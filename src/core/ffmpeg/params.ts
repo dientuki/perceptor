@@ -69,13 +69,12 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
 
   // 4. Generar parámetros finales
   const params: string[] = [];
-  console.log("\n--- AUDIOS SELECCIONADOS (LIMPIOS) ---");
   
   selectedStreams.forEach((s, index) => {
     const lang = (s.tags?.language || "und").toLowerCase();
     const title = s.tags?.title || "Audio";
     
-    console.log(`[Stream #${s.index}] ${lang.toUpperCase()} - ${title} (${s.codec_name}) -> OPUS 320k`);
+    //console.log(`[Stream #${s.index}] ${lang.toUpperCase()} - ${title} (${s.codec_name}) -> OPUS 320k`);
 
     params.push("-map", `0:${s.index}`);
     params.push(`-c:a:${index}`, "libopus");
@@ -88,7 +87,6 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
     params.push(`-metadata:s:a:${index}`, `title="Surround 5.1 (Opus)"`);
     params.push(`-metadata:s:a:${index}`, `language=${lang}`);
   });
-  console.log("--------------------------------------\n");
 
   return params;
 }
@@ -124,16 +122,14 @@ export function getSubtitleParams(subtitleStreams: any[], originalLang: string) 
 
   // 2. Generar parámetros de mapeo
   const params: string[] = [];
-  console.log("\n--- SUBTÍTULOS SELECCIONADOS ---");
-  
+    
   filtered.forEach((s, index) => {
     const lang = (s.tags?.language || "und").toUpperCase();
-    console.log(`[Stream #${s.index}] ${lang} - Codec: ${s.codec_name} (BPS: ${s.tags?.BPS || 'N/A'})`);
+    //console.log(`[Stream #${s.index}] ${lang} - Codec: ${s.codec_name} (BPS: ${s.tags?.BPS || 'N/A'})`);
 
     params.push("-map", `0:${s.index}`);
     params.push(`-c:s:${index}`, "copy"); // Copia directa ya que es texto
   });
-  console.log("--------------------------------\n");
-
+  
   return params;
 }

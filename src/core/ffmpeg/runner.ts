@@ -1,63 +1,66 @@
 import { spawn } from "child_process";
 import fs from "fs";
 
-// Ahora devolvemos una Promesa que resuelve al terminar el proceso
 export function runFfmpeg(args: string[], finalPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tempPath = finalPath.replace(/\.mkv$/, ".working.mkv");
     const finalArgs = [...args.slice(0, -1), tempPath];
 
-    console.log(`\n🚀 Iniciando proceso FFmpeg...`);
-    console.log(`🎬 Destino final: ${finalPath}`);
+    console.log(`\n🚀 Iniciando FFmpeg | Destino: ${finalPath}`);
 
     const child = spawn("ffmpeg", finalArgs, {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
+    // Definimos el manejador de señales para poder removerlo después
+    const killHandler = () => {
+      if (!child.killed) {
+        console.log("\n🛑 Matando proceso FFmpeg por cierre de sistema...");
+        child.kill("SIGINT");
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      }
+    };
+
+    // Escuchamos el cierre del servidor
+    process.once("SIGINT", killHandler);
+    process.once("exit", killHandler);
+
     child.on("error", (err) => {
-      console.error(`\n💥 Error al iniciar FFmpeg: ${err.message}`);
+      cleanupListeners();
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      reject(err); // Avisamos que falló el inicio
+      reject(err);
     });
 
     child.stderr.on("data", (data) => {
       const line = data.toString();
       if (line.includes("fps=") || line.includes("time=")) {
         process.stdout.write(`\r🚀 ${line.trim().substring(0, 100)}`);
-      } else {
-        console.log(`\n[FFmpeg Log] ${line.trim()}`);
       }
     });
 
     child.on("close", (code) => {
+      cleanupListeners(); // IMPORTANTE: Quitar los listeners de process
+
       if (code === 0) {
         try {
           if (fs.existsSync(tempPath)) {
             fs.renameSync(tempPath, finalPath);
-            console.log(`\n\n✅ COMPLETADO EXITOSAMENTE: ${finalPath}`);
-            resolve(); // ¡Éxito!
+            console.log(`\n\n✅ COMPLETADO: ${finalPath}`);
+            resolve();
           }
         } catch (err) {
-          console.error(`\n❌ Error al renombrar: ${err}`);
           reject(err);
         }
       } else {
-        if (fs.existsSync(tempPath)) {
-          try { fs.unlinkSync(tempPath); } catch (e) {}
-        }
-        console.error(`\n\n❌ ERROR: Código ${code}`);
-        reject(new Error(`FFmpeg falló con código ${code}`));
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        reject(new Error(`FFmpeg code ${code}`));
       }
     });
 
-    // Manejo de cierre forzado de Node
-    const killHandler = () => {
-      if (!child.killed) {
-        child.kill("SIGINT");
-        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      }
-    };
-    process.once("exit", killHandler);
-    process.once("SIGINT", killHandler);
+    // Función interna para limpiar la memoria de Node
+    function cleanupListeners() {
+      process.removeListener("SIGINT", killHandler);
+      process.removeListener("exit", killHandler);
+    }
   });
 }
