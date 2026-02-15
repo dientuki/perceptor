@@ -15,17 +15,6 @@ export function getVideoParams(videoStream: any) {
     ];
   }
 
-  if (codec === 'hevc') {
-    return [
-      "-map", "0:v:0",
-      "-c:v", "libsvtav1",
-      "-crf", "28",
-      "-preset", "4",
-      //"-svtav1-params", "rc=1:tune=1:film-grain=8:film-grain-denoise=0:enable-overlays=1:scd=1",
-      "-metadata:s:v:0", 'title="AV1 (Converted from HEVC)"'
-    ];
-  }
-
   // REGLA: Para cualquier otra cosa (AV1, HEVC, VC1, etc.), solo copiar.
   return [
     "-map", "0:v:0",

@@ -1,13 +1,11 @@
-//import { initDB } from "@/db/schema";
-//import { startWorker } from "@/core/jobs/worker";
-
-let started = false;
-
 export async function register() {
-  if (started) return;
-  started = true;
+  // Solo queremos que el worker corra en el servidor de Node.js
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { startWorker } = await import("@/core/jobs/worker");
 
-  console.log("Initializing DB and worker...");
-  //initDB();
-  //startWorker();
+    console.log("🚀 Servidor iniciado. Arrancando motores...");
+    
+    // initDB(); // Si necesitas crear tablas al inicio
+    startWorker();
+  }
 }
