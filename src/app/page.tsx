@@ -1,60 +1,49 @@
 "use client";
 
+import { Button, Field, Input, Label } from "@headlessui/react";
 import { useState } from "react";
-import { Field, Input, Label, Button } from "@headlessui/react";
 
-export default function Home() {
-  const [filename, setFilename] = useState("/home/dientuki/Media/Shows/Liseys Story/");
-  const [language, setLanguage] = useState("eng");
+export default function CreateJobPage() {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setStatus("loading");
 
-    const res = await fetch("/api/convert", {
+    const res = await fetch("/api/create-job", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        filename,
-        language,
-      }),
+      body: JSON.stringify({ query }),
     });
 
-    const data = await res.json();
-    console.log("Response:", data);
+    if (res.ok) {
+      setStatus("success");
+      setQuery("");
+      setTimeout(() => setStatus("idle"), 2000);
+    }
   }
-
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-neutral-900 text-white">
-      <div className="w-full max-w-xl p-6 bg-neutral-800 rounded-xl shadow-lg space-y-6">
-        <h1 className="text-2xl font-bold">Nuevo Torrent</h1>
-
+      <div className="w-full max-w-md p-6 bg-neutral-800 rounded-xl shadow-lg space-y-6">
+        <h1 className="text-2xl font-bold">Buscar peli</h1>
+        
         <form onSubmit={handleSubmit} className="space-y-4">
-          
+                  
           <Field className="space-y-1">
             <Label className="text-sm text-neutral-300">
-              Archivo torrent
+              Query
             </Label>
             <Input
-              value={filename}
-              onChange={(e) => setFilename(e.target.value)}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               className="w-full p-2 rounded bg-neutral-700 border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <div>Liseys.Story.S01E07.mkv</div>
+            <div>Liseys.Story.S01sE07.mkv</div>
             <div>Liseys.Story.S01E08.mkv</div>
-          </Field>
-
-          <Field className="space-y-1">
-            <Label className="text-sm text-neutral-300">
-              Idioma original
-            </Label>
-            <Input
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="w-full p-2 rounded bg-neutral-700 border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
           </Field>
 
           <Button
