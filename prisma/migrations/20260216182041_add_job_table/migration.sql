@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "Job" (
+CREATE TABLE "jobs" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "tmdbId" INTEGER NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'pending',
@@ -8,4 +8,4 @@ CREATE TABLE "Job" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Job_id_key" ON "Job"("id");
+CREATE UNIQUE INDEX "jobs_id_key" ON "jobs"("id");

@@ -36,6 +36,7 @@ model TmdbResult {
   updatedAt      DateTime @updatedAt
 
   @@unique([tmdbId, media_type])
+  @@map("tmdb_results")
 }
 
 model Job {
@@ -46,4 +47,5 @@ model Job {
   updatedAt      DateTime @updatedAt
 
   @@unique([id])
+  @@map("jobs")
 }

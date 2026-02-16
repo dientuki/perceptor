@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "TmdbResult" (
+CREATE TABLE "tmdb_results" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "tmdbId" INTEGER NOT NULL,
     "media_type" TEXT NOT NULL,
@@ -23,4 +23,4 @@ CREATE TABLE "TmdbResult" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "TmdbResult_tmdbId_media_type_key" ON "TmdbResult"("tmdbId", "media_type");
+CREATE UNIQUE INDEX "tmdb_results_tmdbId_media_type_key" ON "tmdb_results"("tmdbId", "media_type");
