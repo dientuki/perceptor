@@ -64,3 +64,28 @@ export async function saveTmdbResults(mediaList: any[], tmdbSearch: { endpoint: 
     });
   }
 }
+
+export async function getItems(ids: number[]) {
+  const items = await prisma.tmdbResult.findMany({
+    where: {
+      tmdbId: { in: ids },
+    },
+    select: {
+      release_date: true,
+      first_air_date: true,
+      title: true,
+      name: true,
+      media_type: true,
+    },
+  });
+
+  return items.map((item) => {
+    const date = item.release_date || item.first_air_date;
+    const year = date ? parseInt(date.substring(0, 4), 10) : null;
+    const name = (item.title || item.name)?.replace(/[:\-]/g, ' ')   // los reemplaza por espacio
+                .replace(/\s+/g, ' ')     // colapsa espacios múltiples
+                .trim();                  // quita espacios al inicio/final
+    const search = `${name} (${year})`;
+    return { year, name, media_type: item.media_type, search };
+  });
+}
