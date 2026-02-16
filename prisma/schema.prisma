@@ -37,3 +37,13 @@ model TmdbResult {
 
   @@unique([tmdbId, media_type])
 }
+
+model Job {
+  id        Int      @id @default(autoincrement())
+  tmdbId    Int
+  status    String   @default("pending")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([id])
+}
