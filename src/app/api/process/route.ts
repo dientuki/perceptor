@@ -14,10 +14,12 @@ export async function POST(req: NextRequest) {
 
     // Aquí podrías agregar lógica adicional para procesar los items, como buscar torrents relacionados
     for (const item of items) {
+      
       const query = item.search;
       console.log(`Buscando torrents para: ${query}`);
       const searchResults = await search(query);
       console.log(`Resultados de búsqueda para "${query}":`, searchResults);
+
     }
 
     return NextResponse.json({ success: true, received: ids, items });
