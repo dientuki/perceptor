@@ -11,10 +11,10 @@ const options = {
   }
 };
 
-export async function fetchAllTmdbPages({ endpoint, query }: TmdbSearch) {
+export async function fetchAllTmdbPages({ endpoint, query }: TmdbSearch): Promise<TmdbResults[]> {
   let page = 1
   let totalPages = 1
-  const results: any[] = [];
+  const results: TmdbResults[] = [];
 
   const urlPath = new URL(`${TMDB_API_VERSION}/${endpoint}`, TMDB_DOMAIN);
   urlPath.searchParams.set("query", query);
@@ -22,12 +22,7 @@ export async function fetchAllTmdbPages({ endpoint, query }: TmdbSearch) {
 
   do {
     const res = await fetch(urlPath.toString(), options)
-    const data: {
-      page: number;
-      total_pages: number;
-      total_results: number;
-      results: any[];
-    } = await res.json();
+    const data = (await res.json()) as TmdbSearchResponse;
 
     if (!data || !data.results) break
 
@@ -38,7 +33,7 @@ export async function fetchAllTmdbPages({ endpoint, query }: TmdbSearch) {
     urlPath.searchParams.set("page",page.toString());
   } while (page <= totalPages)
 
-  console.log(results);
+  //console.log(results);
 
   return results
 }

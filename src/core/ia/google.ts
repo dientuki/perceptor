@@ -48,7 +48,7 @@ Input del usuario: "${input}"`;
 
   const text = stripFencedCodeBlock(response.text?.trim()) ?? '';
 
-  console.log(text);
+  //console.log(text);
 
   try {
     const parsed = JSON.parse(text);
@@ -61,21 +61,25 @@ Input del usuario: "${input}"`;
   }
 }
 
-export async function buildMediaList(input: string, json: string): Promise<string> {
+export async function buildMediaList(input: string, json: string): Promise<any[]> {
   
-  const prompt = `Dado este JSON de TMDB y el input del usuario, determina que está solicitando el usuario. 
-Prioriza: 
-- La saga o serie principal si hay varias coincidencias. 
-- La fecha de lanzamiento más reciente. 
-- Si el input esta en plural seleciona mas de uno.
+  const prompt = `Dado este JSON y el input del usuario, determina qué elementos coinciden con la intención del usuario.
+Reglas obligatorias (en orden de prioridad):
 
-Formato de salida para serie: Nombre
-Formato de salida para pelicula: Nombre (Año de lanzamiento)
+- Si el input contiene palabras o expresiones que indiquen temporalidad reciente, como: "última", "el último", "la más reciente", "la nueva", "la final",  "la más nueva", "la más actual", "la reciente", "lo último", debes seleccionar SOLO un elemento: el de fecha de lanzamiento más reciente dentro de esa saga o franquicia.
+- Si el input está en plural (ej: "las", "todas", "películas", "pelis", etc.) selecciona múltiples elementos relevantes.
+- Si el input está en singular y NO menciona una expresion que indiquen temporalidad reciente selecciona solo el elemento más relevante.
+
+Retornar el id de cada item, si son muchos separados por coma.
 
 Input del usuario: "${input}"
 JSON: ${json}`;
 
-  console.log(prompt);
+
+  // harry potter
+  //671, 12445, 673, 674, 767, 672, 12444, 675
+
+  //console.log(prompt);
 
   const response = await ai.models.generateContent({
     model,
@@ -88,5 +92,22 @@ JSON: ${json}`;
     ],
   });
 
-  return response.text?.trim() ?? '';
+  const raw = response.text ?? '';
+
+  const ids = raw
+    .trim()
+    .split(',')                  // separar por coma
+    .map(id => id.trim())        // limpiar espacios
+    .filter(id => /^\d+$/.test(id)) // solo números válidos
+    .map(Number);                // convertir a number
+
+  let items: any[] = [];
+  try {
+    items = JSON.parse(json);
+  } catch (e) {
+    console.error("Error parsing JSON in buildMediaList", e);
+    return [];
+  }
+
+  return items.filter((item: any) => ids.includes(item.id));
 }

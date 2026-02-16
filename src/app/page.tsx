@@ -4,26 +4,19 @@ import { Button, Field, Input, Label } from "@headlessui/react";
 import { useState } from "react";
 
 export default function CreateJobPage() {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState("bajame la ultima de mision imposible");
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setStatus("loading");
 
-    const res = await fetch("/api/create-job", {
+    await fetch("/api/ia", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({ query }),
     });
 
-    if (res.ok) {
-      setStatus("success");
-      setQuery("");
-      setTimeout(() => setStatus("idle"), 2000);
-    }
+    setStatus("success");
   }
 
   return (
