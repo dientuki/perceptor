@@ -71,6 +71,7 @@ export async function getItems(ids: number[]) {
       tmdbId: { in: ids },
     },
     select: {
+      tmdbId: true,
       release_date: true,
       first_air_date: true,
       title: true,
@@ -86,6 +87,6 @@ export async function getItems(ids: number[]) {
                 .replace(/\s+/g, ' ')     // colapsa espacios múltiples
                 .trim();                  // quita espacios al inicio/final
     const search = `${name} (${year})`;
-    return { year, name, media_type: item.media_type, search };
+    return { tmdbId: item.tmdbId, year, name, media_type: item.media_type, search };
   });
 }

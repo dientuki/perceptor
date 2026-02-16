@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getItems } from "@/core/tmdb/storage";
 import { search } from "@/core/search/prowlar";
+import { create, update } from "@/core/jobs/storage";
+import { addTorrent } from "@/core/search/add";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,9 +19,14 @@ export async function POST(req: NextRequest) {
       
       const query = item.search;
       console.log(`Buscando torrents para: ${query}`);
-      const searchResults = await search(query);
-      console.log(`Resultados de búsqueda para "${query}":`, searchResults);
+      create(item.tmdbId);
+      const searchResult = await search(query);
+      console.log(`Resultados de búsqueda para "${query}":`, searchResult);
+      update(item.tmdbId, "starte download");
 
+      console.log(`Torrent agregado: ${searchResult}`);
+
+      addTorrent(searchResult);
     }
 
     return NextResponse.json({ success: true, received: ids, items });

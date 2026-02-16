@@ -42,7 +42,7 @@ model TmdbResult {
 model Job {
   id        Int      @id @default(autoincrement())
   tmdbId    Int
-  status    String   @default("pending")
+  status    String   @default("added")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
