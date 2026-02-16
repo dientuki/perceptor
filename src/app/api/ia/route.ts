@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildTmdbSearchUrl, buildMediaList } from "@/core/ia/google";
 import { fetchAllTmdbPages } from "@/core/tmdb/client";
 import { logger } from "@/lib/logger";
+import db from "@/db/client";
 
 export async function POST(req: NextRequest) {
     //const { query } = await req.json();
@@ -36,6 +37,22 @@ export async function POST(req: NextRequest) {
         }
     ];
 
+    // Persistencia en SQLite (Opción 3)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS search_cache (
+        tmdb_id INTEGER PRIMARY KEY,
+        data TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const insert = db.prepare("INSERT OR REPLACE INTO search_cache (tmdb_id, data) VALUES (?, ?)");
+    const insertMany = db.transaction((items: any[]) => {
+        for (const item of items) {
+            insert.run(item.id, JSON.stringify(item));
+        }
+    });
+    insertMany(mediaList);
 
     return NextResponse.json(mediaList);
 }
