@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model TmdbResult {
+  id             Int      @id @default(autoincrement())
+  tmdbId         Int
+  media_type     String
+
+  // Campos comunes
+  adult             Boolean?
+  backdrop_path     String?
+  original_language String?
+  overview          String?
+  popularity        Float?
+  poster_path       String?
+  vote_average      Float?
+  vote_count        Int?
+
+  // Campos específicos de Movie
+  original_title    String?
+  release_date      String? // Fecha de estreno
+  title             String?
+  video             Boolean?
+
+  // Campos específicos de TV
+  original_name     String?
+  first_air_date    String?
+  name              String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tmdbId, media_type])
+}
