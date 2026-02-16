@@ -30,7 +30,6 @@ export default function CreateJobPage() {
       method: "POST",
       body: JSON.stringify({ ids: selectedIds }),
     });
-    alert("Enviando IDs: " + selectedIds.join(", "));
   }
 
   function toggleSelection(id: number) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getItems } from "@/core/tmdb/storage";
+import { search } from "@/core/search/prowlar";
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,6 +11,14 @@ export async function POST(req: NextRequest) {
     const items = await getItems(ids);
 
     console.log("Items recuperados:", items);
+
+    // Aquí podrías agregar lógica adicional para procesar los items, como buscar torrents relacionados
+    for (const item of items) {
+      const query = item.search;
+      console.log(`Buscando torrents para: ${query}`);
+      const searchResults = await search(query);
+      console.log(`Resultados de búsqueda para "${query}":`, searchResults);
+    }
 
     return NextResponse.json({ success: true, received: ids, items });
   } catch (error) {
