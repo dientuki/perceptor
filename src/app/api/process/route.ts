@@ -22,11 +22,11 @@ export async function POST(req: NextRequest) {
       create(item.tmdbId);
       const searchResult = await search(query);
       console.log(`Resultados de búsqueda para "${query}":`, searchResult);
-      update(item.tmdbId, "starte download");
+      update(item.tmdbId, "starte download", { infoHash: searchResult.infoHash });
 
       console.log(`Torrent agregado: ${searchResult}`);
 
-      addTorrent(searchResult);
+      addTorrent(searchResult.downloadUrl);
     }
 
     return NextResponse.json({ success: true, received: ids, items });

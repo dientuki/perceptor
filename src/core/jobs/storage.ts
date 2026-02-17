@@ -15,11 +15,11 @@ export async function create(tmdbId: number) {
   }
 }
 
-export async function update(tmdbId: number, status: string) {
+export async function update(tmdbId: number, status: string, extraData?: { infoHash?: string }) {
   try {
     const job = await prisma.job.updateMany({
       where: { tmdbId },
-      data: { status },
+      data: { status, ...extraData },
     });
     return job;
   } catch (error) {

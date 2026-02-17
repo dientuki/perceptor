@@ -26,7 +26,8 @@ async function getData(query: string): Promise<any[]> {
   return data;
 }
 
-function filterData(items: any[]): Promise<string> {
+function filterData(items: any[]): Promise<TorrentInfo> {
+  
   const filtered = items.filter(item => item.title.includes("1080p"))
 
   filtered.forEach(item => {
@@ -47,10 +48,13 @@ function filterData(items: any[]): Promise<string> {
 
   console.log("Mejor resultado:", better);
 
-  return better.magnetUrl ?? better.downloadUrl ?? better.guid;
+  return Promise.resolve({
+    downloadUrl: better.magnetUrl ?? better.downloadUrl ?? better.guid,
+    infoHash: better.infoHash
+  });
 }
 
-export async function search(query: string): Promise<string> {
+export async function search(query: string): Promise<TorrentInfo> {
   const data = await getData(query);
   const filteredData = filterData(data);
   return filteredData;
