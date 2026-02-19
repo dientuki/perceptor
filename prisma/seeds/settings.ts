@@ -2,8 +2,9 @@ import { prisma } from "@/lib/prisma";
 
 export async function seedSettings() {
   const settings = [
-    { key: 'media_movies_path', value: '/mnt/media/movies' },
-    { key: 'media_series_path', value: '/mnt/media/series' },
+    { key: 'path_movies', value: '/home/dientuki/Media/Movies' },
+    { key: 'path_series', value: '/home/dientuki/Media/Series' },
+    { key: 'path_downloads', value: '/home/dientuki/Media/Downloads' },
   ]
 
   for (const setting of settings) {
