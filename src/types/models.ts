@@ -1,0 +1,1 @@
+type Setting = Record<string, string>;
