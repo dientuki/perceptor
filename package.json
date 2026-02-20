@@ -18,6 +18,7 @@
     "dotenv": "^17.3.1",
     "flatpickr": "^4.6.13",
     "next": "16.1.6",
+    "parse-torrent": "^11.0.19",
     "pino": "^10.3.1",
     "react": "19.2.3",
     "react-apexcharts": "^2.0.1",
