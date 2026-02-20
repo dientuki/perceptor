@@ -4,6 +4,7 @@ import { search } from "@/core/search/prowlar";
 import { create, update } from "@/core/jobs/storage";
 import { addTorrent } from "@/core/search/add";
 import { logger } from "@/lib/logger";
+import { DownloadStatus } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,19 +31,23 @@ export async function POST(req: NextRequest) {
         'Buscando torrents para:'
       );
       create(item.tmdbId);
+      update(item.tmdbId, { downloadStatus: DownloadStatus.ADDED });
       const searchResult = await search(query);
       logger.info(
         { query },
         'Resultados de búsqueda para:'
       );      
-      update(item.tmdbId, "starte download", { infoHash: searchResult.infoHash });
+
+      addTorrent(searchResult.downloadUrl);
+      update(
+        item.tmdbId,
+        { downloadStatus: DownloadStatus.ADDED, infoHash: searchResult.infoHash },       
+      );
 
       logger.info(
         { searchResult },
         'Torrent agregado:'
-      );
-
-      addTorrent(searchResult.downloadUrl);
+      );      
     }
 
     return NextResponse.json({ success: true, received: ids, items });
