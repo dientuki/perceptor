@@ -37,6 +37,11 @@ export async function POST(req: NextRequest) {
         }
     ];
 
+    logger.info(
+        { mediaList, tmdbUrl },
+        'Data fetched from TMDB'
+    );
+
     // Guardamos en la DB usando el nuevo modelo
     await saveTmdbResults(mediaList, tmdbUrl);
 

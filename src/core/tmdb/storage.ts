@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 
 export async function saveTmdbResults(mediaList: any[], tmdbSearch: { endpoint: string }) {
   for (const item of mediaList) {
@@ -62,6 +63,11 @@ export async function saveTmdbResults(mediaList: any[], tmdbSearch: { endpoint: 
         video: item.video,
       },
     });
+
+    logger.info(
+      { tmdbId: item.id, mediaType },
+      'Saved TMDB result to database'
+    );
   }
 }
 
