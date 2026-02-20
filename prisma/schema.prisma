@@ -39,11 +39,33 @@ model TmdbResult {
   @@map("tmdb_results")
 }
 
+enum DownloadStatus {
+  CREATED        // Job creado en el sistema
+  SEARCHING      // Buscando torrent en tracker
+  ADDED          // Torrent agregado al cliente
+  DOWNLOADING    // Descargando activamente
+  PAUSED         // Pausado en cliente
+  COMPLETED      // Descarga finalizada
+  ERROR          // Error en cualquier punto
+}
+
+enum EncodeStatus {
+  WAITING
+  QUEUED
+  ENCODING
+  COMPLETED
+  ERROR
+}
+
 model Job {
   id        Int      @id @default(autoincrement())
   tmdbId    Int
-  status    String   @default("added")
   infoHash  String?
+  
+  downloadStatus  DownloadStatus @default(CREATED)
+  encodeStatus    EncodeStatus   @default(WAITING)
+
+  errorMessage    String?  
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
