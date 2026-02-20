@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { Setting } from '@prisma/client';
 
-export async function getAllSettings(): Promise<Setting[]> {
+export async function getAllSettings(): Promise<Record<string, string>> {
   const settings: Setting[] = await prisma.setting.findMany();
 
   return Object.fromEntries(
@@ -8,7 +9,7 @@ export async function getAllSettings(): Promise<Setting[]> {
   );
 }
 
-export async function getSetting(key: string): Promise<Setting> {
+export async function getSetting(key: string): Promise<Setting | null> {
   return prisma.setting.findUnique({
     where: { key },
   });

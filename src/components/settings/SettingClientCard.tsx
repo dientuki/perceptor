@@ -5,17 +5,16 @@ import { Modal } from "../ui/modal";
 import Button from "../ui/button/Button";
 import Input from "../form/input/InputField";
 import Label from "../form/Label";
-import { Setting } from '@prisma/client';
 
 type SettingPathCardProps = {
-  settings: Record<string, string>;
+  settings: Setting[];
 };
 
 export default function SettingPathCard({
   settings,
 }: SettingPathCardProps) {
   const { isOpen, openModal, closeModal } = useModal();
-  console.log(settings.path_downloads);
+  console.log(settings['path_downloads']);
   
   const handleSave = () => {
     // Handle save logic here
@@ -28,7 +27,7 @@ export default function SettingPathCard({
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90 lg:mb-6">
-              Paths
+              Clients
             </h4>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-7 2xl:gap-x-32">
@@ -37,7 +36,7 @@ export default function SettingPathCard({
                   Torrent Download
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  {settings.path_downloads}
+                  {settings['path_downloads']}
                 </p>
               </div>
 
@@ -46,7 +45,7 @@ export default function SettingPathCard({
                   Movie Path
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  {settings.path_movies}
+                  {settings['path_movies']}
                 </p>
               </div>
 
@@ -55,7 +54,7 @@ export default function SettingPathCard({
                   Series Path
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  {settings.path_series}
+                  {settings['path_series']}
                 </p>
               </div>
             </div>
