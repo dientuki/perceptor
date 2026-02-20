@@ -3,28 +3,44 @@ import { getItems } from "@/core/tmdb/storage";
 import { search } from "@/core/search/prowlar";
 import { create, update } from "@/core/jobs/storage";
 import { addTorrent } from "@/core/search/add";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
   try {
     const { ids } = await req.json();
 
-    console.log("IDs recibidos para procesar:", ids);
+    logger.info(
+      { ids },
+      'IDs recibidos para procesar:'
+    );
 
     const items = await getItems(ids);
 
-    console.log("Items recuperados:", items);
+    logger.info(
+      { items },
+      'Items recuperados:'
+    );
 
     // Aquí podrías agregar lógica adicional para procesar los items, como buscar torrents relacionados
     for (const item of items) {
       
       const query = item.search;
-      console.log(`Buscando torrents para: ${query}`);
+      logger.info(
+        { query },
+        'Buscando torrents para:'
+      );
       create(item.tmdbId);
       const searchResult = await search(query);
-      console.log(`Resultados de búsqueda para "${query}":`, searchResult);
+      logger.info(
+        { query },
+        'Resultados de búsqueda para:'
+      );      
       update(item.tmdbId, "starte download", { infoHash: searchResult.infoHash });
 
-      console.log(`Torrent agregado: ${searchResult}`);
+      logger.info(
+        { searchResult },
+        'Torrent agregado:'
+      );
 
       addTorrent(searchResult.downloadUrl);
     }

@@ -30,7 +30,7 @@ export default function SearchContainer() {
     );
   };
 
-  const handleProcess = async (e) => {
+  const handleProcess = async (e: React.FormEvent) => {
     e.preventDefault();
     await fetch("/api/process", {
       method: "POST",

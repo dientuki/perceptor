@@ -1,21 +1,27 @@
 import fetch from 'node-fetch'
 import fs from "fs/promises";
 import { getScore } from "@/core/search/score";
-
-const PROXY_API_KEY = process.env.PROXY_API_KEY;
-const PROXY_DOMAIN = process.env.PROXY_DOMAIN;
-const PROXY_PORT = process.env.PROXY_PORT;
+import { getSetting } from "@/models/settings.model";
+import { logger } from "@/lib/logger";
 
 async function getData(query: string): Promise<any[]> {
-  const url = new URL("/api/v1/search", `http://${PROXY_DOMAIN}:${PROXY_PORT}`);
+  const trackerClient = await getSetting(["tracker_host", "tracker_port", "tracker_api_key"]);
+  
+  const host = trackerClient.tracker_host ?? "localhost";
+  const port = trackerClient.tracker_port ?? "9696";
+
+  const url = new URL("/api/v1/search", `http://${host}:${port}`);
   url.searchParams.set("query", query);
 
-  console.log("Realizando búsqueda en proxy:", url.toString());
+  logger.info(
+    { url },
+    "Realizando búsqueda en proxy:"
+  );
 
   //const res = await fetch(url, {
   //  method: "GET",
   //  headers: {
-  //    "X-Api-Key": PROXY_API_KEY,
+  //    "X-Api-Key": trackerClient.tracker_api_key,
   //  },
   //});
   //const data = await res.json();
@@ -46,7 +52,10 @@ function filterData(items: any[]): Promise<TorrentInfo> {
 
   const better = sorted[1];
 
-  console.log("Mejor resultado:", better);
+  logger.info(
+    { better },
+    "Mejor resultado encontrado:"
+  );
 
   return Promise.resolve({
     downloadUrl: better.magnetUrl ?? better.downloadUrl ?? better.guid,
