@@ -7,31 +7,37 @@ import { DownloadStatus } from "@prisma/client";
 let interval: NodeJS.Timeout | null = null;
 let endpoint: URL;
 
+// https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-list
 const DOWNLOADING_STATES = new Set([
-  "downloading",
-  "metaDL",
-  "forcedDL",
-  "queuedDL",
-  "stalledDL",
-  "checkingDL",
+  "downloading",        // Torrent is being downloaded and data is being transferred
+  "metaDL",             // Torrent has just started downloading and is fetching metadata
+  "forcedDL",           // Torrent is forced to downloading to ignore queue limit
+  "queuedDL",           // Queuing is enabled and torrent is queued for download
+  "stalledDL",          // Torrent is being downloaded, but no connection were made
+  "checkingDL",         // Same as checkingUP, but torrent has NOT finished downloading
+  "allocating",         // Torrent is allocating disk space for download
+  "checkingResumeData", // Checking resume data on qBt startup
 ]);
 
 const COMPLETED_STATES = new Set([
-  "uploading",
-  "stalledUP",
-  "queuedUP",
-  "forcedUP",
-  "checkingUP",
+  "uploading",   // Torrent is being seeded and data is being transferred
+  "stalledUP",   // Torrent is being seeded, but no connection were made
+  "queuedUP",    // Queuing is enabled and torrent is queued for upload
+  "forcedUP",    // Torrent is forced to uploading and ignore queue limit
+  "checkingUP",  // Torrent has finished downloading and is being checked
+  "moving",      // Torrent is moving to another location (considered “active/completed” depending on context)
 ]);
 
 const PAUSED_STATES = new Set([
-  "pausedDL",
-  "pausedUP",
-  "stoppedDL",
-  "stoppedUP",
+  "pausedDL",    // Torrent is paused and has NOT finished downloading
+  "pausedUP",    // Torrent is paused and has finished downloading
+  "error",       // Some error occurred, applies to paused torrents
+  "missingFiles",// Torrent data files is missing
+  "unknown",     // Unknown status
 ]);
 
-function mapTorrentState(state: string): DownloadStatus {
+function mapTorrentState(state: string, completion: number): DownloadStatus {
+  if (completion !== -1) return DownloadStatus.COMPLETED;
   if (!state) return DownloadStatus.ERROR;
 
   if (state.includes("error")) return DownloadStatus.ERROR;
@@ -54,7 +60,7 @@ async function getTorrents() {
 
   return torrents.map((t: any) => ({
     hash: t.hash,
-    state: mapTorrentState(t.state),
+    state: mapTorrentState(t.state, t.completion_on),
     rawState: t.state,
   }));
 }
