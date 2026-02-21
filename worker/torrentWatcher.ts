@@ -62,6 +62,7 @@ async function getTorrents() {
     hash: t.hash,
     state: mapTorrentState(t.state, t.completion_on),
     rawState: t.state,
+    root_path: t.root_path
   }));
 }
 
@@ -92,7 +93,7 @@ async function runCheck() {
   logger.info("🔄 Revisando torrents activos...");
 
   try {
-    const updates: { id: number; downloadStatus: DownloadStatus }[] = [];
+    const updates: { id: number; downloadStatus: DownloadStatus, root_path: string }[] = [];
     const activeTorrents = await getActiveTorrentJobs();
     const torrentStatus = await getTorrents();
 
@@ -117,6 +118,7 @@ async function runCheck() {
         updates.push({
           id: job.id,
           downloadStatus: torrent.state,
+          root_path: torrent.root_path
         });
       }
     }

@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE "jobs" ADD COLUMN "content_path" TEXT;
+ALTER TABLE "jobs" ADD COLUMN "root_path" TEXT;

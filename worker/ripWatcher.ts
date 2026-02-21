@@ -76,17 +76,18 @@ export async function startRipWatcher() {
 async function runCheck() {
   if (isWorking) return;
   logger.info("🔄 Revisando torrents descargados...");
-  isWorking = true;
 
   const nextToRip = await getNextToRip();
 
   if (!nextToRip) return;
 
+  isWorking = true;
+
   try {
     logger.info({ nextToRip }, "📦 Encontrado torrent para rippear");
     //await update(nextToRip.tmdbId, { encodeStatus: EncodeStatus.QUEUED });
 
-    const mkvFile = findMkvFile(nextToRip.content_path);
+    const mkvFile = findMkvFile(nextToRip.root_path);
     logger.info({ mkvFile }, "🔍 Archivo MKV encontrado");
     
     const data = await getMetadata(mkvFile);

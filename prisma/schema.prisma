@@ -70,7 +70,7 @@ model Job {
   encodeStatus    EncodeStatus   @default(WAITING)
 
   errorMessage    String?
-  content_path   String? // Ruta al archivo descargado o al resultado del encode
+  root_path   String? // Ruta al archivo descargado o al resultado del encode
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

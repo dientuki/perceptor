@@ -4,6 +4,7 @@ import { DownloadStatus, EncodeStatus } from "@prisma/client";
 type JobStateUpdate = {
   id: number;
   downloadStatus: DownloadStatus;
+  root_path: string;
 };
 
 export async function create(tmdbId: number) {
@@ -67,6 +68,7 @@ export async function updateJobStates(
         where: { id: update.id },
         data: {
           downloadStatus: update.downloadStatus,
+          root_path: update.root_path
         },
       })
     )
