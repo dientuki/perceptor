@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 
 export async function seedSettings() {
   const settings = [
@@ -25,5 +26,5 @@ export async function seedSettings() {
     })
   }
 
-  console.log('Settings seeded')
+  logger.info('Settings seeded');
 }
