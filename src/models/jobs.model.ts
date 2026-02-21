@@ -74,3 +74,56 @@ export async function updateJobStates(
 
   return
 }
+
+function resolveJobStatus(
+  downloadStatus: DownloadStatus,
+  encodeStatus: EncodeStatus
+): string {
+  // 1️⃣ Si hay error en cualquiera
+  if (
+    downloadStatus === DownloadStatus.ERROR ||
+    encodeStatus === EncodeStatus.ERROR
+  ) {
+    return 'ERROR';
+  }
+
+  // 2️⃣ Si ambos completados
+  if (
+    downloadStatus === DownloadStatus.COMPLETED &&
+    encodeStatus === EncodeStatus.COMPLETED
+  ) {
+    return 'COMPLETED';
+  }
+
+  // 3️⃣ Si encode está esperando → mostrar estado del download
+  if (encodeStatus === EncodeStatus.WAITING) {
+    return downloadStatus;
+  }
+
+  // 4️⃣ Si download terminó → mostrar encode
+  if (downloadStatus === DownloadStatus.COMPLETED) {
+    return encodeStatus;
+  }
+
+  // 5️⃣ Default → download manda
+  return downloadStatus;
+}
+
+export async function getAll(): Promise<Job[]> {
+  const jobs = await prisma.job.findMany({
+    include: {
+      tmdb: true,
+    },
+  });
+
+  return jobs.map(job => ({
+    id: job.id,
+    media_type: job.tmdb.media_type,
+    name: job.tmdb.name ?? job.tmdb.title,
+    status: resolveJobStatus(
+      job.downloadStatus,
+      job.encodeStatus
+    ),
+    error: job.errorMessage,
+  }));
+}
