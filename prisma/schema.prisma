@@ -8,7 +8,9 @@ datasource db {
 
 model TmdbResult {
   id             Int      @id @default(autoincrement())
-  tmdbId         Int
+  tmdbId         Int    @unique
+  job        Job?
+
   media_type     String
 
   // Campos comunes
@@ -59,7 +61,8 @@ enum EncodeStatus {
 
 model Job {
   id        Int      @id @default(autoincrement())
-  tmdbId    Int
+  tmdbId    Int      @unique
+  tmdb      TmdbResult @relation(fields: [tmdbId], references: [tmdbId])
   infoHash  String?
   
   downloadStatus  DownloadStatus @default(CREATED)

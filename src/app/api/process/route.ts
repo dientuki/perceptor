@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getItems } from "@/core/tmdb/storage";
 import { search } from "@/core/search/prowlar";
-import { create, update } from "@/core/jobs/storage";
+import { create, update } from "@/models/jobs.model";
 import { addTorrent } from "@/core/search/add";
 import { logger } from "@/lib/logger";
 import { DownloadStatus } from "@prisma/client";
