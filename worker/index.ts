@@ -8,7 +8,7 @@ logger.info('🧠 Perceptor Worker iniciado...')
 async function bootstrap() {
   logger.info('🚀 Iniciando watchers...')
 
-  //startTorrentWatcher()
+  startTorrentWatcher()
   startRipWatcher()
 }
 
