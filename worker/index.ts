@@ -1,5 +1,6 @@
 // worker/index.ts
 import { startTorrentWatcher } from './torrentWatcher'
+import { startRipWatcher } from './ripWatcher'
 import { logger } from "@/lib/logger";
 
 logger.info('🧠 Perceptor Worker iniciado...')
@@ -7,7 +8,8 @@ logger.info('🧠 Perceptor Worker iniciado...')
 async function bootstrap() {
   logger.info('🚀 Iniciando watchers...')
 
-  startTorrentWatcher()
+  //startTorrentWatcher()
+  startRipWatcher()
 }
 
 bootstrap()

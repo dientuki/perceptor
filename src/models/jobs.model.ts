@@ -127,3 +127,20 @@ export async function getAll(): Promise<Job[]> {
     error: job.errorMessage,
   }));
 }
+
+export async function getNextToRip() {
+  const job = await prisma.job.findFirst({
+    where: {
+      downloadStatus: DownloadStatus.COMPLETED,
+      encodeStatus: EncodeStatus.WAITING,
+    },
+    include: {
+      tmdb: true
+    },
+    orderBy: {
+      updatedAt: 'asc', // para agarrar el "primero" según la fecha de creación
+    },
+  });
+
+  return job;
+}
