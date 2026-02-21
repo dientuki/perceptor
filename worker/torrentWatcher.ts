@@ -59,10 +59,14 @@ async function runCheck() {
 
     if (updates.length === 0) return;
 
+    logger.info(
+          `stop ${updates.length} torrents que cambiaron a COMPLETED`
+        );
+
     const hashesToStop = updates
       .filter(u => u.downloadStatus === DownloadStatus.COMPLETED)
       .map(u => u.infoHash);
-    
+
     await updateJobStates(updates);
     await torrentClient.stop(hashesToStop);
 

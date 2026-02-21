@@ -48,13 +48,12 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
   const host = config.torrent_host ?? "localhost";
   const port = config.torrent_port ?? "8080";
 
-  const baseUrl = `http://${host}:${port}/api/v2/torrents`;
+  const baseUrl = `http://${host}:${port}/api/v2/torrents/`;
 
   const normalizeHashes = (hashes: string | string[]): string =>
     Array.isArray(hashes) ? hashes.join("|") : hashes;
 
   return {
-
   
   /**
    * Obtiene la lista de torrents activos en qbittorrent
@@ -98,11 +97,15 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
      */
     async stop(hashes: string | string[]) {
       const endpoint = new URL("stop", baseUrl);
-      endpoint.searchParams.append("hashes", normalizeHashes(hashes));
-      
-      await fetch(endpoint, {
-        method: HTTP_METHOD.GET,
+
+      const rest = await fetch(endpoint, {
+        method: HTTP_METHOD.POST,
+        body: new URLSearchParams({
+          hashes: normalizeHashes(hashes),
+        }),
       });
+
+      console.log(rest);
     },
 
   /**
@@ -113,11 +116,13 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
    */
     async remove(hashes: string | string[], deleteFiles: boolean = true) {
       const endpoint = new URL("delete", baseUrl);
-      endpoint.searchParams.append("hashes", normalizeHashes(hashes));
-      endpoint.searchParams.append("deleteFiles", deleteFiles.toString());
       
       await fetch(endpoint, {
-        method: HTTP_METHOD.GET,
+        method: HTTP_METHOD.POST,
+        body: new URLSearchParams({
+          hashes: normalizeHashes(hashes),
+          deleteFiles: deleteFiles.toString(),
+        }),
       });
     },
   };
