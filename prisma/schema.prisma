@@ -17,6 +17,7 @@ model TmdbResult {
   adult             Boolean?
   backdrop_path     String?
   original_language String?
+  language          Language? @relation("LanguageToTmdbResult", fields: [original_language], references: [iso2])
   overview          String?
   popularity        Float?
   poster_path       String?
@@ -68,7 +69,8 @@ model Job {
   downloadStatus  DownloadStatus @default(CREATED)
   encodeStatus    EncodeStatus   @default(WAITING)
 
-  errorMessage    String?  
+  errorMessage    String?
+  content_path   String? // Ruta al archivo descargado o al resultado del encode
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -83,4 +85,14 @@ model Setting {
   updatedAt      DateTime @updatedAt
 
   @@map("settings")
+}
+
+model Language {
+  id   Int    @id @default(autoincrement())
+  iso2 String @unique
+  tmdbResults TmdbResult[] @relation("LanguageToTmdbResult")
+
+  iso3 String
+
+  @@map("languages")
 }
