@@ -74,14 +74,3 @@ export async function updateJobStates(
 
   return
 }
-
-export async function getNextDownloadJob() {
-  return prisma.job.findFirst({
-    where: {
-      downloadStatus: DownloadStatus.CREATED,
-    },
-    orderBy: {
-      id: "asc",
-    },
-  });
-}
