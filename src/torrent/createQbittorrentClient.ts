@@ -1,4 +1,4 @@
-import { TorrentStrategy } from "./types";
+import { TorrentClient } from "./types";
 import { HTTP_METHOD } from "@/types/http";
 import { DownloadStatus } from "@prisma/client";
 
@@ -43,7 +43,7 @@ function mapTorrentState(state: string, completion: number): DownloadStatus {
   return DownloadStatus.ERROR;
 }
 
-export const createQbittorrentClient = (config : Record<string, string>): TorrentStrategy => {
+export const createQbittorrentClient = (config : Record<string, string>): TorrentClient => {
   
   const host = config.torrent_host ?? "localhost";
   const port = config.torrent_port ?? "8080";
@@ -58,7 +58,7 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
   /**
    * Obtiene la lista de torrents activos en qbittorrent
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-list
-   * @returns Promise<ClientTorrentInfo[]>
+   * @returns Promise<TorrentClientInfo[]>
    */
     async info() {
       const endpoint = new URL("info", baseUrl);
@@ -98,14 +98,13 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
     async stop(hashes: string | string[]) {
       const endpoint = new URL("stop", baseUrl);
 
-      const rest = await fetch(endpoint, {
+      await fetch(endpoint, {
         method: HTTP_METHOD.POST,
         body: new URLSearchParams({
           hashes: normalizeHashes(hashes),
         }),
       });
 
-      console.log(rest);
     },
 
   /**

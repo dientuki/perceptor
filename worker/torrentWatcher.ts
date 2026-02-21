@@ -1,12 +1,12 @@
 // worker/torrentWatcher.ts
 import { logger } from "@/lib/logger";
 import { getActiveTorrentJobs, updateJobStates } from "@/models/jobs.model";
-import { createTorrentClient } from "@/torrent/createTorrentClient";
 import { DownloadStatus } from "@prisma/client";
-import { ClientTorrentInfo } from "@/torrent/types";
+import { TorrentClientInfo } from "@/torrent/types";
+import { TorrentClient } from "@/torrent/types";
 
 let interval: NodeJS.Timeout | null = null;
-let torrentClient: Awaited<ReturnType<typeof createTorrentClient>>;
+
 
 type TorrentJobUpdate = {
   id: number;
@@ -15,20 +15,19 @@ type TorrentJobUpdate = {
   infoHash: string;
 };
 
-export async function startTorrentWatcher() {
+export async function startTorrentWatcher(torrentClient: TorrentClient) {
   logger.info("👀 TorrentWatcher iniciando...");
 
-  torrentClient = await createTorrentClient();
-  interval = setInterval(runCheck, 5000);
+  interval = setInterval(() => runCheck(torrentClient), 5000);
 }
 
-async function runCheck() {
+async function runCheck(torrentClient: TorrentClient) {
   logger.info("🔄 Revisando torrents activos...");
 
   try {
     const updates: TorrentJobUpdate[] = [];
     const activeTorrents = await getActiveTorrentJobs();
-    const torrentStatus: ClientTorrentInfo[] = await torrentClient.info();
+    const torrentStatus: TorrentClientInfo[] = await torrentClient.info();
 
     logger.info({ activeTorrents, torrentStatus }, "📦 Torrents activos");
 

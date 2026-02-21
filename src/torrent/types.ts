@@ -8,15 +8,15 @@ export const TORRENT_CLIENTS = {
 export type TorrentClientType =
   (typeof TORRENT_CLIENTS)[keyof typeof TORRENT_CLIENTS];
 
-export type ClientTorrentInfo = {
+export type TorrentClientInfo = {
   hash: string;
   state: DownloadStatus;
   rawState: string;
   root_path: string;
 };
 
-export type TorrentStrategy = {
-  info: () => Promise<ClientTorrentInfo[]>;
+export type TorrentClient = {
+  info: () => Promise<TorrentClientInfo[]>;
   add: (torrent: string) => Promise<void>;
   stop: (hashes: string | string[]) => Promise<void>;
   remove: (hashes: string | string[], deleteFiles: boolean) => Promise<void>;
