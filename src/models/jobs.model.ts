@@ -119,7 +119,7 @@ export async function getAll(): Promise<Job[]> {
   return jobs.map(job => ({
     id: job.id,
     media_type: job.tmdb.media_type,
-    name: job.tmdb.name ?? job.tmdb.title,
+    name: job.tmdb.name ?? job.tmdb.original_title,
     status: resolveJobStatus(
       job.downloadStatus,
       job.encodeStatus
@@ -135,7 +135,11 @@ export async function getNextToRip() {
       encodeStatus: EncodeStatus.WAITING,
     },
     include: {
-      tmdb: true
+      tmdb: {
+        include: {
+          language: true, // esto incluye el idioma relacionado
+        },
+      },
     },
     orderBy: {
       updatedAt: 'asc', // para agarrar el "primero" según la fecha de creación

@@ -1,12 +1,15 @@
 import { spawn } from "child_process";
 import fs from "fs";
+import { logger } from "@/lib/logger";
 
 export function runFfmpeg(args: string[], finalPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tempPath = finalPath.replace(/\.mkv$/, ".working.mkv");
     const finalArgs = [...args.slice(0, -1), tempPath];
 
-    console.log(`\n🚀 Iniciando FFmpeg | Destino: ${finalPath}`);
+    logger.info({ finalPath }, "🚀 Iniciando FFmpeg | Destino");
+    const finalCmd = `ffmpeg ${finalArgs.map(arg => (arg.includes(" ") ? `"${arg}"` : arg)).join(" ")}`;
+    logger.info({finalCmd}, `Ejecutando comando: ${finalCmd}`);
 
     const child = spawn("ffmpeg", finalArgs, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -15,7 +18,7 @@ export function runFfmpeg(args: string[], finalPath: string): Promise<void> {
     // Definimos el manejador de señales para poder removerlo después
     const killHandler = () => {
       if (!child.killed) {
-        console.log("\n🛑 Matando proceso FFmpeg por cierre de sistema...");
+        logger.info("🛑 Matando proceso FFmpeg por cierre de sistema...");
         child.kill("SIGINT");
         if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
       }
@@ -45,7 +48,7 @@ export function runFfmpeg(args: string[], finalPath: string): Promise<void> {
         try {
           if (fs.existsSync(tempPath)) {
             fs.renameSync(tempPath, finalPath);
-            console.log(`\n\n✅ COMPLETADO: ${finalPath}`);
+            logger.info({finalPath}, "✅ COMPLETADO");
             resolve();
           }
         } catch (err) {
