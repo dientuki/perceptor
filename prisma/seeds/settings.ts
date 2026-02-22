@@ -16,6 +16,11 @@ export async function seedSettings() {
     { key: 'tracker_host', value: 'localhost' },
     { key: 'tracker_port', value: '9696' },
     { key: 'tracker_api_key', value: '' },
+
+    { key: 'media_server_client', value: 'jellyfin' },
+    { key: 'media_server_host', value: 'localhost' },
+    { key: 'media_server_port', value: '8096' },
+    { key: 'media_server_api_key', value: '' },    
   ]
 
   for (const setting of settings) {
