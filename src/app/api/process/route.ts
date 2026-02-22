@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getItems } from "@/core/tmdb/storage";
 import { search } from "@/core/search/prowlar";
 import { create, update } from "@/models/jobs.model";
-import { addTorrent } from "@/core/search/add";
 import { logger } from "@/lib/logger";
 import { DownloadStatus } from "@prisma/client";
+import { createTorrentClient } from "@/torrent/createTorrentClient";
 
 export async function POST(req: NextRequest) {
+  const torrentClient = await createTorrentClient();
   try {
     const { ids } = await req.json();
 
@@ -38,7 +39,8 @@ export async function POST(req: NextRequest) {
         'Resultados de búsqueda para:'
       );      
 
-      addTorrent(searchResult.downloadUrl);
+      await torrentClient.add(searchResult.downloadUrl);
+
       update(
         item.tmdbId,
         { downloadStatus: DownloadStatus.ADDED, infoHash: searchResult.infoHash },       
