@@ -7,6 +7,7 @@ import { buildOutputPath } from "../files/buildOutputPath";
 import { findMkvFile } from "../files/findMkv";
 import { TorrentClient } from "@/torrent/types";
 import { JobReadyToRip } from "@/models/types";
+import { createMediaServerClient } from "@/mediaServer/createMediaServerClient";
 
 export async function processRip(
   job: JobReadyToRip,
@@ -33,4 +34,7 @@ export async function processRip(
   await update(job.tmdbId, { encodeStatus: EncodeStatus.COMPLETED });
 
   await torrentClient.remove(job.infoHash);
+
+  const mediaServerClient = await createMediaServerClient();
+  await mediaServerClient.createdMedia(outputPath);
 }
