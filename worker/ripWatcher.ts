@@ -34,6 +34,7 @@ async function runCheck(torrentClient: TorrentClient) {
   try {
     logger.info({ job }, "📦 Procesando rip...");
     await processRip(job, path_movies, torrentClient);
+    logger.info("📦 Rip completado");
   } catch (error) {
     logger.error({ error }, "❌ Error en RipWatcher");
   } finally {

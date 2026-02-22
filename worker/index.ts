@@ -14,7 +14,7 @@ async function bootstrap() {
   const torrentClient = await createTorrentClient();
 
   startTorrentWatcher(torrentClient)
-  //startRipWatcher(torrentClient)
+  startRipWatcher(torrentClient)
 }
 
 bootstrap()
