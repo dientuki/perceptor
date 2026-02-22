@@ -19,5 +19,5 @@ export type TorrentClient = {
   info: () => Promise<TorrentClientInfo[]>;
   add: (torrent: string) => Promise<void>;
   stop: (hashes: string | string[]) => Promise<void>;
-  remove: (hashes: string | string[], deleteFiles: boolean) => Promise<void>;
+  remove: (hashes: string | string[], deleteFiles?: boolean) => Promise<void>;
 };
