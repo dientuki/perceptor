@@ -1,11 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { DownloadStatus, EncodeStatus } from "@prisma/client";
-
-type JobStateUpdate = {
-  id: number;
-  downloadStatus: DownloadStatus;
-  root_path: string;
-};
+import { jobToRipInclude, JobStateUpdate } from "@/models/types";
 
 export async function create(tmdbId: number) {
   try {
@@ -131,22 +126,14 @@ export async function getAll(): Promise<Job[]> {
 }
 
 export async function getNextToRip() {
-  const job = await prisma.job.findFirst({
+  return prisma.job.findFirst({
     where: {
       downloadStatus: DownloadStatus.COMPLETED,
       encodeStatus: EncodeStatus.WAITING,
     },
-    include: {
-      tmdb: {
-        include: {
-          language: true, // esto incluye el idioma relacionado
-        },
-      },
-    },
+    include: jobToRipInclude,
     orderBy: {
-      updatedAt: 'asc', // para agarrar el "primero" según la fecha de creación
+      updatedAt: "asc",
     },
   });
-
-  return job;
 }

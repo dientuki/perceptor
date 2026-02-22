@@ -1,4 +1,4 @@
-import { Job, EncodeStatus } from "@prisma/client";
+import { EncodeStatus } from "@prisma/client";
 import { update } from "@/models/jobs.model";
 import { getMetadata } from "../ffmpeg/metadata";
 import { runFfmpeg } from "../ffmpeg/runner";
@@ -6,9 +6,10 @@ import { buildFfmpegCommand } from "../ffmpeg/buildCommand";
 import { buildOutputPath } from "../files/buildOutputPath";
 import { findMkvFile } from "../files/findMkv";
 import { TorrentClient } from "@/torrent/types";
+import { JobReadyToRip } from "@/models/types";
 
 export async function processRip(
-  job: Job,
+  job: JobReadyToRip,
   moviesPath: string,
   torrentClient: TorrentClient
 ) {

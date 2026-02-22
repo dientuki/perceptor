@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { Job } from "@prisma/client";
+import { JobReadyToRip } from "@/models/types";
 
-export function buildOutputPath(job: Job, basePath: string): string {
+export function buildOutputPath(job: JobReadyToRip, basePath: string): string {
   const { original_title, release_date } = job.tmdb;
 
   const cleanTitle = original_title

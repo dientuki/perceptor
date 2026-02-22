@@ -3,10 +3,15 @@ import { getNextToRip } from "@/models/jobs.model";
 import { getSetting } from "@/models/settings.model";
 import { TorrentClient } from "@/torrent/types";
 import { processRip } from "./rip/processRip";
+import { JobToRip, JobReadyToRip } from "@/models/types";
 
 let isWorking = false;
 let interval: NodeJS.Timeout | null = null;
 let path_movies: string;
+
+function isJobReadyToRip(job: JobToRip | null): job is JobReadyToRip {
+  return !!job && !!job.root_path;
+}
 
 export async function startRipWatcher(torrentClient: TorrentClient) {
   logger.info("👀 RipWatcher iniciando...");
@@ -21,7 +26,8 @@ async function runCheck(torrentClient: TorrentClient) {
   if (isWorking) return;
 
   const job = await getNextToRip();
-  if (!job) return;
+  
+  if (!isJobReadyToRip(job)) return;
 
   isWorking = true;
 
