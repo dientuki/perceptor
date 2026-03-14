@@ -11,6 +11,7 @@ const options = {
   }
 };
 
+
 export async function fetchAllTmdbPages({ endpoint, query }: TmdbSearch): Promise<TmdbResults[]> {
   let page = 1
   let totalPages = 1

@@ -16,19 +16,21 @@ async function getData(query: string): Promise<any[]> {
   url.searchParams.set("query", query);
 
   logger.info(
-    { url },
+    { url, trackerClient },
     "Realizando búsqueda en proxy:"
   );
 
-  //const res = await fetch(url, {
-  //  method: "GET",
-  //  headers: {
-  //    "X-Api-Key": trackerClient.tracker_api_key,
-  //  },
-  //});
-  //const data = await res.json();
-  const file = await fs.readFile("./mi7.json", "utf-8");
-  const data = JSON.parse(file);
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      "X-Api-Key": trackerClient.tracker_api_key,
+    },
+  });
+  //console.log('tracker:', trackerClient);
+  //console.log(res);
+  const data = await res.json();
+  //const file = await fs.readFile("./mi7.json", "utf-8");
+  //const data = JSON.parse(file);
 
   //console.log(data);
   return data;

@@ -111,3 +111,70 @@ JSON: ${json}`;
 
   return items.filter((item: any) => ids.includes(item.id));
 }
+
+function safeJsonArrayParse(text: string, expectedLength: number): string[] {
+  try {
+    const cleaned = text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const parsed = JSON.parse(cleaned);
+
+    if (!Array.isArray(parsed)) {
+      throw new Error("Response is not an array");
+    }
+
+    if (parsed.length !== expectedLength) {
+      throw new Error(
+        `Length mismatch. Expected ${expectedLength}, got ${parsed.length}`
+      );
+    }
+
+    return parsed;
+  } catch (err) {
+    console.error("Invalid AI response:\n", text);
+    throw err;
+  }
+}
+
+
+export async function translate(texts: string[]): Promise<string[]> {
+  const prompt = `Actuá como un experto en localización de subtítulos.
+  Traducí el siguiente array de strings de español de España a español de Argentina, aplicando estrictamente el voseo y terminología local.
+  Voseo Obligatorio: Cambiá 'tú' por 'vos' y 'vosotros' por 'ustedes'. Ajustá los verbos (ej: 'tienes' -> 'tenés', 'venid' -> 'vengan', 'sabéis' -> 'saben', 'haces' -> 'hacés').
+  Vocabulario General: Cambiá 'aparcar' por 'estacionar', 'ordenador' por 'computadora', 'zumo' por 'jugo', 'tío' por 'chabón/tipo', 'molar' por 'estar bueno', 'trabajo/curro' por 'laburo', 'dinero/pasta' por 'plata/guita', 'vale' por 'dale/está bien'.
+  Vocabulario Fierrero (Específico):
+  - Neumáticos -> Cubiertas o Gomas.
+  - Capó -> Capot.
+  - Maletero -> Baúl.
+  - Gasolina -> Nafta.
+  - Llantas, caja de cambios (mantener igual).
+  Corrección de Modelos (Initial D):
+  - Cambiá '8.6' por '86'.
+  - Cambiá 'S-1.3' por 'S13'.
+
+  REGLAS DE INTEGRIDAD
+  - Manten la cantidad de elementos del array
+  - Manten el orden de los elementos
+  - Respeta los saltos de linea que estan con el caracter\n
+
+  JSON INPUT:
+  ${JSON.stringify(texts)}`;
+
+  console.log('tranlating');
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: prompt }],
+      },
+    ],
+  });
+
+  const raw = response.text ?? "";
+
+  return safeJsonArrayParse(raw, texts.length);
+}
