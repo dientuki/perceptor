@@ -21,6 +21,13 @@ export async function seedSettings() {
     { key: 'media_server_host', value: 'localhost' },
     { key: 'media_server_port', value: '8096' },
     { key: 'media_server_api_key', value: '' },    
+
+    { key: 'ia_model', value: 'gemini-3-flash-preview' },
+    { key: 'ia_key', value: '' },
+
+    { key: 'movie_db_client', value: 'tmdb' },
+    { key: 'movie_db_host', value: 'https://api.themoviedb.org' },
+    { key: 'movie_db_api_key', value: '' },
   ]
 
   for (const setting of settings) {
