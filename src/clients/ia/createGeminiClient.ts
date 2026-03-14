@@ -42,7 +42,7 @@ function safeJsonArrayParse(text: string, expectedLength: number): string[] {
 export const createGeminiClient = (config : Record<string, string>): IAClient => {
   
   const model = config.ia_model ?? 'gemini-3-flash-preview';
-  const key = config.ia_key ?? "AIzaSyBRJYT05nNvPxum3yL9tXkAHQXCLCS850Q";
+  const key = config.ia_key ?? "";
 
   //const config = { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL, } };
   const ai = new GoogleGenAI({
