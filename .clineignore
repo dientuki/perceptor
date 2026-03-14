@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+dist/
+*.mp4
+*.mkv
+
+# Carpetas de datos o temporales de tu proceso de video:
+data/
+temp/
