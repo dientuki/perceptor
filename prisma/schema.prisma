@@ -96,3 +96,51 @@ model Language {
 
   @@map("languages")
 }
+
+model Show {
+  id          Int       @id @default(autoincrement())
+  tmdbId      Int       @unique
+  title       String
+  description String?
+  posterUrl   String?
+  status      String?
+  
+  seasons     Season[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("shows")
+}
+
+model Season {
+  id           Int       @id @default(autoincrement())
+  showId       Int
+  show         Show      @relation(fields: [showId], references: [id], onDelete: Cascade)
+  seasonNumber Int
+  airDate      DateTime?
+  
+  episodes     Episode[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([showId, seasonNumber])
+  @@map("seasons")
+}
+
+model Episode {
+  id           Int       @id @default(autoincrement())
+  seasonId     Int
+  season       Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  episodeNumber Int
+  title        String?
+  airDate      DateTime?
+  downloaded   Boolean   @default(false)
+  filePath     String?
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([seasonId, episodeNumber])
+  @@map("episodes")
+}
+
