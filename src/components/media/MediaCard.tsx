@@ -36,6 +36,7 @@ export function MediaCard({ item, renderAction }: MediaCardProps) {
         <h3 className="line-clamp-2 text-sm font-semibold text-black dark:text-white" title={item.title}>
           {item.title}
         </h3>
+        {item.description && <p className="line-clamp-3 text-xs text-gray-500 dark:text-gray-400" title={item.description}>{item.description}</p>}
         <p className="text-xs text-gray-500 dark:text-gray-400">{year}</p>
       </div>
     </div>

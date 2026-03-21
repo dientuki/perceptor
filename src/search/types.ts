@@ -12,6 +12,8 @@ export type MediaSearchResult = {
   title: string;
   releaseDate: string;
   posterUrl: string | null;
+  originalLanguage: string;
+  description?: string;
   type: MediaType; // Para saber qué icono mostrar o a qué ruta navegar
 };
 

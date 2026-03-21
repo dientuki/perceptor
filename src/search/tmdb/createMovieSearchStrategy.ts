@@ -6,6 +6,8 @@ interface TmdbRawMovie {
   title: string;
   release_date: string;
   poster_path: string | null;
+  original_language: string;
+  overview: string;
 }
 
 export const createMovieSearchStrategy = (movieDBClient: MovieDBClient): SearchStrategy => ({
@@ -16,7 +18,9 @@ export const createMovieSearchStrategy = (movieDBClient: MovieDBClient): SearchS
       id: item.id,
       title: item.title,
       releaseDate: item.release_date,
-      posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : null,
+      posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w300${item.poster_path}` : null,
+      originalLanguage: item.original_language,
+      description: item.overview,
       type: MEDIA_TYPE.MOVIE
     }));
   }

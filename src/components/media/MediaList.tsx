@@ -18,7 +18,7 @@ export function MediaList({ items, renderAction, emptyMessage = "No hay resultad
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4">
       {items.map((item) => (
         <MediaCard key={item.id} item={item} renderAction={renderAction} />
       ))}
