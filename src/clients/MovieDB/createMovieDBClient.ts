@@ -7,7 +7,9 @@ export async function createMovieDBClient(): Promise<MovieDBClient> {
     "movie_db_client", "movie_db_host", "movie_db_api_key"
   ]);
 
-  if (config.media_server_client === MOVIEDB_CLIENTS.TMDB) {
+  console.log(config);
+
+  if (config.movie_db_client === MOVIEDB_CLIENTS.TMDB) {
     return createTMDBClient(config);
   }
 

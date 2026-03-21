@@ -16,7 +16,7 @@ export const createTVSearchStrategy = (movieDBClient: MovieDBClient): SearchStra
       id: item.id,
       title: item.name,       // TS sabe que 'name' existe porque usamos <TmdbRawTv>
       releaseDate: item.first_air_date,
-      posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
+      posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : null,
       type: MEDIA_TYPE.TV
     }));
   }

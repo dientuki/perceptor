@@ -1,53 +1,42 @@
 "use client";
 
 import { useState } from "react";
-import SearchForm from "./SearchForm";
-import ResultsForm from "./ResultsForm";
+import { MediaType, MediaSearchResult } from "@/search/types";
+import { SearchInput } from "./SearchInput";
+import { searchAction } from "@/actions/search";
+import { MediaList } from "@/components/media/MediaList";
 
-export default function SearchContainer() {
-  const [results, setResults] = useState([]);
-  const [selectedIds, setSelectedIds] = useState([]);
+
+export default function SearchContainer({ type }: { type: MediaType }) {
+  const [results, setResults] = useState<MediaSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const handleSearch = async (query: string) => {
-    //setStatus("loading");
-    setSelectedIds([]);
-
-    const res = await fetch("/api/ia", {
-      method: "POST",
-      body: JSON.stringify({ query }),
-    });
-    const data = await res.json();
+    setLoading(true);
+    const data = await searchAction(query, type);
     setResults(data);
+    setLoading(false);
 
-    //setStatus("success");
-  };
-
-  const toggleSelection = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id)
-        ? prev.filter((i) => i !== id)
-        : [...prev, id]
-    );
-  };
-
-  const handleProcess = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await fetch("/api/process", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: selectedIds }),
-    });
+    console.log(data);
   };
 
   return (
-    <>
-      <SearchForm onSearch={handleSearch} />
-      <ResultsForm
-        results={results}
-        selectedIds={selectedIds}
-        toggleSelection={toggleSelection}
-        onProcess={handleProcess}
-      />
-    </>
+    <div className="space-y-6">
+      {/* Componente de Input */}
+      <SearchInput onSearch={handleSearch} loading={loading} type={type} />
+
+      {/* Aquí irá el MediaGrid que haremos después */}
+      <MediaList
+        items={results} 
+        renderAction={(item) => (
+            <button 
+            onClick={() => console.log(item)}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary/90"
+            >
+            +
+            </button>
+        )}
+        />
+    </div>
   );
 }
