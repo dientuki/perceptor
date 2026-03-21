@@ -1,4 +1,4 @@
-import { MovieDBClient, MovieDBSearch, MovieDBResults } from "./types";
+import { MovieDBClient, MovieDBSearch } from "./types";
 import { HTTP_METHOD } from "@/types/http";
 
 interface TmdbSearchResponse {
@@ -45,12 +45,8 @@ interface TmdbMulti extends TmdbBase {
 
 type TmdbResults = TmdbMovie | TmdbTv | TmdbMulti;
 
-
-
 export const createTMDBClient = (config : Record<string, string>): MovieDBClient => {
   
-  //"movie_db_client", "movie_db_host", "movie_db_api_key"
-
   const host = config.movie_db_host ?? "localhost";
   const apiVersion = "3";
 
@@ -66,8 +62,28 @@ export const createTMDBClient = (config : Record<string, string>): MovieDBClient
     }
   };
 
+  async function fetchPage<T>(endpoint: string, query: string, page: number = 1): Promise<T[]> {
+    const urlPath = new URL(`${apiVersion}/${endpoint}`, baseUrl);
+    urlPath.searchParams.set("query", query);
+    urlPath.searchParams.set("page", page.toString());
+    
+    const res = await fetch(urlPath.toString(), options)
+
+    const data = await res.json();
+    return (data.results || []) as T[];
+    
+  }
+
   return {
-    async fetchAllTmdbPages({ endpoint, query }: MovieDBSearch): Promise<MovieDBResults[]> {
+    // 'thing' sería "movie", "tv", "person", "multi", etc.
+    async search<T>(thing: string, query: string, page: number = 1): Promise<T[]> {
+      return await fetchPage(`search/${thing}`, query, page) as T[];
+    }
+  };
+  /*
+
+  return {
+    async fetchAllTmdbPages<T>({ endpoint, query }: MovieDBSearch): Promise<T[]> {
       let page = 1
       let totalPages = 1
       const results: TmdbResults[] = [];
@@ -91,8 +107,19 @@ export const createTMDBClient = (config : Record<string, string>): MovieDBClient
     
       //console.log(results);
     
-      return results
+      return results as T[]
     },
-  
+
+    async fetchPage<T>(endpoint: string, query: string, page: number = 1): Promise<T[]> {
+      const urlPath = new URL(`${apiVersion}/${endpoint}`, baseUrl);
+      urlPath.searchParams.set("query", query);
+      urlPath.searchParams.set("page", page.toString());
+      
+      const res = await fetch(urlPath.toString(), options)
+
+      return await res.json() as T[];
+    }
+    
   };
+  */
 }
