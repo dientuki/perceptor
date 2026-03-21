@@ -1,20 +1,33 @@
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-import SearchContainer from "@/components/search/SearchContainer";
 import { Metadata } from "next";
-import React from "react";
+import { getAllShows } from "@/models/shows.model";
+import { MediaList } from "@/components/media/MediaList";
+import { MEDIA_TYPE, MediaSearchResult } from "@/search/types";
 
 export const metadata: Metadata = {
-  title: "Next.js Blank Page | TailAdmin - Next.js Dashboard Template",
-  description: "This is Next.js Blank Page TailAdmin Dashboard Template",
+  title: "Shows | Perceptor",
+  description: "List of tracked shows",
 };
 
-export default function ShowsPage() {
+export default async function ShowsPage() {
+  const shows = await getAllShows();
+
+  const items: MediaSearchResult[] = shows.map((show) => ({
+    id: show.id,
+    title: show.title,
+    releaseDate: show.releaseDate ? show.releaseDate.toISOString() : undefined,
+    description: show.description || "",
+    posterUrl: show.posterUrl,
+    type: MEDIA_TYPE.TV,
+    originalLanguage: show.originalLanguage,
+  }));
+
   return (
     <div>
       <PageBreadcrumb pageTitle="Shows" />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
-          el show
+          <MediaList items={items} />
         </div>
       </div>
     </div>

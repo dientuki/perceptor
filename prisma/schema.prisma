@@ -104,6 +104,8 @@ model Show {
   description String?
   posterUrl   String?
   status      String?
+  originalLanguage String
+  releaseDate DateTime?
   
   seasons     Season[]
   createdAt   DateTime  @default(now())
@@ -143,4 +145,3 @@ model Episode {
   @@unique([seasonId, episodeNumber])
   @@map("episodes")
 }
-
