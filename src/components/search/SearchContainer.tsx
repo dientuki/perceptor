@@ -5,9 +5,14 @@ import { MediaType, MediaSearchResult } from "@/search/types";
 import { SearchInput } from "./SearchInput";
 import { searchAction } from "@/actions/search";
 import { MediaList } from "@/components/media/MediaList";
-import { addShowAction } from "@/actions/shows";
 
-export default function SearchContainer({ type }: { type: MediaType }) {
+
+interface SearchContainerProps {
+  type: MediaType;
+  addAction: (item: MediaSearchResult) => Promise<any>;
+}
+
+export default function SearchContainer({ type, addAction }: SearchContainerProps) {
   const [results, setResults] = useState<MediaSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +26,7 @@ export default function SearchContainer({ type }: { type: MediaType }) {
   };
 
   const handleAdd = async (item: MediaSearchResult) => {
-    await addShowAction(item);
+    await addAction(item);
   };
 
   return (

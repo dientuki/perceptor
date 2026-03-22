@@ -19,7 +19,9 @@ import {
   FileIcon,
   TaskIcon
 } from "../icons/index";
+
 import SidebarWidget from "./SidebarWidget";
+import { TvMinimal } from "lucide-react";
 
 type NavItem = {
   name: string;
@@ -39,6 +41,26 @@ const navItems: NavItem[] = [
     name: "Search",
     path: "/search",
   },  
+  {
+    icon: <FileIcon />,
+    name: "Movies",
+    path: "/movies",
+  },
+  {
+    icon: <TvMinimal />,
+    name: "Shows",
+    path: "/shows/list",
+  },
+  {
+    icon: <FileIcon />,
+    name: "Import",
+    path: "/import",
+  },
+  {
+    icon: <FileIcon />,
+    name: "Translate",
+    path: "/translate",
+  },
   {
     icon: <CalenderIcon />,
     name: "Calendar",

@@ -16,6 +16,8 @@ export async function addShowAction(item: MediaSearchResult) {
     });
     
     revalidatePath("/shows");
+
+    
     return { success: true };
   } catch (error) {
     console.error("Error creating show:", error);
