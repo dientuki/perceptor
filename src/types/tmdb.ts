@@ -25,7 +25,7 @@ interface TmdbMovie extends TmdbBase {
   video: boolean;
 }
 
-interface TmdbTv extends TmdbBase {
+interface TmdbShow extends TmdbBase {
   origin_country: string[];   // Países de origen
   original_name: string;
   first_air_date: string;
@@ -40,7 +40,7 @@ interface TmdbMulti extends TmdbBase {
   video: boolean;
 }
 
-type TmdbResults = TmdbMovie | TmdbTv | TmdbMulti;
+type TmdbResults = TmdbMovie | TmdbShow | TmdbMulti;
 
 type TmdbSearch = {
   endpoint: string;
