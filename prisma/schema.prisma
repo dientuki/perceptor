@@ -101,7 +101,7 @@ model Show {
   id          Int       @id @default(autoincrement())
   tmdbId      Int       @unique
   title       String
-  description String?
+  overview    String?
   posterUrl   String?
   status      String?
   originalLanguage String
@@ -119,7 +119,7 @@ model Season {
   showId       Int
   show         Show      @relation(fields: [showId], references: [id], onDelete: Cascade)
   seasonNumber Int
-  airDate      DateTime?
+  releaseDate  DateTime?
   
   episodes     Episode[]
   createdAt    DateTime  @default(now())
@@ -135,7 +135,8 @@ model Episode {
   season       Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   episodeNumber Int
   title        String?
-  airDate      DateTime?
+  overview     String?
+  releaseDate  DateTime?
   downloaded   Boolean   @default(false)
   filePath     String?
   
