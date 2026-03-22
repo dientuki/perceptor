@@ -1,4 +1,5 @@
-import { MovieDBClient, MovieDBSearch } from "./types";
+import { MovieDBClient, MediaDetail, ShowDetail, MovieDetail, EpisodeDetail } from "./types";
+import { MEDIA_TYPE, MediaType } from "@/types/media";
 import { HTTP_METHOD } from "@/types/http";
 
 interface TmdbSearchResponse {
@@ -28,11 +29,23 @@ interface TmdbMovie extends TmdbBase {
   video: boolean;
 }
 
+// Interfaces Específicas de Detalles (TMDB devuelve campos extra en endpoints de detalle)
+interface TmdbMovieDetails extends TmdbMovie {
+  runtime: number;
+  status: string;
+}
+
 interface TmdbTv extends TmdbBase {
   origin_country: string[];   // Países de origen
   original_name: string;
   first_air_date: string;
   name: string;
+}
+
+interface TmdbTvDetails extends TmdbTv {
+  number_of_episodes: number;
+  number_of_seasons: number;
+  status: string;
 }
 
 interface TmdbMulti extends TmdbBase {
@@ -44,6 +57,54 @@ interface TmdbMulti extends TmdbBase {
 }
 
 type TmdbResults = TmdbMovie | TmdbTv | TmdbMulti;
+
+interface TmdbEpisode {
+  id: number;
+  name: string;
+  overview: string;
+  air_date: string;
+  episode_number: number;
+  still_path: string | null;
+  vote_average: number;
+}
+
+interface TmdbSeasonDetails {
+  episodes: TmdbEpisode[];
+}
+
+// --- MAPPERS ---
+// Estrategia de transformación para evitar if/else dentro de la función
+const mappers = {
+  [MEDIA_TYPE.MOVIE]: (data: TmdbMovieDetails): MovieDetail => ({
+    type: MEDIA_TYPE.MOVIE,
+    id: data.id,
+    title: data.title,
+    originalTitle: data.original_title,
+    overview: data.overview,
+    posterPath: data.poster_path,
+    backdropPath: data.backdrop_path,
+    originalLanguage: data.original_language,
+    voteAverage: data.vote_average,
+    releaseDate: data.release_date,
+    runtime: data.runtime,
+    status: data.status,
+  }),
+  [MEDIA_TYPE.TV]: (data: TmdbTvDetails): ShowDetail => ({
+    type: MEDIA_TYPE.TV,
+    id: data.id,
+    title: data.name,
+    originalTitle: data.original_name,
+    overview: data.overview,
+    posterPath: data.poster_path,
+    backdropPath: data.backdrop_path,
+    originalLanguage: data.original_language,
+    voteAverage: data.vote_average,
+    firstAirDate: data.first_air_date,
+    numberOfSeasons: data.number_of_seasons,
+    numberOfEpisodes: data.number_of_episodes,
+    status: data.status,
+  }),
+};
 
 export const createTMDBClient = (config : Record<string, string>): MovieDBClient => {
   
@@ -66,7 +127,7 @@ export const createTMDBClient = (config : Record<string, string>): MovieDBClient
     const urlPath = new URL(`${apiVersion}/${endpoint}`, baseUrl);
     urlPath.searchParams.set("query", query);
     urlPath.searchParams.set("page", page.toString());
-    
+        
     const res = await fetch(urlPath.toString(), options)
 
     const data = await res.json();
@@ -74,52 +135,45 @@ export const createTMDBClient = (config : Record<string, string>): MovieDBClient
     
   }
 
+  async function fetchOne<T>(endpoint: string): Promise<T> {
+    const urlPath = new URL(`${apiVersion}/${endpoint}`, baseUrl);
+    const res = await fetch(urlPath.toString(), options);
+    return (await res.json()) as T;
+  }
+
   return {
     // 'thing' sería "movie", "tv", "person", "multi", etc.
     async search<T>(thing: string, query: string, page: number = 1): Promise<T[]> {
       return await fetchPage(`search/${thing}`, query, page) as T[];
-    }
-  };
-  /*
-
-  return {
-    async fetchAllTmdbPages<T>({ endpoint, query }: MovieDBSearch): Promise<T[]> {
-      let page = 1
-      let totalPages = 1
-      const results: TmdbResults[] = [];
-    
-      const urlPath = new URL(`${apiVersion}/${endpoint}`, baseUrl);
-      urlPath.searchParams.set("query", query);
-      urlPath.searchParams.set("page", page.toString());
-    
-      do {
-        const res = await fetch(urlPath.toString(), options)
-        const data = (await res.json()) as TmdbSearchResponse;
-    
-        if (!data || !data.results) break
-    
-        results.push(...data.results)
-    
-        totalPages = data.total_pages ?? 1
-        page++
-        urlPath.searchParams.set("page",page.toString());
-      } while (page <= totalPages)
-    
-      //console.log(results);
-    
-      return results as T[]
     },
 
-    async fetchPage<T>(endpoint: string, query: string, page: number = 1): Promise<T[]> {
-      const urlPath = new URL(`${apiVersion}/${endpoint}`, baseUrl);
-      urlPath.searchParams.set("query", query);
-      urlPath.searchParams.set("page", page.toString());
+    async details(thing: MediaType, id: number): Promise<MediaDetail> {
+      // Obtenemos los datos crudos
+      const data = await fetchOne<TmdbMovieDetails | TmdbTvDetails>(`${thing}/${id}`);
       
-      const res = await fetch(urlPath.toString(), options)
+      // Seleccionamos la estrategia de mapeo adecuada
+      const transform = mappers[thing];
 
-      return await res.json() as T[];
-    }
-    
+      if (!transform) {
+        throw new Error(`Media type not supported: ${thing}`);
+      }
+
+      // Ejecutamos la transformación
+      return transform(data as any);
+    },
+
+    async seasonDetails(id: number, seasonNumber: number): Promise<EpisodeDetail[]> {
+      const data = await fetchOne<TmdbSeasonDetails>(`tv/${id}/season/${seasonNumber}`);
+
+      return data.episodes.map((episode) => ({
+        id: episode.id,
+        title: episode.name,
+        overview: episode.overview,
+        releaseDate: episode.air_date,
+        episodeNumber: episode.episode_number,
+        stillPath: episode.still_path,
+        voteAverage: episode.vote_average,
+      }));
+    },
   };
-  */
 }

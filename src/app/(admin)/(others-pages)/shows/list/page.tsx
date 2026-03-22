@@ -2,7 +2,8 @@ import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import { Metadata } from "next";
 import { getAllShows } from "@/models/shows.model";
 import { MediaList } from "@/components/media/MediaList";
-import { MEDIA_TYPE, MediaSearchResult } from "@/search/types";
+import { MediaSearchResult } from "@/search/types";
+import { MEDIA_TYPE } from "@/types/media";
 
 export const metadata: Metadata = {
   title: "Shows | Perceptor",
@@ -15,11 +16,11 @@ export default async function ShowsPage() {
   const items: MediaSearchResult[] = shows.map((show) => ({
     id: show.id,
     title: show.title,
-    releaseDate: show.releaseDate ? show.releaseDate.toISOString() : undefined,
-    description: show.description || "",
+    releaseDate: show.releaseDate ? new Date(show.releaseDate).toISOString() : "",
+    overview: show.overview || "",
     posterUrl: show.posterUrl,
     type: MEDIA_TYPE.TV,
-    originalLanguage: show.originalLanguage,
+    originalLanguage: show.originalLanguage || "en",
   }));
 
   return (

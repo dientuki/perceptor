@@ -1,11 +1,5 @@
 // types.ts
-
-export const MEDIA_TYPE = {
-  MOVIE: "movie",
-  TV: "tv",
-} as const;
-
-export type MediaType = (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
+import { MediaType } from "@/types/media";
 
 export type MediaSearchResult = {
   id: number;
@@ -13,8 +7,9 @@ export type MediaSearchResult = {
   releaseDate: string;
   posterUrl: string | null;
   originalLanguage: string;
-  description?: string;
+  overview?: string;
   type: MediaType; // Para saber qué icono mostrar o a qué ruta navegar
+  status?: string;
 };
 
 export interface SearchStrategy {

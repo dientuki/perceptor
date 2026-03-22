@@ -1,5 +1,6 @@
 import { MovieDBClient } from "@/clients/MovieDB/types";
-import { SearchStrategy , MediaSearchResult, MEDIA_TYPE} from "../types";
+import { SearchStrategy , MediaSearchResult} from "../types";
+import { MEDIA_TYPE } from "@/types/media";
 
 interface TmdbRawMovie {
   id: number;
@@ -8,6 +9,7 @@ interface TmdbRawMovie {
   poster_path: string | null;
   original_language: string;
   overview: string;
+  status: string;
 }
 
 export const createMovieSearchStrategy = (movieDBClient: MovieDBClient): SearchStrategy => ({
@@ -21,7 +23,8 @@ export const createMovieSearchStrategy = (movieDBClient: MovieDBClient): SearchS
       posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w300${item.poster_path}` : null,
       originalLanguage: item.original_language,
       description: item.overview,
-      type: MEDIA_TYPE.MOVIE
+      type: MEDIA_TYPE.MOVIE,
+      status: item.status
     }));
   }
 });

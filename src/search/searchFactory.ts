@@ -2,7 +2,8 @@
 import { createMovieDBClient } from "@/clients/MovieDB/createMovieDBClient";
 import { createMovieSearchStrategy } from "./tmdb/createMovieSearchStrategy";
 import { createTVSearchStrategy } from "./tmdb/createTVSearchStrategy";
-import { MEDIA_TYPE, MediaType, SearchStrategy } from "./types";
+import { SearchStrategy } from "./types";
+import { MEDIA_TYPE, MediaType } from "@/types/media";
 
 const STRATEGY_MAP = {
   [MEDIA_TYPE.MOVIE]: createMovieSearchStrategy,

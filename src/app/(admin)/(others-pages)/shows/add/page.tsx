@@ -1,6 +1,6 @@
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import SearchContainer from "@/components/search/SearchContainer";
-import { MEDIA_TYPE } from "@/search/types";
+import { MEDIA_TYPE } from "@/types/media";
 import { Metadata } from "next";
 import { addShowAction } from "@/actions/shows";
 
