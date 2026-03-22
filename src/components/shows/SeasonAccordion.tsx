@@ -4,6 +4,9 @@ import { Prisma } from "@prisma/client";
 import { useState } from "react";
 import { FileVideo, Magnet } from "lucide-react";
 import Button from "@/components/ui/button/Button";
+import { useModal } from "@/hooks/useModal";
+import { Modal } from "@/components/ui/modal";
+import ImportFileModal from "../import/importFileModal";
 
 type SeasonWithEpisodes = Prisma.SeasonGetPayload<{
   include: {
@@ -17,25 +20,34 @@ interface SeasonAccordionProps {
 }
 
 export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordionProps) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [ isSeasonOpen, setIsSeasonOpen] = useState(defaultOpen);
+  const [activeEpisode, setActiveEpisode] = useState<any>(null);
+  const [actionType, setActionType] = useState<"video" | "magnet">("video");
+  const { isOpen, openModal, closeModal } = useModal();
+
+  const handleOpenModal = (episode: any, type: "video" | "magnet") => {
+    setActiveEpisode(episode);
+    setActionType(type);
+    openModal();
+  };
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setIsSeasonOpen(!isSeasonOpen)}
         className="flex w-full items-center justify-between bg-gray-50 px-4 py-3 text-left transition hover:bg-gray-100 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
       >
         <h4 className="font-semibold text-gray-800 dark:text-white/90">
           Season {season.seasonNumber}
         </h4>
-        <span className={`transform transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}>
+        <span className={`transform transition-transform duration-200 ${isSeasonOpen ? "rotate-180" : ""}`}>
           <svg className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </span>
       </button>
       
-      {isOpen && (
+      {isSeasonOpen && (
         <div className="overflow-x-auto border-t border-gray-200 dark:border-gray-800">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead className="bg-gray-50 dark:bg-white/[0.02]">
@@ -65,10 +77,10 @@ export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordion
                   </td>
                   <td className="px-4 py-3 text-sm">
                     <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline">
+                      <Button size="sm" variant="outline" onClick={() => handleOpenModal(episode, "video")}>
                         <FileVideo className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="outline">
+                      <Button size="sm" variant="outline" onClick={() => handleOpenModal(episode, "magnet")}>
                         <Magnet className="h-4 w-4" />
                       </Button>
                     </div>
@@ -79,6 +91,12 @@ export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordion
           </table>
         </div>
       )}
+      <ImportFileModal 
+        isOpen={isOpen} 
+        onClose={closeModal} 
+        item={activeEpisode} 
+      />
     </div>
+    
   );
 };
