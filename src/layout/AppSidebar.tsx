@@ -49,7 +49,7 @@ const navItems: NavItem[] = [
   {
     icon: <TvMinimal />,
     name: "Shows",
-    path: "/shows/list",
+    path: "/shows",
   },
   {
     icon: <FileIcon />,

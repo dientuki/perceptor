@@ -12,6 +12,26 @@ export async function getShowByTmdbId(tmdbId: number) {
 }
 
 /**
+ * Obtiene un show por su ID de base de datos, incluyendo temporadas y episodios.
+ * @param id ID único del show en la DB.
+ */
+export async function getShowById(id: number) {
+  return prisma.show.findUnique({
+    where: { id },
+    include: {
+      seasons: {
+        orderBy: { seasonNumber: "desc" },
+        include: {
+          episodes: {
+            orderBy: { episodeNumber: "desc" },
+          },
+        },
+      },
+    },
+  });
+}
+
+/**
  * Crea un nuevo show en la base de datos.
  * @param data Datos necesarios para crear el show.
  */
