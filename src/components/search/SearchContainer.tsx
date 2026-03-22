@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { MediaType, MediaSearchResult } from "@/search/types";
+import { MediaSearchResult } from "@/search/types";
 import { SearchInput } from "./SearchInput";
 import { searchAction } from "@/actions/search";
 import { MediaList } from "@/components/media/MediaList";
+import { MediaType } from "@/types/media";
 
 
 interface SearchContainerProps {

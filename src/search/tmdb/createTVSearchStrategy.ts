@@ -22,7 +22,7 @@ export const createTVSearchStrategy = (movieDBClient: MovieDBClient): SearchStra
       releaseDate: item.first_air_date,
       posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w300${item.poster_path}` : null,
       originalLanguage: item.original_language,
-      description: item.overview,
+      overview: item.overview,
       type: MEDIA_TYPE.TV,
       status: item.status
     }));

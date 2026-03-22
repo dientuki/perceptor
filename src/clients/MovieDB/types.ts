@@ -28,11 +28,22 @@ export interface MovieDetail extends BaseMediaDetail {
   runtime: number;
 }
 
+export interface SeasonSummary {
+  id: number;
+  name: string;
+  seasonNumber: number;
+  episodeCount: number;
+  releaseDate: string | null;
+  overview: string;
+  posterPath: string | null;
+}
+
 export interface ShowDetail extends BaseMediaDetail {
   type: typeof MEDIA_TYPE.TV;
   firstAirDate: string;
   numberOfSeasons: number;
   numberOfEpisodes: number;
+  seasons: SeasonSummary[];
 }
 
 export interface EpisodeDetail {

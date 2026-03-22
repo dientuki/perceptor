@@ -6,8 +6,8 @@ import type { Prisma } from "@prisma/client";
  * @param data Datos necesarios para crear la temporada.
  */
 export async function createSeason(data: Prisma.SeasonCreateInput | Prisma.SeasonUncheckedCreateInput) {
-  if (typeof data.airDate === "string" && data.airDate) {
-    data.airDate = new Date(data.airDate);
+  if (typeof data.releaseDate === "string" && data.releaseDate) {
+    data.releaseDate = new Date(data.releaseDate);
   }
 
   return prisma.season.create({

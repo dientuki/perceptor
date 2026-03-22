@@ -42,10 +42,22 @@ interface TmdbTv extends TmdbBase {
   name: string;
 }
 
+interface TmdbSeason {
+  air_date: string;
+  episode_count: number;
+  id: number;
+  name: string;
+  overview: string;
+  poster_path: string;
+  season_number: number;
+  vote_average: number;
+}
+
 interface TmdbTvDetails extends TmdbTv {
   number_of_episodes: number;
   number_of_seasons: number;
   status: string;
+  seasons: TmdbSeason[];
 }
 
 interface TmdbMulti extends TmdbBase {
@@ -102,6 +114,15 @@ const mappers = {
     firstAirDate: data.first_air_date,
     numberOfSeasons: data.number_of_seasons,
     numberOfEpisodes: data.number_of_episodes,
+    seasons: data.seasons?.map(s => ({
+      id: s.id,
+      name: s.name,
+      seasonNumber: s.season_number,
+      episodeCount: s.episode_count,
+      releaseDate: s.air_date,
+      overview: s.overview,
+      posterPath: s.poster_path
+    })) || [],
     status: data.status,
   }),
 };

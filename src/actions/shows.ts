@@ -3,17 +3,25 @@
 import { createShow } from "@/models/shows.model";
 import { MediaSearchResult } from "@/search/types";
 import { revalidatePath } from "next/cache";
+import { createSeason } from "@/models/seasons.model";
+import { createEpisode } from "@/models/episodes.model";
+import { createMovieDBClient } from "@/clients/MovieDB/createMovieDBClient";
+import { MEDIA_TYPE } from "@/types/media";
 
 export async function addShowAction(item: MediaSearchResult) {
   try {
-    await createShow({
+    const show = await createShow({
       tmdbId: item.id,
       title: item.title,
-      description: item.description,
+      overview: item.overview,
       posterUrl: item.posterUrl,
       originalLanguage: item.originalLanguage,
       releaseDate: item.releaseDate,
+      status: item.status,
     });
+
+    // Ejecutar sincronización en segundo plano (Fire and forget)
+    void syncShowMetadata(show.id, item.id);
     
     revalidatePath("/shows");
 
@@ -22,5 +30,43 @@ export async function addShowAction(item: MediaSearchResult) {
   } catch (error) {
     console.error("Error creating show:", error);
     return { success: false, error: "Failed to create show" };
+  }
+}
+
+async function syncShowMetadata(showId: number, tmdbId: number) {
+  try {
+    const client = await createMovieDBClient();
+
+    const details = await client.details(MEDIA_TYPE.TV, tmdbId);
+
+    if (details.type === MEDIA_TYPE.TV) {
+      for (let i = 1; i <= details.numberOfSeasons; i++) {
+
+        for (const seasonInfo of details.seasons) {
+        
+          // 1. Crear la temporada en DB
+          const season = await createSeason({
+            showId,
+            seasonNumber: seasonInfo.seasonNumber,
+            releaseDate: seasonInfo.releaseDate ? new Date(seasonInfo.releaseDate) : null,
+          });
+
+          // 2. Buscar episodios de esta temporada en TMDB
+          const episodes = await client.seasonDetails(tmdbId, seasonInfo.seasonNumber);
+          // 3. Guardar episodios en DB
+          for (const episode of episodes) {
+            await createEpisode({
+              seasonId: season.id,
+              episodeNumber: episode.episodeNumber,
+              title: episode.title,
+              overview: episode.overview,
+              releaseDate: episode.releaseDate ? new Date(episode.releaseDate) : null,
+            });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Error syncing metadata for show ${showId}:`, error);
   }
 }
