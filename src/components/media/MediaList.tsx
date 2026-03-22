@@ -4,7 +4,7 @@ import { MediaCard } from "./MediaCard";
 
 interface MediaListProps {
   items: MediaSearchResult[];
-  renderAction?: (item: MediaSearchResult) => React.ReactNode;
+  renderAction?: (item: MediaSearchResult) => Promise<void> | void;
   emptyMessage?: string;
 }
 

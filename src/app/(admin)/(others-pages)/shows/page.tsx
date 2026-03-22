@@ -21,6 +21,7 @@ export default async function ShowsPage() {
     posterUrl: show.posterUrl,
     type: MEDIA_TYPE.TV,
     originalLanguage: show.originalLanguage || "en",
+    showLink: true,
   }));
 
   return (

@@ -10,6 +10,7 @@ export type MediaSearchResult = {
   overview?: string;
   type: MediaType; // Para saber qué icono mostrar o a qué ruta navegar
   status?: string;
+  showLink?: boolean;
 };
 
 export interface SearchStrategy {
