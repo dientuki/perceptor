@@ -35,7 +35,7 @@ interface TmdbMovieDetails extends TmdbMovie {
   status: string;
 }
 
-interface TmdbTv extends TmdbBase {
+interface TmdbShow extends TmdbBase {
   origin_country: string[];   // Países de origen
   original_name: string;
   first_air_date: string;
@@ -53,7 +53,7 @@ interface TmdbSeason {
   vote_average: number;
 }
 
-interface TmdbTvDetails extends TmdbTv {
+interface TmdbShowDetails extends TmdbShow {
   number_of_episodes: number;
   number_of_seasons: number;
   status: string;
@@ -68,7 +68,7 @@ interface TmdbMulti extends TmdbBase {
   video: boolean;
 }
 
-type TmdbResults = TmdbMovie | TmdbTv | TmdbMulti;
+type TmdbResults = TmdbMovie | TmdbShow | TmdbMulti;
 
 interface TmdbEpisode {
   id: number;
@@ -101,7 +101,7 @@ const mappers = {
     runtime: data.runtime,
     status: data.status,
   }),
-  [MEDIA_TYPE.TV]: (data: TmdbTvDetails): ShowDetail => ({
+  [MEDIA_TYPE.TV]: (data: TmdbShowDetails): ShowDetail => ({
     type: MEDIA_TYPE.TV,
     id: data.id,
     title: data.name,
@@ -170,7 +170,7 @@ export const createTMDBClient = (config : Record<string, string>): MovieDBClient
 
     async details(thing: MediaType, id: number): Promise<MediaDetail> {
       // Obtenemos los datos crudos
-      const data = await fetchOne<TmdbMovieDetails | TmdbTvDetails>(`${thing}/${id}`);
+      const data = await fetchOne<TmdbMovieDetails | TmdbShowDetails>(`${thing}/${id}`);
       
       // Seleccionamos la estrategia de mapeo adecuada
       const transform = mappers[thing];
