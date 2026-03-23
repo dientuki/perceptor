@@ -5,7 +5,7 @@ import Button from "@/components/ui/button/Button";
 
 interface MediaCardProps {
   item: MediaSearchResult;
-  renderAction?: (item: MediaSearchResult) => Promise<void> | void;
+  renderAction?: (item: MediaSearchResult) => React.ReactNode;
 }
 
 export function MediaCard({ item, renderAction }: MediaCardProps) {
@@ -35,9 +35,7 @@ export function MediaCard({ item, renderAction }: MediaCardProps) {
       </div>
       {/* Slot para el Botón (encima del poster o donde prefieras) */}
       {renderAction && (
-        <Button size="sm" onClick={() => renderAction(item)} startIcon={<Plus />} className="mt-2">
-          Add
-        </Button>
+        renderAction(item)
       )}
 
       {/* Info */}

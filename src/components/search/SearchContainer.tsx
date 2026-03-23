@@ -6,6 +6,8 @@ import { SearchInput } from "./SearchInput";
 import { searchAction } from "@/actions/search";
 import { MediaList } from "@/components/media/MediaList";
 import { MediaType } from "@/types/media";
+import Button from "@/components/ui/button/Button";
+import { Plus } from "lucide-react";
 
 
 interface SearchContainerProps {
@@ -37,12 +39,9 @@ export default function SearchContainer({ type, addAction }: SearchContainerProp
       <MediaList
         items={results} 
         renderAction={(item) => (
-            <button 
-            onClick={() => handleAdd(item)}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary/90"
-            >
-            +
-            </button>
+          <Button size="sm" onClick={() => handleAdd(item)} startIcon={<Plus />} className="mt-2">
+            Add
+          </Button>
         )}
         />
     </div>
