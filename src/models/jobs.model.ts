@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { DownloadStatus, EncodeStatus } from "@prisma/client";
+import { DownloadStatus, EncodeStatus, MediaType } from "@prisma/client";
 import { jobToRipInclude, JobStateUpdate } from "@/models/types";
 
 export async function create(tmdbId: number) {
@@ -23,6 +23,7 @@ export async function update(
     encodeStatus?: EncodeStatus;
     errorMessage?: string | null;
     infoHash?: string;
+    root_path?: string;
   }
 ) {
   try {
@@ -136,4 +137,22 @@ export async function getNextToRip() {
       updatedAt: "asc",
     },
   });
+}
+
+export async function createJobFromFile(tmdbId: number, data: { rootPath: string; mediaType: MediaType, episodeId?: number }) {
+  try {
+    return await prisma.job.create({
+      data: {
+        tmdbId,
+        root_path: data.rootPath,
+        downloadStatus: DownloadStatus.COMPLETED,
+        encodeStatus: EncodeStatus.WAITING,
+        mediaType: data.mediaType,
+        episodeId: data.episodeId,
+      },
+    });
+  } catch (error) {
+    console.error("Error upserting manual job:", error);
+    throw error;
+  }
 }

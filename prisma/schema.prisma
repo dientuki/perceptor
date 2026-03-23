@@ -9,7 +9,6 @@ datasource db {
 model TmdbResult {
   id             Int      @id @default(autoincrement())
   tmdbId         Int    @unique
-  job        Job?
 
   media_type     String
 
@@ -60,12 +59,19 @@ enum EncodeStatus {
   ERROR
 }
 
+enum MediaType {
+  MOVIE
+  TV
+}
+
 model Job {
   id        Int      @id @default(autoincrement())
   tmdbId    Int      @unique
-  tmdb      TmdbResult @relation(fields: [tmdbId], references: [tmdbId])
+  episodeId Int?     @unique
+  episode   Episode? @relation(fields: [episodeId], references: [id])
   infoHash  String?
   
+  mediaType MediaType @default(MOVIE)
   downloadStatus  DownloadStatus @default(CREATED)
   encodeStatus    EncodeStatus   @default(WAITING)
 
@@ -139,6 +145,7 @@ model Episode {
   releaseDate  DateTime?
   downloaded   Boolean   @default(false)
   filePath     String?
+  job          Job?
   
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

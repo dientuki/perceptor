@@ -1,11 +1,10 @@
 "use client";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, MediaType } from "@prisma/client";
 import { useState } from "react";
 import { FileVideo, Magnet } from "lucide-react";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
-import { Modal } from "@/components/ui/modal";
 import ImportFileModal from "../import/importFileModal";
 
 type SeasonWithEpisodes = Prisma.SeasonGetPayload<{
@@ -22,12 +21,15 @@ interface SeasonAccordionProps {
 export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordionProps) => {
   const [ isSeasonOpen, setIsSeasonOpen] = useState(defaultOpen);
   const [activeEpisode, setActiveEpisode] = useState<any>(null);
-  const [actionType, setActionType] = useState<"video" | "magnet">("video");
   const { isOpen, openModal, closeModal } = useModal();
 
-  const handleOpenModal = (episode: any, type: "video" | "magnet") => {
+  const handleOpenFileModal = (episode: any) => {
     setActiveEpisode(episode);
-    setActionType(type);
+    openModal();
+  };
+
+  const handleOpenMagnetModal = (episode: any) => {
+    setActiveEpisode(episode);
     openModal();
   };
 
@@ -77,10 +79,10 @@ export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordion
                   </td>
                   <td className="px-4 py-3 text-sm">
                     <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={() => handleOpenModal(episode, "video")}>
+                      <Button size="sm" variant="outline" onClick={() => handleOpenFileModal(episode)}>
                         <FileVideo className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleOpenModal(episode, "magnet")}>
+                      <Button size="sm" variant="outline" onClick={() => handleOpenMagnetModal(episode)}>
                         <Magnet className="h-4 w-4" />
                       </Button>
                     </div>
@@ -95,6 +97,7 @@ export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordion
         isOpen={isOpen} 
         onClose={closeModal} 
         item={activeEpisode} 
+        mediaType={MediaType.TV}
       />
     </div>
     

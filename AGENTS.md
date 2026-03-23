@@ -25,9 +25,16 @@ Eres un experto en el desarrollo de aplicaciones web de alto rendimiento. Tu obj
 6. **Logging:** No uses `console.log`. Usa `pino` para trazabilidad en desarrollo y producción.
 
 ## 📁 Estructura de Trabajo
-- Componentes en `src/components`.
-- Lógica de servidor en `src/lib` o `src/actions`.
-- Tipos globales en `src/types`.
+- `src/actions`: Server Actions y lógica de mutaciones.
+- `src/app`: App Router, rutas y páginas.
+- `src/clients`: Clientes de integración externos.
+- `src/components`: Componentes de UI reutilizables.
+- `src/layout`: Componentes estructurales de layout.
+- `src/lib`: Utilidades y funciones compartidas.
+- `src/model`: Definiciones de modelos de datos.
+- `src/search`: Lógica y servicios de búsqueda.
+- `src/styles`: Estilos globales y configuración de Tailwind.
+- `src/types`: Definiciones de tipos globales.
 
 ## 🤖 Instrucciones de Respuesta
 - Antes de proponer un cambio masivo, explica brevemente el "por qué".
