@@ -1,13 +1,14 @@
 import { EncodeStatus } from "@prisma/client";
 import { update, JobWithDetails } from "@/models/jobs.model";
-import { getMetadata } from "../ffmpeg/metadata";
-import { runFfmpeg } from "../ffmpeg/runner";
-import { buildFfmpegCommand } from "../ffmpeg/buildCommand";
-import { buildOutputPath } from "../files/buildOutputPath";
-import { findMkvFile } from "../files/findMkv";
+import { getMetadata } from "@/worker/ffmpeg/metadata";
+import { runFfmpeg } from "@/worker/ffmpeg/runner";
+import { buildFfmpegCommand } from "@/worker/ffmpeg/buildCommand";
+import { buildOutputPath } from "@/worker/files/buildOutputPath";
+import { findMkvFile } from "@/worker/files/findMkv";
 import { TorrentClient } from "@/clients/torrent/types";
 import fs from "fs/promises";
 import { logger } from "@/lib/logger";
+import { createMediaServerClient } from "@/clients/mediaServer/createMediaServerClient";
 
 export async function processRip(
   job: JobWithDetails & { root_path: string },
@@ -42,7 +43,7 @@ export async function processRip(
 
   await update(job.id, { encodeStatus: EncodeStatus.ENCODING });
 
-  await runFfmpeg(job.id, ffmpegArgs, outputPath);
+  //await runFfmpeg(job.id, ffmpegArgs, outputPath);
 
   await update(job.id, { encodeStatus: EncodeStatus.COMPLETED });
 
@@ -50,7 +51,6 @@ export async function processRip(
     await torrentClient.remove(job.infoHash);
   }
 
-  //const mediaServerClient = await createMediaServerClient();
-  //await mediaServerClient.createdMedia(outputPath);
-  
+  const mediaServerClient = await createMediaServerClient();
+  await mediaServerClient.createdMedia(outputPath);
 }
