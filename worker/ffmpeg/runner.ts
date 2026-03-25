@@ -1,14 +1,18 @@
 import { spawn } from "child_process";
 import fs from "fs";
 import { logger } from "@/lib/logger";
+import { update } from "@/models/jobs.model";
 
-export function runFfmpeg(args: string[], finalPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
+export function runFfmpeg(id: number, args: string[], finalPath: string): Promise<void> {
+  return new Promise(async (resolve, reject) => {
     const tempPath = finalPath.replace(/\.mkv$/, ".working.mkv");
     const finalArgs = [...args.slice(0, -1), tempPath];
 
     logger.info({ finalPath }, "🚀 Iniciando FFmpeg | Destino");
     const finalCmd = `ffmpeg ${finalArgs.map(arg => (arg.includes(" ") ? `"${arg}"` : arg)).join(" ")}`;
+
+    await update(id, { ffmpegCommand: finalCmd });
+    
     logger.info({finalCmd}, `Ejecutando comando: ${finalCmd}`);
 
     const child = spawn("ffmpeg", finalArgs, {

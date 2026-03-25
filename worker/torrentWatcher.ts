@@ -2,8 +2,8 @@
 import { logger } from "@/lib/logger";
 import { getActiveTorrentJobs, updateJobStates } from "@/models/jobs.model";
 import { DownloadStatus } from "@prisma/client";
-import { TorrentClientInfo } from "@/torrent/types";
-import { TorrentClient } from "@/torrent/types";
+import { TorrentClientInfo } from "@/clients/torrent/types";
+import { TorrentClient } from "@/clients/torrent/types";
 
 let interval: NodeJS.Timeout | null = null;
 

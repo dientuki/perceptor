@@ -1,23 +1,26 @@
 import { logger } from "@/lib/logger";
-import { getNextToRip } from "@/models/jobs.model";
+import { getNextToRip, JobWithEpisode } from "@/models/jobs.model";
 import { getSetting } from "@/models/settings.model";
-import { TorrentClient } from "@/torrent/types";
+import { TorrentClient } from "@/clients/torrent/types";
 import { processRip } from "./rip/processRip";
-import { JobToRip, JobReadyToRip } from "@/models/types";
+import { MediaType } from "@prisma/client";
 
 let isWorking = false;
 let interval: NodeJS.Timeout | null = null;
-let path_movies: string;
+let paths: Record<MediaType, string>;
 
-function isJobReadyToRip(job: JobToRip | null): job is JobReadyToRip {
+function isJobReadyToRip(job: JobWithEpisode | null): job is JobWithEpisode & { root_path: string } {
   return !!job && !!job.root_path;
 }
 
 export async function startRipWatcher(torrentClient: TorrentClient) {
   logger.info("👀 RipWatcher iniciando...");
 
-  const paths = await getSetting(["path_movies"]) as Record<string, string>;
-  path_movies = paths.path_movies;
+  const pathSettings = await getSetting(["path_movies", "path_shows"]) as Record<string, string>;
+  paths = {
+    [MediaType.MOVIE]: pathSettings.path_movies,
+    [MediaType.TV]: pathSettings.path_shows,
+  };
 
   interval = setInterval(() => runCheck(torrentClient), 5000);
 }
@@ -33,7 +36,7 @@ async function runCheck(torrentClient: TorrentClient) {
 
   try {
     logger.info({ job }, "📦 Procesando rip...");
-    await processRip(job, path_movies, torrentClient);
+    await processRip(job, paths[job.mediaType], torrentClient);
     logger.info("📦 Rip completado");
   } catch (error) {
     logger.error({ error }, "❌ Error en RipWatcher");

@@ -2,8 +2,8 @@
 import { startTorrentWatcher } from './torrentWatcher'
 import { startRipWatcher } from './ripWatcher'
 import { logger } from "@/lib/logger";
-import { createTorrentClient } from "@/torrent/createTorrentClient";
-import { TorrentClient } from "@/torrent/types";
+import { createTorrentClient } from "@/clients/torrent/createTorrentClient";
+import { TorrentClient } from "@/clients/torrent/types";
 
 logger.info('🧠 Perceptor Worker iniciado...')
 let torrentClient: TorrentClient;
@@ -13,7 +13,7 @@ async function bootstrap() {
 
   const torrentClient = await createTorrentClient();
 
-  startTorrentWatcher(torrentClient)
+  //startTorrentWatcher(torrentClient)
   startRipWatcher(torrentClient)
 }
 

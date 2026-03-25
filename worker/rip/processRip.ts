@@ -1,19 +1,17 @@
 import { EncodeStatus } from "@prisma/client";
-import { update } from "@/models/jobs.model";
+import { update, JobWithDetails } from "@/models/jobs.model";
 import { getMetadata } from "../ffmpeg/metadata";
 import { runFfmpeg } from "../ffmpeg/runner";
 import { buildFfmpegCommand } from "../ffmpeg/buildCommand";
 import { buildOutputPath } from "../files/buildOutputPath";
 import { findMkvFile } from "../files/findMkv";
 import { TorrentClient } from "@/clients/torrent/types";
-import { JobReadyToRip } from "@/models/types";
-import { createMediaServerClient } from "@/clients/mediaServer/createMediaServerClient";
 import fs from "fs/promises";
 import { logger } from "@/lib/logger";
 
 export async function processRip(
-  job: JobReadyToRip,
-  moviesPath: string,
+  job: JobWithDetails & { root_path: string },
+  path: string,
   torrentClient: TorrentClient
 ) {
   let mkvFile = job.root_path;
@@ -29,27 +27,30 @@ export async function processRip(
     }
   }
 
+  console.log(mkvFile);
+  
   const metadata = await getMetadata(mkvFile);
+  
+  const outputPath = buildOutputPath(job, path);
 
-  const outputPath = buildOutputPath(job, moviesPath);
-
-  const ffmpegArgs = buildFfmpegCommand(
+  const ffmpegArgs = await buildFfmpegCommand(
     mkvFile,
     outputPath,
     metadata,
-    job.tmdb.language.iso3
+    job
   );
 
-  await update(job.tmdbId, { encodeStatus: EncodeStatus.ENCODING });
+  await update(job.id, { encodeStatus: EncodeStatus.ENCODING });
 
-  await runFfmpeg(ffmpegArgs, outputPath);
+  await runFfmpeg(job.id, ffmpegArgs, outputPath);
 
-  await update(job.tmdbId, { encodeStatus: EncodeStatus.COMPLETED });
+  await update(job.id, { encodeStatus: EncodeStatus.COMPLETED });
 
   if (job.infoHash) {
     await torrentClient.remove(job.infoHash);
   }
 
-  const mediaServerClient = await createMediaServerClient();
-  await mediaServerClient.createdMedia(outputPath);
+  //const mediaServerClient = await createMediaServerClient();
+  //await mediaServerClient.createdMedia(outputPath);
+  
 }

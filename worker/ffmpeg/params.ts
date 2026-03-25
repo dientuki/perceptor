@@ -1,15 +1,36 @@
 // src/core/ffmpeg/params.ts
 
-export function getVideoParams(videoStream: any) {
+type quality = 'remux' | 'web';
+
+function getQuality(isLiveAction: boolean, quality: quality) {
+  //anime 20, remux 22, para amz/web 24
+
+  if (!isLiveAction) return "20";
+
+  if (quality === "remux") return "22";
+
+  return "24";
+}
+
+export function getVideoParams(videoStream: any, isLiveAction: boolean, quality: quality = 'web') {
   const codec = videoStream.codec_name;
 
   // REGLA: Si es h264, convertir. 
   if (codec === 'h264') {
+    const svtav1 = isLiveAction ? "keyint=10s:scd=1:enable-overlays=1:tune=0:scm=0" : "keyint=10s:scd=1:enable-overlays=1:tune=0:aq-mode=2:enable-qm=1:qm-min=4";
+
     return [
       "-map", "0:v:0",
       "-c:v", "libsvtav1",
-      "-crf", "28",
+      //anime 20, remux 22, para amz/web 24
+      "-crf", getQuality(isLiveAction, quality), // 22peli 24 seriAjusta este valor para controlar la calidad (menor es mejor calidad, pero más peso)
       "-preset", "4",
+      "-pix_fmt", "yuv420p10le", //10bit, sacar para 8
+      "-svtav1-params", svtav1,
+      //"-svtav1-params", "keyint=10s:scd=1:enable-overlays=1:tune=0:scm=0",//live-action
+      //"-svtav1-params", "keyint=10s:scd=1:enable-overlays=1:tune=0:aq-mode=2:enable-qm=1:qm-min=4",//anime
+      //"-svtav1-params", "aq-mode=2:aq-strength=1.2:loop-restoration=2",
+      //"-svtav1-params", "film-grain=8:film-grain-denoise=0",
       //"-svtav1-params", "rc=1:tune=1:film-grain=8:film-grain-denoise=0:enable-overlays=1:scd=1",
       "-metadata:s:v:0", 'title="AV1 (Converted from H264)"'
     ];
@@ -82,9 +103,10 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
     
     if (s.channels === 6) {
         params.push(`-af:a:${index}`, "channelmap=channel_layout=5.1");
+        params.push(`-metadata:s:a:${index}`, `title="Surround 5.1 (Opus)"`);
     }
     
-    params.push(`-metadata:s:a:${index}`, `title="Surround 5.1 (Opus)"`);
+    //params.push(`-metadata:s:a:${index}`, `title="Surround 5.1 (Opus)"`);
     params.push(`-metadata:s:a:${index}`, `language=${lang}`);
   });
 

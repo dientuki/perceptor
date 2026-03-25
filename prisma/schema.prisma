@@ -6,41 +6,6 @@ datasource db {
   provider = "sqlite"
 }
 
-model TmdbResult {
-  id             Int      @id @default(autoincrement())
-  tmdbId         Int    @unique
-
-  media_type     String
-
-  // Campos comunes
-  adult             Boolean?
-  backdrop_path     String?
-  original_language String?
-  language          Language? @relation("LanguageToTmdbResult", fields: [original_language], references: [iso2])
-  overview          String?
-  popularity        Float?
-  poster_path       String?
-  vote_average      Float?
-  vote_count        Int?
-
-  // Campos específicos de Movie
-  original_title    String?
-  release_date      String? // Fecha de estreno
-  title             String?
-  video             Boolean?
-
-  // Campos específicos de TV
-  original_name     String?
-  first_air_date    String?
-  name              String?
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([tmdbId, media_type])
-  @@map("tmdb_results")
-}
-
 enum DownloadStatus {
   CREATED        // Job creado en el sistema
   SEARCHING      // Buscando torrent en tracker
@@ -64,9 +29,30 @@ enum MediaType {
   TV
 }
 
+model Movie {
+  id               Int       @id @default(autoincrement())
+  tmdbId           Int       @unique
+  title            String
+  originalTitle    String?
+  overview         String?
+  posterUrl        String?
+  status      String?
+  releaseDate      DateTime?
+  originalLanguage String
+  isLiveAction Boolean @default(true)
+
+  jobs             Job[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("movies")
+}
+
 model Job {
   id        Int      @id @default(autoincrement())
-  tmdbId    Int      @unique
+  tmdbId    Int      // TMDB ID of the Show or Movie
+  movieId   Int?
+  movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: Cascade)
   episodeId Int?     @unique
   episode   Episode? @relation(fields: [episodeId], references: [id])
   infoHash  String?
@@ -75,11 +61,14 @@ model Job {
   downloadStatus  DownloadStatus @default(CREATED)
   encodeStatus    EncodeStatus   @default(WAITING)
 
+  ffmpegCommand String?
+
   errorMessage    String?
   root_path   String? // Ruta al archivo descargado o al resultado del encode
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  @@unique([tmdbId, mediaType]) // A media can only have one active job
   @@map("jobs")
 }
 
@@ -96,8 +85,6 @@ model Setting {
 model Language {
   id   Int    @id @default(autoincrement())
   iso2 String @unique
-  tmdbResults TmdbResult[] @relation("LanguageToTmdbResult")
-
   iso3 String
 
   @@map("languages")
@@ -110,6 +97,7 @@ model Show {
   overview    String?
   posterUrl   String?
   status      String?
+  isLiveAction Boolean @default(true)
   originalLanguage String
   releaseDate DateTime?
   

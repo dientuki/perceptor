@@ -54,7 +54,7 @@ export default function SettingPathCard({
                   Series Path
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  {settings['path_series']}
+                  {settings['path_shows']}
                 </p>
               </div>
             </div>

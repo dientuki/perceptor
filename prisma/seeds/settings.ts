@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 export async function seedSettings() {
   const settings = [
     { key: 'path_movies', value: '/home/dientuki/Media/Movies' },
-    { key: 'path_series', value: '/home/dientuki/Media/Series' },
+    { key: 'path_shows', value: '/home/dientuki/Media/Series' },
     { key: 'path_downloads', value: '/home/dientuki/Media/Downloads' },
 
     { key: 'torrent_client', value: 'qbittorrent' },

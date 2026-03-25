@@ -5,14 +5,19 @@ import { revalidatePath } from "next/cache";
 import { MediaType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
-export async function createJobFromFileAction(item: any, filePath: string, mediaType: MediaType) {
+interface MediaItem {
+	id: number;
+	tmdbId?: number;
+}
+
+export async function createJobFromFileAction(item: MediaItem, filePath: string, mediaType: MediaType) {
   if (!filePath || typeof filePath !== "string") {
     return { success: false, message: "El path del archivo es obligatorio." };
   }
 
   try {
     let tmdbId: number;
-    let episodeId: number;
+    let episodeId: number | undefined;
 
     if (mediaType === MediaType.TV) {
       const episode = await prisma.episode.findUnique({

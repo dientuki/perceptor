@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { DownloadStatus, EncodeStatus, MediaType } from "@prisma/client";
-import { jobToRipInclude, JobStateUpdate } from "@/models/types";
+import { DownloadStatus, EncodeStatus, MediaType, Prisma } from "@prisma/client";
+import { JobStateUpdate } from "@/models/types";
+import { logger } from "@/lib/logger";
 
 export async function create(tmdbId: number) {
   try {
@@ -11,30 +12,31 @@ export async function create(tmdbId: number) {
     });
     return job;
   } catch (error) {
-    console.error("Error creando job:", error);
+    logger.error({ error, tmdbId }, "Error creando job");
     throw error;
   }
 }
 
 export async function update(
-  tmdbId: number,
+  id: number,
   data: {
     downloadStatus?: DownloadStatus;
     encodeStatus?: EncodeStatus;
     errorMessage?: string | null;
     infoHash?: string;
     root_path?: string;
+    ffmpegCommand?: string;
   }
 ) {
   try {
-    const job = await prisma.job.updateMany({
-      where: { tmdbId },
+    const job = await prisma.job.update({
+      where: { id },
       data,
     });
 
     return job;
   } catch (error) {
-    console.error("Error actualizando job:", error);
+    logger.error({ error, jobId: id, data }, "Error actualizando job");
     throw error;
   }
 }
@@ -106,7 +108,7 @@ function resolveJobStatus(
   // 5️⃣ Default → download manda
   return downloadStatus;
 }
-
+/*
 export async function getAll(): Promise<Job[]> {
   const jobs = await prisma.job.findMany({
     include: {
@@ -125,6 +127,35 @@ export async function getAll(): Promise<Job[]> {
     error: job.errorMessage,
   }));
 }
+*/
+const jobWithEpisodeInclude = {
+  episode: {
+    include: {
+      season: {
+        include: {
+          show: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.JobInclude;
+
+export type JobWithEpisode = Prisma.JobGetPayload<{ include: typeof jobWithEpisodeInclude }>;
+
+export const jobWithDetailsInclude = {
+  movie: true,
+  episode: {
+    include: {
+      season: {
+        include: {
+          show: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.JobInclude;
+
+export type JobWithDetails = Prisma.JobGetPayload<{ include: typeof jobWithDetailsInclude }>;
 
 export async function getNextToRip() {
   return prisma.job.findFirst({
@@ -132,7 +163,7 @@ export async function getNextToRip() {
       downloadStatus: DownloadStatus.COMPLETED,
       encodeStatus: EncodeStatus.WAITING,
     },
-    include: jobToRipInclude,
+    include: jobWithDetailsInclude,
     orderBy: {
       updatedAt: "asc",
     },
@@ -152,7 +183,7 @@ export async function createJobFromFile(tmdbId: number, data: { rootPath: string
       },
     });
   } catch (error) {
-    console.error("Error upserting manual job:", error);
+    logger.error({ error, tmdbId, data }, "Error creando job desde archivo");
     throw error;
   }
 }
