@@ -108,7 +108,7 @@ function resolveJobStatus(
   // 5️⃣ Default → download manda
   return downloadStatus;
 }
-/*
+
 export async function getAll(): Promise<Job[]> {
   const jobs = await prisma.job.findMany({
     include: {
@@ -127,7 +127,7 @@ export async function getAll(): Promise<Job[]> {
     error: job.errorMessage,
   }));
 }
-*/
+
 const jobWithEpisodeInclude = {
   episode: {
     include: {
@@ -184,6 +184,40 @@ export async function createJobFromFile(tmdbId: number, data: { rootPath: string
     });
   } catch (error) {
     logger.error({ error, tmdbId, data }, "Error creando job desde archivo");
+    throw error;
+  }
+}
+
+export async function createJobFromMagnet(
+  tmdbId: number,
+  data: {
+    infoHash: string;
+    mediaType: MediaType;
+    episodeId?: number;
+    movieId?: number;
+  }
+) {
+  try {
+    // Using upsert to prevent creating a duplicate job for the same media item.
+    // If a job exists, we'll update it to retry the download with the new magnet.
+    return await prisma.job.upsert({
+      where: {
+        tmdbId_mediaType: {
+          tmdbId,
+          mediaType: data.mediaType,
+        },
+      },
+      update: {
+        infoHash: data.infoHash,
+        downloadStatus: DownloadStatus.ADDED, // Reset status to ADDED
+        encodeStatus: EncodeStatus.WAITING,
+        errorMessage: null,
+        root_path: null, // Clear old path
+      },
+      create: { ...data, tmdbId, downloadStatus: DownloadStatus.ADDED },
+    });
+  } catch (error) {
+    logger.error({ error, tmdbId, data }, "Error creating/updating job from magnet");
     throw error;
   }
 }

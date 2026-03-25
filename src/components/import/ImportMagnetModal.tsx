@@ -5,17 +5,17 @@ import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { Video } from "lucide-react";
-import { createJobFromFileAction } from "@/actions/jobs";
+import { createJobFromMagnetAction } from "@/actions/jobs";
 import { MediaType } from "@prisma/client";
 
-interface ImportFileModalProps {
+interface ImportMagnetModalProps {
   isOpen: boolean;
   onClose: () => void;
   item: any;
   mediaType: MediaType;
 }
 
-export default function ImportFileModal({ isOpen, onClose, item, mediaType }: ImportFileModalProps) {
+export default function ImportMagnetModal({ isOpen, onClose, item, mediaType }: ImportMagnetModalProps) {
   const [path, setPath] = useState("");
   const [isPending, setIsPending] = useState(false);
 
@@ -24,9 +24,9 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
     if (isOpen) setPath("");
   }, [isOpen, item]);
   
-  const title = "Importar Video Local";
-  const label = "Path Absoluto";
-  const placeholder = "/home/user/downloads/video.mkv";
+  const title = "Importar Magnet";
+  const label = "URL";
+  const placeholder = "magnet:?xt=urn:btih:da39a3ee...";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +34,7 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
 
     setIsPending(true);
     console.log(item);
-    const result = await createJobFromFileAction(item, path, mediaType);
+    const result = await createJobFromMagnetAction(item, path, mediaType);
     setIsPending(false);
     
     if (result.success) {
@@ -55,7 +55,7 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
             {title}
           </h4>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
-            Ingresa el path absoluto del archivo para{" "}
+            Ingresa la url del magnet torrent para{" "}
             <span className="font-medium text-gray-800 dark:text-white">{item.title || item.name || `Item ${item.id}`}</span>.
           </p>
         </div>

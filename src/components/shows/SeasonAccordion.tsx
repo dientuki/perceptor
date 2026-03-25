@@ -1,15 +1,16 @@
 "use client";
 
-import { Prisma, MediaType } from "@prisma/client";
+import { Prisma, MediaType, Episode } from "@prisma/client";
 import { useState } from "react";
 import { FileVideo, Magnet } from "lucide-react";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
-import ImportFileModal from "../import/importFileModal";
+import ImportFileModal from "@/components/import/importFileModal";
+import ImportMagnetModal from "@/components/import/ImportMagnetModal";
 
 type SeasonWithEpisodes = Prisma.SeasonGetPayload<{
   include: {
-    episodes: true;
+    episodes: true; // This includes all scalar fields from Episode
   };
 }>;
 
@@ -20,17 +21,18 @@ interface SeasonAccordionProps {
 
 export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordionProps) => {
   const [ isSeasonOpen, setIsSeasonOpen] = useState(defaultOpen);
-  const [activeEpisode, setActiveEpisode] = useState<any>(null);
-  const { isOpen, openModal, closeModal } = useModal();
+  const [activeEpisode, setActiveEpisode] = useState<Episode | null>(null);
+  const { isOpen: isFileModalOpen, openModal: openFileModal, closeModal: closeFileModal } = useModal();
+  const { isOpen: isMagnetModalOpen, openModal: openMagnetModal, closeModal: closeMagnetModal } = useModal();
 
-  const handleOpenFileModal = (episode: any) => {
+  const handleOpenFileModal = (episode: Episode) => {
     setActiveEpisode(episode);
-    openModal();
+    openFileModal();
   };
 
-  const handleOpenMagnetModal = (episode: any) => {
+  const handleOpenMagnetModal = (episode: Episode) => {
     setActiveEpisode(episode);
-    openModal();
+    openMagnetModal();
   };
 
   return (
@@ -94,9 +96,15 @@ export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordion
         </div>
       )}
       <ImportFileModal 
-        isOpen={isOpen} 
-        onClose={closeModal} 
+        isOpen={isFileModalOpen} 
+        onClose={closeFileModal} 
         item={activeEpisode} 
+        mediaType={MediaType.TV}
+      />
+      <ImportMagnetModal
+        isOpen={isMagnetModalOpen}
+        onClose={closeMagnetModal}
+        item={activeEpisode}
         mediaType={MediaType.TV}
       />
     </div>
