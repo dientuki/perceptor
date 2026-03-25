@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import { getNextToRip, JobWithEpisode } from "@/models/jobs.model";
 import { getSetting } from "@/models/settings.model";
 import { TorrentClient } from "@/clients/torrent/types";
-import { processRip } from "./rip/processRip";
+import { processRip } from "@/worker/rip/processRip";
 import { MediaType } from "@prisma/client";
 
 let isWorking = false;

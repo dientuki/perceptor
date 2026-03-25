@@ -1,6 +1,6 @@
 // worker/index.ts
-import { startTorrentWatcher } from './torrentWatcher'
-import { startRipWatcher } from './ripWatcher'
+import { startTorrentWatcher } from '@/worker/torrentWatcher'
+import { startRipWatcher } from '@/worker/ripWatcher'
 import { logger } from "@/lib/logger";
 import { createTorrentClient } from "@/clients/torrent/createTorrentClient";
 import { TorrentClient } from "@/clients/torrent/types";
@@ -13,7 +13,7 @@ async function bootstrap() {
 
   const torrentClient = await createTorrentClient();
 
-  //startTorrentWatcher(torrentClient)
+  startTorrentWatcher(torrentClient)
   startRipWatcher(torrentClient)
 }
 

@@ -1,4 +1,4 @@
-import { getVideoParams, getAudioParams, getSubtitleParams } from "./params";
+import { getVideoParams, getAudioParams, getSubtitleParams } from "@/worker/ffmpeg/params";
 import { getIso3FromIso2 } from "@/models/languages.model";
 import { JobWithDetails } from "@/models/jobs.model";
 import { MediaType } from "@prisma/client";

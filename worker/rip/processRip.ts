@@ -43,7 +43,7 @@ export async function processRip(
 
   await update(job.id, { encodeStatus: EncodeStatus.ENCODING });
 
-  //await runFfmpeg(job.id, ffmpegArgs, outputPath);
+  await runFfmpeg(job.id, ffmpegArgs, outputPath);
 
   await update(job.id, { encodeStatus: EncodeStatus.COMPLETED });
 
