@@ -5,7 +5,7 @@ type quality = 'remux' | 'web';
 function getQuality(isLiveAction: boolean, quality: quality) {
   //anime 20, remux 22, para amz/web 24
 
-  if (!isLiveAction) return "20";
+  //if (!isLiveAction) return "20";
 
   if (quality === "remux") return "22";
 

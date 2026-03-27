@@ -12,33 +12,42 @@ interface MediaItem {
 	tmdbId?: number;
 }
 
+/**
+ * Resuelve el tmdbId del show y el episodeId (si aplica)
+ */
+async function resolveMediaIds(item: MediaItem, mediaType: MediaType) {
+  let tmdbId: number;
+  let episodeId: number | undefined;
+
+  if (mediaType === MediaType.TV) {
+    const episode = await prisma.episode.findUnique({
+      where: { id: item.id },
+      select: {
+        season: {
+          select: { show: { select: { tmdbId: true } } },
+        },
+      },
+    });
+
+    if (!episode?.season?.show?.tmdbId) {
+      throw new Error("No se pudo obtener el TMDB ID del show.");
+    }
+    tmdbId = episode.season.show.tmdbId;
+    episodeId = item.id;
+  } else {
+    tmdbId = item.tmdbId || item.id;
+  }
+
+  return { tmdbId, episodeId };
+}
+
 export async function createJobFromFileAction(item: MediaItem, filePath: string, mediaType: MediaType) {
   if (!filePath || typeof filePath !== "string") {
     return { success: false, message: "El path del archivo es obligatorio." };
   }
 
   try {
-    let tmdbId: number;
-    let episodeId: number | undefined;
-
-    if (mediaType === MediaType.TV) {
-      const episode = await prisma.episode.findUnique({
-        where: { id: item.id },
-        select: {
-          season: {
-            select: { show: { select: { tmdbId: true } } },
-          },
-        },
-      });
-
-      if (!episode?.season?.show?.tmdbId) {
-        return { success: false, message: "No se pudo obtener el TMDB ID del show." };
-      }
-      tmdbId = episode.season.show.tmdbId;
-      episodeId = item.id;
-    } else {
-      tmdbId = item.tmdbId || item.id;
-    }
+    const { tmdbId, episodeId } = await resolveMediaIds(item, mediaType);
 
     await createJobFromFile(tmdbId, {
       rootPath: filePath,
@@ -65,34 +74,15 @@ export async function createJobFromMagnetAction(item: MediaItem, magnetLink: str
 
   try {
     // 1. Extract infohash from magnet link
-    const infoHashMatch = magnetLink.match(/btih:([a-fA-F0-9]{40})/);
+    // Soporta hashes hex (40 chars) y base32 (32 chars)
+    const infoHashMatch = magnetLink.match(/btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/);
     if (!infoHashMatch) {
       return { success: false, message: "No se pudo extraer el Info Hash del link Magnet." };
     }
     const infoHash = infoHashMatch[1].toLowerCase();
 
     // 2. Determine tmdbId and episodeId
-    let tmdbId: number;
-    let episodeId: number | undefined;
-
-    if (mediaType === MediaType.TV) {
-      const episode = await prisma.episode.findUnique({
-        where: { id: item.id },
-        select: {
-          season: {
-            select: { show: { select: { tmdbId: true } } },
-          },
-        },
-      });
-
-      if (!episode?.season?.show?.tmdbId) {
-        return { success: false, message: "No se pudo obtener el TMDB ID del show." };
-      }
-      tmdbId = episode.season.show.tmdbId;
-      episodeId = item.id;
-    } else { // MOVIE
-      tmdbId = item.tmdbId || item.id;
-    }
+    const { tmdbId, episodeId } = await resolveMediaIds(item, mediaType);
 
     // 3. Add to torrent client
     const torrentClient = await createTorrentClient();

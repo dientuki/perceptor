@@ -172,8 +172,21 @@ export async function getNextToRip() {
 
 export async function createJobFromFile(tmdbId: number, data: { rootPath: string; mediaType: MediaType, episodeId?: number }) {
   try {
-    return await prisma.job.create({
-      data: {
+    return await prisma.job.upsert({
+      where: {
+        tmdbId_mediaType_episodeId: {
+          tmdbId,
+          mediaType: data.mediaType,
+          episodeId: data.episodeId ?? null,
+        },
+      },
+      update: {
+        root_path: data.rootPath,
+        downloadStatus: DownloadStatus.COMPLETED,
+        encodeStatus: EncodeStatus.WAITING,
+        errorMessage: null,
+      },
+      create: {
         tmdbId,
         root_path: data.rootPath,
         downloadStatus: DownloadStatus.COMPLETED,
@@ -202,9 +215,10 @@ export async function createJobFromMagnet(
     // If a job exists, we'll update it to retry the download with the new magnet.
     return await prisma.job.upsert({
       where: {
-        tmdbId_mediaType: {
+        tmdbId_mediaType_episodeId: {
           tmdbId,
           mediaType: data.mediaType,
+          episodeId: data.episodeId ?? null,
         },
       },
       update: {
@@ -214,7 +228,12 @@ export async function createJobFromMagnet(
         errorMessage: null,
         root_path: null, // Clear old path
       },
-      create: { ...data, tmdbId, downloadStatus: DownloadStatus.ADDED },
+      create: { 
+        ...data, 
+        tmdbId, 
+        downloadStatus: DownloadStatus.ADDED,
+        episodeId: data.episodeId ?? null,
+      },
     });
   } catch (error) {
     logger.error({ error, tmdbId, data }, "Error creating/updating job from magnet");

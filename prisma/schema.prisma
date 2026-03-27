@@ -68,7 +68,7 @@ model Job {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@unique([tmdbId, mediaType]) // A media can only have one active job
+  @@unique([tmdbId, mediaType, episodeId], name: "tmdbId_mediaType_episodeId")
   @@map("jobs")
 }
 

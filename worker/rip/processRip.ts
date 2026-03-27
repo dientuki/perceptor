@@ -24,12 +24,10 @@ export async function processRip(
     
     if (mkvFile && mkvFile !== job.root_path) {
       logger.info({ jobId: job.id, oldPath: job.root_path, newPath: mkvFile }, "📂 Actualizando path del Job al archivo MKV detectado");
-      await update(job.tmdbId, { root_path: mkvFile });
+      await update(job.id, { root_path: mkvFile });
     }
   }
 
-  console.log(mkvFile);
-  
   const metadata = await getMetadata(mkvFile);
   
   const outputPath = buildOutputPath(job, path);

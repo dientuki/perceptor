@@ -68,7 +68,7 @@ async function runCheck(torrentClient: TorrentClient) {
 
     await updateJobStates(updates);
     await torrentClient.stop(hashesToStop);
-
+    
   } catch (error) {
     logger.error({ error }, "❌ Error en TorrentWatcher:");
   }
