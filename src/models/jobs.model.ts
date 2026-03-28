@@ -170,30 +170,35 @@ export async function getNextToRip() {
   });
 }
 
-export async function createJobFromFile(tmdbId: number, data: { rootPath: string; mediaType: MediaType, episodeId?: number }) {
+export async function createJobFromFile(tmdbId: number, data: { rootPath: string; mediaType: MediaType, episodeId?: number, movieId?: number }) {
   try {
-    return await prisma.job.upsert({
-      where: {
-        tmdbId_mediaType_episodeId: {
-          tmdbId,
-          mediaType: data.mediaType,
-          episodeId: data.episodeId ?? null,
-        },
-      },
-      update: {
-        root_path: data.rootPath,
-        downloadStatus: DownloadStatus.COMPLETED,
-        encodeStatus: EncodeStatus.WAITING,
-        errorMessage: null,
-      },
-      create: {
-        tmdbId,
-        root_path: data.rootPath,
-        downloadStatus: DownloadStatus.COMPLETED,
-        encodeStatus: EncodeStatus.WAITING,
-        mediaType: data.mediaType,
-        episodeId: data.episodeId,
-      },
+    // Buscamos si ya existe un job para este ítem específico
+    const existingJob = await prisma.job.findFirst({
+      where: data.mediaType === MediaType.TV 
+        ? { episodeId: data.episodeId } 
+        : { movieId: data.movieId }
+    });
+
+    const jobData = {
+      tmdbId,
+      root_path: data.rootPath,
+      downloadStatus: DownloadStatus.COMPLETED,
+      encodeStatus: EncodeStatus.WAITING,
+      mediaType: data.mediaType,
+      errorMessage: null,
+      episodeId: data.episodeId ?? null,
+      movieId: data.movieId ?? null,
+    };
+
+    if (existingJob) {
+      return await prisma.job.update({
+        where: { id: existingJob.id },
+        data: jobData,
+      });
+    }
+
+    return await prisma.job.create({
+      data: jobData,
     });
   } catch (error) {
     logger.error({ error, tmdbId, data }, "Error creando job desde archivo");
@@ -211,32 +216,36 @@ export async function createJobFromMagnet(
   }
 ) {
   try {
-    // Using upsert to prevent creating a duplicate job for the same media item.
-    // If a job exists, we'll update it to retry the download with the new magnet.
-    return await prisma.job.upsert({
-      where: {
-        tmdbId_mediaType_episodeId: {
-          tmdbId,
-          mediaType: data.mediaType,
-          episodeId: data.episodeId ?? null,
-        },
-      },
-      update: {
-        infoHash: data.infoHash,
-        downloadStatus: DownloadStatus.ADDED, // Reset status to ADDED
-        encodeStatus: EncodeStatus.WAITING,
-        errorMessage: null,
-        root_path: null, // Clear old path
-      },
-      create: { 
-        ...data, 
-        tmdbId, 
-        downloadStatus: DownloadStatus.ADDED,
-        episodeId: data.episodeId ?? null,
-      },
+    const existingJob = await prisma.job.findFirst({
+      where: data.mediaType === MediaType.TV 
+        ? { episodeId: data.episodeId } 
+        : { movieId: data.movieId }
+    });
+
+    const jobData = {
+      tmdbId,
+      infoHash: data.infoHash,
+      mediaType: data.mediaType,
+      downloadStatus: DownloadStatus.ADDED,
+      encodeStatus: EncodeStatus.WAITING,
+      errorMessage: null,
+      root_path: null,
+      episodeId: data.episodeId ?? null,
+      movieId: data.movieId ?? null,
+    };
+
+    if (existingJob) {
+      return await prisma.job.update({
+        where: { id: existingJob.id },
+        data: jobData,
+      });
+    }
+
+    return await prisma.job.create({
+      data: jobData,
     });
   } catch (error) {
-    logger.error({ error, tmdbId, data }, "Error creating/updating job from magnet");
+    logger.error({ error, tmdbId, data }, "Error creando/actualizando job desde magnet");
     throw error;
   }
 }

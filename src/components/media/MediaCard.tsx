@@ -1,7 +1,8 @@
 // components/Media/MediaCard.tsx
 import { MediaSearchResult } from "@/search/types";
-import { Plus } from "lucide-react";
-import Button from "@/components/ui/button/Button";
+import { MEDIA_TYPE } from "@/types/media";
+import Image from "next/image";
+import Link from "next/link";
 
 interface MediaCardProps {
   item: MediaSearchResult;
@@ -12,10 +13,12 @@ export function MediaCard({ item, renderAction }: MediaCardProps) {
   const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : "N/A";
 
   const poster = item.posterUrl ? (
-    <img
+    <Image
       src={item.posterUrl}
       alt={item.title}
-      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+      fill
+      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+      className="object-cover transition-transform duration-300 group-hover:scale-105"
     />
   ) : (
     <span className="flex h-full items-center justify-center text-xs text-gray-400">Sin Poster</span>
@@ -26,9 +29,9 @@ export function MediaCard({ item, renderAction }: MediaCardProps) {
       {/* Poster */}
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
         {item.showLink ? (
-          <a href={item.type === "tv" ? `/shows/${item.id}` : `/movies/${item.id}`} className="block h-full w-full">
+          <Link href={item.type === MEDIA_TYPE.TV ? `/shows/${item.id}` : `/movies/${item.id}`} className="block h-full w-full">
             {poster}
-          </a>
+          </Link>
         ) : (
           poster
         )}

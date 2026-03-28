@@ -28,13 +28,18 @@ export async function buildFfmpegCommand(
 
   const languageIso3 = (await getIso3FromIso2(originalIso2)) ?? "eng";
 
+  // Detectamos si es REMUX buscando la palabra en el nombre del archivo o en el título del metadata
+  const isRemux = input.toLowerCase().includes("remux") || 
+                  (metadata.format?.tags?.title || "").toLowerCase().includes("remux");
+  const quality = isRemux ? "remux" : "web";
+
   return [
     "-i",
     input,
     "-threads",
     "0",
     //"-t", "00:01:00", // Solo para pruebas, elimina esto después
-    ...getVideoParams(vStream, isLiveAction),
+    ...getVideoParams(vStream, isLiveAction, quality),
     ...getAudioParams(aStreams, languageIso3),
     ...getSubtitleParams(sStreams, languageIso3),
     "-map_metadata:g",

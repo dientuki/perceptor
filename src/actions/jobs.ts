@@ -18,6 +18,7 @@ interface MediaItem {
 async function resolveMediaIds(item: MediaItem, mediaType: MediaType) {
   let tmdbId: number;
   let episodeId: number | undefined;
+  let movieId: number | undefined;
 
   if (mediaType === MediaType.TV) {
     const episode = await prisma.episode.findUnique({
@@ -36,9 +37,10 @@ async function resolveMediaIds(item: MediaItem, mediaType: MediaType) {
     episodeId = item.id;
   } else {
     tmdbId = item.tmdbId || item.id;
+    movieId = item.id;
   }
 
-  return { tmdbId, episodeId };
+  return { tmdbId, episodeId, movieId };
 }
 
 export async function createJobFromFileAction(item: MediaItem, filePath: string, mediaType: MediaType) {
@@ -47,12 +49,13 @@ export async function createJobFromFileAction(item: MediaItem, filePath: string,
   }
 
   try {
-    const { tmdbId, episodeId } = await resolveMediaIds(item, mediaType);
+    const { tmdbId, episodeId, movieId } = await resolveMediaIds(item, mediaType);
 
     await createJobFromFile(tmdbId, {
       rootPath: filePath,
       mediaType: mediaType,
       episodeId: episodeId,
+      movieId: movieId,
     });
     
     revalidatePath("/jobs");
@@ -82,18 +85,19 @@ export async function createJobFromMagnetAction(item: MediaItem, magnetLink: str
     const infoHash = infoHashMatch[1].toLowerCase();
 
     // 2. Determine tmdbId and episodeId
-    const { tmdbId, episodeId } = await resolveMediaIds(item, mediaType);
+    const { tmdbId, episodeId, movieId } = await resolveMediaIds(item, mediaType);
 
     // 3. Add to torrent client
     const torrentClient = await createTorrentClient();
     await torrentClient.add(magnetLink);
-    logger.info({ infoHash, mediaType, tmdbId, episodeId }, "🧲 Magnet link agregado al cliente de torrents.");
+    logger.info({ infoHash, mediaType, tmdbId, episodeId, movieId }, "🧲 Magnet link agregado al cliente de torrents.");
 
     // 4. Create or update Job in DB
     await createJobFromMagnet(tmdbId, {
       infoHash,
       mediaType,
       episodeId,
+      movieId,
     });
 
     // 5. Revalidate paths

@@ -33,7 +33,6 @@ model Movie {
   id               Int       @id @default(autoincrement())
   tmdbId           Int       @unique
   title            String
-  originalTitle    String?
   overview         String?
   posterUrl        String?
   status      String?

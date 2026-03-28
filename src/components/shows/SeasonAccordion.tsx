@@ -20,8 +20,8 @@ interface SeasonAccordionProps {
 }
 
 export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordionProps) => {
-  const [ isSeasonOpen, setIsSeasonOpen] = useState(defaultOpen);
-  const [activeEpisode, setActiveEpisode] = useState<Episode | null>(null);
+  const [ isSeasonOpen, setIsSeasonOpen ] = useState(defaultOpen);
+  const [ activeEpisode, setActiveEpisode ] = useState<Episode | null>(null);
   const { isOpen: isFileModalOpen, openModal: openFileModal, closeModal: closeFileModal } = useModal();
   const { isOpen: isMagnetModalOpen, openModal: openMagnetModal, closeModal: closeMagnetModal } = useModal();
 
