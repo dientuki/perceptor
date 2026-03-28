@@ -24,6 +24,9 @@ export async function getShowById(id: number) {
         include: {
           episodes: {
             orderBy: { episodeNumber: "desc" },
+            include: {
+              job: true,
+            },
           },
         },
       },

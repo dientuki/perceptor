@@ -1,6 +1,6 @@
 "use client";
 
-import { Prisma, MediaType, Episode } from "@prisma/client";
+import { Prisma, MediaType, Episode, DownloadStatus, EncodeStatus } from "@prisma/client";
 import { useState } from "react";
 import { FileVideo, Magnet } from "lucide-react";
 import Button from "@/components/ui/button/Button";
@@ -10,13 +10,36 @@ import ImportMagnetModal from "@/components/import/ImportMagnetModal";
 
 type SeasonWithEpisodes = Prisma.SeasonGetPayload<{
   include: {
-    episodes: true; // This includes all scalar fields from Episode
+    episodes: {
+      include: {
+        job: true;
+      };
+   
+    }
+
   };
 }>;
 
 interface SeasonAccordionProps {
   season: SeasonWithEpisodes;
   defaultOpen?: boolean;
+}
+
+/**
+ * Resuelve el estado maestro para mostrar en la UI
+ */
+function getEpisodeStatus(job: any): string {
+  if (!job) return "PENDING";
+
+  const { downloadStatus, encodeStatus } = job;
+
+  if (downloadStatus === DownloadStatus.ERROR || encodeStatus === EncodeStatus.ERROR) return "ERROR";
+  if (downloadStatus === DownloadStatus.COMPLETED && encodeStatus === EncodeStatus.COMPLETED) return "COMPLETED";
+  
+  if (encodeStatus === EncodeStatus.WAITING) return downloadStatus;
+  if (downloadStatus === DownloadStatus.COMPLETED) return encodeStatus;
+
+  return downloadStatus;
 }
 
 export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordionProps) => {
@@ -75,8 +98,13 @@ export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordion
                     {episode.releaseDate ? new Date(episode.releaseDate).toLocaleDateString("es-ES") : "-"}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${episode.downloaded ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400" : "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400"}`}>
-                      {episode.downloaded ? "Downloaded" : "Pending"}
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold uppercase tracking-wider ${
+                      getEpisodeStatus((episode as any).job) === 'COMPLETED' ? 'bg-green-500/10 text-green-500' :
+                      getEpisodeStatus((episode as any).job) === 'ERROR' ? 'bg-red-500/10 text-red-500' :
+                      getEpisodeStatus((episode as any).job) === 'PENDING' ? 'bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400' :
+                      'animate-pulse bg-blue-500/10 text-blue-500'
+                    }`}>
+                      {getEpisodeStatus((episode as any).job)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">

@@ -75,7 +75,7 @@ export async function updateJobStates(
   return
 }
 
-function resolveJobStatus(
+export function resolveJobStatus(
   downloadStatus: DownloadStatus,
   encodeStatus: EncodeStatus
 ): string {
