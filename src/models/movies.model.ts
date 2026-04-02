@@ -8,12 +8,6 @@ import type { Prisma, Movie } from "@prisma/client";
 export async function getMovieById(id: number) {
   return prisma.movie.findUnique({
     where: { id },
-    include: {
-      jobs: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-    },
   });
 }
 
@@ -37,11 +31,5 @@ export async function createMovie(data: Prisma.MovieCreateInput) {
 export async function getAllMovies() {
   return prisma.movie.findMany({
     orderBy: { title: "asc" },
-    include: {
-      jobs: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-    },
   });
 }

@@ -11,6 +11,7 @@ export type MediaSearchResult = {
   type: MediaType; // Para saber qué icono mostrar o a qué ruta navegar
   status?: string;
   showLink?: boolean;
+  jobStatus?: string; // Nuevo campo para el estado del job asociado, si existe
 };
 
 export interface SearchStrategy {

@@ -7,6 +7,7 @@ import ImportMagnetModal from "@/components/import/ImportMagnetModal";
 import { useModal } from "@/hooks/useModal";
 import { MediaType } from "@prisma/client";
 import type { Movie as MovieRecord } from "@prisma/client";
+import JobStatusBadge from "@/components/common/JobStatusBadge";
 
 export default function Movie({ movie }: { movie: MovieRecord }) {
 
@@ -44,9 +45,12 @@ export default function Movie({ movie }: { movie: MovieRecord }) {
       {/* Información a la derecha */}
       <div className="flex-1 space-y-6">
         <div>
-            <h3 className="mb-2 text-2xl font-bold text-gray-800 dark:text-white/90">
-            {movie.title}
-            </h3>
+            <div className="flex items-center justify-between gap-4 relative">
+                <h3 className="mb-2 text-2xl font-bold text-gray-800 dark:text-white/90">
+                {movie.title}
+                </h3>
+                <JobStatusBadge status={movie.jobStatus} />
+            </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">
             {movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : 'Unknown Year'} • {movie.originalLanguage?.toUpperCase()}
             </p>

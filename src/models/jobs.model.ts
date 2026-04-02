@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { DownloadStatus, EncodeStatus, MediaType, Prisma } from "@prisma/client";
+import { DownloadStatus, EncodeStatus, MediaType, Prisma, JobStatus, Job } from "@prisma/client";
 import { JobStateUpdate } from "@/models/types";
 import { logger } from "@/lib/logger";
 
@@ -27,20 +27,60 @@ export async function update(
     root_path?: string;
     ffmpegCommand?: string;
   }
-) {
+): Promise<Job> {
   try {
-    const job = await prisma.job.update({
-      where: { id },
-      data,
+    const updatedJob = await prisma.$transaction(async (tx) => {
+      // 1. Get the current job state to resolve the final jobStatus
+      // We need to select all fields that might be affected by the update,
+      // and also the related movie/episode IDs.
+      const currentJob = await tx.job.findUnique({
+        where: { id },
+        select: {
+          downloadStatus: true,
+          encodeStatus: true,
+          mediaType: true,
+          movieId: true,
+          episodeId: true,
+        },
+      });
+
+      if (!currentJob) {
+        throw new Error(`Job with ID ${id} not found.`);
+      }
+
+      // 2. Update the job itself
+      const job = await tx.job.update({
+        where: { id },
+        data,
+      });
+
+      // 3. Resolve the new overall jobStatus for the related Movie/Episode
+      const newOverallJobStatus = resolveJobStatus(
+        data.downloadStatus ?? currentJob.downloadStatus, // Use new status if provided, else current
+        data.encodeStatus ?? currentJob.encodeStatus      // Use new status if provided, else current
+      );
+
+      // 4. Update the related Movie or Episode's jobStatus
+      if (job.mediaType === MediaType.MOVIE && job.movieId) {
+        await tx.movie.update({
+          where: { id: job.movieId },
+          data: { jobStatus: newOverallJobStatus },
+        });
+      } else if (job.mediaType === MediaType.TV && job.episodeId) {
+        await tx.episode.update({
+          where: { id: job.episodeId },
+          data: { jobStatus: newOverallJobStatus },
+        });
+      }
+      return job;
     });
 
-    return job;
+    return updatedJob;
   } catch (error) {
     logger.error({ error, jobId: id, data }, "Error actualizando job");
     throw error;
   }
 }
-
 export async function getActiveTorrentJobs() {
   return prisma.job.findMany({
     where: {
@@ -78,7 +118,7 @@ export async function updateJobStates(
 export function resolveJobStatus(
   downloadStatus: DownloadStatus,
   encodeStatus: EncodeStatus
-): string {
+): JobStatus {
   // 1️⃣ Si hay error en cualquiera
   if (
     downloadStatus === DownloadStatus.ERROR ||

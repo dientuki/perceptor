@@ -3,7 +3,6 @@ import { getMovieById } from "@/models/movies.model";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Movie from "@/components/movies/movie";
-import { resolveJobStatus } from "@/models/jobs.model";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -27,9 +26,6 @@ export default async function MovieDetailsPage({ params }: PageProps) {
     notFound();
   }
 
-  const job = (movie as any).jobs?.[0];
-  const jobStatus = job ? resolveJobStatus(job.downloadStatus, job.encodeStatus) : null;
-
   return (
     <div>
       <PageBreadcrumb pageTitle={movie.title} />
@@ -38,7 +34,7 @@ export default async function MovieDetailsPage({ params }: PageProps) {
           {movie.title}
         </h3>
         <div className="space-y-6">
-          <Movie movie={movie} status={jobStatus} />
+          <Movie movie={movie}/>
         </div>
       </div>
     </div>

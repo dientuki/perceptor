@@ -6,6 +6,18 @@ datasource db {
   provider = "sqlite"
 }
 
+enum JobStatus {
+  CREATED
+  SEARCHING
+  STALLED
+  DOWNLOADING
+  PAUSED
+  QUEUED
+  ENCODING
+  COMPLETED
+  ERROR
+}
+
 enum DownloadStatus {
   CREATED        // Job creado en el sistema
   SEARCHING      // Buscando torrent en tracker
@@ -40,7 +52,8 @@ model Movie {
   originalLanguage String
   isLiveAction Boolean @default(true)
 
-  jobs             Job[]
+  job          Job?
+  jobStatus        JobStatus? @default(CREATED)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -50,7 +63,7 @@ model Movie {
 model Job {
   id        Int      @id @default(autoincrement())
   tmdbId    Int      // TMDB ID of the Show or Movie
-  movieId   Int?
+  movieId   Int?     @unique
   movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: Cascade)
   episodeId Int?     @unique
   episode   Episode? @relation(fields: [episodeId], references: [id])
@@ -130,9 +143,10 @@ model Episode {
   title        String?
   overview     String?
   releaseDate  DateTime?
-  downloaded   Boolean   @default(false)
   filePath     String?
   job          Job?
+
+  jobStatus        JobStatus @default(CREATED)
   
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
