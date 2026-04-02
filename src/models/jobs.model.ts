@@ -10,6 +10,9 @@ export async function create(tmdbId: number) {
         tmdbId,
       },
     });
+
+    
+
     return job;
   } catch (error) {
     logger.error({ error, tmdbId }, "Error creando job");
@@ -24,7 +27,7 @@ export async function update(
     encodeStatus?: EncodeStatus;
     errorMessage?: string | null;
     infoHash?: string;
-    root_path?: string;
+    root_path?: string | null;
     ffmpegCommand?: string;
   }
 ): Promise<Job> {
@@ -119,12 +122,12 @@ export function resolveJobStatus(
   downloadStatus: DownloadStatus,
   encodeStatus: EncodeStatus
 ): JobStatus {
-  // 1️⃣ Si hay error en cualquiera
+    // 1️⃣ Si hay error en cualquiera
   if (
     downloadStatus === DownloadStatus.ERROR ||
     encodeStatus === EncodeStatus.ERROR
   ) {
-    return 'ERROR';
+    return JobStatus.ERROR;
   }
 
   // 2️⃣ Si ambos completados
@@ -132,21 +135,33 @@ export function resolveJobStatus(
     downloadStatus === DownloadStatus.COMPLETED &&
     encodeStatus === EncodeStatus.COMPLETED
   ) {
-    return 'COMPLETED';
+    return JobStatus.COMPLETED;
   }
 
-  // 3️⃣ Si encode está esperando → mostrar estado del download
-  if (encodeStatus === EncodeStatus.WAITING) {
+  if (
+    downloadStatus === DownloadStatus.CREATED &&
+    encodeStatus === EncodeStatus.WAITING
+  ) {
+    return JobStatus.CREATED;
+  }
+
+  if (downloadStatus === DownloadStatus.ADDED || downloadStatus === DownloadStatus.SEARCHING) {
+    return JobStatus.DOWNLOADING;
+  }
+
+  if (downloadStatus === DownloadStatus.DOWNLOADING || downloadStatus === DownloadStatus.PAUSED) {
     return downloadStatus;
   }
 
-  // 4️⃣ Si download terminó → mostrar encode
-  if (downloadStatus === DownloadStatus.COMPLETED) {
-    return encodeStatus;
+  if (encodeStatus === EncodeStatus.WAITING || encodeStatus === EncodeStatus.QUEUED) {
+    return JobStatus.QUEUED;
   }
 
-  // 5️⃣ Default → download manda
-  return downloadStatus;
+  if ( encodeStatus === EncodeStatus.ENCODING) {
+    return JobStatus.ENCODING;
+  }
+
+  return JobStatus.ERROR;
 }
 
 export async function getAll(): Promise<Job[]> {
@@ -231,14 +246,34 @@ export async function createJobFromFile(tmdbId: number, data: { rootPath: string
     };
 
     if (existingJob) {
-      return await prisma.job.update({
-        where: { id: existingJob.id },
-        data: jobData,
+      return await update(existingJob.id, {
+        root_path: jobData.root_path,
+        downloadStatus: jobData.downloadStatus,
+        encodeStatus: jobData.encodeStatus,
+        errorMessage: jobData.errorMessage,
       });
     }
 
-    return await prisma.job.create({
-      data: jobData,
+    return await prisma.$transaction(async (tx) => {
+      const job = await tx.job.create({
+        data: jobData,
+      });
+
+      const newOverallJobStatus = resolveJobStatus(jobData.downloadStatus, jobData.encodeStatus);
+      console.log("Nuevo estado consolidado del job:", newOverallJobStatus);
+
+      if (job.mediaType === MediaType.MOVIE && job.movieId) {
+        await tx.movie.update({
+          where: { id: job.movieId },
+          data: { jobStatus: newOverallJobStatus },
+        });
+      } else if (job.mediaType === MediaType.TV && job.episodeId) {
+        await tx.episode.update({
+          where: { id: job.episodeId },
+          data: { jobStatus: newOverallJobStatus },
+        });
+      }
+      return job;
     });
   } catch (error) {
     logger.error({ error, tmdbId, data }, "Error creando job desde archivo");
@@ -275,14 +310,34 @@ export async function createJobFromMagnet(
     };
 
     if (existingJob) {
-      return await prisma.job.update({
-        where: { id: existingJob.id },
-        data: jobData,
+      return await update(existingJob.id, {
+        infoHash: jobData.infoHash,
+        downloadStatus: jobData.downloadStatus,
+        encodeStatus: jobData.encodeStatus,
+        errorMessage: jobData.errorMessage,
+        root_path: jobData.root_path,
       });
     }
 
-    return await prisma.job.create({
-      data: jobData,
+    return await prisma.$transaction(async (tx) => {
+      const job = await tx.job.create({
+        data: jobData,
+      });
+
+      const newOverallJobStatus = resolveJobStatus(jobData.downloadStatus, jobData.encodeStatus);
+
+      if (job.mediaType === MediaType.MOVIE && job.movieId) {
+        await tx.movie.update({
+          where: { id: job.movieId },
+          data: { jobStatus: newOverallJobStatus },
+        });
+      } else if (job.mediaType === MediaType.TV && job.episodeId) {
+        await tx.episode.update({
+          where: { id: job.episodeId },
+          data: { jobStatus: newOverallJobStatus },
+        });
+      }
+      return job;
     });
   } catch (error) {
     logger.error({ error, tmdbId, data }, "Error creando/actualizando job desde magnet");

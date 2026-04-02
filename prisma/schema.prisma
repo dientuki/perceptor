@@ -9,7 +9,6 @@ datasource db {
 enum JobStatus {
   CREATED
   SEARCHING
-  STALLED
   DOWNLOADING
   PAUSED
   QUEUED
