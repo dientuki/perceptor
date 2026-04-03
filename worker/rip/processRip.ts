@@ -4,7 +4,7 @@ import { getMetadata } from "@/worker/ffmpeg/metadata";
 import { runFfmpeg } from "@/worker/ffmpeg/runner";
 import { buildFfmpegCommand } from "@/worker/ffmpeg/buildCommand";
 import { buildOutputPath } from "@/worker/files/buildOutputPath";
-import { findMkvFile } from "@/worker/files/findMkv";
+import { findVideoFile } from "@/worker/files/findVideoFile";
 import { TorrentClient } from "@/clients/torrent/types";
 import fs from "fs/promises";
 import { logger } from "@/lib/logger";
@@ -20,7 +20,7 @@ export async function processRip(
   // Si es un directorio (descarga de torrent), buscamos el archivo de video y actualizamos el job
   const stats = await fs.stat(mkvFile);
   if (stats.isDirectory()) {
-    mkvFile = findMkvFile(job.root_path);
+    mkvFile = findVideoFile(job.root_path);
     
     if (mkvFile && mkvFile !== job.root_path) {
       logger.info({ jobId: job.id, oldPath: job.root_path, newPath: mkvFile }, "📂 Actualizando path del Job al archivo MKV detectado");
