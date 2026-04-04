@@ -3,6 +3,8 @@
 import { createIndexerClient } from "@/clients/indexer/createIndexerClient";
 import { TorrentResult } from "@/clients/indexer/types";
 import { logger } from "@/lib/logger";
+import { createJobFromMagnetAction } from "./jobs";
+import { MediaType } from "@prisma/client";
 
 export async function searchTorrentsAction(query: string): Promise<TorrentResult[]> {
   try {
@@ -12,5 +14,15 @@ export async function searchTorrentsAction(query: string): Promise<TorrentResult
   } catch (error) {
     logger.error({ error, query }, "Error en searchTorrentsAction");
     return [];
+  }
+}
+
+export async function addTorrentToQueueAction(item: { id: number; tmdbId?: number }, urls: string[], mediaType: MediaType) {
+  try {
+    console.log("addTorrentToQueueAction called with:", { item, urls, mediaType });
+    return await createJobFromMagnetAction(item, urls, mediaType);
+  } catch (error) {
+    logger.error({ error, id: item.id }, "Error en addTorrentToQueueAction");
+    return { success: false, message: "Error al encolar el torrent" };
   }
 }

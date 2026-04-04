@@ -33,8 +33,7 @@ export default function ImportMagnetModal({ isOpen, onClose, item, mediaType }: 
     if (!item) return;
 
     setIsPending(true);
-    console.log(item);
-    const result = await createJobFromMagnetAction(item, path, mediaType);
+    const result = await createJobFromMagnetAction(item, [path], mediaType);
     setIsPending(false);
     
     if (result.success) {

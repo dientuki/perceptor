@@ -15,6 +15,9 @@ export interface TorrentResult {
   items: {
     downloadUrl: string | null;
   }[];
+  infoUrl: {
+    downloadUrl: string | null;
+  }[];
 }
 
 export type IndexerClient = {

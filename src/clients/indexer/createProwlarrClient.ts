@@ -153,6 +153,9 @@ async function filterData(items: Item[]): Promise<TorrentResult[]> {
       items: group.map((item) => ({
         downloadUrl: item.magnetUrl ?? item.downloadUrl ?? item.guid ?? null,
       })),
+      infoUrl: group.map((item) => ({
+        downloadUrl: item.infoUrl ?? null,
+      })),
     };
   });
 

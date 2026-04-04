@@ -79,14 +79,14 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
   /**
    * Add a torrent to qbittorrent
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#add-new-torrent
-   * @param {string} url The URL of the torrent to add
+   * @param {string[]} urls Array of URLs (magnet links or torrent HTTP URLs) to add
    */
-    async add(url: string) {
+    async add(urls: string[]) {
       const endpoint = new URL("add", baseUrl);
 
       await fetch(endpoint, {
         method: HTTP_METHOD.POST,
-        body: new URLSearchParams({ urls: url }),
+        body: new URLSearchParams({ urls: urls.join("\n") }),
       });
     },
 
