@@ -3,6 +3,8 @@ import { getMovieById } from "@/models/movies.model";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Movie from "@/components/movies/movie";
+import SearchTorrent from "@/components/search/SearchTorrent";
+import { MediaType } from "@prisma/client";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -30,11 +32,9 @@ export default async function MovieDetailsPage({ params }: PageProps) {
     <div>
       <PageBreadcrumb pageTitle={movie.title} />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
-        <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-white/90 lg:mb-7">
-          {movie.title}
-        </h3>
         <div className="space-y-6">
           <Movie movie={movie}/>
+          <SearchTorrent item={movie} mediaType={MediaType.MOVIE}/>
         </div>
       </div>
     </div>
