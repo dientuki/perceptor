@@ -47,10 +47,10 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
 // src/core/ffmpeg/params.ts
 export function getAudioParams(audioStreams: any[], originalLang: string) {
   // Aseguramos que sea 'eng' por defecto si viene vacío, pero respetamos el parámetro
-  const allowedLangs = Array.from(new Set([originalLang.toLowerCase(), 'spa'])); // Evita duplicados si original es spa
+  const allowedLangs = Array.from(new Set([originalLang.toLowerCase(), 'spa', 'eng'])); // Evita duplicados si original es spa
   
   const blacklistWords = ['commentary', 'description', 'visual', 'sdh'];
-  const priority = ['eac3', 'ac3', 'truehd'];
+  const priority = ['truehd', 'eac3', 'ac3'];
 
   // 1. Filtrado inicial
   const candidates = audioStreams.filter(s => {
@@ -71,17 +71,47 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
   // 3. Selección de UN solo mejor stream por idioma
   const selectedStreams: any[] = [];
   allowedLangs.forEach(langCode => {
-    const langStreams = candidates.filter(s => (s.tags?.language || "").toLowerCase() === langCode);
-    
+    const langStreams = candidates.filter(
+      s => (s.tags?.language || "").toLowerCase() === langCode
+    );
+
     if (langStreams.length > 0) {
       langStreams.sort((a, b) => {
-        const indexA = priority.indexOf(a.codec_name);
-        const indexB = priority.indexOf(b.codec_name);
-        return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
+        const codecA = (a.codec_name || "").toLowerCase();
+        const codecB = (b.codec_name || "").toLowerCase();
+
+        const indexA = priority.indexOf(codecA);
+        const indexB = priority.indexOf(codecB);
+
+        const codecRankA = indexA === -1 ? 99 : indexA;
+        const codecRankB = indexB === -1 ? 99 : indexB;
+
+        // 1. Mejor codec primero
+        if (codecRankA !== codecRankB) {
+          return codecRankA - codecRankB;
+        }
+
+        // 2. Dentro del mismo codec, más bitrate primero
+        const bitrateA = Number(a.bit_rate || 0);
+        const bitrateB = Number(b.bit_rate || 0);
+
+        if (bitrateA !== bitrateB) {
+          return bitrateB - bitrateA;
+        }
+
+        // 3. Si empatan bitrate, más canales primero
+        const channelsA = Number(a.channels || 0);
+        const channelsB = Number(b.channels || 0);
+
+        if (channelsA !== channelsB) {
+          return channelsB - channelsA;
+        }
+
+        return 0;
       });
 
       const best = langStreams[0];
-      // Evitar meter el mismo stream si por error el archivo tiene tags raros
+
       if (!selectedStreams.some(s => s.index === best.index)) {
         selectedStreams.push(best);
       }
