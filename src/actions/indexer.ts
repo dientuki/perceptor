@@ -17,9 +17,13 @@ export async function searchTorrentsAction(query: string): Promise<TorrentResult
   }
 }
 
-export async function addTorrentToQueueAction(item: { id: number; tmdbId?: number }, urls: string[], mediaType: MediaType) {
+export async function addTorrentToQueueAction(
+  item: { id: number; tmdbId?: number; infoHash?: string }, 
+  urls: string[], 
+  mediaType: MediaType
+) {
   try {
-    console.log("addTorrentToQueueAction called with:", { item, urls, mediaType });
+    logger.info({ item, mediaType }, "Añadiendo torrent a la cola");
     return await createJobFromMagnetAction(item, urls, mediaType);
   } catch (error) {
     logger.error({ error, id: item.id }, "Error en addTorrentToQueueAction");

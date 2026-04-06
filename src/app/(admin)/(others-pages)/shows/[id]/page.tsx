@@ -38,6 +38,7 @@ export default async function ShowDetailsPage({ params }: PageProps) {
             <SeasonAccordion 
               key={season.id} 
               season={season} 
+              showTitle={show.title}
               defaultOpen={index === 0} 
             />
           ))}

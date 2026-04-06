@@ -6,12 +6,12 @@ import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { Video } from "lucide-react";
 import { createJobFromMagnetAction } from "@/actions/jobs";
-import { MediaType } from "@prisma/client";
+import { MediaType, Movie, Episode } from "@prisma/client";
 
 interface ImportMagnetModalProps {
   isOpen: boolean;
   onClose: () => void;
-  item: any;
+  item: Movie | Episode | null;
   mediaType: MediaType;
 }
 
@@ -54,8 +54,7 @@ export default function ImportMagnetModal({ isOpen, onClose, item, mediaType }: 
             {title}
           </h4>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
-            Ingresa la url del magnet torrent para{" "}
-            <span className="font-medium text-gray-800 dark:text-white">{item.title || item.name || `Item ${item.id}`}</span>.
+            Ingresa la url del magnet torrent para {item.title}
           </p>
         </div>
         <form className="flex flex-col" onSubmit={handleSubmit}>
