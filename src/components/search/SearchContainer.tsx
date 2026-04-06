@@ -8,11 +8,11 @@ import { MediaList } from "@/components/media/MediaList";
 import { MediaType } from "@/types/media";
 import Button from "@/components/ui/button/Button";
 import { Plus } from "lucide-react";
-
+import { logger } from "@/lib/logger";
 
 interface SearchContainerProps {
   type: MediaType;
-  addAction: (item: MediaSearchResult) => Promise<any>;
+  addAction: (item: MediaSearchResult) => Promise<void>;
 }
 
 export default function SearchContainer({ type, addAction }: SearchContainerProps) {
@@ -24,8 +24,8 @@ export default function SearchContainer({ type, addAction }: SearchContainerProp
     const data = await searchAction(query, type);
     setResults(data);
     setLoading(false);
-
-    console.log(data);
+    
+    logger.info({ count: data.length, type }, "Búsqueda de medios realizada");
   };
 
   const handleAdd = async (item: MediaSearchResult) => {

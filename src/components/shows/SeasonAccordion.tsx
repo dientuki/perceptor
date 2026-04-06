@@ -2,11 +2,12 @@
 
 import { Prisma, MediaType, Episode, DownloadStatus, EncodeStatus } from "@prisma/client";
 import { useState } from "react";
-import { FileVideo, Magnet } from "lucide-react";
+import { FileVideo, Magnet, Search, X } from "lucide-react";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/ImportMagnetModal";
+import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 
 type SeasonWithEpisodes = Prisma.SeasonGetPayload<{
   include: {
@@ -23,6 +24,7 @@ type SeasonWithEpisodes = Prisma.SeasonGetPayload<{
 interface SeasonAccordionProps {
   season: SeasonWithEpisodes;
   defaultOpen?: boolean;
+  showTitle: string;
 }
 
 /**
@@ -42,11 +44,12 @@ function getEpisodeStatus(job: any): string {
   return downloadStatus;
 }
 
-export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordionProps) => {
+export const SeasonAccordion = ({ season, showTitle, defaultOpen = false }: SeasonAccordionProps) => {
   const [ isSeasonOpen, setIsSeasonOpen ] = useState(defaultOpen);
   const [ activeEpisode, setActiveEpisode ] = useState<Episode | null>(null);
   const { isOpen: isFileModalOpen, openModal: openFileModal, closeModal: closeFileModal } = useModal();
   const { isOpen: isMagnetModalOpen, openModal: openMagnetModal, closeModal: closeMagnetModal } = useModal();
+  const { isOpen: isSearchModalOpen, openModal: openSearchModal, closeModal: closeSearchModal } = useModal();
 
   const handleOpenFileModal = (episode: Episode) => {
     setActiveEpisode(episode);
@@ -56,6 +59,11 @@ export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordion
   const handleOpenMagnetModal = (episode: Episode) => {
     setActiveEpisode(episode);
     openMagnetModal();
+  };
+
+  const handleOpenSearchModal = (episode: Episode) => {
+    setActiveEpisode(episode);
+    openSearchModal();
   };
 
   return (
@@ -109,6 +117,9 @@ export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordion
                   </td>
                   <td className="px-4 py-3 text-sm">
                     <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" title="Search Torrent" onClick={() => handleOpenSearchModal(episode)}>
+                        <Search className="h-4 w-4" />
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => handleOpenFileModal(episode)}>
                         <FileVideo className="h-4 w-4" />
                       </Button>
@@ -134,6 +145,14 @@ export const SeasonAccordion = ({ season, defaultOpen = false }: SeasonAccordion
         onClose={closeMagnetModal}
         item={activeEpisode}
         mediaType={MediaType.TV}
+      />
+      <SearchTorrentModal
+        isOpen={isSearchModalOpen}
+        onClose={closeSearchModal}
+        item={activeEpisode}
+        mediaType={MediaType.TV}
+        showTitle={showTitle}
+        seasonNumber={season.seasonNumber}
       />
     </div>
     
