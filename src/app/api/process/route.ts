@@ -4,7 +4,7 @@ import { search } from "@/core/search/prowlar";
 import { create, update } from "@/models/jobs.model";
 import { logger } from "@/lib/logger";
 import { DownloadStatus } from "@prisma/client";
-import { createTorrentClient } from "@/torrent/createTorrentClient";
+import { createTorrentClient } from "@/clients/torrent/createTorrentClient";
 
 export async function POST(req: NextRequest) {
   const torrentClient = await createTorrentClient();
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, received: ids, items });
   } catch (error) {
-    console.error("Error en /api/process:", error);
+    logger.error({ error }, "Error en /api/process:");
     return NextResponse.json({ error: "Error procesando la solicitud" }, { status: 500 });
   }
 }
