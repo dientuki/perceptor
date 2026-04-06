@@ -1,6 +1,7 @@
 // src/core/ffmpeg/metadata.ts
 import { exec } from "child_process";
 import { promisify } from "util";
+import { logger } from "@/lib/logger";
 
 const execAsync = promisify(exec);
 
@@ -11,7 +12,7 @@ export async function getMetadata(filePath: string) {
     const { stdout } = await execAsync(command);
     return JSON.parse(stdout);
   } catch (error) {
-    console.error("Error en ffprobe:", error);
+    logger.error({ error, filePath }, "Error en ffprobe al analizar metadatos");
     throw new Error("No se pudo analizar el archivo de video.");
   }
 }

@@ -29,7 +29,7 @@ async function runCheck(torrentClient: TorrentClient) {
   if (isWorking) return;
 
   const job = await getNextToRip();
-  
+
   if (!isJobReadyToRip(job)) return;
 
   isWorking = true;

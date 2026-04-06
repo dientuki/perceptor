@@ -1,4 +1,5 @@
 // src/core/ffmpeg/params.ts
+import { logger } from "@/lib/logger";
 
 type quality = 'remux' | 'web';
 
@@ -64,7 +65,7 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
 
   // Si no hay idioma original (o el filtro nos dejó vacíos), COPY ALL
   if (!hasOriginal || candidates.length === 0) {
-    console.log(`⚠️ Alerta: No se encontró el idioma [${originalLang.toLowerCase()}] tras filtrar. Haciendo COPY de todos los audios.`);
+    logger.warn({ originalLang }, "No se encontró el idioma original tras filtrar. Haciendo COPY de todos los audios.");
     return ["-map", "0:a", "-c:a", "copy"];
   }
 
@@ -168,7 +169,7 @@ export function getSubtitleParams(subtitleStreams: any[], originalLang: string) 
   });
 
   if (filtered.length === 0) {
-    console.log("ℹ️ No se encontraron subtítulos Subrip que cumplan las reglas.");
+    logger.info("No se encontraron subtítulos Subrip que cumplan las reglas.");
     return [];
   }
 
