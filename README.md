@@ -1,61 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 👁️ Perceptor
 
-## Getting Started
+**Perceptor** es tu centro de mando inteligente para la gestión de contenido multimedia. Olvídate de procesos manuales y tediosos; Perceptor automatiza todo el ciclo de vida de tus películas y series favoritas, optimizando el espacio y organizando tu biblioteca de forma automática.
 
-First, run the development server:
+## 🌟 ¿Qué puedes hacer con Perceptor?
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Perceptor ofrece un flujo de trabajo simplificado y potente para los amantes del cine y las series:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1.  **Búsqueda Inteligente:** Encuentra rápidamente películas y series gracias a una interfaz intuitiva potenciada por IA.
+2.  **Gestión de Descargas:** Manejo eficiente de archivos a través de protocolos de descarga optimizados (torrents).
+3.  **Compresión de Siguiente Generación (AV1):** Reduce drásticamente el tamaño de tus archivos sin perder calidad visual, utilizando el codec AV1. Ideal para ahorrar espacio en disco y mejorar el streaming.
+4.  **Sincronización con Jellyfin:** Envía automáticamente el contenido procesado a tu servidor Jellyfin, listo per ser disfrutado en cualquier dispositivo.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## ✨ Características Principales
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+*   **Automatización de Extremo a Extremo:** Desde que buscas el contenido hasta que aparece en tu televisión.
+*   **Optimización de Memoria:** Diseñado para ejecutarse de forma fluida incluso en servidores Linux con recursos ajustados, especialmente durante el procesamiento de video.
+*   **Interfaz Moderna:** Una experiencia de usuario rápida y limpia, construida para ser tan funcional como atractiva.
+*   **Impulsado por IA:** Utiliza modelos de lenguaje avanzados para facilitar la búsqueda y organización del contenido.
 
-## Learn More
+## 🚀 Resumen Técnico (Para desarrolladores)
 
-To learn more about Next.js, take a look at the following resources:
+Aunque Perceptor se enfoca en la facilidad de uso, por dentro es una bestia técnica:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+-   **Core:** Next.js 16 (App Router) y React 19.
+-   **Estilos:** Tailwind CSS v4.
+-   **Base de Datos:** Prisma + SQLite (better-sqlite3).
+-   **IA:** Integración con Google GenAI.
+-   **Monitorización:** Logging de alto rendimiento con Pino.
+-   **Calidad:** Formateo y linting ultra rápido con Biome.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🏁 Inicio Rápido
 
-## Deploy on Vercel
+### Requisitos Previos
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Node.js (versión compatible con Next.js 16)
+- npm / pnpm / yarn
 
-## Prisma
+### Instalación
 
-Reset the database:
+1.  Clona el repositorio:
+    ```bash
+    git clone https://github.com/tu-usuario/perceptor.git
+    cd perceptor
+    ```
 
-```bash
-npx prisma migrate reset
-```
+2.  Instala las dependencias:
+    ```bash
+    npm install
+    ```
 
-New migration the database:
+3.  Configura las variables de entorno:
+    Crea un archivo `.env` basado en el ejemplo y añade tu `GOOGLE_GENAI_API_KEY`.
 
-```bash
-npx prisma migrate dev --name migration-name
-```
+4.  Prepara la base de datos:
+    ```bash
+    npx prisma generate
+    npx prisma db push
+    ```
 
-Regenerate
+5.  Inicia el servidor de desarrollo:
+    ```bash
+    npm run dev
+    ```
 
-```bash
-npx prisma generate
-```
+## 🛠️ Comandos de Desarrollo
 
-```bash
-npx prisma db seed
-```
+### Base de Datos (Prisma)
 
+Perceptor utiliza Prisma para la gestión de datos. Aquí tienes los comandos más frecuentes:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+*   **Visualizar datos:** Abre una interfaz gráfica en tu navegador para explorar y editar la base de datos de forma sencilla.
+    ```bash
+    npx prisma studio
+    ```
+*   **Actualizar esquema:** Si realizas cambios en `prisma/schema.prisma`, usa estos comandos para regenerar el cliente y aplicar los cambios:
+    ```bash
+    npx prisma generate
+    npx prisma db push
+    ```
+
+##  Licencia
+
+Este proyecto está bajo la Licencia [Tu Licencia]. Consulta el archivo `LICENSE` para más detalles.
+
+---
+Desarrollado con ❤️ para simplificar tu vida digital.
