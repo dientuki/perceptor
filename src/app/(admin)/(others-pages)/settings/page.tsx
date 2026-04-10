@@ -1,9 +1,6 @@
 import SettingPathCard from "@/components/settings/SettingPathCard";
-import UserInfoCard from "@/components/user-profile/UserInfoCard";
-import UserMetaCard from "@/components/user-profile/UserMetaCard";
 import { Metadata } from "next";
-import React from "react";
-import { getAllSettings } from "@/models/settings.model";
+import { getSetting } from "@/models/settings.model";
 
 export const metadata: Metadata = {
   title: "Next.js Profile | TailAdmin - Next.js Dashboard Template",
@@ -12,9 +9,15 @@ export const metadata: Metadata = {
 };
 
 export default async function Settings() {
-  const settings = await getAllSettings();
-
-  //console.log(settings);
+  const paths = (await getSetting([
+    "path_downloads",
+    "path_movies",
+    "path_shows",
+  ])) as {
+    path_downloads: { id: number; value: string };
+    path_movies: { id: number; value: string };
+    path_shows: { id: number; value: string };
+  };
 
   return (
     <div>
@@ -23,9 +26,7 @@ export default async function Settings() {
           Settings
         </h3>
         <div className="space-y-6">
-          <UserMetaCard />
-          <UserInfoCard />
-          <SettingPathCard settings={settings} />
+          <SettingPathCard settings={paths} />
         </div>
       </div>
     </div>
