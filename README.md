@@ -36,6 +36,23 @@ Aunque Perceptor se enfoca en la facilidad de uso, por dentro es una bestia téc
 - Node.js (versión compatible con Next.js 16)
 - npm / pnpm / yarn
 
+### Servicios Externos y Herramientas
+
+Para que Perceptor funcione a pleno rendimiento y pueda gestionar tu contenido multimedia, necesitarás tener instalados y configurados los siguientes servicios y herramientas en tu sistema:
+
+*   **FFmpeg:** Esencial para el procesamiento y compresión de video (especialmente a AV1).
+    *   Asegúrate de tener una versión reciente instalada y accesible en tu `PATH`. Puedes encontrar instrucciones de instalación para tu sistema operativo en la documentación oficial de FFmpeg.
+
+*   **Prowlarr:** Un indexador de torrents que Perceptor utilizará para buscar películas y series.
+    *   Deberás configurarlo para que apunte a tus trackers preferidos. Consulta la documentación de Prowlarr para su instalación y configuración.
+
+*   **qBittorrent:** Un cliente de torrents que Perceptor usará para descargar el contenido encontrado.
+    *   Asegúrate de que esté configurado para permitir el acceso remoto (API WebUI) para que Perceptor pueda interactuar con él. Más información en la documentación de qBittorrent.
+
+*   **Jellyfin:** Tu servidor multimedia donde Perceptor organizará y enviará el contenido procesado.
+    *   Perceptor interactuará con tu instancia de Jellyfin para añadir y actualizar tu biblioteca. Visita la documentación de Jellyfin para su instalación.
+
+
 ### Instalación
 
 1.  Clona el repositorio:
