@@ -33,7 +33,7 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
       //"-svtav1-params", "aq-mode=2:aq-strength=1.2:loop-restoration=2",
       //"-svtav1-params", "film-grain=8:film-grain-denoise=0",
       //"-svtav1-params", "rc=1:tune=1:film-grain=8:film-grain-denoise=0:enable-overlays=1:scd=1",
-      "-metadata:s:v:0", 'title="AV1 (Converted from H264)"'
+      "-metadata:s:v:0", 'title=AV1 (Converted from H264)'
     ];
   }
 
@@ -41,7 +41,7 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
   return [
     "-map", "0:v:0",
     "-c:v", "copy",
-    "-metadata:s:v:0", 'title="Video (Direct Copy)"'
+    "-metadata:s:v:0", 'title=Video (Direct Copy)'
   ];
 }
 
@@ -131,10 +131,17 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
     params.push("-map", `0:${s.index}`);
     params.push(`-c:a:${index}`, "libopus");
     params.push(`-b:a:${index}`, "320k");
+
+    if (s.channel_layout === "5.1(side)") {
+    params.push(
+      `-af:a:${index}`,
+        "channelmap=map=0|1|2|3|4|5:channel_layout=5.1"
+      );
+    }
     
     if (s.channels === 6) {
-        params.push(`-af:a:${index}`, "channelmap=channel_layout=5.1");
-        params.push(`-metadata:s:a:${index}`, `title="Surround 5.1 (Opus)"`);
+        //params.push(`-af:a:${index}`, "channelmap=channel_layout=5.1");
+        params.push(`-metadata:s:a:${index}`, `title=Surround 5.1 (Opus)`);
     }
     
     //params.push(`-metadata:s:a:${index}`, `title="Surround 5.1 (Opus)"`);
