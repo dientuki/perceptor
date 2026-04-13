@@ -1,5 +1,6 @@
 "use server";
-
+import fs from "node:fs/promises";
+import path from "node:path";
 import { createJobFromFile, createJobFromMagnet } from "@/models/jobs.model";
 import { revalidatePath } from "next/cache";
 import { MediaType } from "@prisma/client";
@@ -122,5 +123,64 @@ export async function createJobFromMagnetAction(item: MediaItem, magnetLinks: st
     const errorMessage = error instanceof Error ? error.message : "Error desconocido al crear el job desde magnet.";
     logger.error({ error, item, magnetLinks }, errorMessage);
     return { success: false, message: errorMessage };
+  }
+}
+
+export async function  createJobFromFolderAction(showId: number, seasonId: number, folderPath: string) {
+  try {
+    // 1. Obtener el tmdbId del show
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      select: { tmdbId: true }
+    });
+
+    if (!show) throw new Error("Show no encontrado.");
+
+    // 2. Leer la carpeta
+    const files = await fs.readdir(folderPath);
+    
+    // Filtrar archivos .mkv que sigan el patrón SXXEXX
+    const mkvFiles = files.filter(f => f.toLowerCase().endsWith(".mkv"));
+    const pattern = /S(\d+)E(\d+)/i;
+
+    // 3. Cargar todos los episodios de la temporada en memoria para evitar consultas repetitivas a la DB
+    const episodes = await prisma.episode.findMany({
+      where: { seasonId },
+      select: { id: true, episodeNumber: true }
+    });
+
+    let jobsCreated = 0;
+
+    for (const filename of mkvFiles) {
+      const match = filename.match(pattern);
+      if (!match) continue;
+
+      const episodeNumber = parseInt(match[2], 10);
+
+      const episode = episodes.find(e => e.episodeNumber === episodeNumber);
+
+      if (!episode) {
+        logger.warn({ filename, seasonId, episodeNumber }, "No se encontró el episodio en la base de datos.");
+        continue;
+      }
+
+      // 4. Crear el job individual
+      const absolutePath = path.join(folderPath, filename);
+      //console.log(`Creando job para ${episode.id} ${episode}  (Episode ${episodeNumber}) con path: ${absolutePath}`);
+      await createJobFromFile(show.tmdbId, {
+        rootPath: absolutePath,
+        mediaType: MediaType.TV,
+        episodeId: episode.id,
+        movieId: undefined
+      });
+
+      jobsCreated++;
+    }
+
+    revalidatePath("/jobs");
+    return { success: true, message: `Se han encolado ${jobsCreated} episodios para procesar.` };
+  } catch (error) {
+    logger.error({ error, folderPath }, "Error en createJobFromFolderAction");
+    return { success: false, message: error instanceof Error ? error.message : "Error al importar la carpeta." };
   }
 }

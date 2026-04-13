@@ -8,6 +8,7 @@ import { useModal } from "@/hooks/useModal";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/ImportMagnetModal";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
+import ImportFolderModal from "@/components/import/importFolderModal";
 
 type SeasonWithEpisodes = Prisma.SeasonGetPayload<{
   include: {
@@ -50,6 +51,7 @@ export const SeasonAccordion = ({ season, showTitle, defaultOpen = false }: Seas
   const { isOpen: isFileModalOpen, openModal: openFileModal, closeModal: closeFileModal } = useModal();
   const { isOpen: isMagnetModalOpen, openModal: openMagnetModal, closeModal: closeMagnetModal } = useModal();
   const { isOpen: isSearchModalOpen, openModal: openSearchModal, closeModal: closeSearchModal } = useModal();
+  const { isOpen: isOpenFolderModal, openModal: openOpenFolderModal, closeModal: closeOpenFolderModal } = useModal();
 
   const handleOpenFileModal = (episode: Episode) => {
     setActiveEpisode(episode);
@@ -84,6 +86,9 @@ export const SeasonAccordion = ({ season, showTitle, defaultOpen = false }: Seas
       
       {isSeasonOpen && (
         <div className="overflow-x-auto border-t border-gray-200 dark:border-gray-800">
+          <Button size="sm" variant="outline" title="Import Folder" onClick={() => openOpenFolderModal()}>
+            <FileVideo className="h-4 w-4" />
+          </Button>
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead className="bg-gray-50 dark:bg-white/[0.02]">
               <tr>
@@ -120,10 +125,10 @@ export const SeasonAccordion = ({ season, showTitle, defaultOpen = false }: Seas
                       <Button size="sm" variant="outline" title="Search Torrent" onClick={() => handleOpenSearchModal(episode)}>
                         <Search className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleOpenFileModal(episode)}>
+                      <Button size="sm" variant="outline" title="Import File" onClick={() => handleOpenFileModal(episode)}>
                         <FileVideo className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleOpenMagnetModal(episode)}>
+                      <Button size="sm" variant="outline" title="Import Magnet" onClick={() => handleOpenMagnetModal(episode)}>
                         <Magnet className="h-4 w-4" />
                       </Button>
                     </div>
@@ -153,6 +158,13 @@ export const SeasonAccordion = ({ season, showTitle, defaultOpen = false }: Seas
         mediaType={MediaType.TV}
         showTitle={showTitle}
         seasonNumber={season.seasonNumber}
+      />
+      <ImportFolderModal
+        isOpen={isOpenFolderModal}
+        onClose={closeOpenFolderModal}
+        showId={season.showId}
+        seasonId={season.id}
+        showTitle={showTitle}
       />
     </div>
     
