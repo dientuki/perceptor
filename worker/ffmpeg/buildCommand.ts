@@ -3,17 +3,31 @@ import { getIso3FromIso2 } from "@/models/languages.model";
 import { JobWithDetails } from "@/models/jobs.model";
 import { MediaType } from "@prisma/client";
 
+interface FfmpegMetadata {
+  streams: Array<{
+    codec_name?: string;
+    codec_type?: "video" | "audio" | "subtitle";
+    language?: string;
+    channels?: number;
+    bit_rate?: string;
+    [key: string]: any;
+  }>;
+  format?: {
+    tags?: {
+      title?: string;
+    };
+  };
+}
+
 export async function buildFfmpegCommand(
   input: string,
   output: string,
-  metadata: any,
+  metadata: FfmpegMetadata,
   job: JobWithDetails
 ): Promise<string[]> {
-  const vStream = metadata.streams.find((s: any) => s.codec_type === "video");
-  const aStreams = metadata.streams.filter((s: any) => s.codec_type === "audio");
-  const sStreams = metadata.streams.filter(
-    (s: any) => s.codec_type === "subtitle"
-  );
+  const vStream = metadata.streams.find((s) => s.codec_type === "video");
+  const aStreams = metadata.streams.filter((s) => s.codec_type === "audio");
+  const sStreams = metadata.streams.filter((s) => s.codec_type === "subtitle");
 
   let originalIso2 = "en";
   let isLiveAction = true; // Default to true for movies if not specified
@@ -38,7 +52,7 @@ export async function buildFfmpegCommand(
     input,
     "-threads",
     "0",
-    //"-t", "00:01:00", // Solo para pruebas, elimina esto después
+    //"-t", "00:05:00", // Solo para pruebas, elimina esto después
     ...getVideoParams(vStream, isLiveAction, quality),
     ...getAudioParams(aStreams, languageIso3),
     ...getSubtitleParams(sStreams, languageIso3),

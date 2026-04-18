@@ -11,8 +11,6 @@ export async function create(tmdbId: number) {
       },
     });
 
-    
-
     return job;
   } catch (error) {
     logger.error({ error, tmdbId }, "Error creando job");
@@ -29,6 +27,7 @@ export async function update(
     infoHash?: string;
     root_path?: string | null;
     ffmpegCommand?: string;
+    seasonId?: number | null;
   }
 ): Promise<Job> {
   try {
@@ -199,6 +198,7 @@ export type JobWithEpisode = Prisma.JobGetPayload<{ include: typeof jobWithEpiso
 
 export const jobWithDetailsInclude = {
   movie: true,
+  season: true,
   episode: {
     include: {
       season: {
@@ -260,7 +260,7 @@ export async function createJobFromFile(tmdbId: number, data: { rootPath: string
       });
 
       const newOverallJobStatus = resolveJobStatus(jobData.downloadStatus, jobData.encodeStatus);
-      console.log("Nuevo estado consolidado del job:", newOverallJobStatus);
+      logger.info({ jobId: job.id, status: newOverallJobStatus }, "Nuevo estado consolidado del job");
 
       if (job.mediaType === MediaType.MOVIE && job.movieId) {
         await tx.movie.update({
@@ -288,12 +288,13 @@ export async function createJobFromMagnet(
     mediaType: MediaType;
     episodeId?: number;
     movieId?: number;
+    seasonId?: number;
   }
 ) {
   try {
     const existingJob = await prisma.job.findFirst({
       where: data.mediaType === MediaType.TV 
-        ? { episodeId: data.episodeId } 
+        ? (data.seasonId ? { seasonId: data.seasonId } : { episodeId: data.episodeId })
         : { movieId: data.movieId }
     });
 
@@ -307,6 +308,7 @@ export async function createJobFromMagnet(
       root_path: null,
       episodeId: data.episodeId ?? null,
       movieId: data.movieId ?? null,
+      seasonId: data.seasonId ?? null,
     };
 
     if (existingJob) {
@@ -316,6 +318,7 @@ export async function createJobFromMagnet(
         encodeStatus: jobData.encodeStatus,
         errorMessage: jobData.errorMessage,
         root_path: jobData.root_path,
+        seasonId: jobData.seasonId,
       });
     }
 
@@ -341,6 +344,29 @@ export async function createJobFromMagnet(
     });
   } catch (error) {
     logger.error({ error, tmdbId, data }, "Error creando/actualizando job desde magnet");
+    throw error;
+  }
+}
+
+/**
+ * Resetea los jobs que quedaron en estado ENCODING (probablemente por una caída del worker)
+ * devolviéndolos a WAITING para que el RipWatcher los vuelva a procesar.
+ */
+export async function resetEncodingJobs() {
+  try {
+    const { count } = await prisma.job.updateMany({
+      where: {
+        downloadStatus: DownloadStatus.COMPLETED,
+        encodeStatus: EncodeStatus.ENCODING,
+      },
+      data: {
+        encodeStatus: EncodeStatus.WAITING,
+      },
+    });
+
+    logger.info({ count }, "🔄 Se han reseteado jobs interrumpidos durante el encoding");
+  } catch (error) {
+    logger.error({ error }, "❌ Error al resetear jobs interrumpidos");
     throw error;
   }
 }

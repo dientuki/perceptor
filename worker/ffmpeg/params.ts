@@ -51,7 +51,7 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
   const allowedLangs = Array.from(new Set([originalLang.toLowerCase(), 'spa', 'eng'])); // Evita duplicados si original es spa
   
   const blacklistWords = ['commentary', 'description', 'visual', 'sdh'];
-  const priority = ['truehd', 'eac3', 'ac3'];
+  const priority = ['truehd', 'dts', 'eac3', 'ac3'];
 
   // 1. Filtrado inicial
   const candidates = audioStreams.filter(s => {
@@ -72,47 +72,31 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
   // 3. Selección de UN solo mejor stream por idioma
   const selectedStreams: any[] = [];
   allowedLangs.forEach(langCode => {
-    const langStreams = candidates.filter(
-      s => (s.tags?.language || "").toLowerCase() === langCode
-    );
+    const langStreams = candidates.filter(s => (s.tags?.language || "").toLowerCase() === langCode);
 
     if (langStreams.length > 0) {
       langStreams.sort((a, b) => {
         const codecA = (a.codec_name || "").toLowerCase();
         const codecB = (b.codec_name || "").toLowerCase();
 
-        const indexA = priority.indexOf(codecA);
-        const indexB = priority.indexOf(codecB);
+        const rankA = priority.indexOf(codecA) === -1 ? 99 : priority.indexOf(codecA);
+        const rankB = priority.indexOf(codecB) === -1 ? 99 : priority.indexOf(codecB);
 
-        const codecRankA = indexA === -1 ? 99 : indexA;
-        const codecRankB = indexB === -1 ? 99 : indexB;
+        // 1. Mejor Codec (Fuente)
+        if (rankA !== rankB) return rankA - rankB;
 
-        // 1. Mejor codec primero
-        if (codecRankA !== codecRankB) {
-          return codecRankA - codecRankB;
-        }
+        // 2. Más Canales (Preferimos 7.1 > 5.1 > 2.0)
+        const chanA = Number(a.channels || 0);
+        const chanB = Number(b.channels || 0);
+        if (chanA !== chanB) return chanB - chanA;
 
-        // 2. Dentro del mismo codec, más bitrate primero
-        const bitrateA = Number(a.bit_rate || 0);
-        const bitrateB = Number(b.bit_rate || 0);
-
-        if (bitrateA !== bitrateB) {
-          return bitrateB - bitrateA;
-        }
-
-        // 3. Si empatan bitrate, más canales primero
-        const channelsA = Number(a.channels || 0);
-        const channelsB = Number(b.channels || 0);
-
-        if (channelsA !== channelsB) {
-          return channelsB - channelsA;
-        }
-
-        return 0;
+        // 3. Más Bitrate
+        const bitA = Number(a.bit_rate || 0);
+        const bitB = Number(b.bit_rate || 0);
+        return bitB - bitA;
       });
 
       const best = langStreams[0];
-
       if (!selectedStreams.some(s => s.index === best.index)) {
         selectedStreams.push(best);
       }
@@ -123,28 +107,40 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
   const params: string[] = [];
   
   selectedStreams.forEach((s, index) => {
+    console.log(s)
     const lang = (s.tags?.language || "und").toLowerCase();
-    const title = s.tags?.title || "Audio";
+    const channels = Number(s.channels || 0);
+    //const title = s.tags?.title || "Audio";
     
     //console.log(`[Stream #${s.index}] ${lang.toUpperCase()} - ${title} (${s.codec_name}) -> OPUS 320k`);
 
     params.push("-map", `0:${s.index}`);
     params.push(`-c:a:${index}`, "libopus");
-    params.push(`-b:a:${index}`, "320k");
+    params.push("-vbr", "on");
 
-    if (s.channel_layout === "5.1(side)") {
-    params.push(
-      `-af:a:${index}`,
-        "channelmap=map=0|1|2|3|4|5:channel_layout=5.1"
-      );
-    }
-    
-    if (s.channels === 6) {
-        //params.push(`-af:a:${index}`, "channelmap=channel_layout=5.1");
+    let bitrate = "128k";
+    let title = "Stereo";    
+
+    if (channels >= 8) {
+        // Surround 7.1
+        params.push(`-b:a:${index}`, "512k");
+        params.push(`-filter:a:${index}`, "channelmap=map=0|1|2|3|4|5|6|7:channel_layout=7.1");
+        params.push(`-mapping_family:a:${index}`, "1");
+        params.push(`-metadata:s:a:${index}`, `title=Surround 7.1 (Opus)`);
+        
+    } else if (channels >= 6) {
+        params.push(`-b:a:${index}`, "320k");
+        params.push(`-filter:a:${index}`, "aformat=channel_layouts=5.1");
+        params.push(`-mapping_family:a:${index}`, "1");
         params.push(`-metadata:s:a:${index}`, `title=Surround 5.1 (Opus)`);
+        
+    } else {
+        // Stereo o inferior
+        params.push(`-b:a:${index}`, "128k");
+        params.push(`-metadata:s:a:${index}`, `title=Stereo (Opus)`);
     }
-    
-    //params.push(`-metadata:s:a:${index}`, `title="Surround 5.1 (Opus)"`);
+
+    // 3. Lenguaje
     params.push(`-metadata:s:a:${index}`, `language=${lang}`);
   });
 

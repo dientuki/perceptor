@@ -9,12 +9,34 @@ import { TorrentClient } from "@/clients/torrent/types";
 import fs from "fs/promises";
 import { logger } from "@/lib/logger";
 import { createMediaServerClient } from "@/clients/mediaServer/createMediaServerClient";
+import { createJobFromFolderAction } from "@/actions/jobs";
 
 export async function processRip(
   job: JobWithDetails & { root_path: string },
   path: string,
   torrentClient: TorrentClient
 ) {
+
+  // Si el Job tiene un seasonId, es un pack de temporada completa
+  if (job.seasonId) {
+    logger.info({ jobId: job.id, seasonId: job.seasonId }, "📦 Detectado Job de temporada completa. Escaneando carpeta para crear Jobs individuales.");
+    
+    const showId = job.season?.showId;
+    if (!showId) throw new Error("No se pudo determinar el showId para el pack de temporada.");
+
+    // Usamos la acción existente para crear un job por cada MKV
+    await createJobFromFolderAction(showId, job.seasonId, job.root_path);
+
+    // Marcamos este job principal como completado
+    await update(job.id, { encodeStatus: EncodeStatus.COMPLETED });
+
+    if (job.infoHash) {
+      await torrentClient.remove(job.infoHash, false);
+    }
+    
+    return; // Salimos, no hay nada más que hacer con el pack en este worker
+  }
+
   let mkvFile = job.root_path;
 
   // Si es un directorio (descarga de torrent), buscamos el archivo de video y actualizamos el job

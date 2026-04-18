@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { getNextToRip, JobWithEpisode } from "@/models/jobs.model";
+import { getNextToRip, JobWithEpisode, resetEncodingJobs } from "@/models/jobs.model";
 import { getSetting } from "@/models/settings.model";
 import { TorrentClient } from "@/clients/torrent/types";
 import { processRip } from "@/worker/rip/processRip";
@@ -15,6 +15,8 @@ function isJobReadyToRip(job: JobWithEpisode | null): job is JobWithEpisode & { 
 
 export async function startRipWatcher(torrentClient: TorrentClient) {
   logger.info("👀 RipWatcher iniciando...");
+
+  await resetEncodingJobs();
 
   const pathSettings = await getSetting(["path_movies", "path_shows"]) as Record<string, string>;
   paths = {

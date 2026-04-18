@@ -45,15 +45,36 @@ export function runFfmpeg(id: number, args: string[], finalPath: string): Promis
       }
     });
 
-    child.on("close", (code) => {
-      cleanupListeners(); // IMPORTANTE: Quitar los listeners de process
+    child.on("close", async (code) => {
+      cleanupListeners();
 
       if (code === 0) {
         try {
           if (fs.existsSync(tempPath)) {
-            fs.renameSync(tempPath, finalPath);
-            logger.info({finalPath}, "✅ COMPLETADO");
-            resolve();
+            logger.info("Muxing con mkvmerge para corregir metadatos...");
+
+            // En lugar de renameSync, usamos mkvmerge
+            const merge = spawn("mkvmerge", [
+              "-o", finalPath,  // Destino final (.mkv)
+              tempPath           // Origen (.working.mkv)
+            ]);
+
+            merge.on("close", (mergeCode) => {
+              if (mergeCode === 0) {
+                // Si mkvmerge terminó bien, borramos el temporal
+                fs.unlinkSync(tempPath);
+                logger.info({ finalPath }, "✅ Muestreo y Metadatos corregidos. COMPLETADO.");
+                resolve();
+              } else {
+                reject(new Error(`mkvmerge falló con código ${mergeCode}`));
+              }
+            });
+
+            merge.on("error", (err) => {
+              logger.error(err, "Error ejecutando mkvmerge");
+              reject(err);
+            });
+
           }
         } catch (err) {
           reject(err);
