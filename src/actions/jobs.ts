@@ -184,3 +184,56 @@ export async function  createJobFromFolderAction(showId: number, seasonId: numbe
     return { success: false, message: error instanceof Error ? error.message : "Error al importar la carpeta." };
   }
 }
+
+export async function createJobFromSeasonMagnetAction(showId: number, seasonId: number, magnetLinks: string[]) {
+  try {
+    // 1. Obtener el tmdbId del show necesario para el modelo de jobs
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      select: { tmdbId: true }
+    });
+    if (!show) throw new Error("Show no encontrado.");
+
+    // 2. Extraer el infoHash del magnet link
+    let infoHash;
+    //const match = magnetLinks.match(/btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/);
+    for (const link of magnetLinks) {
+      const match = link.match(/btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/);
+      if (match) {
+        infoHash = match[1].toLowerCase();
+        break;
+      }
+    }
+
+    if (!infoHash) {
+      return { success: false, message: "No se pudo determinar un Info Hash válido." };
+    }
+
+    // 3. Add to torrent client
+    const torrentClient = await createTorrentClient();
+    await torrentClient.add(magnetLinks);
+    
+    logger.info({ 
+      infoHash, 
+      showId, 
+      seasonId 
+    }, "🧲 Magnet de temporada agregado al cliente con tag 'seasonTorrent'.");
+
+    // 4. Create or update Job in DB
+    await createJobFromMagnet(show.tmdbId, {
+      infoHash,
+      mediaType: MediaType.TV,
+      seasonId: seasonId,
+    });
+
+    // 6. Revalidate paths
+    revalidatePath("/jobs");
+    revalidatePath("/");
+
+    return { success: true };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Error al procesar el magnet de temporada.";
+    logger.error({ error, showId, seasonId }, errorMessage);
+    return { success: false, message: errorMessage };
+  }
+}
