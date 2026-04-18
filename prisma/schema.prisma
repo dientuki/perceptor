@@ -66,6 +66,9 @@ model Job {
   movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: Cascade)
   episodeId Int?     @unique
   episode   Episode? @relation(fields: [episodeId], references: [id])
+  seasonId  Int?     @unique
+  season    Season?  @relation(fields: [seasonId], references: [id])
+
   infoHash  String?
   
   mediaType MediaType @default(MOVIE)
@@ -127,6 +130,7 @@ model Season {
   releaseDate  DateTime?
   
   episodes     Episode[]
+  job          Job?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

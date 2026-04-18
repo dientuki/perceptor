@@ -95,6 +95,14 @@ Perceptor utiliza Prisma para la gestión de datos. Aquí tienes los comandos m�
     npx prisma generate
     npx prisma db push
     ```
+*   **Generar migración:** Crea una nueva migración a partir de los cambios en el esquema.
+    ```bash
+    npx prisma migrate dev --name nombre_de_la_migracion
+    ```
+*   **Ejecutar Seed:** Poblar la base de datos con datos iniciales.
+    ```bash
+    npx prisma db seed
+    ```
 
 ##  Licencia
 
