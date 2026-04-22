@@ -6,29 +6,33 @@ export function findVideoFile(dir: string): string {
     throw new Error(`Directory does not exist: ${dir}`);
   }
 
-  const files = fs.readdirSync(dir);
+  const videoFiles: { fullPath: string; size: number }[] = [];
 
-  const videoFiles = files
-    .map((file) => {
-      const fullPath = path.join(dir, file);
+  function traverse(currentPath: string) {
+    const items = fs.readdirSync(currentPath);
+
+    for (const item of items) {
+      const fullPath = path.join(currentPath, item);
       const stat = fs.statSync(fullPath);
 
-      return {
-        file,
-        fullPath,
-        stat,
-      };
-    })
-    .filter(
-      ({ file, stat }) =>
+      if (stat.isDirectory()) {
+        traverse(fullPath);
+      } else if (
         stat.isFile() &&
-        [".mkv", ".mp4"].includes(path.extname(file).toLowerCase())
-    )
-    .sort((a, b) => b.stat.size - a.stat.size);
+        [".mkv", ".mp4"].includes(path.extname(item).toLowerCase())
+      ) {
+        videoFiles.push({ fullPath, size: stat.size });
+      }
+    }
+  }
+
+  traverse(dir);
 
   if (videoFiles.length === 0) {
     throw new Error("No MKV or MP4 file found");
   }
+
+  videoFiles.sort((a, b) => b.size - a.size);
 
   return videoFiles[0].fullPath;
 }

@@ -11,7 +11,7 @@ let interval: NodeJS.Timeout | null = null;
 type TorrentJobUpdate = {
   id: number;
   downloadStatus: DownloadStatus;
-  root_path: string;
+  //root_path: string;
   infoHash: string;
 };
 
@@ -50,7 +50,7 @@ async function runCheck(torrentClient: TorrentClient) {
         updates.push({
           id: job.id,
           downloadStatus: torrent.state,
-          root_path: torrent.root_path,
+          //root_path: torrent.root_path,
           infoHash: torrent.hash
         });
       }

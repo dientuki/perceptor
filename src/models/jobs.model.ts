@@ -108,7 +108,7 @@ export async function updateJobStates(
         where: { id: update.id },
         data: {
           downloadStatus: update.downloadStatus,
-          root_path: update.root_path
+          //root_path: update.root_path
         },
       })
     )
@@ -289,6 +289,7 @@ export async function createJobFromMagnet(
     episodeId?: number;
     movieId?: number;
     seasonId?: number;
+    rootPath?: string;
   }
 ) {
   try {
@@ -305,13 +306,14 @@ export async function createJobFromMagnet(
       downloadStatus: DownloadStatus.ADDED,
       encodeStatus: EncodeStatus.WAITING,
       errorMessage: null,
-      root_path: null,
+      root_path: data.rootPath ?? null,
       episodeId: data.episodeId ?? null,
       movieId: data.movieId ?? null,
       seasonId: data.seasonId ?? null,
     };
 
     if (existingJob) {
+      logger.info({ jobId: existingJob.id, jobData }, "Job ya existente, actualizando");
       return await update(existingJob.id, {
         infoHash: jobData.infoHash,
         downloadStatus: jobData.downloadStatus,

@@ -5,5 +5,5 @@ import { DownloadStatus } from "@prisma/client";
 export type JobStateUpdate = {
   id: number;
   downloadStatus: DownloadStatus;
-  root_path: string;
+  //root_path: string;
 };

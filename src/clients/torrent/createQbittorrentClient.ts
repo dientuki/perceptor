@@ -1,6 +1,7 @@
 import { TorrentClient } from "./types";
 import { HTTP_METHOD } from "@/types/http";
 import { DownloadStatus } from "@prisma/client";
+import crypto from "node:crypto";
 
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-list
 const DOWNLOADING_STATES = new Set([
@@ -43,10 +44,18 @@ function mapTorrentState(state: string, completion: number): DownloadStatus {
   return DownloadStatus.ERROR;
 }
 
+interface QbittorrentTorrent {
+  hash: string;
+  state: string;
+  completion_on: number;
+  root_path: string;
+}
+
 export const createQbittorrentClient = (config : Record<string, string>): TorrentClient => {
   
   const host = config.torrent_host ?? "localhost";
   const port = config.torrent_port ?? "8080";
+  const basePath = config.path_downloads ?? "";
 
   const baseUrl = `http://${host}:${port}/api/v2/torrents/`;
 
@@ -69,7 +78,7 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
 
       const torrents = await response.json();
 
-      return torrents.map((t: any) => ({
+      return torrents.map((t: QbittorrentTorrent) => ({
         hash: t.hash,
         state: mapTorrentState(t.state, t.completion_on),
         rawState: t.state,
@@ -81,13 +90,26 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#add-new-torrent
    * @param {string[]} urls Array of URLs (magnet links or torrent HTTP URLs) to add
    */
-    async add(urls: string[]) {
+    async add(urls: string[]): Promise<string> {
       const endpoint = new URL("add", baseUrl);
+      
+      const firstUrl = urls[0] ?? "";
+      // Generamos un hash a partir de la primera URL para asegurar una carpeta única
+      const folder = crypto.createHash("sha256").update(firstUrl).digest("hex").substring(0, 16);
+
+      // Construimos el savepath asegurando que no haya problemas con barras duplicadas
+      const separator = basePath.includes("\\") ? "\\" : "/";
+      const savepath = basePath.replace(/[\\/]$/, "") + separator + folder;
 
       await fetch(endpoint, {
         method: HTTP_METHOD.POST,
-        body: new URLSearchParams({ urls: urls.join("\n") }),
+        body: new URLSearchParams({ 
+          urls: urls.join("\n"),
+          savepath: savepath
+        }),
       });
+
+      return savepath;
     },
 
     /**
