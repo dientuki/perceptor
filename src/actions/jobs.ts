@@ -103,7 +103,7 @@ export async function createJobFromMagnetAction(item: MediaItem, magnetLinks: st
 
     // 3. Add to torrent client
     const torrentClient = await createTorrentClient();
-    await torrentClient.add(magnetLinks);
+    const rootPath = await torrentClient.add(magnetLinks);
     logger.info({ infoHash, mediaType, tmdbId, episodeId, movieId, magnetLinks }, "🧲 Magnet links agregados al cliente de torrents.");
 
     // 4. Create or update Job in DB
@@ -112,6 +112,7 @@ export async function createJobFromMagnetAction(item: MediaItem, magnetLinks: st
       mediaType,
       episodeId,
       movieId,
+      rootPath
     });
 
     // 6. Revalidate paths
@@ -211,12 +212,13 @@ export async function createJobFromSeasonMagnetAction(showId: number, seasonId: 
 
     // 3. Add to torrent client
     const torrentClient = await createTorrentClient();
-    await torrentClient.add(magnetLinks);
+    const rootPath = await torrentClient.add(magnetLinks);
     
     logger.info({ 
       infoHash, 
       showId, 
-      seasonId 
+      seasonId,
+      rootPath
     }, "🧲 Magnet de temporada agregado al cliente con tag 'seasonTorrent'.");
 
     // 4. Create or update Job in DB
@@ -224,6 +226,7 @@ export async function createJobFromSeasonMagnetAction(showId: number, seasonId: 
       infoHash,
       mediaType: MediaType.TV,
       seasonId: seasonId,
+      rootPath: rootPath
     });
 
     // 6. Revalidate paths
