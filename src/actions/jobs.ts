@@ -138,7 +138,7 @@ export async function  createJobFromFolderAction(showId: number, seasonId: numbe
     if (!show) throw new Error("Show no encontrado.");
 
     // 2. Leer la carpeta
-    const files = await fs.readdir(folderPath);
+    const files = (await fs.readdir(folderPath, { recursive: true })) as string[];
     
     // Filtrar archivos .mkv que sigan el patrón SXXEXX
     const mkvFiles = files.filter(f => f.toLowerCase().endsWith(".mkv"));
