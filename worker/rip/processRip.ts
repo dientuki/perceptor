@@ -56,7 +56,6 @@ export async function processRip(
 
   const ffmpegArgs = await buildFfmpegCommand(
     mkvFile,
-    outputPath,
     metadata,
     job
   );

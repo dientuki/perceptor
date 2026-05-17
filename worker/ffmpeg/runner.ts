@@ -5,8 +5,8 @@ import { update } from "@/models/jobs.model";
 
 export function runFfmpeg(id: number, args: string[], finalPath: string): Promise<void> {
   return new Promise(async (resolve, reject) => {
-    const tempPath = finalPath.replace(/\.mkv$/, ".working.mkv");
-    const finalArgs = [...args.slice(0, -1), tempPath];
+    const tempPath = args[args.length - 1];
+    const finalArgs = args;
 
     logger.info({ finalPath }, "🚀 Iniciando FFmpeg | Destino");
     const finalCmd = `ffmpeg ${finalArgs.map(arg => (arg.includes(" ") ? `"${arg}"` : arg)).join(" ")}`;
