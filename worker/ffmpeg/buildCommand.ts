@@ -21,10 +21,10 @@ interface FfmpegMetadata {
 
 export async function buildFfmpegCommand(
   input: string,
-  output: string,
   metadata: FfmpegMetadata,
   job: JobWithDetails
 ): Promise<string[]> {
+  const output = input.replace(/\.mkv$/, ".working.mkv"); // El output se construye en base al root_path del Job, que ya tiene la estructura correcta
   const vStream = metadata.streams.find((s) => s.codec_type === "video");
   const aStreams = metadata.streams.filter((s) => s.codec_type === "audio");
   const sStreams = metadata.streams.filter((s) => s.codec_type === "subtitle");
@@ -52,7 +52,7 @@ export async function buildFfmpegCommand(
     input,
     "-threads",
     "0",
-    //"-t", "00:05:00", // Solo para pruebas, elimina esto después
+    //"-t", "00:01:00", // Solo para pruebas, elimina esto después
     ...getVideoParams(vStream, isLiveAction, quality),
     ...getAudioParams(aStreams, languageIso3),
     ...getSubtitleParams(sStreams, languageIso3),
