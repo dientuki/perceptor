@@ -15,11 +15,31 @@ function getQuality(isLiveAction: boolean, quality: quality) {
 
 export function getVideoParams(videoStream: any, isLiveAction: boolean, quality: quality = 'web') {
   const codec = videoStream.codec_name;
+  const width = Number(videoStream.width ?? 0);
+  const height = Number(videoStream.height ?? 0);
+  const is4K =
+    width >= 3800 || height >= 2100;
+
+  const svtav1 = [
+    "keyint=10s",
+    "scd=1",
+    "enable-overlays=1",
+    "tune=0",
+    "input-depth=10",
+
+    ...(isLiveAction
+      ? [
+          "scm=0",
+        ]
+      : [
+          "aq-mode=2",
+          "enable-qm=1",
+          "qm-min=4",
+        ]),
+  ].join(":");
 
   // REGLA: Si es h264, convertir. 
   if (codec === 'h264') {
-    const svtav1 = isLiveAction ? "keyint=10s:scd=1:enable-overlays=1:tune=0:scm=0" : "keyint=10s:scd=1:enable-overlays=1:tune=0:aq-mode=2:enable-qm=1:qm-min=4";
-
     return [
       "-map", "0:v:0",
       "-c:v", "libsvtav1",
@@ -35,6 +55,45 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
       //"-svtav1-params", "rc=1:tune=1:film-grain=8:film-grain-denoise=0:enable-overlays=1:scd=1",
       "-metadata:s:v:0", 'title=AV1 (Converted from H264)'
     ];
+  }
+
+    // HEVC/H265 4K -> 1080p AV1
+  if ((codec === 'hevc' || codec === 'h265') && is4K) {
+
+    const hasDolbyVision = Array.isArray(videoStream.side_data_list) && 
+      videoStream.side_data_list.some((sideData: any) => sideData.side_data_type === "DOVI configuration record");
+
+    if (hasDolbyVision) {
+        return [
+        "-map", "0:v:0",
+        "-vf", "scale=1920:2160,libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto",
+        "-c:v", "libsvtav1",
+        "-crf", getQuality(isLiveAction, quality),
+        "-preset", "4",
+        "-pix_fmt", "yuv420p10le",
+        "-svtav1-params", svtav1,
+        "-metadata:s:v:0", 'title=AV1 1080p (Tonemapped from 4K DoVi)'
+      ];
+    }
+
+    const hasHDR10 = Array.isArray(videoStream.side_data_list) && 
+      videoStream.side_data_list.some((sideData: any) => 
+        sideData.side_data_type === "Mastering display metadata" || 
+        sideData.side_data_type === "Content light level metadata"
+      );
+
+    if (hasHDR10) {
+      return [
+        "-map", "0:v:0",
+        "-vf", "scale=1920:2160,libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto",
+        "-c:v", "libsvtav1",
+        "-crf", getQuality(isLiveAction, quality),
+        "-preset", "4",
+        "-pix_fmt", "yuv420p10le",
+        "-svtav1-params", svtav1,
+        "-metadata:s:v:0", 'title=AV1 1080p (Tonemapped from 4K HDR10)'
+      ];
+    }
   }
 
   // REGLA: Para cualquier otra cosa (AV1, HEVC, VC1, etc.), solo copiar.
@@ -72,9 +131,23 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
   // 3. Selección de UN solo mejor stream por idioma
   const selectedStreams: any[] = [];
   allowedLangs.forEach(langCode => {
-    const langStreams = candidates.filter(s => (s.tags?.language || "").toLowerCase() === langCode);
+    let langStreams = candidates.filter(s => (s.tags?.language || "").toLowerCase() === langCode);
 
     if (langStreams.length > 0) {
+      // ---- NUEVA REGLA PARA ESPAÑOL (LATINO) ----
+      if (langCode === 'spa' && langStreams.length > 1) {
+        // Filtramos las que tengan "latin" o "latino" de forma explícita
+        const latinStreams = langStreams.filter(s => {
+          const title = (s.tags?.title || "").toLowerCase();
+          return title.includes('latin') || title.includes('latino');
+        });
+
+        // Si encontramos pistas con "latin/latino", trabajamos SOLO con esas para elegir la mejor
+        if (latinStreams.length > 0) {
+          langStreams = latinStreams;
+        }
+      }
+
       langStreams.sort((a, b) => {
         const codecA = (a.codec_name || "").toLowerCase();
         const codecB = (b.codec_name || "").toLowerCase();
@@ -107,7 +180,6 @@ export function getAudioParams(audioStreams: any[], originalLang: string) {
   const params: string[] = [];
   
   selectedStreams.forEach((s, index) => {
-    console.log(s)
     const lang = (s.tags?.language || "und").toLowerCase();
     const channels = Number(s.channels || 0);
     //const title = s.tags?.title || "Audio";
