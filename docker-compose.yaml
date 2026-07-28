@@ -1,4 +1,23 @@
 services:
+  traefik:
+    image: traefik:v3.7
+    container_name: perceptor-traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      # - "8080:8080" # Descomentar si querés ver el Dashboard de Traefik
+    command:
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      # - "--api.insecure=true" # Descomentar si querés habilitar el Dashboard en el puerto 8080
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - perceptor-net
+
   web:
     build:
       context: .
@@ -15,6 +34,14 @@ services:
       - NODE_ENV=${NODE_ENV}
       # Necesario en Linux para que Next.js detecte cambios de archivos con Hot Reload/HMR a través de Docker
       - WATCHPACK_POLLING=true
+      - DOMAIN=${DOMAIN}
+    networks:
+      - perceptor-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.web.entrypoints=web"
+      - "traefik.http.services.web.loadbalancer.server.port=3000"      
 
   api:
     build:
@@ -30,6 +57,16 @@ services:
       - DATABASE_URL=${DATABASE_URL}
     depends_on:
       - db      
+      - redis
+      - prowlarr
+      - torrent
+    networks:
+      - perceptor-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.${DOMAIN}`)"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.http.services.api.loadbalancer.server.port=3000"      
 
   db:
     image: mariadb:12.3.2
@@ -45,6 +82,8 @@ services:
     volumes:
       # Mantiene los datos guardados en un volumen gestionado por Docker
       - mariadb_data:/var/lib/mysql
+    networks:
+      - perceptor-net      
 
   worker:
     build:
@@ -63,8 +102,10 @@ services:
       - DOWNLOADS_DIR=${CONTAINER_DOWNLOADS_DIR}
       - DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
     depends_on:
-      - db
-      #- redis   
+      #- db
+      - redis   
+    networks:
+      - perceptor-net      
 
   redis:
     image: redis:7-alpine
@@ -80,6 +121,8 @@ services:
       --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
+    networks:
+      - perceptor-net      
     #healthcheck:
     #  test: ["CMD", "redis-cli", "ping"]
     #  interval: 5s
@@ -111,8 +154,15 @@ services:
       
       # Mapeo a la misma carpeta de descargas que lee el worker
       - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
+    networks:
+      - perceptor-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.torrent.rule=Host(`torrent.${DOMAIN}`)"
+      - "traefik.http.routers.torrent.entrypoints=web"
+      # Le indicamos a Traefik el puerto interno de la WebUI
+      - "traefik.http.services.torrent.loadbalancer.server.port=${QBITTORRENT_WEBUI_PORT}"      
     
-
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:2.5.2
     container_name: perceptor-prowlarr
@@ -128,9 +178,20 @@ services:
       - prowlarr_config:/config
     ports:
       - "${PROWLARR_PORT}:9696"
+    networks:
+      - perceptor-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prowlarr.rule=Host(`indexer.${DOMAIN}`)"
+      - "traefik.http.routers.prowlarr.entrypoints=web"
+      - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"      
 
 volumes:
   mariadb_data:
   redis_data:
   qbittorrent_config: # Nuevo volumen para la config de qBittorrent    
   prowlarr_config: # Nuevo volumen para la config de Prowlarr
+
+networks:
+  perceptor-net:
+    driver: bridge  
