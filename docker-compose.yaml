@@ -19,6 +19,11 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:
       - perceptor-net
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3      
 
   web:
     build:
@@ -37,6 +42,15 @@ services:
       # Necesario en Linux para que Next.js detecte cambios de archivos con Hot Reload/HMR a través de Docker
       - WATCHPACK_POLLING=true
       - DOMAIN=${DOMAIN}
+    depends_on:
+      api:
+        condition: service_healthy      
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s      
     networks:
       - perceptor-net
     labels:
@@ -57,11 +71,21 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s      
     depends_on:
-      - db      
-      - redis
-      - prowlarr
-      - torrent
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      prowlarr:
+        condition: service_healthy
+      torrent:
+        condition: service_healthy
     networks:
       - perceptor-net
     labels:
@@ -85,7 +109,13 @@ services:
       # Mantiene los datos guardados en un volumen gestionado por Docker
       - mariadb_data:/var/lib/mysql
     networks:
-      - perceptor-net      
+      - perceptor-net
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p'${DB_ROOT_PASSWORD}'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s           
 
   worker:
     build:
@@ -100,12 +130,12 @@ services:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=6379
+      - REDIS_PORT=${REDIS_PORT}
       - DOWNLOADS_DIR=${CONTAINER_DOWNLOADS_DIR}
       - DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
     depends_on:
-      #- db
-      - redis   
+      redis:
+        condition: service_healthy
     networks:
       - perceptor-net      
 
@@ -114,7 +144,7 @@ services:
     container_name: perceptor-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT}:6379" # Expuesto al host por si querés inspeccionar con Redis Insight o TablePlus
+      - "${REDIS_PORT}:${REDIS_PORT}" # Expuesto al host por si querés inspeccionar con Redis Insight o TablePlus
     command: >
       redis-server 
       --save 60 1 
@@ -125,16 +155,11 @@ services:
       - redis_data:/data
     networks:
       - perceptor-net      
-    #healthcheck:
-    #  test: ["CMD", "redis-cli", "ping"]
-    #  interval: 5s
-    #  timeout: 3s
-    #  retries: 5    
-    #depends_on:
-    #  db:
-    #    condition: service_started
-    #  redis:
-    #    condition: service_healthy      
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5  
 
   torrent:
     image: lscr.io/linuxserver/qbittorrent:5.2.3
@@ -156,6 +181,12 @@ services:
       
       # Mapeo a la misma carpeta de descargas que lee el worker
       - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${QBITTORRENT_WEBUI_PORT}/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s      
     networks:
       - perceptor-net
     labels:
@@ -180,6 +211,12 @@ services:
       - prowlarr_config:/config
     ports:
       - "${PROWLARR_PORT}:9696"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9696/ping || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s      
     networks:
       - perceptor-net
     labels:
