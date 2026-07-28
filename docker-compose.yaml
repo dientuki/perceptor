@@ -4,7 +4,6 @@ services:
     image: traefik:v3.7
     container_name: perceptor-traefik
     restart: unless-stopped
-    profiles: ["default"]
     ports:
       - "80:80"
       - "443:443"
@@ -65,7 +64,7 @@ services:
       dockerfile: docker/api.Dockerfile
     container_name: perceptor-api
     ports:
-      - "${API_PORT}:3000" # Mapeamos al puerto especificado para no chocar con Next.js
+      - "${API_PORT}:${API_PORT}" # Mapeamos al puerto especificado para no chocar con Next.js
     volumes:
       - ./services/api:/app
     environment:
