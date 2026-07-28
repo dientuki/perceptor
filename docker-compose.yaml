@@ -1,0 +1,136 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    container_name: perceptor-web
+    ports:
+      - "${WEB_PORT}:3000"
+    volumes:
+      # Mapea services/web al directorio /app del contenedor.
+      # Esto hace que los node_modules instalados en el build se escriban
+      # directamente en services/web/node_modules de tu host.
+      - ./services/web:/app
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      # Necesario en Linux para que Next.js detecte cambios de archivos con Hot Reload/HMR a través de Docker
+      - WATCHPACK_POLLING=true
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: perceptor-api
+    ports:
+      - "${API_PORT}:3000" # Mapeamos al puerto especificado para no chocar con Next.js
+    volumes:
+      - ./services/api:/app
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - db      
+
+  db:
+    image: mariadb:12.3.2
+    container_name: perceptor-db
+    restart: always
+    ports:
+      - "${DB_PORT}:3306" # Mapeado al host para conectar clientes externos
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      # Mantiene los datos guardados en un volumen gestionado por Docker
+      - mariadb_data:/var/lib/mysql
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: perceptor-worker
+    volumes:
+      - ./services/worker:/app
+      - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
+      - ${HOST_DESTINATIONS_DIR}:${CONTAINER_DESTINATIONS_DIR}
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=6379
+      - DOWNLOADS_DIR=${CONTAINER_DOWNLOADS_DIR}
+      - DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
+    depends_on:
+      - db
+      #- redis   
+
+  redis:
+    image: redis:7-alpine
+    container_name: perceptor-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379" # Expuesto al host por si querés inspeccionar con Redis Insight o TablePlus
+    command: >
+      redis-server 
+      --save 60 1 
+      --loglevel notice 
+      --maxmemory 256mb 
+      --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    #healthcheck:
+    #  test: ["CMD", "redis-cli", "ping"]
+    #  interval: 5s
+    #  timeout: 3s
+    #  retries: 5    
+    #depends_on:
+    #  db:
+    #    condition: service_started
+    #  redis:
+    #    condition: service_healthy      
+
+  torrent:
+    image: lscr.io/linuxserver/qbittorrent:5.2.3
+    container_name: perceptor-torrent
+    restart: unless-stopped
+    ports:
+      - "${QBITTORRENT_WEBUI_PORT}:${QBITTORRENT_WEBUI_PORT}/tcp"
+      - "${QBITTORRENT_TORRENTING_PORT}:${QBITTORRENT_TORRENTING_PORT}/tcp"
+      - "${QBITTORRENT_TORRENTING_PORT}:${QBITTORRENT_TORRENTING_PORT}/udp"    
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=${QBITTORRENT_WEBUI_PORT}
+      - TORRENTING_PORT=${QBITTORRENT_TORRENTING_PORT}
+    volumes:
+      # Configuración persistente del cliente (resume de descargas, torrents activos, etc.)
+      - qbittorrent_config:/config
+      
+      # Mapeo a la misma carpeta de descargas que lee el worker
+      - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
+    
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:2.5.2
+    container_name: perceptor-prowlarr
+    restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8    
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - prowlarr_config:/config
+    ports:
+      - "${PROWLARR_PORT}:9696"
+
+volumes:
+  mariadb_data:
+  redis_data:
+  qbittorrent_config: # Nuevo volumen para la config de qBittorrent    
+  prowlarr_config: # Nuevo volumen para la config de Prowlarr
