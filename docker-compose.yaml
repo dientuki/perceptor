@@ -1,8 +1,10 @@
 services:
+
   traefik:
     image: traefik:v3.7
     container_name: perceptor-traefik
     restart: unless-stopped
+    profiles: ["default"]
     ports:
       - "80:80"
       - "443:443"
