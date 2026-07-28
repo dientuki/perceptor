@@ -1,0 +1,25 @@
+{
+  "name": "perceptor-worker",
+  "version": "1.0.0",
+  "description": "Worker de procesamiento de video con FFmpeg, BullMQ y comunicación a API",
+  "main": "src/index.ts",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "bullmq": "^5.41.0",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
