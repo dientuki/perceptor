@@ -1,0 +1,13 @@
+#!/bin/bash
+
+case "$1" in
+  web|api|worker)
+    SERVICE=$1
+    shift
+    ;;
+  *)
+    SERVICE="web"
+    ;;
+esac
+
+bin/cli "$SERVICE" npm "$@"

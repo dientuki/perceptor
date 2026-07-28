@@ -1,0 +1,4 @@
+#!/bin/bash
+SERVICE=$1
+shift
+bin/cli "$SERVICE" sh "$@"
