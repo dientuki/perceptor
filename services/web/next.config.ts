@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   allowedDevOrigins: [domain],
+  output: 'standalone'
 };
 
 export default nextConfig;
