@@ -32,11 +32,11 @@ CMD ["sh", "-c", "if [ ! -d node_modules ]; then npm install; fi && npm run dev"
 # ==========================================
 FROM base AS builder
 # Copiamos manifiestos e instalamos dependencias completas
-COPY services/web/package*.json ./
+COPY package*.json ./
 RUN npm ci
 
 # Copiamos el resto del código y compilamos Next.js
-COPY services/web/ .
+COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

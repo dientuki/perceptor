@@ -26,8 +26,8 @@ services:
 
   web:
     build:
-      context: .
-      dockerfile: docker/web.Dockerfile
+      context: ./services/web
+      #dockerfile: docker/web.Dockerfile
       target: ${BUILD_TARGET:-dev}
     container_name: perceptor-web
     ports:
@@ -61,8 +61,9 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: docker/api.Dockerfile
+      context: ./services/api
+      #dockerfile: docker/api.Dockerfile
+      target: ${BUILD_TARGET:-dev}
     container_name: perceptor-api
     ports:
       - "${API_PORT}:${API_PORT}" # Mapeamos al puerto especificado para no chocar con Next.js
@@ -84,10 +85,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      prowlarr:
-        condition: service_healthy
-      torrent:
-        condition: service_healthy
+      #prowlarr:
+      #  condition: service_healthy
+      #torrent:
+      #  condition: service_healthy
     networks:
       - perceptor-net
     labels:
@@ -121,8 +122,9 @@ services:
 
   worker:
     build:
-      context: .
-      dockerfile: docker/worker.Dockerfile
+      context: ./services/worker
+      #dockerfile: docker/worker.Dockerfile
+      target: ${BUILD_TARGET:-dev}
     container_name: perceptor-worker
     volumes:
       - ./services/worker:/app
@@ -163,69 +165,69 @@ services:
       timeout: 3s
       retries: 5  
 
-  torrent:
-    image: lscr.io/linuxserver/qbittorrent:5.2.3
-    container_name: perceptor-torrent
-    restart: unless-stopped
-    ports:
-      - "${QBITTORRENT_WEBUI_PORT}:${QBITTORRENT_WEBUI_PORT}/tcp"
-      - "${QBITTORRENT_TORRENTING_PORT}:${QBITTORRENT_TORRENTING_PORT}/tcp"
-      - "${QBITTORRENT_TORRENTING_PORT}:${QBITTORRENT_TORRENTING_PORT}/udp"    
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - WEBUI_PORT=${QBITTORRENT_WEBUI_PORT}
-      - TORRENTING_PORT=${QBITTORRENT_TORRENTING_PORT}
-    volumes:
-      # Configuración persistente del cliente (resume de descargas, torrents activos, etc.)
-      - qbittorrent_config:/config
-      
-      # Mapeo a la misma carpeta de descargas que lee el worker
-      - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:${QBITTORRENT_WEBUI_PORT}/ || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s      
-    networks:
-      - perceptor-net
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.torrent.rule=Host(`torrent.${DOMAIN}`)"
-      - "traefik.http.routers.torrent.entrypoints=web"
-      # Le indicamos a Traefik el puerto interno de la WebUI
-      - "traefik.http.services.torrent.loadbalancer.server.port=${QBITTORRENT_WEBUI_PORT}"      
-    
-  prowlarr:
-    image: lscr.io/linuxserver/prowlarr:2.5.2
-    container_name: perceptor-prowlarr
-    restart: unless-stopped
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8    
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    volumes:
-      - prowlarr_config:/config
-    ports:
-      - "${PROWLARR_PORT}:9696"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9696/ping || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 15s      
-    networks:
-      - perceptor-net
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.prowlarr.rule=Host(`indexer.${DOMAIN}`)"
-      - "traefik.http.routers.prowlarr.entrypoints=web"
-      - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"      
+  #torrent:
+  #  image: lscr.io/linuxserver/qbittorrent:5.2.3
+  #  container_name: perceptor-torrent
+  #  restart: unless-stopped
+  #  ports:
+  #    - "${QBITTORRENT_WEBUI_PORT}:${QBITTORRENT_WEBUI_PORT}/tcp"
+  #    - "${QBITTORRENT_TORRENTING_PORT}:${QBITTORRENT_TORRENTING_PORT}/tcp"
+  #    - "${QBITTORRENT_TORRENTING_PORT}:${QBITTORRENT_TORRENTING_PORT}/udp"    
+  #  environment:
+  #    - PUID=${PUID}
+  #    - PGID=${PGID}
+  #    - TZ=${TZ}
+  #    - WEBUI_PORT=${QBITTORRENT_WEBUI_PORT}
+  #    - TORRENTING_PORT=${QBITTORRENT_TORRENTING_PORT}
+  #  volumes:
+  #    # Configuración persistente del cliente (resume de descargas, torrents activos, etc.)
+  #    - qbittorrent_config:/config
+  #    
+  #    # Mapeo a la misma carpeta de descargas que lee el worker
+  #    - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
+  #  healthcheck:
+  #    test: ["CMD-SHELL", "curl -f http://localhost:${QBITTORRENT_WEBUI_PORT}/ || exit 1"]
+  #    interval: 15s
+  #    timeout: 5s
+  #    retries: 3
+  #    start_period: 10s      
+  #  networks:
+  #    - perceptor-net
+  #  labels:
+  #    - "traefik.enable=true"
+  #    - "traefik.http.routers.torrent.rule=Host(`torrent.${DOMAIN}`)"
+  #    - "traefik.http.routers.torrent.entrypoints=web"
+  #    # Le indicamos a Traefik el puerto interno de la WebUI
+  #    - "traefik.http.services.torrent.loadbalancer.server.port=${QBITTORRENT_WEBUI_PORT}"      
+  #  
+  #prowlarr:
+  #  image: lscr.io/linuxserver/prowlarr:2.5.2
+  #  container_name: perceptor-prowlarr
+  #  restart: unless-stopped
+  #  dns:
+  #    - 1.1.1.1
+  #    - 8.8.8.8    
+  #  environment:
+  #    - PUID=${PUID}
+  #    - PGID=${PGID}
+  #    - TZ=${TZ}
+  #  volumes:
+  #    - prowlarr_config:/config
+  #  ports:
+  #    - "${PROWLARR_PORT}:9696"
+  #  healthcheck:
+  #    test: ["CMD-SHELL", "curl -f http://localhost:9696/ping || exit 1"]
+  #    interval: 15s
+  #    timeout: 5s
+  #    retries: 3
+  #    start_period: 15s      
+  #  networks:
+  #    - perceptor-net
+  #  labels:
+  #    - "traefik.enable=true"
+  #    - "traefik.http.routers.prowlarr.rule=Host(`indexer.${DOMAIN}`)"
+  #    - "traefik.http.routers.prowlarr.entrypoints=web"
+  #    - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"      
 
 volumes:
   mariadb_data:
