@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Asegura que estamos en la raíz del proyecto
+cd "$(dirname "$0")/.."
+
+# Carga las variables del .env
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+fi
+
+echo "Otorgando permisos globales a '${DB_USER}' en MariaDB..."
+
+# Se conecta como 'root' a la base de datos usando docker compose exec
+docker compose exec -T db mariadb -u root -p"${DB_ROOT_PASSWORD}" <<EOF
+GRANT ALL PRIVILEGES ON *.* TO '${DB_USER}'@'%';
+FLUSH PRIVILEGES;
+EOF
+
+if [ $? -eq 0 ]; then
+  echo "✅ Permisos asignados correctamente a ${DB_USER}."
+  echo "Ahora podés ejecutar 'npx prisma migrate dev' sin problemas de Shadow Database."
+else
+  echo "❌ Error al asignar permisos."
+fi

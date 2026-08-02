@@ -36,6 +36,7 @@ yarn-error.log*
 .pnpm-debug.log*
 pnpm-debug.log*
 lerna-debug.log*
+generated/prisma
 
 # OS & System files
 .DS_Store
