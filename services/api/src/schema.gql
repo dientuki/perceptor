@@ -10,4 +10,10 @@ type Item {
 type Query {
   ping: String!
   items: [Item!]!
+  me: String!
+}
+
+type Mutation {
+  login(username: String!, pass: String!): Boolean!
+  logout: Boolean!
 }
