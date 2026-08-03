@@ -7,13 +7,37 @@ type Item {
   title: String!
 }
 
+type User {
+  id: ID!
+  name: String!
+  email: String!
+}
+
 type Query {
   ping: String!
   items: [Item!]!
   me: String!
+  users: [User!]!
+  user(id: ID!): User!
 }
 
 type Mutation {
   login(username: String!, pass: String!): Boolean!
   logout: Boolean!
+  createUser(createUserInput: CreateUserInput!): User!
+  updateUser(updateUserInput: UpdateUserInput!): User!
+  removeUser(id: ID!): User!
+}
+
+input CreateUserInput {
+  name: String!
+  email: String!
+  password: String!
+}
+
+input UpdateUserInput {
+  name: String
+  email: String
+  password: String
+  id: ID!
 }

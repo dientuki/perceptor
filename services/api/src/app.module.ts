@@ -4,6 +4,8 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
 import { AppResolver } from './app.resolver'; // Lo creamos en el paso 2
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
@@ -18,7 +20,9 @@ import { AuthModule } from './auth/auth.module';
       // Desactiva la intro en producción por seguridad
       introspection: process.env.NODE_ENV !== 'production',
     }),
+    PrismaModule,
     AuthModule,
+    UsersModule,
   ],
   providers: [AppResolver],
 })

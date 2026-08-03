@@ -27,7 +27,7 @@ FROM base AS dev
 ENV NODE_ENV=development
 EXPOSE 3000
 # Verifica si existe nest CLI o node_modules, de lo contrario instala e inicia en dev
-CMD ["sh", "-c", "if [ ! -d node_modules ]; then npm install; fi && npm run start:dev"]
+CMD ["sh", "-c", "if [ ! -d node_modules ]; then npm install; fi && npx prisma generate && npm run start:dev"]
 
 # ==========================================
 # 3. BUILDER: Compilación para Producción
@@ -36,6 +36,10 @@ FROM base AS builder
 # Copiamos manifiestos e instalamos TODAS las dependencias (incluyendo devDependencies para compilar)
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+# Copiamos el schema de Prisma y generamos el cliente
+COPY prisma ./prisma/
+RUN npx prisma generate
 
 # Copiamos el código fuente y compilamos NestJS
 COPY . .
@@ -56,6 +60,7 @@ RUN addgroup --system --gid 1001 nestjs && \
 
 # Copiamos las dependencias de producción ya podadas y el código compilado
 COPY --from=builder --chown=nestjs:nestjs /app/node_modules ./node_modules
+COPY --from=builder --chown=nestjs:nestjs /app/prisma ./prisma
 COPY --from=builder --chown=nestjs:nestjs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nestjs /app/package*.json ./
 
