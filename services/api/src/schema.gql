@@ -13,6 +13,11 @@ type User {
   email: String!
 }
 
+type LoginResponse {
+  access_token: String!
+  user: User!
+}
+
 type Query {
   ping: String!
   items: [Item!]!
@@ -22,11 +27,17 @@ type Query {
 }
 
 type Mutation {
-  login(username: String!, pass: String!): Boolean!
+  """Inicia sesión y retorna un JWT"""
+  login(loginInput: LoginInput!): LoginResponse!
   logout: Boolean!
   createUser(createUserInput: CreateUserInput!): User!
   updateUser(updateUserInput: UpdateUserInput!): User!
   removeUser(id: ID!): User!
+}
+
+input LoginInput {
+  email: String!
+  password: String!
 }
 
 input CreateUserInput {

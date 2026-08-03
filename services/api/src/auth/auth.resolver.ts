@@ -3,34 +3,21 @@ import { AuthService } from './auth.service';
 import { UseGuards, UnauthorizedException } from '@nestjs/common';
 import { GqlAuthGuard } from './guards/gql-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { LoginResponse } from './dto/login-response';
+import { LoginInput } from './dto/login.input';
 
 @Resolver()
 export class AuthResolver {
   constructor(private authService: AuthService) {}
 
-  @Mutation(() => Boolean)
+  @Mutation(() => LoginResponse, { description: 'Inicia sesión y retorna un JWT' })
   async login(
-    @Args('username') username: string,
-    @Args('pass') pass: string,
-    @Context() context: any, // Acceso a req y res de Express
-  ) {
-    const user = await this.authService.validateUser(username, pass);
-    if (!user) {
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
-
-    const { access_token } = await this.authService.login(user);
-
-    // Guardamos la cookie en el objeto de respuesta de Express
-    context.res.cookie('token', access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
-    });
-
-    return true;
+    @Args('loginInput') loginInput: LoginInput,
+  ): Promise<LoginResponse> {
+    return await this.authService.login(
+      loginInput.email,
+      loginInput.password,
+    );
   }
 
   @Mutation(() => Boolean)
