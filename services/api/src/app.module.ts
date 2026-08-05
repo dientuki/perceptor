@@ -6,6 +6,7 @@ import { AppResolver } from './app.resolver'; // Lo creamos en el paso 2
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { MoviesModule } from './movies/movies.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { PrismaModule } from './prisma/prisma.module';
     PrismaModule,
     AuthModule,
     UsersModule,
+    MoviesModule, // Asegúrate de importar el módulo de películas
   ],
   providers: [AppResolver],
 })

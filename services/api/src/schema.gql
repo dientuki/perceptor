@@ -18,12 +18,35 @@ type LoginResponse {
   user: User!
 }
 
+type Movie {
+  id: ID!
+  tmdbId: Int!
+  title: String!
+  overview: String
+  posterUrl: String
+  releaseDate: DateTime
+  originalLanguage: String!
+  isLiveAction: Boolean!
+  status: String!
+  filePath: String
+  downloadTaskId: Float
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
 type Query {
   ping: String!
   items: [Item!]!
   me: String!
   users: [User!]!
   user(id: ID!): User!
+  movies: [Movie!]!
+  movie(id: Int!): Movie
 }
 
 type Mutation {
