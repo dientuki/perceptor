@@ -3,10 +3,10 @@ import Checkbox from "@/components/form/input/Checkbox";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/20/solid';
+import { Eye, EyeOff } from 'lucide-react';
 import Link from "next/link";
 import { useState, useActionState } from "react";
-import { loginAction } from "@/app/actions/auth";
+import { loginAction } from "@/actions/auth";
 import { useSearchParams } from "next/dist/client/components/navigation";
 
 export default function SignInForm() {
@@ -67,9 +67,9 @@ export default function SignInForm() {
                       className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2 w-5 h-5"
                     >
                       {showPassword ? (
-                        <EyeIcon className="fill-gray-500 dark:fill-gray-400" />
+                        <Eye className="fill-gray-500 dark:fill-gray-400" />
                       ) : (
-                        <EyeSlashIcon className="fill-gray-500 dark:fill-gray-400" />
+                        <EyeOff className="fill-gray-500 dark:fill-gray-400" />
                       )}
                     </span>
                   </div>

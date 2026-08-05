@@ -2,7 +2,7 @@
 import Checkbox from "@/components/form/input/Checkbox";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/20/solid';
+import { Eye, EyeOff } from 'lucide-react';
 import Link from "next/link";
 import React, { useState } from "react";
 
@@ -129,9 +129,9 @@ export default function SignUpForm() {
                       className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2"
                     >
                       {showPassword ? (
-                        <EyeIcon className="fill-gray-500 dark:fill-gray-400" />
+                        <Eye className="fill-gray-500 dark:fill-gray-400" />
                       ) : (
-                        <EyeSlashIcon className="fill-gray-500 dark:fill-gray-400" />
+                        <EyeOff className="fill-gray-500 dark:fill-gray-400" />
                       )}
                     </span>
                   </div>
