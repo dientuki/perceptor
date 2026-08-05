@@ -10,8 +10,8 @@ async function main() {
 
   await prisma.$connect(); // Conectamos explícitamente
 
-  //await seedLanguages(prisma);
-  //await seedUsers(prisma);
+  await seedLanguages(prisma);
+  await seedUsers(prisma);
   await seedMovies(prisma);
 
   console.log('✅ Seeders completados con éxito.');
