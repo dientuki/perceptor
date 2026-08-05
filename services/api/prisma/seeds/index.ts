@@ -1,6 +1,7 @@
 import { PrismaService } from '../../src/prisma/prisma.service'; // Ajustá la ruta a tu proyecto
 import { seedLanguages } from './languages';
 import { seedUsers } from './users';
+import { seedMovies } from './movie';
 
 const prisma = new PrismaService();
 
@@ -9,8 +10,9 @@ async function main() {
 
   await prisma.$connect(); // Conectamos explícitamente
 
-  await seedLanguages(prisma);
-  await seedUsers(prisma);
+  //await seedLanguages(prisma);
+  //await seedUsers(prisma);
+  await seedMovies(prisma);
 
   console.log('✅ Seeders completados con éxito.');
 }

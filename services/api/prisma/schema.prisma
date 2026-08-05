@@ -12,6 +12,33 @@ datasource db {
   provider = "mysql"
 }
 
+enum DownloadStatus {
+  CREATED      // Job creado en el sistema
+  SEARCHING    // Buscando torrent en tracker
+  ADDED        // Torrent agregado al cliente
+  DOWNLOADING  // Descargando activamente
+  PAUSED       // Pausado en cliente
+  COMPLETED    // Descarga finalizada
+  ERROR        // Error en cualquier punto
+}
+
+enum EncodeStatus {
+  WAITING
+  QUEUED
+  ENCODING
+  COMPLETED
+  ERROR
+}
+
+// Estado simplificado / consolidado para la UI (Movie, Episode, Track)
+enum MediaStatus {
+  MISSING       // No solicitado o no existe archivo
+  DOWNLOADING   // Está en cualquiera de los pasos de descarga (SEARCHING, ADDED, DOWNLOADING, etc.)
+  ENCODING      // Está en la cola o siendo procesado por FFmpeg (QUEUED, ENCODING)
+  COMPLETED     // Todo el flujo finalizó (Descarga + Encode)
+  ERROR         // Falló la descarga o el encode
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -29,4 +56,128 @@ model Language {
   iso3 String
 
   @@map("languages")
+}
+
+// Tarea de descarga (1 por Torrent / Pack / Archivo individual)
+model DownloadTask {
+  id            Int            @id @default(autoincrement())
+  infoHash      String?        @unique
+  downloadPath  String?
+  
+  status        DownloadStatus @default(CREATED)
+  errorMessage  String?
+
+  movie         Movie?
+  processJobs   ProcessJob[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("download_tasks")
+}
+
+// Tarea de encoding (1 por archivo de video/audio físico)
+model ProcessJob {
+  id              Int          @id @default(autoincrement())
+  
+  downloadTaskId  Int
+  downloadTask    DownloadTask @relation(fields: [downloadTaskId], references: [id], onDelete: Cascade)
+
+  movieId         Int?
+  movie           Movie?       @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  episodeId       Int?
+  episode         Episode?     @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  inputFilePath   String?
+  outputFilePath  String?
+  ffmpegCommand   String?
+
+  status          EncodeStatus @default(WAITING)
+  errorMessage    String?
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@map("process_jobs")
+}
+
+model Movie {
+  id               Int          @id @default(autoincrement())
+  tmdbId           Int          @unique
+  title            String
+  overview         String?
+  posterUrl        String?
+  releaseDate      DateTime?
+  originalLanguage String
+  isLiveAction     Boolean      @default(true)
+
+  // Estado consolidado para mostrar rápido en tarjetas/listados de la App
+  status           MediaStatus  @default(MISSING)
+  filePath         String?      // Ruta al archivo final procesado
+
+  // Descarga activa vinculada (opcional)
+  downloadTaskId   Int?         @unique
+  downloadTask     DownloadTask? @relation(fields: [downloadTaskId], references: [id], onDelete: SetNull)
+
+  processJobs      ProcessJob[]
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@map("movies")
+}
+
+model Show {
+  id               Int       @id @default(autoincrement())
+  tmdbId           Int       @unique
+  title            String
+  overview         String?
+  posterUrl        String?
+  status           String?
+  isLiveAction     Boolean   @default(true)
+  originalLanguage String
+  releaseDate      DateTime?
+
+  seasons          Season[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("shows")
+}
+
+model Season {
+  id           Int       @id @default(autoincrement())
+  showId       Int
+  show         Show      @relation(fields: [showId], references: [id], onDelete: Cascade)
+  seasonNumber Int
+  releaseDate  DateTime?
+
+  episodes     Episode[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([showId, seasonNumber])
+  @@map("seasons")
+}
+
+model Episode {
+  id            Int          @id @default(autoincrement())
+  seasonId      Int
+  season        Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  episodeNumber Int
+  title         String?
+  overview      String?
+  releaseDate   DateTime?
+
+  status        MediaStatus  @default(MISSING)
+  filePath      String?
+
+  processJobs   ProcessJob[]
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([seasonId, episodeNumber])
+  @@map("episodes")
 }
