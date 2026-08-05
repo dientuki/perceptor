@@ -22,5 +22,8 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
     "preserveWatchOutput": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   }
 }

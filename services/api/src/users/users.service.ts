@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service'; // Ajustá la ruta según tu estructura
+import { PrismaService } from '@/prisma/prisma.service'; // Ajustá la ruta según tu estructura
 import { CreateUserInput } from './dto/create-user.input';
 import { UpdateUserInput } from './dto/update-user.input';
 import { User } from './entities/user.entity';
@@ -13,7 +13,7 @@ export class UsersService {
     const { email, password, name } = createUserInput;
 
     // 1. Verificar si el email ya existe
-    const existingUser = await this.prisma.users.findUnique({
+    const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
 
@@ -25,7 +25,7 @@ export class UsersService {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // 3. Crear el usuario en MariaDB
-    return await this.prisma.users.create({
+    return await this.prisma.user.create({
       data: {
         email,
         name,
@@ -35,11 +35,11 @@ export class UsersService {
   }
 
   async findAll(): Promise<User[]> {
-    return await this.prisma.users.findMany();
+    return await this.prisma.user.findMany();
   }
 
   async findOne(id: string): Promise<User> {
-    const user = await this.prisma.users.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id },
     });
 
@@ -56,7 +56,7 @@ export class UsersService {
     const { id: _, ...dataToUpdate } = updateUserInput;
 
     try {
-      return await this.prisma.users.update({
+      return await this.prisma.user.update({
         where: { id },
         data: dataToUpdate,
       });
@@ -67,7 +67,7 @@ export class UsersService {
 
   async remove(id: string): Promise<User> {
     try {
-      return await this.prisma.users.delete({
+      return await this.prisma.user.delete({
         where: { id },
       });
     } catch {

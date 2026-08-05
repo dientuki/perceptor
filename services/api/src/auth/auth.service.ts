@@ -13,7 +13,7 @@ export class AuthService {
   // 1. Validar email y password contra MariaDB
   async validateUser(email: string, pass: string) {
     // Buscar usuario en la base de datos
-    const user = await this.prisma.users.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { email },
     });
 
