@@ -32,6 +32,9 @@ services:
     container_name: perceptor-web
     ports:
       - "${WEB_PORT}:3000"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     volumes:
       # Mapea services/web al directorio /app del contenedor.
       # Esto hace que los node_modules instalados en el build se escriban
@@ -42,6 +45,7 @@ services:
       # Necesario en Linux para que Next.js detecte cambios de archivos con Hot Reload/HMR a través de Docker
       - WATCHPACK_POLLING=true
       - DOMAIN=${DOMAIN}
+      - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
     depends_on:
       api:
         condition: service_healthy      
