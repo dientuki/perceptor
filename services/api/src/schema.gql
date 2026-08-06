@@ -39,6 +39,17 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 """
 scalar DateTime
 
+type MediaSearchResult {
+  id: Int!
+  title: String!
+  releaseDate: String
+  posterUrl: String
+  originalLanguage: String!
+  overview: String
+  type: String!
+  status: String
+}
+
 type Query {
   ping: String!
   items: [Item!]!
@@ -47,6 +58,9 @@ type Query {
   user(id: ID!): User!
   movies: [Movie!]!
   movie(id: Int!): Movie
+
+  """Busca películas en TMDB"""
+  searchMovies(query: String!): [MediaSearchResult!]!
 }
 
 type Mutation {
