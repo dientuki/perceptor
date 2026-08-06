@@ -31,7 +31,7 @@ export default function Movie({ movie }: { movie: MovieRecord }) {
             {movie.title}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-            {movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : 'Unknown Year'} • {movie.originalLanguage.toUpperCase()}
+            {movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : 'Unknown Year'} • {movie.originalLanguage.toUpperCase()} • {movie.status}
             </p>
         </div>
 

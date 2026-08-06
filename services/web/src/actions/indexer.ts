@@ -31,3 +31,31 @@ export async function searchTorrentsAction(query: string): Promise<TorrentResult
 
   return data?.searchTorrents ?? [];
 }
+
+const ADD_TORRENT_MUTATION = `
+  mutation AddTorrentToMovie($movieId: Int!, $infoHash: String!, $urls: [String!]!, $releaseTitle: String, $force: Boolean) {
+    addTorrentToMovie(movieId: $movieId, infoHash: $infoHash, urls: $urls, releaseTitle: $releaseTitle, force: $force) {
+      id
+      status
+    }
+  }
+`;
+
+export async function addTorrentToMovieAction(
+  movieId: number,
+  infoHash: string,
+  urls: string[],
+  releaseTitle: string | null,
+  force = false,
+): Promise<{ id: number; status: string }> {
+  const { data, errors } = await fetchGraphQL<{ addTorrentToMovie: { id: number; status: string } }>(
+    ADD_TORRENT_MUTATION,
+    { movieId, infoHash, urls, releaseTitle, force },
+  );
+
+  if (errors && errors.length > 0) {
+    throw new Error(errors[0]?.message || 'Error al agregar el torrent');
+  }
+
+  return data!.addTorrentToMovie;
+}

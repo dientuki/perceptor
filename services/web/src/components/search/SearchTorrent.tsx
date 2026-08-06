@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import type { Movie } from "@/actions/movies";
 import { MEDIA_TYPE, MediaType, Episode } from "@/types/media";
 import { Search, Download, Loader2 } from "lucide-react";
 import { TorrentResult } from "@/types/indexer";
 import Button from "@/components/ui/button/Button";
-import { searchTorrentsAction } from "@/actions/indexer";
+import { searchTorrentsAction, addTorrentToMovieAction } from "@/actions/indexer";
 
 interface SearchTorrentProps {
   item: Movie | Episode;
@@ -31,6 +32,9 @@ export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber
   const [results, setResults] = useState<TorrentResult[]>([]);
   const [filter, setFilter] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [addingHash, setAddingHash] = useState<string | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (mediaType === MEDIA_TYPE.MOVIE) {
@@ -69,12 +73,36 @@ export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber
   };
 
   const handleAddTorrent = async (res: TorrentResult) => {
-    const urls = res.items
-      .map((i) => i.downloadUrl)
-      .filter((url): url is string => !!url);
+    if (mediaType !== MEDIA_TYPE.MOVIE) return; // shows: sin GraphQL todavía
 
-    // TODO: encolar la descarga cuando exista el pipeline (qBittorrent + jobs)
-    console.log('Release elegido:', { infoHash: res.infoHash, urls });
+    const urls = res.items.map((i) => i.downloadUrl).filter((u): u is string => !!u);
+    const movieId = Number((item as Movie).id);
+
+    setAddingHash(res.infoHash);
+    setAddError(null);
+
+    try {
+      await addTorrentToMovieAction(movieId, res.infoHash, urls, res.title, false);
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al agregar el torrent';
+
+      if (message.includes('ya tiene una descarga en curso')) {
+        const replace = window.confirm(`${message}\n\n¿Reemplazar por este release?`);
+        if (replace) {
+          try {
+            await addTorrentToMovieAction(movieId, res.infoHash, urls, res.title, true);
+            router.refresh();
+          } catch (retryErr) {
+            setAddError(retryErr instanceof Error ? retryErr.message : 'Error al reemplazar');
+          }
+        }
+      } else {
+        setAddError(message);
+      }
+    } finally {
+      setAddingHash(null);
+    }
   };
 
   return (
@@ -107,6 +135,12 @@ export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber
             className="w-full rounded-lg border border-gray-200 bg-transparent py-2 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 dark:border-gray-800 dark:text-white"
           />
         </div>
+      )}
+
+      {addError && (
+        <p className="flex-shrink-0 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
+          {addError}
+        </p>
       )}
 
       <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
@@ -146,12 +180,17 @@ export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber
                     <span className="text-green-500">{res.seeders}</span> / <span className="text-gray-400">{res.leechers}</span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => handleAddTorrent(res)}
+                      disabled={addingHash === res.infoHash}
                     >
-                      <Download className="h-4 w-4" />
+                      {addingHash === res.infoHash ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
                     </Button>
                   </td>
                 </tr>
