@@ -1,6 +1,7 @@
-import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
+import { Resolver, Query, Args, Int } from '@nestjs/graphql';
 import { MoviesService } from './movies.service';
 import { Movie } from './entities/movies.entity';
+import { MediaSearchResult } from './entities/media-search-result.entity';
 
 @Resolver(() => Movie)
 export class MoviesResolver {
@@ -16,5 +17,12 @@ export class MoviesResolver {
   @Query(() => Movie, { name: 'movie', nullable: true })
   async getMovieById(@Args('id', { type: () => Int }) id: number) {
     return this.moviesService.findOneFromDb(id);
+  }
+
+  @Query(() => [MediaSearchResult], { name: 'searchMovies', description: 'Busca películas en TMDB' })
+  async searchMovies(
+    @Args('query', { type: () => String }) query: string,
+  ): Promise<MediaSearchResult[]> {
+    return this.moviesService.searchMovies(query);
   }
 }
