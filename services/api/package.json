@@ -38,6 +38,7 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "graphql": "^16.14.2",
+    "ioredis": "^6.0.0",
     "mariadb": "^3.5.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
