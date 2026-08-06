@@ -1,22 +1,9 @@
 'use server'
 
-import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
 import { fetchGraphQL } from '@/lib/graphql-client';
-import { CONFIG } from '@/lib/config';
+import { MediaType } from '@/types/media';
+import { MediaSearchResult } from '@/types/search';
 
-const LOGIN_MUTATION = `
-  mutation Login($loginInput: LoginInput!) {
-    login(loginInput: $loginInput) {
-      access_token
-      user {
-        id
-        name
-        email
-      }
-    }
-  }
-`
 
 export interface Movie {
   id: string;
@@ -28,7 +15,6 @@ export interface Movie {
   originalLanguage: string;
   isLiveAction: boolean;
   status: string;
-  filePath?: string;
 }
 
 export async function getMovies(): Promise<Movie[]> {
@@ -44,7 +30,47 @@ export async function getMovies(): Promise<Movie[]> {
     }
   `;
 
-  const { data } = await fetchGraphQL<{ movies: Movie[] }>(query);
+  const { data, errors } = await fetchGraphQL<{ movies: Movie[] }>(query);
 
-  return data.movies;
+  // GraphQL responde 200 con `errors` poblado: sin este chequeo `data` viene undefined
+  if (errors && errors.length > 0) {
+    throw new Error(errors[0]?.message || 'Error al obtener películas');
+  }
+
+  return data?.movies ?? [];
+}
+
+export async function addMovie(id: any, type: MediaType): Promise<boolean> {
+  return true
+}
+
+const SEARCH_MOVIES_QUERY = `
+  query SearchMovies($query: String!) {
+    searchMovies(query: $query) {
+      id
+      title
+      releaseDate
+      posterUrl
+      originalLanguage
+      overview
+      type
+    }
+  }
+`;
+
+export async function searchMovies(query: string): Promise<MediaSearchResult[]> {
+  // El API ya corta con [] en query vacía, pero evitamos el round trip
+  if (!query.trim()) return [];
+
+  const { data, errors } = await fetchGraphQL<{ searchMovies: MediaSearchResult[] }>(
+    SEARCH_MOVIES_QUERY,
+    { query },
+  );
+
+  // GraphQL responde 200 con `errors` poblado: hay que mirarlo explícitamente
+  if (errors && errors.length > 0) {
+    throw new Error(errors[0]?.message || 'Error al buscar películas');
+  }
+
+  return data?.searchMovies ?? [];
 }

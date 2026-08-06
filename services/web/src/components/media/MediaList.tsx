@@ -8,18 +8,22 @@ interface MediaListProps {
   renderAction?: (item: any) => React.ReactNode;
   mediaType?: typeof MEDIA_TYPE[keyof typeof MEDIA_TYPE]; // Puedes agregar más tipos si es necesario
   showLink?: boolean; // Nueva propiedad para controlar si se muestra el enlace
+  emptyMessage?: string; // Sobreescribe el vacío por defecto ("registradas" no aplica en búsquedas)
 }
 
 export function MediaList({
     items,
     renderAction,
     mediaType = MEDIA_TYPE.MOVIE,
-    showLink = false
+    showLink = false,
+    emptyMessage
 }: MediaListProps) {
   if (items.length === 0) {
     return (
       <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
-        <p className="text-gray-500">No hay {mediaType === MEDIA_TYPE.MOVIE ? "películas" : "series"} registradas</p>
+        <p className="text-gray-500">
+          {emptyMessage ?? `No hay ${mediaType === MEDIA_TYPE.MOVIE ? "películas" : "series"} registradas`}
+        </p>
       </div>
     );
   }
