@@ -40,8 +40,55 @@ export async function getMovies(): Promise<Movie[]> {
   return data?.movies ?? [];
 }
 
-export async function addMovie(id: any, type: MediaType): Promise<boolean> {
-  return true
+const GET_MOVIE_QUERY = `
+  query GetMovie($id: Int!) {
+    movie(id: $id) {
+      id
+      tmdbId
+      title
+      overview
+      posterUrl
+      releaseDate
+      originalLanguage
+      isLiveAction
+      status
+    }
+  }
+`;
+
+export async function getMovieById(id: number): Promise<Movie | null> {
+  const { data, errors } = await fetchGraphQL<{ movie: Movie | null }>(GET_MOVIE_QUERY, { id });
+
+  if (errors && errors.length > 0) {
+    throw new Error(errors[0]?.message || 'Error al obtener la película');
+  }
+
+  // El API devuelve null cuando el id no existe; la página lo traduce a notFound()
+  return data?.movie ?? null;
+}
+
+const ADD_MOVIE_MUTATION = `
+  mutation AddMovie($tmdbId: Int!) {
+    addMovie(tmdbId: $tmdbId) {
+      id
+    }
+  }
+`;
+
+export async function addMovie(tmdbId: number, type: MediaType): Promise<number> {
+  const { data, errors } = await fetchGraphQL<{ addMovie: { id: number } }>(
+    ADD_MOVIE_MUTATION,
+    { tmdbId },
+  );
+
+  if (errors && errors.length > 0) {
+    throw new Error(errors[0]?.message || 'Error al agregar la película');
+  }
+
+  const id = data?.addMovie?.id;
+  if (!id) throw new Error('El API no devolvió el id de la película');
+
+  return id;
 }
 
 const SEARCH_MOVIES_QUERY = `
