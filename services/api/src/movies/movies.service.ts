@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service'; // Ajustá la ruta según tu estructura
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
@@ -61,6 +61,51 @@ export class MoviesService {
     });
   }
 
+  // Única definición de la clave de cache, compartida por el write de la búsqueda
+  // y el read del add: evita que ambos lados se desincronicen.
+  private cacheKey(tmdbId: number): string {
+    return `tmdb:movie:${tmdbId}`;
+  }
+
+  // Registra en MariaDB una película ya vista en una búsqueda de TMDB. Idempotente:
+  // si ya está en la biblioteca, devuelve el registro existente sin reescribir nada.
+  async addMovie(tmdbId: number) {
+    const existing = await this.prisma.movie.findUnique({ where: { tmdbId } });
+    if (existing) return existing;
+
+    const cached = await this.getCachedMovie(tmdbId);
+
+    // isLiveAction y status quedan en sus defaults de Prisma (true / MISSING):
+    // es lo correcto para una película recién registrada y sin archivo todavía.
+    return this.create({
+      tmdbId: cached.id,
+      title: cached.title,
+      overview: cached.overview,
+      posterUrl: cached.posterUrl ?? undefined,
+      releaseDate: cached.releaseDate ? new Date(cached.releaseDate) : undefined,
+      originalLanguage: cached.originalLanguage,
+    });
+  }
+
+  // A diferencia de cacheMovies, acá Redis es la fuente de datos (no un cache
+  // oportunista): un error no se silencia, se propaga como error de GraphQL.
+  private async getCachedMovie(tmdbId: number): Promise<MediaSearchResult> {
+    const raw = await this.redis.get(this.cacheKey(tmdbId));
+    if (raw) return JSON.parse(raw) as MediaSearchResult;
+
+    return this.fetchMovieFromTMDB(tmdbId);
+  }
+
+  // TODO: implementar. `client.details(MEDIA_TYPE.MOVIE, tmdbId)` ya existe pero
+  // devuelve un MovieDetail (posterPath relativo, no posterUrl absoluto), así que
+  // falta definir el mapeo a MediaSearchResult. Por ahora el cache vencido (TTL
+  // 24hs) es un error explícito en vez de un fallback silencioso.
+  private async fetchMovieFromTMDB(tmdbId: number): Promise<MediaSearchResult> {
+    throw new NotFoundException(
+      `La película ${tmdbId} no está en cache. Volvé a buscarla.`,
+    );
+  }
+
   async searchMovies(query: string): Promise<MediaSearchResult[]> {
     if (!query.trim()) return [];
 
@@ -96,7 +141,7 @@ export class MoviesService {
       const pipeline = this.redis.pipeline();
 
       for (const movie of results) {
-        pipeline.set(`tmdb:movie:${movie.id}`, JSON.stringify(movie), 'EX', TMDB_CACHE_TTL_SECONDS);
+        pipeline.set(this.cacheKey(movie.id), JSON.stringify(movie), 'EX', TMDB_CACHE_TTL_SECONDS);
       }
 
       const execResults = await pipeline.exec();

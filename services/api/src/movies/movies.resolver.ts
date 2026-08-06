@@ -1,4 +1,4 @@
-import { Resolver, Query, Args, Int } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { MoviesService } from './movies.service';
 import { Movie } from './entities/movies.entity';
 import { MediaSearchResult } from './entities/media-search-result.entity';
@@ -24,5 +24,14 @@ export class MoviesResolver {
     @Args('query', { type: () => String }) query: string,
   ): Promise<MediaSearchResult[]> {
     return this.moviesService.searchMovies(query);
+  }
+
+  // Sin anotar el tipo de retorno: igual que getMovies/getMovieById, el shape que
+  // devuelve Prisma (overview/posterUrl null en vez de undefined, status como enum)
+  // no calza estructuralmente con el @ObjectType() Movie, y es GraphQL —vía los
+  // decoradores— quien define la forma real de la respuesta, no el tipo de TS.
+  @Mutation(() => Movie, { name: 'addMovie', description: 'Registra una película de TMDB en la biblioteca' })
+  async addMovie(@Args('tmdbId', { type: () => Int }) tmdbId: number) {
+    return this.moviesService.addMovie(tmdbId);
   }
 }

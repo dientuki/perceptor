@@ -70,6 +70,9 @@ type Mutation {
   createUser(createUserInput: CreateUserInput!): User!
   updateUser(updateUserInput: UpdateUserInput!): User!
   removeUser(id: ID!): User!
+
+  """Registra una película de TMDB en la biblioteca"""
+  addMovie(tmdbId: Int!): Movie!
 }
 
 input LoginInput {
