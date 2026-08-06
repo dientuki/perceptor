@@ -206,40 +206,40 @@ services:
   #    # Le indicamos a Traefik el puerto interno de la WebUI
   #    - "traefik.http.services.torrent.loadbalancer.server.port=${QBITTORRENT_WEBUI_PORT}"      
   #  
-  #prowlarr:
-  #  image: lscr.io/linuxserver/prowlarr:2.5.2
-  #  container_name: perceptor-prowlarr
-  #  restart: unless-stopped
-  #  dns:
-  #    - 1.1.1.1
-  #    - 8.8.8.8    
-  #  environment:
-  #    - PUID=${PUID}
-  #    - PGID=${PGID}
-  #    - TZ=${TZ}
-  #  volumes:
-  #    - prowlarr_config:/config
-  #  ports:
-  #    - "${PROWLARR_PORT}:9696"
-  #  healthcheck:
-  #    test: ["CMD-SHELL", "curl -f http://localhost:9696/ping || exit 1"]
-  #    interval: 15s
-  #    timeout: 5s
-  #    retries: 3
-  #    start_period: 15s      
-  #  networks:
-  #    - perceptor-net
-  #  labels:
-  #    - "traefik.enable=true"
-  #    - "traefik.http.routers.prowlarr.rule=Host(`indexer.${DOMAIN}`)"
-  #    - "traefik.http.routers.prowlarr.entrypoints=web"
-  #    - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"      
+  indexer:
+    image: lscr.io/linuxserver/prowlarr:2.5.2
+    container_name: perceptor-indexer
+    restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8    
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - indexer_config:/config
+    ports:
+      - "${INDEXER_PORT}:9696"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9696/ping || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s      
+    networks:
+      - perceptor-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.indexer.rule=Host(`indexer.${DOMAIN}`)"
+      - "traefik.http.routers.indexer.entrypoints=web"
+      - "traefik.http.services.indexer.loadbalancer.server.port=9696"      
 
 volumes:
   mariadb_data:
   redis_data:
   qbittorrent_config: # Nuevo volumen para la config de qBittorrent    
-  prowlarr_config: # Nuevo volumen para la config de Prowlarr
+  indexer_config: # Nuevo volumen para la config de Prowlarr
 
 networks:
   perceptor-net:
