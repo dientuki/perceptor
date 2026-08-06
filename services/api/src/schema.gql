@@ -50,6 +50,20 @@ type MediaSearchResult {
   status: String
 }
 
+type TorrentLink {
+  downloadUrl: String
+}
+
+type TorrentResult {
+  infoHash: String!
+  title: String
+  size: Float
+  seeders: Int!
+  leechers: Int!
+  items: [TorrentLink!]!
+  infoUrl: [TorrentLink!]!
+}
+
 type Query {
   ping: String!
   items: [Item!]!
@@ -61,6 +75,9 @@ type Query {
 
   """Busca películas en TMDB"""
   searchMovies(query: String!): [MediaSearchResult!]!
+
+  """Busca releases en el indexer (Prowlarr)"""
+  searchTorrents(query: String!): [TorrentResult!]!
 }
 
 type Mutation {
