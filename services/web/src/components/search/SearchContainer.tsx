@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { MediaSearchResult } from "@/types/search";
 import { SearchInput } from "./SearchInput";
 import { MediaList } from "@/components/media/MediaList";
@@ -10,7 +11,7 @@ import { Plus } from "lucide-react";
 
 interface SearchContainerProps {
   type: MediaType;
-  addAction: (id: any, type: MediaType) => Promise<boolean>; // Cambiado a una función que devuelve una promesa de booleano
+  addAction: (id: number, type: MediaType) => Promise<number>;
   searchAction: (query: string) => Promise<MediaSearchResult[]>; // Cambiado a una función que devuelve una promesa de booleano
 }
 
@@ -19,6 +20,8 @@ export default function SearchContainer({ type, addAction, searchAction }: Searc
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [addingId, setAddingId] = useState<number | null>(null);
+  const router = useRouter();
 
   const handleSearch = async (query: string) => {
     setLoading(true);
@@ -39,7 +42,17 @@ export default function SearchContainer({ type, addAction, searchAction }: Searc
   };
 
   const handleAdd = async (item: MediaSearchResult) => {
-    //await addAction(item.id, type);
+    setAddingId(item.id);
+    setError(null);
+
+    try {
+      const id = await addAction(item.id, type);
+      router.push(`/movies/${id}`);
+    } catch (err) {
+      console.error('Error al agregar:', err);
+      setError('No se pudo agregar la película. Intentá de nuevo.');
+      setAddingId(null);
+    }
   };
 
   return (
@@ -57,8 +70,14 @@ export default function SearchContainer({ type, addAction, searchAction }: Searc
         showLink={false}
         emptyMessage={searched ? "No se encontraron resultados" : "Buscá una película para empezar"}
         renderAction={(item) => (
-          <Button size="sm" onClick={() => handleAdd(item)} startIcon={<Plus />} className="mt-2">
-            Add
+          <Button
+            size="sm"
+            onClick={() => handleAdd(item)}
+            startIcon={<Plus />}
+            className="mt-2"
+            disabled={addingId === item.id}
+          >
+            {addingId === item.id ? "Agregando..." : "Add"}
           </Button>
         )}
         />
