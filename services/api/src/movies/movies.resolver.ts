@@ -34,4 +34,18 @@ export class MoviesResolver {
   async addMovie(@Args('tmdbId', { type: () => Int }) tmdbId: number) {
     return this.moviesService.addMovie(tmdbId);
   }
+
+  @Mutation(() => Movie, {
+    name: 'addTorrentToMovie',
+    description: 'Envía un release elegido a qBittorrent y lo asocia a la película',
+  })
+  async addTorrentToMovie(
+    @Args('movieId', { type: () => Int }) movieId: number,
+    @Args('infoHash') infoHash: string,
+    @Args('urls', { type: () => [String] }) urls: string[],
+    @Args('releaseTitle', { type: () => String, nullable: true }) releaseTitle: string | null,
+    @Args('force', { type: () => Boolean, nullable: true, defaultValue: false }) force: boolean,
+  ) {
+    return this.moviesService.addTorrentToMovie(movieId, { infoHash, urls, releaseTitle, force });
+  }
 }

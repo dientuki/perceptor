@@ -1,4 +1,4 @@
-import { DownloadStatus } from "@prisma/client";
+import { SourceStatus } from "@prisma/client";
 
 export const TORRENT_CLIENTS = {
   QBITTORRENT: "qbittorrent",
@@ -10,14 +10,14 @@ export type TorrentClientType =
 
 export type TorrentClientInfo = {
   hash: string;
-  state: DownloadStatus;
+  state: SourceStatus;
   rawState: string;
   root_path: string;
 };
 
 export type TorrentClient = {
   info: () => Promise<TorrentClientInfo[]>;
-  add: (urls: string[]) => Promise<string>;
+  add: (urls: string[]) => Promise<void>;
   stop: (hashes: string | string[]) => Promise<void>;
   remove: (hashes: string | string[], deleteFiles?: boolean) => Promise<void>;
 };

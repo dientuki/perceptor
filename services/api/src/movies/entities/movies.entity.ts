@@ -33,7 +33,7 @@ export class Movie {
   filePath?: string;
 
   @Field({ nullable: true })
-  downloadTaskId?: number;
+  mediaSourceId?: number;
 
   @Field()
   createdAt: Date;

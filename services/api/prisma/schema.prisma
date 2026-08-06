@@ -12,14 +12,28 @@ datasource db {
   provider = "mysql"
 }
 
-enum DownloadStatus {
-  CREATED      // Job creado en el sistema
-  SEARCHING    // Buscando torrent en tracker
-  ADDED        // Torrent agregado al cliente
-  DOWNLOADING  // Descargando activamente
-  PAUSED       // Pausado en cliente
-  COMPLETED    // Descarga finalizada
-  ERROR        // Error en cualquier punto
+// Cómo llegó el material a nuestro disco
+enum SourceKind {
+  TORRENT_SEARCH // El usuario eligió un release del indexer
+  TORRENT_FILE // El usuario pegó un magnet o subió un .torrent
+  LOCAL_FILE // El usuario pasó la ruta de un archivo
+  LOCAL_FOLDER // El usuario pasó la ruta de una carpeta
+}
+
+enum SourceStatus {
+  PENDING // Creado en el sistema, nada hecho todavía
+  QUEUED // (torrent) Entregado al cliente, sin empezar
+  DOWNLOADING // (torrent) Descargando activamente
+  PAUSED // (torrent) Pausado en cliente
+  READY // Archivos disponibles en disco
+  SCANNED // Archivos inventariados en source_files
+  ERROR // Error en cualquier punto
+}
+
+enum SourceFileStatus {
+  MATCHED // Se resolvió a qué media pertenece
+  UNMATCHED // No se pudo parsear, o el episodio no existe en la DB
+  IGNORED // Sample, subtítulo, .nfo, extensión no soportada
 }
 
 enum EncodeStatus {
@@ -32,11 +46,11 @@ enum EncodeStatus {
 
 // Estado simplificado / consolidado para la UI (Movie, Episode, Track)
 enum MediaStatus {
-  MISSING       // No solicitado o no existe archivo
-  DOWNLOADING   // Está en cualquiera de los pasos de descarga (SEARCHING, ADDED, DOWNLOADING, etc.)
-  ENCODING      // Está en la cola o siendo procesado por FFmpeg (QUEUED, ENCODING)
-  COMPLETED     // Todo el flujo finalizó (Descarga + Encode)
-  ERROR         // Falló la descarga o el encode
+  MISSING // No solicitado o no existe archivo
+  DOWNLOADING // Está en cualquiera de los pasos de descarga (SEARCHING, ADDED, DOWNLOADING, etc.)
+  ENCODING // Está en la cola o siendo procesado por FFmpeg (QUEUED, ENCODING)
+  COMPLETED // Todo el flujo finalizó (Descarga + Encode)
+  ERROR // Falló la descarga o el encode
 }
 
 model User {
@@ -58,72 +72,127 @@ model Language {
   @@map("languages")
 }
 
-// Tarea de descarga (1 por Torrent / Pack / Archivo individual)
-model DownloadTask {
-  id            Int            @id @default(autoincrement())
-  infoHash      String?        @unique
-  downloadPath  String?
-  
-  status        DownloadStatus @default(CREATED)
-  errorMessage  String?
+// Origen del material para un pedido: torrent, archivo o carpeta local
+model MediaSource {
+  id Int @id @default(autoincrement())
 
-  movie         Movie?
-  processJobs   ProcessJob[]
+  kind   SourceKind
+  status SourceStatus @default(PENDING)
 
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  // Sólo para kind TORRENT_*: null en los casos locales
+  infoHash     String? @unique @db.VarChar(40)
+  downloadUrl  String? @db.Text // Magnet o url del .torrent
+  releaseTitle String? @db.Text // Nombre del release, para mostrar en la UI
 
-  @@map("download_tasks")
+  // Carpeta o archivo donde está el material. Para torrents la llena el cliente
+  // al completar; para los casos locales la da el usuario al crear el pedido.
+  downloadPath String? @db.VarChar(500)
+
+  // Objetivo del pedido para series. Las películas usan el 1:1 desde Movie.
+  seasonId  Int?
+  season    Season?  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  episodeId Int?
+  episode   Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  movie       Movie? // Back-relation del 1:1
+  sourceFiles SourceFile[]
+
+  errorMessage String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+  @@map("media_sources")
+}
+
+// Un archivo encontrado dentro de un MediaSource, mapeado (o no) a una película/episodio
+model SourceFile {
+  id Int @id @default(autoincrement())
+
+  mediaSourceId Int
+  mediaSource   MediaSource @relation(fields: [mediaSourceId], references: [id], onDelete: Cascade)
+
+  // Ruta tal como está en disco. NO se borra tras procesar: el original queda
+  // para que el usuario decida qué hacer con él.
+  filePath String  @db.VarChar(500)
+  fileName String  @db.VarChar(500)
+  size     BigInt?
+
+  // Resultado del parseo del nombre (S03E02 → 3, 2)
+  parsedSeason  Int?
+  parsedEpisode Int?
+
+  status SourceFileStatus @default(UNMATCHED)
+  reason String?          @db.VarChar(500) // Por qué quedó UNMATCHED o IGNORED
+
+  movieId   Int?
+  movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: SetNull)
+  episodeId Int?
+  episode   Episode? @relation(fields: [episodeId], references: [id], onDelete: SetNull)
+
+  processJob ProcessJob?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([mediaSourceId, filePath])
+  @@index([status])
+  @@index([movieId])
+  @@index([episodeId])
+  @@map("source_files")
 }
 
 // Tarea de encoding (1 por archivo de video/audio físico)
 model ProcessJob {
-  id              Int          @id @default(autoincrement())
-  
-  downloadTaskId  Int
-  downloadTask    DownloadTask @relation(fields: [downloadTaskId], references: [id], onDelete: Cascade)
+  id Int @id @default(autoincrement())
 
-  movieId         Int?
-  movie           Movie?       @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  // El input ya no se duplica: sale de sourceFile.filePath
+  sourceFileId Int        @unique
+  sourceFile   SourceFile @relation(fields: [sourceFileId], references: [id], onDelete: Cascade)
 
-  episodeId       Int?
-  episode         Episode?     @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  // Denormalizado desde sourceFile para consultar por media sin join extra.
+  movieId   Int?
+  movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  episodeId Int?
+  episode   Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
-  inputFilePath   String?
-  outputFilePath  String?
-  ffmpegCommand   String?
+  outputFilePath String? @db.VarChar(500)
+  ffmpegCommand  String? @db.Text
+  progress       Int     @default(0) // 0-100, para la UI de encoding
 
-  status          EncodeStatus @default(WAITING)
-  errorMessage    String?
+  status       EncodeStatus @default(WAITING)
+  errorMessage String?      @db.Text
 
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@index([status])
   @@map("process_jobs")
 }
 
 model Movie {
-  id               Int          @id @default(autoincrement())
-  tmdbId           Int          @unique
+  id               Int       @id @default(autoincrement())
+  tmdbId           Int       @unique
   title            String
   overview         String?
   posterUrl        String?
   releaseDate      DateTime?
   originalLanguage String
-  isLiveAction     Boolean      @default(true)
+  isLiveAction     Boolean   @default(true)
 
   // Estado consolidado para mostrar rápido en tarjetas/listados de la App
-  status           MediaStatus  @default(MISSING)
-  filePath         String?      // Ruta al archivo final procesado
+  status   MediaStatus @default(MISSING)
+  filePath String?     @db.VarChar(500) // Ruta al archivo final procesado
 
-  // Descarga activa vinculada (opcional)
-  downloadTaskId   Int?         @unique
-  downloadTask     DownloadTask? @relation(fields: [downloadTaskId], references: [id], onDelete: SetNull)
+  // Origen de descarga vinculado (opcional)
+  mediaSourceId Int?         @unique
+  mediaSource   MediaSource? @relation(fields: [mediaSourceId], references: [id], onDelete: SetNull)
 
-  processJobs      ProcessJob[]
+  sourceFiles SourceFile[]
+  processJobs ProcessJob[]
 
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("movies")
 }
@@ -139,9 +208,9 @@ model Show {
   originalLanguage String
   releaseDate      DateTime?
 
-  seasons          Season[]
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  seasons   Season[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("shows")
 }
@@ -154,29 +223,33 @@ model Season {
   releaseDate  DateTime?
 
   episodes     Episode[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  mediaSources MediaSource[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([showId, seasonNumber])
   @@map("seasons")
 }
 
 model Episode {
-  id            Int          @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   seasonId      Int
-  season        Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  season        Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   episodeNumber Int
   title         String?
   overview      String?
   releaseDate   DateTime?
 
-  status        MediaStatus  @default(MISSING)
-  filePath      String?
+  status   MediaStatus @default(MISSING)
+  filePath String?     @db.VarChar(500)
 
-  processJobs   ProcessJob[]
+  sourceFiles  SourceFile[]
+  mediaSources MediaSource[] // Pedidos de capítulo suelto (S1)
+  processJobs  ProcessJob[]
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([seasonId, episodeNumber])
   @@map("episodes")

@@ -29,7 +29,7 @@ type Movie {
   isLiveAction: Boolean!
   status: String!
   filePath: String
-  downloadTaskId: Float
+  mediaSourceId: Float
   createdAt: DateTime!
   updatedAt: DateTime!
 }
@@ -90,6 +90,9 @@ type Mutation {
 
   """Registra una película de TMDB en la biblioteca"""
   addMovie(tmdbId: Int!): Movie!
+
+  """Envía un release elegido a qBittorrent y lo asocia a la película"""
+  addTorrentToMovie(movieId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
 }
 
 input LoginInput {

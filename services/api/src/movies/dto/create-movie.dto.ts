@@ -44,5 +44,5 @@ export class CreateMovieDto {
 
   @IsOptional()
   @IsInt()
-  downloadTaskId?: number;
+  mediaSourceId?: number;
 }

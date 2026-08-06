@@ -1,7 +1,6 @@
 import { TorrentClient } from "./types";
 import { HTTP_METHOD } from "@/types/http";
-import { DownloadStatus } from "@prisma/client";
-import crypto from "node:crypto";
+import { SourceStatus } from "@prisma/client";
 
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-list
 const DOWNLOADING_STATES = new Set([
@@ -32,16 +31,16 @@ const PAUSED_STATES = new Set([
   "unknown",     // Unknown status
 ]);
 
-function mapTorrentState(state: string, completion: number): DownloadStatus {
-  if (completion !== -1) return DownloadStatus.COMPLETED;
-  if (!state) return DownloadStatus.ERROR;
+function mapTorrentState(state: string, completion: number): SourceStatus {
+  if (completion !== -1) return SourceStatus.READY;
+  if (!state) return SourceStatus.ERROR;
 
-  if (state.includes("error")) return DownloadStatus.ERROR;
-  if (PAUSED_STATES.has(state)) return DownloadStatus.PAUSED;
-  if (COMPLETED_STATES.has(state)) return DownloadStatus.COMPLETED;
-  if (DOWNLOADING_STATES.has(state)) return DownloadStatus.DOWNLOADING;
+  if (state.includes("error")) return SourceStatus.ERROR;
+  if (PAUSED_STATES.has(state)) return SourceStatus.PAUSED;
+  if (COMPLETED_STATES.has(state)) return SourceStatus.READY;
+  if (DOWNLOADING_STATES.has(state)) return SourceStatus.DOWNLOADING;
 
-  return DownloadStatus.ERROR;
+  return SourceStatus.ERROR;
 }
 
 interface QbittorrentTorrent {
@@ -52,9 +51,8 @@ interface QbittorrentTorrent {
 }
 
 export const createQbittorrentClient = (config : Record<string, string>): TorrentClient => {
-  
+
   const port = config.torrent_port ?? "8080";
-  const basePath = config.path_downloads ?? "";
 
   const baseUrl = `http://torrent:${port}/api/v2/torrents/`;
 
@@ -89,26 +87,15 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#add-new-torrent
    * @param {string[]} urls Array of URLs (magnet links or torrent HTTP URLs) to add
    */
-    async add(urls: string[]): Promise<string> {
+    async add(urls: string[]): Promise<void> {
       const endpoint = new URL("add", baseUrl);
-      
-      const firstUrl = urls[0] ?? "";
-      // Generamos un hash a partir de la primera URL para asegurar una carpeta única
-      const folder = crypto.createHash("sha256").update(firstUrl).digest("hex").substring(0, 16);
-
-      // Construimos el savepath asegurando que no haya problemas con barras duplicadas
-      const separator = basePath.includes("\\") ? "\\" : "/";
-      const savepath = basePath.replace(/[\\/]$/, "") + separator + folder;
 
       await fetch(endpoint, {
         method: HTTP_METHOD.POST,
-        body: new URLSearchParams({ 
+        body: new URLSearchParams({
           urls: urls.join("\n"),
-          savepath: savepath
         }),
       });
-
-      return savepath;
     },
 
     /**

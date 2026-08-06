@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service'; // Ajustá la ruta según tu estructura
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
@@ -7,6 +7,7 @@ import { MediaSearchResult } from '@/clients/types';
 import { createTMDBClient } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
+import { createQbittorrentClient } from '@/clients/torrent/client';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
@@ -28,7 +29,7 @@ export class MoviesService {
     return this.prisma.movie.findMany({
       orderBy: { createdAt: 'desc' }, // Las más recientes primero
       include: {
-        downloadTask: true,
+        mediaSource: true,
         processJobs: true,
       },
     });
@@ -38,7 +39,7 @@ export class MoviesService {
     return this.prisma.movie.findUnique({
       where: { id },
       include: {
-        downloadTask: true,
+        mediaSource: true,
         processJobs: true,
       },
     });
@@ -129,6 +130,41 @@ export class MoviesService {
 
     // 4. Responder INMEDIATAMENTE al cliente GraphQL
     return results;
+  }
+
+  async addTorrentToMovie(
+    movieId: number,
+    input: { infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
+  ) {
+    const movie = await this.findOneFromDb(movieId);
+    if (!movie) throw new NotFoundException(`La película ${movieId} no existe`);
+
+    if (movie.mediaSourceId && !input.force) {
+      throw new ConflictException(
+        'Esta película ya tiene una descarga en curso. Confirmá para reemplazarla.',
+      );
+    }
+
+    // TODO: la config sale de la tabla Setting cuando exista, igual que TMDB
+    const client = createQbittorrentClient({ torrent_port: process.env.TORRENT_PORT ?? '8080' });
+    await client.add(input.urls);
+
+    // downloadPath queda null: lo llena el poller con el root_path que reporte
+    // qBittorrent cuando la descarga termine.
+    const mediaSource = await this.prisma.mediaSource.create({
+      data: {
+        kind: 'TORRENT_SEARCH',
+        status: 'QUEUED',
+        infoHash: input.infoHash,
+        downloadUrl: input.urls.join('\n'),
+        releaseTitle: input.releaseTitle,
+      },
+    });
+
+    return this.prisma.movie.update({
+      where: { id: movieId },
+      data: { mediaSourceId: mediaSource.id, status: 'DOWNLOADING' },
+    });
   }
 
   // Guarda/actualiza (upsert) cada película en Redis con TTL. No bloquea la
