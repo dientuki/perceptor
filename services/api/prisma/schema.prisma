@@ -185,7 +185,7 @@ model Movie {
   id               Int       @id @default(autoincrement())
   tmdbId           Int       @unique
   title            String
-  overview         String?
+  overview         String?   @db.Text // Los sinopsis de TMDB pasan el varchar(191) por default
   posterUrl        String?
   releaseDate      DateTime?
   originalLanguage String
@@ -212,7 +212,7 @@ model Show {
   id               Int       @id @default(autoincrement())
   tmdbId           Int       @unique
   title            String
-  overview         String?
+  overview         String?   @db.Text // Los sinopsis de TMDB pasan el varchar(191) por default
   posterUrl        String?
   status           String?
   isLiveAction     Boolean   @default(true)
@@ -249,7 +249,7 @@ model Episode {
   season        Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   episodeNumber Int
   title         String?
-  overview      String?
+  overview      String?   @db.Text // Los sinopsis de TMDB pasan el varchar(191) por default
   releaseDate   DateTime?
 
   status   MediaStatus @default(MISSING)
