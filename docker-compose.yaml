@@ -138,16 +138,18 @@ services:
       - ${HOST_DESTINATIONS_DIR}:${CONTAINER_DESTINATIONS_DIR}
     environment:
       - NODE_ENV=${NODE_ENV}
-      - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - DOWNLOADS_DIR=${CONTAINER_DOWNLOADS_DIR}
       - DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
+      - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
     depends_on:
       redis:
         condition: service_healthy
+      api:
+        condition: service_healthy
     networks:
-      - perceptor-net      
+      - perceptor-net
 
   redis:
     image: redis:7-alpine
