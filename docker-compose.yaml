@@ -79,7 +79,6 @@ services:
       - PORT=${API_PORT}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
-      - TORRENT_PORT=${QBITTORRENT_WEBUI_PORT}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/graphql', (res) => process.exit(res.statusCode < 500 ? 0 : 1))"]
       #test: ["CMD-SHELL", "true"]
@@ -173,22 +172,25 @@ services:
       retries: 5  
 
   torrent:
-    image: lscr.io/linuxserver/qbittorrent:5.2.3
+    build:
+      context: ./services/torrent
     container_name: perceptor-torrent
     restart: unless-stopped
-    dns:  
+    dns:
       - 1.1.1.1
-      - 8.8.8.8   
+      - 8.8.8.8
     ports:
       - "${QBITTORRENT_WEBUI_PORT}:${QBITTORRENT_WEBUI_PORT}/tcp"
       - "${QBITTORRENT_TORRENTING_PORT}:${QBITTORRENT_TORRENTING_PORT}/tcp"
-      - "${QBITTORRENT_TORRENTING_PORT}:${QBITTORRENT_TORRENTING_PORT}/udp"    
+      - "${QBITTORRENT_TORRENTING_PORT}:${QBITTORRENT_TORRENTING_PORT}/udp"
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
       - WEBUI_PORT=${QBITTORRENT_WEBUI_PORT}
       - TORRENTING_PORT=${QBITTORRENT_TORRENTING_PORT}
+      - QBITTORRENT_USER=${QBITTORRENT_USER}
+      - QBITTORRENT_PASSWORD=${QBITTORRENT_PASSWORD}
     volumes:
       # Configuración persistente del cliente (resume de descargas, torrents activos, etc.)
       - qbittorrent_config:/config
