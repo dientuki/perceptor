@@ -25,7 +25,7 @@ export default function Home() {
             lista en tu biblioteca.
           </p>
 
-          <div className="mt-8 grid w-full max-w-lg grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mt-8 flex w-full max-w-lg flex-wrap justify-center gap-3 lg:justify-start">
             <Feature icon={<Search className="size-5" />} label="Buscar" />
             <Feature icon={<Download className="size-5" />} label="Descargar" />
             <Feature icon={<Film className="size-5" />} label="Transcodificar" />
@@ -51,7 +51,7 @@ export default function Home() {
 
 function Feature({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm font-medium text-gray-700 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300">
+    <div className="flex min-w-[150px] items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm font-medium text-gray-700 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300">
       <span className="text-brand-500 dark:text-brand-400">{icon}</span>
       {label}
     </div>
