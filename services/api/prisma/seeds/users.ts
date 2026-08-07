@@ -7,10 +7,10 @@ export async function seedUsers(prisma: PrismaClient) {
   const hashedPassword = await bcrypt.hash('pass123', 10);
 
   await prisma.user.upsert({
-    where: { email: 'admin@admin' },
+    where: { username: 'admin' },
     update: {}, // Si ya existe, no sobrescribe
     create: {
-      email: 'admin@admin',
+      username: 'admin',
       name: 'Admin',
       password: hashedPassword,
     },

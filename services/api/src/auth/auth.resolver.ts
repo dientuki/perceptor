@@ -15,7 +15,7 @@ export class AuthResolver {
     @Args('loginInput') loginInput: LoginInput,
   ): Promise<LoginResponse> {
     return await this.authService.login(
-      loginInput.email,
+      loginInput.username,
       loginInput.password,
     );
   }

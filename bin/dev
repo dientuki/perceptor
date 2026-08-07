@@ -16,4 +16,4 @@ if [ "${USE_TRAEFIK}" = "true" ]; then
   SERVICES="traefik $SERVICES"
 fi
 
-BUILD_TARGET=dev docker compose up -d $SERVICES
+BUILD_TARGET=dev docker compose up $SERVICES

@@ -10,7 +10,7 @@ type Item {
 type User {
   id: ID!
   name: String!
-  email: String!
+  username: String!
 }
 
 type LoginResponse {
@@ -122,19 +122,19 @@ type Mutation {
 }
 
 input LoginInput {
-  email: String!
+  username: String!
   password: String!
 }
 
 input CreateUserInput {
   name: String!
-  email: String!
+  username: String!
   password: String!
 }
 
 input UpdateUserInput {
   name: String
-  email: String
+  username: String
   password: String
   id: ID!
 }

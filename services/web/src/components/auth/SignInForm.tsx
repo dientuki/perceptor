@@ -32,7 +32,7 @@ export default function SignInForm() {
               Sign In
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Enter your email and password to sign in!
+              Enter your username and password to sign in!
             </p>
           </div>
           <div>
@@ -40,14 +40,13 @@ export default function SignInForm() {
               <div className="space-y-6">
                 <div>
                   <Label>
-                    Email <span className="text-error-500">*</span>{" "}
+                    Username <span className="text-error-500">*</span>{" "}
                   </Label>
-                  <Input 
-                    name="email"
-                    placeholder="info@gmail.com" 
-                    type="email" 
-                    defaultValue="dev@4perceptor.local"
-                    required 
+                  <Input
+                    name="username"
+                    placeholder="admin"
+                    type="text"
+                    required
                   />
                 </div>
                 <div>
@@ -60,7 +59,6 @@ export default function SignInForm() {
                       type={showPassword ? "text" : "password"}
                       placeholder="Enter your password"
                       required
-                      defaultValue="Password123!"
                     />
                     <span
                       onClick={() => setShowPassword(!showPassword)}

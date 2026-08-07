@@ -9,5 +9,5 @@ export class User {
   name: string;
 
   @Field()
-  email: string;
+  username: string;
 }

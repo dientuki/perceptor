@@ -10,15 +10,15 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createUserInput: CreateUserInput): Promise<User> {
-    const { email, password, name } = createUserInput;
+    const { username, password, name } = createUserInput;
 
-    // 1. Verificar si el email ya existe
+    // 1. Verificar si el username ya existe
     const existingUser = await this.prisma.user.findUnique({
-      where: { email },
+      where: { username },
     });
 
     if (existingUser) {
-      throw new ConflictException('El correo electrónico ya está registrado');
+      throw new ConflictException('El nombre de usuario ya está registrado');
     }
 
     // 2. Hash de la contraseña (10 salt rounds)
@@ -27,7 +27,7 @@ export class UsersService {
     // 3. Crear el usuario en MariaDB
     return await this.prisma.user.create({
       data: {
-        email,
+        username,
         name,
         password: hashedPassword,
       },

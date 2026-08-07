@@ -12,20 +12,20 @@ const LOGIN_MUTATION = `
       user {
         id
         name
-        email
+        username
       }
     }
   }
 `
 
 export async function loginAction(redirectTo: string, prevState: any, formData: FormData) {
-  const email = formData.get('email')
+  const username = formData.get('username')
   const password = formData.get('password')
   const destination = (redirectTo && redirectTo.startsWith('/')) ? redirectTo : '/dashboard';
 
   try {
     const { data, errors } = await fetchGraphQL(LOGIN_MUTATION, {
-        loginInput: { email, password }
+        loginInput: { username, password }
     });
 
     // Manejo de errores específicos de GraphQL

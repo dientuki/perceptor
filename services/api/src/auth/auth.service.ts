@@ -10,11 +10,11 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  // 1. Validar email y password contra MariaDB
-  async validateUser(email: string, pass: string) {
+  // 1. Validar username y password contra MariaDB
+  async validateUser(username: string, pass: string) {
     // Buscar usuario en la base de datos
     const user = await this.prisma.user.findUnique({
-      where: { email },
+      where: { username },
     });
 
     if (!user) {
@@ -34,15 +34,15 @@ export class AuthService {
   }
 
   // 2. Generar el JWT
-  async login(email: string, pass: string) {
-    const user = await this.validateUser(email, pass);
+  async login(username: string, pass: string) {
+    const user = await this.validateUser(username, pass);
 
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    // Payload con sub (ID de usuario) y email
-    const payload = { email: user.email, sub: user.id };
+    // Payload con sub (ID de usuario) y username
+    const payload = { username: user.username, sub: user.id };
 
     return {
       access_token: this.jwtService.sign(payload),

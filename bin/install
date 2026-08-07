@@ -1,43 +1,84 @@
 #!/bin/bash
-# Genera .env a partir de .env.example, preguntando si el stack se va a rutear
-# por Traefik (dominios) o por puertos directos en localhost.
+# Genera .env a partir de .env.example (si no existe, o si se pide
+# regenerarlo), preguntando si el stack se va a rutear por Traefik. Siempre
+# sigue con la base: levanta db/redis/api, aplica migraciones y siembra los
+# datos iniciales (salteando el seed si la base ya los tiene).
 set -e
 cd "$(dirname "$0")/.."
 
+set_env_var() {
+  # sed -i no es portable (GNU vs BSD/macOS piden flags distintos): escribir a
+  # un temporal y mover evita la diferencia por completo. Delimitador '|' en vez
+  # de '/' porque algunos valores (rutas) contienen '/'.
+  sed "s|^${1}=.*|${1}=${2}|" .env > .env.tmp && mv .env.tmp .env
+}
+
+generate_env=true
 if [ -f .env ]; then
-  read -rp ".env ya existe. ¿Sobreescribirlo? [y/N] " overwrite
+  read -rp ".env ya existe. ¿Regenerarlo desde .env.example? [y/N] " overwrite
   case "$overwrite" in
     [yY]*) ;;
-    *) echo "Cancelado."; exit 0 ;;
+    *) generate_env=false ;;
   esac
 fi
 
-cp .env.example .env
+if [ "$generate_env" = true ]; then
+  cp .env.example .env
 
-# sed -i no es portable (GNU vs BSD/macOS piden flags distintos): escribir a un
-# temporal y mover evita la diferencia por completo.
-set_env_var() {
-  sed "s/^${1}=.*/${1}=${2}/" .env > .env.tmp && mv .env.tmp .env
-}
+  read -rp "¿Usar Traefik para rutear por dominio? [y/N] " use_traefik
+  case "$use_traefik" in
+    [yY]*)
+      read -rp "Dominio a usar (ej: perceptor.local): " domain
+      set_env_var USE_TRAEFIK true
+      set_env_var DOMAIN "${domain}"
+      echo
+      echo "Listo. Agregá esto a /etc/hosts para que resuelva:"
+      echo "  127.0.0.1  ${domain} api.${domain} torrent.${domain} indexer.${domain}"
+      ;;
+    *)
+      set_env_var USE_TRAEFIK false
+      echo
+      echo "Traefik desactivado. Vas a acceder a cada servicio por su puerto en localhost"
+      echo "(WEB_PORT, API_PORT, INDEXER_PORT, QBITTORRENT_WEBUI_PORT)."
+      ;;
+  esac
 
-read -rp "¿Usar Traefik para rutear por dominio? [y/N] " use_traefik
-case "$use_traefik" in
-  [yY]*)
-    read -rp "Dominio a usar (ej: perceptor.local): " domain
-    set_env_var USE_TRAEFIK true
-    set_env_var DOMAIN "${domain}"
-    echo
-    echo "Listo. Agregá esto a /etc/hosts para que resuelva:"
-    echo "  127.0.0.1  ${domain} api.${domain} torrent.${domain} indexer.${domain}"
-    ;;
-  *)
-    set_env_var USE_TRAEFIK false
-    echo
-    echo "Traefik desactivado. Vas a acceder a cada servicio por su puerto en localhost"
-    echo "(WEB_PORT, API_PORT, INDEXER_PORT, QBITTORRENT_WEBUI_PORT)."
-    ;;
-esac
+  read -rp "Ingrese la carpeta de descargas [./data/downloads]: " downloads_dir
+  set_env_var HOST_DOWNLOADS_DIR "${downloads_dir:-./data/downloads}"
+
+  read -rp "Ingrese la carpeta de tu media server [./data/library]: " destinations_dir
+  set_env_var HOST_DESTINATIONS_DIR "${destinations_dir:-./data/library}"
+
+  echo
+  echo ".env creado a partir de .env.example — completá el resto de las variables (puertos,"
+  echo "credenciales, rutas de descarga) antes de seguir si los defaults no te sirven."
+else
+  echo "Uso el .env existente."
+fi
+
+set -a; . ./.env; set +a
 
 echo
-echo ".env creado a partir de .env.example — completá el resto de las variables antes de levantar el stack."
-echo "Después corré: bin/dev"
+echo "Levantando db, redis y api..."
+BUILD_TARGET=dev docker compose up -d --wait --wait-timeout 180 db redis api
+
+echo "Otorgando privilegios a ${DB_USER} en MariaDB..."
+bin/dbinit
+
+echo "Aplicando migraciones de Prisma..."
+bin/cli api npx prisma migrate deploy
+
+# El seed no es idempotente (usa create(), no upsert, para languages/movies) —
+# correrlo dos veces sobre una base ya sembrada revienta por unique constraint.
+# languages es la primera tabla que llena, así que sirve de bandera barata.
+already_seeded=$(docker compose exec -T db mariadb -N -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" \
+  -e "select count(*) from languages" 2>/dev/null || echo 0)
+if [ "${already_seeded:-0}" -gt 0 ] 2>/dev/null; then
+  echo "La base ya tiene datos sembrados, salteo el seed."
+else
+  echo "Sembrando datos iniciales..."
+  bin/cli api npx ts-node prisma/seeds/index.ts
+fi
+
+echo
+echo "Listo. Corré bin/dev para levantar el resto del stack (web, torrent, indexer)."

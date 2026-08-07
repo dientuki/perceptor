@@ -18,7 +18,7 @@ export default function SignUpForm() {
               Sign Up
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Enter your email and password to sign up!
+              Enter your username and password to sign up!
             </p>
           </div>
           <div>
@@ -102,16 +102,16 @@ export default function SignUpForm() {
                     />
                   </div>
                 </div>
-                {/* <!-- Email --> */}
+                {/* <!-- Username --> */}
                 <div>
                   <Label>
-                    Email<span className="text-error-500">*</span>
+                    Username<span className="text-error-500">*</span>
                   </Label>
                   <Input
-                    type="email"
-                    id="email"
-                    name="email"
-                    placeholder="Enter your email"
+                    type="text"
+                    id="username"
+                    name="username"
+                    placeholder="Enter your username"
                   />
                 </div>
                 {/* <!-- Password --> */}
