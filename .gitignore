@@ -22,6 +22,7 @@ next-env.d.ts
 
 # Environment & Sensitive configs
 .env*
+!.env.example
 cline.toml
 
 # Testing & Coverage

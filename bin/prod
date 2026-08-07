@@ -1,0 +1,20 @@
+#!/bin/bash
+# Levanta el stack en modo producción (stage runner de cada Dockerfile). Lee
+# USE_TRAEFIK de .env para decidir si el servicio traefik entra en el docker
+# compose up.
+set -e
+cd "$(dirname "$0")/.."
+
+if [ ! -f .env ]; then
+  echo ".env no existe. Corré bin/install primero."
+  exit 1
+fi
+
+set -a; . ./.env; set +a
+
+SERVICES="db redis api web worker torrent indexer"
+if [ "${USE_TRAEFIK}" = "true" ]; then
+  SERVICES="traefik $SERVICES"
+fi
+
+BUILD_TARGET=runner docker compose up -d --build $SERVICES
