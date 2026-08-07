@@ -146,17 +146,22 @@ export class MoviesService {
       );
     }
 
-    await this.qbittorrent.add(input.urls);
+    // El savepath lo decide el client al agregar el torrent, así cada descarga cae
+    // en su propia carpeta y sabemos dónde están los archivos desde el arranque
+    // (los torrents de un solo archivo, si no, quedan sueltos en la raíz).
+    const downloadPath = await this.qbittorrent.add(input.urls);
 
-    // downloadPath queda null: lo llena el poller con el root_path que reporte
-    // qBittorrent cuando la descarga termine.
     const mediaSource = await this.prisma.mediaSource.create({
       data: {
         kind: 'TORRENT_SEARCH',
         status: 'QUEUED',
         infoHash: input.infoHash,
-        downloadUrl: input.urls.join('\n'),
+        // La URL de Prowlarr con la que se pidió el release. Guardamos la primera
+        // —la misma que hashea add() para armar la carpeta— y no el join de todas,
+        // así el downloadPath se puede reconstruir desde esta fila.
+        downloadUrl: input.urls[0] ?? null,
         releaseTitle: input.releaseTitle,
+        downloadPath,
       },
     });
 

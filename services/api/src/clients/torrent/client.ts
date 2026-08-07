@@ -3,6 +3,7 @@ import { TorrentClient } from "./types";
 import { HTTP_METHOD } from "@/types/http";
 import { SourceStatus } from "@prisma/client";
 import { SettingsService } from '@/settings/settings.service';
+import crypto from "node:crypto";
 
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-list
 const DOWNLOADING_STATES = new Set([
@@ -92,15 +93,28 @@ export class QbittorrentClient implements TorrentClient {
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#add-new-torrent
    * @param {string[]} urls Array of URLs (magnet links or torrent HTTP URLs) to add
    */
-  async add(urls: string[]): Promise<void> {
+  async add(urls: string[]): Promise<string> {
+    const config = await this.settings.getMap();
+    const basePath = config.path_downloads ?? "";
     const endpoint = new URL("add", await this.baseUrl());
+
+    const firstUrl = urls[0] ?? "";
+    // Generamos un hash a partir de la primera URL para asegurar una carpeta única
+    const folder = crypto.createHash("sha256").update(firstUrl).digest("hex").substring(0, 16);
+
+    // Construimos el savepath asegurando que no haya problemas con barras duplicadas
+    const separator = basePath.includes("\\") ? "\\" : "/";
+    const savepath = basePath.replace(/[\\/]$/, "") + separator + folder;
 
     await fetch(endpoint, {
       method: HTTP_METHOD.POST,
       body: new URLSearchParams({
         urls: urls.join("\n"),
+        savepath,
       }),
     });
+
+    return savepath;
   }
 
   /**
