@@ -1,6 +1,8 @@
+import { Injectable } from '@nestjs/common';
 import { TorrentClient } from "./types";
 import { HTTP_METHOD } from "@/types/http";
 import { SourceStatus } from "@prisma/client";
+import { SettingsService } from '@/settings/settings.service';
 
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-list
 const DOWNLOADING_STATES = new Set([
@@ -50,70 +52,72 @@ interface QbittorrentTorrent {
   root_path: string;
 }
 
-export const createQbittorrentClient = (config : Record<string, string>): TorrentClient => {
+@Injectable()
+export class QbittorrentClient implements TorrentClient {
+  constructor(private readonly settings: SettingsService) {}
 
-  const port = config.torrent_port ?? "8080";
+  private async baseUrl(): Promise<string> {
+    const config = await this.settings.getMap();
+    return `http://${config.torrent_host}:${config.torrent_port}/api/v2/torrents/`;
+  }
 
-  const baseUrl = `http://torrent:${port}/api/v2/torrents/`;
+  private normalizeHashes(hashes: string | string[]): string {
+    return Array.isArray(hashes) ? hashes.join("|") : hashes;
+  }
 
-  const normalizeHashes = (hashes: string | string[]): string =>
-    Array.isArray(hashes) ? hashes.join("|") : hashes;
-
-  return {
-  
   /**
    * Obtiene la lista de torrents activos en qbittorrent
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-list
    * @returns Promise<TorrentClientInfo[]>
    */
-    async info() {
-      const endpoint = new URL("info", baseUrl);
+  async info() {
+    const endpoint = new URL("info", await this.baseUrl());
 
-      const response = await fetch(endpoint, {
-        method: HTTP_METHOD.GET,
-      });
+    const response = await fetch(endpoint, {
+      method: HTTP_METHOD.GET,
+    });
 
-      const torrents = await response.json();
+    const torrents = await response.json();
 
-      return torrents.map((t: QbittorrentTorrent) => ({
-        hash: t.hash,
-        state: mapTorrentState(t.state, t.completion_on),
-        rawState: t.state,
-        root_path: t.root_path
-      }));
-    },
+    return torrents.map((t: QbittorrentTorrent) => ({
+      hash: t.hash,
+      state: mapTorrentState(t.state, t.completion_on),
+      rawState: t.state,
+      root_path: t.root_path
+    }));
+  }
+
   /**
    * Add a torrent to qbittorrent
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#add-new-torrent
    * @param {string[]} urls Array of URLs (magnet links or torrent HTTP URLs) to add
    */
-    async add(urls: string[]): Promise<void> {
-      const endpoint = new URL("add", baseUrl);
+  async add(urls: string[]): Promise<void> {
+    const endpoint = new URL("add", await this.baseUrl());
 
-      await fetch(endpoint, {
-        method: HTTP_METHOD.POST,
-        body: new URLSearchParams({
-          urls: urls.join("\n"),
-        }),
-      });
-    },
+    await fetch(endpoint, {
+      method: HTTP_METHOD.POST,
+      body: new URLSearchParams({
+        urls: urls.join("\n"),
+      }),
+    });
+  }
 
-    /**
-     * Stop a torrent from qbittorrent
-     * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#pause-torrents
-     * @param {string} hashes The info hashes of the torrents to stop
-     */
-    async stop(hashes: string | string[]) {
-      const endpoint = new URL("stop", baseUrl);
+  /**
+   * Stop a torrent from qbittorrent
+   * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#pause-torrents
+   * @param {string} hashes The info hashes of the torrents to stop
+   */
+  async stop(hashes: string | string[]) {
+    const endpoint = new URL("stop", await this.baseUrl());
 
-      await fetch(endpoint, {
-        method: HTTP_METHOD.POST,
-        body: new URLSearchParams({
-          hashes: normalizeHashes(hashes),
-        }),
-      });
-
-    },
+    await fetch(endpoint, {
+      method: HTTP_METHOD.POST,
+      body: new URLSearchParams({
+        hashes: this.normalizeHashes(hashes),
+      }),
+    });
+  }
 
   /**
    * Remove a torrent from qbittorrent
@@ -121,16 +125,31 @@ export const createQbittorrentClient = (config : Record<string, string>): Torren
    * @param {string} hashes The info hashes of the torrents to remove
    * @param {boolean} deleteFiles Whether to delete the downloaded files (default: true)
    */
-    async remove(hashes: string | string[], deleteFiles: boolean = true) {
-      const endpoint = new URL("delete", baseUrl);
-      
-      await fetch(endpoint, {
-        method: HTTP_METHOD.POST,
-        body: new URLSearchParams({
-          hashes: normalizeHashes(hashes),
-          deleteFiles: deleteFiles.toString(),
-        }),
-      });
-    },
-  };
-};
+  async remove(hashes: string | string[], deleteFiles: boolean = true) {
+    const endpoint = new URL("delete", await this.baseUrl());
+
+    await fetch(endpoint, {
+      method: HTTP_METHOD.POST,
+      body: new URLSearchParams({
+        hashes: this.normalizeHashes(hashes),
+        deleteFiles: deleteFiles.toString(),
+      }),
+    });
+  }
+
+  /**
+   * Cambia la carpeta de descarga (save path) de qbittorrent.
+   * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#set-application-preferences
+   * @param {string} path Ruta absoluta, dentro del contenedor de qbittorrent
+   */
+  async setSavePath(path: string): Promise<void> {
+    const endpoint = new URL("../app/setPreferences", await this.baseUrl());
+
+    await fetch(endpoint, {
+      method: HTTP_METHOD.POST,
+      body: new URLSearchParams({
+        json: JSON.stringify({ save_path: path, temp_path: `${path}/incomplete` }),
+      }),
+    });
+  }
+}

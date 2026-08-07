@@ -4,10 +4,10 @@ import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
 import { RedisService } from '@/redis/redis.service';
 import { MediaSearchResult } from '@/clients/types';
-import { createTMDBClient } from '@/clients/tmdb/client';
+import { TmdbClient } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
-import { createQbittorrentClient } from '@/clients/torrent/client';
+import { QbittorrentClient } from '@/clients/torrent/client';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
@@ -17,6 +17,8 @@ export class MoviesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly tmdb: TmdbClient,
+    private readonly qbittorrent: QbittorrentClient,
   ) {}
 
   async create(createMovieDto: CreateMovieDto) {
@@ -110,9 +112,8 @@ export class MoviesService {
   async searchMovies(query: string): Promise<MediaSearchResult[]> {
     if (!query.trim()) return [];
 
-    // 1. Consultar TMDB. TODO: la config sale de la tabla Setting cuando exista
-    const client = createTMDBClient();
-    const items = await client.search<TmdbMovie>('movie', query);
+    // 1. Consultar TMDB.
+    const items = await this.tmdb.search<TmdbMovie>('movie', query);
 
     // 2. Traducir la respuesta cruda de TMDB a nuestro formato
     const results: MediaSearchResult[] = items.map(item => ({
@@ -145,9 +146,7 @@ export class MoviesService {
       );
     }
 
-    // TODO: la config sale de la tabla Setting cuando exista, igual que TMDB
-    const client = createQbittorrentClient({ torrent_port: process.env.TORRENT_PORT ?? '8080' });
-    await client.add(input.urls);
+    await this.qbittorrent.add(input.urls);
 
     // downloadPath queda null: lo llena el poller con el root_path que reporte
     // qBittorrent cuando la descarga termine.

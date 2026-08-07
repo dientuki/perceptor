@@ -20,4 +20,5 @@ export type TorrentClient = {
   add: (urls: string[]) => Promise<void>;
   stop: (hashes: string | string[]) => Promise<void>;
   remove: (hashes: string | string[], deleteFiles?: boolean) => Promise<void>;
+  setSavePath: (path: string) => Promise<void>;
 };

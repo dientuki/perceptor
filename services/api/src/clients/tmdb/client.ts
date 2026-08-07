@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import {
   TmdbSearchResponse,
   TmdbMovieDetails,
@@ -7,6 +8,7 @@ import {
 import { MovieDBClient, MediaDetail, ShowDetail, MovieDetail, EpisodeDetail } from '@/clients/types';
 import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { HTTP_METHOD } from '@/types/http';
+import { SettingsService } from '@/settings/settings.service';
 
 // Mapea nuestro MediaType interno al segmento de ruta que usa TMDB: el "show"
 // interno corresponde a "tv" en la API de TMDB, no a "show" (eso daría 404).
@@ -58,30 +60,17 @@ const mappers = {
   }),
 };
 
-export const createTMDBClient = (): MovieDBClient => {
+@Injectable()
+export class TmdbClient implements MovieDBClient {
+  constructor(private readonly settings: SettingsService) {}
 
-  const host = "https://api.themoviedb.org";
-  const apiVersion = "3";
-
-  // TODO: leer de la tabla Setting (movie_db_api_key) cuando exista
-  const api_key = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI0YTVlNTExZTk3YmI0OTkwYmFiNGVkYmM2OTMyYTk1MSIsIm5iZiI6MTc3MDc2NjgyNy45MTY5OTk4LCJzdWIiOiI2OThiYzFlYjM3NDA4OGIyZDE4ODVjNGQiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.nIJZYCjsP--p54gQmYV1WUuHOhpn9qey5byeI_QZUS4";
-
-  const baseUrl = host;
-
-  const options = {
-    method: HTTP_METHOD.GET,
-    headers: {
-      accept: 'application/json',
-      Authorization: `Bearer ${api_key}`
-    }
-  };
-
-  async function fetchPage<T>(endpoint: string, query: string, page: number = 1): Promise<T[]> {
-    const urlPath = new URL(`${apiVersion}/${endpoint}`, baseUrl);
+  private async fetchPage<T>(endpoint: string, query: string, page: number = 1): Promise<T[]> {
+    const config = await this.settings.getMap();
+    const urlPath = new URL(`${config.movie_db_api_version}/${endpoint}`, config.movie_db_host);
     urlPath.searchParams.set("query", query);
     urlPath.searchParams.set("page", page.toString());
 
-    const res = await fetch(urlPath.toString(), options);
+    const res = await fetch(urlPath.toString(), this.options(config.movie_db_api_key));
 
     if (!res.ok) {
       throw new Error(`TMDB request failed: ${res.status} ${res.statusText} (${urlPath.toString()})`);
@@ -91,9 +80,10 @@ export const createTMDBClient = (): MovieDBClient => {
     return data.results || [];
   }
 
-  async function fetchOne<T>(endpoint: string): Promise<T> {
-    const urlPath = new URL(`${apiVersion}/${endpoint}`, baseUrl);
-    const res = await fetch(urlPath.toString(), options);
+  private async fetchOne<T>(endpoint: string): Promise<T> {
+    const config = await this.settings.getMap();
+    const urlPath = new URL(`${config.movie_db_api_version}/${endpoint}`, config.movie_db_host);
+    const res = await fetch(urlPath.toString(), this.options(config.movie_db_api_key));
 
     if (!res.ok) {
       throw new Error(`TMDB request failed: ${res.status} ${res.statusText} (${urlPath.toString()})`);
@@ -102,41 +92,49 @@ export const createTMDBClient = (): MovieDBClient => {
     return (await res.json()) as T;
   }
 
-  return {
-    // 'thing' sería "movie", "tv", "person", "multi", etc.
-    async search<T>(thing: string, query: string, page: number = 1): Promise<T[]> {
-      return await fetchPage(`search/${thing}`, query, page) as T[];
-    },
+  private options(apiKey: string) {
+    return {
+      method: HTTP_METHOD.GET,
+      headers: {
+        accept: 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+    };
+  }
 
-    async details(thing: MediaType, id: number): Promise<MediaDetail> {
-      const endpoint = TMDB_ENDPOINT[thing];
+  // 'thing' sería "movie", "tv", "person", "multi", etc.
+  async search<T>(thing: string, query: string, page: number = 1): Promise<T[]> {
+    return await this.fetchPage(`search/${thing}`, query, page) as T[];
+  }
 
-      // Obtenemos los datos crudos
-      const data = await fetchOne<TmdbMovieDetails | TmdbShowDetails>(`${endpoint}/${id}`);
+  async details(thing: MediaType, id: number): Promise<MediaDetail> {
+    const endpoint = TMDB_ENDPOINT[thing];
 
-      // Seleccionamos la estrategia de mapeo adecuada
-      const transform = mappers[thing];
+    // Obtenemos los datos crudos
+    const data = await this.fetchOne<TmdbMovieDetails | TmdbShowDetails>(`${endpoint}/${id}`);
 
-      if (!transform) {
-        throw new Error(`Media type not supported: ${thing}`);
-      }
+    // Seleccionamos la estrategia de mapeo adecuada
+    const transform = mappers[thing];
 
-      // Ejecutamos la transformación
-      return transform(data as any);
-    },
+    if (!transform) {
+      throw new Error(`Media type not supported: ${thing}`);
+    }
 
-    async seasonDetails(id: number, seasonNumber: number): Promise<EpisodeDetail[]> {
-      const data = await fetchOne<TmdbSeasonDetails>(`tv/${id}/season/${seasonNumber}`);
+    // Ejecutamos la transformación
+    return transform(data as any);
+  }
 
-      return data.episodes.map((episode) => ({
-        id: episode.id,
-        title: episode.name,
-        overview: episode.overview,
-        releaseDate: episode.air_date,
-        episodeNumber: episode.episode_number,
-        stillPath: episode.still_path,
-        voteAverage: episode.vote_average,
-      }));
-    },
-  };
+  async seasonDetails(id: number, seasonNumber: number): Promise<EpisodeDetail[]> {
+    const data = await this.fetchOne<TmdbSeasonDetails>(`tv/${id}/season/${seasonNumber}`);
+
+    return data.episodes.map((episode) => ({
+      id: episode.id,
+      title: episode.name,
+      overview: episode.overview,
+      releaseDate: episode.air_date,
+      episodeNumber: episode.episode_number,
+      stillPath: episode.still_path,
+      voteAverage: episode.vote_average,
+    }));
+  }
 }

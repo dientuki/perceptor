@@ -50,6 +50,11 @@ type MediaSearchResult {
   status: String
 }
 
+type Setting {
+  key: String!
+  value: String!
+}
+
 type TorrentLink {
   downloadUrl: String
 }
@@ -75,6 +80,7 @@ type Query {
 
   """Busca películas en TMDB"""
   searchMovies(query: String!): [MediaSearchResult!]!
+  settings: [Setting!]!
 
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!): [TorrentResult!]!
@@ -93,6 +99,7 @@ type Mutation {
 
   """Envía un release elegido a qBittorrent y lo asocia a la película"""
   addTorrentToMovie(movieId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
+  updateSettings(entries: [SettingInput!]!): [Setting!]!
 }
 
 input LoginInput {
@@ -111,4 +118,9 @@ input UpdateUserInput {
   email: String
   password: String
   id: ID!
+}
+
+input SettingInput {
+  key: String!
+  value: String!
 }

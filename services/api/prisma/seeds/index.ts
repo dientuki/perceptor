@@ -2,6 +2,7 @@ import { PrismaService } from '../../src/prisma/prisma.service'; // Ajustá la r
 import { seedLanguages } from './languages';
 import { seedUsers } from './users';
 import { seedMovies } from './movie';
+import { seedSettings } from './settings';
 
 const prisma = new PrismaService();
 
@@ -13,6 +14,7 @@ async function main() {
   await seedLanguages(prisma);
   await seedUsers(prisma);
   await seedMovies(prisma);
+  await seedSettings(prisma);
 
   console.log('✅ Seeders completados con éxito.');
 }

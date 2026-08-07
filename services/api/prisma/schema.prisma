@@ -53,6 +53,17 @@ enum MediaStatus {
   ERROR // Falló la descarga o el encode
 }
 
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String @db.Text
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("settings")
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique

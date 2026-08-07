@@ -1,6 +1,8 @@
+import { Injectable } from '@nestjs/common';
 import { IndexerClient, TorrentResult, TorrentInfo } from "./types";
 import { HTTP_METHOD } from "@/types/http";
 import { getScore } from "./score";
+import { SettingsService } from '@/settings/settings.service';
 
 async function resolveInfoHash(item: any): Promise<string> {
   // 1️⃣ Si viene explícito
@@ -42,7 +44,7 @@ async function resolveInfoHash(item: any): Promise<string> {
 }
 
 async function filterIAData(items: any[]): Promise<TorrentInfo> {
-  
+
   const filtered = items.filter(item => item.title.includes("1080p"))
 
   filtered.forEach(item => {
@@ -155,50 +157,31 @@ async function filterData(items: Item[]): Promise<TorrentResult[]> {
   return result.sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
 }
 
+@Injectable()
+export class ProwlarrClient implements IndexerClient {
+  constructor(private readonly settings: SettingsService) {}
 
-export const createProwlarrClient = (): IndexerClient => {
-  
-  const port = "9696";
-
-  const api_key = "f23cbd62535747d4a5d1777a2a3c7237";
-
-  const baseUrl = `http://indexer:${port}/`;
-
-  async function getData(query: string): Promise<any[]> {
+  private async getData(query: string): Promise<any[]> {
+    const config = await this.settings.getMap();
+    const baseUrl = `http://${config.tracker_host}:${config.tracker_port}/`;
     const url = new URL("/api/v1/search", baseUrl);
     url.searchParams.set("query", query);
 
-   
     const res = await fetch(url.toString(), {
       method: HTTP_METHOD.GET,
       headers: {
-        "X-Api-Key": api_key,
+        "X-Api-Key": config.tracker_api_key,
       },
     });
-    //console.log('tracker:');
-    //console.log(res);
-    const data = await res.json();
-    //const file = await fs.readFile("./mi7.json", "utf-8");
-    //const data = JSON.parse(file);
 
-    //console.log(data);
+    const data = await res.json();
+
     return data;
   }
 
-  return {
-
-    async search(query: string): Promise<TorrentResult[]> {
-      const data = await getData(query);
-      const filteredData = await filterData(data);
-      //const filteredData = filterData(data);
-      return filteredData;
-    },
-
-    //async searchIA(query: string): Promise<TorrentInfo> {
-    //  const data = await getData(query);
-    //  const filteredData = filterIAData(data);
-    //  return filteredData;
-    //},
-
+  async search(query: string): Promise<TorrentResult[]> {
+    const data = await this.getData(query);
+    const filteredData = await filterData(data);
+    return filteredData;
   }
 }

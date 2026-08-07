@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MoviesModule } from './movies/movies.module';
 import { IndexerModule } from './indexer/indexer.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { IndexerModule } from './indexer/indexer.module';
     UsersModule,
     MoviesModule, // Asegúrate de importar el módulo de películas
     IndexerModule,
+    SettingsModule,
   ],
   providers: [AppResolver],
 })
