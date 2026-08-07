@@ -10,6 +10,7 @@ import { MoviesModule } from './movies/movies.module';
 import { IndexerModule } from './indexer/indexer.module';
 import { SettingsModule } from './settings/settings.module';
 import { DownloadsModule } from './downloads/downloads.module';
+import { MediaSourcesModule } from './media-sources/media-sources.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { DownloadsModule } from './downloads/downloads.module';
     IndexerModule,
     SettingsModule,
     DownloadsModule,
+    MediaSourcesModule,
   ],
   providers: [AppResolver],
 })

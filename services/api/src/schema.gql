@@ -69,6 +69,16 @@ type TorrentResult {
   infoUrl: [TorrentLink!]!
 }
 
+type MediaSource {
+  id: ID!
+  status: String!
+  downloadPath: String
+  releaseTitle: String
+  movieId: Int
+  episodeId: Int
+  errorMessage: String
+}
+
 type Query {
   ping: String!
   items: [Item!]!
@@ -84,6 +94,7 @@ type Query {
 
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!): [TorrentResult!]!
+  mediaSource(id: Int!): MediaSource
 }
 
 type Mutation {
@@ -103,6 +114,11 @@ type Mutation {
 
   """Aviso del cliente de torrents de que una descarga terminó"""
   torrentCompleted(infoHash: String!): String!
+
+  """
+  El worker reporta el inventario de archivos de un MediaSource ya descargado
+  """
+  sourceScanned(mediaSourceId: Int!, files: [SourceFileInput!]!, matchedFilePath: String): MediaSource!
 }
 
 input LoginInput {
@@ -126,4 +142,10 @@ input UpdateUserInput {
 input SettingInput {
   key: String!
   value: String!
+}
+
+input SourceFileInput {
+  filePath: String!
+  fileName: String!
+  size: Float
 }
