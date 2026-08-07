@@ -9,9 +9,11 @@ Pipeline stage status today:
 | :-- | :-- | :-- |
 | Search catalog (TMDB) | `api` — `src/clients/TMDBClient.ts`, `src/movies/movies.search.ts` | in progress, does not compile |
 | Register title in DB | `api` — `movies` module + Prisma | working (read + CRUD service) |
-| Find release (indexer) | Prowlarr | designed only, commented out in `docker-compose.yaml` |
-| Download | qBittorrent | designed only, commented out in `docker-compose.yaml` |
-| Transcode | `worker` | stub, one `console.log` |
+| Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `api` — `src/clients/indexer/client.ts` | working |
+| Download | qBittorrent — `torrent` service, `api` — `src/clients/torrent/client.ts` | working, per-torrent save path |
+| Detect completion, update DB, enqueue job | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | working |
+| Scan downloaded files, inventory | `worker` — BullMQ consumer, talks to `api` over GraphQL | working |
+| Transcode | `worker` (FFmpeg) | not started — `ProcessJob` rows sit in `WAITING` |
 | Browse library | `web` | working for the movie list |
 
 ## Layout
@@ -32,18 +34,21 @@ services/worker/         BullMQ + FFmpeg consumer        -> services/worker/CLAU
                        :80 / :443
                            |
                        traefik (v3.7, docker provider, opt-in via labels)
-                        /        \
-        Host(${DOMAIN})           Host(api.${DOMAIN})
-              |                           |
-        web  :3000  --INTERNAL_GRAPHQL_URL-->  api  :${API_PORT}
-                                                |        \
-                                             db (MariaDB 12.3)  redis (7-alpine)
-                                                             |
-                                        worker (no ingress, Redis queue only)
+                  /        |         \                    \
+    Host(${DOMAIN})  Host(api.${DOMAIN})  Host(torrent.${DOMAIN})  Host(indexer.${DOMAIN})
+        |                  |                     |                      |
+   web  :3000  --GraphQL-->  api  :${API_PORT}   torrent (qBittorrent)  indexer (Prowlarr)
+                              |        \                 ^
+                        db (MariaDB) redis (queue)       | AutoRun hook on completion
+                                       |
+                       worker (no ingress, Redis queue only, calls back into api over GraphQL)
 ```
 
 - Everything shares the `perceptor-net` bridge network.
-- `web` waits for `api` healthy; `api` waits for `db` and `redis` healthy.
+- `web` waits for `api` healthy; `api` waits for `db` and `redis` healthy; `worker` waits for
+  `redis` and `api` healthy.
+- `web` and `worker` never touch the database directly — both go through `api`'s GraphQL endpoint
+  (`INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql`).
 - Only containers with `traefik.enable=true` are routed — see `docs/spec/docker/traefik.md`
   for the label contract.
 
@@ -55,6 +60,9 @@ through the wrappers in `bin/`, which shell into the running containers.
 
 | Script | What it does | Example |
 | :-- | :-- | :-- |
+| `bin/install` | generates `.env` from `.env.example`, asking Traefik y/n + domain | run once, first checkout |
+| `bin/dev` | `docker compose up -d` in dev mode, reads `USE_TRAEFIK` from `.env` to include/exclude `traefik` | `bin/dev` |
+| `bin/prod` | same, `BUILD_TARGET=runner`, rebuilds images | `bin/prod` |
 | `bin/cli <service> <cmd…>` | `docker compose exec -it <service> <cmd…>` | `bin/cli api npx prisma migrate status` |
 | `bin/npm [service] <args…>` | npm inside a service; **defaults to `web`** when the first arg is not `web`/`api`/`worker` | `bin/npm api run test`, `bin/npm run dev` (= web) |
 | `bin/bash <service>` | interactive `sh` in a container | `bin/bash api` |
@@ -64,8 +72,12 @@ through the wrappers in `bin/`, which shell into the running containers.
 Bring the stack up from the repo root:
 
 ```bash
-docker compose up -d
+bin/dev
 ```
+
+`bin/dev`/`bin/prod` decide whether to include the `traefik` service based on `USE_TRAEFIK` in
+`.env` (set by `bin/install`). Without Traefik, each service is still reachable directly on its
+published port (`WEB_PORT`, `API_PORT`, etc.) — Traefik only adds domain-based routing.
 
 Source is bind-mounted (`./services/<svc>:/app`), so edits hot-reload. The dev stages install
 `node_modules` on first boot if the directory is missing, which means `node_modules` lands in your
@@ -73,19 +85,23 @@ host working copy — that is intentional, and it is what your editor's TypeScri
 
 ## Environment
 
-All configuration lives in `.env` at the repo root; compose interpolates it and passes a subset
-into each container. Variable names (values are secret, never copy them into docs or code):
+All configuration lives in `.env` at the repo root (see `.env.example` for the full list of names);
+compose interpolates it and passes a subset into each container. Variable names (values are
+secret, never copy them into docs or code):
 
-`NODE_ENV`, `TZ`, `PUID`, `PGID`, `DOMAIN`, `BUILD_TARGET`,
-`WEB_PORT`, `API_PORT`, `DB_PORT`, `REDIS_PORT`, `PROWLARR_PORT`,
-`QBITTORRENT_WEBUI_PORT`, `QBITTORRENT_TORRENTING_PORT`,
+`NODE_ENV`, `TZ`, `PUID`, `PGID`, `USE_TRAEFIK`, `DOMAIN`,
+`WEB_PORT`, `API_PORT`, `DB_PORT`, `REDIS_PORT`, `INDEXER_PORT`,
+`QBITTORRENT_WEBUI_PORT`, `QBITTORRENT_TORRENTING_PORT`, `QBITTORRENT_USER`, `QBITTORRENT_PASSWORD`,
 `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ROOT_PASSWORD`, `DATABASE_URL`,
 `REDIS_HOST`, `HOST_DOWNLOADS_DIR`, `HOST_DESTINATIONS_DIR`,
-`CONTAINER_DOWNLOADS_DIR`, `CONTAINER_DESTINATIONS_DIR`,
-`TMDB_API_KEY`, `TMDB_DOMAIN`, `TMDB_API_VERSION`.
+`CONTAINER_DOWNLOADS_DIR`, `CONTAINER_DESTINATIONS_DIR`.
 
-`BUILD_TARGET` selects the Dockerfile stage (`dev` by default, `runner` for production). Every
-Dockerfile has `base` / `dev` / `builder` / `runner` stages.
+`BUILD_TARGET` is an optional override for which Dockerfile stage to run (`dev` by default,
+`runner` for production) — every Dockerfile has `base` / `dev` / `builder` / `runner` stages, and
+compose falls back to `dev` when it's unset.
+
+Note: `TMDB_API_KEY` is **not** currently in `.env` — the TMDB bearer token is hardcoded in
+`TMDBClient.ts` instead (see Known debt below). Add it to `.env` if you fix that.
 
 ## Conventions
 
@@ -119,10 +135,9 @@ expect to fix the wiring rather than follow it:
 
 ## Known debt
 
-- TMDB bearer token is hardcoded in `services/api/src/clients/TMDBClient.ts` even though
-  `TMDB_API_KEY` already exists in `.env`.
+- TMDB bearer token is hardcoded in `services/api/src/clients/TMDBClient.ts`; there's no
+  `TMDB_API_KEY` in `.env` yet to replace it with.
 - The database DSN is hardcoded in `services/api/src/prisma/prisma.service.ts` even though
   `DATABASE_URL` already exists in `.env`.
 - `services/api/prisma/schema.prisma` declares `datasource db` with no `url` — the connection
   comes solely from the driver adapter.
-- `services/worker` has no `tsconfig.json` despite a `"build": "tsc"` script.
