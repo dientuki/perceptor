@@ -9,6 +9,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { MoviesModule } from './movies/movies.module';
 import { IndexerModule } from './indexer/indexer.module';
 import { SettingsModule } from './settings/settings.module';
+import { DownloadsModule } from './downloads/downloads.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { SettingsModule } from './settings/settings.module';
     MoviesModule, // Asegúrate de importar el módulo de películas
     IndexerModule,
     SettingsModule,
+    DownloadsModule,
   ],
   providers: [AppResolver],
 })

@@ -1,0 +1,129 @@
+#!/bin/bash
+# Nota: init-custom-files invoca este script con `/bin/bash "${SCRIPT}"` y
+# ademas necesita el bit +x (via COPY --chmod=755 en el Dockerfile) — el
+# shebang de esta linea no lo respeta el runner, es sólo documentación.
+#
+# Activa [AutoRun] en qBittorrent.conf para que, al completar una descarga,
+# qBittorrent ejecute services/torrent/commands/on-torrent-completed.sh y
+# avise al api por GraphQL. Convergemos el volumen existente acá (y no con
+# un sed sobre /defaults en el Dockerfile) porque init-qbittorrent-config
+# sólo copia /defaults cuando qBittorrent.conf no existe todavía, y el
+# volumen qbittorrent_config de esta máquina ya lo tiene.
+
+set -euo pipefail
+
+CONF_PATH="/config/qBittorrent/qBittorrent.conf"
+
+if [ ! -f "${CONF_PATH}" ]; then
+  echo "[20-qbittorrent-autorun] ERROR: no existe ${CONF_PATH} (¿corrió init-qbittorrent-config?)." >&2
+  exit 1
+fi
+
+CONF_PATH="${CONF_PATH}" python3 <<'PYEOF'
+import os
+
+conf_path = os.environ["CONF_PATH"]
+
+# Igual que en 10-qbittorrent-password: INI de Qt, no lo parsea configparser,
+# se edita línea por línea dentro de la sección correspondiente.
+SECTION = "[AutoRun]"
+ENABLED_KEY = "enabled"
+PROGRAM_KEY = "program"
+ENABLED_VALUE = "true"
+PROGRAM_VALUE = "/bin/bash /commands/on-torrent-completed.sh %I"
+
+with open(conf_path, "r") as f:
+    lines = f.readlines()
+
+
+def find_section_bounds():
+    """Devuelve (start, end) como índices de línea: start es la línea de
+    '[AutoRun]', end es la primera línea vacía o el próximo '[Seccion]'
+    después de start (o len(lines) si la sección llega al final del archivo).
+    None si la sección no existe."""
+    start = None
+    for i, line in enumerate(lines):
+        if line.rstrip("\n") == SECTION:
+            start = i
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        stripped = lines[i].rstrip("\n")
+        if stripped == "" or (stripped.startswith("[") and stripped.endswith("]")):
+            end = i
+            break
+    return (start, end)
+
+
+def find_key_index(start: int, end: int, key: str):
+    prefix = key + "="
+    for i in range(start, end):
+        if lines[i].startswith(prefix):
+            return i
+    return None
+
+
+def get_value(start: int, end: int, key: str):
+    idx = find_key_index(start, end, key)
+    if idx is None:
+        return None
+    value = lines[idx].rstrip("\n")[len(key) + 1:]
+    # qBittorrent-nox re-serializa sus propios settings al hacer shutdown
+    # limpio y envuelve en comillas dobles literales los valores con
+    # caracteres especiales (como espacios, en nuestro `program`). Las
+    # sacamos antes de comparar, así la idempotencia no depende de si el
+    # último en tocar el archivo fuimos nosotros o el propio qbittorrent-nox.
+    if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+        value = value[1:-1]
+    return value
+
+
+bounds = find_section_bounds()
+if bounds is None:
+    # No debería pasar (init-qbittorrent-config siempre deja [AutoRun] con
+    # ambas claves, activo y en /defaults), pero por si faltara la sección
+    # entera la agregamos al final.
+    print(f"[20-qbittorrent-autorun] {SECTION} no existe: la agrego al final del archivo")
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    lines.append(f"{SECTION}\n")
+    lines.append(f"{ENABLED_KEY}={ENABLED_VALUE}\n")
+    lines.append(f"{PROGRAM_KEY}={PROGRAM_VALUE}\n")
+else:
+    start, end = bounds
+    changed = False
+
+    current_enabled = get_value(start, end, ENABLED_KEY)
+    if current_enabled != ENABLED_VALUE:
+        idx = find_key_index(start, end, ENABLED_KEY)
+        line = f"{ENABLED_KEY}={ENABLED_VALUE}\n"
+        if idx is not None:
+            lines[idx] = line
+        else:
+            lines.insert(end, line)
+            end += 1
+        changed = True
+
+    current_program = get_value(start, end, PROGRAM_KEY)
+    if current_program != PROGRAM_VALUE:
+        idx = find_key_index(start, end, PROGRAM_KEY)
+        line = f"{PROGRAM_KEY}={PROGRAM_VALUE}\n"
+        if idx is not None:
+            lines[idx] = line
+        else:
+            lines.insert(end, line)
+            end += 1
+        changed = True
+
+    if not changed:
+        print(f"[20-qbittorrent-autorun] {SECTION} sin cambios: enabled y program ya estaban correctos")
+    else:
+        print(f"[20-qbittorrent-autorun] {SECTION} actualizado: enabled={ENABLED_VALUE}, program={PROGRAM_VALUE}")
+
+# Truncar y reescribir en el mismo path (no crear un archivo nuevo): preserva
+# el owner abc:abc que dejó init-qbittorrent-config con su lsiown -R.
+with open(conf_path, "w") as f:
+    f.writelines(lines)
+PYEOF

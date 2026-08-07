@@ -191,12 +191,16 @@ services:
       - TORRENTING_PORT=${QBITTORRENT_TORRENTING_PORT}
       - QBITTORRENT_USER=${QBITTORRENT_USER}
       - QBITTORRENT_PASSWORD=${QBITTORRENT_PASSWORD}
+      - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
     volumes:
       # Configuración persistente del cliente (resume de descargas, torrents activos, etc.)
       - qbittorrent_config:/config
-      
+
       # Mapeo a la misma carpeta de descargas que lee el worker
       - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
+
+      # Script de AutoRun que avisa al api cuando termina una descarga
+      - ./services/torrent/commands:/commands:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:${QBITTORRENT_WEBUI_PORT}/ || exit 1"]
       interval: 15s

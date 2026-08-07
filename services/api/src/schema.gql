@@ -100,6 +100,9 @@ type Mutation {
   """Envía un release elegido a qBittorrent y lo asocia a la película"""
   addTorrentToMovie(movieId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
+
+  """Aviso del cliente de torrents de que una descarga terminó"""
+  torrentCompleted(infoHash: String!): String!
 }
 
 input LoginInput {
