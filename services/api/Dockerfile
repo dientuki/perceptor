@@ -26,8 +26,11 @@ WORKDIR /app
 FROM base AS dev
 ENV NODE_ENV=development
 EXPOSE 3000
-# Verifica si existe nest CLI o node_modules, de lo contrario instala e inicia en dev
-CMD ["sh", "-c", "if [ ! -d node_modules ]; then npm install; fi && npx prisma generate && npm run start:dev"]
+# Verifica el binario real (no sólo si la carpeta existe: un node_modules a
+# medias pasaría el chequeo y "npx prisma generate" quedaría pidiendo
+# confirmación interactiva en medio del arranque del container). --no en npx
+# hace que falle en vez de ofrecer bajar el paquete del registry.
+CMD ["sh", "-c", "if [ ! -x node_modules/.bin/nest ]; then npm install; fi && npx --no prisma generate && npm run start:dev"]
 
 # ==========================================
 # 3. BUILDER: Compilación para Producción

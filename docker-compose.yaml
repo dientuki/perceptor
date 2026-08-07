@@ -54,7 +54,10 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 15s      
+      # Mismo motivo que en api: en un checkout limpio el CMD de dev instala
+      # node_modules antes de levantar, y un start_period corto marca el
+      # container "unhealthy" en medio de esa instalación.
+      start_period: 60s
     networks:
       - perceptor-net
     labels:
@@ -79,13 +82,20 @@ services:
       - PORT=${API_PORT}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
+      - ADMIN_USER=${ADMIN_USER}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/graphql', (res) => process.exit(res.statusCode < 500 ? 0 : 1))"]
       #test: ["CMD-SHELL", "true"]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 20s      
+      # Generoso a propósito: en un checkout limpio (sin node_modules) el
+      # CMD de dev corre npm install + prisma generate antes de levantar,
+      # lo que puede tardar 40s+. Con un start_period corto, los healthchecks
+      # que fallan durante ese instalado cuentan como fallas reales y el
+      # container queda "unhealthy" antes de terminar de arrancar.
+      start_period: 90s
     depends_on:
       db:
         condition: service_healthy
@@ -219,16 +229,19 @@ services:
       - "traefik.http.services.torrent.loadbalancer.server.port=${QBITTORRENT_WEBUI_PORT}"      
     
   indexer:
-    image: lscr.io/linuxserver/prowlarr:2.5.2
+    build:
+      context: ./services/indexer
     container_name: perceptor-indexer
     restart: unless-stopped
     dns:
       - 1.1.1.1
-      - 8.8.8.8    
+      - 8.8.8.8
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
+      - INDEXER_USER=${INDEXER_USER}
+      - INDEXER_PASSWORD=${INDEXER_PASSWORD}
     volumes:
       - indexer_config:/config
     ports:

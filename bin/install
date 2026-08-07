@@ -1,8 +1,10 @@
 #!/bin/bash
 # Genera .env a partir de .env.example (si no existe, o si se pide
 # regenerarlo), preguntando si el stack se va a rutear por Traefik. Siempre
-# sigue con la base: levanta db/redis/api, aplica migraciones y siembra los
-# datos iniciales (salteando el seed si la base ya los tiene).
+# sigue con la base: levanta db/redis/api, resetea la base (destructivo a
+# propósito — install arma un ambiente limpio, no lo actualiza) y siembra los
+# datos iniciales. Al final frena los containers: instalar no implica dejar
+# el stack corriendo, eso lo decide el usuario con bin/dev.
 set -e
 cd "$(dirname "$0")/.."
 
@@ -62,23 +64,37 @@ echo
 echo "Levantando db, redis y api..."
 BUILD_TARGET=dev docker compose up -d --wait --wait-timeout 180 db redis api
 
+# Un container "healthy" no implica un container instalado: node_modules está
+# bind-mounteado desde el host, así que se puede borrar con el container arriba
+# y el proceso de Nest sigue respondiendo el healthcheck con los módulos ya
+# cargados en memoria. Sin este chequeo, npx se pondría a bajar prisma del
+# registry con un prompt interactivo en medio del script.
+if ! docker compose exec -T api test -x node_modules/.bin/prisma; then
+  echo "Faltan dependencias de node en api, instalando..."
+  docker compose exec -T api npm install
+  # El nest --watch que quedó vivo entró en estado roto al desaparecer
+  # typescript y no se recupera solo: reiniciar lo deja corriendo con las
+  # dependencias nuevas.
+  echo "Reiniciando api para que levante con las dependencias nuevas..."
+  docker compose restart api
+  BUILD_TARGET=dev docker compose up -d --wait --wait-timeout 300 api
+fi
+
 echo "Otorgando privilegios a ${DB_USER} en MariaDB..."
 bin/dbinit
 
-echo "Aplicando migraciones de Prisma..."
-bin/cli api npx prisma migrate deploy
+echo "Reseteando la base y aplicando migraciones de Prisma..."
+bin/cli api npx --no prisma migrate reset --force
 
-# El seed no es idempotente (usa create(), no upsert, para languages/movies) —
-# correrlo dos veces sobre una base ya sembrada revienta por unique constraint.
-# languages es la primera tabla que llena, así que sirve de bandera barata.
-already_seeded=$(docker compose exec -T db mariadb -N -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" \
-  -e "select count(*) from languages" 2>/dev/null || echo 0)
-if [ "${already_seeded:-0}" -gt 0 ] 2>/dev/null; then
-  echo "La base ya tiene datos sembrados, salteo el seed."
-else
-  echo "Sembrando datos iniciales..."
-  bin/cli api npx ts-node prisma/seeds/index.ts
-fi
+# migrate reset no siembra solo pese a que prisma.config.ts declara un
+# comando de seed (verificado: la tabla languages queda en 0 filas después
+# del reset) — hay que correrlo aparte.
+echo "Sembrando datos iniciales..."
+bin/cli api npx --no ts-node prisma/seeds/index.ts
 
 echo
-echo "Listo. Corré bin/dev para levantar el resto del stack (web, torrent, indexer)."
+echo "Frenando los containers..."
+docker compose stop
+
+echo
+echo "Listo. Corré bin/dev para levantar el stack (web, api, db, redis, torrent, indexer)."

@@ -90,11 +90,18 @@ compose interpolates it and passes a subset into each container. Variable names 
 secret, never copy them into docs or code):
 
 `NODE_ENV`, `TZ`, `PUID`, `PGID`, `USE_TRAEFIK`, `DOMAIN`,
+`ADMIN_USER`, `ADMIN_PASSWORD`,
 `WEB_PORT`, `API_PORT`, `DB_PORT`, `REDIS_PORT`, `INDEXER_PORT`,
 `QBITTORRENT_WEBUI_PORT`, `QBITTORRENT_TORRENTING_PORT`, `QBITTORRENT_USER`, `QBITTORRENT_PASSWORD`,
+`INDEXER_USER`, `INDEXER_PASSWORD`,
 `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ROOT_PASSWORD`, `DATABASE_URL`,
 `REDIS_HOST`, `HOST_DOWNLOADS_DIR`, `HOST_DESTINATIONS_DIR`,
 `CONTAINER_DOWNLOADS_DIR`, `CONTAINER_DESTINATIONS_DIR`.
+
+`ADMIN_USER`/`ADMIN_PASSWORD` are the canonical credentials — `QBITTORRENT_USER`/`QBITTORRENT_PASSWORD`
+and `INDEXER_USER`/`INDEXER_PASSWORD` reference them via `.env` interpolation (`${ADMIN_USER}`), and
+the api seed reads them directly, so the app login, qBittorrent's WebUI and Prowlarr's WebUI all
+share one login. Each service's own UI can still change its own credentials afterward.
 
 `BUILD_TARGET` is an optional override for which Dockerfile stage to run (`dev` by default,
 `runner` for production) — every Dockerfile has `base` / `dev` / `builder` / `runner` stages, and
