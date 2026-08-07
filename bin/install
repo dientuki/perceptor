@@ -14,18 +14,24 @@ fi
 
 cp .env.example .env
 
+# sed -i no es portable (GNU vs BSD/macOS piden flags distintos): escribir a un
+# temporal y mover evita la diferencia por completo.
+set_env_var() {
+  sed "s/^${1}=.*/${1}=${2}/" .env > .env.tmp && mv .env.tmp .env
+}
+
 read -rp "¿Usar Traefik para rutear por dominio? [y/N] " use_traefik
 case "$use_traefik" in
   [yY]*)
     read -rp "Dominio a usar (ej: perceptor.local): " domain
-    sed -i "s/^USE_TRAEFIK=.*/USE_TRAEFIK=true/" .env
-    sed -i "s/^DOMAIN=.*/DOMAIN=${domain}/" .env
+    set_env_var USE_TRAEFIK true
+    set_env_var DOMAIN "${domain}"
     echo
     echo "Listo. Agregá esto a /etc/hosts para que resuelva:"
     echo "  127.0.0.1  ${domain} api.${domain} torrent.${domain} indexer.${domain}"
     ;;
   *)
-    sed -i "s/^USE_TRAEFIK=.*/USE_TRAEFIK=false/" .env
+    set_env_var USE_TRAEFIK false
     echo
     echo "Traefik desactivado. Vas a acceder a cada servicio por su puerto en localhost"
     echo "(WEB_PORT, API_PORT, INDEXER_PORT, QBITTORRENT_WEBUI_PORT)."
