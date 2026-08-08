@@ -46,6 +46,10 @@ services:
       - WATCHPACK_POLLING=true
       - DOMAIN=${DOMAIN}
       - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
+      # NEXT_PUBLIC_ porque el modal de subida corre en el browser: necesita
+      # una URL que el browser pueda resolver, no la interna de Docker de
+      # arriba (esa sólo la ven los containers entre sí).
+      - NEXT_PUBLIC_UPLOAD_URL=${PUBLIC_UPLOAD_URL}
     depends_on:
       api:
         condition: service_healthy      
@@ -72,10 +76,17 @@ services:
       #dockerfile: docker/api.Dockerfile
       target: ${BUILD_TARGET:-dev}
     container_name: perceptor-api
+    # No root: /uploads (ver src/uploads/) escribe en el disco de descargas, y
+    # el archivo tiene que quedar con el mismo dueño/grupo que espera el
+    # worker — mismo criterio que ya se le aplicó a ese servicio.
+    user: "${PUID}:${PGID}"
+    group_add:
+      - "${MEDIA_GID}"
     ports:
       - "${API_PORT}:${API_PORT}" # Mapeamos al puerto especificado para no chocar con Next.js
     volumes:
       - ./services/api:/app
+      - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
@@ -84,6 +95,8 @@ services:
       - REDIS_PORT=${REDIS_PORT}
       - ADMIN_USER=${ADMIN_USER}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - DOMAIN=${DOMAIN}
+      - WEB_PORT=${WEB_PORT}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/graphql', (res) => process.exit(res.statusCode < 500 ? 0 : 1))"]
       #test: ["CMD-SHELL", "true"]
@@ -142,6 +155,12 @@ services:
       #dockerfile: docker/worker.Dockerfile
       target: ${BUILD_TARGET:-dev}
     container_name: perceptor-worker
+    # Verificado en vivo: ffmpeg con SVT-AV1 puede tardar ~9s en morir tras
+    # SIGTERM (multi-hilo, necesita desarmar el encoder) — el default de
+    # Docker (10s) deja casi sin margen para que corra el resto de la
+    # limpieza de runner.ts (rm de temporales en dos discos distintos) antes
+    # de que Docker escale a SIGKILL, que no le da tiempo a nada.
+    stop_grace_period: 60s
     # No root: los archivos que arma (biblioteca de Jellyfin) tienen que quedar
     # con el mismo dueño que el resto — MEDIA_GID (no necesariamente PGID, que
     # también consumen torrent/indexer) es el grupo dueño de esas carpetas.

@@ -118,6 +118,14 @@ Note: `TMDB_API_KEY` is **not** currently in `.env` — the TMDB bearer token is
 - **Path alias**: `@/*` → `./src/*` in both `api` (tsconfig `paths`) and `web`.
 - **API contract**: GraphQL only. `web` never touches the database; it calls the API through
   `fetchGraphQL` in `services/web/src/lib/graphql-client.ts`.
+  **One deliberate exception**: `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`)
+  is the project's only REST route. A file upload from the browser (up to tens of GB, resumable via
+  the [tus](https://tus.io) protocol) doesn't fit a GraphQL mutation or a Next Server Action (1MB
+  body limit by default) — so the browser talks to `api` directly for that one endpoint, bypassing
+  `web` entirely. `onUploadFinish` closes the loop itself (creates the `MediaSource`, updates the
+  `Movie`, enqueues `bull:process`) in the same request that received the last chunk, so there's no
+  window where a file is uploaded but unregistered. `web` still never touches the database and has
+  no other path to `api` besides `fetchGraphQL`.
 
 ## Current state — do not treat these files as reference code
 

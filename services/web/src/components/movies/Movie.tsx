@@ -1,7 +1,15 @@
+"use client";
 import Image from "next/image";
 import type { Movie as MovieRecord } from "@/actions/movies";
+import { FileVideo } from "lucide-react";
+import ImportFileModal from "@/components/import/importFileModal";
+import { useModal } from "@/hooks/useModal";
+import Button from "@/components/ui/button/Button";
+import { MEDIA_TYPE } from "@/types/media";
 
 export default function Movie({ movie }: { movie: MovieRecord }) {
+
+  const { isOpen: isFileModalOpen, openModal: openFileModal, closeModal: closeFileModal } = useModal();
 
   return (
     <div className="flex flex-col gap-8 md:flex-row">
@@ -35,6 +43,13 @@ export default function Movie({ movie }: { movie: MovieRecord }) {
             </p>
         </div>
 
+        <div className="flex flex-wrap gap-3">
+            <Button size="sm" variant="outline" onClick={openFileModal}>
+              <FileVideo size={18} />
+              File
+            </Button>
+        </div>
+
         <div className="space-y-2">
             <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Sinopsis</h4>
             <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">
@@ -42,6 +57,13 @@ export default function Movie({ movie }: { movie: MovieRecord }) {
             </p>
         </div>
       </div>
+
+      <ImportFileModal 
+        isOpen={isFileModalOpen} 
+        onClose={closeFileModal} 
+        item={movie} 
+        mediaType={MEDIA_TYPE.MOVIE}
+      />
 
 
 

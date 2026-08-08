@@ -12,6 +12,7 @@ import { SettingsModule } from './settings/settings.module';
 import { DownloadsModule } from './downloads/downloads.module';
 import { MediaSourcesModule } from './media-sources/media-sources.module';
 import { ProcessJobsModule } from './process-jobs/process-jobs.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ProcessJobsModule } from './process-jobs/process-jobs.module';
     DownloadsModule,
     MediaSourcesModule,
     ProcessJobsModule,
+    UploadsModule,
   ],
   providers: [AppResolver],
 })

@@ -3,6 +3,7 @@ import { seedLanguages } from './languages';
 import { seedUsers } from './users';
 import { seedMovies } from './movie';
 import { seedSettings } from './settings';
+import { seedMediaSource } from './media-source';
 
 const prisma = new PrismaService();
 
@@ -15,6 +16,7 @@ async function main() {
   await seedUsers(prisma);
   await seedMovies(prisma);
   await seedSettings(prisma);
+  await seedMediaSource(prisma);
 
   console.log('✅ Seeders completados con éxito.');
 }

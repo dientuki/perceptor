@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, ChildProcess } from 'node:child_process';
 import { rm, rename, stat } from 'node:fs/promises';
 
 // Cuántas líneas de stderr de ffmpeg se guardan para el errorMessage que
@@ -14,33 +14,21 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-function runMkvmerge(remuxPath: string, workingPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const merge = spawn('mkvmerge', ['-o', remuxPath, workingPath]);
-    let stderr = '';
-    merge.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
-    });
-    merge.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`mkvmerge falló con código ${code}: ${stderr.trim().slice(-500)}`));
-      }
-    });
-    merge.on('error', reject);
-  });
-}
-
 // Corre ffmpeg y, si termina bien, remuxea con mkvmerge para corregir
-// metadatos del contenedor antes de dejar el archivo en su ruta final.
+// metadatos del contenedor — mkvmerge escribe DIRECTO al destino final.
 //
-// Secuencia de archivos, ninguno escrito directo sobre `output`:
-//   ffmpeg   -> workingPath (<final>.working.mkv)
-//   mkvmerge -> remuxPath   (<final>.remux.mkv)
-//   rename   -> output      (atómico dentro del mismo filesystem)
-// Antes mkvmerge escribía directo sobre el nombre final: si lo mataban a
-// mitad de camino (SIGKILL, disco lleno, corte de luz), Jellyfin podía
+// Secuencia de archivos:
+//   ffmpeg   -> workingPath (junto al ORIGEN: <input>.working.mkv, ver
+//               encode.ffmpeg.ts) — el encode dura horas, no tiene sentido
+//               pagar la latencia de un disco de biblioteca lento durante
+//               todo ese tiempo.
+//   mkvmerge -> partPath    (<final>.part.mkv, en el DESTINO) — igual lee el
+//               archivo entero y lo vuelve a escribir, así que hace de remux
+//               y de "copiar al destino" en una sola pasada.
+//   rename   -> output      (atómico: partPath y output son hermanos en el
+//               mismo filesystem de destino, así que nunca cruza dispositivos)
+// Ninguno de los dos pasos escribe nunca directo sobre `output`: si se corta
+// a mitad de camino (SIGKILL, disco lleno, corte de luz), Jellyfin no puede
 // encontrar un archivo con nombre definitivo pero contenido truncado.
 //
 // `durationSeconds` es el denominador para calcular el progreso a partir de
@@ -49,7 +37,7 @@ function runMkvmerge(remuxPath: string, workingPath: string): Promise<void> {
 export function runFfmpeg(
   args: string[],
   workingPath: string,
-  remuxPath: string,
+  partPath: string,
   output: string,
   durationSeconds: number,
   onProgress: (progress: number) => Promise<void>,
@@ -58,49 +46,70 @@ export function runFfmpeg(
     const finalCmd = `ffmpeg ${args.map((arg) => (arg.includes(' ') ? `"${arg}"` : arg)).join(' ')}`;
     console.log(`[ffmpeg] ejecutando: ${finalCmd}`);
 
-    const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-
     const stderrTail: string[] = [];
     let progressInFlight = false;
     let settled = false;
 
+    // Apunta al proceso que esté corriendo en cada momento (primero ffmpeg,
+    // después mkvmerge): así una señal de cierre llega al que corresponda sin
+    // importar en qué paso esté el job. El bug viejo sólo mataba a ffmpeg —
+    // durante todo el remux (ahora potencialmente varios minutos, escribiendo
+    // a un disco lento) no había ningún proceso registrado para matar.
+    let activeChild: ChildProcess | null = null;
+
     const cleanupTemps = async () => {
+      // Los dos temporales viven en discos distintos (origen y destino): un
+      // .part.mkv huérfano en la biblioteca puede pesar varios GB, así que
+      // limpiarlo acá importa tanto como limpiar el .working.mkv del origen.
       await rm(workingPath, { force: true }).catch(() => {});
-      await rm(remuxPath, { force: true }).catch(() => {});
+      await rm(partPath, { force: true }).catch(() => {});
     };
 
     // Docker manda SIGTERM en `docker compose stop`/restart, no SIGINT — el
-    // runner viejo sólo escuchaba SIGINT, así que un stop dejaba el ffmpeg
-    // huérfano. ffmpeg maneja SIGTERM igual que SIGINT (para el loop principal
-    // y cierra el archivo de forma prolija); el 'close' que dispara después
-    // limpia los temporales por el camino normal de error (code !== 0).
+    // runner viejo sólo escuchaba SIGINT, así que un stop dejaba el proceso
+    // huérfano. ffmpeg y mkvmerge manejan SIGTERM igual que SIGINT.
     const killHandler = () => {
-      if (!child.killed) {
-        console.log('[ffmpeg] señal de cierre recibida, matando el proceso...');
-        child.kill('SIGTERM');
+      if (activeChild && !activeChild.killed) {
+        console.log('[ffmpeg] señal de cierre recibida, matando el proceso activo...');
+        activeChild.kill('SIGTERM');
       }
     };
 
     process.once('SIGINT', killHandler);
     process.once('SIGTERM', killHandler);
     // Último recurso si el proceso se cae sin pasar por SIGINT/SIGTERM (p. ej.
-    // una excepción no capturada en otro punto del worker): sólo mata al hijo,
-    // sin tocar el filesystem — 'exit' no puede esperar operaciones async.
+    // una excepción no capturada en otro punto del worker): sólo mata al hijo
+    // activo, sin tocar el filesystem — 'exit' no puede esperar operaciones async.
     process.once('exit', () => {
-      if (!child.killed) child.kill('SIGKILL');
+      if (activeChild && !activeChild.killed) activeChild.kill('SIGKILL');
     });
 
+    // Se llama recién al final real del trabajo (éxito o fallo, tras ffmpeg
+    // Y tras mkvmerge) — no en el close de ffmpeg, que es lo que dejaba el
+    // remux sin ningún handler de señales registrado.
     function cleanupListeners() {
       process.removeListener('SIGINT', killHandler);
       process.removeListener('SIGTERM', killHandler);
     }
 
-    child.on('error', (err) => {
+    function settleReject(err: Error) {
       if (settled) return;
       settled = true;
       cleanupListeners();
       cleanupTemps().finally(() => reject(err));
-    });
+    }
+
+    function settleResolve() {
+      if (settled) return;
+      settled = true;
+      cleanupListeners();
+      resolve(finalCmd);
+    }
+
+    const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    activeChild = child;
+
+    child.on('error', (err) => settleReject(err));
 
     // out_time_us= llega en microsegundos y viene en 'N/A' durante el
     // buffering inicial de encoders como SVT-AV1 — hay que saltearlo, no
@@ -137,15 +146,12 @@ export function runFfmpeg(
 
     child.on('close', (code) => {
       if (settled) return;
-      settled = true;
-      cleanupListeners();
-      void handleClose(code);
+      void handleFfmpegClose(code);
     });
 
-    async function handleClose(code: number | null) {
+    async function handleFfmpegClose(code: number | null) {
       if (code !== 0) {
-        await cleanupTemps();
-        reject(new Error(`ffmpeg terminó con código ${code}: ${stderrTail.slice(-10).join(' | ')}`));
+        settleReject(new Error(`ffmpeg terminó con código ${code}: ${stderrTail.slice(-10).join(' | ')}`));
         return;
       }
 
@@ -154,20 +160,45 @@ export function runFfmpeg(
       // reject() — con concurrency 1 eso ocupaba el worker de encode
       // indefinidamente. Ahora siempre se resuelve uno de los dos caminos.
       if (!(await exists(workingPath))) {
-        reject(new Error(`ffmpeg terminó con código 0 pero no generó ${workingPath}`));
+        settleReject(new Error(`ffmpeg terminó con código 0 pero no generó ${workingPath}`));
+        return;
+      }
+
+      // De acá en más el trabajo pesado ya no es CPU, es I/O contra el disco
+      // de destino: si es el disco lento de la biblioteca, este paso puede
+      // tardar varios minutos por sí solo (progreso clavado en 99% mientras
+      // tanto) — por eso importa que activeChild siga apuntando a algo vivo.
+      console.log(`[ffmpeg] muxing con mkvmerge hacia el destino (${partPath})...`);
+
+      const merge = spawn('mkvmerge', ['-o', partPath, workingPath]);
+      activeChild = merge;
+
+      let mergeStderr = '';
+      merge.stderr.on('data', (data: Buffer) => {
+        mergeStderr += data.toString();
+      });
+
+      merge.on('error', (err) => settleReject(err));
+
+      merge.on('close', (mergeCode) => {
+        if (settled) return;
+        void handleMergeClose(mergeCode, mergeStderr);
+      });
+    }
+
+    async function handleMergeClose(mergeCode: number | null, mergeStderr: string) {
+      if (mergeCode !== 0) {
+        settleReject(new Error(`mkvmerge falló con código ${mergeCode}: ${mergeStderr.trim().slice(-500)}`));
         return;
       }
 
       try {
-        console.log('[ffmpeg] muxing con mkvmerge para corregir metadatos...');
-        await runMkvmerge(remuxPath, workingPath);
         await rm(workingPath, { force: true });
-        await rename(remuxPath, output);
+        await rename(partPath, output);
         console.log(`[ffmpeg] completado -> ${output}`);
-        resolve(finalCmd);
+        settleResolve();
       } catch (err) {
-        await cleanupTemps();
-        reject(err instanceof Error ? err : new Error(String(err)));
+        settleReject(err instanceof Error ? err : new Error(String(err)));
       }
     }
   });
