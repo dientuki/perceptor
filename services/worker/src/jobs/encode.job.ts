@@ -14,6 +14,7 @@ export type EncodeJobDetails = {
   title: string;
   year: number | null;
   originalLanguage: string;
+  originalLanguageIso3: string;
   isLiveAction: boolean;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -39,7 +40,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage isLiveAction
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 isLiveAction
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath
       }
@@ -80,7 +81,12 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       }
     };
 
-    const { ffmpegCommand } = await encode(details.inputFilePath, outputPath, onProgress);
+    const { ffmpegCommand } = await encode(
+      details.inputFilePath,
+      outputPath,
+      { originalLanguageIso3: details.originalLanguageIso3, isLiveAction: details.isLiveAction },
+      onProgress,
+    );
 
     await fetchGraphQL(
       `mutation ($id: Int!, $out: String!, $cmd: String!) {

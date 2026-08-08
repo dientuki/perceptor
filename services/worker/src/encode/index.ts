@@ -10,12 +10,12 @@ const DRIVERS: Record<string, EncodeFn> = {
   ffmpeg: encodeFfmpeg,
 };
 
-export const encode: EncodeFn = (input, output, onProgress) => {
+export const encode: EncodeFn = (input, output, details, onProgress) => {
   const driverName = process.env.ENCODE_DRIVER ?? 'mock';
   const driver = DRIVERS[driverName];
   if (!driver) {
     throw new Error(`ENCODE_DRIVER desconocido: ${driverName}`);
   }
 
-  return driver(input, output, onProgress);
+  return driver(input, output, details, onProgress);
 };

@@ -2,8 +2,12 @@
 # 1. BASE: Entorno común (Alpine + FFmpeg + libc6)
 # ==========================================
 FROM node:24.18.0-alpine AS base
-# Instalamos FFmpeg y librerías de compatibilidad requeridas por el worker
-RUN apk add --no-cache ffmpeg libc6-compat
+# Instalamos FFmpeg y librerías de compatibilidad requeridas por el worker.
+# mkvtoolnix: mkvmerge para el remux final (ver src/ffmpeg/runner.ts).
+# vulkan-loader + mesa-vulkan-intel: habilitan el filtro libplacebo (tonemap
+# 4K HDR/DoVi por GPU, ver src/ffmpeg/params.ts) cuando USE_GPU=true mapea
+# /dev/dri al contenedor. Sin esto libplacebo falla con VK_ERROR_INCOMPATIBLE_DRIVER.
+RUN apk add --no-cache ffmpeg mkvtoolnix vulkan-loader mesa-vulkan-intel libc6-compat
 WORKDIR /app
 
 # ==========================================

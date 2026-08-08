@@ -153,6 +153,9 @@ services:
       - DOWNLOADS_DIR=${CONTAINER_DOWNLOADS_DIR}
       - DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
       - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
+      - ENCODE_DRIVER=${ENCODE_DRIVER}
+      - ENCODE_SAMPLE_SECONDS=${ENCODE_SAMPLE_SECONDS}
+      - ENCODE_MOCK_SECONDS=${ENCODE_MOCK_SECONDS}
     depends_on:
       redis:
         condition: service_healthy

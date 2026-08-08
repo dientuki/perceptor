@@ -31,7 +31,13 @@ export class EncodeJobDetails {
   year: number | null;
 
   @Field()
-  originalLanguage: string;
+  originalLanguage: string; // iso2, tal cual lo guarda Movie/Show (ej. 'en', 'ja')
+
+  // iso3 del mismo idioma (ej. 'eng', 'jpn') — lo necesita el driver de ffmpeg para
+  // elegir la pista de audio/subtítulo original (ver src/ffmpeg/params.ts en el worker,
+  // que compara contra tags.language, que ffprobe reporta en iso3).
+  @Field()
+  originalLanguageIso3: string;
 
   @Field()
   isLiveAction: boolean;

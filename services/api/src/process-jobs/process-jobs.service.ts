@@ -44,6 +44,7 @@ export class ProcessJobsService {
         title: movie.title,
         year: movie.releaseDate?.getFullYear() ?? null,
         originalLanguage: movie.originalLanguage,
+        originalLanguageIso3: await this.resolveIso3(movie.originalLanguage),
         isLiveAction: movie.isLiveAction,
         seasonNumber: null,
         episodeNumber: null,
@@ -61,6 +62,7 @@ export class ProcessJobsService {
         title: show.title,
         year: show.releaseDate?.getFullYear() ?? null,
         originalLanguage: show.originalLanguage,
+        originalLanguageIso3: await this.resolveIso3(show.originalLanguage),
         isLiveAction: show.isLiveAction,
         seasonNumber: episode.season.seasonNumber,
         episodeNumber: episode.episodeNumber,
@@ -72,6 +74,15 @@ export class ProcessJobsService {
     // ProcessJob. Si pasa, es un dato corrupto — mejor que el worker falle acá
     // con un mensaje claro a que arme una ruta de salida sin media asociada.
     throw new Error(`El processJob ${id} no tiene movie ni episode asociado`);
+  }
+
+  // Movie/Show guardan el idioma como iso2 (TMDB). El driver de ffmpeg necesita
+  // iso3 para comparar contra tags.language de ffprobe. Si el idioma no está
+  // sembrado en la tabla languages, cae a 'eng' en vez de romper el job — un
+  // idioma sin traducir es mejor que un encode que nunca arranca.
+  private async resolveIso3(originalLanguageIso2: string): Promise<string> {
+    const language = await this.prisma.language.findUnique({ where: { iso2: originalLanguageIso2 } });
+    return language?.iso3 ?? 'eng';
   }
 
   async encodeStarted(processJobId: number) {

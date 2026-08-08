@@ -1,6 +1,7 @@
 #!/bin/bash
 # Levanta el stack en modo desarrollo. Lee USE_TRAEFIK de .env para decidir si
-# el servicio traefik entra en el docker compose up.
+# el servicio traefik entra en el docker compose up, y USE_GPU para sumar el
+# overlay docker-compose.gpu.yaml (mapea /dev/dri al worker).
 set -e
 cd "$(dirname "$0")/.."
 
@@ -16,4 +17,9 @@ if [ "${USE_TRAEFIK}" = "true" ]; then
   SERVICES="traefik $SERVICES"
 fi
 
-BUILD_TARGET=dev docker compose up $SERVICES
+COMPOSE_FILES="-f docker-compose.yaml"
+if [ "${USE_GPU}" = "true" ]; then
+  COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yaml"
+fi
+
+BUILD_TARGET=dev docker compose $COMPOSE_FILES up $SERVICES

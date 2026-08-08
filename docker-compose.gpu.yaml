@@ -1,0 +1,10 @@
+# Overlay opcional: mapea la GPU del host al worker para que libplacebo (tonemap 4K HDR/DoVi,
+# ver services/worker/src/ffmpeg/params.ts) corra por GPU en vez de CPU. bin/dev y bin/prod lo
+# suman a `docker compose` con -f cuando USE_GPU=true en .env — mismo patrón que USE_TRAEFIK.
+#
+# El encode AV1 en sí siempre corre en CPU: ni la iGPU Intel ni la mayoría de las dGPU pueden
+# codificar AV1 en hardware; esto sólo acelera el paso de tonemap/escalado previo.
+services:
+  worker:
+    devices:
+      - /dev/dri:/dev/dri
