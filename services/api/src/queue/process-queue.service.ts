@@ -1,17 +1,12 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { PROCESS_QUEUE, SOURCE_READY_JOB, SourceReadyJob } from '@/queue/types';
+import { redisConnection } from '@/queue/connection';
 
 @Injectable()
 export class ProcessQueueService implements OnModuleDestroy {
   private readonly queue = new Queue<SourceReadyJob>(PROCESS_QUEUE, {
-    // Opciones planas a propósito: BullMQ arma su propia conexión con los
-    // settings que necesita, en vez de reusar RedisService (maxRetriesPerRequest: 3
-    // e ioredis v6, incompatibles con los comandos bloqueantes de BullMQ).
-    connection: {
-      host: process.env.REDIS_HOST ?? 'redis',
-      port: Number(process.env.REDIS_PORT ?? 6379),
-    },
+    connection: redisConnection(),
   });
 
   async addSourceReady(payload: SourceReadyJob) {

@@ -9,3 +9,10 @@ export const SOURCE_READY_JOB = 'source-ready';
 export type SourceReadyJob = {
   mediaSourceId: number;
 };
+
+export const ENCODE_QUEUE = 'encode';
+export const ENCODE_JOB = 'encode';
+
+export type EncodeJob = {
+  processJobId: number;
+};
