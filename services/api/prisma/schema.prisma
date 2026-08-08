@@ -30,12 +30,6 @@ enum SourceStatus {
   ERROR // Error en cualquier punto
 }
 
-enum SourceFileStatus {
-  MATCHED // Se resolvió a qué media pertenece
-  UNMATCHED // No se pudo parsear, o el episodio no existe en la DB
-  IGNORED // Sample, subtítulo, .nfo, extensión no soportada
-}
-
 enum EncodeStatus {
   WAITING
   QUEUED
@@ -116,25 +110,16 @@ model MediaSource {
   @@map("media_sources")
 }
 
-// Un archivo encontrado dentro de un MediaSource, mapeado (o no) a una película/episodio
+// El archivo de video de un MediaSource, ya resuelto a qué película/episodio pertenece
 model SourceFile {
   id Int @id @default(autoincrement())
 
   mediaSourceId Int
   mediaSource   MediaSource @relation(fields: [mediaSourceId], references: [id], onDelete: Cascade)
 
-  // Ruta tal como está en disco. NO se borra tras procesar: el original queda
-  // para que el usuario decida qué hacer con él.
-  filePath String  @db.VarChar(500)
-  fileName String  @db.VarChar(500)
-  size     BigInt?
-
-  // Resultado del parseo del nombre (S03E02 → 3, 2)
-  parsedSeason  Int?
-  parsedEpisode Int?
-
-  status SourceFileStatus @default(UNMATCHED)
-  reason String?          @db.VarChar(500) // Por qué quedó UNMATCHED o IGNORED
+  // Ruta completa tal como está en disco. NO se borra tras procesar: el original
+  // queda para que el usuario decida qué hacer con él.
+  filePath String @db.VarChar(500)
 
   movieId   Int?
   movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: SetNull)
@@ -147,7 +132,6 @@ model SourceFile {
   updatedAt DateTime @updatedAt
 
   @@unique([mediaSourceId, filePath])
-  @@index([status])
   @@index([movieId])
   @@index([episodeId])
   @@map("source_files")
