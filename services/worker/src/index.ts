@@ -1,11 +1,18 @@
 import { Worker } from 'bullmq';
-import { PROCESS_QUEUE, SOURCE_READY_JOB } from './queue/types';
-import type { SourceReadyJob } from './queue/types';
+import { PROCESS_QUEUE, SOURCE_READY_JOB, ENCODE_QUEUE, ENCODE_JOB } from './queue/types';
+import type { SourceReadyJob, EncodeJob } from './queue/types';
 import { handleSourceReady } from './jobs/source-ready.job';
+import { handleEncode } from './jobs/encode.job';
 
-// Conexión con opciones planas, igual que el productor (process-queue.service.ts
-// en la api): BullMQ arma su propia conexión con los settings que necesita.
-const worker = new Worker<SourceReadyJob>(
+// Conexión con opciones planas, igual que los productores (process-queue.service.ts
+// y encode-queue.service.ts en la api): BullMQ arma su propia conexión con los
+// settings que necesita.
+const connection = {
+  host: process.env.REDIS_HOST ?? 'redis',
+  port: Number(process.env.REDIS_PORT ?? 6379),
+};
+
+const scanWorker = new Worker<SourceReadyJob>(
   PROCESS_QUEUE,
   async (job) => {
     if (job.name !== SOURCE_READY_JOB) {
@@ -16,24 +23,54 @@ const worker = new Worker<SourceReadyJob>(
     await handleSourceReady(job);
   },
   {
-    connection: {
-      host: process.env.REDIS_HOST ?? 'redis',
-      port: Number(process.env.REDIS_PORT ?? 6379),
-    },
-    // Un escaneo es IO sobre una carpeta y FFmpeg (paso siguiente) no debe
-    // arrancar N veces por accidente.
+    connection,
+    // Un escaneo es IO sobre una carpeta y un encode no debe arrancar N veces
+    // por accidente.
     concurrency: 1,
   },
 );
 
-worker.on('completed', (job) => {
+// Worker separado, no un job name más en `process`: un encode puede tardar
+// horas, y con concurrency:1 en una sola cola compartida o los escaneos
+// quedan bloqueados detrás de FFmpeg, o se arriesgan N FFmpeg simultáneos.
+// Cada Worker abre su propia conexión bloqueante, así que este puede estar
+// horas ocupado sin frenar al de arriba.
+const encodeWorker = new Worker<EncodeJob>(
+  ENCODE_QUEUE,
+  async (job) => {
+    if (job.name !== ENCODE_JOB) {
+      console.log(`[worker] job desconocido ${job.name}, se ignora`);
+      return;
+    }
+
+    await handleEncode(job);
+  },
+  {
+    connection,
+    concurrency: 1,
+  },
+);
+
+scanWorker.on('completed', (job) => {
   console.log(`[worker] completado ${job.id}`);
 });
 
-worker.on('failed', (job, err) => {
+scanWorker.on('failed', (job, err) => {
   console.error(`[worker] falló ${job?.id}:`, err);
 });
 
-process.on('SIGTERM', () => void worker.close());
+encodeWorker.on('completed', (job) => {
+  console.log(`[worker] encode completado ${job.id}`);
+});
+
+encodeWorker.on('failed', (job, err) => {
+  console.error(`[worker] encode falló ${job?.id}:`, err);
+});
+
+process.on('SIGTERM', () => {
+  void scanWorker.close();
+  void encodeWorker.close();
+});
 
 console.log('[worker] escuchando la cola', PROCESS_QUEUE);
+console.log('[worker] escuchando la cola', ENCODE_QUEUE);
