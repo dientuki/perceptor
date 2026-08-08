@@ -84,6 +84,7 @@ type EncodeJobDetails {
   status: String!
   inputFilePath: String!
   kind: String!
+  tmdbId: Int!
   title: String!
   year: Int
   originalLanguage: String!

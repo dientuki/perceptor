@@ -40,6 +40,7 @@ export class ProcessJobsService {
       return {
         ...base,
         kind: 'MOVIE',
+        tmdbId: movie.tmdbId,
         title: movie.title,
         year: movie.releaseDate?.getFullYear() ?? null,
         originalLanguage: movie.originalLanguage,
@@ -56,6 +57,7 @@ export class ProcessJobsService {
       return {
         ...base,
         kind: 'EPISODE',
+        tmdbId: show.tmdbId,
         title: show.title,
         year: show.releaseDate?.getFullYear() ?? null,
         originalLanguage: show.originalLanguage,
