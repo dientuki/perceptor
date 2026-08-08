@@ -37,7 +37,13 @@ export const encodeMock: EncodeFn = async (input, output, onProgress) => {
     await onProgress(Math.round((step / STEPS) * 100));
   }
 
-  await rename(workingPath, output);
+  // Comentado a propósito mientras se prueba el workflow a mano: el rename es
+  // justo el paso que deja el archivo con su nombre definitivo en la
+  // biblioteca real (DESTINATIONS_DIR), y correr el mock varias veces seguidas
+  // ahí es fácil de confundir con una biblioteca real. El .working.mkv queda
+  // en destino (visible, sin ensuciar el nombre final) hasta que se
+  // descomente para probar el paso completo.
+  // await rename(workingPath, output);
 
   return { ffmpegCommand: `[mock] cp "${input}" "${output}"` };
 };

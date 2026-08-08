@@ -10,6 +10,7 @@ export type EncodeJobDetails = {
   status: string;
   inputFilePath: string;
   kind: string; // 'MOVIE' | 'EPISODE'
+  tmdbId: number;
   title: string;
   year: number | null;
   originalLanguage: string;
@@ -38,7 +39,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind title year originalLanguage isLiveAction
+        id status inputFilePath kind tmdbId title year originalLanguage isLiveAction
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath
       }
