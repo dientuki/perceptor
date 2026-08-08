@@ -19,6 +19,11 @@ export class EncodeJobDetails {
   @Field()
   kind: string; // 'MOVIE' | 'EPISODE'
 
+  // De la Movie o del Show (según kind) — lo necesita el cliente de Jellyfin
+  // para el matching por [tmdbid=...] en vez de confiar en el nombre.
+  @Field(() => Int)
+  tmdbId: number;
+
   @Field()
   title: string;
 
