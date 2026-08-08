@@ -4,6 +4,15 @@ import type { SourceReadyJob, EncodeJob } from './queue/types';
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
 
+// El container corre como PUID:PGID (ver docker-compose.yaml, "user:"), no
+// root: sin esto el umask por defecto (022) deja carpetas 755/root y archivos
+// 644, que Jellyfin (mismo grupo, pero otro uid) no puede escribir — necesita
+// meter folder.jpg/.nfo/.trickplay adentro de cada carpeta que arma el
+// worker. Con 002, sobre carpetas setgid (la biblioteca real ya lo tiene)
+// queda 2775/664: mismo dueño de grupo, escribible por el grupo entero. Se
+// hereda a ffmpeg/mkvmerge como hijos, así que no hace falta tocar runner.ts.
+process.umask(0o002);
+
 // Conexión con opciones planas, igual que los productores (process-queue.service.ts
 // y encode-queue.service.ts en la api): BullMQ arma su propia conexión con los
 // settings que necesita.

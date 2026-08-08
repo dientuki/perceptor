@@ -1,4 +1,4 @@
-import { mkdir, copyFile, rename } from 'node:fs/promises';
+import { mkdir, copyFile, chmod, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { EncodeFn } from './types';
 
@@ -27,6 +27,13 @@ export const encodeMock: EncodeFn = async (input, output, _details, onProgress) 
   const workingPath = toWorkingPath(output);
   await mkdir(dirname(output), { recursive: true });
   await copyFile(input, workingPath);
+  // copyFile preserva el modo del archivo origen en vez de respetar el umask
+  // del proceso (a diferencia de mkdir/writeFile) — con un source suelto de
+  // pruebas eso puede dejar el resultado en 644 en vez de 664, distinto de lo
+  // que produciría ffmpeg (un proceso hijo que sí hereda el umask del padre,
+  // ver process.umask() en index.ts). Se fuerza acá para que el mock no
+  // esconda un problema de permisos ni lo invente donde no lo hay.
+  await chmod(workingPath, 0o664);
 
   const totalMs = Number(process.env.ENCODE_MOCK_SECONDS ?? 5) * 1000;
   for (let step = 1; step <= STEPS; step++) {

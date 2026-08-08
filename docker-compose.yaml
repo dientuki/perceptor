@@ -142,6 +142,12 @@ services:
       #dockerfile: docker/worker.Dockerfile
       target: ${BUILD_TARGET:-dev}
     container_name: perceptor-worker
+    # No root: los archivos que arma (biblioteca de Jellyfin) tienen que quedar
+    # con el mismo dueño que el resto — MEDIA_GID (no necesariamente PGID, que
+    # también consumen torrent/indexer) es el grupo dueño de esas carpetas.
+    user: "${PUID}:${PGID}"
+    group_add:
+      - "${MEDIA_GID}"
     volumes:
       - ./services/worker:/app
       - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
