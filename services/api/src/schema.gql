@@ -79,6 +79,24 @@ type MediaSource {
   errorMessage: String
 }
 
+type EncodeJobDetails {
+  id: ID!
+  status: String!
+  inputFilePath: String!
+  kind: String!
+  title: String!
+  year: Int
+  originalLanguage: String!
+  isLiveAction: Boolean!
+  seasonNumber: Int
+  episodeNumber: Int
+  episodeTitle: String
+  mediaSourceId: Int!
+  sourceKind: String!
+  infoHash: String
+  downloadPath: String
+}
+
 type Query {
   ping: String!
   items: [Item!]!
@@ -95,6 +113,9 @@ type Query {
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!): [TorrentResult!]!
   mediaSource(id: Int!): MediaSource
+
+  """Datos que el worker necesita para encodear un ProcessJob"""
+  processJob(id: Int!): EncodeJobDetails!
 }
 
 type Mutation {
@@ -119,6 +140,21 @@ type Mutation {
   El worker reporta el inventario de archivos de un MediaSource ya descargado
   """
   sourceScanned(mediaSourceId: Int!, files: [SourceFileInput!]!, matchedFilePath: String): MediaSource!
+
+  """El worker avisa que arrancó a encodear un ProcessJob"""
+  encodeStarted(processJobId: Int!): String!
+
+  """El worker reporta el progreso (0-100) de un encode en curso"""
+  encodeProgress(processJobId: Int!, progress: Int!): String!
+
+  """El worker avisa que un encode terminó bien"""
+  encodeCompleted(processJobId: Int!, outputFilePath: String!, ffmpegCommand: String!): String!
+
+  """El worker avisa que un encode falló"""
+  encodeFailed(processJobId: Int!, errorMessage: String!): String!
+
+  """El worker pide borrar el torrent del cliente tras un encode exitoso"""
+  downloadRemove(mediaSourceId: Int!): String!
 }
 
 input LoginInput {
