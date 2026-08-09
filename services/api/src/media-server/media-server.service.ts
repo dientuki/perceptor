@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { createMediaServerClient } from '@/clients/media-server/registry';
+import { MEDIA_SERVER_NONE } from '@/clients/media-server/types';
 
 @Injectable()
 export class MediaServerService {
@@ -19,6 +20,16 @@ export class MediaServerService {
     try {
       const config = await this.settings.getMap();
       const clientId = config.media_server_client;
+
+      if (clientId && clientId !== MEDIA_SERVER_NONE && !config.media_server_host) {
+        // Cliente elegido pero sin host: 'localhost' sería el propio api, no
+        // la PC del usuario — mejor avisar claro acá que dejar que el fetch
+        // falle contra un host implícito y equivocado (ver jellyfin.ts).
+        console.warn(
+          `[media-server] "${clientId}" configurado sin host — completá media_server_host en Settings`,
+        );
+        return;
+      }
 
       const client = createMediaServerClient(clientId, {
         host: config.media_server_host,

@@ -1,5 +1,10 @@
 import { spawn, ChildProcess } from 'node:child_process';
-import { rm, rename, stat } from 'node:fs/promises';
+import { mkdir, rm, rename, stat } from 'node:fs/promises';
+import { dirname } from 'node:path';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // Cuántas líneas de stderr de ffmpeg se guardan para el errorMessage que
 // termina en encodeFailed — sin esto un fallo de encode no dice nada útil.
@@ -169,6 +174,22 @@ export function runFfmpeg(
       // tardar varios minutos por sí solo (progreso clavado en 99% mientras
       // tanto) — por eso importa que activeChild siga apuntando a algo vivo.
       console.log(`[ffmpeg] muxing con mkvmerge hacia el destino (${partPath})...`);
+
+      try {
+        // La carpeta de destino se crea recién acá, justo antes del primer
+        // byte que se escribe ahí — no al arrancar el encode (que puede durar
+        // horas). Así nadie mirando la biblioteca ve una carpeta vacía
+        // fingiendo contenido que todavía no existe.
+        await mkdir(dirname(partPath), { recursive: true });
+        // Margen defensivo para destinos de red (NFS/SMB): un mkdir que ya
+        // resolvió puede tardar un instante en propagarse antes de que otro
+        // proceso (mkvmerge) la vea — barato comparado con las horas que ya
+        // llevó el encode.
+        await sleep(1000);
+      } catch (err) {
+        settleReject(err instanceof Error ? err : new Error(String(err)));
+        return;
+      }
 
       const merge = spawn('mkvmerge', ['-o', partPath, workingPath]);
       activeChild = merge;

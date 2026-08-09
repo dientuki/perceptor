@@ -2,9 +2,12 @@ import { MediaServerClient, MediaServerConfig } from './types';
 import { HTTP_METHOD } from '@/types/http';
 
 export const createJellyfinClient = (config: MediaServerConfig): MediaServerClient => {
-  const host = config.host || 'localhost';
-  const port = config.port || '8096';
-  const apiKey = config.apiKey;
+  // Sin fallback a 'localhost': acá adentro "localhost" sería el container
+  // api, casi nunca donde corre Jellyfin de verdad — un default silencioso
+  // ahí sólo cambia un error visible (host vacío) por uno confuso
+  // (ECONNREFUSED contra el propio api). MediaServerService ya garantiza que
+  // no llega acá con el host vacío (ver notifyCreated).
+  const { host, port, apiKey } = config;
 
   const baseUrl = `http://${host}:${port}/`;
 

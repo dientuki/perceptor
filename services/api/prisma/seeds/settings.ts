@@ -24,10 +24,14 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'tracker_port', value: '9696' },
     { key: 'tracker_api_key', value: '' },
 
-    // 'none' por default: una instalación limpia no le habla a nadie. Elegir
-    // 'jellyfin' desde Settings usa estos host/port como valor inicial.
+    // 'none' por default: una instalación limpia no le habla a nadie. Host
+    // vacío a propósito: 'localhost' parece un valor válido pero adentro del
+    // container api apunta al propio api, no a la PC del usuario — sembrarlo
+    // ahí sólo esconde el error hasta que alguien elige Jellyfin y falla en
+    // silencio. Vacío obliga a completarlo con el valor real (ver el hint en
+    // MediaServerFields.tsx).
     { key: 'media_server_client', value: 'none' },
-    { key: 'media_server_host', value: 'localhost' },
+    { key: 'media_server_host', value: '' },
     { key: 'media_server_port', value: '8096' },
     { key: 'media_server_api_key', value: '' },
 

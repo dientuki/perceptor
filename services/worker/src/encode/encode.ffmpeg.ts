@@ -1,4 +1,3 @@
-import { mkdir } from 'node:fs/promises';
 import { dirname, join, basename, extname } from 'node:path';
 import type { EncodeFn } from './types';
 import { getMetadata } from '../ffmpeg/metadata';
@@ -29,8 +28,10 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress)
   const workingPath = toWorkingPath(input);
   const partPath = toPartPath(output);
 
-  await mkdir(dirname(output), { recursive: true });
-
+  // La carpeta de destino se crea en runner.ts, recién antes del remux con
+  // mkvmerge — no acá. El encode puede tardar horas; crearla ya en este punto
+  // deja una carpeta vacía visible en la biblioteca (y al media server) todo
+  // ese tiempo, fingiendo contenido que todavía no existe.
   const metadata = await getMetadata(input);
 
   // Con ENCODE_SAMPLE_SECONDS seteado sólo se encodean esos segundos (ver
