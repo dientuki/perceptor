@@ -42,7 +42,13 @@ export default function MediaServerFields({ options, client, host, port, apiKey 
         <>
           <div>
             <Label htmlFor="media_server_host">Host</Label>
-            <Input id="media_server_host" name="media_server_host" defaultValue={host} />
+            <Input
+              id="media_server_host"
+              name="media_server_host"
+              defaultValue={host}
+              placeholder="host.docker.internal"
+              hint="Vacío por defecto a propósito: 'localhost' acá sería este mismo servidor, no tu media server. Si corre en tu PC, usá host.docker.internal; si corre en otro container de este stack, el nombre de ese servicio."
+            />
           </div>
 
           <div>
