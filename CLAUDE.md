@@ -14,6 +14,7 @@ Pipeline stage status today:
 | Detect completion, update DB, enqueue job | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | working |
 | Scan downloaded files, inventory | `worker` — BullMQ consumer, talks to `api` over GraphQL | working |
 | Transcode | `worker` (FFmpeg) | not started — `ProcessJob` rows sit in `WAITING` |
+| Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` | working (Jellyfin, opt-in from Settings, default `none`) |
 | Browse library | `web` | working for the movie list |
 
 ## Layout
@@ -98,6 +99,14 @@ secret, never copy them into docs or code):
 `REDIS_HOST`, `HOST_DOWNLOADS_DIR`, `HOST_DESTINATIONS_DIR`,
 `CONTAINER_DOWNLOADS_DIR`, `CONTAINER_DESTINATIONS_DIR`.
 
+`HOST_DOWNLOADS_DIR`/`HOST_DESTINATIONS_DIR` and `CONTAINER_DOWNLOADS_DIR`/`CONTAINER_DESTINATIONS_DIR`
+are also passed into `api` (not just `worker`/`torrent`) — `api`'s `src/media-roots/` module reads
+them to know the two roots the Settings UI is confined to. The `path_downloads`/`path_movies`/
+`path_shows` settings (editable from the web UI) are **segments relative to those roots**, never
+absolute container paths — e.g. `path_movies=Movies` means
+`<HOST_DESTINATIONS_DIR>/Movies` on the host. The UI only ever shows/edits the host-side path; the
+container path never crosses the GraphQL boundary. See `services/api/CLAUDE.md`.
+
 `ADMIN_USER`/`ADMIN_PASSWORD` are the canonical credentials — `QBITTORRENT_USER`/`QBITTORRENT_PASSWORD`
 and `INDEXER_USER`/`INDEXER_PASSWORD` reference them via `.env` interpolation (`${ADMIN_USER}`), and
 the api seed reads them directly, so the app login, qBittorrent's WebUI and Prowlarr's WebUI all
@@ -106,6 +115,14 @@ share one login. Each service's own UI can still change its own credentials afte
 `BUILD_TARGET` is an optional override for which Dockerfile stage to run (`dev` by default,
 `runner` for production) — every Dockerfile has `base` / `dev` / `builder` / `runner` stages, and
 compose falls back to `dev` when it's unset.
+
+The media server (Jellyfin today, see `media_server_client` in Settings) is **not** a service in
+`docker-compose.yaml` — it's assumed to run outside the stack, on the user's own host or LAN. That's
+why the post-encode notification (`api`'s `MediaServerService.notifyCreated`, called from
+`ProcessJobsService.encodeCompleted`) translates the container's output path to the host path via
+`MediaRootsService.containerToHostPath()` before sending it: a Jellyfin outside the stack has no
+idea what `/media/library/...` means, but it can see the same host folder the user configured in
+`HOST_DESTINATIONS_DIR`.
 
 Note: `TMDB_API_KEY` is **not** currently in `.env` — the TMDB bearer token is hardcoded in
 `TMDBClient.ts` instead (see Known debt below). Add it to `.env` if you fix that.
@@ -145,8 +162,9 @@ expect to fix the wiring rather than follow it:
   non-boolean signatures.
 - `services/web/src/components/search/SearchTorrent.tsx`, `SearchTorrentModal.tsx`, `SearchForm.tsx`
   and `src/app/(dashboard)/movies/[id]/page.tsx` — import `@prisma/client`, `@/models/movies.model`,
-  `@/clients/indexer/types`, `@/lib/logger`, `@/actions/indexer`, `@/components/ui/modal` and
-  `@/icons`; none exist in `services/web`.
+  `@/clients/indexer/types`, `@/lib/logger`, `@/actions/indexer` and `@/icons`; none of those exist
+  in `services/web`. (`@/components/ui/modal` and `@/hooks/useModal` — also imported by some of
+  these files — **do** exist now, built for the file-upload modal; only the list above is missing.)
 
 ## Known debt
 

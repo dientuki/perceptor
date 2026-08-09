@@ -62,4 +62,11 @@ export class EncodeJobDetails {
 
   @Field(() => String, { nullable: true })
   downloadPath: string | null;
+
+  // Ruta absoluta de container donde el worker tiene que armar la carpeta de
+  // salida — resuelta server-side desde path_movies/path_shows (ver
+  // ProcessJobsService, media-roots/). El worker sólo hace join()/mkdir()
+  // sobre esto, nunca lee env para el destino.
+  @Field()
+  outputRoot: string;
 }

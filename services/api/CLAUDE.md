@@ -60,8 +60,18 @@ Everything through `bin/npm api …` from the repo root (never bare `npm`/`npx`/
 
 Seed data runs via `prisma/seeds/index.ts`, wired as the `seed` command in `prisma.config.ts`
 (`ts-node prisma/seeds/index.ts`); `prisma migrate dev` prompts to run it automatically. It calls
-`seedLanguages`, `seedUsers`, `seedMovies` in turn. Note `prisma/seeds/settings.ts` was removed;
-`seeds/index.ts` never referenced it, so nothing else needs to change for that removal.
+`seedLanguages`, `seedUsers`, `seedMovies`, `seedSettings` in turn. `prisma/seeds/settings.ts`
+seeds `path_downloads`/`path_movies`/`path_shows` as segments relative to the roots declared in
+`.env` (`.`/`Movies`/`Shows`) — see `src/media-roots/` below — plus torrent/tracker/media-server/TMDB
+config keys. Create-only (checks `findUnique` before `create`), so re-running the seed never
+clobbers real values (API keys, a custom path) already set through the UI.
+
+`src/media-roots/` is the single owner of "is this path inside a declared root?" — used by settings
+validation (`SettingsService.updateMany`), by `QbittorrentClient` to resolve `path_downloads` to an
+absolute container path, and by `ProcessJobsService` to resolve `path_movies`/`path_shows` into the
+`outputRoot` the worker uses to build the final file path. `MediaRootsService.resolveFromRoot()` is
+the actual traversal/symlink guard — see its own doc comments and `media-roots.service.spec.ts` for
+the escape suite it defends against.
 
 ## Schema/enum reality check
 

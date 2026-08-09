@@ -55,6 +55,13 @@ type Setting {
   value: String!
 }
 
+type MediaRoot {
+  id: ID!
+  label: String!
+  hostPath: String!
+  available: Boolean!
+}
+
 type TorrentLink {
   downloadUrl: String
 }
@@ -97,6 +104,12 @@ type EncodeJobDetails {
   sourceKind: String!
   infoHash: String
   downloadPath: String
+  outputRoot: String!
+}
+
+type MediaServerOption {
+  id: ID!
+  label: String!
 }
 
 type Query {
@@ -112,12 +125,22 @@ type Query {
   searchMovies(query: String!): [MediaSearchResult!]!
   settings: [Setting!]!
 
+  """
+  Raíces de media declaradas por .env (descargas, biblioteca) — la UI arma "hostPath + segmento" con esto, nunca una ruta de container.
+  """
+  mediaRoots: [MediaRoot!]!
+
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!): [TorrentResult!]!
   mediaSource(id: Int!): MediaSource
 
   """Datos que el worker necesita para encodear un ProcessJob"""
   processJob(id: Int!): EncodeJobDetails!
+
+  """
+  Media servers soportados, derivados del registro de clientes — la UI arma el combo con esto en vez de hardcodear las opciones.
+  """
+  mediaServerClients: [MediaServerOption!]!
 }
 
 type Mutation {

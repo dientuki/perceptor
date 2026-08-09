@@ -13,6 +13,8 @@ import { DownloadsModule } from './downloads/downloads.module';
 import { MediaSourcesModule } from './media-sources/media-sources.module';
 import { ProcessJobsModule } from './process-jobs/process-jobs.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { MediaRootsModule } from './media-roots/media-roots.module';
+import { MediaServerModule } from './media-server/media-server.module';
 
 @Module({
   imports: [
@@ -32,11 +34,13 @@ import { UploadsModule } from './uploads/uploads.module';
     UsersModule,
     MoviesModule, // Asegúrate de importar el módulo de películas
     IndexerModule,
+    MediaRootsModule,
     SettingsModule,
     DownloadsModule,
     MediaSourcesModule,
     ProcessJobsModule,
     UploadsModule,
+    MediaServerModule,
   ],
   providers: [AppResolver],
 })

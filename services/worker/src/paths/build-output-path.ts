@@ -11,6 +11,11 @@ export type OutputPathInput = {
   seasonNumber: number | null;
   episodeNumber: number | null;
   episodeTitle: string | null;
+  // Ruta absoluta de container ya resuelta por el api (a partir de
+  // path_movies/path_shows en settings, ver process-jobs.service.ts del api)
+  // — reemplaza al viejo process.env.DESTINATIONS_DIR. El worker sólo hace
+  // join()/mkdir() sobre esto, nunca vuelve a leer env para el destino.
+  outputRoot: string;
 };
 
 // Reglas portadas tal cual de services/worker/src/ffmpeg/buildOutputPath.ts
@@ -35,12 +40,13 @@ function pad2(n: number): string {
 // con [tmdbid=] para matching preciso en vez de confiar en el nombre — sólo
 // en la carpeta, nunca en el archivo (confirmado contra la biblioteca real:
 // "Avengers Endgame (2019) [tmdbid=299534]/Avengers Endgame (2019).mkv"):
-// Movies/<Título> (<año>) [tmdbid=<id>]/<Título> (<año>).mkv
-// Shows/<Título> (<año>) [tmdbid=<id>]/Season NN/<Título> SNNENN <ep título>.mkv
+// <outputRoot>/<Título> (<año>) [tmdbid=<id>]/<Título> (<año>).mkv
+// <outputRoot>/<Título> (<año>) [tmdbid=<id>]/Season NN/<Título> SNNENN <ep título>.mkv
+// El segmento "Movies"/"Shows" ya no está hardcodeado acá: es parte de
+// `outputRoot`, que el api arma resolviendo path_movies/path_shows contra la
+// raíz "library" (ver media-roots/ del api) — así el usuario elige el
+// nombre de esa carpeta (o incluso "Series" en vez de "Shows") desde Settings.
 export function buildOutputPath(details: OutputPathInput): string {
-  const root = process.env.DESTINATIONS_DIR;
-  if (!root) throw new Error('DESTINATIONS_DIR no está definida');
-
   const cleanTitle = sanitize(details.title);
   // '0000' en vez de omitir el año cuando no se conoce: mismo comportamiento
   // que el repo viejo, mantiene la carpeta parseable por Jellyfin.
@@ -48,7 +54,7 @@ export function buildOutputPath(details: OutputPathInput): string {
   const titledFolder = `${cleanTitle} (${year}) [tmdbid=${details.tmdbId}]`;
 
   if (details.kind === 'MOVIE') {
-    return join(root, 'Movies', titledFolder, `${cleanTitle} (${year}).mkv`);
+    return join(details.outputRoot, titledFolder, `${cleanTitle} (${year}).mkv`);
   }
 
   if (details.seasonNumber === null || details.episodeNumber === null) {
@@ -59,5 +65,5 @@ export function buildOutputPath(details: OutputPathInput): string {
   const episodeTitle = details.episodeTitle ? sanitize(details.episodeTitle) : '';
   const episodeFile = `${cleanTitle} S${pad2(details.seasonNumber)}E${pad2(details.episodeNumber)}${episodeTitle ? ` ${episodeTitle}` : ''}.mkv`;
 
-  return join(root, 'Shows', titledFolder, seasonFolder, episodeFile);
+  return join(details.outputRoot, titledFolder, seasonFolder, episodeFile);
 }

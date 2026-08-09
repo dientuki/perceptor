@@ -17,10 +17,14 @@ Per the pipeline described in the root `CLAUDE.md`, `worker` is meant to be a Bu
 
 - Listens on the shared Redis queue (`ioredis`, same `redis` container as `api`) for encode jobs
   created against the `ProcessJob` Prisma model (see `services/api/CLAUDE.md`).
-- Runs FFmpeg transcodes reading from `DOWNLOADS_DIR` and writing to `DESTINATIONS_DIR` — the
-  bind-mounted host directories configured via `HOST_DOWNLOADS_DIR`/`HOST_DESTINATIONS_DIR` and
-  `CONTAINER_DOWNLOADS_DIR`/`CONTAINER_DESTINATIONS_DIR` in the root `.env` (see
-  `docker-compose.yaml`).
+- Runs FFmpeg transcodes reading from the bind-mounted downloads directory and writing to the
+  bind-mounted library directory (`HOST_DOWNLOADS_DIR`/`HOST_DESTINATIONS_DIR` and
+  `CONTAINER_DOWNLOADS_DIR`/`CONTAINER_DESTINATIONS_DIR` in the root `.env`, see
+  `docker-compose.yaml`). The worker no longer reads `DOWNLOADS_DIR`/`DESTINATIONS_DIR` env vars —
+  it never did read the former, and the latter was removed. The output root now arrives as
+  `outputRoot` in the `processJob` GraphQL payload (`services/worker/src/jobs/encode.job.ts`),
+  resolved server-side from the `path_movies`/`path_shows` settings against the declared roots —
+  see `services/api/src/media-roots/` and `build-output-path.ts` in this service.
 - Has no HTTP ingress — it is not routed through Traefik and only talks to Redis (and, once
   implemented, the API and/or database).
 

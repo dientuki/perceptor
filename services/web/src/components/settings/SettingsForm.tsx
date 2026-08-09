@@ -3,18 +3,26 @@
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
+import PathPicker from "@/components/settings/PathPicker";
+import MediaServerFields from "@/components/settings/MediaServerFields";
 import { useActionState } from "react";
 import { updateSettingsAction } from "@/actions/settings";
 import { Setting } from "@/types/settings";
+import { MediaRoot } from "@/types/media-roots";
+import { MediaServerOption } from "@/types/media-server";
 
 interface SettingsFormProps {
   settings: Setting[];
+  mediaRoots: MediaRoot[];
+  mediaServerOptions: MediaServerOption[];
 }
 
-export default function SettingsForm({ settings }: SettingsFormProps) {
+export default function SettingsForm({ settings, mediaRoots, mediaServerOptions }: SettingsFormProps) {
   const [state, formAction, isPending] = useActionState(updateSettingsAction, null);
 
   const valueOf = (key: string) => settings.find((setting) => setting.key === key)?.value ?? "";
+  const rootOf = (id: string): MediaRoot =>
+    mediaRoots.find((root) => root.id === id) ?? { id, label: id, hostPath: "?", available: false };
 
   return (
     <form action={formAction}>
@@ -24,25 +32,12 @@ export default function SettingsForm({ settings }: SettingsFormProps) {
             Torrent
           </h3>
           <div className="space-y-6">
-            <div>
-              <Label htmlFor="torrent_port">Puerto de qBittorrent</Label>
-              <Input
-                id="torrent_port"
-                name="torrent_port"
-                defaultValue={valueOf("torrent_port")}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="path_downloads">Carpeta de descargas</Label>
-              <Input
-                id="path_downloads"
-                name="path_downloads"
-                defaultValue={valueOf("path_downloads")}
-                hint="Tiene que ser una ruta dentro del volumen montado en el contenedor de qBittorrent; una ruta fuera de ese volumen hace que las descargas vayan a disco efímero."
-                required
-              />
-            </div>
+            <PathPicker
+              settingKey="path_downloads"
+              label="Carpeta de descargas"
+              root={rootOf("downloads")}
+              value={valueOf("path_downloads")}
+            />
           </div>
         </div>
 
@@ -89,15 +84,12 @@ export default function SettingsForm({ settings }: SettingsFormProps) {
               </label>
             </div>
 
-            <div>
-              <Label htmlFor="path_movies">Carpeta de películas</Label>
-              <Input
-                id="path_movies"
-                name="path_movies"
-                defaultValue={valueOf("path_movies")}
-                required
-              />
-            </div>
+            <PathPicker
+              settingKey="path_movies"
+              label="Carpeta de películas"
+              root={rootOf("library")}
+              value={valueOf("path_movies")}
+            />
 
             <div className="flex items-center gap-2">
               <input
@@ -112,15 +104,12 @@ export default function SettingsForm({ settings }: SettingsFormProps) {
               </label>
             </div>
 
-            <div>
-              <Label htmlFor="path_shows">Carpeta de series</Label>
-              <Input
-                id="path_shows"
-                name="path_shows"
-                defaultValue={valueOf("path_shows")}
-                required
-              />
-            </div>
+            <PathPicker
+              settingKey="path_shows"
+              label="Carpeta de series"
+              root={rootOf("library")}
+              value={valueOf("path_shows")}
+            />
           </div>
         </div>
 
@@ -128,7 +117,13 @@ export default function SettingsForm({ settings }: SettingsFormProps) {
           <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
             Media server
           </h3>
-          <p className="text-sm italic text-gray-400 dark:text-gray-500">Próximamente.</p>
+          <MediaServerFields
+            options={mediaServerOptions}
+            client={valueOf("media_server_client")}
+            host={valueOf("media_server_host")}
+            port={valueOf("media_server_port")}
+            apiKey={valueOf("media_server_api_key")}
+          />
         </div>
 
         {state && "error" in state && state.error && (

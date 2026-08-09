@@ -87,6 +87,9 @@ services:
     volumes:
       - ./services/api:/app
       - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
+      # Sólo lectura: el api resuelve/valida rutas de biblioteca (media-roots),
+      # nunca escribe ahí — eso lo hace el worker, que sí monta rw más abajo.
+      - ${HOST_DESTINATIONS_DIR}:${CONTAINER_DESTINATIONS_DIR}:ro
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
@@ -97,6 +100,13 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - DOMAIN=${DOMAIN}
       - WEB_PORT=${WEB_PORT}
+      # Raíces que media-roots.module.ts arma como MEDIA_ROOTS: HOST_* es lo que
+      # la UI muestra (la ruta real en la PC del usuario), CONTAINER_* es dónde
+      # vive ese mismo mount adentro de este container.
+      - HOST_DOWNLOADS_DIR=${HOST_DOWNLOADS_DIR}
+      - CONTAINER_DOWNLOADS_DIR=${CONTAINER_DOWNLOADS_DIR}
+      - HOST_DESTINATIONS_DIR=${HOST_DESTINATIONS_DIR}
+      - CONTAINER_DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/graphql', (res) => process.exit(res.statusCode < 500 ? 0 : 1))"]
       #test: ["CMD-SHELL", "true"]
@@ -120,6 +130,15 @@ services:
       #  condition: service_healthy
     networks:
       - perceptor-net
+    # El media server (Jellyfin) suele correr afuera del stack, en el host del
+    # usuario — no hay un `localhost` compartido entre el container y el host:
+    # dentro del container, `localhost` es el propio api. `host-gateway` es un
+    # valor especial de Docker (soportado en Linux desde 20.10, no sólo
+    # Desktop) que resuelve `host.docker.internal` a la IP del host real. Con
+    # esto, media_server_host=host.docker.internal en Settings apunta a
+    # Jellyfin corriendo en la PC del usuario.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=Host(`api.${DOMAIN}`)"
@@ -175,8 +194,6 @@ services:
       - NODE_ENV=${NODE_ENV}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
-      - DOWNLOADS_DIR=${CONTAINER_DOWNLOADS_DIR}
-      - DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
       - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
       - ENCODE_DRIVER=${ENCODE_DRIVER}
       - ENCODE_SAMPLE_SECONDS=${ENCODE_SAMPLE_SECONDS}

@@ -5,6 +5,7 @@ import { Server } from '@tus/server';
 import { FileStore } from '@tus/file-store';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SettingsService } from '@/settings/settings.service';
+import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
 
 const ILLEGAL_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
@@ -45,13 +46,21 @@ export class UploadsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
+    private readonly mediaRoots: MediaRootsService,
     private readonly queue: ProcessQueueService,
   ) {}
 
   async onModuleInit() {
-    const config = await this.settings.getMap();
-    const basePath = config.path_downloads ?? '/media/downloads';
-    this.uploadsDir = join(basePath, 'uploads');
+    // Staging FIJO en la raíz completa del mount, no en la setting: tus
+    // necesita un directorio estable durante toda la vida del proceso — no se
+    // puede reconstruir el Server en cada cambio de path_downloads sin romper
+    // las subidas resumibles que estén en curso. Como updateMany() (ver
+    // settings.service.ts) garantiza que path_downloads siempre resuelve
+    // ADENTRO de esta misma raíz, anclar acá no le saca alcance a la setting
+    // — y de paso mantiene el rename() de más abajo dentro del mismo
+    // filesystem siempre, nunca cruza de dispositivo.
+    const downloadsRoot = await this.mediaRoots.resolveFromRoot('downloads', '.');
+    this.uploadsDir = join(downloadsRoot, 'uploads');
 
     this.server = new Server({
       path: '/uploads',
@@ -94,12 +103,19 @@ export class UploadsService implements OnModuleInit {
       );
     }
 
+    // path_downloads se re-lee acá, no en el snapshot de boot (this.uploadsDir
+    // es fijo, ver onModuleInit): así un cambio hecho en Settings mientras la
+    // subida estaba en curso se refleja en la próxima que termine, sin
+    // necesitar reiniciar el api.
+    const config = await this.settings.getMap();
+    const downloadsBase = await this.mediaRoots.resolveFromRoot('downloads', config.path_downloads ?? '.');
+
     // FileStore escribe los bytes planos como <uploadsDir>/<id> — un archivo,
     // no una carpeta. El destino no puede reusar ese mismo nombre (mkdir
     // pisaría el propio archivo que se está moviendo), así que las subidas ya
     // cerradas van a su propio namespace "imports/<id>/<filename>", mismo
     // criterio que qBittorrent (client.ts::add) de una carpeta por descarga.
-    const destDir = join(this.uploadsDir, 'imports', upload.id);
+    const destDir = join(downloadsBase, 'imports', upload.id);
     const destPath = join(destDir, filename);
     await mkdir(destDir, { recursive: true });
     await rename(rawPath, destPath);

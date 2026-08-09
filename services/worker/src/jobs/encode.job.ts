@@ -23,6 +23,7 @@ export type EncodeJobDetails = {
   sourceKind: string;
   infoHash: string | null;
   downloadPath: string | null;
+  outputRoot: string;
 };
 
 type ProcessJobQueryResult = {
@@ -42,7 +43,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       processJob(id: $id) {
         id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 isLiveAction
         seasonNumber episodeNumber episodeTitle
-        mediaSourceId sourceKind infoHash downloadPath
+        mediaSourceId sourceKind infoHash downloadPath outputRoot
       }
     }`,
     { id: processJobId },
@@ -111,9 +112,9 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       }
     }
 
-    // TODO: cliente de Jellyfin (config ya sembrada en `settings`, código
-    // todavía no existe). Por ahora, sólo loguea.
-    console.log(`[encode] TODO avisar al media server: ${outputPath}`);
+    // El aviso al media server (Jellyfin, si está configurado) lo dispara el
+    // api dentro de encodeCompleted — tiene las settings y las raíces, el
+    // worker no necesita enterarse.
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 

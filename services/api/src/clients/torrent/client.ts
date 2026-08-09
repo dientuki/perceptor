@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { join } from 'node:path';
+import crypto from "node:crypto";
 import { TorrentClient } from "./types";
 import { HTTP_METHOD } from "@/types/http";
 import { SourceStatus } from "@prisma/client";
 import { SettingsService } from '@/settings/settings.service';
-import crypto from "node:crypto";
+import { MediaRootsService } from '@/media-roots/media-roots.service';
 
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-list
 const DOWNLOADING_STATES = new Set([
@@ -55,7 +57,10 @@ interface QbittorrentTorrent {
 
 @Injectable()
 export class QbittorrentClient implements TorrentClient {
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly mediaRoots: MediaRootsService,
+  ) {}
 
   private async baseUrl(): Promise<string> {
     const config = await this.settings.getMap();
@@ -95,16 +100,18 @@ export class QbittorrentClient implements TorrentClient {
    */
   async add(urls: string[]): Promise<string> {
     const config = await this.settings.getMap();
-    const basePath = config.path_downloads ?? "";
+    // path_downloads se guarda relativo a la raíz "downloads" (ver
+    // media-roots/): acá se resuelve a la ruta absoluta que qBittorrent
+    // necesita — corre en su propio container, pero monta el mismo
+    // CONTAINER_DOWNLOADS_DIR, así que la ruta absoluta es válida ahí también.
+    const basePath = await this.mediaRoots.resolveFromRoot('downloads', config.path_downloads ?? '.');
     const endpoint = new URL("add", await this.baseUrl());
 
     const firstUrl = urls[0] ?? "";
     // Generamos un hash a partir de la primera URL para asegurar una carpeta única
     const folder = crypto.createHash("sha256").update(firstUrl).digest("hex").substring(0, 16);
 
-    // Construimos el savepath asegurando que no haya problemas con barras duplicadas
-    const separator = basePath.includes("\\") ? "\\" : "/";
-    const savepath = basePath.replace(/[\\/]$/, "") + separator + folder;
+    const savepath = join(basePath, folder);
 
     await fetch(endpoint, {
       method: HTTP_METHOD.POST,

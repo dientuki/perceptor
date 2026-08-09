@@ -32,15 +32,20 @@ const UPDATE_SETTINGS_MUTATION = `
 `;
 
 // Las claves que este form conoce y puede guardar. El resto de los settings
-// (torrent_client, torrent_host, media_server_*, ia_*, movie_db_client, movie_db_host)
-// no se editan acá.
+// (torrent_client, torrent_host, torrent_port, ia_*, movie_db_client,
+// movie_db_host) no se editan acá — torrent_port en particular no tiene sentido editarlo:
+// es el puerto interno de qBittorrent dentro de la red de Docker (QBITTORRENT_WEBUI_PORT
+// en .env), no algo que el usuario final deba tocar.
 const EDITABLE_KEYS = [
   'path_downloads',
-  'torrent_port',
   'tracker_api_key',
   'movie_db_api_key',
   'path_movies',
   'path_shows',
+  'media_server_client',
+  'media_server_host',
+  'media_server_port',
+  'media_server_api_key',
 ] as const;
 
 // Checkboxes nativos: si no están tildados, ni siquiera viajan en el FormData.

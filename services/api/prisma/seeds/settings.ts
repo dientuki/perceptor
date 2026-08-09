@@ -4,9 +4,15 @@ export async function seedSettings(prisma: PrismaClient) {
   console.log('Seeding settings...');
 
   const settings = [
-    { key: 'path_movies', value: '/media/destinations/movies' },
-    { key: 'path_shows', value: '/media/destinations/shows' },
-    { key: 'path_downloads', value: '/media/downloads' },
+    // Relativos a las raíces declaradas en .env (HOST_DOWNLOADS_DIR/
+    // HOST_DESTINATIONS_DIR, ver media-roots/): '.' es la raíz misma, así
+    // que estos tres literales preservan el layout de biblioteca de siempre
+    // (Movies/Shows como subcarpetas) sin depender de leer CONTAINER_*_DIR
+    // acá. Ver settings.service.ts::updateMany, que valida y normaliza
+    // cualquier valor nuevo contra esas mismas raíces.
+    { key: 'path_movies', value: 'Movies' },
+    { key: 'path_shows', value: 'Shows' },
+    { key: 'path_downloads', value: '.' },
 
     { key: 'torrent_client', value: 'qbittorrent' },
     { key: 'torrent_host', value: 'torrent' },
@@ -18,7 +24,9 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'tracker_port', value: '9696' },
     { key: 'tracker_api_key', value: '' },
 
-    { key: 'media_server_client', value: 'jellyfin' },
+    // 'none' por default: una instalación limpia no le habla a nadie. Elegir
+    // 'jellyfin' desde Settings usa estos host/port como valor inicial.
+    { key: 'media_server_client', value: 'none' },
     { key: 'media_server_host', value: 'localhost' },
     { key: 'media_server_port', value: '8096' },
     { key: 'media_server_api_key', value: '' },
