@@ -9,7 +9,7 @@ Pipeline stage status today:
 | :-- | :-- | :-- |
 | Search catalog (TMDB) | `api` — `src/clients/TMDBClient.ts`, `src/movies/movies.search.ts` | in progress, does not compile |
 | Register title in DB | `api` — `movies` module + Prisma | working (read + CRUD service) |
-| Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `api` — `src/clients/indexer/client.ts` | working |
+| Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `api` — `src/clients/indexer/client.ts` | working; alternativa manual: pegar un magnet (`addMagnetToMovie`, `src/clients/torrent/magnet.ts`) — mismo `MediaSource`/AutoRun de ahí en más |
 | Download | qBittorrent — `torrent` service, `api` — `src/clients/torrent/client.ts` | working, per-torrent save path |
 | Detect completion, update DB, enqueue job | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | working |
 | Scan downloaded files, inventory | `worker` — BullMQ consumer, talks to `api` over GraphQL | working |

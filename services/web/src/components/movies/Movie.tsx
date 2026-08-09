@@ -1,8 +1,9 @@
 "use client";
 import Image from "next/image";
 import type { Movie as MovieRecord } from "@/actions/movies";
-import { FileVideo } from "lucide-react";
+import { FileVideo, Magnet } from "lucide-react";
 import ImportFileModal from "@/components/import/importFileModal";
+import ImportMagnetModal from "@/components/import/importMagnetModal";
 import { useModal } from "@/hooks/useModal";
 import Button from "@/components/ui/button/Button";
 import { MEDIA_TYPE } from "@/types/media";
@@ -10,6 +11,7 @@ import { MEDIA_TYPE } from "@/types/media";
 export default function Movie({ movie }: { movie: MovieRecord }) {
 
   const { isOpen: isFileModalOpen, openModal: openFileModal, closeModal: closeFileModal } = useModal();
+  const { isOpen: isMagnetModalOpen, openModal: openMagnetModal, closeModal: closeMagnetModal } = useModal();
 
   return (
     <div className="flex flex-col gap-8 md:flex-row">
@@ -48,6 +50,10 @@ export default function Movie({ movie }: { movie: MovieRecord }) {
               <FileVideo size={18} />
               File
             </Button>
+            <Button size="sm" variant="outline" onClick={openMagnetModal}>
+              <Magnet size={18} className="text-red-500" />
+              Magnet
+            </Button>
         </div>
 
         <div className="space-y-2">
@@ -62,6 +68,12 @@ export default function Movie({ movie }: { movie: MovieRecord }) {
         isOpen={isFileModalOpen} 
         onClose={closeFileModal} 
         item={movie} 
+        mediaType={MEDIA_TYPE.MOVIE}
+      />
+      <ImportMagnetModal
+        isOpen={isMagnetModalOpen}
+        onClose={closeMagnetModal}
+        item={movie}
         mediaType={MEDIA_TYPE.MOVIE}
       />
 

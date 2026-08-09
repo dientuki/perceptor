@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service'; // Ajustá la ruta según tu estructura
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
@@ -8,6 +8,8 @@ import { TmdbClient } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
 import { QbittorrentClient } from '@/clients/torrent/client';
+import { parseMagnet } from '@/clients/torrent/magnet';
+import { SourceKind } from '@prisma/client';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
@@ -137,6 +139,33 @@ export class MoviesService {
     movieId: number,
     input: { infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
   ) {
+    return this.attachTorrentSource(movieId, { kind: 'TORRENT_SEARCH', ...input });
+  }
+
+  // Magnet pegado a mano por el usuario, en vez de un release elegido del
+  // indexer. El infoHash sale del propio magnet (parseMagnet no pega a la
+  // red) — a partir de acá el flujo es idéntico a addTorrentToMovie.
+  async addMagnetToMovie(movieId: number, input: { magnet: string; force: boolean }) {
+    let parsed;
+    try {
+      parsed = parseMagnet(input.magnet);
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : String(err));
+    }
+
+    return this.attachTorrentSource(movieId, {
+      kind: 'TORRENT_FILE',
+      infoHash: parsed.infoHash,
+      urls: [input.magnet],
+      releaseTitle: parsed.displayName,
+      force: input.force,
+    });
+  }
+
+  private async attachTorrentSource(
+    movieId: number,
+    input: { kind: SourceKind; infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
+  ) {
     const movie = await this.findOneFromDb(movieId);
     if (!movie) throw new NotFoundException(`La película ${movieId} no existe`);
 
@@ -146,24 +175,51 @@ export class MoviesService {
       );
     }
 
+    // infoHash es @unique: si ya existe una fila con este hash, no podemos
+    // crear otra (P2002). De otra película es una colisión real que sólo
+    // decide el usuario; de esta misma película es un reintento — se reusa
+    // la fila en vez de duplicarla.
+    const existingSource = await this.prisma.mediaSource.findUnique({
+      where: { infoHash: input.infoHash },
+      include: { movie: true },
+    });
+
+    if (existingSource && existingSource.movie && existingSource.movie.id !== movieId) {
+      throw new ConflictException(
+        `Ese magnet ya está asociado a «${existingSource.movie.title}»`,
+      );
+    }
+
     // El savepath lo decide el client al agregar el torrent, así cada descarga cae
     // en su propia carpeta y sabemos dónde están los archivos desde el arranque
     // (los torrents de un solo archivo, si no, quedan sueltos en la raíz).
     const downloadPath = await this.qbittorrent.add(input.urls);
 
-    const mediaSource = await this.prisma.mediaSource.create({
-      data: {
-        kind: 'TORRENT_SEARCH',
-        status: 'QUEUED',
-        infoHash: input.infoHash,
-        // La URL de Prowlarr con la que se pidió el release. Guardamos la primera
-        // —la misma que hashea add() para armar la carpeta— y no el join de todas,
-        // así el downloadPath se puede reconstruir desde esta fila.
-        downloadUrl: input.urls[0] ?? null,
-        releaseTitle: input.releaseTitle,
-        downloadPath,
-      },
-    });
+    const mediaSource = existingSource
+      ? await this.prisma.mediaSource.update({
+          where: { id: existingSource.id },
+          data: {
+            kind: input.kind,
+            status: 'QUEUED',
+            downloadUrl: input.urls[0] ?? null,
+            releaseTitle: input.releaseTitle,
+            downloadPath,
+            errorMessage: null,
+          },
+        })
+      : await this.prisma.mediaSource.create({
+          data: {
+            kind: input.kind,
+            status: 'QUEUED',
+            infoHash: input.infoHash,
+            // La URL con la que se pidió el release. Guardamos la primera —la misma
+            // que hashea add() para armar la carpeta— y no el join de todas, así el
+            // downloadPath se puede reconstruir desde esta fila.
+            downloadUrl: input.urls[0] ?? null,
+            releaseTitle: input.releaseTitle,
+            downloadPath,
+          },
+        });
 
     return this.prisma.movie.update({
       where: { id: movieId },

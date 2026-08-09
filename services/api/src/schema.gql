@@ -156,6 +156,11 @@ type Mutation {
 
   """Envía un release elegido a qBittorrent y lo asocia a la película"""
   addTorrentToMovie(movieId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
+
+  """
+  Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la película
+  """
+  addMagnetToMovie(movieId: Int!, magnet: String!, force: Boolean = false): Movie!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
 
   """Aviso del cliente de torrents de que una descarga terminó"""

@@ -48,4 +48,16 @@ export class MoviesResolver {
   ) {
     return this.moviesService.addTorrentToMovie(movieId, { infoHash, urls, releaseTitle, force });
   }
+
+  @Mutation(() => Movie, {
+    name: 'addMagnetToMovie',
+    description: 'Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la película',
+  })
+  async addMagnetToMovie(
+    @Args('movieId', { type: () => Int }) movieId: number,
+    @Args('magnet') magnet: string,
+    @Args('force', { type: () => Boolean, nullable: true, defaultValue: false }) force: boolean,
+  ) {
+    return this.moviesService.addMagnetToMovie(movieId, { magnet, force });
+  }
 }

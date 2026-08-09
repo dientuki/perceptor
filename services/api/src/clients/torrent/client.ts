@@ -113,13 +113,21 @@ export class QbittorrentClient implements TorrentClient {
 
     const savepath = join(basePath, folder);
 
-    await fetch(endpoint, {
+    const response = await fetch(endpoint, {
       method: HTTP_METHOD.POST,
       body: new URLSearchParams({
         urls: urls.join("\n"),
         savepath,
       }),
     });
+
+    // Con urls que vienen de Prowlarr esto casi nunca falla; con un magnet
+    // tipeado a mano por el usuario, qBittorrent puede rechazarlo (415). Sin
+    // este chequeo se crea igual un MediaSource en QUEUED que nunca baja —
+    // hay que fallar acá, antes de que el caller cree nada en la DB.
+    if (!response.ok) {
+      throw new Error(`qBittorrent rechazó el torrent (${response.status}): ${await response.text()}`);
+    }
 
     return savepath;
   }
