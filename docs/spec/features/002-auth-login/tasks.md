@@ -1,7 +1,7 @@
 ---
 title: Login and the Authentication Boundary — Tasks
 last_updated: 2026-08-10
-status: Draft
+status: In Progress
 ---
 
 # TASKS: Login and the Authentication Boundary (`tasks.md`)

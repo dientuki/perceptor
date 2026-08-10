@@ -2,16 +2,19 @@ import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { MediaSourcesService } from './media-sources.service';
 import { MediaSource } from './entities/media-source.entity';
 import { SourceFileInput } from './dto/source-file.input';
+import { AllowService } from '@/auth/decorators/allow-service.decorator';
 
 @Resolver(() => MediaSource)
 export class MediaSourcesResolver {
   constructor(private readonly mediaSourcesService: MediaSourcesService) {}
 
+  @AllowService()
   @Query(() => MediaSource, { name: 'mediaSource', nullable: true })
   async mediaSource(@Args('id', { type: () => Int }) id: number) {
     return this.mediaSourcesService.findOne(id);
   }
 
+  @AllowService()
   @Mutation(() => MediaSource, {
     name: 'sourceScanned',
     description: 'El worker reporta el inventario de archivos de un MediaSource ya descargado',

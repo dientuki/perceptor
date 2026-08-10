@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
+import { assertAuthEnv } from './auth/auth.constants';
 
 // /uploads (ver src/uploads/) recibe el body crudo de tus, potencialmente de
 // varios GB por request: no puede pasar por el body parser global. bodyParser:
@@ -17,6 +18,11 @@ function skipUploads(middleware: RequestHandler): RequestHandler {
 }
 
 async function bootstrap() {
+  // First statement, on purpose: a missing JWT_SECRET must fail loudly at
+  // boot (AC-8), before anything else — including the health check — can
+  // make it look like the api started successfully without one (REQ-6).
+  assertAuthEnv();
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
 
   app.use(skipUploads(json()));

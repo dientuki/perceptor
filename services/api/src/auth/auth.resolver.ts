@@ -1,8 +1,7 @@
 import { Resolver, Mutation, Query, Args, Context } from '@nestjs/graphql';
 import { AuthService } from './auth.service';
-import { UseGuards, UnauthorizedException } from '@nestjs/common';
-import { GqlAuthGuard } from './guards/gql-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { Public } from './decorators/public.decorator';
 import { LoginResponse } from './dto/login-response';
 import { LoginInput } from './dto/login.input';
 
@@ -10,6 +9,9 @@ import { LoginInput } from './dto/login.input';
 export class AuthResolver {
   constructor(private authService: AuthService) {}
 
+  // The only public operation in the schema (REQ-4) — every other resolver
+  // requires a credential once JwtAuthGuard is registered as APP_GUARD.
+  @Public()
   @Mutation(() => LoginResponse, { description: 'Inicia sesión y retorna un JWT' })
   async login(
     @Args('loginInput') loginInput: LoginInput,
@@ -26,9 +28,8 @@ export class AuthResolver {
     return true;
   }
 
-  // Endpoint protegido usando el Guard de Nest
+  // TODO(T007): guard this with JwtAuthGuard, return User! via getProfile.
   @Query(() => String)
-  @UseGuards(GqlAuthGuard)
   me(@CurrentUser() user: any) {
     return user.username;
   }
