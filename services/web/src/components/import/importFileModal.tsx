@@ -8,6 +8,7 @@ import Label from "@/components/form/Label";
 import { Video } from "lucide-react";
 import type { Movie } from "@/actions/movies";
 import type { Episode, MediaType } from "@/types/media";
+import { createUploadTicketAction } from "@/actions/uploads";
 
 interface ImportFileModalProps {
   isOpen: boolean;
@@ -63,7 +64,7 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
     onClose();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !item) return;
 
@@ -72,10 +73,24 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
     setProgress({ sent: 0, total: file.size });
     setStatus("uploading");
 
+    // El ticket se pide antes de crear la subida: onUploadCreate lo verifica
+    // una sola vez, en el POST inicial (ver spec 002-auth-login).
+    let ticket;
+    try {
+      ticket = await createUploadTicketAction(Number(item.id));
+    } catch (err) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "Error al generar el permiso de subida.");
+      return;
+    }
+
     const upload = new tus.Upload(file, {
       endpoint: process.env.NEXT_PUBLIC_UPLOAD_URL,
       chunkSize: CHUNK_SIZE,
       retryDelays: RETRY_DELAYS,
+      headers: {
+        Authorization: 'Bearer ' + ticket.token,
+      },
       metadata: {
         filename: file.name,
         // Sólo movies por ahora: la api (onUploadFinish) todavía no resuelve
