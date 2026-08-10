@@ -165,7 +165,7 @@ doc correction — does not. The flow:
 | :-- | :-- |
 | `/specify <description>` | `docs/spec/features/NNN-slug/spec.md` — requirements, the GraphQL contract delta, acceptance criteria. Open questions are left as `[NEEDS CLARIFICATION]` |
 | `/plan-feature NNN` | `plan.md` (cross-service: order, migrations, risk) and one `<svc>/plan.md` per service the feature touches. Refuses to run while any clarification is open |
-| `/tasks NNN` | `tasks.md` — atomic tasks, each tagged `[api]`/`[web]`/`[worker]`, with dependencies |
+| `/tasks NNN` | `tasks.md` — atomic tasks, each tagged `[api]`/`[web]`/`[worker]` for a service agent, or `[docs]`/`[orch]` for the two the orchestrator does itself, with dependencies |
 | `/implement NNN` | Dispatches each task to that service's subagent (`.claude/agents/`) and verifies the reports |
 
 `/constitution` reviews or amends the rules themselves.

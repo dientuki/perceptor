@@ -16,6 +16,7 @@ status: Draft            # Draft | In Progress | Done
 | :-- | :-- |
 | `[api]` `[web]` `[worker]` | Which subagent owns the task. Exactly one per task — a task that needs two services is two tasks. |
 | `[docs]` | Documentation only. Owned by the orchestrator, not a service agent. |
+| `[orch]` | Repo-root and third-party-container territory — `docker-compose.yaml`, `.env.example`, `bin/`, `services/torrent/`. Owned by the orchestrator for the same reason as `[docs]`: no agent's scope covers it. Unlike `[docs]`, these are executable config, so they carry a real *Done when*. |
 | `[P]` | May run in parallel with the other `[P]` tasks in the same group. |
 | `→ Tnnn` | Blocked by that task. |
 

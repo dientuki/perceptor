@@ -282,6 +282,9 @@ service. These tasks must be tagged so `/implement` does not try to route them; 
 does them directly, the same way it handles `[docs]`. `003-auth-user-management` hits the same gap
 with `bin/reset-password`.
 
-Two features in a row exposing this is enough evidence to fix the flow itself afterwards — either a
-fourth tag for repo-root and third-party-container territory, or an explicit statement in
-`.claude/commands/implement.md`. Not resolved by this spec.
+**Resolved.** Two features in a row exposing this was enough evidence to fix the flow rather than
+work around it, so `[orch]` is now a first-class tag for repo-root and third-party-container
+territory — `docker-compose.yaml`, `.env.example`, `bin/`, `services/torrent/`. It is defined in
+`docs/spec/features/_templates/tasks.md`, derived by `.claude/commands/tasks.md`, and executed by
+the orchestrator under `.claude/commands/implement.md`, which states explicitly that an `[orch]`
+task is never dispatched to a service agent. This feature's `tasks.md` uses it; `003` inherits it.

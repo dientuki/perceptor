@@ -16,10 +16,14 @@ still `Draft`, stop and say which — `/plan-feature` has not finished.
 
 One task = one coherent change one agent can finish **and verify** on its own.
 
-- **Exactly one service tag per task** — `[api]`, `[web]`, `[worker]`, or `[docs]` for
-  documentation the orchestrator handles. A task that needs two services is scoped wrong: split
-  it. This is not a formality; it is what lets a subagent stop at its boundary instead of
-  helpfully editing someone else's service.
+- **Exactly one tag per task** — `[api]`, `[web]`, `[worker]` for the three service agents, plus
+  two the orchestrator handles itself: `[docs]` for documentation, and `[orch]` for repo-root and
+  third-party-container territory (`docker-compose.yaml`, `.env.example`, `bin/`,
+  `services/torrent/`). The difference between the last two is prose versus executable config —
+  an `[orch]` task changes how the stack boots, so it carries a real *Done when*, not a "the file
+  now says X". A task that needs two services is scoped wrong: split it. This is not a formality;
+  it is what lets a subagent stop at its boundary instead of helpfully editing someone else's
+  service.
 - **Every task gets a *Done when*** line: an observable result. A command's output, a row's
   contents, something visible in the UI. "Implemented correctly" is not a done condition.
 - **Dependencies are explicit** — `→ T001`. Anything consuming the GraphQL contract depends on the
