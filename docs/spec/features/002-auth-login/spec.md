@@ -1,6 +1,6 @@
 ---
 title: Login and the Authentication Boundary
-spec_version: 1.0.0
+spec_version: 1.1.0
 author: Juan Farias
 created_at: 2026-08-09
 last_updated: 2026-08-10
@@ -248,22 +248,24 @@ does not need it (Constitution, Article VII).
 
 - **Roles and permissions.** `003-auth-user-management` adds `isAdmin` and gates the user
   mutations. This feature only establishes *authenticated vs not*.
-- **Refresh tokens.** A 30-day token that cannot be revoked is the accepted trade-off for a
-  self-hosted single-admin app. Adding rotation means server-side session state and is a feature of
-  its own.
-- **Server-side logout / token blocklist.** Follows from the above: a stateless JWT stays valid
-  until it expires. REQ-10 is satisfied by deleting the browser's cookie, and the spec says so
-  rather than pretending otherwise.
+- **Refresh tokens.** A 30-day token whose session record isn't renewed until it's used again is
+  the accepted trade-off for a self-hosted single-admin app. Rotating the token itself (issuing a
+  new one before the old one expires) is a feature of its own.
+- **Server-side session state, beyond a single revocable record per login.** REQ-10 requires that
+  a logout make the token that logout used unusable, replayed cookie included — not achievable
+  with a purely stateless JWT and a `token blocklist` was ruled out in an earlier draft of this
+  spec for exactly that reason, until AC-5 made explicit that replay must actually be rejected.
+  The mechanism is a **session registry in Redis**: `login` mints a `jti`, records
+  `session:<jti> -> userId` with the token's TTL; `logout` deletes that key; the JWT strategy
+  checks the key exists for every user principal (not for service principals, which carry no
+  `jti` and never expire). This is *not* a full session-management feature — there is no listing
+  of active sessions, no per-device revocation, no idle-timeout distinct from the token's own TTL.
+  It exists solely to make REQ-10 and AC-5 true.
 - **Rate limiting and lockout on `login`.** Worth doing; needs a store and a policy, and does not
   belong in the change that first makes authentication real.
 - **Password recovery.** There is no SMTP in the stack. `003` adds a `bin/reset-password` script
   instead, and removes the dead `/reset-password` link.
 - **Per-chunk upload authentication.** See the residual risk above.
-- **Fixing `services/api/src/auth/test/auth.service.spec.ts`.** It is written against an
-  implementation that never existed — it calls `login(userObject)` when the signature is
-  `login(username, pass)` — and carries all three of `api`'s current type errors. Repairing it is a
-  test fix, not this feature, and bundling it would hide whether this feature added errors of its
-  own.
 
 ## Process note: files this feature touches that no agent owns
 

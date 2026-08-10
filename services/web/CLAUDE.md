@@ -66,11 +66,18 @@ boundary.
 
 ## Auth
 
-The auth cookie's name is not a literal string in call sites — it comes from `CONFIG.authTtoken`
-in `src/lib/config.ts` (note the typo in the key, `authTtoken`, not `authToken` — it's load-bearing,
-keep it consistent if you touch this). Route gating happens in `src/proxy.ts`: it reads the cookie,
-then redirects unauthenticated requests away from protected routes and authenticated requests away
-from `/signin` etc. `AUTH_ROUTES`/`PUBLIC_ROUTES` there define the exceptions.
+The auth cookie's name is not a literal string in call sites — it comes from `CONFIG.authCookie` in
+`src/lib/config.ts` (value `"auth_token"`; older revisions of this file had it as `authTtoken`, a
+typo corrected by `002-auth-login`'s REQ-2 — one cookie name, defined in one place). `fetchGraphQL`
+(`src/lib/graphql-client.ts`) reads that cookie and forwards it as `Authorization: Bearer …` on
+every server-action call to `api`; a server action that has a session and skips this is a defect,
+not a style choice. Route gating happens in `src/proxy.ts`: it reads the cookie for a cheap
+presence check and redirects unauthenticated requests away from protected routes and authenticated
+requests away from `/signin` etc. — `AUTH_ROUTES`/`PUBLIC_ROUTES` there define the exceptions. The
+real enforcement point is `api`'s global guard: `src/app/(dashboard)/layout.tsx` calls
+`getCurrentUser()` (the `me` query) server-side, and `src/lib/auth-session.ts`'s
+`redirectIfUnauthenticated` sends any action that gets back `No autenticado` or a session-expired
+error straight to `/signin`, deleting the stale cookie first.
 
 ## UI origin: TailAdmin template
 
