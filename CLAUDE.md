@@ -21,7 +21,12 @@ Pipeline stage status today:
 
 ```
 bin/                     host wrapper scripts (see below)
-docs/spec/               service specs, e.g. docs/spec/docker/traefik.md
+docs/constitution.md     the non-negotiable rules — outranks every CLAUDE.md
+docs/spec/               component specs, e.g. docs/spec/docker/traefik.md
+docs/spec/graphql-contract.md   the web/worker <-> api boundary
+docs/spec/features/      one directory per feature spec (see below)
+.claude/agents/          one implementer subagent per service
+.claude/commands/        the /specify -> /plan-feature -> /tasks -> /implement flow
 docker-compose.yaml      the whole stack
 .env                     single source of configuration (not committed)
 services/api/            NestJS 11 + Apollo + Prisma 7  -> services/api/CLAUDE.md
@@ -130,8 +135,11 @@ Note: `TMDB_API_KEY` is **not** currently in `.env` — the TMDB bearer token is
 ## Conventions
 
 - **Commits**: `[scope] lowercase message` — scopes seen so far are `[api]`, `[web]`, `[traefix]`.
-- **Language**: code comments are Spanish; commit messages, documentation and identifiers are
-  English. Keep it that way.
+- **Language**: everything committed is English — code comments, identifiers, documentation,
+  commit messages, test descriptions. See `docs/constitution.md` → Article VI, which is the
+  authority. The **exception is user-facing copy**: error messages and UI text the app shows are
+  Spanish, because the app is Spanish. Much of the existing code still carries Spanish comments
+  from before this rule; that is legacy, not a pattern to copy.
 - **Path alias**: `@/*` → `./src/*` in both `api` (tsconfig `paths`) and `web`.
 - **API contract**: GraphQL only. `web` never touches the database; it calls the API through
   `fetchGraphQL` in `services/web/src/lib/graphql-client.ts`.
@@ -144,27 +152,61 @@ Note: `TMDB_API_KEY` is **not** currently in `.env` — the TMDB bearer token is
   window where a file is uploaded but unregistered. `web` still never touches the database and has
   no other path to `api` besides `fetchGraphQL`.
 
+## Spec Driven Development
+
+`docs/constitution.md` holds the nine rules that outrank every other document here. When it and a
+`CLAUDE.md` disagree, the constitution wins and the `CLAUDE.md` is the bug.
+
+A change starts as a feature spec when it touches more than one service, the Prisma schema, the
+GraphQL contract, or a pipeline stage (Article VII). Everything smaller — a bug fix, a rename, a
+doc correction — does not. The flow:
+
+| Step | Produces |
+| :-- | :-- |
+| `/specify <description>` | `docs/spec/features/NNN-slug/spec.md` — requirements, the GraphQL contract delta, acceptance criteria. Open questions are left as `[NEEDS CLARIFICATION]` |
+| `/plan-feature NNN` | `plan.md` (cross-service: order, migrations, risk) and one `<svc>/plan.md` per service the feature touches. Refuses to run while any clarification is open |
+| `/tasks NNN` | `tasks.md` — atomic tasks, each tagged `[api]`/`[web]`/`[worker]`, with dependencies |
+| `/implement NNN` | Dispatches each task to that service's subagent (`.claude/agents/`) and verifies the reports |
+
+`/constitution` reviews or amends the rules themselves.
+
+Two things make this work rather than just add ceremony:
+
+- **The GraphQL contract is frozen before anyone implements** (Article VIII). There is no codegen
+  between `api` and its consumers — `web` and `worker` retype the schema by hand — so an
+  unannounced contract change fails at runtime, not at compile time. See
+  `docs/spec/graphql-contract.md`.
+- **Each subagent writes only inside its own service.** A task that needs two services is two
+  tasks. An agent that hits another service's code stops and reports instead of helpfully fixing
+  it. There is no `db` agent: the database belongs to `api` (Article III).
+
+**Dispatching note.** The Claude Code CLI discovers `.claude/agents/` and resolves
+`subagent_type: "worker"` directly. The desktop app does **not** — it only offers its built-in
+agent set. There the flow still works: dispatch `general-purpose` and tell it to read
+`.claude/agents/<service>.md` first and follow it as its instructions. `/implement` does this
+automatically. The fallback loses the frontmatter's `tools:` restriction, so the scope boundary
+rests entirely on the brief — which is why `/implement` verifies the diff after every batch.
+
+`docs/spec/features/_templates/` holds the four templates; `docs/spec/features/001-magnet-import/`
+is a worked example, written after the fact against a feature that shipped.
+
 ## Current state — do not treat these files as reference code
 
-A TMDB search slice is mid-refactor and **does not compile**. Files carried over from a
-pre-GraphQL version of the app still import modules that no longer exist. If you touch this area,
-expect to fix the wiring rather than follow it:
+Measured 2026-08-09. Re-run the typechecks rather than trusting the counts — the numbers are what
+an agent reports before and after a change to prove it added nothing.
 
-- `services/api/src/movies/movies.search.ts` — imports `@/clients/MovieDB/types` and `../types`;
-  neither path exists. The real client types are in `src/clients/types.ts`.
-- `services/api/src/movies/movies.resolver.ts` — references an undefined `MovieType` and
-  `moviesService.searchMovies()`, which is commented out in `movies.service.ts`.
-- `services/api/src/clients/types.ts` and `TMDBClient.ts` — import `@/types/media` (does not exist
-  in `api`, only in `web`) and `MEDIA_TYPE` from `@prisma/client` (no such enum, see
-  `services/api/CLAUDE.md`). `types.ts` also uses `MEDIA_TYPE.TV` while `web` defines
-  `MOVIE`/`SHOW`.
-- `services/web/src/actions/movies.ts` — `searchMovies` and `addMovie` return `true` against
-  non-boolean signatures.
-- `services/web/src/components/search/SearchTorrent.tsx`, `SearchTorrentModal.tsx`, `SearchForm.tsx`
-  and `src/app/(dashboard)/movies/[id]/page.tsx` — import `@prisma/client`, `@/models/movies.model`,
-  `@/clients/indexer/types`, `@/lib/logger`, `@/actions/indexer` and `@/icons`; none of those exist
-  in `services/web`. (`@/components/ui/modal` and `@/hooks/useModal` — also imported by some of
-  these files — **do** exist now, built for the file-upload modal; only the list above is missing.)
+**`api` — 3 errors, all in one test file.** `bin/cli api npx --no tsc --noEmit`:
+`src/auth/test/auth.service.spec.ts` has two `'user' is possibly 'null'` and one wrong arity. The TMDB search slice that used to be listed here now compiles; `TMDBClient.ts` is gone,
+replaced by `src/clients/tmdb/{client,types}.ts`.
+
+**`web` — 13 errors across 5 files**, all pre-GraphQL leftovers on paths the running UI does not
+use: `components/import/importFolderModal.tsx` and `ImportMagnetSeasonModal.tsx` (both import a
+non-existent `@/actions/jobs`, both pass `value` to a component that only takes `defaultValue`),
+`components/search/SearchTorrentModal.tsx` (imports `@prisma/client` — a Constitution Article II
+violation), `SearchForm.tsx` and `ResultsForm.tsx` (missing `@/icons`, implicit `any`).
+`services/web/CLAUDE.md` has the table.
+
+**`worker` — clean.**
 
 ## Known debt
 
