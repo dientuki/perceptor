@@ -112,10 +112,15 @@ type MediaServerOption {
   label: String!
 }
 
+type UploadTicket {
+  token: String!
+  expiresAt: DateTime!
+}
+
 type Query {
   ping: String!
   items: [Item!]!
-  me: String!
+  me: User!
   users: [User!]!
   user(id: ID!): User!
   movies: [Movie!]!
@@ -185,11 +190,13 @@ type Mutation {
 
   """El worker pide borrar el torrent del cliente tras un encode exitoso"""
   downloadRemove(mediaSourceId: Int!): String!
+  createUploadTicket(movieId: Int!): UploadTicket!
 }
 
 input LoginInput {
   username: String!
   password: String!
+  rememberMe: Boolean = false
 }
 
 input CreateUserInput {

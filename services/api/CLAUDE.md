@@ -41,9 +41,21 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
 
 **Domain modules** (all registered in `app.module.ts`):
 
-- `auth/` — JWT + Passport (`passport-jwt`). `guards/gql-auth.guard.ts` exposes `GqlAuthGuard` for
-  resolvers; `decorators/current-user.decorator.ts` exposes `@CurrentUser()`. Specs under
-  `auth/test/`.
+- `auth/` — JWT + Passport (`passport-jwt`), the authentication boundary for the whole API
+  (`002-auth-login`). `guards/jwt-auth.guard.ts` exposes `JwtAuthGuard`, registered once as
+  `APP_GUARD` in `app.module.ts` — every GraphQL operation requires a valid credential by default.
+  Two `Reflector`-driven decorators carve out the exceptions: `decorators/public.decorator.ts`'s
+  `@Public()` (currently only on `login`) and `decorators/allow-service.decorator.ts`'s
+  `@AllowService()` (the worker/qBittorrent-reachable operations — see `auth.types.ts`). A request
+  carries one of two principal shapes, decided by `auth.types.ts`'s `toPrincipal()`: a **user**
+  principal (`{type:'user', id, username}`, checked against `session.service.ts`'s Redis-backed
+  session record so `logout` can actually revoke it — this is what makes AC-5 hold for a stateless
+  JWT) or a **service** principal (`{type:'service', name}`, no `id`, no expiry, minted by
+  `scripts/mint-service-token.ts` and never subjected to the session check). `guards/jwt-auth.guard.ts`
+  short-circuits for any non-GraphQL execution context, so it never touches `/uploads` — that REST
+  route is authenticated separately, per-request, by the ticket mechanism in `src/uploads/`.
+  `decorators/current-user.decorator.ts` exposes `@CurrentUser()`, typed to the principal union.
+  Specs under `auth/test/`.
 - `users/` — CRUD over the `User` model.
 - `movies/` — CRUD over `Movie`, plus `addTorrentToMovie` / `addMagnetToMovie` (the two entry
   points into the download pipeline) and the in-progress `movies.search.ts`.
@@ -57,7 +69,13 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
 - `media-roots/` — the two declared roots and every path translation. See below.
 - `media-server/` — post-encode notification (Jellyfin today), opt-in from Settings.
 - `indexer/` — Prowlarr search surface.
-- `uploads/` — the project's only REST route (tus). See the root `CLAUDE.md` for why.
+- `uploads/` — the project's only REST route (tus). See the root `CLAUDE.md` for why. Authenticated
+  by ticket, not by `JwtAuthGuard` (that guard skips non-GraphQL contexts entirely): a signed-in
+  user mints one via the `createUploadTicket` mutation (`uploads.resolver.ts`, guarded, user
+  principals only — see `auth/`), the browser sends it as `Authorization: Bearer <ticket>` on the
+  tus `POST`, and `uploads.service.ts`'s `onUploadCreate` hook verifies and spends it exactly once
+  via `upload-tickets.service.ts` (a Redis `SET ... NX`, atomic so two concurrent POSTs can't both
+  win). Never re-checked on `PATCH` — by design, see `002-auth-login`'s spec.
 
 **Infrastructure**: `prisma/` (`PrismaModule` + `PrismaService`, effectively global), `redis/`,
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).
@@ -144,10 +162,11 @@ scaffolding. Constitution, Article IX has the rule.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-09, `bin/cli api npx --no tsc --noEmit` reports **3 errors, all in one file**:
-
-- `src/auth/test/auth.service.spec.ts` — two `'user' is possibly 'null'` and one wrong arity. A
-  test file, not production code.
+As of 2026-08-10, `bin/cli api npx --no tsc --noEmit` reports **0 errors**. The previously-listed
+`src/auth/test/auth.service.spec.ts` (two `'user' is possibly 'null'`, one wrong arity — written
+against a `login()` signature that never existed) is gone: it was deleted ahead of
+`002-auth-login`, whose spec had originally left "fixing" it explicitly Out of Scope before the
+file was removed entirely, taking those 3 errors with it.
 
 The TMDB search slice that used to be listed here **now compiles**; `src/clients/TMDBClient.ts` is
 gone, replaced by `src/clients/tmdb/{client,types}.ts`. Treat that vertical as ordinary code again.

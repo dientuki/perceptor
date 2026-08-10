@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.0.0
+spec_version: 1.1.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-09
+last_updated: 2026-08-10
 status: Approved
 target_service: api, web, worker
 ---
@@ -55,6 +55,22 @@ bin/cli api cat src/schema.gql
 The two clients differ deliberately, and the reason is written at the top of the worker's:
 `web` renders errors to a user, so it must be able to see them; a worker that swallowed an error
 would mark the job completed without having written anything.
+
+**Both clients authenticate every call** (`002-auth-login`): `api` requires a credential on every
+operation except `login` (`JwtAuthGuard`, registered as `APP_GUARD` in `app.module.ts`). `web`'s
+`fetchGraphQL` reads the session cookie via `cookies()` and forwards it as `Authorization: Bearer
+<token>`; `worker`'s `fetchGraphQL` forwards `Authorization: Bearer $SERVICE_TOKEN`, a machine
+credential distinct from a user session (no `id`, no expiry — see `services/api/CLAUDE.md`'s
+`auth/` bullet). A third caller, `services/torrent/commands/on-torrent-completed.sh`, sends the
+same `SERVICE_TOKEN` outside either client, straight from `curl`.
+
+**The cookie name is a cross-runtime boundary fact, not just a `web`-internal detail.** `api` reads
+it via `AUTH_COOKIE_NAME` in `services/api/src/auth/auth.constants.ts`; `web` writes it via
+`CONFIG.authCookie` in `services/web/src/lib/config.ts`. Both currently hold the literal
+`"auth_token"`. There is no shared package to enforce this — same seam as the schema itself — so a
+change to one without the other silently breaks every browser session while leaving the bearer
+carrier (what `web`'s own server actions use) completely unaffected, which makes the failure easy
+to miss in testing that only exercises `web`→`api` calls.
 
 ### The `web` server-action pattern
 
@@ -144,6 +160,12 @@ mutation nor a Next Server Action (1 MB body limit by default).
 `bull:process` — inside the request that receives the last chunk, so there is no window in which a
 file exists but is unregistered.
 
+Since `002-auth-login`, the route also authenticates — separately from the GraphQL guard, which
+never reaches non-GraphQL contexts. A signed-in user mints a short-lived, single-use ticket via the
+`createUploadTicket` GraphQL mutation; the browser sends it as `Authorization: Bearer <ticket>` on
+the tus `POST`; `onUploadCreate` verifies and spends it. See `services/api/CLAUDE.md`'s `uploads/`
+bullet for the mechanism.
+
 ### The queue payload is a second, parallel contract
 
 `api` → `worker` also communicates through BullMQ, and that payload is **not** covered by the
@@ -170,12 +192,6 @@ payload in its `spec.md` the same way it declares the GraphQL delta.
   `package.json` files and both build pipelines, so it is a feature in its own right and a good
   candidate for the first real `/specify`.
 
-- **`services/web/src/lib/graphql-client.ts` logs every request.** Two `console.log` calls dump the
-  URL and the full request object — headers included, and the auth cookie
-  (`CONFIG.authTtoken`) rides in those headers. This runs on the server, so it lands in the `web`
-  container's logs rather than the browser, but it is still a credential in a log file. Left as-is
-  here only because removing it is unrelated to this document; it should not survive long.
-
-- **`CONFIG.authTtoken`** (`services/web/src/lib/config.ts`) has a typo in the name, and the typo
-  is load-bearing — it is referenced across the auth flow. Renaming it is a mechanical change
-  nobody has done yet.
+Both items formerly logged here — `fetchGraphQL` logging full request bodies (including the
+plaintext login password) and the `CONFIG.authTtoken` typo — were fixed by `002-auth-login`
+(REQ-2, REQ-7). See `services/web/CLAUDE.md`'s Auth section for the current shape.

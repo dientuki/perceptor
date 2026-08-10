@@ -2,7 +2,7 @@
 title: Login and the Authentication Boundary — web slice
 service: web
 last_updated: 2026-08-10
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Login and the Authentication Boundary — `web` (`web/plan.md`)

@@ -102,7 +102,21 @@ secret, never copy them into docs or code):
 `INDEXER_USER`, `INDEXER_PASSWORD`,
 `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ROOT_PASSWORD`, `DATABASE_URL`,
 `REDIS_HOST`, `HOST_DOWNLOADS_DIR`, `HOST_DESTINATIONS_DIR`,
-`CONTAINER_DOWNLOADS_DIR`, `CONTAINER_DESTINATIONS_DIR`.
+`CONTAINER_DOWNLOADS_DIR`, `CONTAINER_DESTINATIONS_DIR`,
+`JWT_SECRET`, `SERVICE_TOKEN`.
+
+`JWT_SECRET` signs every JWT the app issues; `api` refuses to boot without it (no default, ever —
+`services/api/src/auth/auth.constants.ts`). `SERVICE_TOKEN` is the machine credential the worker
+and the qBittorrent AutoRun hook authenticate with — a JWT with no expiry, minted from
+`JWT_SECRET`. `bin/install` generates both on a fresh checkout; on an existing `.env` missing
+either, `bin/install` fills them in without touching anything else. See
+`docs/spec/features/002-auth-login/spec.md` for the full design.
+
+**Upgrading an existing checkout**: pulling this feature without regenerating `.env` means `api`
+will not boot (`JWT_SECRET` unset, by design — AC-8). Run `bin/install` again, answering "no" to
+regenerating `.env` from `.env.example`, and it fills in `JWT_SECRET`/`SERVICE_TOKEN` alongside
+whatever you already had configured. Rotating `JWT_SECRET` afterward invalidates `SERVICE_TOKEN` —
+re-mint it with `bin/npm api run token:service --silent` and update `.env`.
 
 `HOST_DOWNLOADS_DIR`/`HOST_DESTINATIONS_DIR` and `CONTAINER_DOWNLOADS_DIR`/`CONTAINER_DESTINATIONS_DIR`
 are also passed into `api` (not just `worker`/`torrent`) — `api`'s `src/media-roots/` module reads
@@ -192,21 +206,24 @@ is a worked example, written after the fact against a feature that shipped.
 
 ## Current state — do not treat these files as reference code
 
-Measured 2026-08-09. Re-run the typechecks rather than trusting the counts — the numbers are what
-an agent reports before and after a change to prove it added nothing.
+Measured 2026-08-10, after `002-auth-login` landed. Re-run the typechecks rather than trusting the
+counts — the numbers are what an agent reports before and after a change to prove it added nothing.
 
-**`api` — 3 errors, all in one test file.** `bin/cli api npx --no tsc --noEmit`:
-`src/auth/test/auth.service.spec.ts` has two `'user' is possibly 'null'` and one wrong arity. The TMDB search slice that used to be listed here now compiles; `TMDBClient.ts` is gone,
-replaced by `src/clients/tmdb/{client,types}.ts`.
+**`api` — clean, 0 errors.** `bin/cli api npx --no tsc --noEmit`. The stale
+`src/auth/test/auth.service.spec.ts` (written against a `login()` signature that never existed —
+see `002-auth-login`'s spec, formerly Out of Scope there) is gone; deleting it is what took `api`
+from 3 errors to 0. The TMDB search slice that used to be listed here also now compiles;
+`TMDBClient.ts` is gone, replaced by `src/clients/tmdb/{client,types}.ts`.
 
-**`web` — 13 errors across 5 files**, all pre-GraphQL leftovers on paths the running UI does not
+**`web` — 12 errors across 5 files**, all pre-GraphQL leftovers on paths the running UI does not
 use: `components/import/importFolderModal.tsx` and `ImportMagnetSeasonModal.tsx` (both import a
 non-existent `@/actions/jobs`, both pass `value` to a component that only takes `defaultValue`),
 `components/search/SearchTorrentModal.tsx` (imports `@prisma/client` — a Constitution Article II
 violation), `SearchForm.tsx` and `ResultsForm.tsx` (missing `@/icons`, implicit `any`).
-`services/web/CLAUDE.md` has the table.
+`services/web/CLAUDE.md` has the table. (Previously logged here as 13 — that count was never
+correct; 12 is what the same five files have always produced.)
 
-**`worker` — clean.**
+**`worker` — clean, 0 errors.**
 
 ## Known debt
 

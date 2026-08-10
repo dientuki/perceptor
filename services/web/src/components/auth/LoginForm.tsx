@@ -9,7 +9,7 @@ import { useState, useActionState } from "react";
 import { loginAction } from "@/actions/auth";
 import { useSearchParams } from "next/dist/client/components/navigation";
 
-export default function SignInForm() {
+export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
   const searchParams = useSearchParams();
@@ -19,8 +19,6 @@ export default function SignInForm() {
   const loginWithRedirect = loginAction.bind(null, redirectTo);
   
   const [state, formAction, isPending] = useActionState(loginWithRedirect, null);
-  console.log('state', state);
-  console.log('isPending', isPending);
 
 
   return (
@@ -29,10 +27,10 @@ export default function SignInForm() {
         <div>
           <div className="mb-5 sm:mb-8">
             <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
-              Sign In
+              Login
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Enter your username and password to sign in!
+              Enter your username and password to log in!
             </p>
           </div>
           <div>
@@ -81,7 +79,7 @@ export default function SignInForm() {
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Checkbox checked={isChecked} onChange={setIsChecked} />
+                    <Checkbox name="rememberMe" checked={isChecked} onChange={setIsChecked} />
                     <span className="block font-normal text-gray-700 text-theme-sm dark:text-gray-400">
                       Keep me logged in
                     </span>
@@ -95,23 +93,11 @@ export default function SignInForm() {
                 </div>
                 <div>
                   <Button type="submit" className="w-full" size="sm" disabled={isPending}>
-                    {isPending ? "Signing in..." : "Sign in"}
+                    {isPending ? "Logging in..." : "Log in"}
                   </Button>
                 </div>
               </div>
             </form>
-
-            <div className="mt-5">
-              <p className="text-sm font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start">
-                Don&apos;t have an account? {""}
-                <Link
-                  href="/signup"
-                  className="text-brand-500 hover:text-brand-600 dark:text-brand-400"
-                >
-                  Sign Up
-                </Link>
-              </p>
-            </div>
           </div>
         </div>
       </div>

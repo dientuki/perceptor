@@ -59,6 +59,7 @@ describe('JwtStrategy', () => {
       const principal = await strategy.validate({ sub: 'service:perceptor', typ: 'service' });
 
       expect(principal).toEqual({ type: 'service', name: 'service:perceptor' });
+      expect('id' in principal).toBe(false);
       expect(exists).not.toHaveBeenCalled();
     });
 
@@ -68,7 +69,7 @@ describe('JwtStrategy', () => {
 
       const principal = await strategy.validate({ sub: '1', username: 'juan', jti: 'abc' });
 
-      expect(principal).toEqual({ type: 'user', id: '1', username: 'juan' });
+      expect(principal).toEqual({ type: 'user', id: '1', username: 'juan', jti: 'abc' });
       expect(exists).toHaveBeenCalledWith('abc');
     });
 

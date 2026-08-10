@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
 import { AppResolver } from './app.resolver'; // Lo creamos en el paso 2
 import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { UsersModule } from './users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MoviesModule } from './movies/movies.module';
@@ -42,6 +44,6 @@ import { MediaServerModule } from './media-server/media-server.module';
     UploadsModule,
     MediaServerModule,
   ],
-  providers: [AppResolver],
+  providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })
 export class AppModule {}

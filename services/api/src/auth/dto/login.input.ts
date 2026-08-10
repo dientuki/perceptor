@@ -11,10 +11,12 @@ export class LoginInput {
   @IsNotEmpty({ message: 'La contraseña es requerida' })
   password: string;
 
-  // defaultValue (not nullable: true) is what makes this render as
-  // `Boolean = false` in the generated SDL instead of bare `Boolean` — the
-  // frozen contract requires the former character for character.
-  @Field(() => Boolean, { defaultValue: false })
+  // `nullable: true` + `defaultValue: false` is what makes this render as
+  // `Boolean = false` in the generated SDL, matching the existing
+  // `force: Boolean = false` pattern in movies.resolver.ts — `defaultValue`
+  // alone renders `Boolean!` (non-null), not the frozen contract's bare
+  // `Boolean = false`.
+  @Field(() => Boolean, { nullable: true, defaultValue: false })
   @IsBoolean()
   rememberMe: boolean;
 }

@@ -73,11 +73,11 @@ typo corrected by `002-auth-login`'s REQ-2 — one cookie name, defined in one p
 every server-action call to `api`; a server action that has a session and skips this is a defect,
 not a style choice. Route gating happens in `src/proxy.ts`: it reads the cookie for a cheap
 presence check and redirects unauthenticated requests away from protected routes and authenticated
-requests away from `/signin` etc. — `AUTH_ROUTES`/`PUBLIC_ROUTES` there define the exceptions. The
+requests away from `/login` etc. — `AUTH_ROUTES`/`PUBLIC_ROUTES` there define the exceptions. The
 real enforcement point is `api`'s global guard: `src/app/(dashboard)/layout.tsx` calls
 `getCurrentUser()` (the `me` query) server-side, and `src/lib/auth-session.ts`'s
 `redirectIfUnauthenticated` sends any action that gets back `No autenticado` or a session-expired
-error straight to `/signin`, deleting the stale cookie first.
+error straight to `/login`, deleting the stale cookie first.
 
 ## UI origin: TailAdmin template
 
@@ -108,8 +108,10 @@ toolchain here is its own decision and deserves its own spec.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-09, `bin/cli web npx --no tsc --noEmit` reports **13 errors across 5 files**. All are
+As of 2026-08-10, `bin/cli web npx --no tsc --noEmit` reports **12 errors across 5 files**. All are
 leftovers from a pre-GraphQL version of the app; none are on a path the running UI uses.
+(Previously logged here as 13 — that was never the real count; these same five files have always
+produced 12, confirmed while implementing `002-auth-login`.)
 
 | File | Problem |
 | :-- | :-- |

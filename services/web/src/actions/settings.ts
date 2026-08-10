@@ -1,6 +1,7 @@
 'use server'
 
 import { fetchGraphQL } from '@/lib/graphql-client';
+import { redirectIfUnauthenticated } from '@/lib/auth-session';
 import { Setting } from '@/types/settings';
 
 const SETTINGS_QUERY = `
@@ -16,6 +17,7 @@ export async function getSettings(): Promise<Setting[]> {
   const { data, errors } = await fetchGraphQL<{ settings: Setting[] }>(SETTINGS_QUERY);
 
   if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
     throw new Error(errors[0]?.message || 'Error al obtener la configuración');
   }
 
@@ -72,15 +74,19 @@ export async function updateSettingsAction(
     return { error: 'No hay valores para guardar.' };
   }
 
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
   try {
-    const { errors } = await fetchGraphQL(UPDATE_SETTINGS_MUTATION, { entries });
-
-    if (errors && errors.length > 0) {
-      return { error: errors[0].message || 'Error al guardar la configuración' };
-    }
-
-    return { success: true };
+    result = await fetchGraphQL(UPDATE_SETTINGS_MUTATION, { entries });
   } catch (err) {
     return { error: 'Error de conexión con el servidor GraphQL.' };
   }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: errors[0].message || 'Error al guardar la configuración' };
+  }
+
+  return { success: true };
 }

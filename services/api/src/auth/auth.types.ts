@@ -16,7 +16,7 @@ export type ServiceJwtPayload = {
 export type JwtPayload = UserJwtPayload | ServiceJwtPayload;
 
 export type AuthPrincipal =
-  | { type: 'user'; id: string; username: string }
+  | { type: 'user'; id: string; username: string; jti: string }
   | { type: 'service'; name: string };
 
 /**
@@ -27,10 +27,15 @@ export type AuthPrincipal =
  * can never resolve a user by accident, whether in `me`,
  * `createUploadTicket`, or a future resolver that trusts `principal.id`
  * without first checking `principal.type`.
+ *
+ * The user branch carries `jti` through as well — `logout` needs it to
+ * revoke the caller's own session, and `AuthPrincipal` is the single source
+ * of truth for "what a resolver knows about the caller" rather than every
+ * caller reaching around it into the raw JWT payload.
  */
 export function toPrincipal(payload: JwtPayload): AuthPrincipal {
   if (payload.typ === 'service') {
     return { type: 'service', name: payload.sub };
   }
-  return { type: 'user', id: payload.sub, username: payload.username };
+  return { type: 'user', id: payload.sub, username: payload.username, jti: payload.jti };
 }

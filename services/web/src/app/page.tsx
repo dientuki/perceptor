@@ -33,7 +33,7 @@ export default function Home() {
           </div>
 
           <Link
-            href="/signin"
+            href="/login"
             className="mt-10 inline-flex items-center gap-2 rounded-lg bg-brand-500 px-6 py-3.5 text-theme-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
           >
             Ir al login

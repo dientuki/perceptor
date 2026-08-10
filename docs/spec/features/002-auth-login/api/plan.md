@@ -2,7 +2,7 @@
 title: Login and the Authentication Boundary — api slice
 service: api
 last_updated: 2026-08-10
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Login and the Authentication Boundary — `api` (`api/plan.md`)

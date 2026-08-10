@@ -7,6 +7,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
+import { UploadTicketsService } from './upload-tickets.service';
 
 const ILLEGAL_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
 
@@ -14,13 +15,14 @@ function sanitizeFilename(name: string): string {
   return name.replace(ILLEGAL_CHARS, '').trim() || 'video';
 }
 
-// onUploadFinish corre dentro del manejo propio de tus, no del pipeline HTTP
-// de Nest — un ConflictException/NotFoundException normal llega ahí como un
-// Error más y tus lo devuelve como 500 genérico. tus sí sabe leer
-// error.status_code/error.body (ver @tus/server/dist/server.js::onError), así
-// que se arma el error con esa forma para que el browser reciba el código
-// real.
-class UploadFinishError extends Error {
+// onUploadFinish and onUploadCreate both run inside tus's own request
+// handling, not Nest's HTTP pipeline — a plain ConflictException/
+// NotFoundException thrown there lands as just another Error and tus
+// answers with a generic 500. tus does know how to read
+// error.status_code/error.body (see @tus/server/dist/server.js::onError),
+// so both hooks throw this shape instead, and the browser gets the real
+// status code.
+class UploadHttpError extends Error {
   status_code: number;
   body: string;
 
@@ -48,6 +50,7 @@ export class UploadsService implements OnModuleInit {
     private readonly settings: SettingsService,
     private readonly mediaRoots: MediaRootsService,
     private readonly queue: ProcessQueueService,
+    private readonly uploadTickets: UploadTicketsService,
   ) {}
 
   async onModuleInit() {
@@ -68,6 +71,10 @@ export class UploadsService implements OnModuleInit {
       // Traefik está adelante: sin esto el Location que arma tus sale con el
       // host/proto internos del container en vez de los que vio el browser.
       respectForwardedHeaders: true,
+      // Lets the browser's tus client actually send the header the ticket
+      // travels in.
+      allowedHeaders: ['Authorization'],
+      onUploadCreate: (req, upload) => this.onUploadCreate(req, upload),
       onUploadFinish: async (req, upload) => {
         try {
           await this.handleUploadFinish(upload);
@@ -80,6 +87,32 @@ export class UploadsService implements OnModuleInit {
     });
   }
 
+  // Wired into the `Server` options above, alongside registering the global
+  // GraphQL guard — both halves of the boundary close in the same commit
+  // (plan.md § Phase C). Verified via upload-tickets.service.spec.ts against
+  // the ticket logic; this method itself is thin request plumbing on top of it.
+  async onUploadCreate(req: Request, upload: { metadata?: Record<string, string | null> }) {
+    const authorization = req.headers.get('authorization');
+    const token = authorization?.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : null;
+
+    if (!token) {
+      throw new UploadHttpError(401, 'El permiso de subida venció, volvé a intentar');
+    }
+
+    const movieId = Number(upload.metadata?.movieId);
+
+    try {
+      await this.uploadTickets.verifyAndSpend(token, movieId);
+    } catch (err) {
+      if (err instanceof Error && err.message === 'Upload ticket does not match the movie being uploaded') {
+        throw new UploadHttpError(403, 'El permiso de subida no corresponde a esta película');
+      }
+      throw new UploadHttpError(401, 'El permiso de subida venció, volvé a intentar');
+    }
+
+    return {};
+  }
+
   private async handleUploadFinish(upload: {
     id: string;
     metadata?: Record<string, string | null>;
@@ -90,14 +123,14 @@ export class UploadsService implements OnModuleInit {
     const rawPath = upload.storage?.path;
 
     if (!movieId || !rawPath) {
-      throw new UploadFinishError(400, 'Metadata de la subida incompleta (movieId/filename)');
+      throw new UploadHttpError(400, 'Metadata de la subida incompleta (movieId/filename)');
     }
 
     const movie = await this.prisma.movie.findUnique({ where: { id: movieId } });
-    if (!movie) throw new UploadFinishError(404, `La película ${movieId} no existe`);
+    if (!movie) throw new UploadHttpError(404, `La película ${movieId} no existe`);
 
     if (movie.mediaSourceId) {
-      throw new UploadFinishError(
+      throw new UploadHttpError(
         409,
         'Esta película ya tiene una descarga en curso. Confirmá para reemplazarla.',
       );

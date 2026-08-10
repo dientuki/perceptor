@@ -3,13 +3,13 @@ import type { NextRequest } from 'next/server';
 import { CONFIG } from '@/lib/config';
 
 // Rutas accesibles SOLO cuando NO estás autenticado
-const AUTH_ROUTES = ['/signin', '/forgot-password', '/reset-password'];
+const AUTH_ROUTES = ['/login', '/forgot-password', '/reset-password'];
 
 // Rutas explícitamente públicas (ejemplo: landing, términos, etc.)
 const PUBLIC_ROUTES = ['/', '/terms', '/privacy'];
 
 export function proxy(request: NextRequest) {
-  const token = request.cookies.get(CONFIG.authTtoken)?.value;
+  const token = request.cookies.get(CONFIG.authCookie)?.value;
   const { pathname } = request.nextUrl;
 
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
@@ -20,7 +20,7 @@ export function proxy(request: NextRequest) {
 
   // 1. Sin token intentando entrar a zona protegida -> Redirigir a Login
   if (isProtectedRoute && !token) {
-    const loginUrl = new URL('/signin', request.url);
+    const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }

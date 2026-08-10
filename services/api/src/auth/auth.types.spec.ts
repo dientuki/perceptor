@@ -13,7 +13,7 @@ describe('toPrincipal', () => {
   it('maps a user payload to a user principal', () => {
     const payload: JwtPayload = { sub: '1', username: 'juan', jti: 'abc' };
 
-    expect(toPrincipal(payload)).toEqual({ type: 'user', id: '1', username: 'juan' });
+    expect(toPrincipal(payload)).toEqual({ type: 'user', id: '1', username: 'juan', jti: 'abc' });
   });
 
   it('maps a service payload to a service principal carrying no id field at all', () => {

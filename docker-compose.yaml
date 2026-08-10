@@ -100,6 +100,8 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - DOMAIN=${DOMAIN}
       - WEB_PORT=${WEB_PORT}
+      # No default, ever (REQ-6) — auth.constants.ts's assertAuthEnv() fails boot loudly if unset.
+      - JWT_SECRET=${JWT_SECRET}
       # Raíces que media-roots.module.ts arma como MEDIA_ROOTS: HOST_* es lo que
       # la UI muestra (la ruta real en la PC del usuario), CONTAINER_* es dónde
       # vive ese mismo mount adentro de este container.
@@ -195,6 +197,9 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
+      # The worker's identity against the api's GraphQL guard (REQ-5) — a machine credential,
+      # never a user session. See services/worker/src/api/graphql-client.ts.
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
       - ENCODE_DRIVER=${ENCODE_DRIVER}
       - ENCODE_SAMPLE_SECONDS=${ENCODE_SAMPLE_SECONDS}
       - ENCODE_MOCK_SECONDS=${ENCODE_MOCK_SECONDS}
@@ -249,6 +254,9 @@ services:
       - QBITTORRENT_USER=${QBITTORRENT_USER}
       - QBITTORRENT_PASSWORD=${QBITTORRENT_PASSWORD}
       - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
+      # Read by services/torrent/commands/on-torrent-completed.sh (AutoRun hook) to authenticate
+      # the torrentCompleted call — same machine credential as the worker (REQ-5).
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
     volumes:
       # Configuración persistente del cliente (resume de descargas, torrents activos, etc.)
       - qbittorrent_config:/config

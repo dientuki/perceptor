@@ -2,7 +2,7 @@
 title: Login and the Authentication Boundary — worker slice
 service: worker
 last_updated: 2026-08-10
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Login and the Authentication Boundary — `worker` (`worker/plan.md`)

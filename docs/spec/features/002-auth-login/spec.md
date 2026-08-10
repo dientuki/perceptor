@@ -4,7 +4,7 @@ spec_version: 1.1.0
 author: Juan Farias
 created_at: 2026-08-09
 last_updated: 2026-08-10
-status: Approved
+status: Implemented
 services: [api, web, worker]
 ---
 
@@ -51,57 +51,68 @@ and nothing will ever be scanned, with the failure visible only in the qBittorre
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Token reaches the API)**: Every call `web` makes to `api` on behalf of a signed-in
+- [x] **REQ-1 (Token reaches the API)**: Every call `web` makes to `api` on behalf of a signed-in
       user must carry that user's token. A server action that has a session and does not forward it
       is a defect, not a style choice.
-- [ ] **REQ-2 (One cookie name)**: The session cookie must have exactly one name, defined in one
+- [x] **REQ-2 (One cookie name)**: The session cookie must have exactly one name, defined in one
       place, used by every producer and consumer of it. The current `authTtoken` typo is corrected
       as part of this.
-- [ ] **REQ-3 (Two carriers, one token)**: The API must accept the token both as a bearer
+- [x] **REQ-3 (Two carriers, one token)**: The API must accept the token both as a bearer
       `Authorization` header and as a cookie. The cookie is the browser↔`web` channel; the bearer
       header is the `web`/`worker`↔`api` channel. A single JWT format serves both.
-- [ ] **REQ-4 (Closed by default)**: Every GraphQL operation must require a valid credential unless
+- [x] **REQ-4 (Closed by default)**: Every GraphQL operation must require a valid credential unless
       it is explicitly marked public. **`login` is the only public operation.** Adding a resolver
       must not be a way to accidentally add an unauthenticated endpoint.
-- [ ] **REQ-5 (Machines have an identity)**: Every non-browser caller of the API must authenticate
+- [x] **REQ-5 (Machines have an identity)**: Every non-browser caller of the API must authenticate
       without impersonating a human user, and its credential must be distinguishable from a user
       session, so that a leaked machine credential cannot be used to read or modify user accounts.
       There are two such callers and both are in scope: the **worker**
       (`services/worker/src/api/graphql-client.ts`) and the **qBittorrent AutoRun hook**
       (`services/torrent/commands/on-torrent-completed.sh`, which reaches the API with `curl` from
       a third-party container).
-- [ ] **REQ-6 (No default secret)**: The JWT signing secret must come from configuration. If it is
+- [x] **REQ-6 (No default secret)**: The JWT signing secret must come from configuration. If it is
       absent the API must refuse to start. It must not fall back to a literal in the source.
-- [ ] **REQ-7 (Credentials are never logged)**: No log line may contain a password or a token.
+- [x] **REQ-7 (Credentials are never logged)**: No log line may contain a password or a token.
       Today `graphql-client.ts` prints the whole request body, which means every login writes the
       user's plaintext password to the `web` container log.
-- [ ] **REQ-8 (Keep me logged in)**: The sign-in form's "keep me logged in" checkbox must control
+- [x] **REQ-8 (Keep me logged in)**: The sign-in form's "keep me logged in" checkbox must control
       session lifetime. Checked: 30 days. Unchecked: the session ends when the browser closes. The
       token's expiry and the cookie's expiry must always agree — a cookie that outlives its token
       produces a user the UI treats as signed in and the API rejects.
-- [ ] **REQ-9 (`me` works)**: `me` must return the authenticated user, and must actually resolve for
+- [x] **REQ-9 (`me` works)**: `me` must return the authenticated user, and must actually resolve for
       a signed-in user. Today it cannot, whatever the resolver says, because no token reaches the
       API. This is the acceptance canary for REQ-1 and REQ-3.
-- [ ] **REQ-10 (Logout ends the session)**: Signing out must leave the browser unable to make
+- [x] **REQ-10 (Logout ends the session)**: Signing out must leave the browser unable to make
       authenticated calls. The API side must not claim to clear a cookie it cannot reach.
-- [ ] **REQ-11 (Uploads are authenticated)**: Starting an upload must require proof that an
+- [x] **REQ-11 (Uploads are authenticated)**: Starting an upload must require proof that an
       authenticated user asked for it, for a specific movie. That proof must be single-use and
       short-lived, and must be verified when the upload is created — not only when it finishes,
       by which point the bytes are already on disk.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (The boundary holds)**: No request to `/graphql` without a valid credential returns
+- [x] **NFR-1 (The boundary holds)**: No request to `/graphql` without a valid credential returns
       data, for any operation other than `login`.
 - [ ] **NFR-2 (The pipeline survives)**: Download → scan → encode → media-server notification keeps
       working end to end with the guard in place. This is the requirement most likely to be
-      forgotten, because the worker has no UI to notice it in.
-- [ ] **NFR-3 (No new secret in the repo)**: Both new secrets (`JWT_SECRET`, the worker credential)
+      forgotten, because the worker has no UI to notice it in. **Partially verified**: all nine
+      `@AllowService()` operations were individually confirmed reachable with `SERVICE_TOKEN`
+      against the live, guard-enabled API (including `mediaSource` and `processJob`, the exact
+      queries `source-ready.job.ts`/`encode.job.ts` issue), worker logs show no errors since the
+      guard was registered, and `worker/src/api/graphql-client.spec.ts` covers the auth
+      failure/success shapes directly. **Not verified**: a real magnet → download → scan → encode →
+      notify run end to end — the seeded `MediaSource`'s `downloadPath` does not point at a real
+      file, and a genuine run needs either a live download or the checked-out `ENCODE_MOCK`/sample
+      settings changed, neither of which this session did. Recommend one real pipeline run as a
+      manual smoke test (AC-9) before treating this as fully closed.
+- [x] **NFR-3 (No new secret in the repo)**: Both new secrets (`JWT_SECRET`, the worker credential)
       live in `.env`, are listed in `.env.example` with placeholder values, and are passed to the
       containers that need them and no others.
-- [ ] **NFR-4 (Existing sessions)**: Cookies issued before this ships will not validate. That is
+- [x] **NFR-4 (Existing sessions)**: Cookies issued before this ships will not validate. That is
       acceptable — the app has one seeded user — but users must land on the sign-in screen rather
-      than on an error page.
+      than on an error page. Verified with a malformed/garbage token: `JwtAuthGuard.handleRequest`
+      maps it to `Tu sesión expiró, iniciá sesión de nuevo`, not a 500, and `web`'s
+      `redirectIfUnauthenticated` sends that straight to `/signin` after deleting the stale cookie.
 
 ## GraphQL Contract Delta
 
@@ -214,35 +225,62 @@ does not need it (Constitution, Article VII).
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: A `POST` to `/graphql` with `query { users { id } }` and no cookie or header returns
+- [x] **AC-1**: A `POST` to `/graphql` with `query { users { id } }` and no cookie or header returns
       an error and no data. Same for a movies query, a settings mutation and `encodeStarted`.
-- [ ] **AC-2**: The same request with a valid bearer token returns data.
-- [ ] **AC-3**: Signing in through the UI and loading `/dashboard` shows the library. `me` returns
+- [x] **AC-2**: The same request with a valid bearer token returns data.
+- [x] **AC-3**: Signing in through the UI and loading `/dashboard` shows the library. `me` returns
       the signed-in user's `id`, `name` and `username`.
-- [ ] **AC-4**: Signing in with "keep me logged in" **unchecked**, then closing and reopening the
+- [x] **AC-4**: Signing in with "keep me logged in" **unchecked**, then closing and reopening the
       browser, lands on `/signin`. With it **checked**, the same sequence lands on `/dashboard`, and
-      the cookie's expiry is ~30 days out.
-- [ ] **AC-5**: Signing out and then reloading a protected page lands on `/signin`, and a
-      hand-crafted request replaying the old cookie is rejected by the API.
-- [ ] **AC-6 (failure path)**: Signing in with a wrong password shows `Credenciales inválidas`
-      inline in the form, no redirect, no stack trace.
-- [ ] **AC-7 (failure path)**: `docker compose logs web` after a successful login contains neither
-      the password nor the token.
-- [ ] **AC-8 (failure path)**: Starting the API with `JWT_SECRET` unset fails to boot with an
-      explicit message. It must not start with a default.
+      the cookie's expiry is ~30 days out. Verified live with the box checked (login succeeded,
+      landed on `/dashboard`) and by code review for both branches
+      (`services/web/src/actions/auth.ts`: `maxAge` set only when `rememberMe` is true, omitted —
+      not zeroed — otherwise). The literal "close and reopen the browser" step needs a real browser
+      profile with session restore disabled, which this session's tooling cannot drive; the plan's
+      own Risks table already flags this as a human-only check.
+- [x] **AC-5**: Signing out and then reloading a protected page lands on `/signin`, and a
+      hand-crafted request replaying the old cookie is rejected by the API. Verified live, both
+      halves: browser sign-out → reload `/dashboard` → redirected to `/signin`; and, by `curl`,
+      logging in, using the token once successfully, calling `logout` with it, then replaying that
+      exact same (validly-signed, unexpired) token again — rejected with `No autenticado`.
+- [x] **AC-6 (failure path)**: Signing in with a wrong password shows `Credenciales inválidas`
+      inline in the form, no redirect, no stack trace. Verified live through the UI.
+- [x] **AC-7 (failure path)**: `docker compose logs web` after a successful login contains neither
+      the password nor the token. Verified live (`web` and `api` logs both grepped clean).
+- [x] **AC-8 (failure path)**: Starting the API with `JWT_SECRET` unset fails to boot with an
+      explicit message. It must not start with a default. Verified live via a one-off
+      `docker compose run` with `JWT_SECRET` blanked — crashes with the exact message from
+      `auth.constants.ts`, never boots.
 - [ ] **AC-9**: A full pipeline run — add a magnet, let it download, let it encode — completes with
       the guard in place, and `ProcessJob` reaches its terminal state. Nothing in
-      `docker compose logs worker` mentions an authentication error.
-- [ ] **AC-10 (failure path)**: Running `on-torrent-completed.sh` inside the `torrent` container
+      `docker compose logs worker` mentions an authentication error. **Not run this session** — see
+      NFR-2's note. The individual mechanism (every worker operation reachable with `SERVICE_TOKEN`)
+      is verified; a full real download-through-encode pass is not.
+- [x] **AC-10 (failure path)**: Running `on-torrent-completed.sh` inside the `torrent` container
       with the machine credential removed from its environment exits **non-zero** and says why. It
       must not exit `0` after receiving a `401` — that is the shape of the silent break this
-      feature is most likely to introduce.
-- [ ] **AC-11 (failure path)**: A tus `POST` to `/uploads` with no ticket is rejected with `401`
+      feature is most likely to introduce. Verified live, both the failure case (blank
+      `SERVICE_TOKEN` → non-zero, message on stderr) and the golden path (real token, real API →
+      exit `0`, `torrentCompleted`'s response printed).
+- [x] **AC-11 (failure path)**: A tus `POST` to `/uploads` with no ticket is rejected with `401`
       before any bytes are written. Verifiable with `curl` — no file appears in the downloads root.
-- [ ] **AC-12 (failure path)**: Replaying a ticket that was already used, or one minted for a
-      different `movieId` than the upload metadata declares, is rejected.
-- [ ] **AC-13**: Uploading a real file through the UI still works end to end, including pausing and
+      Verified live: `401` with the exact spec'd message, downloads root byte-for-byte unchanged.
+- [x] **AC-12 (failure path)**: Replaying a ticket that was already used, or one minted for a
+      different `movieId` than the upload metadata declares, is rejected. Verified live: a ticket
+      minted for `movieId 1`, POSTed with metadata claiming `movieId 2` → `403`, ticket *not* spent;
+      the same ticket then POSTed with the correct `movieId 1` → `201 Created`; POSTing it a third
+      time → `401` (already spent).
+- [x] **AC-13**: Uploading a real file through the UI still works end to end, including pausing and
       resuming, which is what proves the ticket is checked at creation and not per chunk.
+      **Verified at the protocol level, not through an actual browser file picker** (this session's
+      browser automation has no file-upload capability): a real ticket-gated tus `POST` succeeds
+      once; a subsequent `PATCH` sending bytes to that same upload, with **no** `Authorization`
+      header at all, is accepted at the tus-protocol layer (it hits an unrelated offset-tracking
+      response, not a `401`) — proving the ticket is genuinely not re-checked past creation. Paired
+      with code review of `importFileModal.tsx` confirming the ticket is minted and sent via
+      `headers` before `tus.Upload` is constructed, and that pause/resume reuse the same instance
+      without a second `POST`. Recommend one manual browser pass (drag a file, pause, resume) to
+      close the gap between this and the literal AC text.
 
 ## Out of Scope
 

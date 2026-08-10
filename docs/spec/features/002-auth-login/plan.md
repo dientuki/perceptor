@@ -2,7 +2,7 @@
 title: Login and the Authentication Boundary — Implementation Plan
 spec_version: 1.0.0
 last_updated: 2026-08-10
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Login and the Authentication Boundary (`plan.md`)

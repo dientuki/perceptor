@@ -1,6 +1,7 @@
 'use server'
 
 import { fetchGraphQL } from '@/lib/graphql-client';
+import { redirectIfUnauthenticated } from '@/lib/auth-session';
 import { MediaType } from '@/types/media';
 import { MediaSearchResult } from '@/types/search';
 
@@ -34,6 +35,7 @@ export async function getMovies(): Promise<Movie[]> {
 
   // GraphQL responde 200 con `errors` poblado: sin este chequeo `data` viene undefined
   if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
     throw new Error(errors[0]?.message || 'Error al obtener películas');
   }
 
@@ -60,6 +62,7 @@ export async function getMovieById(id: number): Promise<Movie | null> {
   const { data, errors } = await fetchGraphQL<{ movie: Movie | null }>(GET_MOVIE_QUERY, { id });
 
   if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
     throw new Error(errors[0]?.message || 'Error al obtener la película');
   }
 
@@ -82,6 +85,7 @@ export async function addMovie(tmdbId: number, type: MediaType): Promise<number>
   );
 
   if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
     throw new Error(errors[0]?.message || 'Error al agregar la película');
   }
 
@@ -116,6 +120,7 @@ export async function searchMovies(query: string): Promise<MediaSearchResult[]> 
 
   // GraphQL responde 200 con `errors` poblado: hay que mirarlo explícitamente
   if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
     throw new Error(errors[0]?.message || 'Error al buscar películas');
   }
 

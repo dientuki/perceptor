@@ -15,6 +15,18 @@ set_env_var() {
   sed "s|^${1}=.*|${1}=${2}|" .env > .env.tmp && mv .env.tmp .env
 }
 
+ensure_env_var() {
+  # Como set_env_var, pero agrega la línea si no existe todavía — necesario
+  # para variables agregadas a .env.example después de que el .env del
+  # usuario ya existía (JWT_SECRET, SERVICE_TOKEN de 002-auth-login): en la
+  # rama "uso el .env existente" set_env_var por sí sola no haría nada.
+  if grep -q "^${1}=" .env; then
+    set_env_var "$1" "$2"
+  else
+    echo "${1}=${2}" >> .env
+  fi
+}
+
 generate_env=true
 if [ -f .env ]; then
   read -rp ".env ya existe. ¿Regenerarlo desde .env.example? [y/N] " overwrite
@@ -72,6 +84,18 @@ else
   echo "Uso el .env existente."
 fi
 
+# JWT_SECRET tiene que existir ANTES de levantar api más abajo: sin él,
+# assertAuthEnv() (services/api/src/auth/auth.constants.ts) hace fallar el
+# boot a propósito (AC-8, REQ-6) — así que un JWT_SECRET vacío acá dejaría a
+# api reiniciándose en loop y el --wait de más abajo terminaría en timeout.
+# Sólo se genera si está vacío: no pisa un secreto que el usuario ya haya
+# puesto a mano en un .env reusado.
+current_jwt_secret=$(grep '^JWT_SECRET=' .env 2>/dev/null | cut -d= -f2-)
+if [ -z "$current_jwt_secret" ]; then
+  echo "Generando JWT_SECRET..."
+  ensure_env_var JWT_SECRET "$(openssl rand -hex 32)"
+fi
+
 set -a; . ./.env; set +a
 
 echo
@@ -92,6 +116,19 @@ if ! docker compose exec -T api test -x node_modules/.bin/prisma; then
   echo "Reiniciando api para que levante con las dependencias nuevas..."
   docker compose restart api
   BUILD_TARGET=dev docker compose up -d --wait --wait-timeout 300 api
+fi
+
+# SERVICE_TOKEN recién se puede mintear con api ya arriba (el script vive en
+# services/api/scripts/, corre adentro del container). Igual que JWT_SECRET,
+# sólo si todavía no hay uno — no pisa un token que el usuario ya haya
+# generado a mano (por ejemplo después de rotar JWT_SECRET manualmente).
+# --T (sin pseudo-tty) en vez de bin/npm/bin/cli porque acá se captura stdout
+# con command substitution, mismo motivo que el chequeo de prisma más arriba.
+current_service_token=$(grep '^SERVICE_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
+if [ -z "$current_service_token" ]; then
+  echo "Minteando SERVICE_TOKEN..."
+  service_token=$(docker compose exec -T api npm run --silent token:service)
+  ensure_env_var SERVICE_TOKEN "$service_token"
 fi
 
 echo "Otorgando privilegios a ${DB_USER} en MariaDB..."
