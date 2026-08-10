@@ -1,10 +1,10 @@
 ---
 title: Login and the Authentication Boundary
-spec_version: 0.1.0
+spec_version: 1.0.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-09
-status: Draft
+last_updated: 2026-08-10
+status: Approved
 services: [api, web, worker]
 ---
 
