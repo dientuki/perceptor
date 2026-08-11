@@ -1,11 +1,18 @@
 "use client";
-import React, { useEffect, useRef, useState,useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 
-import { Calendar, Film, Popcorn, TvMinimal, LayoutList } from "lucide-react";
+import {
+  Calendar,
+  Film,
+  Popcorn,
+  TvMinimal,
+  LayoutList,
+  Users,
+} from "lucide-react";
 
 type NavItem = {
   name: string;
@@ -14,11 +21,11 @@ type NavItem = {
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
-const navItems: NavItem[] = [
+const baseNavItems: NavItem[] = [
   {
     icon: <Popcorn />,
     name: "Dashboard",
-    path: "/"
+    path: "/",
   },
   {
     icon: <Film />,
@@ -48,13 +55,23 @@ const navItems: NavItem[] = [
   },
 ];
 
-const AppSidebar: React.FC = () => {
+interface AppSidebarProps {
+  isAdmin?: boolean;
+}
+
+const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
 
+  // Only the administrator sees the entry point — REQ-4's usability half. The
+  // real control is api's AdminGuard (REQ-2); this is cosmetic, per web/plan.md.
+  const navItems: NavItem[] = isAdmin
+    ? [...baseNavItems, { icon: <Users />, name: "Users", path: "/users" }]
+    : baseNavItems;
+
   const renderMenuItems = (
     navItems: NavItem[],
-    menuType: "main" | "others"
+    menuType: "main" | "others",
   ) => (
     <ul className="flex flex-col gap-4">
       {navItems.map((nav, index) => (
@@ -91,7 +108,10 @@ const AppSidebar: React.FC = () => {
                     openSubmenu?.index === index
                       ? "rotate-90"
                       : ""
-                  }`}>a</span>
+                  }`}
+                >
+                  a
+                </span>
               )}
             </button>
           ) : (
@@ -154,7 +174,6 @@ const AppSidebar: React.FC = () => {
                             new
                           </span>
                         )}
-                        
                       </span>
                     </Link>
                   </li>
@@ -172,12 +191,12 @@ const AppSidebar: React.FC = () => {
     index: number;
   } | null>(null);
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>(
-    {}
+    {},
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // const isActive = (path: string) => path === pathname;
-   const isActive = useCallback((path: string) => path === pathname, [pathname]);
+  const isActive = useCallback((path: string) => path === pathname, [pathname]);
 
   useEffect(() => {
     // Check if the current path matches any submenu item
@@ -238,8 +257,8 @@ const AppSidebar: React.FC = () => {
           isExpanded || isMobileOpen
             ? "w-[290px]"
             : isHovered
-            ? "w-[290px]"
-            : "w-[90px]"
+              ? "w-[290px]"
+              : "w-[90px]"
         }
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
         lg:translate-x-0`}

@@ -48,8 +48,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     if (principal.type === 'service' && !allowsService) {
       // Same message as "no credential at all" — a service principal
-      // hitting a user-only operation does not get a sixth user-facing
-      // error string (see plan.md § Contract Freeze).
+      // hitting a user-only operation does not get a distinct user-facing
+      // error string here. `002-auth-login` froze five such strings; the
+      // sixth, `Tu cuenta está deshabilitada`, was added by
+      // `004-user-disable`, but it belongs to the login path, not this
+      // rejection (see plan.md § Contract Freeze).
       throw new UnauthorizedException('No autenticado');
     }
 

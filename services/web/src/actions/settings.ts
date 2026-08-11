@@ -1,7 +1,7 @@
 'use server'
 
 import { fetchGraphQL } from '@/lib/graphql-client';
-import { redirectIfUnauthenticated } from '@/lib/auth-session';
+import { redirectIfUnauthenticated, redirectToClearSession } from '@/lib/auth-session';
 import { Setting } from '@/types/settings';
 
 const SETTINGS_QUERY = `
@@ -17,7 +17,10 @@ export async function getSettings(): Promise<Setting[]> {
   const { data, errors } = await fetchGraphQL<{ settings: Setting[] }>(SETTINGS_QUERY);
 
   if (errors && errors.length > 0) {
-    await redirectIfUnauthenticated(errors);
+    // Called directly from SettingsPage's Server Component render — cookie
+    // mutation is illegal there, so hand off to the Route Handler instead of
+    // redirectIfUnauthenticated (used below, in the form action, where it's legal).
+    redirectToClearSession(errors);
     throw new Error(errors[0]?.message || 'Error al obtener la configuración');
   }
 

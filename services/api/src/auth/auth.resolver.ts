@@ -47,7 +47,10 @@ export class AuthResolver {
     // Structurally unreachable today — the guard's absent @AllowService()
     // already keeps a service principal out — but TypeScript still needs the
     // narrowing to access `.id`, and this is the same message the guard
-    // itself would throw for the same reason (no sixth user-facing string).
+    // itself would throw for the same reason: reusing it here doesn't add a
+    // new user-facing string on this boundary. `002-auth-login` froze five;
+    // `Tu cuenta está deshabilitada` from `004-user-disable` is the sixth,
+    // and it belongs to `login`, not this query.
     if (principal.type !== 'user') {
       throw new UnauthorizedException('No autenticado');
     }

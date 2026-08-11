@@ -1,7 +1,7 @@
 'use server'
 
 import { fetchGraphQL } from '@/lib/graphql-client';
-import { redirectIfUnauthenticated } from '@/lib/auth-session';
+import { redirectIfUnauthenticated, redirectToClearSession } from '@/lib/auth-session';
 import { MediaType } from '@/types/media';
 import { MediaSearchResult } from '@/types/search';
 
@@ -62,7 +62,11 @@ export async function getMovieById(id: number): Promise<Movie | null> {
   const { data, errors } = await fetchGraphQL<{ movie: Movie | null }>(GET_MOVIE_QUERY, { id });
 
   if (errors && errors.length > 0) {
-    await redirectIfUnauthenticated(errors);
+    // Called directly from MovieDetailsPage's Server Component render (and
+    // its generateMetadata) — cookie mutation is illegal there, so hand off
+    // to the Route Handler instead of redirectIfUnauthenticated (still used
+    // below, in the form actions, where it's legal).
+    redirectToClearSession(errors);
     throw new Error(errors[0]?.message || 'Error al obtener la película');
   }
 

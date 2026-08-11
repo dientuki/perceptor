@@ -19,13 +19,13 @@ export default function AdminShell({ user, children }: AdminShellProps) {
   const mainContentMargin = isMobileOpen
     ? "ml-0"
     : isExpanded || isHovered
-    ? "lg:ml-[290px]"
-    : "lg:ml-[90px]";
+      ? "lg:ml-[290px]"
+      : "lg:ml-[90px]";
 
   return (
     <div className="min-h-screen xl:flex">
       {/* Sidebar and Backdrop */}
-      <AppSidebar />
+      <AppSidebar isAdmin={user.isAdmin} />
       <Backdrop />
       {/* Main Content Area */}
       <div
@@ -34,7 +34,9 @@ export default function AdminShell({ user, children }: AdminShellProps) {
         {/* Header */}
         <AppHeader user={user} />
         {/* Page Content */}
-        <div className="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">{children}</div>
+        <div className="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
+          {children}
+        </div>
       </div>
     </div>
   );

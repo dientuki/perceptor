@@ -47,6 +47,13 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
+    // A disabled user must not get a session, even with the correct password
+    // (004-user-disable REQ-2) — this has to run before sessionService.create()
+    // so a refused login never leaves a session record behind.
+    if (!user.isEnabled) {
+      throw new UnauthorizedException('Tu cuenta está deshabilitada');
+    }
+
     const ttlSeconds = ttlToSeconds(rememberMe ? REMEMBER_ME_TTL : SESSION_TTL);
     const jti = await this.sessionService.create(user.id, ttlSeconds);
 

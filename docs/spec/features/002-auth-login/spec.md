@@ -183,6 +183,11 @@ worked yesterday. `web` and `worker` retype the schema by hand and there is no c
 | Upload ticket missing, expired or already used | HTTP `401` from tus | `El permiso de subida venció, volvé a intentar` |
 | Upload ticket does not match the movie being uploaded | HTTP `403` from tus | `El permiso de subida no corresponde a esta película` |
 
+> **2026-08-11**: `004-user-disable` added a sixth user-facing string on this same login/session
+> boundary (`Tu cuenta está deshabilitada`, for a disabled account's `login` attempt). This table
+> is not amended — it documents this feature as shipped — see that feature's `spec.md` § Errors for
+> the sixth string and why it was added there rather than here.
+
 What each consumer does with them:
 
 - **`web`** — on "no autenticado" or "sesión expiró", the server action deletes the cookie and

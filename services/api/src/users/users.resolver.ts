@@ -32,8 +32,14 @@ export class UsersResolver {
   }
 
   @Mutation(() => User)
-  async updateUser(@Args('updateUserInput') updateUserInput: UpdateUserInput) {
-    return await this.usersService.update(updateUserInput.id, updateUserInput);
+  async updateUser(
+    @Args('updateUserInput') updateUserInput: UpdateUserInput,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    // AdminGuard already guarantees principal.type === 'user'; narrowed
+    // again here purely for TypeScript.
+    const requesterId = principal.type === 'user' ? principal.id : '';
+    return await this.usersService.update(updateUserInput.id, updateUserInput, requesterId);
   }
 
   @Mutation(() => User)

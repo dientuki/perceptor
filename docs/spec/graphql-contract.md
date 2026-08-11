@@ -3,7 +3,7 @@ title: The GraphQL Contract
 spec_version: 1.1.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-10
+last_updated: 2026-08-11
 status: Approved
 target_service: api, web, worker
 ---
@@ -161,6 +161,28 @@ non-admin caller gets `No tenés permisos para administrar usuarios` from every 
 No schema shape changed beyond the additive `isAdmin` field — `removeUser` still takes only `id`;
 the caller is read server-side via `@CurrentUser()`, not passed as an argument. `createUser` has no
 `isAdmin` argument — the `/users` screen can only create ordinary users.
+
+### Users can be disabled (`004-user-disable`)
+
+`User` also carries `isEnabled: Boolean!`, and `UpdateUserInput` gained `isEnabled: Boolean` —
+additive, no shape change to `updateUser` itself. `updateUser` now reads its caller via
+`@CurrentUser()`, the same way `removeUser` already did — no new GraphQL argument for "who is
+asking". `isEnabled` is deliberately not on `CreateUserInput`: a user is always created enabled.
+
+A disabled user's `login` is refused, and disabling revokes every session that user currently
+holds (not just their next login attempt) — see `services/api/CLAUDE.md`'s `auth/` bullet for the
+per-user Redis SET this uses. `updateUser` refuses two attempts, mirroring `remove()`'s existing
+self/last-admin safeguards:
+
+| Condition | Exception | Message |
+| :-- | :-- | :-- |
+| Correct credentials, account disabled (`login`) | `UnauthorizedException` | `Tu cuenta está deshabilitada` |
+| Admin disabling their own account | `BadRequestException` | `No podés deshabilitar tu propio usuario` |
+| Admin disabling the last enabled administrator | `BadRequestException` | `No podés deshabilitar al único administrador` |
+
+`Tu cuenta está deshabilitada` is a sixth user-facing string on the login/session boundary that
+`002-auth-login`'s `spec.md` froze at five — see that file's dated pointer for why `002` itself was
+not reopened.
 
 ### The one non-GraphQL route
 

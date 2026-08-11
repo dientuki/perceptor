@@ -133,8 +133,10 @@ the api seed reads them directly, so the app login, qBittorrent's WebUI and Prow
 share one login. Each service's own UI can still change its own credentials afterward. The seeded
 `ADMIN_USER` is also the app's first administrator (`isAdmin: true` — see
 `003-auth-user-management`): there is no public registration, so every other user is created by an
-admin from the `/users` screen. If nobody can sign in as an admin, `bin/reset-password` is the
-recovery path.
+admin from the `/users` screen. An admin can also disable a user instead of deleting them
+(`isEnabled: false` — `004-user-disable`): a disabled user is refused at login and, unlike a plain
+flag flip, has every session they currently hold revoked immediately, not just their next login
+attempt. If nobody can sign in as an admin, `bin/reset-password` is the recovery path.
 
 `BUILD_TARGET` is an optional override for which Dockerfile stage to run (`dev` by default,
 `runner` for production) — every Dockerfile has `base` / `dev` / `builder` / `runner` stages, and

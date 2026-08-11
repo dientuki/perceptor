@@ -1,7 +1,11 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { createUserAction, deleteUserAction } from "@/actions/users";
+import {
+  createUserAction,
+  deleteUserAction,
+  setUserEnabledAction,
+} from "@/actions/users";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
@@ -152,6 +156,9 @@ function UsersTable({ users, currentUserId }: UsersManagerProps) {
                 Rol
               </th>
               <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+                Estado
+              </th>
+              <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
                 {" "}
               </th>
             </tr>
@@ -177,7 +184,18 @@ interface UserRowProps {
 }
 
 function UserRow({ user, isSelf }: UserRowProps) {
-  const [state, formAction, isPending] = useActionState(deleteUserAction, null);
+  const [deleteState, deleteFormAction, isDeletePending] = useActionState(
+    deleteUserAction,
+    null,
+  );
+  const [toggleState, toggleFormAction, isTogglePending] = useActionState(
+    setUserEnabledAction,
+    null,
+  );
+
+  const error =
+    (toggleState && "error" in toggleState && toggleState.error) ||
+    (deleteState && "error" in deleteState && deleteState.error);
 
   return (
     <>
@@ -199,25 +217,65 @@ function UserRow({ user, isSelf }: UserRowProps) {
             </span>
           )}
         </td>
+        <td className="py-3 pr-4">
+          {user.isEnabled ? (
+            <span className="inline-flex items-center rounded-full bg-success-50 px-2.5 py-0.5 text-xs font-medium text-success-500 dark:bg-success-500/10">
+              Habilitado
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-500 dark:bg-brand-500/10">
+              Deshabilitado
+            </span>
+          )}
+        </td>
         <td className="py-3 pr-4 text-right">
-          <form action={formAction}>
-            <input type="hidden" name="id" value={user.id} />
-            <Button
-              type="submit"
-              size="sm"
-              variant="outline"
-              disabled={isSelf || isPending}
-              title={isSelf ? "No podés eliminar tu propio usuario" : undefined}
-            >
-              {isPending ? "Eliminando..." : "Eliminar"}
-            </Button>
-          </form>
+          <div className="flex justify-end gap-2">
+            <form action={toggleFormAction}>
+              <input type="hidden" name="id" value={user.id} />
+              <input
+                type="hidden"
+                name="isEnabled"
+                value={(!user.isEnabled).toString()}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                variant="outline"
+                disabled={isSelf || isTogglePending}
+                title={
+                  isSelf ? "No podés deshabilitar tu propio usuario" : undefined
+                }
+              >
+                {isTogglePending
+                  ? user.isEnabled
+                    ? "Deshabilitando..."
+                    : "Habilitando..."
+                  : user.isEnabled
+                    ? "Deshabilitar"
+                    : "Habilitar"}
+              </Button>
+            </form>
+            <form action={deleteFormAction}>
+              <input type="hidden" name="id" value={user.id} />
+              <Button
+                type="submit"
+                size="sm"
+                variant="outline"
+                disabled={isSelf || isDeletePending}
+                title={
+                  isSelf ? "No podés eliminar tu propio usuario" : undefined
+                }
+              >
+                {isDeletePending ? "Eliminando..." : "Eliminar"}
+              </Button>
+            </form>
+          </div>
         </td>
       </tr>
-      {state && "error" in state && state.error && (
+      {error && (
         <tr>
-          <td colSpan={4} className="pb-3">
-            <p className={ERROR_CLASS}>{state.error}</p>
+          <td colSpan={5} className="pb-3">
+            <p className={ERROR_CLASS}>{error}</p>
           </td>
         </tr>
       )}

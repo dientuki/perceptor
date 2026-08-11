@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { fetchGraphQL } from '@/lib/graphql-client';
-import { redirectIfUnauthenticated } from '@/lib/auth-session';
+import { redirectToClearSession } from '@/lib/auth-session';
 import { CONFIG } from '@/lib/config';
 
 export interface CurrentUser {
@@ -104,7 +104,13 @@ export async function getCurrentUser(): Promise<CurrentUser> {
   const { data, errors } = await fetchGraphQL<{ me: CurrentUser }>(ME_QUERY);
 
   if (errors && errors.length > 0) {
-    await redirectIfUnauthenticated(errors);
+    // getCurrentUser() is only ever called from a Server Component's render
+    // pass (the dashboard layout, the users page) — cookies can't be
+    // mutated there, only read. redirectToClearSession hands the actual
+    // cookie deletion off to a Route Handler instead of doing it here (which
+    // is what redirectIfUnauthenticated does, and would crash in this
+    // context). See src/app/api/auth/clear-session/route.ts.
+    redirectToClearSession(errors);
     throw new Error(errors[0]?.message || 'Error al obtener el usuario actual');
   }
 

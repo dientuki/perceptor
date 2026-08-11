@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-11
 last_updated: 2026-08-11
-status: Draft
+status: Implemented
 services: [api, web]
 ---
 
@@ -38,38 +38,38 @@ The toggle lives on the same `/users` screen `003` built (`services/web/src/app/
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (The state is a property of the row)**: A user must be markable as disabled in a way
+- [x] **REQ-1 (The state is a property of the row)**: A user must be markable as disabled in a way
       that survives everything else about that row — renaming, promoting/demoting admin status,
       restoring a backup. Every existing user, on the migration that introduces the column, must
       come out enabled — nobody gets locked out by upgrading.
-- [ ] **REQ-2 (Disabled means no new session)**: The `login` mutation must refuse a disabled user's
+- [x] **REQ-2 (Disabled means no new session)**: The `login` mutation must refuse a disabled user's
       credentials, even if the username and password are correct, with a distinct message (see
       § GraphQL Contract Delta § Errors) — not the generic wrong-credentials message.
-- [ ] **REQ-3 (Disabled kills the session, not just the next login)**: The moment an administrator
+- [x] **REQ-3 (Disabled kills the session, not just the next login)**: The moment an administrator
       disables a user, every session that user currently holds — however many browsers or devices
       they're signed in on — must stop working on its very next request. A user who is mid-session
       when disabled must not get to keep using the app until their token happens to expire.
-- [ ] **REQ-4 (Only the admin toggles it)**: Enabling or disabling a user is an admin-only action,
+- [x] **REQ-4 (Only the admin toggles it)**: Enabling or disabling a user is an admin-only action,
       through the same `AdminGuard` that already gates every `users` operation. No new guard.
-- [ ] **REQ-5 (Nobody can lock the app via disable)**: An administrator must not be able to disable
+- [x] **REQ-5 (Nobody can lock the app via disable)**: An administrator must not be able to disable
       themselves, and must not be able to disable the last *enabled* administrator. Both attempts
       must fail with an explanation rather than succeeding. This is `003`'s REQ-5 for delete,
       extended to disable — including the same ordering lesson `003` documented: the last-admin
       check must count only enabled admins, or a lone remaining admin can be locked out by
       disabling every admin but themselves one at a time.
-- [ ] **REQ-6 (The screen shows and controls it)**: The `/users` table must show whether each user
+- [x] **REQ-6 (The screen shows and controls it)**: The `/users` table must show whether each user
       is enabled or disabled, and let the administrator toggle it per row, from inside the same
       screen `003` built. Toggling the current administrator's own row must be disabled in the UI,
       matching how the delete button already handles the caller's own row.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (No backfill needed)**: Unlike `003`'s `isAdmin` column, the new column's default
+- [x] **NFR-1 (No backfill needed)**: Unlike `003`'s `isAdmin` column, the new column's default
       (`true`) is already the correct value for every existing row — the migration needs no
       backfill `UPDATE`, only the `ALTER TABLE`.
-- [ ] **NFR-2 (Language)**: UI copy and API exception messages in Spanish; code, comments,
+- [x] **NFR-2 (Language)**: UI copy and API exception messages in Spanish; code, comments,
       identifiers and test descriptions in English (Constitution, Article VI).
-- [ ] **NFR-3 (Silent failure is not acceptable here)**: A disable that doesn't actually revoke a
+- [x] **NFR-3 (Silent failure is not acceptable here)**: A disable that doesn't actually revoke a
       live session is exactly the failure Constitution Article IX exists for — nothing errors
       anywhere, the administrator believes the user is locked out, and they aren't. This must be
       covered by a test, not just a manual check.
@@ -150,26 +150,26 @@ scope for that feature**, not as forbidden forever — see this spec's header bl
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: On a fresh database, `bin/mysql -e 'select username, isEnabled from users'` shows
+- [x] **AC-1**: On a fresh database, `bin/mysql -e 'select username, isEnabled from users'` shows
       every seeded user with `isEnabled = 1`.
-- [ ] **AC-2**: On a database that already had users before the migration, the same query shows
+- [x] **AC-2**: On a database that already had users before the migration, the same query shows
       every existing row with `isEnabled = 1` after `bin/cli api npx prisma migrate deploy` — no
       row silently becomes disabled by upgrading.
-- [ ] **AC-3**: Signed in as the administrator, toggling a user to disabled in `/users` updates
+- [x] **AC-3**: Signed in as the administrator, toggling a user to disabled in `/users` updates
       that row's status in the table with no page error, and toggling it back to enabled does the
       same.
-- [ ] **AC-4 (failure path)**: That disabled user attempting to sign in with their correct
+- [x] **AC-4 (failure path)**: That disabled user attempting to sign in with their correct
       password is refused with `Tu cuenta está deshabilitada`, not `Credenciales inválidas`.
-- [ ] **AC-5 (failure path)**: A user who is already signed in, in a *different* browser session,
+- [x] **AC-5 (failure path)**: A user who is already signed in, in a *different* browser session,
       at the moment an administrator disables them: their very next request in that session fails
       and they are redirected to `/login` — not merely their next login attempt, an already-open
       session actively in use.
-- [ ] **AC-6 (failure path)**: The administrator attempting to disable their own account is refused
+- [x] **AC-6 (failure path)**: The administrator attempting to disable their own account is refused
       with `No podés deshabilitar tu propio usuario`, and their account remains enabled afterwards.
-- [ ] **AC-7 (failure path)**: With exactly one *enabled* administrator in the database (a second,
+- [x] **AC-7 (failure path)**: With exactly one *enabled* administrator in the database (a second,
       already-disabled administrator may also exist), attempting to disable that one remaining
       enabled administrator is refused with `No podés deshabilitar al único administrador`.
-- [ ] **AC-8**: Re-enabling a previously disabled user lets them sign in again with their existing
+- [x] **AC-8**: Re-enabling a previously disabled user lets them sign in again with their existing
       password — disabling and re-enabling does not touch the password hash or any other field.
 
 ## Out of Scope

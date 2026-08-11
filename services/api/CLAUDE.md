@@ -62,7 +62,11 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   principal (`{type:'user', id, username}`, checked against `session.service.ts`'s Redis-backed
   session record so `logout` can actually revoke it — this is what makes AC-5 hold for a stateless
   JWT) or a **service** principal (`{type:'service', name}`, no `id`, no expiry, minted by
-  `scripts/mint-service-token.ts` and never subjected to the session check). `guards/jwt-auth.guard.ts`
+  `scripts/mint-service-token.ts` and never subjected to the session check). `session.service.ts`
+  also keeps a per-user reverse index (`user-sessions:<userId>`, a Redis SET of that user's live
+  `jti`s, refreshed on every `create()`) so `revokeAllForUser(userId)` can kill every session a user
+  holds in one shot — this is what `004-user-disable` uses to make a disable take effect
+  immediately instead of waiting for each session to expire. `guards/jwt-auth.guard.ts`
   short-circuits for any non-GraphQL execution context, so it never touches `/uploads` — that REST
   route is authenticated separately, per-request, by the ticket mechanism in `src/uploads/`.
   `decorators/current-user.decorator.ts` exposes `@CurrentUser()`, typed to the principal union.
@@ -73,6 +77,13 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   recovery path when no admin can sign in — run through `bin/reset-password`, never bare.
 - `users/` — CRUD over the `User` model. `isAdmin: Boolean!` (`003-auth-user-management`) gates the
   whole module via `AdminGuard`; `remove()` refuses self-delete and refuses deleting the last admin.
+  `isEnabled: Boolean!` (`004-user-disable`) adds a second lever: `update()` refuses self-disable
+  and refuses disabling the last *enabled* admin (`{ isAdmin: true, isEnabled: true }` — counting
+  disabled admins would let someone lock the app out one disable at a time), same check order as
+  `remove()`. A successful disable calls `SessionService.revokeAllForUser()` in the same method, so
+  an already-open session dies immediately rather than at token expiry. `login()`
+  (`auth.service.ts`) refuses a disabled user's credentials with a distinct message, even if
+  correct.
 - `movies/` — CRUD over `Movie`, plus `addTorrentToMovie` / `addMagnetToMovie` (the two entry
   points into the download pipeline) and the in-progress `movies.search.ts`.
 - `media-sources/` — the `MediaSource` row that represents one acquisition attempt.
@@ -172,9 +183,11 @@ real `mkdtemp` with real symlinks because a bug there is a real path traversal.
 Both of those files currently have Spanish `it(...)` strings; they predate Constitution Article VI.
 Copy their *structure*, write the new prose in English.
 
-Do **not** extend or imitate `src/users/users.service.spec.ts`, `users.resolver.spec.ts` or
-`app.controller.spec.ts` — those 18-line `expect(service).toBeDefined()` files are `nest g`
-scaffolding. Constitution, Article IX has the rule.
+Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts` — those 18-line
+`expect(service).toBeDefined()` files are `nest g` scaffolding. Constitution, Article IX has the
+rule. `src/users/users.service.spec.ts` **used to be** on this list; `004-user-disable` rewrote it
+into a real suite (see its own header comment for what it defends against) — follow *that* file's
+structure now, not the scaffolding pattern its name might suggest from memory.
 
 ## Current state — do not treat as reference code
 

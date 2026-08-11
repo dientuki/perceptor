@@ -5,4 +5,5 @@ export type AdminUser = {
   name: string;
   username: string;
   isAdmin: boolean;
+  isEnabled: boolean;
 };

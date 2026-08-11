@@ -20,6 +20,8 @@ import { getJwtSecret } from './auth.constants';
     }),
   ],
   providers: [AuthService, AuthResolver, JwtStrategy, SessionService],
-  exports: [JwtModule],
+  // SessionService is exported so UsersModule can revoke a disabled user's
+  // live sessions (004-user-disable REQ-3) without a second Redis wrapper.
+  exports: [JwtModule, SessionService],
 })
 export class AuthModule {}

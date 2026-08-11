@@ -12,6 +12,7 @@ type User {
   name: String!
   username: String!
   isAdmin: Boolean!
+  isEnabled: Boolean!
 }
 
 type LoginResponse {
@@ -211,6 +212,7 @@ input UpdateUserInput {
   username: String
   password: String
   id: ID!
+  isEnabled: Boolean
 }
 
 input SettingInput {

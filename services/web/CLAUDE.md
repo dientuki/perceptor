@@ -79,15 +79,40 @@ real enforcement point is `api`'s global guard: `src/app/(dashboard)/layout.tsx`
 `redirectIfUnauthenticated` sends any action that gets back `No autenticado` or a session-expired
 error straight to `/login`, deleting the stale cookie first.
 
-## Admin user management (`003-auth-user-management`)
+## Admin user management (`003-auth-user-management`, `004-user-disable`)
 
-`src/actions/users.ts` (`getUsers`/`createUserAction`/`deleteUserAction`, same server-action shape
-as `settings.ts`), `src/app/(dashboard)/users/page.tsx` (server component — checks
-`getCurrentUser().isAdmin` and calls `notFound()` **before** calling `getUsers()`, sequentially,
-never via `Promise.all`: racing them turns `api`'s `AdminGuard` refusal into a 500 instead of a
-clean 404), `src/components/users/UsersManager.tsx` (the client-side table + create form), and
-`src/types/users.ts` (`AdminUser`). The `isAdmin`-gated "Users" sidebar entry is wired through
-`src/layout/AdminShell.tsx` → `src/layout/AppSidebar.tsx`.
+`src/actions/users.ts` (`getUsers`/`createUserAction`/`deleteUserAction`/`setUserEnabledAction`,
+same server-action shape as `settings.ts`), `src/app/(dashboard)/users/page.tsx` (server component —
+checks `getCurrentUser().isAdmin` and calls `notFound()` **before** calling `getUsers()`,
+sequentially, never via `Promise.all`: racing them turns `api`'s `AdminGuard` refusal into a 500
+instead of a clean 404), `src/components/users/UsersManager.tsx` (the client-side table + create
+form), and `src/types/users.ts` (`AdminUser`). The `isAdmin`-gated "Users" sidebar entry is wired
+through `src/layout/AdminShell.tsx` → `src/layout/AppSidebar.tsx`.
+
+`AdminUser.isEnabled` drives an "Estado" column and a per-row toggle form
+(`setUserEnabledAction`), disabled on the caller's own row the same way the delete button already
+is — the real enforcement (self-disable, last-admin, session revocation) is server-side, this is a
+usability affordance only. `setUserEnabledAction` sends only `{ id, isEnabled }`, never the rest of
+`UpdateUserInput`, and parses the target state explicitly from `formData` (`=== 'true'`) rather
+than a truthy check, since `formData` values are always strings and `"false"` is truthy.
+
+## Session invalidation from a Server Component render (`004-user-disable`)
+
+`redirectIfUnauthenticated` (`src/lib/auth-session.ts`) deletes the auth cookie before redirecting
+to `/login` — legal only from a Server Action or a Route Handler. `getCurrentUser()`
+(`src/actions/auth.ts`), `getSettings`, `getMediaRoots`, `getMediaServerOptions` and `getMovieById`
+are all read functions a Server Component `await`s directly during its render pass (the dashboard
+layout, `/settings`, `/movies/[id]`), where cookie mutation throws instead of working. Those call
+`redirectToClearSession` instead, which only calls `redirect()` — the actual cookie deletion
+happens in the new `src/app/api/auth/clear-session/route.ts` Route Handler it redirects to (exempt
+from `src/proxy.ts`'s matcher, so it always runs). Without the real deletion, `proxy.ts`'s
+presence-only check on `/login` would bounce straight back to `/dashboard` since the stale cookie
+never went away — a loop, not a fix. This surfaced because `004-user-disable`'s session revocation
+is the first thing that can invalidate a *live, in-use* session from outside; before it, a cookie
+only went stale via explicit logout (a Server Action) or TTL expiry. Any new read function a
+Server Component awaits directly needs `redirectToClearSession`, not `redirectIfUnauthenticated` —
+the two are not interchangeable, pick based on the caller's context, not by copying the nearest
+example.
 
 ## UI origin: TailAdmin template
 
