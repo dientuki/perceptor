@@ -84,8 +84,18 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   an already-open session dies immediately rather than at token expiry. `login()`
   (`auth.service.ts`) refuses a disabled user's credentials with a distinct message, even if
   correct.
-- `movies/` — CRUD over `Movie`, plus `addTorrentToMovie` / `addMagnetToMovie` (the two entry
-  points into the download pipeline) and the in-progress `movies.search.ts`.
+- `movies/` — CRUD over `Movie`, plus `searchMovies`/`addMovie` (the TMDB search-and-register
+  flow, `src/movies/movies.service.ts` — no separate `movies.search.ts`) and `addTorrentToMovie` /
+  `addMagnetToMovie` (the two entry points into the download pipeline). Since `005-movie-search`,
+  `Movie` is a shared catalog row (`tmdbId @unique`, never duplicated) joined to `User` through
+  `UserMovie` (`userId`/`movieId` composite key, both `onDelete: Cascade`): `movies` and
+  `searchMovies`'s `inLibrary` are scoped to the caller via that join, `movie(id)` stays unscoped,
+  and `addTorrentToMovie`/`addMagnetToMovie` refuse a film the caller hasn't registered with the
+  same `La película <id> no existe` a missing film already produced. `searchMovies` enriches its
+  results with `movieId`/`inLibrary` **after** the best-effort Redis cache write in `cacheMovies`
+  — that cache key is shared globally across all users, so ownership must never be computed before
+  it, or one user's `inLibrary` leaks into what every other user sees for the film for the next 24h
+  (see `movies.service.spec.ts`).
 - `media-sources/` — the `MediaSource` row that represents one acquisition attempt.
 - `downloads/` — `torrentCompleted`, the mutation qBittorrent's AutoRun hook calls; matches
   **exclusively by infoHash** and silently ignores unknown hashes by design.
@@ -205,9 +215,6 @@ what an agent reports before/after to prove it added nothing.
 
 ## Known debt
 
-- `src/clients/tmdb/client.ts` hardcodes the TMDB bearer token as a literal string, and there is no
-  `TMDB_API_KEY` in `.env` to replace it with — documented debt, not something to silently "fix" as
-  a side effect of unrelated work.
 - `src/prisma/prisma.service.ts` hardcodes the MariaDB connection string in the `PrismaMariaDb(...)`
   constructor call even though `DATABASE_URL` already exists in `.env`.
 - `prisma/schema.prisma`'s `datasource db` has no `url` — see "Prisma 7 via driver adapter" above.

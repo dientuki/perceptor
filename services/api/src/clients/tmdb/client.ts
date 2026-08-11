@@ -17,6 +17,19 @@ const TMDB_ENDPOINT: Record<MediaType, string> = {
   [MEDIA_TYPE.SHOW]: 'tv',
 };
 
+// Size segment for every poster TMDB serves through this client. One constant
+// so a search result (warm cache) and a details fallback (cold cache) can
+// never end up pointing at different image sizes for the same film.
+const TMDB_POSTER_SIZE = 'w300';
+
+// Single place that turns a TMDB-relative poster_path into the absolute URL
+// the rest of the app stores and renders. Exported so both the search path
+// (`searchMovies`) and the details fallback (`fetchMovieFromTMDB`) in
+// `movies.service.ts` build the exact same string for the same poster.
+export function posterUrl(posterPath: string | null | undefined): string | null {
+  return posterPath ? `https://image.tmdb.org/t/p/${TMDB_POSTER_SIZE}${posterPath}` : null;
+}
+
 // --- MAPPERS ---
 // Estrategia de transformación para evitar if/else dentro de la función
 const mappers = {

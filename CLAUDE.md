@@ -7,7 +7,7 @@ Pipeline stage status today:
 
 | Stage | Where | Status |
 | :-- | :-- | :-- |
-| Search catalog (TMDB) | `api` — `src/clients/TMDBClient.ts`, `src/movies/movies.search.ts` | in progress, does not compile |
+| Search catalog (TMDB) | `api` — `src/movies/movies.service.ts`, `src/clients/tmdb/{client,types}.ts` | working, per-user library (`005-movie-search`) |
 | Register title in DB | `api` — `movies` module + Prisma | working (read + CRUD service) |
 | Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `api` — `src/clients/indexer/client.ts` | working; alternativa manual: pegar un magnet (`addMagnetToMovie`, `src/clients/torrent/magnet.ts`) — mismo `MediaSource`/AutoRun de ahí en más |
 | Download | qBittorrent — `torrent` service, `api` — `src/clients/torrent/client.ts` | working, per-torrent save path |
@@ -136,7 +136,10 @@ share one login. Each service's own UI can still change its own credentials afte
 admin from the `/users` screen. An admin can also disable a user instead of deleting them
 (`isEnabled: false` — `004-user-disable`): a disabled user is refused at login and, unlike a plain
 flag flip, has every session they currently hold revoked immediately, not just their next login
-attempt. If nobody can sign in as an admin, `bin/reset-password` is the recovery path.
+attempt. If nobody can sign in as an admin, `bin/reset-password` is the recovery path. Every movie
+is also linked to whoever has it in their library (`UserMovie`, `005-movie-search`); the migration
+that introduced that join backfills every pre-existing film onto the oldest enabled admin, which on
+a fresh install is this same seeded account.
 
 `BUILD_TARGET` is an optional override for which Dockerfile stage to run (`dev` by default,
 `runner` for production) — every Dockerfile has `base` / `dev` / `builder` / `runner` stages, and
@@ -150,8 +153,10 @@ why the post-encode notification (`api`'s `MediaServerService.notifyCreated`, ca
 idea what `/media/library/...` means, but it can see the same host folder the user configured in
 `HOST_DESTINATIONS_DIR`.
 
-Note: `TMDB_API_KEY` is **not** currently in `.env` — the TMDB bearer token is hardcoded in
-`TMDBClient.ts` instead (see Known debt below). Add it to `.env` if you fix that.
+Note: the TMDB bearer token is **not** an `.env` variable and is not hardcoded in source — it comes
+from the `movie_db_api_key` Settings key (`api`'s `src/clients/tmdb/client.ts` reads it from
+`SettingsService` on every call), editable from the Settings screen. A fresh install ships it empty,
+so `searchMovies`/the TMDB fallback fail with `401 Unauthorized` until an admin sets a real key.
 
 ## Conventions
 
@@ -220,7 +225,8 @@ counts — the numbers are what an agent reports before and after a change to pr
 `src/auth/test/auth.service.spec.ts` (written against a `login()` signature that never existed —
 see `002-auth-login`'s spec, formerly Out of Scope there) is gone; deleting it is what took `api`
 from 3 errors to 0. The TMDB search slice that used to be listed here also now compiles;
-`TMDBClient.ts` is gone, replaced by `src/clients/tmdb/{client,types}.ts`.
+`TMDBClient.ts` is gone, replaced by `src/clients/tmdb/{client,types}.ts`. `005-movie-search` added
+a ninth suite (`movies.service.spec.ts`); tests are now **80** across **9** suites.
 
 **`web` — 12 errors across 5 files**, all pre-GraphQL leftovers on paths the running UI does not
 use: `components/import/importFolderModal.tsx` and `ImportMagnetSeasonModal.tsx` (both import a
@@ -234,8 +240,6 @@ correct; 12 is what the same five files have always produced.)
 
 ## Known debt
 
-- TMDB bearer token is hardcoded in `services/api/src/clients/TMDBClient.ts`; there's no
-  `TMDB_API_KEY` in `.env` yet to replace it with.
 - The database DSN is hardcoded in `services/api/src/prisma/prisma.service.ts` even though
   `DATABASE_URL` already exists in `.env`.
 - `services/api/prisma/schema.prisma` declares `datasource db` with no `url` — the connection

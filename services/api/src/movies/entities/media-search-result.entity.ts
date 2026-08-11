@@ -29,4 +29,17 @@ export class MediaSearchResult {
 
   @Field({ nullable: true })
   status?: string;
+
+  // Id of the Movie row when this film is already registered by anyone;
+  // null when it is not (see cacheKey ordering note in movies.service.ts —
+  // this field is deliberately absent from clients/types.ts's
+  // MediaSearchResult, which is the shared Redis-cached shape).
+  @Field(() => Int, { nullable: true })
+  movieId?: number | null;
+
+  // True only when the calling user already has this film in their own
+  // library. Never cached — computed per-request after the catalog result
+  // is already in Redis.
+  @Field()
+  inLibrary: boolean;
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { MEDIA_TYPE, MediaType } from "@/types/media";
+import Button from "@/components/ui/button/Button";
+import { MEDIA_TYPE, type MediaType } from "@/types/media";
 
 interface Props {
   onSearch: (query: string) => void;
@@ -23,17 +24,13 @@ export function SearchInput({ onSearch, loading, type }: Props) {
           name="query"
           type="text"
           placeholder={`Buscar ${type === MEDIA_TYPE.SHOW ? "serie" : "película"}...`}
-          className="w-full rounded-lg border border-gray-300 bg-transparent py-3 pl-4 pr-10 text-black outline-none focus:border-primary dark:border-gray-700 dark:text-white"
+          className="w-full rounded-lg border border-gray-300 bg-transparent py-3 pl-4 pr-10 text-black outline-none focus:border-brand-300 dark:border-gray-700 dark:text-white dark:focus:border-brand-800"
         />
       </div>
-      
-      <button
-        type="submit"
-        disabled={loading}
-        className="flex items-center justify-center rounded-lg bg-primary px-6 py-3 font-medium text-white hover:bg-opacity-90 disabled:bg-opacity-50"
-      >
+
+      <Button type="submit" disabled={loading}>
         {loading ? "Buscando..." : "Buscar"}
-      </button>
+      </Button>
     </form>
   );
 }

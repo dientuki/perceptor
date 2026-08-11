@@ -82,8 +82,8 @@ const ADD_MOVIE_MUTATION = `
   }
 `;
 
-export async function addMovie(tmdbId: number, type: MediaType): Promise<number> {
-  const { data, errors } = await fetchGraphQL<{ addMovie: { id: number } }>(
+export async function addMovie(tmdbId: number, type: MediaType): Promise<string> {
+  const { data, errors } = await fetchGraphQL<{ addMovie: { id: string } }>(
     ADD_MOVIE_MUTATION,
     { tmdbId },
   );
@@ -109,6 +109,8 @@ const SEARCH_MOVIES_QUERY = `
       originalLanguage
       overview
       type
+      movieId
+      inLibrary
     }
   }
 `;

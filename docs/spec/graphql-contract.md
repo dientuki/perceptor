@@ -1,6 +1,6 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.1.0
+spec_version: 1.2.0
 author: Juan Farias
 created_at: 2026-08-09
 last_updated: 2026-08-11
@@ -183,6 +183,33 @@ self/last-admin safeguards:
 `Tu cuenta está deshabilitada` is a sixth user-facing string on the login/session boundary that
 `002-auth-login`'s `spec.md` froze at five — see that file's dated pointer for why `002` itself was
 not reopened.
+
+### `movies` and `addMovie` are scoped to the caller, with unchanged signatures (`005-movie-search`)
+
+A film is a single shared `Movie` row (`tmdbId @unique`, never duplicated) joined to `User` through
+`UserMovie` — one movie, many owners, one shared download/encode status. `movies: [Movie!]!` and
+`addMovie(tmdbId: Int!): Movie!` kept byte-identical shapes across this change: `movies` now
+returns only the films the caller has registered (previously every film in the system), and
+`addMovie` now also links the caller to the film in addition to creating/returning it. **Neither
+change is visible to a typechecker** — this is exactly the class of risk this document's "gap"
+section warns about, and it is why this section exists rather than leaving the semantic shift
+implicit in the unchanged SDL. `movie(id)` was deliberately left unscoped: any authenticated user
+can still read a single film by internal id, because the catalog itself is shared.
+
+`MediaSearchResult` (returned by `searchMovies`) gained two additive fields: `movieId: Int`
+(`Movie.id` if *any* user has registered this film, `null` otherwise) and `inLibrary: Boolean!`
+(true only for the calling user). They answer different questions on purpose — collapsing them into
+one nullable id would make "registered, but not by me" unrepresentable. **Never treat `movieId !==
+null` as an ownership test**; only `inLibrary` means "mine". `searchMovies` computes both **after**
+its best-effort write to the shared, 24-hour Redis cache (`tmdb:movie:<tmdbId>`) — that cache key is
+read by every user who searches the same film, so enriching before the cache write would leak one
+user's ownership into what every other user sees for a day, with no error anywhere. Any future
+change to `searchMovies` must preserve that ordering.
+
+`attachTorrentSource` (backing `addTorrentToMovie`/`addMagnetToMovie`) now also requires the
+caller's link, refusing an unowned film with the same `NotFoundException('La película <id> no
+existe')` it already used for a missing one — deliberately one string, not a second "no es tuya"
+message (see `005-movie-search/spec.md` § Errors for why).
 
 ### The one non-GraphQL route
 

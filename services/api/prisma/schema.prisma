@@ -68,7 +68,25 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  movies UserMovie[]
+
   @@map("users")
+}
+
+// Join between User and Movie: whose library a movie is in. The movie row
+// itself stays global (Movie.tmdbId @unique) — this table only records
+// ownership, not a second copy of the film.
+model UserMovie {
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movieId Int
+  movie   Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, movieId])
+  @@index([movieId])
+  @@map("user_movies")
 }
 
 model Language {
@@ -187,6 +205,7 @@ model Movie {
 
   sourceFiles SourceFile[]
   processJobs ProcessJob[]
+  users       UserMovie[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -89,6 +89,9 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.(spec|e2e-spec)\\.ts$",
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/$1"
+    },
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },

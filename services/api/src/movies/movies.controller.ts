@@ -23,7 +23,11 @@ export class MoviesController {
 
   @Get()
   findAll() {
-    return this.moviesService.findAll();
+    // Dead code: this controller is never registered in movies.module.ts
+    // (no `controllers` array), so this route never actually executes.
+    // Passing '' keeps it compiling after 005-movie-search scoped
+    // MoviesService.findAll() to a userId; it is not a real caller.
+    return this.moviesService.findAll('');
   }
 
   @Get(':id')

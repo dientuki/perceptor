@@ -50,6 +50,8 @@ type MediaSearchResult {
   overview: String
   type: String!
   status: String
+  movieId: Int
+  inLibrary: Boolean!
 }
 
 type Setting {

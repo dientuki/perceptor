@@ -114,6 +114,23 @@ Server Component awaits directly needs `redirectToClearSession`, not `redirectIf
 the two are not interchangeable, pick based on the caller's context, not by copying the nearest
 example.
 
+## Movie search and per-user libraries (`005-movie-search`)
+
+`src/components/search/SearchInput.tsx`'s submit button is the shared `Button`
+(`src/components/ui/button/Button.tsx`, `bg-brand-500`), not a hand-rolled element — a
+`bg-primary` class silently compiled to nothing before this feature, since `web`'s Tailwind 4
+`@theme` only ever defined `--color-brand-*`. Do not reintroduce a `primary` colour token here;
+reuse the shared component instead of styling a bare `<button>`.
+
+`src/components/search/SearchContainer.tsx`'s `handleAdd` no longer calls `router.push` after a
+successful add — the user stays on the search screen and that result's card switches from
+`Agregar` to an `Ir` link (`next/link` → `/movies/<id>`), tracked in local `addedMovieIds` state
+(keyed by TMDB id) until the next search. Each `MediaSearchResult` also carries `movieId`
+(`Movie.id` if *anyone* has registered the film, else `null`) and `inLibrary` (true only for the
+caller) — `renderAction` treats a card as owned when `item.inLibrary` is true **or** it was added
+this session, never when `movieId !== null` alone, since a film someone else already registered is
+still addable by the caller (that add only links them, it never re-downloads).
+
 ## UI origin: TailAdmin template
 
 `src/layout/`, `src/components/common|form|ui`, and `src/context/` come from the TailAdmin Next.js
@@ -143,10 +160,10 @@ toolchain here is its own decision and deserves its own spec.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-10, `bin/cli web npx --no tsc --noEmit` reports **12 errors across 5 files**. All are
-leftovers from a pre-GraphQL version of the app; none are on a path the running UI uses.
-(Previously logged here as 13 — that was never the real count; these same five files have always
-produced 12, confirmed while implementing `002-auth-login`.)
+As of 2026-08-11, `bin/cli web npx --no tsc --noEmit` reports **12 errors across 5 files**,
+unchanged by `005-movie-search`. All are leftovers from a pre-GraphQL version of the app; none are
+on a path the running UI uses. (Previously logged here as 13 — that was never the real count; these
+same five files have always produced 12, confirmed while implementing `002-auth-login`.)
 
 | File | Problem |
 | :-- | :-- |

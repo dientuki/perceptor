@@ -3,8 +3,9 @@ import { PrismaService } from '@/prisma/prisma.service'; // Ajustá la ruta seg�
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
 import { RedisService } from '@/redis/redis.service';
-import { MediaSearchResult } from '@/clients/types';
-import { TmdbClient } from '@/clients/tmdb/client';
+import { MediaSearchResult, MovieDetail } from '@/clients/types';
+import { MediaSearchResult as MediaSearchResultEntity } from './entities/media-search-result.entity';
+import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
 import { QbittorrentClient } from '@/clients/torrent/client';
@@ -29,8 +30,13 @@ export class MoviesService {
     });
   }
 
-  async findAll() {
+  // The library belongs to the user: only returns films this userId has
+  // registered, filtered through the user_movies join. findOneFromDb() is
+  // deliberately left unscoped — movie(id) stays readable by any
+  // authenticated user.
+  async findAll(userId: string) {
     return this.prisma.movie.findMany({
+      where: { users: { some: { userId } } },
       orderBy: { createdAt: 'desc' }, // Las más recientes primero
       include: {
         mediaSource: true,
@@ -73,22 +79,43 @@ export class MoviesService {
   }
 
   // Registra en MariaDB una película ya vista en una búsqueda de TMDB. Idempotente:
-  // si ya está en la biblioteca, devuelve el registro existente sin reescribir nada.
-  async addMovie(tmdbId: number) {
+  // si ya está en la biblioteca (por cualquier usuario), devuelve el registro
+  // existente sin reescribir nada. En ambas ramas nos aseguramos de que exista
+  // el vínculo con el usuario que llama (REQ-3): la fila de la película es
+  // compartida, pero cada usuario necesita su propio user_movies.
+  async addMovie(tmdbId: number, userId: string) {
     const existing = await this.prisma.movie.findUnique({ where: { tmdbId } });
-    if (existing) return existing;
+    if (existing) {
+      await this.linkUserToMovie(userId, existing.id);
+      return existing;
+    }
 
     const cached = await this.getCachedMovie(tmdbId);
 
     // isLiveAction y status quedan en sus defaults de Prisma (true / MISSING):
     // es lo correcto para una película recién registrada y sin archivo todavía.
-    return this.create({
+    const movie = await this.create({
       tmdbId: cached.id,
       title: cached.title,
       overview: cached.overview,
       posterUrl: cached.posterUrl ?? undefined,
       releaseDate: cached.releaseDate ? new Date(cached.releaseDate) : undefined,
       originalLanguage: cached.originalLanguage,
+    });
+
+    await this.linkUserToMovie(userId, movie.id);
+    return movie;
+  }
+
+  // upsert en vez de create: un segundo addMovie del mismo usuario para la misma
+  // película no debe explotar con un P2002 sobre la primary key compuesta — el
+  // botón que dispara esto en el UI puede volver a llamarse antes de que
+  // desaparezca (REQ-8/T004).
+  private async linkUserToMovie(userId: string, movieId: number): Promise<void> {
+    await this.prisma.userMovie.upsert({
+      where: { userId_movieId: { userId, movieId } },
+      update: {},
+      create: { userId, movieId },
     });
   }
 
@@ -101,17 +128,34 @@ export class MoviesService {
     return this.fetchMovieFromTMDB(tmdbId);
   }
 
-  // TODO: implementar. `client.details(MEDIA_TYPE.MOVIE, tmdbId)` ya existe pero
-  // devuelve un MovieDetail (posterPath relativo, no posterUrl absoluto), así que
-  // falta definir el mapeo a MediaSearchResult. Por ahora el cache vencido (TTL
-  // 24hs) es un error explícito en vez de un fallback silencioso.
+  // Falls back to the catalog itself when the Redis cache has expired,
+  // been evicted, or never got written (the best-effort save in
+  // cacheMovies() can silently fail). This is not a second search path: it
+  // re-fetches the one film addMovie asked for, via the same
+  // TmdbClient.details() the rest of the client uses, and reuses posterUrl()
+  // so this path and searchMovies() can never disagree on image size for the
+  // same film (REQ-2). Only a tmdbId the catalog itself does not know about
+  // reaches the caller as an error.
   private async fetchMovieFromTMDB(tmdbId: number): Promise<MediaSearchResult> {
-    throw new NotFoundException(
-      `La película ${tmdbId} no está en cache. Volvé a buscarla.`,
-    );
+    let detail: MovieDetail;
+    try {
+      detail = (await this.tmdb.details(MEDIA_TYPE.MOVIE, tmdbId)) as MovieDetail;
+    } catch {
+      throw new NotFoundException('No encontramos la película en el catálogo');
+    }
+
+    return {
+      id: detail.id,
+      title: detail.title,
+      releaseDate: detail.releaseDate || null,
+      posterUrl: posterUrl(detail.posterPath),
+      originalLanguage: detail.originalLanguage,
+      overview: detail.overview,
+      type: MEDIA_TYPE.MOVIE,
+    };
   }
 
-  async searchMovies(query: string): Promise<MediaSearchResult[]> {
+  async searchMovies(query: string, userId: string): Promise<MediaSearchResultEntity[]> {
     if (!query.trim()) return [];
 
     // 1. Consultar TMDB.
@@ -122,30 +166,73 @@ export class MoviesService {
       id: item.id,
       title: item.title,
       releaseDate: item.release_date || null,
-      posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w300${item.poster_path}` : null,
+      posterUrl: posterUrl(item.poster_path),
       originalLanguage: item.original_language,
       overview: item.overview,
       type: MEDIA_TYPE.MOVIE,
     }));
 
-    // 3. Disparar el upsert en Redis en BACKGROUND (sin 'await')
+    // 3. Disparar el upsert en Redis en BACKGROUND (sin 'await'). This MUST
+    // run on the catalog-only `results` before ownership is attached below:
+    // cacheMovies() serialises whatever it is handed into a shared, global
+    // Redis key (tmdb:movie:<id>, 24h TTL) read by every user who searches
+    // this film. Enriching first would leak this caller's inLibrary/movieId
+    // into that cache and serve it to everyone else for the next 24 hours,
+    // with no error anywhere.
     void this.cacheMovies(results);
 
-    // 4. Responder INMEDIATAMENTE al cliente GraphQL
-    return results;
+    // 4. Enriquecer con la ownership del usuario que llama, en una sola
+    // query por página (no una por resultado). movieId/inLibrary son
+    // per-request y nunca tocan el objeto cacheado en el paso anterior.
+    const enriched = await this.enrichWithOwnership(results, userId);
+
+    // 5. Responder INMEDIATAMENTE al cliente GraphQL
+    return enriched;
+  }
+
+  // Attaches movieId (registered by anyone, or null) and inLibrary (owned by
+  // this caller) to a page of catalog results, from a single query — not one
+  // per result. Deliberately not merged into the objects passed to
+  // cacheMovies(): see the ordering note in searchMovies().
+  private async enrichWithOwnership(
+    results: MediaSearchResult[],
+    userId: string,
+  ): Promise<MediaSearchResultEntity[]> {
+    if (!results.length) return [];
+
+    const movies = await this.prisma.movie.findMany({
+      where: { tmdbId: { in: results.map(r => r.id) } },
+      select: {
+        id: true,
+        tmdbId: true,
+        users: { where: { userId }, select: { userId: true } },
+      },
+    });
+
+    const byTmdbId = new Map(movies.map(m => [m.tmdbId, m]));
+
+    return results.map(result => {
+      const registered = byTmdbId.get(result.id);
+      return {
+        ...result,
+        movieId: registered?.id ?? null,
+        inLibrary: (registered?.users.length ?? 0) > 0,
+      };
+    });
   }
 
   async addTorrentToMovie(
     movieId: number,
     input: { infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
+    userId: string,
   ) {
-    return this.attachTorrentSource(movieId, { kind: 'TORRENT_SEARCH', ...input });
+    return this.attachTorrentSource(movieId, { kind: 'TORRENT_SEARCH', ...input }, userId);
   }
 
   // Magnet pegado a mano por el usuario, en vez de un release elegido del
   // indexer. El infoHash sale del propio magnet (parseMagnet no pega a la
   // red) — a partir de acá el flujo es idéntico a addTorrentToMovie.
-  async addMagnetToMovie(movieId: number, input: { magnet: string; force: boolean }) {
+  async addMagnetToMovie(movieId: number, input: { magnet: string; force: boolean }, userId: string) {
     let parsed;
     try {
       parsed = parseMagnet(input.magnet);
@@ -153,20 +240,34 @@ export class MoviesService {
       throw new BadRequestException(err instanceof Error ? err.message : String(err));
     }
 
-    return this.attachTorrentSource(movieId, {
-      kind: 'TORRENT_FILE',
-      infoHash: parsed.infoHash,
-      urls: [input.magnet],
-      releaseTitle: parsed.displayName,
-      force: input.force,
-    });
+    return this.attachTorrentSource(
+      movieId,
+      {
+        kind: 'TORRENT_FILE',
+        infoHash: parsed.infoHash,
+        urls: [input.magnet],
+        releaseTitle: parsed.displayName,
+        force: input.force,
+      },
+      userId,
+    );
   }
 
+  // Same NotFoundException the resolver already threw for an unknown id, now
+  // also covering a film the caller has not registered (REQ-6). One lookup
+  // scoped by both id and the caller's user_movies link, one message: an
+  // unowned film and a missing one are indistinguishable from here on, by
+  // design — see spec.md § Errors for why no second "no es tuya" string
+  // exists.
   private async attachTorrentSource(
     movieId: number,
     input: { kind: SourceKind; infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
+    userId: string,
   ) {
-    const movie = await this.findOneFromDb(movieId);
+    const movie = await this.prisma.movie.findFirst({
+      where: { id: movieId, users: { some: { userId } } },
+      include: { mediaSource: true, processJobs: true },
+    });
     if (!movie) throw new NotFoundException(`La película ${movieId} no existe`);
 
     if (movie.mediaSourceId && !input.force) {
