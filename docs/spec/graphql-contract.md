@@ -149,6 +149,19 @@ it is a requirement in `spec.md`, not a detail in a plan.
 
 ## Contracts & Interfaces
 
+### `users` operations are admin-only
+
+Since `003-auth-user-management`, `User` carries `isAdmin: Boolean!` and the five `users`
+operations (`users`, `user`, `createUser`, `updateUser`, `removeUser`) require the caller to be an
+admin, not just authenticated. `AdminGuard` (`services/api/src/auth/guards/admin.guard.ts`) reads
+`isAdmin` fresh from the database on every call — it is deliberately never embedded in the JWT, so
+a demoted admin's still-valid session stops working immediately instead of at token expiry. A
+non-admin caller gets `No tenés permisos para administrar usuarios` from every one of the five.
+
+No schema shape changed beyond the additive `isAdmin` field — `removeUser` still takes only `id`;
+the caller is read server-side via `@CurrentUser()`, not passed as an argument. `createUser` has no
+`isAdmin` argument — the `/users` screen can only create ordinary users.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

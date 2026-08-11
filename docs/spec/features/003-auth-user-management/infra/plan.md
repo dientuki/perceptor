@@ -2,7 +2,7 @@
 title: Admin User Management — infra slice
 service: infra
 last_updated: 2026-08-10
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Admin User Management — `infra` (`infra/plan.md`)

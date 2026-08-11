@@ -2,7 +2,7 @@
 title: Admin User Management — web slice
 service: web
 last_updated: 2026-08-10
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Admin User Management — `web` (`web/plan.md`)

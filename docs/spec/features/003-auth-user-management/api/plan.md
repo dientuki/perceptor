@@ -2,7 +2,7 @@
 title: Admin User Management — api slice
 service: api
 last_updated: 2026-08-10
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Admin User Management — `api` (`api/plan.md`)

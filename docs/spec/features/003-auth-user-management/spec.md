@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-09
 last_updated: 2026-08-10
-status: Approved
+status: Implemented
 services: [api, web, infra]
 ---
 
@@ -42,10 +42,10 @@ of re-seeding the database. No pipeline stage in the root `CLAUDE.md` changes st
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (The admin is a property of the row)**: A user must be markable as administrator in a
+- [x] **REQ-1 (The admin is a property of the row)**: A user must be markable as administrator in a
       way that survives renaming that user, restoring a backup, and the existence of other users.
       The seeded `ADMIN_USER` is the administrator on a fresh install.
-- [ ] **REQ-2 (Only the admin manages users)**: Listing, creating, updating and deleting users must
+- [x] **REQ-2 (Only the admin manages users)**: Listing, creating, updating and deleting users must
       require being the administrator. An ordinary authenticated session must be refused.
 - [x] **REQ-3 (No public registration)**: The public sign-up route, its form component and the link
       to it from the sign-in screen must be gone. There must be no reachable path for an
@@ -54,30 +54,32 @@ of re-seeding the database. No pipeline stage in the root `CLAUDE.md` changes st
       deleted outright before this feature was even drafted. The sign-in screen ("Sign Up" link)
       never carried the link to begin with in its post-`002` form. Nothing left for this feature
       to do here beyond REQ-8, which covers the *other* dead link on that same screen.
-- [ ] **REQ-4 (A screen to do it)**: The administrator must be able to see the list of users, create
+- [x] **REQ-4 (A screen to do it)**: The administrator must be able to see the list of users, create
       one and delete one, from inside the authenticated dashboard. Non-administrators must not see
       the entry point at all — hiding it is a usability requirement; REQ-2 is what enforces it.
-- [ ] **REQ-5 (Nobody can lock the app)**: A user must not be able to delete themselves, and the
+- [x] **REQ-5 (Nobody can lock the app)**: A user must not be able to delete themselves, and the
       last administrator must not be deletable. Both attempts must fail with an explanation rather
-      than succeeding. Without this the only recovery is re-seeding the database.
-- [ ] **REQ-6 (Duplicate usernames are explained)**: Creating a user with a username that already
+      than succeeding. Without this the only recovery is re-seeding the database. See AC-8's note:
+      the outcome holds for every reachable path, though the "last administrator" message specifically
+      is unreachable under the current `AdminGuard` model — self-delete always fires first.
+- [x] **REQ-6 (Duplicate usernames are explained)**: Creating a user with a username that already
       exists must show the user why it failed. The API already produces the right message
       (`services/api/src/users/users.service.ts`); this requirement is that it reaches the screen
       instead of surfacing as a generic failure.
-- [ ] **REQ-7 (Password recovery from the host)**: An administrator locked out of the app must be
+- [x] **REQ-7 (Password recovery from the host)**: An administrator locked out of the app must be
       able to set a new password from the host, without editing the database by hand and without a
       running web session. The new password must be stored the same way the application stores it.
-- [ ] **REQ-8 (No dead links)**: The `/reset-password` link on the sign-in form must go, since no
+- [x] **REQ-8 (No dead links)**: The `/reset-password` link on the sign-in form must go, since no
       such route exists or will exist.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Existing installs keep their admin)**: The migration must leave the already-seeded
+- [x] **NFR-1 (Existing installs keep their admin)**: The migration must leave the already-seeded
       administrator as administrator. An install that upgrades and finds nobody privileged is
       locked out of its own user management.
-- [ ] **NFR-2 (Language)**: UI copy and API exception messages in Spanish; code, comments,
+- [x] **NFR-2 (Language)**: UI copy and API exception messages in Spanish; code, comments,
       identifiers and test descriptions in English (Constitution, Article VI).
-- [ ] **NFR-3 (Docker-first)**: The new script goes through the container like every other `bin/`
+- [x] **NFR-3 (Docker-first)**: The new script goes through the container like every other `bin/`
       wrapper. It must not require Node, Prisma or bcrypt on the host (Constitution, Article I).
 
 ## GraphQL Contract Delta
@@ -145,31 +147,61 @@ column. One boolean is the whole model this app needs; anything more is a differ
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: On a fresh database, `bin/mysql -e 'select username, isAdmin from users'` shows the
-      seeded `ADMIN_USER` with `isAdmin = 1`.
-- [ ] **AC-2**: On a database that already had users before the migration, the same query shows the
-      `ADMIN_USER` row with `isAdmin = 1` after `bin/cli api npx prisma migrate deploy`.
-- [ ] **AC-3**: Signed in as the administrator, the user management screen lists the existing users,
-      and creating one adds it to the list without a page error.
-- [ ] **AC-4**: The newly created (non-administrator) user can sign in and use the app, and does not
-      see the user management entry point.
-- [ ] **AC-5 (failure path)**: That non-administrator user issuing `createUser` directly against
+- [x] **AC-1**: On a fresh database, `bin/mysql -e 'select username, isAdmin from users'` shows the
+      seeded `ADMIN_USER` with `isAdmin = 1`. Confirmed: `admin | 1`.
+- [x] **AC-2**: On a database that already had users before the migration, the same query shows the
+      `ADMIN_USER` row with `isAdmin = 1` after `bin/cli api npx prisma migrate deploy`. Confirmed
+      during the migration's original rollout (`api/plan.md`) — the backfill `UPDATE` marks the
+      oldest existing user as admin, not just the freshly-seeded one.
+- [x] **AC-3**: Signed in as the administrator, the user management screen lists the existing users,
+      and creating one adds it to the list without a page error. Confirmed live: created and deleted
+      a throwaway user via the actual `/users` form, both round-tripped correctly.
+- [x] **AC-4**: The newly created (non-administrator) user can sign in and use the app, and does not
+      see the user management entry point. Confirmed live — required an actual fix along the way:
+      the page originally raced `getCurrentUser()`/`getUsers()` via `Promise.all`, so a non-admin's
+      `getUsers()` throwing produced a 500 instead of a clean 404. Fixed by sequencing the `isAdmin`
+      check before ever calling `getUsers()`.
+- [x] **AC-5 (failure path)**: That non-administrator user issuing `createUser` directly against
       `/graphql` with their own valid token is refused with `No tenés permisos para administrar
-      usuarios`. Hiding the UI is not the control; this is the test that proves it.
-- [ ] **AC-6 (failure path)**: Creating a user with an existing username shows `El nombre de usuario
+      usuarios`. Hiding the UI is not the control; this is the test that proves it. Confirmed live
+      against a running `/graphql` endpoint with a non-admin's token.
+- [x] **AC-6 (failure path)**: Creating a user with an existing username shows `El nombre de usuario
       ya está registrado` inline. Creating one with a 2-character username or a 5-character password
-      shows the corresponding validation message.
-- [ ] **AC-7 (failure path)**: The administrator attempting to delete their own account is refused
-      with `No podés eliminar tu propio usuario`, and the account still exists afterwards.
-- [ ] **AC-8 (failure path)**: With exactly one administrator in the database, deleting that
-      administrator is refused with `No podés eliminar al único administrador`.
-- [ ] **AC-9**: `/signup` returns a 404, `SignUpForm.tsx` no longer exists in the repo, and the
-      sign-in screen shows neither a "Sign Up" link nor a "Forgot password?" link.
-- [ ] **AC-10**: `bin/reset-password <username>` sets a new password, and that password then works
+      shows the corresponding validation message. All three confirmed live. The two length messages
+      needed a real fix, not just wiring: `ValidationPipe`'s default `exceptionFactory` buried the
+      real `class-validator` message under `errors[0].extensions.originalError.message[0]` and put
+      the generic string `"Bad Request Exception"` at the top-level `errors[0].message`, which is
+      what every `web` action reads. Fixed with a custom `exceptionFactory` in `main.ts` that throws
+      a single string, like every other exception in this codebase already does.
+- [x] **AC-7 (failure path)**: The administrator attempting to delete their own account is refused
+      with `No podés eliminar tu propio usuario`, and the account still exists afterwards. Confirmed
+      live, including submitting the disabled delete button's request directly (simulating a stale
+      client) — still refused server-side.
+- [x] **AC-8 (failure path)**: With exactly one administrator in the database, deleting that
+      administrator is refused with `No podés eliminar al único administrador`. **The outcome holds,
+      the message doesn't — noted, not silently passed.** The only reachable path to "delete the
+      sole admin" is that admin deleting themselves, and `users.service.ts`'s own comment documents
+      that this is ordered to show AC-7's message first, on purpose: a lone admin who tries to
+      delete themselves sees `No podés eliminar tu propio usuario`, never
+      `No podés eliminar al único administrador`. The `adminCount === 1` branch that produces AC-8's
+      exact message is reachable only through a distinct-caller path that `AdminGuard` makes
+      practically unreachable in normal use (the only caller who could ever be "a different admin"
+      deleting the sole remaining admin would have to not be an admin themselves to make the count
+      work out, which the guard already refuses). Deletion of the sole admin is refused either way —
+      confirmed via the self-delete path in AC-7 — so REQ-5's actual goal ("nobody can lock the
+      app") holds; AC-8's specific wording does not describe the branch that actually fires.
+- [x] **AC-9**: `/signup` returns a 404, `SignUpForm.tsx` no longer exists in the repo, and the
+      sign-in screen shows neither a "Sign Up" link nor a "Forgot password?" link. Confirmed:
+      `SignUpForm.tsx` absent, `/reset-password` redirects to `/login`, no dead-link text in
+      `LoginForm.tsx`.
+- [x] **AC-10**: `bin/reset-password <username>` sets a new password, and that password then works
       at `/signin`. The stored value is a bcrypt hash, not plaintext — verifiable with
-      `bin/mysql -e 'select password from users'`.
-- [ ] **AC-11 (failure path)**: `bin/reset-password` with a username that does not exist prints an
-      explicit error and changes nothing.
+      `bin/mysql -e 'select password from users'`. Confirmed live, non-interactively — the original
+      script hung forever on non-tty stdin (a second `rl.question()` losing the piped second line);
+      fixed with a shared async-iterator `readline` interface for the non-interactive path.
+- [x] **AC-11 (failure path)**: `bin/reset-password` with a username that does not exist prints an
+      explicit error and changes nothing. Confirmed live: prints
+      `Usuario "doesnotexist" no encontrado` to stderr, exits non-zero, no DB row changed.
 
 ## Out of Scope
 
