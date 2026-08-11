@@ -8,7 +8,7 @@ Implement feature **$ARGUMENTS** (if empty, the highest-numbered directory in
 `docs/spec/features/`).
 
 You are the **orchestrator**. You dispatch; the service subagents write code. Your own edits are
-limited to `tasks.md`, the `[docs]` and `[orch]` tasks, and the feature's own files.
+limited to `tasks.md`, the `[docs]` tasks, and the feature's own files.
 
 ## 1. Load
 
@@ -22,13 +22,14 @@ Mirror the task list into the session task tracker so progress is visible.
 Walk the groups in order. Within a group, dispatch every unblocked task; run the `[P]` ones in
 parallel by putting multiple Agent calls in a single message.
 
-Route by tag: `[api]` → the `api` agent, `[web]` → `web`, `[worker]` → `worker`. `[docs]` and
-`[orch]` you do yourself.
+Route by tag: `[api]` → the `api` agent, `[web]` → `web`, `[worker]` → `worker`, `[infra]` →
+`infra`. `[docs]` you do yourself.
 
-**Never dispatch an `[orch]` task to a service agent.** Those tasks live in `docker-compose.yaml`,
-`.env.example`, `bin/` and `services/torrent/` — outside every agent's scope. Handing one to the
-`api` agent because it "looks like api config" is precisely the boundary violation the agent
-definitions exist to prevent, and the agent is instructed to stop and report rather than comply.
+**Never dispatch an `[infra]` task to a service agent.** Those tasks live in
+`docker-compose.yaml`, `.env.example`, `bin/` and `services/*/Dockerfile` — outside every service
+agent's scope. Handing one to the `api` agent because it "looks like api config" is precisely the
+boundary violation the agent definitions exist to prevent, and the agent is instructed to stop and
+report rather than comply.
 
 **How to actually dispatch.** Try `subagent_type: "<service>"` first. If that fails with
 `Agent type '<service>' not found`, the session is hosted in an environment that does not discover

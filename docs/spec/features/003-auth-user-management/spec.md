@@ -3,9 +3,9 @@ title: Admin User Management
 spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-09
-status: Draft
-services: [api, web]
+last_updated: 2026-08-10
+status: Approved
+services: [api, web, infra]
 ---
 
 # SPEC: Admin User Management (`spec.md`)
@@ -15,27 +15,28 @@ services: [api, web]
 
 ## Context & Goal
 
-The sign-up screen at `services/web/src/app/(auth)/signup/` is the TailAdmin template, untouched.
-Its `<form>` has no `action`, its password input has no `name`, it collects `fname`/`lname` when
-`CreateUserInput` wants `name`/`username`/`password`, and it offers "Sign up with Google" and "Sign
-up with X" buttons wired to nothing. It cannot create a user and never could. Meanwhile
-`services/web/src/proxy.ts` does not list `/signup` in `AUTH_ROUTES`, so it is treated as a
-protected route — you have to be signed in to reach the registration page.
+> **Updated 2026-08-10.** This section originally described `services/web/src/app/(auth)/signup/`
+> as the untouched TailAdmin template — no `action` on its `<form>`, no `name` on its password
+> input, `fname`/`lname` instead of `name`/`username`/`password`, dead "Sign up with Google"/"Sign
+> up with X" buttons. That directory **no longer exists**: commit `9f51a0a` (`002-auth-login`)
+> deleted `(auth)/signup/page.tsx` and `SignUpForm.tsx` outright, renamed `(auth)/signin/` to
+> `(auth)/login/`, and renamed `SignInForm.tsx` to `LoginForm.tsx`. The public sign-up screen this
+> spec set out to lock down was already removed as a side effect of `002`. See REQ-3.
 
-On the API side the opposite is true: `createUser` works perfectly and is completely open, as are
-`users`, `user`, `updateUser` and `removeUser` (`services/api/src/users/users.resolver.ts`). Once
-`002` puts a guard in front of them they become authenticated-only, which is a large improvement and
-still not what this app wants. Perceptor is self-hosted and seeds a single administrator from
+The API side is what this feature still has to fix. `createUser` works perfectly and is completely
+open, as are `users`, `user`, `updateUser` and `removeUser` (`services/api/src/users/users.resolver.ts`).
+Once `002` put a guard in front of them they became authenticated-only, which is a large improvement
+and still not what this app wants. Perceptor is self-hosted and seeds a single administrator from
 `ADMIN_USER`/`ADMIN_PASSWORD`; account creation belongs to that person, not to anyone holding a
 session.
 
-This feature deletes public registration outright and replaces it with an administrator screen
-inside the dashboard. It marks the administrator with a single `isAdmin` boolean on `User` — not a
-role enum, not a permission matrix, because the app has exactly one privileged operation set and a
-column that survives a username change is all that is needed to anchor it. It also adds
-`bin/reset-password`, which is the only password recovery this app will have: there is no SMTP in
-the stack, and an admin who is locked out currently has no path back short of re-seeding the
-database. No pipeline stage in the root `CLAUDE.md` changes status.
+This feature adds an administrator screen inside the dashboard for managing users (public
+registration itself is already gone, per REQ-3). It marks the administrator with a single `isAdmin`
+boolean on `User` — not a role enum, not a permission matrix, because the app has exactly one
+privileged operation set and a column that survives a username change is all that is needed to
+anchor it. It also adds `bin/reset-password`, which is the only password recovery this app will
+have: there is no SMTP in the stack, and an admin who is locked out currently has no path back short
+of re-seeding the database. No pipeline stage in the root `CLAUDE.md` changes status.
 
 ## Requirements
 
@@ -46,9 +47,13 @@ database. No pipeline stage in the root `CLAUDE.md` changes status.
       The seeded `ADMIN_USER` is the administrator on a fresh install.
 - [ ] **REQ-2 (Only the admin manages users)**: Listing, creating, updating and deleting users must
       require being the administrator. An ordinary authenticated session must be refused.
-- [ ] **REQ-3 (No public registration)**: The public sign-up route, its form component and the link
+- [x] **REQ-3 (No public registration)**: The public sign-up route, its form component and the link
       to it from the sign-in screen must be gone. There must be no reachable path for an
-      unauthenticated visitor to create an account.
+      unauthenticated visitor to create an account. **Already satisfied**, as a side effect of
+      `002-auth-login` (commit `9f51a0a`): `(auth)/signup/page.tsx` and `SignUpForm.tsx` were
+      deleted outright before this feature was even drafted. The sign-in screen ("Sign Up" link)
+      never carried the link to begin with in its post-`002` form. Nothing left for this feature
+      to do here beyond REQ-8, which covers the *other* dead link on that same screen.
 - [ ] **REQ-4 (A screen to do it)**: The administrator must be able to see the list of users, create
       one and delete one, from inside the authenticated dashboard. Non-administrators must not see
       the entry point at all — hiding it is a usability requirement; REQ-2 is what enforces it.
@@ -185,12 +190,12 @@ column. One boolean is the whole model this app needs; anything more is a differ
 
 ## Process note: `bin/` has no owner
 
-REQ-7 creates `bin/reset-password`, and **no subagent can be assigned to it**. All three agent
-definitions in `.claude/agents/` scope writes to `services/<svc>/`; `bin/` is outside every one of
-them. The task must be tagged so `/implement` does not try to route it — the orchestrator does it
-directly, the same way it handles `[docs]` tasks.
+**Resolved 2026-08-10.** REQ-7 creates `bin/reset-password`, and when this note was first written
+no subagent could be assigned to it — all three agent definitions in `.claude/agents/` scoped
+writes to `services/<svc>/`, and `bin/` sat outside every one of them.
 
-This is the first task in the project that exposes the gap. Worth resolving in the flow itself
-afterwards: either a fourth tag for repo-root tooling, or an explicit statement in
-`.claude/commands/implement.md` that `bin/`, `docker-compose.yaml` and `.env.example` are
-orchestrator territory. Not resolved by this spec.
+The gap is closed with a fourth agent, `infra` (`.claude/agents/infra.md`), scoped to `bin/`,
+`docker-compose.yaml`, `.env.example`, `services/*/Dockerfile` and `docs/spec/docker/`. The
+`[infra]` tag is now wired into `.claude/commands/tasks.md` and `.claude/commands/implement.md`
+alongside `[api]`/`[web]`/`[worker]`/`[docs]`/`[orch]`. `REQ-7`'s task in this feature's `tasks.md`
+carries that tag and is the first thing the new agent implements — see `infra/plan.md`.
