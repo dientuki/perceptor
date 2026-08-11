@@ -1,0 +1,16 @@
+# Biome's `vcs.useIgnoreFile` (biome.json) needs a `.gitignore` it can see. Only
+# `services/web/` is bind-mounted into the container (no `.git`, no repo-root
+# `.gitignore`), so without this file `bin/npm web run lint` hard-fails with
+# "Biome couldn't find an ignore file" before checking a single file. Mirrors
+# the relevant entries from the repo root `.gitignore`.
+
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+.env*
+!.env.example
+coverage/

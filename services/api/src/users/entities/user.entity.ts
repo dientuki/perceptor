@@ -10,4 +10,7 @@ export class User {
 
   @Field()
   username: string;
+
+  @Field()
+  isAdmin: boolean;
 }

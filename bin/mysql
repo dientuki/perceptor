@@ -5,4 +5,4 @@ if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
 fi
 
-bin/cli db mariadb -h"${DB_HOST}" -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_DATABASE}" "$@"
+bin/cli db mariadb -h"${DB_HOST}" -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" "$@"

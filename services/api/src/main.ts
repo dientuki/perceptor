@@ -2,7 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import type { ValidationError } from '@nestjs/common';
 import { json, urlencoded } from 'express';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { assertAuthEnv } from './auth/auth.constants';
@@ -36,10 +37,28 @@ async function bootstrap() {
   // Habilita el parsing de cookies entrantes
   app.use(cookieParser());
 
-  // Habilita la validación automática de los DTOs
+  // Habilita la validación automática de los DTOs. Nest's default
+  // exceptionFactory throws BadRequestException(errors) with the raw
+  // ValidationError[] as the message — Apollo then serializes that array as
+  // the generic "Bad Request Exception" string at errors[0].message, burying
+  // the real class-validator message under
+  // errors[0].extensions.originalError.message[0]. Every consumer in
+  // services/web/src/actions/*.ts reads errors[0].message directly, so this
+  // exceptionFactory throws a plain string instead, matching how every other
+  // BadRequestException in this codebase is constructed (users.service.ts,
+  // media-roots.service.ts, settings.service.ts). None of this app's DTOs use
+  // @ValidateNested, so the first top-level error's first constraint is
+  // always the whole story — no children to walk.
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     transform: true,
+    exceptionFactory: (errors: ValidationError[]) => {
+      const firstError = errors[0];
+      const firstMessage = firstError?.constraints
+        ? Object.values(firstError.constraints)[0]
+        : 'Validation failed';
+      return new BadRequestException(firstMessage);
+    },
   }));
 
   // El browser sube archivos a /uploads directo contra la api (ver

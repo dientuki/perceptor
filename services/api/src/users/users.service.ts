@@ -1,5 +1,5 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service'; // Ajustá la ruta según tu estructura
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserInput } from './dto/create-user.input';
 import { UpdateUserInput } from './dto/update-user.input';
 import { User } from './entities/user.entity';
@@ -55,6 +55,12 @@ export class UsersService {
     // para no intentarlo actualizar en la BD.
     const { id: _, ...dataToUpdate } = updateUserInput;
 
+    // create() hashes the password before writing; update() must too, or a
+    // password change lands in the database in plaintext.
+    if (dataToUpdate.password) {
+      dataToUpdate.password = await bcrypt.hash(dataToUpdate.password, 10);
+    }
+
     try {
       return await this.prisma.user.update({
         where: { id },
@@ -65,13 +71,24 @@ export class UsersService {
     }
   }
 
-  async remove(id: string): Promise<User> {
-    try {
-      return await this.prisma.user.delete({
-        where: { id },
-      });
-    } catch {
-      throw new NotFoundException(`Usuario con ID "${id}" no encontrado`);
+  async remove(id: string, requesterId: string): Promise<User> {
+    // Order matters (AC-7): a lone admin deleting themself must see the
+    // "your own account" message, not the "last admin" one.
+    if (id === requesterId) {
+      throw new BadRequestException('No podés eliminar tu propio usuario');
     }
+
+    const target = await this.findOne(id);
+
+    if (target.isAdmin) {
+      const adminCount = await this.prisma.user.count({ where: { isAdmin: true } });
+      if (adminCount === 1) {
+        throw new BadRequestException('No podés eliminar al único administrador');
+      }
+    }
+
+    return await this.prisma.user.delete({
+      where: { id },
+    });
   }
 }

@@ -11,6 +11,8 @@ interface InputProps {
   min?: string;
   max?: string;
   step?: number;
+  minLength?: number;
+  autoComplete?: string;
   disabled?: boolean;
   success?: boolean;
   error?: boolean;
@@ -29,6 +31,8 @@ const Input: FC<InputProps> = ({
   min,
   max,
   step,
+  minLength,
+  autoComplete,
   disabled = false,
   success = false,
   error = false,
@@ -61,6 +65,8 @@ const Input: FC<InputProps> = ({
         min={min}
         max={max}
         step={step}
+        minLength={minLength}
+        autoComplete={autoComplete}
         disabled={disabled}
         className={inputClasses}
         required={required}
@@ -73,8 +79,8 @@ const Input: FC<InputProps> = ({
             error
               ? "text-error-500"
               : success
-              ? "text-success-500"
-              : "text-gray-500"
+                ? "text-success-500"
+                : "text-gray-500"
           }`}
         >
           {hint}

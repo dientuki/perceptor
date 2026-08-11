@@ -20,6 +20,17 @@ join(process.cwd(), 'src/schema.gql')`. That means:
   hand-edit it — change the decorators and let Nest regenerate it.
 - `playground`/`introspection` are on outside of `NODE_ENV=production`.
 
+## Validation errors reach the caller as a plain string
+
+`main.ts`'s global `ValidationPipe` has a custom `exceptionFactory` (`003-auth-user-management`):
+it throws `BadRequestException` with a single string — the first `class-validator` constraint
+message — instead of Nest's default, which throws the raw `ValidationError[]` and serializes as
+the generic `"Bad Request Exception"` at the GraphQL error's top-level `message`, burying the real
+text under `extensions.originalError.message[0]`. Every consumer in `services/web/src/actions/*.ts`
+reads `errors[0].message` directly, so any DTO's `@MinLength`/`@IsNotEmpty` message (e.g.
+`create-user.input.ts`) now reaches the screen unmodified, the same way a plain
+`throw new BadRequestException('...')` always has.
+
 ## Prisma 7 via driver adapter
 
 `prisma/schema.prisma` declares `datasource db { provider = "mysql" }` with **no `url`** — the
@@ -55,8 +66,13 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   short-circuits for any non-GraphQL execution context, so it never touches `/uploads` — that REST
   route is authenticated separately, per-request, by the ticket mechanism in `src/uploads/`.
   `decorators/current-user.decorator.ts` exposes `@CurrentUser()`, typed to the principal union.
-  Specs under `auth/test/`.
-- `users/` — CRUD over the `User` model.
+  Specs under `auth/test/`. `guards/admin.guard.ts` exposes `AdminGuard` (`003-auth-user-management`),
+  applied at class level on `UsersResolver` — it re-reads `isAdmin` fresh from `PrismaService` on
+  every call rather than trusting the JWT, so a demoted admin's still-valid session stops working on
+  the very next request instead of at token expiry. `scripts/reset-password.ts` is the host-side
+  recovery path when no admin can sign in — run through `bin/reset-password`, never bare.
+- `users/` — CRUD over the `User` model. `isAdmin: Boolean!` (`003-auth-user-management`) gates the
+  whole module via `AdminGuard`; `remove()` refuses self-delete and refuses deleting the last admin.
 - `movies/` — CRUD over `Movie`, plus `addTorrentToMovie` / `addMagnetToMovie` (the two entry
   points into the download pipeline) and the in-progress `movies.search.ts`.
 - `media-sources/` — the `MediaSource` row that represents one acquisition attempt.

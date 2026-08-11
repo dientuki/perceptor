@@ -79,6 +79,16 @@ real enforcement point is `api`'s global guard: `src/app/(dashboard)/layout.tsx`
 `redirectIfUnauthenticated` sends any action that gets back `No autenticado` or a session-expired
 error straight to `/login`, deleting the stale cookie first.
 
+## Admin user management (`003-auth-user-management`)
+
+`src/actions/users.ts` (`getUsers`/`createUserAction`/`deleteUserAction`, same server-action shape
+as `settings.ts`), `src/app/(dashboard)/users/page.tsx` (server component — checks
+`getCurrentUser().isAdmin` and calls `notFound()` **before** calling `getUsers()`, sequentially,
+never via `Promise.all`: racing them turns `api`'s `AdminGuard` refusal into a 500 instead of a
+clean 404), `src/components/users/UsersManager.tsx` (the client-side table + create form), and
+`src/types/users.ts` (`AdminUser`). The `isAdmin`-gated "Users" sidebar entry is wired through
+`src/layout/AdminShell.tsx` → `src/layout/AppSidebar.tsx`.
+
 ## UI origin: TailAdmin template
 
 `src/layout/`, `src/components/common|form|ui`, and `src/context/` come from the TailAdmin Next.js

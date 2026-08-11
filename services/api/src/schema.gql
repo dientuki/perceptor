@@ -11,6 +11,7 @@ type User {
   id: ID!
   name: String!
   username: String!
+  isAdmin: Boolean!
 }
 
 type LoginResponse {

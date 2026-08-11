@@ -4,7 +4,6 @@ import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
 import { Eye, EyeOff } from 'lucide-react';
-import Link from "next/link";
 import { useState, useActionState } from "react";
 import { loginAction } from "@/actions/auth";
 import { useSearchParams } from "next/dist/client/components/navigation";
@@ -77,19 +76,11 @@ export default function LoginForm() {
                   </p>
                 )}
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Checkbox name="rememberMe" checked={isChecked} onChange={setIsChecked} />
-                    <span className="block font-normal text-gray-700 text-theme-sm dark:text-gray-400">
-                      Keep me logged in
-                    </span>
-                  </div>
-                  <Link
-                    href="/reset-password"
-                    className="text-sm text-brand-500 hover:text-brand-600 dark:text-brand-400"
-                  >
-                    Forgot password?
-                  </Link>
+                <div className="flex items-center gap-3">
+                  <Checkbox name="rememberMe" checked={isChecked} onChange={setIsChecked} />
+                  <span className="block font-normal text-gray-700 text-theme-sm dark:text-gray-400">
+                    Keep me logged in
+                  </span>
                 </div>
                 <div>
                   <Button type="submit" className="w-full" size="sm" disabled={isPending}>

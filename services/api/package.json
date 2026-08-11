@@ -20,7 +20,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "token:service": "ts-node scripts/mint-service-token.ts"
+    "token:service": "ts-node scripts/mint-service-token.ts",
+    "password:reset": "ts-node scripts/reset-password.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",

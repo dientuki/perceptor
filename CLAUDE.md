@@ -74,6 +74,7 @@ through the wrappers in `bin/`, which shell into the running containers.
 | `bin/bash <service>` | interactive `sh` in a container | `bin/bash api` |
 | `bin/mysql [args…]` | `mariadb` client against `db` using `.env` credentials | `bin/mysql -e 'show tables'` |
 | `bin/dbinit` | grants global privileges to `${DB_USER}` so Prisma can create its shadow database | run once after a fresh `db` volume, before `prisma migrate dev` |
+| `bin/reset-password <username>` | resets a user's password interactively (masked prompt in a TTY session, plain prompt otherwise) | `bin/reset-password admin` — the recovery path when no admin can sign in |
 
 Bring the stack up from the repo root:
 
@@ -129,7 +130,11 @@ container path never crosses the GraphQL boundary. See `services/api/CLAUDE.md`.
 `ADMIN_USER`/`ADMIN_PASSWORD` are the canonical credentials — `QBITTORRENT_USER`/`QBITTORRENT_PASSWORD`
 and `INDEXER_USER`/`INDEXER_PASSWORD` reference them via `.env` interpolation (`${ADMIN_USER}`), and
 the api seed reads them directly, so the app login, qBittorrent's WebUI and Prowlarr's WebUI all
-share one login. Each service's own UI can still change its own credentials afterward.
+share one login. Each service's own UI can still change its own credentials afterward. The seeded
+`ADMIN_USER` is also the app's first administrator (`isAdmin: true` — see
+`003-auth-user-management`): there is no public registration, so every other user is created by an
+admin from the `/users` screen. If nobody can sign in as an admin, `bin/reset-password` is the
+recovery path.
 
 `BUILD_TARGET` is an optional override for which Dockerfile stage to run (`dev` by default,
 `runner` for production) — every Dockerfile has `base` / `dev` / `builder` / `runner` stages, and

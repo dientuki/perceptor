@@ -10,6 +10,7 @@ export interface CurrentUser {
   id: string;
   name: string;
   username: string;
+  isAdmin: boolean;
 }
 
 const LOGIN_MUTATION = `
@@ -20,6 +21,7 @@ const LOGIN_MUTATION = `
         id
         name
         username
+        isAdmin
       }
     }
   }
@@ -93,6 +95,7 @@ const ME_QUERY = `
       id
       name
       username
+      isAdmin
     }
   }
 `

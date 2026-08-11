@@ -10,11 +10,14 @@ export async function seedUsers(prisma: PrismaClient) {
 
   await prisma.user.upsert({
     where: { username },
-    update: {}, // Si ya existe, no sobrescribe
+    // Re-running the seed repairs an install that lost its admin (NFR-1) —
+    // it never touches name/password of an existing row, only isAdmin.
+    update: { isAdmin: true },
     create: {
       username,
       name: 'Admin',
       password: hashedPassword,
+      isAdmin: true,
     },
   });
 }

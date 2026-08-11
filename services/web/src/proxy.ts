@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { CONFIG } from '@/lib/config';
 
 // Rutas accesibles SOLO cuando NO estás autenticado
-const AUTH_ROUTES = ['/login', '/forgot-password', '/reset-password'];
+const AUTH_ROUTES = ['/login'];
 
 // Rutas explícitamente públicas (ejemplo: landing, términos, etc.)
 const PUBLIC_ROUTES = ['/', '/terms', '/privacy'];
