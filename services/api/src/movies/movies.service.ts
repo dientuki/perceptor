@@ -4,19 +4,21 @@ import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
 import { RedisService } from '@/redis/redis.service';
 import { MediaSearchResult, MovieDetail } from '@/clients/types';
-import { MediaSearchResult as MediaSearchResultEntity } from './entities/media-search-result.entity';
+import { MediaSearchResult as MediaSearchResultEntity } from '@/media/entities/media-search-result.entity';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
 import { SourceKind } from '@prisma/client';
+import { MediaTypeService } from '@/media/media-type.interface';
+import { MediaRef } from '@/media/entities/media-ref.entity';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
 
 @Injectable()
-export class MoviesService {
+export class MoviesService implements MediaTypeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
@@ -83,11 +85,11 @@ export class MoviesService {
   // existente sin reescribir nada. En ambas ramas nos aseguramos de que exista
   // el vínculo con el usuario que llama (REQ-3): la fila de la película es
   // compartida, pero cada usuario necesita su propio user_movies.
-  async addMovie(tmdbId: number, userId: string) {
+  async register(tmdbId: number, userId: string): Promise<MediaRef> {
     const existing = await this.prisma.movie.findUnique({ where: { tmdbId } });
     if (existing) {
       await this.linkUserToMovie(userId, existing.id);
-      return existing;
+      return { id: existing.id, type: MEDIA_TYPE.MOVIE };
     }
 
     const cached = await this.getCachedMovie(tmdbId);
@@ -104,7 +106,7 @@ export class MoviesService {
     });
 
     await this.linkUserToMovie(userId, movie.id);
-    return movie;
+    return { id: movie.id, type: MEDIA_TYPE.MOVIE };
   }
 
   // upsert en vez de create: un segundo addMovie del mismo usuario para la misma
@@ -155,7 +157,7 @@ export class MoviesService {
     };
   }
 
-  async searchMovies(query: string, userId: string): Promise<MediaSearchResultEntity[]> {
+  async search(query: string, userId: string): Promise<MediaSearchResultEntity[]> {
     if (!query.trim()) return [];
 
     // 1. Consultar TMDB.
@@ -215,7 +217,7 @@ export class MoviesService {
       const registered = byTmdbId.get(result.id);
       return {
         ...result,
-        movieId: registered?.id ?? null,
+        mediaId: registered?.id ?? null,
         inLibrary: (registered?.users.length ?? 0) > 0,
       };
     });

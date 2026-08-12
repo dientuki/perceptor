@@ -114,22 +114,58 @@ Server Component awaits directly needs `redirectToClearSession`, not `redirectIf
 the two are not interchangeable, pick based on the caller's context, not by copying the nearest
 example.
 
-## Movie search and per-user libraries (`005-movie-search`)
+## Media search and per-user libraries (`005-movie-search`, generalized by `006-media-search`)
 
 `src/components/search/SearchInput.tsx`'s submit button is the shared `Button`
 (`src/components/ui/button/Button.tsx`, `bg-brand-500`), not a hand-rolled element — a
-`bg-primary` class silently compiled to nothing before this feature, since `web`'s Tailwind 4
+`bg-primary` class silently compiled to nothing before `005-movie-search`, since `web`'s Tailwind 4
 `@theme` only ever defined `--color-brand-*`. Do not reintroduce a `primary` colour token here;
 reuse the shared component instead of styling a bare `<button>`.
 
-`src/components/search/SearchContainer.tsx`'s `handleAdd` no longer calls `router.push` after a
-successful add — the user stays on the search screen and that result's card switches from
-`Agregar` to an `Ir` link (`next/link` → `/movies/<id>`), tracked in local `addedMovieIds` state
-(keyed by TMDB id) until the next search. Each `MediaSearchResult` also carries `movieId`
-(`Movie.id` if *anyone* has registered the film, else `null`) and `inLibrary` (true only for the
-caller) — `renderAction` treats a card as owned when `item.inLibrary` is true **or** it was added
-this session, never when `movieId !== null` alone, since a film someone else already registered is
-still addable by the caller (that add only links them, it never re-downloads).
+`src/components/search/SearchContainer.tsx` now backs both `/movies/add` and `/shows/add`,
+parameterized by its `type: MediaType` prop — `searchAction`/`addAction` are passed in by the page
+(`searchMedia`/`addMedia` from `src/actions/media.ts`, since `006-media-search`; `src/actions/movies.ts`
+no longer exports a search/add pair). `handleAdd` never calls `router.push` after a successful add
+— the user stays on the search screen and that result's card changes, tracked in local
+`addedMediaIds` state (keyed by TMDB id) until the next search. Each `MediaSearchResult` carries
+`mediaId` (the registered row's id in whatever table `type` names, if *anyone* has registered it,
+else `null` — renamed from `movieId` by `006-media-search`; see `docs/spec/graphql-contract.md`
+for why the sibling `movieId`s elsewhere in this service were deliberately left alone) and
+`inLibrary` (true only for the caller). `renderAction` treats a card as owned when
+`item.inLibrary` is true **or** it was added this session, never when `mediaId !== null` alone,
+since something someone else already registered is still addable by the caller (that add only
+links them, it never re-downloads). **The owned branch itself now splits by type**: a film renders
+the `Ir` link (`next/link` → `/movies/<mediaId>`) exactly as before; a series renders a
+non-interactive `Agregada` badge with no `href`, because this service ships no `/shows/[id]` to
+link to.
+
+## Library listings: two parallel screens, not one parameterized one (`007-library-listing`)
+
+`/movies` and `/shows` are deliberately **separate** implementations — `src/actions/movies.ts`'s
+`getMovies()` + `src/components/movies/Movies.tsx`, and `src/actions/shows.ts`'s `getShows()` +
+`src/components/Shows/Shows.tsx`. This is the opposite of what `SearchContainer` did above, and it
+is not an oversight: `api` exposes `movies` and `shows` as two sibling queries with two independent
+types (see `docs/spec/graphql-contract.md` → `007-library-listing`), and each listing component is
+a ~30-line `useEffect` fetch. Do not merge them; the duplication is cheaper than the parameter.
+
+What *is* shared is the rendering: both pass their rows to `src/components/media/MediaList.tsx`,
+which takes a `mediaType` prop and already produces the right Spanish empty state for each ("No hay
+series registradas" for `MEDIA_TYPE.SHOW`). Never pass a custom `emptyMessage` and never fork
+`MediaList`/`MediaCard` — those two are the one thing the two listings genuinely share.
+
+Both actions call `redirectIfUnauthenticated`, **not** `redirectToClearSession`, because both are
+invoked from a client component's `useEffect` — see the session-invalidation section above for why
+the choice is by caller context, not by resemblance.
+
+Note the directory casing is inconsistent — `src/components/Shows/` against `src/components/movies/`.
+Known; renaming it is churn nobody has spent a change on yet.
+
+**The series card's detail link is knowingly broken.** `MediaCard` builds its href from
+`item.type`, and `getShows()` deliberately does not select a `type` field, so a series card links
+to `/movies/<id>` and renders a film. Adding `type` would be a one-line "fix" that points at
+`src/app/(dashboard)/shows/[id]/page.tsx` — an untracked paste that fetches a *movie* by that id,
+i.e. wrong content with no error. The link and a real detail route ship together, as their own
+feature; do not fix half of it.
 
 ## UI origin: TailAdmin template
 
@@ -160,10 +196,11 @@ toolchain here is its own decision and deserves its own spec.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-11, `bin/cli web npx --no tsc --noEmit` reports **12 errors across 5 files**,
-unchanged by `005-movie-search`. All are leftovers from a pre-GraphQL version of the app; none are
-on a path the running UI uses. (Previously logged here as 13 — that was never the real count; these
-same five files have always produced 12, confirmed while implementing `002-auth-login`.)
+As of 2026-08-12, after `006-media-search`, `bin/cli web npx --no tsc --noEmit` reports **12 errors
+across 5 files**, unchanged by either `005-movie-search` or `006-media-search`. All are leftovers
+from a pre-GraphQL version of the app; none are on a path the running UI uses. (Previously logged
+here as 13 — that was never the real count; these same five files have always produced 12,
+confirmed while implementing `002-auth-login`.)
 
 | File | Problem |
 | :-- | :-- |
@@ -172,6 +209,16 @@ same five files have always produced 12, confirmed while implementing `002-auth-
 | `src/components/search/SearchTorrentModal.tsx` | imports `@prisma/client` — a direct Constitution Article II violation |
 | `src/components/search/SearchForm.tsx` | imports `../../icons` (no `src/icons/`); implicit `any` props |
 | `src/components/search/ResultsForm.tsx` | untyped destructured props (5 implicit `any`) |
+
+The 6th error that used to be listed here — `Cannot find module '@/components/movies/Shows'` on
+`src/app/(dashboard)/shows/page.tsx` — is **gone as of `007-library-listing`**, which finished that
+untracked paste into the real series listing. Verified 2026-08-12: `bin/cli web npx --no tsc
+--noEmit` reports 12 errors across the 5 files above and nothing else.
+
+`bin/npm web run lint` is **not** a usable gate today: `biome check` reports ~1598 errors and ~96
+warnings across the pre-existing template, with or without any given change. Judge a new file by
+running Biome on that file (a new action like `src/actions/shows.ts` should come back clean) rather
+than on the repo.
 
 Files that used to be on this list and now compile: `SearchTorrent.tsx`,
 `src/app/(dashboard)/movies/[id]/page.tsx`, `src/actions/movies.ts`. `@/components/ui/modal` and

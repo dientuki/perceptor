@@ -12,11 +12,11 @@ export const metadata: Metadata = {
 export default function ShowAddPage() {
   return (
     <div>
-      <PageBreadcrumb pageTitle="Movies Add" />
+      <PageBreadcrumb pageTitle="Shows Add" />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
           <SearchContainer
-            type={MEDIA_TYPE.MOVIE}
+            type={MEDIA_TYPE.SHOW}
             addAction={addMedia}
             searchAction={searchMedia}
           />

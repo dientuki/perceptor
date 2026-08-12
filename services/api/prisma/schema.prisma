@@ -69,6 +69,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   movies UserMovie[]
+  shows  UserShow[]
 
   @@map("users")
 }
@@ -87,6 +88,22 @@ model UserMovie {
   @@id([userId, movieId])
   @@index([movieId])
   @@map("user_movies")
+}
+
+// Join between User and Show: whose library a series is in. The show row
+// itself stays global (Show.tmdbId @unique) — this table only records
+// ownership, not a second copy of the series.
+model UserShow {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  showId Int
+  show   Show   @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, showId])
+  @@index([showId])
+  @@map("user_shows")
 }
 
 model Language {
@@ -214,19 +231,21 @@ model Movie {
 }
 
 model Show {
-  id               Int       @id @default(autoincrement())
-  tmdbId           Int       @unique
+  id               Int         @id @default(autoincrement())
+  tmdbId           Int         @unique
   title            String
-  overview         String?   @db.Text // Los sinopsis de TMDB pasan el varchar(191) por default
+  overview         String?     @db.Text // Los sinopsis de TMDB pasan el varchar(191) por default
   posterUrl        String?
-  status           String?
-  isLiveAction     Boolean   @default(true)
+  status           MediaStatus @default(MISSING)
+  isLiveAction     Boolean     @default(true)
   originalLanguage String
   releaseDate      DateTime?
+  seasonsSyncedAt  DateTime?
 
   seasons   Season[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  users     UserShow[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   @@map("shows")
 }

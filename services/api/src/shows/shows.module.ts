@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { MoviesResolver } from './movies.resolver';
-import { MoviesService } from './movies.service';
+import { ShowsResolver } from './shows.resolver';
+import { ShowsService } from './shows.service';
 import { RedisModule } from '@/redis/redis.module';
 import { SettingsModule } from '@/settings/settings.module';
 
 @Module({
   imports: [RedisModule, SettingsModule],
-  providers: [MoviesResolver, MoviesService],
-  exports: [MoviesService],
+  providers: [ShowsResolver, ShowsService],
+  exports: [ShowsService],
 })
-export class MoviesModule {}
+export class ShowsModule {}

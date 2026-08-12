@@ -5,14 +5,17 @@ import Link from "next/link";
 import { useState } from "react";
 import { MediaList } from "@/components/media/MediaList";
 import Button from "@/components/ui/button/Button";
-import type { MediaType } from "@/types/media";
+import { MEDIA_TYPE, type MediaType } from "@/types/media";
 import type { MediaSearchResult } from "@/types/search";
 import { SearchInput } from "./SearchInput";
 
 interface SearchContainerProps {
   type: MediaType;
   addAction: (id: number, type: MediaType) => Promise<string>;
-  searchAction: (query: string) => Promise<MediaSearchResult[]>; // Cambiado a una función que devuelve una promesa de booleano
+  searchAction: (
+    query: string,
+    type: MediaType,
+  ) => Promise<MediaSearchResult[]>;
 }
 
 export default function SearchContainer({
@@ -25,8 +28,8 @@ export default function SearchContainer({
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [addingId, setAddingId] = useState<number | null>(null);
-  // TMDB id -> Movie id, for results added this session (before `inLibrary` would reflect it on a fresh search)
-  const [addedMovieIds, setAddedMovieIds] = useState<Record<number, string>>(
+  // TMDB id -> registered row id, for results added this session (before `inLibrary` would reflect it on a fresh search)
+  const [addedMediaIds, setAddedMediaIds] = useState<Record<number, string>>(
     {},
   );
 
@@ -35,7 +38,7 @@ export default function SearchContainer({
     setError(null);
 
     try {
-      const data = await searchAction(query);
+      const data = await searchAction(query, type);
       setResults(data);
     } catch (err) {
       // Sin este catch el finally no corre y el botón queda deshabilitado para siempre
@@ -53,11 +56,13 @@ export default function SearchContainer({
     setError(null);
 
     try {
-      const movieId = await addAction(item.id, type);
-      setAddedMovieIds((prev) => ({ ...prev, [item.id]: movieId }));
+      const mediaId = await addAction(item.id, type);
+      setAddedMediaIds((prev) => ({ ...prev, [item.id]: mediaId }));
     } catch (err) {
       console.error("Error al agregar:", err);
-      setError("No se pudo agregar la película. Intentá de nuevo.");
+      setError(
+        `No se pudo agregar la ${type === MEDIA_TYPE.SHOW ? "serie" : "película"}. Intentá de nuevo.`,
+      );
     } finally {
       setAddingId(null);
     }
@@ -79,17 +84,25 @@ export default function SearchContainer({
         emptyMessage={
           searched
             ? "No se encontraron resultados"
-            : "Buscá una película para empezar"
+            : `Buscá una ${type === MEDIA_TYPE.SHOW ? "serie" : "película"} para empezar`
         }
         renderAction={(item: MediaSearchResult) => {
-          const addedMovieId = addedMovieIds[item.id];
-          const owned = item.inLibrary || addedMovieId !== undefined;
+          const addedMediaId = addedMediaIds[item.id];
+          const owned = item.inLibrary || addedMediaId !== undefined;
 
           if (owned) {
-            const movieId = addedMovieId ?? String(item.movieId);
+            if (type === MEDIA_TYPE.SHOW) {
+              return (
+                <span className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-100 px-4 py-3 text-sm font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                  Agregada
+                </span>
+              );
+            }
+
+            const mediaId = addedMediaId ?? String(item.mediaId);
             return (
               <Link
-                href={`/movies/${movieId}`}
+                href={`/movies/${mediaId}`}
                 className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
               >
                 Ir

@@ -17,6 +17,8 @@ import { ProcessJobsModule } from './process-jobs/process-jobs.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { MediaRootsModule } from './media-roots/media-roots.module';
 import { MediaServerModule } from './media-server/media-server.module';
+import { MediaModule } from './media/media.module';
+import { ShowsModule } from './shows/shows.module';
 
 @Module({
   imports: [
@@ -43,6 +45,8 @@ import { MediaServerModule } from './media-server/media-server.module';
     ProcessJobsModule,
     UploadsModule,
     MediaServerModule,
+    MediaModule,
+    ShowsModule,
   ],
   providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })

@@ -41,19 +41,6 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 """
 scalar DateTime
 
-type MediaSearchResult {
-  id: Int!
-  title: String!
-  releaseDate: String
-  posterUrl: String
-  originalLanguage: String!
-  overview: String
-  type: String!
-  status: String
-  movieId: Int
-  inLibrary: Boolean!
-}
-
 type Setting {
   key: String!
   value: String!
@@ -121,6 +108,39 @@ type UploadTicket {
   expiresAt: DateTime!
 }
 
+type MediaSearchResult {
+  id: Int!
+  title: String!
+  releaseDate: String
+  posterUrl: String
+  originalLanguage: String!
+  overview: String
+  type: String!
+  status: String
+  mediaId: Int
+  inLibrary: Boolean!
+}
+
+type MediaRef {
+  id: Int!
+  type: String!
+}
+
+type Show {
+  id: ID!
+  tmdbId: Int!
+  title: String!
+  overview: String
+  posterUrl: String
+  releaseDate: DateTime
+  originalLanguage: String!
+  isLiveAction: Boolean!
+  status: String!
+  seasonsSyncedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
 type Query {
   ping: String!
   items: [Item!]!
@@ -129,9 +149,6 @@ type Query {
   user(id: ID!): User!
   movies: [Movie!]!
   movie(id: Int!): Movie
-
-  """Busca películas en TMDB"""
-  searchMovies(query: String!): [MediaSearchResult!]!
   settings: [Setting!]!
 
   """
@@ -150,6 +167,8 @@ type Query {
   Media servers soportados, derivados del registro de clientes — la UI arma el combo con esto en vez de hardcodear las opciones.
   """
   mediaServerClients: [MediaServerOption!]!
+  searchMedia(query: String!, type: String!): [MediaSearchResult!]!
+  shows: [Show!]!
 }
 
 type Mutation {
@@ -159,9 +178,6 @@ type Mutation {
   createUser(createUserInput: CreateUserInput!): User!
   updateUser(updateUserInput: UpdateUserInput!): User!
   removeUser(id: ID!): User!
-
-  """Registra una película de TMDB en la biblioteca"""
-  addMovie(tmdbId: Int!): Movie!
 
   """Envía un release elegido a qBittorrent y lo asocia a la película"""
   addTorrentToMovie(movieId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
@@ -195,6 +211,7 @@ type Mutation {
   """El worker pide borrar el torrent del cliente tras un encode exitoso"""
   downloadRemove(mediaSourceId: Int!): String!
   createUploadTicket(movieId: Int!): UploadTicket!
+  addMedia(tmdbId: Int!, type: String!): MediaRef!
 }
 
 input LoginInput {

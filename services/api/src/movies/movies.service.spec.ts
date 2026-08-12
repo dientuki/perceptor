@@ -78,7 +78,7 @@ describe('MoviesService', () => {
     service = module.get<MoviesService>(MoviesService);
   });
 
-  describe('searchMovies', () => {
+  describe('search', () => {
     it('hands Redis a catalog-only object, never this caller\'s ownership', async () => {
       tmdb.search.mockResolvedValue([
         {
@@ -100,13 +100,13 @@ describe('MoviesService', () => {
       const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
       redis.pipeline.mockReturnValue({ set: pipelineSet, exec: pipelineExec });
 
-      const results = await service.searchMovies('dune', 'user-1');
+      const results = await service.search('dune', 'user-1');
 
       // Sanity check: the returned value is correctly enriched either way —
       // this is exactly why the assertion below has to look at the Redis
       // call, not at this.
       expect(results).toEqual([
-        expect.objectContaining({ id: 42, movieId: 7, inLibrary: true }),
+        expect.objectContaining({ id: 42, mediaId: 7, inLibrary: true }),
       ]);
 
       expect(pipelineSet).toHaveBeenCalledTimes(1);
@@ -145,17 +145,17 @@ describe('MoviesService', () => {
     });
   });
 
-  describe('addMovie', () => {
+  describe('register', () => {
     it('links the caller to an already-registered film, creates no second row, and tolerates a repeat', async () => {
       const existing = { id: 5, tmdbId: 42, title: 'Dune' };
       prisma.movie.findUnique.mockResolvedValue(existing);
       prisma.userMovie.upsert.mockResolvedValue({ userId: 'user-1', movieId: 5 });
 
-      const first = await service.addMovie(42, 'user-1');
-      const second = await service.addMovie(42, 'user-1');
+      const first = await service.register(42, 'user-1');
+      const second = await service.register(42, 'user-1');
 
-      expect(first).toBe(existing);
-      expect(second).toBe(existing);
+      expect(first).toEqual({ id: 5, type: MEDIA_TYPE.MOVIE });
+      expect(second).toEqual({ id: 5, type: MEDIA_TYPE.MOVIE });
       expect(prisma.movie.create).not.toHaveBeenCalled();
       expect(prisma.userMovie.upsert).toHaveBeenCalledTimes(2);
       expect(prisma.userMovie.upsert).toHaveBeenNthCalledWith(1, {
@@ -192,7 +192,7 @@ describe('MoviesService', () => {
       prisma.movie.create.mockResolvedValue({ id: 9, tmdbId: 42, title: 'Dune' });
       prisma.userMovie.upsert.mockResolvedValue({ userId: 'user-1', movieId: 9 });
 
-      await service.addMovie(42, 'user-1');
+      await service.register(42, 'user-1');
 
       expect(prisma.movie.create).toHaveBeenCalledTimes(1);
       const createData = prisma.movie.create.mock.calls[0][0].data;
