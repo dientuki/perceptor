@@ -84,18 +84,48 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   an already-open session dies immediately rather than at token expiry. `login()`
   (`auth.service.ts`) refuses a disabled user's credentials with a distinct message, even if
   correct.
-- `movies/` — CRUD over `Movie`, plus `searchMovies`/`addMovie` (the TMDB search-and-register
-  flow, `src/movies/movies.service.ts` — no separate `movies.search.ts`) and `addTorrentToMovie` /
-  `addMagnetToMovie` (the two entry points into the download pipeline). Since `005-movie-search`,
-  `Movie` is a shared catalog row (`tmdbId @unique`, never duplicated) joined to `User` through
-  `UserMovie` (`userId`/`movieId` composite key, both `onDelete: Cascade`): `movies` and
-  `searchMovies`'s `inLibrary` are scoped to the caller via that join, `movie(id)` stays unscoped,
-  and `addTorrentToMovie`/`addMagnetToMovie` refuse a film the caller hasn't registered with the
-  same `La película <id> no existe` a missing film already produced. `searchMovies` enriches its
-  results with `movieId`/`inLibrary` **after** the best-effort Redis cache write in `cacheMovies`
-  — that cache key is shared globally across all users, so ownership must never be computed before
-  it, or one user's `inLibrary` leaks into what every other user sees for the film for the next 24h
-  (see `movies.service.spec.ts`).
+- `media/` — the boundary that turns a `type` argument into a choice of service
+  (`006-media-search`). `media.resolver.ts` exposes `searchMedia(query, type)` and
+  `addMedia(tmdbId, type)`, the only two catalog-search-and-register operations in the schema now;
+  `media-dispatch.service.ts` holds a `Record<MediaType, MediaTypeService>` lookup (`movie` →
+  `MoviesService`, `show` → `ShowsService`) and throws `BadRequestException('Tipo de medio no
+  soportado: <type>')` for anything else — the only user-facing string that lives above the
+  per-type services. `media-type.interface.ts` is the whole contract a per-type service
+  implements: `search(query, userId)` and `register(tmdbId, userId)`, nothing else — every other
+  detail (cache key, catalog endpoint, error strings, Prisma model) stays private to the
+  implementation, by design (see `006-media-search/spec.md` § Context & Goal for why). Adding a
+  third media type costs one new service plus one entry in the dispatch's lookup, not an edit to
+  the dispatch itself.
+- `movies/` — CRUD over `Movie`, plus `search`/`register` (`MoviesService`, implementing
+  `MediaTypeService` for `"movie"` — `src/movies/movies.service.ts`, no separate
+  `movies.search.ts`) and `addTorrentToMovie` / `addMagnetToMovie` (the two entry points into the
+  download pipeline). Since `005-movie-search`, `Movie` is a shared catalog row (`tmdbId @unique`,
+  never duplicated) joined to `User` through `UserMovie` (`userId`/`movieId` composite key, both
+  `onDelete: Cascade`): `movies` and `search`'s `inLibrary` are scoped to the caller via that join,
+  `movie(id)` stays unscoped, and `addTorrentToMovie`/`addMagnetToMovie` refuse a film the caller
+  hasn't registered with the same `La película <id> no existe` a missing film already produced.
+  `search` enriches its results with `mediaId`/`inLibrary` **after** the best-effort Redis cache
+  write in `cacheMovies` — that cache key is shared globally across all users, so ownership must
+  never be computed before it, or one user's `inLibrary` leaks into what every other user sees for
+  the film for the next 24h (see `movies.service.spec.ts`).
+- `shows/` — `ShowsService`, `MoviesService`'s structural twin implementing `MediaTypeService` for
+  `"show"` (`006-media-search`) — same cache-before-enrich ordering, same idempotent-link-via-
+  upsert shape, deliberately **not** factored into a shared base class with `MoviesService` (see
+  `006-media-search/spec.md` § Out of Scope). Since `007-library-listing` the module has a
+  resolver: `ShowsResolver` exposes exactly one query, `shows: [Show!]!`, backed by
+  `ShowsService.findAll(userId)` — a single `findMany` scoped through the `UserShow` join
+  (`where: { users: { some: { userId } } }`) and ordered `createdAt: 'desc'`, copying
+  `MoviesResolver`/`MoviesService.findAll` line for line, including the
+  `principal.type === 'user' ? principal.id : ''` narrowing. There is still **no `show(id)` query**
+  and no detail route — that is the next feature. `Show.status` is a `MediaStatus` since that same
+  feature (`@default(MISSING)`, backfilled), but crosses GraphQL as a plain `String!` exactly as
+  `Movie.status` does; do not `registerEnumType` it for one type only.
+  `register()` also kicks off a detached, never-awaited season/episode hydration
+  (`ShowsService.hydrate`) — one HTTP request for the season list, then one sequential
+  (never `Promise.all`, TMDB rate-limits) request per season for its episodes, claimed via a Redis
+  `SET … NX` so two concurrent registrations of the same series fetch once. `Show.seasonsSyncedAt`
+  is set only once every season and episode has been written; it stays `null` on any failure or if
+  hydration never ran, and the next `register()` for that series retries whenever it is `null`.
 - `media-sources/` — the `MediaSource` row that represents one acquisition attempt.
 - `downloads/` — `torrentCompleted`, the mutation qBittorrent's AutoRun hook calls; matches
   **exclusively by infoHash** and silently ignores unknown hashes by design.
@@ -171,9 +201,13 @@ declares its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — that 
 not a database one. If `api` needs a movie/show discriminator it must be added to `schema.prisma`
 and migrated first.
 
-There are 10 models (`Setting`, `User`, `Language`, `MediaSource`, `SourceFile`, `ProcessJob`,
-`Movie`, `Show`, `Season`, `Episode`) and 10 migrations. `Show`/`Season`/`Episode` exist in the
-schema but have no module and no GraphQL surface yet — the API is movies-only today.
+There are 12 models (`Setting`, `User`, `UserMovie`, `UserShow`, `Language`, `MediaSource`,
+`SourceFile`, `ProcessJob`, `Movie`, `Show`, `Season`, `Episode` — verify with
+`grep -c "^model " prisma/schema.prisma` rather than trusting this list) and 15 migrations (counted
+2026-08-12, the newest being `add_show_status_enum`). `Show`/`Season`/`Episode` have a module
+(`shows/`), are registered through `searchMedia`/`addMedia` (`type: "show"`, `006-media-search`),
+and since `007-library-listing` are **read back through the `shows` query** — a per-user listing.
+There is still no `show(id)` query and nothing exposes `Season`/`Episode` over GraphQL.
 
 ## Tests
 
@@ -201,17 +235,19 @@ structure now, not the scaffolding pattern its name might suggest from memory.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-10, `bin/cli api npx --no tsc --noEmit` reports **0 errors**. The previously-listed
-`src/auth/test/auth.service.spec.ts` (two `'user' is possibly 'null'`, one wrong arity — written
-against a `login()` signature that never existed) is gone: it was deleted ahead of
-`002-auth-login`, whose spec had originally left "fixing" it explicitly Out of Scope before the
-file was removed entirely, taking those 3 errors with it.
+As of 2026-08-12, after `007-library-listing`, `bin/cli api npx --no tsc --noEmit` reports **0
+errors** and `bin/npm api test` is green at **87** tests across **10** suites (`shows.service.spec.ts`
+is the tenth; `007` added three `findAll` cases to it rather than an eleventh suite — one of them
+asserts the ownership `where` clause and was verified to fail when that clause is removed). The previously-listed `src/auth/test/auth.service.spec.ts` (two `'user' is possibly
+'null'`, one wrong arity — written against a `login()` signature that never existed) is gone: it
+was deleted ahead of `002-auth-login`, whose spec had originally left "fixing" it explicitly Out of
+Scope before the file was removed entirely, taking those 3 errors with it.
 
 The TMDB search slice that used to be listed here **now compiles**; `src/clients/TMDBClient.ts` is
 gone, replaced by `src/clients/tmdb/{client,types}.ts`. Treat that vertical as ordinary code again.
 
-Re-run the typecheck rather than trusting this count — the number is the useful part, and it is
-what an agent reports before/after to prove it added nothing.
+Re-run the typecheck and the test suite rather than trusting these counts — the numbers are the
+useful part, and they are what an agent reports before/after to prove it added nothing.
 
 ## Known debt
 

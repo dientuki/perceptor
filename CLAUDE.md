@@ -7,15 +7,15 @@ Pipeline stage status today:
 
 | Stage | Where | Status |
 | :-- | :-- | :-- |
-| Search catalog (TMDB) | `api` — `src/movies/movies.service.ts`, `src/clients/tmdb/{client,types}.ts` | working, per-user library (`005-movie-search`) |
-| Register title in DB | `api` — `movies` module + Prisma | working (read + CRUD service) |
+| Search catalog (TMDB) | `api` — `src/media/` (dispatch + `searchMedia`/`addMedia`), `src/movies/movies.service.ts`, `src/shows/shows.service.ts`, `src/clients/tmdb/{client,types}.ts` | working for films and series, per-user library, parameterized by media type (`006-media-search`) |
+| Register title in DB | `api` — `media`/`movies`/`shows` modules + Prisma | working (read + CRUD service); a registered series also fetches its seasons/episodes in the background |
 | Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `api` — `src/clients/indexer/client.ts` | working; alternativa manual: pegar un magnet (`addMagnetToMovie`, `src/clients/torrent/magnet.ts`) — mismo `MediaSource`/AutoRun de ahí en más |
 | Download | qBittorrent — `torrent` service, `api` — `src/clients/torrent/client.ts` | working, per-torrent save path |
 | Detect completion, update DB, enqueue job | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | working |
 | Scan downloaded files, inventory | `worker` — BullMQ consumer, talks to `api` over GraphQL | working |
 | Transcode | `worker` (FFmpeg) | not started — `ProcessJob` rows sit in `WAITING` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` | working (Jellyfin, opt-in from Settings, default `none`) |
-| Browse library | `web` | working for the movie list |
+| Browse library | `api` — `src/movies/movies.resolver.ts`, `src/shows/shows.resolver.ts`; `web` — `/movies`, `/shows` | working for both films and series, each a per-user listing behind its own query (`007-library-listing`); the series card's detail link still points at `/movies/<id>` — known, next spec |
 
 ## Layout
 
@@ -139,7 +139,8 @@ flag flip, has every session they currently hold revoked immediately, not just t
 attempt. If nobody can sign in as an admin, `bin/reset-password` is the recovery path. Every movie
 is also linked to whoever has it in their library (`UserMovie`, `005-movie-search`); the migration
 that introduced that join backfills every pre-existing film onto the oldest enabled admin, which on
-a fresh install is this same seeded account.
+a fresh install is this same seeded account. A series is linked the same way through `UserShow`
+(`006-media-search`) — no backfill there, since `shows` was unreachable code before that feature.
 
 `BUILD_TARGET` is an optional override for which Dockerfile stage to run (`dev` by default,
 `runner` for production) — every Dockerfile has `base` / `dev` / `builder` / `runner` stages, and
@@ -218,7 +219,7 @@ is a worked example, written after the fact against a feature that shipped.
 
 ## Current state — do not treat these files as reference code
 
-Measured 2026-08-10, after `002-auth-login` landed. Re-run the typechecks rather than trusting the
+Measured 2026-08-12, after `006-media-search` landed. Re-run the typechecks rather than trusting the
 counts — the numbers are what an agent reports before and after a change to prove it added nothing.
 
 **`api` — clean, 0 errors.** `bin/cli api npx --no tsc --noEmit`. The stale
@@ -226,15 +227,22 @@ counts — the numbers are what an agent reports before and after a change to pr
 see `002-auth-login`'s spec, formerly Out of Scope there) is gone; deleting it is what took `api`
 from 3 errors to 0. The TMDB search slice that used to be listed here also now compiles;
 `TMDBClient.ts` is gone, replaced by `src/clients/tmdb/{client,types}.ts`. `005-movie-search` added
-a ninth suite (`movies.service.spec.ts`); tests are now **80** across **9** suites.
+a ninth suite (`movies.service.spec.ts`); `006-media-search` added a tenth
+(`shows.service.spec.ts`). `007-library-listing` added three cases to that tenth suite rather than
+an eleventh. Tests are now **87** across **10** suites (`bin/npm api test`, run 2026-08-12).
 
-**`web` — 12 errors across 5 files**, all pre-GraphQL leftovers on paths the running UI does not
-use: `components/import/importFolderModal.tsx` and `ImportMagnetSeasonModal.tsx` (both import a
+**`web` — 12 errors across the same 5 pre-GraphQL files**, none on a path the running UI uses:
+`components/import/importFolderModal.tsx` and `ImportMagnetSeasonModal.tsx` (both import a
 non-existent `@/actions/jobs`, both pass `value` to a component that only takes `defaultValue`),
 `components/search/SearchTorrentModal.tsx` (imports `@prisma/client` — a Constitution Article II
 violation), `SearchForm.tsx` and `ResultsForm.tsx` (missing `@/icons`, implicit `any`).
 `services/web/CLAUDE.md` has the table. (Previously logged here as 13 — that count was never
-correct; 12 is what the same five files have always produced.)
+correct; 12 is what the same five files have always produced.) The 6th error that used to be
+listed here — `Cannot find module '@/components/movies/Shows'` on `app/(dashboard)/shows/page.tsx`
+— is **gone**: `007-library-listing` finished that untracked paste into the real series listing.
+Verified 2026-08-12: `bin/cli web npx --no tsc --noEmit` reports exactly 12 errors across those 5
+files. `bin/npm web run build` still fails on them (`next.config.ts` sets no `ignoreBuildErrors`),
+independently of anything this feature touched.
 
 **`worker` — clean, 0 errors.**
 

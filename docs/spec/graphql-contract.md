@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.2.0
+spec_version: 1.3.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-11
+last_updated: 2026-08-12
 status: Approved
 target_service: api, web, worker
 ---
@@ -210,6 +210,100 @@ change to `searchMovies` must preserve that ordering.
 caller's link, refusing an unowned film with the same `NotFoundException('La película <id> no
 existe')` it already used for a missing one — deliberately one string, not a second "no es tuya"
 message (see `005-movie-search/spec.md` § Errors for why).
+
+### `searchMovies`/`addMovie` are gone; `searchMedia`/`addMedia` replace them, parameterized by type (`006-media-search`)
+
+`searchMovies(query: String!)` and `addMovie(tmdbId: Int!)` **no longer exist** — the catalog is
+searched and registered through `searchMedia(query: String!, type: String!):
+[MediaSearchResult!]!` and `addMedia(tmdbId: Int!, type: String!): MediaRef!`, both defined in a
+new `src/media/` module that dispatches on `type` to the service that owns that media type
+(`MoviesService` for `"movie"`, `ShowsService` for `"show"`). `type` is a plain `String!`, not a
+GraphQL enum — the schema has none, and `MEDIA_TYPE` already holds `"movie"`/`"show"` as literals
+on both `api` and `web`. An unsupported `type` is refused with `BadRequestException('Tipo de medio
+no soportado: <type>')`, thrown by the dispatch itself before any per-type service runs.
+
+`addMedia` returns `MediaRef { id: Int!, type: String! }`, not the created row — `web` only ever
+read `.id` from `addMovie`'s response, and a polymorphic return would need a GraphQL union with
+hand-written inline fragments and no codegen to check them.
+
+`MediaSearchResult.movieId` is renamed to `mediaId: Int` — the registered row's id in whatever
+table `type` names, still `null` when nothing is registered, still never an ownership test (only
+`inLibrary` means "mine"). **This is the one rename in the whole feature, and it is scoped
+narrowly on purpose**: `movieId` also appears, unrenamed and meaning something else, as an
+argument on `addTorrentToMovie`/`addMagnetToMovie`/`createUploadTicket`, as the tus upload
+metadata key, and on `MediaSource.movieId` — the last one read by `worker`
+(`services/worker/src/jobs/source-ready.job.ts`), a consumer this feature does not touch.
+Renaming any of those by matching the string rather than the meaning breaks the download pipeline
+with no error anywhere.
+
+**The cache-before-enrich ordering is now an obligation on every per-type service, not a fact
+about `searchMovies`.** `search()` must hand its catalog-only results to the shared Redis cache
+(`tmdb:<type>:<tmdbId>`, 24h TTL) before computing `mediaId`/`inLibrary` for the caller — that
+cache key is read by every user who searches the same item, so enriching first leaks one caller's
+ownership into what everyone else sees for a day. Because each per-type service implements this
+independently (`MoviesService`, `ShowsService`, and whatever comes next), it can be broken
+independently — `services/api/src/shows/shows.service.spec.ts` asserts it exactly the way
+`movies.service.spec.ts` already did, and any new per-type service owes the same test.
+
+`show` also registers a series' seasons and episodes, fetched in the background after `addMedia`
+returns (never awaited) and marked complete only in `Show.seasonsSyncedAt` — not part of the
+GraphQL contract, since no field surfaces it; see `006-media-search/spec.md` for the full shape.
+
+### `shows` is a sibling of `movies`, not a parameterized listing (`007-library-listing`)
+
+A user's series are read back through `shows: [Show!]!` — a second query alongside `movies`, with
+its own `Show` type, not `library(type:)` and not a `MediaTypeService.list()`. This is the opposite
+choice from `searchMedia`/`addMedia` above, and it is deliberate: search and registration genuinely
+*are* the same operation for both media types, while the two listings share fields but not shape
+(`Movie` carries `filePath` and `mediaSource`, `Show` carries seasons). Unifying the return type
+would either flatten both to a lowest common denominator or force a union every consumer has to
+narrow by hand — with no codegen, that narrowing is unchecked. `MediaTypeService` stays at two
+methods; the dispatch pattern is scoped to search and registration.
+
+```graphql
+type Show {
+  id: ID!
+  tmdbId: Int!
+  title: String!
+  overview: String
+  posterUrl: String
+  releaseDate: DateTime
+  originalLanguage: String!
+  isLiveAction: Boolean!
+  status: String!
+  seasonsSyncedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+```
+
+Four things a consumer needs that the SDL does not say:
+
+- **`status` crosses as `String!` although Prisma has it as an enum.** `007-library-listing`
+  migrated `shows.status` from a nullable `String` to `MediaStatus @default(MISSING)`, matching
+  `Movie` — but like `Movie.status` it is **not** `registerEnumType`'d, so `web` receives one of
+  `"MISSING" | "DOWNLOADING" | "ENCODING" | "COMPLETED" | "ERROR"` as a plain string. Introducing a
+  GraphQL enum for one of the two types would make the listings structurally different in the one
+  place they are kept identical; if the enum should cross, it crosses for both, as its own change.
+- **Scoping is by ownership, ordering is by catalog row.** `shows` returns only the caller's series,
+  through the `UserShow` join, ordered `shows.createdAt desc` — the *shared catalog row's* creation
+  date, not the ownership link's, exactly as `movies` orders on `movie.createdAt`. A user who
+  registers a title someone else added months ago therefore sees it at the bottom of their library.
+  Both listings behave this way; changing it is a change to both.
+- **A service credential is refused, not handed an empty list.** `shows` carries no
+  `@AllowService()`, so the global `JwtAuthGuard` rejects a `SERVICE_TOKEN` principal before the
+  resolver runs: `errors[0].message` is `No autenticado` and `data` is `null`. The `worker` has no
+  business reading a user's library and must not call this query. (The string is `No autenticado`,
+  not `Unauthorized` — the latter appears only under `extensions.originalError.error`, and every
+  `web` action reads `errors[0].message`.)
+- **`Show` carries no `type` field.** A consumer cannot tell a series from a film by payload alone.
+  This is not an oversight: `web`'s shared `MediaCard` builds its href from `item.type`, so adding
+  the field would silently point series cards at `/shows/<id>` before that route exists. Until the
+  detail route ships, a series card links to `/movies/<id>` and shows the wrong title — known, and
+  fixed together with the destination page.
+
+An empty library is `{"data":{"shows":[]}}`, never `null` and never an error. `movies`, `Movie`,
+`searchMedia` and `addMedia` are unchanged by this feature.
 
 ### The one non-GraphQL route
 
