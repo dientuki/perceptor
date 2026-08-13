@@ -1,14 +1,18 @@
-import { UnauthorizedException, UseGuards } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { Resolver, Mutation, Args, Int } from '@nestjs/graphql';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { UploadTicket } from './entities/upload-ticket.entity';
 import { UploadTicketsService } from './upload-tickets.service';
+import { MoviesService } from '@/movies/movies.service';
 
 @Resolver()
 export class UploadsResolver {
-  constructor(private readonly uploadTickets: UploadTicketsService) {}
+  constructor(
+    private readonly uploadTickets: UploadTicketsService,
+    private readonly movies: MoviesService,
+  ) {}
 
   // Deliberately no @AllowService() — an upload ticket is delegated from a
   // user session (REQ-11), and a service principal has no user to delegate
@@ -22,6 +26,10 @@ export class UploadsResolver {
   ): Promise<UploadTicket> {
     if (principal.type !== 'user') {
       throw new UnauthorizedException('No autenticado');
+    }
+    const movie = await this.movies.findOneFromDb(movieId, principal.id);
+    if (!movie) {
+      throw new NotFoundException(`La película ${movieId} no existe`);
     }
     return await this.uploadTickets.mint(principal.id, movieId);
   }

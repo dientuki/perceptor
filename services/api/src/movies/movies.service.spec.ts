@@ -23,13 +23,19 @@ import { MEDIA_TYPE } from '@/types/media';
 //    throws a raw Prisma P2002 the second time the same user clicks it;
 //  - a broken TMDB-fallback mapping registers a film with the wrong poster
 //    size or a relative path Next/`<img>` cannot render, with no exception
-//    anywhere in the chain.
+//    anywhere in the chain;
+//  - `findOneFromDb` dropping (or never applying) its `user_movies` scope
+//    would resolve a film for any authenticated caller, not just the one
+//    linked to it — the query still succeeds, `movie(id)` still returns a
+//    real record with a real poster, and the page renders correctly; the
+//    only wrong thing is whose library it came from (008-movie-detail).
 describe('MoviesService', () => {
   let service: MoviesService;
   let prisma: {
     movie: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       create: jest.Mock;
     };
     userMovie: {
@@ -50,6 +56,7 @@ describe('MoviesService', () => {
       movie: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
       },
       userMovie: {
@@ -142,6 +149,40 @@ describe('MoviesService', () => {
         orderBy: { createdAt: 'desc' },
         include: { mediaSource: true, processJobs: true },
       });
+    });
+  });
+
+  describe('findOneFromDb', () => {
+    it('scopes the query to the caller through the user_movies join', async () => {
+      prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Mine' });
+
+      await service.findOneFromDb(7, 'user-1');
+
+      // The failure mode here is a query that resolves a film for any
+      // authenticated caller, not just the one linked to it: asserting the
+      // where-clause is the only way a mocked Prisma can catch it, since the
+      // mock returns whatever we told it to regardless of what it was
+      // actually asked for. A version that keeps `where: { id }` and moves
+      // the join into `include` would pass a looser, `objectContaining`
+      // assertion while being entirely unscoped — hence full equality.
+      expect(prisma.movie.findFirst).toHaveBeenCalledTimes(1);
+      const [args] = prisma.movie.findFirst.mock.calls[0];
+      expect(args.where).toEqual({ id: 7, users: { some: { userId: 'user-1' } } });
+    });
+
+    it('returns null for a film the caller is not linked to', async () => {
+      prisma.movie.findFirst.mockResolvedValue(null);
+
+      await expect(service.findOneFromDb(7, 'user-2')).resolves.toBeNull();
+    });
+
+    it('returns the same null for an id that does not exist', async () => {
+      // REQ-3: an unowned film and a missing one must be indistinguishable
+      // from the caller's side — both resolve through the identical query
+      // shape above and both come back null.
+      prisma.movie.findFirst.mockResolvedValue(null);
+
+      await expect(service.findOneFromDb(999999999, 'user-1')).resolves.toBeNull();
     });
   });
 

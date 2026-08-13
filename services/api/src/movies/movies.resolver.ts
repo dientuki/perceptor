@@ -18,10 +18,13 @@ export class MoviesResolver {
     return this.moviesService.findAll(userId);
   }
 
-  // Si querés obtener una sola película por su ID interno de DB
+  // Single film by internal DB id, scoped to the caller's own library — see
+  // spec.md's 008-movie-detail for why null now means "not available to
+  // you" as well as "does not exist".
   @Query(() => Movie, { name: 'movie', nullable: true })
-  async getMovieById(@Args('id', { type: () => Int }) id: number) {
-    return this.moviesService.findOneFromDb(id);
+  async getMovieById(@Args('id', { type: () => Int }) id: number, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.findOneFromDb(id, userId);
   }
 
   @Mutation(() => Movie, {

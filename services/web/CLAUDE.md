@@ -139,6 +139,25 @@ the `Ir` link (`next/link` → `/movies/<mediaId>`) exactly as before; a series 
 non-interactive `Agregada` badge with no `href`, because this service ships no `/shows/[id]` to
 link to.
 
+## Movie detail is scoped, with a route-segment 404 (`008-movie-detail`)
+
+`src/app/(dashboard)/movies/[id]/page.tsx` still calls the same `getMovieById` query it always did
+(`src/actions/movies.ts`), unchanged — the API now returns `null` for a film the caller does not
+own, on top of the `null` it already returned for a nonexistent id, and this page cannot and must
+not tell the two apart. `page.tsx` validates the route param (`parseMovieId`, positive integers
+only) *before* fetching, in both the page component and `generateMetadata` — a non-numeric id used
+to reach the API as `NaN` and surface as an uncaught 500, since it isn't one of the two auth-error
+strings `redirectToClearSession` checks for. `generateMetadata` returns a fixed
+`UNAVAILABLE_METADATA` (Spanish, no film-derived text) for both an invalid param and a `null`
+film — same title and description either way, so the browser tab cannot leak a film's existence
+even when the page body looks correct.
+
+The unavailable page itself is a segment-scoped `src/app/(dashboard)/movies/[id]/not-found.tsx`,
+rendering `Recurso no disponible para este usuario`, served as a real HTTP 404 by Next when
+`notFound()` fires in this segment. It is deliberately **not** an app-wide 404 — `/users`'s
+`notFound()` (see above) is untouched, and `/shows/[id]` gets its own detail route as its own
+feature, not this one.
+
 ## Library listings: two parallel screens, not one parameterized one (`007-library-listing`)
 
 `/movies` and `/shows` are deliberately **separate** implementations — `src/actions/movies.ts`'s
@@ -196,11 +215,11 @@ toolchain here is its own decision and deserves its own spec.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-12, after `006-media-search`, `bin/cli web npx --no tsc --noEmit` reports **12 errors
-across 5 files**, unchanged by either `005-movie-search` or `006-media-search`. All are leftovers
-from a pre-GraphQL version of the app; none are on a path the running UI uses. (Previously logged
-here as 13 — that was never the real count; these same five files have always produced 12,
-confirmed while implementing `002-auth-login`.)
+As of 2026-08-12, after `008-movie-detail`, `bin/cli web npx --no tsc --noEmit` reports **12 errors
+across 5 files**, unchanged since `005-movie-search`. All are leftovers from a pre-GraphQL version
+of the app; none are on a path the running UI uses. (Previously logged here as 13 — that was never
+the real count; these same five files have always produced 12, confirmed while implementing
+`002-auth-login`.)
 
 | File | Problem |
 | :-- | :-- |
@@ -221,7 +240,9 @@ running Biome on that file (a new action like `src/actions/shows.ts` should come
 than on the repo.
 
 Files that used to be on this list and now compile: `SearchTorrent.tsx`,
-`src/app/(dashboard)/movies/[id]/page.tsx`, `src/actions/movies.ts`. `@/components/ui/modal` and
+`src/app/(dashboard)/movies/[id]/page.tsx`, `src/actions/movies.ts`. The new
+`src/app/(dashboard)/movies/[id]/not-found.tsx` (`008-movie-detail`) is clean too — not among the
+12. `@/components/ui/modal` and
 `@/hooks/useModal` exist now, built for the import modals.
 
 Re-run the typecheck rather than trusting the count. The number is the point: report it before and

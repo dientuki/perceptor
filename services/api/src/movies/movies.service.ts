@@ -34,8 +34,8 @@ export class MoviesService implements MediaTypeService {
 
   // The library belongs to the user: only returns films this userId has
   // registered, filtered through the user_movies join. findOneFromDb() is
-  // deliberately left unscoped — movie(id) stays readable by any
-  // authenticated user.
+  // scoped the same way — movie(id) only resolves against the caller's own
+  // library.
   async findAll(userId: string) {
     return this.prisma.movie.findMany({
       where: { users: { some: { userId } } },
@@ -47,9 +47,13 @@ export class MoviesService implements MediaTypeService {
     });
   }
 
-  async findOneFromDb(id: number) {
-    return this.prisma.movie.findUnique({
-      where: { id },
+  // Same ownership clause as attachTorrentSource: returns the film only when
+  // the caller is linked to it via user_movies. Returns null both when the
+  // id does not exist and when it exists but belongs to someone else — the
+  // two are deliberately indistinguishable from here on (see spec.md § Errors).
+  async findOneFromDb(id: number, userId: string) {
+    return this.prisma.movie.findFirst({
+      where: { id, users: { some: { userId } } },
       include: {
         mediaSource: true,
         processJobs: true,
@@ -58,7 +62,8 @@ export class MoviesService implements MediaTypeService {
   }
 
   async update(id: number, updateMovieDto: UpdateMovieDto) {
-    await this.findOneFromDb(id); // Valida que exista antes de actualizar
+    const existing = await this.prisma.movie.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException(`La película ${id} no existe`);
 
     return this.prisma.movie.update({
       where: { id },
@@ -67,7 +72,8 @@ export class MoviesService implements MediaTypeService {
   }
 
   async remove(id: number) {
-    await this.findOneFromDb(id); // Valida que exista
+    const existing = await this.prisma.movie.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException(`La película ${id} no existe`);
 
     return this.prisma.movie.delete({
       where: { id },

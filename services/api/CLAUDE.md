@@ -102,8 +102,14 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   download pipeline). Since `005-movie-search`, `Movie` is a shared catalog row (`tmdbId @unique`,
   never duplicated) joined to `User` through `UserMovie` (`userId`/`movieId` composite key, both
   `onDelete: Cascade`): `movies` and `search`'s `inLibrary` are scoped to the caller via that join,
-  `movie(id)` stays unscoped, and `addTorrentToMovie`/`addMagnetToMovie` refuse a film the caller
-  hasn't registered with the same `La película <id> no existe` a missing film already produced.
+  and `addTorrentToMovie`/`addMagnetToMovie` refuse a film the caller hasn't registered with the
+  same `La película <id> no existe` a missing film already produced. Since `008-movie-detail`,
+  `movie(id)` is scoped through that same join too — `findOneFromDb(id, userId)` is a `findFirst`
+  with `where: { id, users: { some: { userId } } }`, copied from `attachTorrentSource`'s clause —
+  so its `null` now means "not available to you", identically for a missing id and an unowned film;
+  no `@AllowService()` was added (the worker reads film metadata through `processJob` instead, see
+  `process-jobs/` below). The old `MoviesController` REST controller (unregistered, unreachable, a
+  `005-movie-search` leftover) was deleted rather than re-patched to the new signature.
   `search` enriches its results with `mediaId`/`inLibrary` **after** the best-effort Redis cache
   write in `cacheMovies` — that cache key is shared globally across all users, so ownership must
   never be computed before it, or one user's `inLibrary` leaks into what every other user sees for
@@ -142,7 +148,13 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   principals only — see `auth/`), the browser sends it as `Authorization: Bearer <ticket>` on the
   tus `POST`, and `uploads.service.ts`'s `onUploadCreate` hook verifies and spends it exactly once
   via `upload-tickets.service.ts` (a Redis `SET ... NX`, atomic so two concurrent POSTs can't both
-  win). Never re-checked on `PATCH` — by design, see `002-auth-login`'s spec.
+  win). Never re-checked on `PATCH` — by design, see `002-auth-login`'s spec. Since
+  `008-movie-detail`, `createUploadTicket` also requires the caller's `user_movies` link — it
+  injects `MoviesService` (`UploadsModule` imports `MoviesModule`) and calls the same
+  `findOneFromDb(movieId, principal.id)` `movie(id)` uses, refusing with the identical `La película
+  <id> no existe` a missing film already produced. `uploads.service.ts`'s `handleUploadFinish` keeps
+  its own bare `prisma.movie.findUnique` — not a second ownership hole, since a ticket is now only
+  mintable for a film the caller owns and `verifyAndSpend` binds it to that `movieId`.
 
 **Infrastructure**: `prisma/` (`PrismaModule` + `PrismaService`, effectively global), `redis/`,
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).
@@ -235,10 +247,13 @@ structure now, not the scaffolding pattern its name might suggest from memory.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-12, after `007-library-listing`, `bin/cli api npx --no tsc --noEmit` reports **0
-errors** and `bin/npm api test` is green at **87** tests across **10** suites (`shows.service.spec.ts`
-is the tenth; `007` added three `findAll` cases to it rather than an eleventh suite — one of them
-asserts the ownership `where` clause and was verified to fail when that clause is removed). The previously-listed `src/auth/test/auth.service.spec.ts` (two `'user' is possibly
+As of 2026-08-12, after `008-movie-detail`, `bin/cli api npx --no tsc --noEmit` reports **0
+errors** and `bin/npm api test` is green at **90** tests across **10** suites (`movies.service.spec.ts`
+gained a `findOneFromDb` block — three cases, asserting the ownership `where` clause and verified
+to fail when that clause is removed, the same technique `007-library-listing` used on
+`shows.service.spec.ts`'s `findAll` block — no eleventh suite). `src/movies/movies.controller.ts`,
+an unregistered REST controller left over from before `005-movie-search` scoped `MoviesService`,
+is gone. The previously-listed `src/auth/test/auth.service.spec.ts` (two `'user' is possibly
 'null'`, one wrong arity — written against a `login()` signature that never existed) is gone: it
 was deleted ahead of `002-auth-login`, whose spec had originally left "fixing" it explicitly Out of
 Scope before the file was removed entirely, taking those 3 errors with it.
