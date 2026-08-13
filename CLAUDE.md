@@ -260,3 +260,15 @@ touched.
   `DATABASE_URL` already exists in `.env`.
 - `services/api/prisma/schema.prisma` declares `datasource db` with no `url` — the connection
   comes solely from the driver adapter.
+- **The string `movieId` means two different things depending on where it appears.**
+  `006-media-search` already renamed `MediaSearchResult.movieId` → `mediaId` where the field came to
+  mean "film or series", but three occurrences were deliberately left alone because there it still
+  means "a film, specifically": the argument on `addTorrentToMovie`/`addMagnetToMovie`/
+  `createUploadTicket`, the **tus upload metadata key** (`web` writes it in
+  `services/web/src/components/import/importFileModal.tsx`, `api` reads it in
+  `services/api/src/uploads/uploads.service.ts`), and `MediaSource.movieId`, which the worker reads
+  in `services/worker/src/jobs/source-ready.job.ts`. `010-episode-acquisition` adds `episodeId`
+  *beside* `movieId` rather than generalising, precisely because the rename crosses all three
+  services with no codegen between them — a partial rename breaks the download pipeline at runtime,
+  with no compile error anywhere. Unifying them is worth doing; `docs/spec/graphql-contract.md`
+  is the document that has to move first. **Planned for the week of 2026-08-17.**
