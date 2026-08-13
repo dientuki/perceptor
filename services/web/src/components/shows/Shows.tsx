@@ -1,15 +1,15 @@
-import { getMovies } from '@/actions/movies';
+import { getShows } from '@/actions/shows';
 import { MediaList } from "@/components/media/MediaList";
 import { MEDIA_TYPE } from '@/types/media';
 
-export default async function Movies() {
-  const dbMovies = await getMovies();
+export default async function Shows() {
+  const dbShows = await getShows();
 
   return (
     <div>
       <MediaList
-        items={dbMovies}
-        mediaType={MEDIA_TYPE.MOVIE}
+        items={dbShows}
+        mediaType={MEDIA_TYPE.SHOW}
         showLink={true}
       />
     </div>

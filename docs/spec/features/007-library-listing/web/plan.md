@@ -87,14 +87,15 @@ handles the happy path compiles fine and fails at runtime):
 
 | Condition | Message | What `getShows()` does |
 | :-- | :-- | :-- |
-| No credential / expired JWT | `Unauthorized` | `await redirectIfUnauthenticated(errors)` before throwing — the user lands on `/login` |
-| Anything else (DB down, etc.) | `Error al obtener series` | `throw new Error(errors[0]?.message \|\| 'Error al obtener series')`; `Shows.tsx`'s `catch` logs it and the grid stays empty |
+| No credential / expired JWT | `No autenticado` | `redirectToClearSession(errors)` — the user lands on `/login` |
+| Anything else (DB down, etc.) | `Error al obtener series` | logged with `console.error` and `[]` is returned; `Shows.tsx` renders the shared empty state |
 
-`redirectIfUnauthenticated` — **not** `redirectToClearSession` — is correct here, because `getShows`
-is called from a **client** component's `useEffect`, which reaches the action as a Server Action
-where cookie mutation is legal. The two are not interchangeable and `services/web/CLAUDE.md`
-documents the trap; pick by caller context, not by copying the nearest example. If a later change
-makes a Server Component `await getShows()` during render, that call needs the other function.
+**Superseded after `007` shipped**: `Shows.tsx` was converted from a client component's
+`useEffect` fetch to a Server Component that `await`s `getShows()` during render, to remove the
+flash of the empty state on every navigation (closing AC-11/AC-12). That made cookie mutation
+during render illegal, so `getShows()` now uses `redirectToClearSession`, not
+`redirectIfUnauthenticated` — the opposite of what this section originally specified. See
+`services/web/CLAUDE.md` § Library listings for the current shape.
 
 Two things this slice must **not** do, both of which will look like obvious one-line improvements:
 

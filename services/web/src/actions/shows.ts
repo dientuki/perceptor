@@ -1,6 +1,6 @@
 "use server";
 
-import { redirectIfUnauthenticated } from "@/lib/auth-session";
+import { redirectToClearSession } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
 
 export interface Show {
@@ -35,8 +35,16 @@ export async function getShows(): Promise<Show[]> {
 
   // GraphQL answers 200 with `errors` populated: without this check `data` is undefined
   if (errors && errors.length > 0) {
-    await redirectIfUnauthenticated(errors);
-    throw new Error(errors[0]?.message || "Error al obtener series");
+    // Called directly from ShowsPage's Server Component render — cookie
+    // mutation is illegal there, so hand off to the Route Handler instead of
+    // redirectIfUnauthenticated (which throws by mutating cookies).
+    redirectToClearSession(errors);
+    // Any other error: log it server-side and fall back to an empty list,
+    // matching what the client component's try/catch used to do silently —
+    // there is no app/(dashboard)/error.tsx, so letting this throw would
+    // surface Next's default error screen instead of the empty state.
+    console.error("Error al obtener series:", errors[0]?.message);
+    return [];
   }
 
   return data?.shows ?? [];

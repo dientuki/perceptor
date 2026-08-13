@@ -162,22 +162,34 @@ feature, not this one.
 
 `/movies` and `/shows` are deliberately **separate** implementations — `src/actions/movies.ts`'s
 `getMovies()` + `src/components/movies/Movies.tsx`, and `src/actions/shows.ts`'s `getShows()` +
-`src/components/Shows/Shows.tsx`. This is the opposite of what `SearchContainer` did above, and it
+`src/components/shows/Shows.tsx`. This is the opposite of what `SearchContainer` did above, and it
 is not an oversight: `api` exposes `movies` and `shows` as two sibling queries with two independent
-types (see `docs/spec/graphql-contract.md` → `007-library-listing`), and each listing component is
-a ~30-line `useEffect` fetch. Do not merge them; the duplication is cheaper than the parameter.
+types (see `docs/spec/graphql-contract.md` → `007-library-listing`). Do not merge them; the
+duplication is cheaper than the parameter.
 
 What *is* shared is the rendering: both pass their rows to `src/components/media/MediaList.tsx`,
 which takes a `mediaType` prop and already produces the right Spanish empty state for each ("No hay
 series registradas" for `MEDIA_TYPE.SHOW`). Never pass a custom `emptyMessage` and never fork
 `MediaList`/`MediaCard` — those two are the one thing the two listings genuinely share.
 
-Both actions call `redirectIfUnauthenticated`, **not** `redirectToClearSession`, because both are
-invoked from a client component's `useEffect` — see the session-invalidation section above for why
-the choice is by caller context, not by resemblance.
+**Both list components are Server Components, not client fetches.** `Movies.tsx` and `Shows.tsx`
+are `async function` components that `await getMovies()` / `await getShows()` directly during
+render and hand the rows to `MediaList` — no `"use client"`, no `useState`/`useEffect`. This
+replaced an earlier version where each was a client component fetching in `useEffect`, which
+served the empty state first and repainted after hydration on every navigation. Because the fetch
+now runs during a Server Component's render, cookie mutation is illegal on the auth-error path —
+both actions call `redirectToClearSession`, **not** `redirectIfUnauthenticated` (see the
+session-invalidation section above for why that distinction is by caller context, not by
+resemblance). A non-auth error is logged with `console.error` and swallowed to `[]` rather than
+thrown — there is no `app/(dashboard)/error.tsx`, so an uncaught throw from this path would
+surface Next's default error screen instead of the shared empty state.
 
-Note the directory casing is inconsistent — `src/components/Shows/` against `src/components/movies/`.
-Known; renaming it is churn nobody has spent a change on yet.
+If you add a third listing (or move either of these back to a client fetch — e.g. for polling),
+re-derive which of `redirectIfUnauthenticated`/`redirectToClearSession` applies from where the call
+actually happens; don't copy whichever this section currently says.
+
+The directory casing that used to be inconsistent (`src/components/Shows/` vs
+`src/components/movies/`) is fixed — both are lowercase now.
 
 **The series card's detail link is knowingly broken.** `MediaCard` builds its href from
 `item.type`, and `getShows()` deliberately does not select a `type` field, so a series card links

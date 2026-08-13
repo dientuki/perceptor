@@ -1,9 +1,6 @@
 "use server";
 
-import {
-  redirectIfUnauthenticated,
-  redirectToClearSession,
-} from "@/lib/auth-session";
+import { redirectToClearSession } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
 
 export interface Movie {
@@ -35,8 +32,16 @@ export async function getMovies(): Promise<Movie[]> {
 
   // GraphQL responde 200 con `errors` poblado: sin este chequeo `data` viene undefined
   if (errors && errors.length > 0) {
-    await redirectIfUnauthenticated(errors);
-    throw new Error(errors[0]?.message || "Error al obtener películas");
+    // Called directly from MoviesPage's Server Component render — cookie
+    // mutation is illegal there, so hand off to the Route Handler instead of
+    // redirectIfUnauthenticated (which throws by mutating cookies).
+    redirectToClearSession(errors);
+    // Any other error: log it server-side and fall back to an empty list,
+    // matching what the client component's try/catch used to do silently —
+    // there is no app/(dashboard)/error.tsx, so letting this throw would
+    // surface Next's default error screen instead of the empty state.
+    console.error("Error al obtener películas:", errors[0]?.message);
+    return [];
   }
 
   return data?.movies ?? [];
@@ -67,8 +72,7 @@ export async function getMovieById(id: number): Promise<Movie | null> {
   if (errors && errors.length > 0) {
     // Called directly from MovieDetailsPage's Server Component render (and
     // its generateMetadata) — cookie mutation is illegal there, so hand off
-    // to the Route Handler instead of redirectIfUnauthenticated (still used
-    // below, in the form actions, where it's legal).
+    // to the Route Handler instead of mutating the cookie in-process.
     redirectToClearSession(errors);
     throw new Error(errors[0]?.message || "Error al obtener la película");
   }

@@ -1,5 +1,5 @@
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-import Shows from "@/components/Shows/Shows";
+import Shows from "@/components/shows/Shows";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
