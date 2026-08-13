@@ -136,10 +136,11 @@ for why the sibling `movieId`s elsewhere in this service were deliberately left 
 since something someone else already registered is still addable by the caller (that add only
 links them, it never re-downloads). **The owned branch itself now splits by type**: a film renders
 the `Ir` link (`next/link` → `/movies/<mediaId>`) exactly as before; a series renders a
-non-interactive `Agregada` badge with no `href`, because this service ships no `/shows/[id]` to
-link to.
+non-interactive `Agregada` badge with no `href`. `/shows/[id]` exists as a real route since
+`009-show-detail` — this badge was never revisited to link there, since `SearchContainer` is scoped
+to search results, not the library listing, and nothing in that feature asked for it.
 
-## Movie detail is scoped, with a route-segment 404 (`008-movie-detail`)
+## Movie and show detail are scoped, with a route-segment 404 (`008-movie-detail`, `009-show-detail`)
 
 `src/app/(dashboard)/movies/[id]/page.tsx` still calls the same `getMovieById` query it always did
 (`src/actions/movies.ts`), unchanged — the API now returns `null` for a film the caller does not
@@ -155,8 +156,20 @@ even when the page body looks correct.
 The unavailable page itself is a segment-scoped `src/app/(dashboard)/movies/[id]/not-found.tsx`,
 rendering `Recurso no disponible para este usuario`, served as a real HTTP 404 by Next when
 `notFound()` fires in this segment. It is deliberately **not** an app-wide 404 — `/users`'s
-`notFound()` (see above) is untouched, and `/shows/[id]` gets its own detail route as its own
-feature, not this one.
+`notFound()` (see above) is untouched.
+
+`009-show-detail` shipped `/shows/[id]` as the structural twin one level deeper: `getShowById`
+(`src/actions/shows.ts`) follows the same `parseId`-guard-then-fetch-then-`notFound()` shape,
+its own `src/app/(dashboard)/shows/[id]/not-found.tsx` renders the identical string, and `api`'s
+`show(id)` is scoped through `UserShow` the same way `movie(id)` is scoped through `UserMovie` —
+same `null`-means-"not available to you" rule, no way to tell "doesn't exist" from "not yours".
+Below the show's own metadata (rendered by `src/components/shows/Show.tsx`, `Movie.tsx`'s twin
+minus the acquisition buttons — a series has none at that level), the page renders one
+`src/components/shows/SeasonAccordion.tsx` per season, the highest `seasonNumber` expanded by
+default (computed once via `Math.max`, not per-season inside the render loop). Each episode row
+renders three buttons (buscar / importar archivo / añadir torrent) whose `onClick` is written but
+commented out — there is no episode-level acquisition path yet, so wiring them to a real modal is
+scope creep for a future feature, not a bug to fix here.
 
 ## Library listings: two parallel screens, not one parameterized one (`007-library-listing`)
 
@@ -191,12 +204,12 @@ actually happens; don't copy whichever this section currently says.
 The directory casing that used to be inconsistent (`src/components/Shows/` vs
 `src/components/movies/`) is fixed — both are lowercase now.
 
-**The series card's detail link is knowingly broken.** `MediaCard` builds its href from
-`item.type`, and `getShows()` deliberately does not select a `type` field, so a series card links
-to `/movies/<id>` and renders a film. Adding `type` would be a one-line "fix" that points at
-`src/app/(dashboard)/shows/[id]/page.tsx` — an untracked paste that fetches a *movie* by that id,
-i.e. wrong content with no error. The link and a real detail route ship together, as their own
-feature; do not fix half of it.
+**The series card's detail link is fixed, without a `type` field on `Show` (`009-show-detail`).**
+`MediaCard` resolves its `href` from a `mediaType` prop, not from a payload field — `MediaList`
+already received `mediaType` for its own empty-state text and now forwards it into `MediaCard` too.
+`getShows()` still does not select (and `Show` still does not carry) a `type` field; do not add one
+to solve a routing decision that is already solved client-side, and do not resolve `href` off
+`item.type` again — that field has never existed on either `Movie` or `Show`.
 
 ## UI origin: TailAdmin template
 
@@ -227,7 +240,7 @@ toolchain here is its own decision and deserves its own spec.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-12, after `008-movie-detail`, `bin/cli web npx --no tsc --noEmit` reports **12 errors
+As of 2026-08-13, after `009-show-detail`, `bin/cli web npx --no tsc --noEmit` reports **12 errors
 across 5 files**, unchanged since `005-movie-search`. All are leftovers from a pre-GraphQL version
 of the app; none are on a path the running UI uses. (Previously logged here as 13 — that was never
 the real count; these same five files have always produced 12, confirmed while implementing
@@ -243,8 +256,12 @@ the real count; these same five files have always produced 12, confirmed while i
 
 The 6th error that used to be listed here — `Cannot find module '@/components/movies/Shows'` on
 `src/app/(dashboard)/shows/page.tsx` — is **gone as of `007-library-listing`**, which finished that
-untracked paste into the real series listing. Verified 2026-08-12: `bin/cli web npx --no tsc
---noEmit` reports 12 errors across the 5 files above and nothing else.
+untracked paste into the real series listing. `009-show-detail` similarly rewrote
+`src/app/(dashboard)/shows/[id]/page.tsx`, `src/components/shows/Show.tsx` and
+`src/components/shows/SeasonAccordion.tsx` from scratch (they were broken, uncommitted drafts —
+none of the three ever contributed to this count, but they were the last untracked paste of this
+kind in the repo). Verified 2026-08-13: `bin/cli web npx --no tsc --noEmit` reports 12 errors across
+the 5 files above and nothing else.
 
 `bin/npm web run lint` is **not** a usable gate today: `biome check` reports ~1598 errors and ~96
 warnings across the pre-existing template, with or without any given change. Judge a new file by

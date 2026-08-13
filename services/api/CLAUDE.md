@@ -122,10 +122,17 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `ShowsService.findAll(userId)` — a single `findMany` scoped through the `UserShow` join
   (`where: { users: { some: { userId } } }`) and ordered `createdAt: 'desc'`, copying
   `MoviesResolver`/`MoviesService.findAll` line for line, including the
-  `principal.type === 'user' ? principal.id : ''` narrowing. There is still **no `show(id)` query**
-  and no detail route — that is the next feature. `Show.status` is a `MediaStatus` since that same
-  feature (`@default(MISSING)`, backfilled), but crosses GraphQL as a plain `String!` exactly as
-  `Movie.status` does; do not `registerEnumType` it for one type only.
+  `principal.type === 'user' ? principal.id : ''` narrowing. `Show.status` is a `MediaStatus` since
+  that same feature (`@default(MISSING)`, backfilled), but crosses GraphQL as a plain `String!`
+  exactly as `Movie.status` does; do not `registerEnumType` it for one type only.
+  Since `009-show-detail` the module also exposes `show(id: Int!): Show`, `MoviesResolver`/
+  `MoviesService.findOneFromDb`'s structural twin one level deeper: the same ownership-scoped
+  `findFirst` through `UserShow`, but with a nested `include` on `seasons`/`episodes`, both ordered
+  server-side (`orderBy: { seasonNumber: 'asc' }` / `{ episodeNumber: 'asc' }`). `null` means "not
+  available to you" — indistinguishable between nonexistent and unowned, same rule as `movie(id)`.
+  Two new entities carry the shape over GraphQL, `shows/entities/{season,episode}.entity.ts` —
+  plain `@ObjectType()`s, no image field, `Episode.status` a bare `String!` like the other two
+  status fields.
   `register()` also kicks off a detached, never-awaited season/episode hydration
   (`ShowsService.hydrate`) — one HTTP request for the season list, then one sequential
   (never `Promise.all`, TMDB rate-limits) request per season for its episodes, claimed via a Redis

@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.3.0
+spec_version: 1.4.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-12
+last_updated: 2026-08-13
 status: Approved
 target_service: api, web, worker
 ---
@@ -298,10 +298,9 @@ Four things a consumer needs that the SDL does not say:
   not `Unauthorized` — the latter appears only under `extensions.originalError.error`, and every
   `web` action reads `errors[0].message`.)
 - **`Show` carries no `type` field.** A consumer cannot tell a series from a film by payload alone.
-  This is not an oversight: `web`'s shared `MediaCard` builds its href from `item.type`, so adding
-  the field would silently point series cards at `/shows/<id>` before that route exists. Until the
-  detail route ships, a series card links to `/movies/<id>` and shows the wrong title — known, and
-  fixed together with the destination page.
+  This is not an oversight: `web`'s shared `MediaCard` resolves its href from a `mediaType` prop
+  `MediaList` already threads down (not from a payload field) — see `009-show-detail` below for how
+  the series card was pointed at `/shows/<id>` without adding one.
 
 An empty library is `{"data":{"shows":[]}}`, never `null` and never an error. `movies`, `Movie`,
 `searchMedia` and `addMedia` are unchanged by this feature.
@@ -333,6 +332,56 @@ called `movie(id)` before this feature and still does not. Its actual need for f
 `Movie` (`services/api/src/process-jobs/process-jobs.service.ts`). If a future worker code path
 genuinely needs to read a film by internal id, that grant is added then, with its own
 justification — not as a side effect of this feature.
+
+### `show(id)` returns seasons and episodes, scoped like `movie(id)` (`009-show-detail`)
+
+`Show` gains `seasons: [Season!]!`, resolved through a new query, `show(id: Int!): Show`:
+
+```graphql
+type Episode {
+  id: ID!
+  episodeNumber: Int!
+  title: String
+  overview: String
+  releaseDate: DateTime
+  status: String!
+}
+
+type Season {
+  id: ID!
+  seasonNumber: Int!
+  releaseDate: DateTime
+  episodes: [Episode!]!
+}
+
+type Query {
+  show(id: Int!): Show
+}
+```
+
+- **`Episode.status` crosses as plain `String!`, same reasoning as `Movie.status`/`Show.status`.**
+  Not `registerEnumType`'d — introducing an enum for the third structurally-parallel status field
+  and not the other two would make them diverge for no reason.
+- **No image field on `Season` or `Episode`.** The schema has none — only `Show.posterUrl` exists;
+  this query never surfaces a season or episode still.
+- **`null` means "not available to you", identical to `movie(id)`'s rule (`008-movie-detail`).**
+  `show(id)` resolves through the same `UserShow` join `shows` already uses:
+  `findFirst({ where: { id, users: { some: { userId } } }, include: { seasons: { orderBy: {
+  seasonNumber: 'asc' }, include: { episodes: { orderBy: { episodeNumber: 'asc' } } } } } })`. A
+  nonexistent id and an id the caller has no `UserShow` link to return the exact same `null`, no
+  `errors`, no `extensions` code — do not read either outcome as proof of the other's absence.
+- **`seasons`/`episodes` arrive pre-ordered.** `seasonNumber` and `episodeNumber` ascending, both
+  server-side in the Prisma `include` above, not sorted by any consumer. A consumer that re-sorts
+  client-side would mask a future ordering regression instead of surfacing it.
+- **No `@AllowService()`.** A `SERVICE_TOKEN` principal is rejected by the global `JwtAuthGuard`
+  before the resolver runs, `No autenticado`, matching `shows` and `movie(id)`. The worker has no
+  call site for `show(id)` today; add the grant only when one exists, with its own justification.
+
+The series-card link (`MediaCard`) is fixed entirely in `web`, with no schema change: `MediaList`
+already receives a `mediaType` prop for its own empty-state text and now forwards it into
+`MediaCard`, which resolves its `href` off that prop instead of a nonexistent `item.type` field.
+`web` retypes this query by hand in `src/actions/shows.ts`'s `getShowById`, same as every other
+query — no codegen.
 
 ### The one non-GraphQL route
 
