@@ -7,9 +7,10 @@ interface MediaCardProps {
   item: any;
   renderAction?: (item: any) => React.ReactNode;
   showLink: boolean; // Nueva propiedad para controlar si se muestra el enlace
+  mediaType?: (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
 }
 
-export function MediaCard({ item, renderAction, showLink }: MediaCardProps) {
+export function MediaCard({ item, renderAction, showLink, mediaType }: MediaCardProps) {
   const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : "N/A";
 
   const poster = item.posterUrl ? (
@@ -29,7 +30,7 @@ export function MediaCard({ item, renderAction, showLink }: MediaCardProps) {
       {/* Poster */}
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
         {showLink ? (
-          <Link href={item.type === MEDIA_TYPE.SHOW ? `/shows/${item.id}` : `/movies/${item.id}`} className="block h-full w-full">
+          <Link href={mediaType === MEDIA_TYPE.SHOW ? `/shows/${item.id}` : `/movies/${item.id}`} className="block h-full w-full">
             {poster}
           </Link>
         ) : (

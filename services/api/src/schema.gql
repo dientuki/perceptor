@@ -126,6 +126,22 @@ type MediaRef {
   type: String!
 }
 
+type Episode {
+  id: ID!
+  episodeNumber: Int!
+  title: String
+  overview: String
+  releaseDate: DateTime
+  status: String!
+}
+
+type Season {
+  id: ID!
+  seasonNumber: Int!
+  releaseDate: DateTime
+  episodes: [Episode!]!
+}
+
 type Show {
   id: ID!
   tmdbId: Int!
@@ -139,6 +155,7 @@ type Show {
   seasonsSyncedAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
+  seasons: [Season!]!
 }
 
 type Query {
@@ -169,6 +186,7 @@ type Query {
   mediaServerClients: [MediaServerOption!]!
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
   shows: [Show!]!
+  show(id: Int!): Show
 }
 
 type Mutation {

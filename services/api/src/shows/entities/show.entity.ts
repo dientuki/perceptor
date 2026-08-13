@@ -1,8 +1,10 @@
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
+import { Season } from './season.entity';
 
 // Field-for-field twin of Movie (movies/entities/movies.entity.ts), minus the
-// film-only file/source fields and plus seasonsSyncedAt. `status` is a plain
-// `string` on purpose even though the Prisma column is the MediaStatus enum:
+// film-only file/source fields and plus seasonsSyncedAt — with one exception:
+// `seasons`, which Movie has no equivalent of. `status` is a plain `string`
+// on purpose even though the Prisma column is the MediaStatus enum:
 // Movie.status already crosses the boundary as String! and web hand-retypes
 // both listings, so a GraphQL enum here alone would make the two structurally
 // different (see 007-library-listing/plan.md § Contract Freeze).
@@ -43,4 +45,7 @@ export class Show {
 
   @Field()
   updatedAt: Date;
+
+  @Field(() => [Season])
+  seasons: Season[];
 }

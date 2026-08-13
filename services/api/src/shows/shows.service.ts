@@ -44,6 +44,24 @@ export class ShowsService implements MediaTypeService {
     });
   }
 
+  // Same ownership clause as findAll, narrowed to a single row and deepened
+  // two levels (seasons, then each season's episodes), both ordered
+  // server-side (NFR-2). Returns null both when the id does not exist and
+  // when it exists but belongs to someone else — the two are deliberately
+  // indistinguishable from here on, same rule as MoviesService.findOneFromDb
+  // (008-movie-detail, see spec.md § Errors there and in 009-show-detail).
+  async findOneFromDb(id: number, userId: string) {
+    return this.prisma.show.findFirst({
+      where: { id, users: { some: { userId } } },
+      include: {
+        seasons: {
+          orderBy: { seasonNumber: 'asc' },
+          include: { episodes: { orderBy: { episodeNumber: 'asc' } } },
+        },
+      },
+    });
+  }
+
   // Única definición de la clave de cache, compartida por el write de la búsqueda
   // y el read del add: evita que ambos lados se desincronicen.
   private cacheKey(tmdbId: number): string {

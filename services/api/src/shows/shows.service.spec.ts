@@ -31,13 +31,24 @@ import { MEDIA_TYPE } from '@/types/media';
 //    permanently indistinguishable from a complete one — REQ-14's retry
 //    path never fires again for it — and a claim key left behind after a
 //    failed hydration silently disables every future retry until the TTL
-//    expires (NFR-4 / NFR-5).
+//    expires (NFR-4 / NFR-5);
+//  - `findOneFromDb` dropping (or never applying) its `user_shows` scope
+//    would resolve a series (and its seasons/episodes) for any authenticated
+//    caller, not just the one linked to it — the query still succeeds,
+//    `show(id)` still returns a real record with real seasons, and the page
+//    renders correctly; the only wrong thing is whose library it came from
+//    (009-show-detail). A missing `orderBy` on the nested seasons/episodes
+//    include is the same class of bug one level deeper: episodes render in
+//    whatever order the DB happens to return them, silently, until a
+//    re-hydration or manual edit reorders the underlying rows and nothing
+//    anywhere reports it.
 describe('ShowsService', () => {
   let service: ShowsService;
   let prisma: {
     show: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
     };
@@ -62,6 +73,7 @@ describe('ShowsService', () => {
       show: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -129,6 +141,54 @@ describe('ShowsService', () => {
       prisma.show.findMany.mockResolvedValue([]);
 
       await expect(service.findAll('user-without-series')).resolves.toEqual([]);
+    });
+  });
+
+  describe('findOneFromDb', () => {
+    it('scopes the query to the caller through the user_shows join', async () => {
+      prisma.show.findFirst.mockResolvedValue({ id: 7, title: 'Mine' });
+
+      await service.findOneFromDb(7, 'user-1');
+
+      // The failure mode here is a query that resolves a series for any
+      // authenticated caller, not just the one linked to it: asserting the
+      // where-clause is the only way a mocked Prisma can catch it, since the
+      // mock returns whatever we told it to regardless of what it was
+      // actually asked for. A version that keeps `where: { id }` and moves
+      // the join into `include` would pass a looser, `objectContaining`
+      // assertion while being entirely unscoped — hence full equality.
+      expect(prisma.show.findFirst).toHaveBeenCalledTimes(1);
+      const [args] = prisma.show.findFirst.mock.calls[0];
+      expect(args.where).toEqual({ id: 7, users: { some: { userId: 'user-1' } } });
+    });
+
+    it('returns null for a series the caller is not linked to', async () => {
+      prisma.show.findFirst.mockResolvedValue(null);
+
+      await expect(service.findOneFromDb(7, 'user-2')).resolves.toBeNull();
+    });
+
+    it('returns the same null for an id that does not exist', async () => {
+      // NFR-1: an unowned series and a missing one must be indistinguishable
+      // from the caller's side — both resolve through the identical query
+      // shape above and both come back null.
+      prisma.show.findFirst.mockResolvedValue(null);
+
+      await expect(service.findOneFromDb(999999999, 'user-1')).resolves.toBeNull();
+    });
+
+    it('orders seasons and episodes server-side, ascending', async () => {
+      prisma.show.findFirst.mockResolvedValue({ id: 7, title: 'Mine', seasons: [] });
+
+      await service.findOneFromDb(7, 'user-1');
+
+      // NFR-2: episodes rendering in the wrong order is a silent failure —
+      // nothing throws, the page just looks wrong. Asserting the shape of
+      // the `include` passed to Prisma is the only way a mocked client can
+      // catch a dropped or misplaced `orderBy`.
+      const [args] = prisma.show.findFirst.mock.calls[0];
+      expect(args.include.seasons.orderBy).toEqual({ seasonNumber: 'asc' });
+      expect(args.include.seasons.include.episodes.orderBy).toEqual({ episodeNumber: 'asc' });
     });
   });
 
