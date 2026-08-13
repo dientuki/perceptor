@@ -193,8 +193,9 @@ returns only the films the caller has registered (previously every film in the s
 `addMovie` now also links the caller to the film in addition to creating/returning it. **Neither
 change is visible to a typechecker** — this is exactly the class of risk this document's "gap"
 section warns about, and it is why this section exists rather than leaving the semantic shift
-implicit in the unchanged SDL. `movie(id)` was deliberately left unscoped: any authenticated user
-can still read a single film by internal id, because the catalog itself is shared.
+implicit in the unchanged SDL. `movie(id)` was originally left unscoped — any authenticated user
+could read a single film by internal id, because the catalog itself is shared. **`008-movie-detail`
+closed that**; see that section below for the current behaviour.
 
 `MediaSearchResult` (returned by `searchMovies`) gained two additive fields: `movieId: Int`
 (`Movie.id` if *any* user has registered this film, `null` otherwise) and `inLibrary: Boolean!`
@@ -304,6 +305,34 @@ Four things a consumer needs that the SDL does not say:
 
 An empty library is `{"data":{"shows":[]}}`, never `null` and never an error. `movies`, `Movie`,
 `searchMedia` and `addMedia` are unchanged by this feature.
+
+### `movie(id)` is scoped like `movies`; `createUploadTicket` requires the same link (`008-movie-detail`)
+
+`movie(id: Int!): Movie` kept its exact SDL — no new argument, no changed nullability — but stopped
+being the one unscoped read in the `movies` module. It now resolves through the same `UserMovie`
+join `movies`/`attachTorrentSource` already use: `null` for an id that does not exist, and **the
+same `null`** for a film that exists but the caller has no link to. A caller cannot tell those two
+apart from the response — same value, no `errors`, no `extensions` code — which is the point:
+`005-movie-search`'s `attachTorrentSource` already set the precedent of one shared "does not exist"
+answer rather than a second "not yours" string, and this closes the one query that had not followed
+it. **`movie(id)`'s `null` therefore means "not available to you", not "does not exist in the
+database"** — do not read a non-null result as proof no other user shares the row, and do not read
+`null` as proof the row is absent.
+
+`createUploadTicket(movieId: Int!): UploadTicket!` gained the same check: it now calls the same
+`findOneFromDb(movieId, userId)` before minting, and refuses with the identical
+`NotFoundException('La película <id> no existe')` `attachTorrentSource` already throws for an
+unowned film. No new message.
+
+Neither operation gained `@AllowService()`. A `SERVICE_TOKEN` principal is rejected by the global
+guard on both with `No autenticado`, exactly as it always was — this feature did not add or remove
+that rejection. That rejection is also not a gap for the machine credential: the `worker` never
+called `movie(id)` before this feature and still does not. Its actual need for film metadata —
+`tmdbId`, `title`, `year`, `originalLanguage`, `isLiveAction`, `outputRoot` — is served by
+`processJob(id)`, which does carry `@AllowService()` and returns those fields pre-joined from
+`Movie` (`services/api/src/process-jobs/process-jobs.service.ts`). If a future worker code path
+genuinely needs to read a film by internal id, that grant is added then, with its own
+justification — not as a side effect of this feature.
 
 ### The one non-GraphQL route
 
