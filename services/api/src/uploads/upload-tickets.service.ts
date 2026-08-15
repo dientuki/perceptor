@@ -7,9 +7,17 @@ import { UploadTicket } from './entities/upload-ticket.entity';
 
 const UPLOAD_TICKET_KEY_PREFIX = 'upload:ticket:';
 
+// A ticket is minted for exactly one target — a movie or an episode — never
+// both. `movieId` keeps its name and meaning (010-episode-acquisition §
+// NFR-1); `episodeId` sits beside it rather than generalising into a single
+// `mediaId`, the same restraint `006-media-search` applied everywhere except
+// `MediaSearchResult`.
+export type UploadTicketTarget = { movieId: number } | { episodeId: number };
+
 type UploadTicketPayload = {
   sub: string;
-  movieId: number;
+  movieId?: number;
+  episodeId?: number;
   typ: 'upload';
   jti: string;
 };
@@ -35,9 +43,14 @@ export class UploadTicketsService {
     private readonly redis: RedisService,
   ) {}
 
-  async mint(userId: string, movieId: number): Promise<UploadTicket> {
+  async mint(userId: string, target: UploadTicketTarget): Promise<UploadTicket> {
     const jti = randomUUID();
-    const payload: UploadTicketPayload = { sub: userId, movieId, typ: 'upload', jti };
+    const payload: UploadTicketPayload = {
+      sub: userId,
+      ...('movieId' in target ? { movieId: target.movieId } : { episodeId: target.episodeId }),
+      typ: 'upload',
+      jti,
+    };
 
     const token = this.jwtService.sign(payload, { expiresIn: UPLOAD_TICKET_TTL_SECONDS });
 
@@ -49,14 +62,14 @@ export class UploadTicketsService {
 
   /**
    * Verifies a ticket and, on success, spends it so it cannot be replayed.
-   * The movieId check runs BEFORE the spend on purpose (AC-12): a ticket
-   * minted for one movie and presented for another must not be burned by
-   * the mismatch, or a client that mistakenly races two uploads for
-   * different movies with the same ticket would lose the ticket it actually
-   * needed. Returns the ticket's owner `userId` on success, throws on any
-   * failure — callers decide the exact HTTP shape of that failure.
+   * The target check runs BEFORE the spend on purpose (AC-12/AC-11): a
+   * ticket minted for one movie/episode and presented for another must not
+   * be burned by the mismatch, or a client that mistakenly races two
+   * uploads with the same ticket would lose the ticket it actually needed.
+   * Returns the ticket's owner `userId` on success, throws on any failure —
+   * callers decide the exact HTTP shape of that failure.
    */
-  async verifyAndSpend(token: string, movieId: number): Promise<string> {
+  async verifyAndSpend(token: string, target: UploadTicketTarget): Promise<string> {
     let payload: DecodedUploadTicket;
     try {
       payload = this.jwtService.verify<DecodedUploadTicket>(token);
@@ -68,8 +81,14 @@ export class UploadTicketsService {
       throw new Error('Token is not an upload ticket');
     }
 
-    if (Number(payload.movieId) !== movieId) {
-      throw new Error('Upload ticket does not match the movie being uploaded');
+    const matches =
+      'movieId' in target
+        ? payload.movieId !== undefined && Number(payload.movieId) === target.movieId
+        : payload.episodeId !== undefined && Number(payload.episodeId) === target.episodeId;
+
+    if (!matches) {
+      const label = 'movieId' in target ? 'movie' : 'episode';
+      throw new Error(`Upload ticket does not match the ${label} being uploaded`);
     }
 
     const secondsRemaining = payload.exp - Math.floor(Date.now() / 1000);

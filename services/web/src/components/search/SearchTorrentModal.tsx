@@ -1,25 +1,26 @@
 "use client";
-import React from "react";
-import { Modal } from "@/components/ui/modal";
 import { Database } from "lucide-react";
-import { MediaType, Episode, Movie } from "@prisma/client";
+import { Modal } from "@/components/ui/modal";
+import type { AcquisitionTarget } from "@/types/media";
 import SearchTorrent from "./SearchTorrent";
 
 interface SearchTorrentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  item: Movie | Episode | null;
-  mediaType: MediaType;
-  showTitle?: string;
-  seasonNumber?: number;
+  target: AcquisitionTarget | null;
 }
 
-export default function SearchTorrentModal({ isOpen, onClose, item, mediaType, showTitle, seasonNumber }: SearchTorrentModalProps) {
-  if (!item) return null;
+export default function SearchTorrentModal({
+  isOpen,
+  onClose,
+  target,
+}: SearchTorrentModalProps) {
+  if (!target) return null;
 
-  const titleText = mediaType === MediaType.MOVIE 
-    ? (item as Movie).title 
-    : (item as Episode).title || `Episode ${(item as Episode).episodeNumber}`;
+  const titleText =
+    target.kind === "movie"
+      ? target.movie.title
+      : `${target.showTitle} S${String(target.seasonNumber).padStart(2, "0")}E${String(target.episode.episodeNumber).padStart(2, "0")}`;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="max-w-[1200px] m-4">
@@ -31,17 +32,14 @@ export default function SearchTorrentModal({ isOpen, onClose, item, mediaType, s
           </h4>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
             Buscando lanzamientos para{" "}
-            <span className="font-medium text-gray-800 dark:text-white">{titleText}</span>.
+            <span className="font-medium text-gray-800 dark:text-white">
+              {titleText}
+            </span>
+            .
           </p>
         </div>
         <div className="px-2 flex flex-col flex-1 min-h-0">
-          <SearchTorrent 
-            item={item} 
-            mediaType={mediaType} 
-            showTitle={showTitle}
-            seasonNumber={seasonNumber}
-            onClose={onClose}
-          />
+          <SearchTorrent target={target} onClose={onClose} />
         </div>
       </div>
     </Modal>

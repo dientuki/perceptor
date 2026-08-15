@@ -18,6 +18,7 @@ describe('UploadTicketsService', () => {
   let jwtService: JwtService;
   let service: UploadTicketsService;
   const MOVIE_ID = 42;
+  const EPISODE_ID = 7;
 
   beforeAll(() => {
     redis = new RedisService();
@@ -30,17 +31,17 @@ describe('UploadTicketsService', () => {
   });
 
   it('accepts a freshly minted ticket for the movie it was minted for', async () => {
-    const ticket = await service.mint('user-1', MOVIE_ID);
+    const ticket = await service.mint('user-1', { movieId: MOVIE_ID });
 
-    await expect(service.verifyAndSpend(ticket.token, MOVIE_ID)).resolves.toBe('user-1');
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toBe('user-1');
   });
 
   it('rejects the same ticket presented a second time', async () => {
-    const ticket = await service.mint('user-1', MOVIE_ID);
+    const ticket = await service.mint('user-1', { movieId: MOVIE_ID });
 
-    await service.verifyAndSpend(ticket.token, MOVIE_ID);
+    await service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID });
 
-    await expect(service.verifyAndSpend(ticket.token, MOVIE_ID)).rejects.toThrow();
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).rejects.toThrow();
   });
 
   it('rejects an expired ticket', async () => {
@@ -49,7 +50,7 @@ describe('UploadTicketsService', () => {
       { expiresIn: -10 },
     );
 
-    await expect(service.verifyAndSpend(expired, MOVIE_ID)).rejects.toThrow();
+    await expect(service.verifyAndSpend(expired, { movieId: MOVIE_ID })).rejects.toThrow();
   });
 
   it('rejects a token that is not typed as an upload ticket', async () => {
@@ -58,16 +59,29 @@ describe('UploadTicketsService', () => {
       { expiresIn: 60 },
     );
 
-    await expect(service.verifyAndSpend(wrongType, MOVIE_ID)).rejects.toThrow();
+    await expect(service.verifyAndSpend(wrongType, { movieId: MOVIE_ID })).rejects.toThrow();
   });
 
   it('rejects a movieId mismatch without spending the ticket', async () => {
-    const ticket = await service.mint('user-1', MOVIE_ID);
+    const ticket = await service.mint('user-1', { movieId: MOVIE_ID });
 
-    await expect(service.verifyAndSpend(ticket.token, MOVIE_ID + 1)).rejects.toThrow();
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID + 1 })).rejects.toThrow();
 
     // The mismatch above must not have burned the ticket — the correct
     // movieId still works afterwards (AC-12's whole point).
-    await expect(service.verifyAndSpend(ticket.token, MOVIE_ID)).resolves.toBe('user-1');
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toBe('user-1');
+  });
+
+  it('rejects a ticket minted for a movie when presented for an episode, without spending it', async () => {
+    const ticket = await service.mint('user-1', { movieId: MOVIE_ID });
+
+    await expect(service.verifyAndSpend(ticket.token, { episodeId: EPISODE_ID })).rejects.toThrow();
+
+    // Same argument as the movieId-mismatch case above, but across targets:
+    // if the target check ran after the Redis spend, this cross-target
+    // rejection would silently burn the ticket, and the legitimate movie
+    // upload right below would then fail with "already used" — a failure
+    // that would surface nowhere near the actual bug.
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toBe('user-1');
   });
 });

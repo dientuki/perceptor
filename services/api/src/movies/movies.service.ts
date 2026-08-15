@@ -17,6 +17,20 @@ import { MediaRef } from '@/media/entities/media-ref.entity';
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
 
+// Zero-padded "<Show> S04E01" rendering for a MediaSource owned by an
+// episode, used only in the collision message below — matches the prefill
+// format `SearchTorrent.tsx` builds on the web side. Kept local rather than
+// shared with EpisodesService for the same reason attachTorrentSource itself
+// is not shared (see 010-episode-acquisition's api/plan.md § Approach).
+function episodeDisplayTitle(episode: {
+  episodeNumber: number;
+  season: { seasonNumber: number; show: { title: string } };
+}): string {
+  const season = String(episode.season.seasonNumber).padStart(2, '0');
+  const ep = String(episode.episodeNumber).padStart(2, '0');
+  return `${episode.season.show.title} S${season}E${ep}`;
+}
+
 @Injectable()
 export class MoviesService implements MediaTypeService {
   constructor(
@@ -287,15 +301,26 @@ export class MoviesService implements MediaTypeService {
     // infoHash es @unique: si ya existe una fila con este hash, no podemos
     // crear otra (P2002). De otra película es una colisión real que sólo
     // decide el usuario; de esta misma película es un reintento — se reusa
-    // la fila en vez de duplicarla.
+    // la fila en vez de duplicarla. Since 010-episode-acquisition a
+    // MediaSource can also be owned by an episode: checking only `.movie`
+    // here would let a hash already attached to an episode fall through the
+    // guard and get silently re-pointed at this film below, with no error
+    // anywhere (see EpisodesService.attachTorrentSource for the mirror-image
+    // check on the episode side).
     const existingSource = await this.prisma.mediaSource.findUnique({
       where: { infoHash: input.infoHash },
-      include: { movie: true },
+      include: { movie: true, episode: { include: { season: { include: { show: true } } } } },
     });
 
     if (existingSource && existingSource.movie && existingSource.movie.id !== movieId) {
       throw new ConflictException(
         `Ese magnet ya está asociado a «${existingSource.movie.title}»`,
+      );
+    }
+
+    if (existingSource && existingSource.episode) {
+      throw new ConflictException(
+        `Ese magnet ya está asociado a «${episodeDisplayTitle(existingSource.episode)}»`,
       );
     }
 

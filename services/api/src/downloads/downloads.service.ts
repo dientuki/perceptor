@@ -12,7 +12,7 @@ export class DownloadsService {
   async handleTorrentCompleted(infoHash: string): Promise<string> {
     const mediaSource = await this.prisma.mediaSource.findUnique({
       where: { infoHash },
-      include: { movie: true },
+      include: { movie: true, episode: true },
     });
 
     // El AutoRun dispara para TODOS los torrents del cliente, incluso los que no
@@ -30,6 +30,16 @@ export class DownloadsService {
         `[torrentCompleted] ya procesado: mediaSource ${mediaSource.id} en estado ${mediaSource.status}`,
       );
       return `ya procesado: mediaSource ${mediaSource.id} en estado ${mediaSource.status}`;
+    }
+
+    // Una fila ya degradada a ERROR (por ejemplo, reemplazada con force) fue
+    // superada por un pedido más nuevo. Un torrentCompleted tardío para ese hash
+    // no debe mover nada.
+    if (mediaSource.status === 'ERROR') {
+      console.log(
+        `[torrentCompleted] ignorado: mediaSource ${mediaSource.id} está en ERROR (reemplazado)`,
+      );
+      return `ignorado: mediaSource ${mediaSource.id} está en ERROR (reemplazado)`;
     }
 
     // Las filas viejas (previas al savepath por torrent) no tienen path, así que
@@ -54,6 +64,13 @@ export class DownloadsService {
       if (mediaSource.movie) {
         await tx.movie.update({
           where: { id: mediaSource.movie.id },
+          data: { status: 'ENCODING' },
+        });
+      }
+
+      if (mediaSource.episode) {
+        await tx.episode.update({
+          where: { id: mediaSource.episode.id },
           data: { status: 'ENCODING' },
         });
       }

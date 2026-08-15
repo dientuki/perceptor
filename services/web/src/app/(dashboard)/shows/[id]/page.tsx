@@ -84,6 +84,7 @@ export default async function ShowDetailsPage({ params }: PageProps) {
             key={season.id}
             season={season}
             defaultOpen={season.seasonNumber === lastSeasonNumber}
+            showTitle={show.title}
           />
         ))}
       </div>

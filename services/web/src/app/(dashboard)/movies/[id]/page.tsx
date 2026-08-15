@@ -1,11 +1,11 @@
-import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Movie from "@/components/movies/Movie";
 import { cache } from "react";
 import { getMovieById } from "@/actions/movies";
+import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+import Movie from "@/components/movies/Movie";
 import SearchTorrent from "@/components/search/SearchTorrent";
-import { MEDIA_TYPE } from "@/types/media";
+import type { AcquisitionTarget } from "@/types/media";
 
 // generateMetadata y la página corren por separado; cache() colapsa los dos fetch en uno solo
 const getMovie = cache(getMovieById);
@@ -65,13 +65,15 @@ export default async function MovieDetailsPage({ params }: PageProps) {
     notFound();
   }
 
+  const target: AcquisitionTarget = { kind: "movie", movie };
+
   return (
     <div>
       <PageBreadcrumb pageTitle={movie.title} />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
           <Movie movie={movie} />
-          <SearchTorrent item={movie} mediaType={MEDIA_TYPE.MOVIE} />
+          <SearchTorrent target={target} />
         </div>
       </div>
     </div>

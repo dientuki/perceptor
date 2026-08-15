@@ -3,7 +3,12 @@
 import { ChevronDown, FileVideo, Magnet, Search } from "lucide-react";
 import { useState } from "react";
 import type { Episode, Season } from "@/actions/shows";
+import ImportFileModal from "@/components/import/importFileModal";
+import ImportMagnetModal from "@/components/import/importMagnetModal";
+import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 import Button from "@/components/ui/button/Button";
+import { useModal } from "@/hooks/useModal";
+import type { AcquisitionTarget } from "@/types/media";
 
 function statusBadgeClass(status: string): string {
   switch (status) {
@@ -18,7 +23,17 @@ function statusBadgeClass(status: string): string {
   }
 }
 
-function EpisodeRow({ episode }: { episode: Episode }) {
+function EpisodeRow({
+  episode,
+  onOpenSearchModal,
+  onOpenFileModal,
+  onOpenMagnetModal,
+}: {
+  episode: Episode;
+  onOpenSearchModal: (episode: Episode) => void;
+  onOpenFileModal: (episode: Episode) => void;
+  onOpenMagnetModal: (episode: Episode) => void;
+}) {
   return (
     <tr>
       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
@@ -54,7 +69,7 @@ function EpisodeRow({ episode }: { episode: Episode }) {
             size="sm"
             variant="outline"
             title="Buscar"
-            /* onClick={() => openSearchModal(episode)} */
+            onClick={() => onOpenSearchModal(episode)}
           >
             <Search size={16} />
           </Button>
@@ -62,7 +77,7 @@ function EpisodeRow({ episode }: { episode: Episode }) {
             size="sm"
             variant="outline"
             title="Importar archivo"
-            /* onClick={() => openFileModal(episode)} */
+            onClick={() => onOpenFileModal(episode)}
           >
             <FileVideo size={16} />
           </Button>
@@ -70,7 +85,7 @@ function EpisodeRow({ episode }: { episode: Episode }) {
             size="sm"
             variant="outline"
             title="Añadir torrent"
-            /* onClick={() => openMagnetModal(episode)} */
+            onClick={() => onOpenMagnetModal(episode)}
           >
             <Magnet size={16} className="text-red-500" />
           </Button>
@@ -83,11 +98,54 @@ function EpisodeRow({ episode }: { episode: Episode }) {
 export default function SeasonAccordion({
   season,
   defaultOpen,
+  showTitle,
 }: {
   season: Season;
   defaultOpen: boolean;
+  showTitle: string;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [activeEpisode, setActiveEpisode] = useState<Episode | null>(null);
+
+  const {
+    isOpen: isFileModalOpen,
+    openModal: openFileModal,
+    closeModal: closeFileModal,
+  } = useModal();
+  const {
+    isOpen: isMagnetModalOpen,
+    openModal: openMagnetModal,
+    closeModal: closeMagnetModal,
+  } = useModal();
+  const {
+    isOpen: isSearchModalOpen,
+    openModal: openSearchModal,
+    closeModal: closeSearchModal,
+  } = useModal();
+
+  const handleOpenFileModal = (episode: Episode) => {
+    setActiveEpisode(episode);
+    openFileModal();
+  };
+
+  const handleOpenMagnetModal = (episode: Episode) => {
+    setActiveEpisode(episode);
+    openMagnetModal();
+  };
+
+  const handleOpenSearchModal = (episode: Episode) => {
+    setActiveEpisode(episode);
+    openSearchModal();
+  };
+
+  const target: AcquisitionTarget | null = activeEpisode
+    ? {
+        kind: "episode",
+        episode: activeEpisode,
+        showTitle,
+        seasonNumber: season.seasonNumber,
+      }
+    : null;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
@@ -132,12 +190,34 @@ export default function SeasonAccordion({
             <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-transparent">
               {/* Display order only — newest episode first; the underlying array stays in the order the API sent it. */}
               {[...season.episodes].reverse().map((episode) => (
-                <EpisodeRow key={episode.id} episode={episode} />
+                <EpisodeRow
+                  key={episode.id}
+                  episode={episode}
+                  onOpenSearchModal={handleOpenSearchModal}
+                  onOpenFileModal={handleOpenFileModal}
+                  onOpenMagnetModal={handleOpenMagnetModal}
+                />
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <ImportFileModal
+        isOpen={isFileModalOpen}
+        onClose={closeFileModal}
+        target={target}
+      />
+      <ImportMagnetModal
+        isOpen={isMagnetModalOpen}
+        onClose={closeMagnetModal}
+        target={target}
+      />
+      <SearchTorrentModal
+        isOpen={isSearchModalOpen}
+        onClose={closeSearchModal}
+        target={target}
+      />
     </div>
   );
 }

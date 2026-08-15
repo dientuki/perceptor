@@ -75,6 +75,15 @@ export class MediaSourcesService {
           await tx.movie.update({ where: { id: movieId }, data: { status: 'ERROR' } });
         }
 
+        // Mismo razonamiento para el episodio: sin esto queda en ENCODING
+        // para siempre esperando un encode que nunca se va a encolar.
+        if (mediaSource.episodeId) {
+          await tx.episode.update({
+            where: { id: mediaSource.episodeId },
+            data: { status: 'ERROR' },
+          });
+        }
+
         return;
       }
 
@@ -91,8 +100,8 @@ export class MediaSourcesService {
 
       const sourceFile = await tx.sourceFile.upsert({
         where: { mediaSourceId_filePath: { mediaSourceId, filePath: matchedFilePath } },
-        create: { mediaSourceId, filePath: matchedFilePath, movieId },
-        update: { movieId },
+        create: { mediaSourceId, filePath: matchedFilePath, movieId, episodeId: mediaSource.episodeId },
+        update: { movieId, episodeId: mediaSource.episodeId },
       });
       const matchedSourceFileId = sourceFile.id;
 

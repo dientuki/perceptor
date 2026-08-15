@@ -6,12 +6,13 @@ import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import { useModal } from "@/hooks/useModal";
 import Button from "@/components/ui/button/Button";
-import { MEDIA_TYPE } from "@/types/media";
+import type { AcquisitionTarget } from "@/types/media";
 
 export default function Movie({ movie }: { movie: MovieRecord }) {
 
   const { isOpen: isFileModalOpen, openModal: openFileModal, closeModal: closeFileModal } = useModal();
   const { isOpen: isMagnetModalOpen, openModal: openMagnetModal, closeModal: closeMagnetModal } = useModal();
+  const target: AcquisitionTarget = { kind: "movie", movie };
 
   return (
     <div className="flex flex-col gap-8 md:flex-row">
@@ -64,17 +65,15 @@ export default function Movie({ movie }: { movie: MovieRecord }) {
         </div>
       </div>
 
-      <ImportFileModal 
-        isOpen={isFileModalOpen} 
-        onClose={closeFileModal} 
-        item={movie} 
-        mediaType={MEDIA_TYPE.MOVIE}
+      <ImportFileModal
+        isOpen={isFileModalOpen}
+        onClose={closeFileModal}
+        target={target}
       />
       <ImportMagnetModal
         isOpen={isMagnetModalOpen}
         onClose={closeMagnetModal}
-        item={movie}
-        mediaType={MEDIA_TYPE.MOVIE}
+        target={target}
       />
 
 

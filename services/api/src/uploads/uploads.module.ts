@@ -9,9 +9,18 @@ import { QueueModule } from '@/queue/queue.module';
 import { AuthModule } from '../auth/auth.module';
 import { RedisModule } from '../redis/redis.module';
 import { MoviesModule } from '@/movies/movies.module';
+import { EpisodesModule } from '@/episodes/episodes.module';
 
 @Module({
-  imports: [SettingsModule, MediaRootsModule, QueueModule, AuthModule, RedisModule, MoviesModule],
+  imports: [
+    SettingsModule,
+    MediaRootsModule,
+    QueueModule,
+    AuthModule,
+    RedisModule,
+    MoviesModule,
+    EpisodesModule,
+  ],
   controllers: [UploadsController],
   providers: [UploadsService, UploadsResolver, UploadTicketsService],
 })

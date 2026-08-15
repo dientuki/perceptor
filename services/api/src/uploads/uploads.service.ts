@@ -8,6 +8,7 @@ import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
 import { UploadTicketsService } from './upload-tickets.service';
+import type { UploadTicketTarget } from './upload-tickets.service';
 
 const ILLEGAL_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
 
@@ -91,6 +92,12 @@ export class UploadsService implements OnModuleInit {
   // GraphQL guard — both halves of the boundary close in the same commit
   // (plan.md § Phase C). Verified via upload-tickets.service.spec.ts against
   // the ticket logic; this method itself is thin request plumbing on top of it.
+  //
+  // 010-episode-acquisition (T006): reads whichever id the metadata carries.
+  // Exactly one of movieId/episodeId is expected — createUploadTicket only
+  // ever mints a ticket for one target, so metadata carrying both or neither
+  // means the browser sent something a legitimate ticket flow never produces;
+  // verifyAndSpend below rejects it the same way a mismatched target does.
   async onUploadCreate(req: Request, upload: { metadata?: Record<string, string | null> }) {
     const authorization = req.headers.get('authorization');
     const token = authorization?.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : null;
@@ -99,13 +106,28 @@ export class UploadsService implements OnModuleInit {
       throw new UploadHttpError(401, 'El permiso de subida venció, volvé a intentar');
     }
 
-    const movieId = Number(upload.metadata?.movieId);
+    const rawMovieId = upload.metadata?.movieId;
+    const rawEpisodeId = upload.metadata?.episodeId;
+    const isEpisode = rawEpisodeId !== undefined && rawEpisodeId !== null && rawEpisodeId !== '';
+
+    const target: UploadTicketTarget = isEpisode
+      ? { episodeId: Number(rawEpisodeId) }
+      : { movieId: Number(rawMovieId) };
 
     try {
-      await this.uploadTickets.verifyAndSpend(token, movieId);
+      await this.uploadTickets.verifyAndSpend(token, target);
     } catch (err) {
-      if (err instanceof Error && err.message === 'Upload ticket does not match the movie being uploaded') {
-        throw new UploadHttpError(403, 'El permiso de subida no corresponde a esta película');
+      const mismatch =
+        err instanceof Error &&
+        (err.message === 'Upload ticket does not match the movie being uploaded' ||
+          err.message === 'Upload ticket does not match the episode being uploaded');
+      if (mismatch) {
+        throw new UploadHttpError(
+          403,
+          isEpisode
+            ? 'El permiso de subida no corresponde a este episodio'
+            : 'El permiso de subida no corresponde a esta película',
+        );
       }
       throw new UploadHttpError(401, 'El permiso de subida venció, volvé a intentar');
     }
@@ -113,14 +135,72 @@ export class UploadsService implements OnModuleInit {
     return {};
   }
 
+  // 010-episode-acquisition (T006): branches on whichever id the metadata
+  // carries. The `movieId` metadata key keeps its name and meaning (NFR-1);
+  // `episodeId` sits beside it. Both branches validate everything that can
+  // throw — missing metadata, missing parent row, an already-active source —
+  // before the file is moved off tus's staging directory, mirroring the film
+  // path's existing ordering.
   private async handleUploadFinish(upload: {
     id: string;
     metadata?: Record<string, string | null>;
     storage?: { path: string };
   }) {
-    const movieId = Number(upload.metadata?.movieId);
+    const rawMovieId = upload.metadata?.movieId;
+    const rawEpisodeId = upload.metadata?.episodeId;
+    const isEpisode = rawEpisodeId !== undefined && rawEpisodeId !== null && rawEpisodeId !== '';
+
     const filename = sanitizeFilename(upload.metadata?.filename || upload.id);
     const rawPath = upload.storage?.path;
+
+    if (isEpisode) {
+      const episodeId = Number(rawEpisodeId);
+      if (!episodeId || !rawPath) {
+        throw new UploadHttpError(400, 'Metadata de la subida incompleta (episodeId/filename)');
+      }
+
+      const episode = await this.prisma.episode.findUnique({ where: { id: episodeId } });
+      if (!episode) throw new UploadHttpError(404, `El episodio ${episodeId} no existe`);
+
+      // Same active-source conflict rule as EpisodesService.attachTorrentSource
+      // (010-episode-acquisition, T003): an episode is the pointed-at side of
+      // MediaSource, so "already downloading" is a query for a non-ERROR
+      // MediaSource against this episodeId, not a null-column check like a
+      // film's Movie.mediaSourceId.
+      const activeSource = await this.prisma.mediaSource.findFirst({
+        where: { episodeId, status: { not: 'ERROR' } },
+      });
+      if (activeSource) {
+        throw new UploadHttpError(
+          409,
+          'Este episodio ya tiene una descarga en curso. Confirmá para reemplazarla.',
+        );
+      }
+
+      const destPath = await this.moveUploadedFile(upload.id, rawPath, filename);
+
+      const mediaSource = await this.prisma.mediaSource.create({
+        data: {
+          kind: 'LOCAL_FILE',
+          status: 'READY',
+          downloadPath: destPath,
+          releaseTitle: upload.metadata?.filename ?? null,
+          episodeId,
+        },
+      });
+
+      await this.prisma.episode.update({
+        where: { id: episodeId },
+        data: { status: 'ENCODING' },
+      });
+
+      await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
+
+      console.log(`[uploads] ${upload.id}: completado -> mediaSource ${mediaSource.id} (episode ${episodeId}), encolado`);
+      return;
+    }
+
+    const movieId = Number(rawMovieId);
 
     if (!movieId || !rawPath) {
       throw new UploadHttpError(400, 'Metadata de la subida incompleta (movieId/filename)');
@@ -136,22 +216,7 @@ export class UploadsService implements OnModuleInit {
       );
     }
 
-    // path_downloads se re-lee acá, no en el snapshot de boot (this.uploadsDir
-    // es fijo, ver onModuleInit): así un cambio hecho en Settings mientras la
-    // subida estaba en curso se refleja en la próxima que termine, sin
-    // necesitar reiniciar el api.
-    const config = await this.settings.getMap();
-    const downloadsBase = await this.mediaRoots.resolveFromRoot('downloads', config.path_downloads ?? '.');
-
-    // FileStore escribe los bytes planos como <uploadsDir>/<id> — un archivo,
-    // no una carpeta. El destino no puede reusar ese mismo nombre (mkdir
-    // pisaría el propio archivo que se está moviendo), así que las subidas ya
-    // cerradas van a su propio namespace "imports/<id>/<filename>", mismo
-    // criterio que qBittorrent (client.ts::add) de una carpeta por descarga.
-    const destDir = join(downloadsBase, 'imports', upload.id);
-    const destPath = join(destDir, filename);
-    await mkdir(destDir, { recursive: true });
-    await rename(rawPath, destPath);
+    const destPath = await this.moveUploadedFile(upload.id, rawPath, filename);
 
     const mediaSource = await this.prisma.mediaSource.create({
       data: {
@@ -170,5 +235,22 @@ export class UploadsService implements OnModuleInit {
     await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
 
     console.log(`[uploads] ${upload.id}: completado -> mediaSource ${mediaSource.id}, encolado`);
+  }
+
+  // Shared by both branches of handleUploadFinish: re-reads path_downloads
+  // (not the boot-time snapshot in this.uploadsDir) and relocates the file
+  // FileStore staged as a bare <uploadsDir>/<id> into its own
+  // "imports/<id>/<filename>" namespace, the same criterion qBittorrent
+  // (client.ts::add) uses for a folder per download.
+  private async moveUploadedFile(uploadId: string, rawPath: string, filename: string): Promise<string> {
+    const config = await this.settings.getMap();
+    const downloadsBase = await this.mediaRoots.resolveFromRoot('downloads', config.path_downloads ?? '.');
+
+    const destDir = join(downloadsBase, 'imports', uploadId);
+    const destPath = join(destDir, filename);
+    await mkdir(destDir, { recursive: true });
+    await rename(rawPath, destPath);
+
+    return destPath;
   }
 }

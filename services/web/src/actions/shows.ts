@@ -1,6 +1,9 @@
 "use server";
 
-import { redirectToClearSession } from "@/lib/auth-session";
+import {
+  redirectIfUnauthenticated,
+  redirectToClearSession,
+} from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
 
 export interface Episode {
@@ -115,4 +118,64 @@ export async function getShowById(id: number): Promise<Show | null> {
   // El API devuelve null cuando el id no existe o no pertenece al usuario;
   // la página lo traduce a notFound()
   return data?.show ?? null;
+}
+
+const ADD_TORRENT_TO_EPISODE_MUTATION = `
+  mutation AddTorrentToEpisode($episodeId: Int!, $infoHash: String!, $urls: [String!]!, $releaseTitle: String, $force: Boolean) {
+    addTorrentToEpisode(episodeId: $episodeId, infoHash: $infoHash, urls: $urls, releaseTitle: $releaseTitle, force: $force) {
+      id
+      status
+    }
+  }
+`;
+
+export async function addTorrentToEpisodeAction(
+  episodeId: number,
+  infoHash: string,
+  urls: string[],
+  releaseTitle: string | null,
+  force = false,
+): Promise<{ id: number; status: string }> {
+  const { data, errors } = await fetchGraphQL<{
+    addTorrentToEpisode: { id: number; status: string };
+  }>(ADD_TORRENT_TO_EPISODE_MUTATION, {
+    episodeId,
+    infoHash,
+    urls,
+    releaseTitle,
+    force,
+  });
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    throw new Error(errors[0]?.message || "Error al agregar el torrent");
+  }
+
+  return data!.addTorrentToEpisode;
+}
+
+const ADD_MAGNET_TO_EPISODE_MUTATION = `
+  mutation AddMagnetToEpisode($episodeId: Int!, $magnet: String!, $force: Boolean) {
+    addMagnetToEpisode(episodeId: $episodeId, magnet: $magnet, force: $force) {
+      id
+      status
+    }
+  }
+`;
+
+export async function addMagnetToEpisodeAction(
+  episodeId: number,
+  magnet: string,
+  force = false,
+): Promise<{ id: number; status: string }> {
+  const { data, errors } = await fetchGraphQL<{
+    addMagnetToEpisode: { id: number; status: string };
+  }>(ADD_MAGNET_TO_EPISODE_MUTATION, { episodeId, magnet, force });
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    throw new Error(errors[0]?.message || "Error al importar el magnet");
+  }
+
+  return data!.addMagnetToEpisode;
 }

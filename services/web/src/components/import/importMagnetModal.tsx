@@ -6,43 +6,46 @@ import Button from "@/components/ui/button/Button";
 import Label from "@/components/form/Label";
 import { Magnet } from "lucide-react";
 import { importMagnetAction } from "@/actions/imports";
-import type { Movie } from "@/actions/movies";
-import type { Episode, MediaType } from "@/types/media";
+import { addMagnetToEpisodeAction } from "@/actions/shows";
+import type { AcquisitionTarget } from "@/types/media";
 
 interface ImportMagnetModalProps {
   isOpen: boolean;
   onClose: () => void;
-  item: Movie | Episode | null;
-  mediaType: MediaType;
+  target: AcquisitionTarget | null;
 }
 
 const CONFLICT_MESSAGE = "ya tiene una descarga en curso";
 
-export default function ImportMagnetModal({ isOpen, onClose, item }: ImportMagnetModalProps) {
+export default function ImportMagnetModal({ isOpen, onClose, target }: ImportMagnetModalProps) {
   const [magnet, setMagnet] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const router = useRouter();
 
-  // Limpiar todo cuando cambia el item o se reabre el modal.
+  // Limpiar todo cuando cambia el target o se reabre el modal.
   useEffect(() => {
     if (isOpen) {
       setMagnet("");
       setError(null);
       setNeedsConfirm(false);
     }
-  }, [isOpen, item]);
+  }, [isOpen, target]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!item || !magnet.trim()) return;
+    if (!target || !magnet.trim()) return;
 
     setIsPending(true);
     setError(null);
 
     try {
-      await importMagnetAction(Number(item.id), magnet, needsConfirm);
+      if (target.kind === "movie") {
+        await importMagnetAction(Number(target.movie.id), magnet, needsConfirm);
+      } else {
+        await addMagnetToEpisodeAction(Number(target.episode.id), magnet, needsConfirm);
+      }
       onClose();
       // Mismo criterio que ImportFileModal/SearchTorrent: refrescar el server
       // component para que la película aparezca con su estado nuevo.
@@ -56,7 +59,12 @@ export default function ImportMagnetModal({ isOpen, onClose, item }: ImportMagne
     }
   };
 
-  if (!item) return null;
+  if (!target) return null;
+
+  const targetLabel =
+    target.kind === "movie"
+      ? target.movie.title
+      : `${target.showTitle} S${String(target.seasonNumber).padStart(2, "0")}E${String(target.episode.episodeNumber).padStart(2, "0")}`;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="max-w-[700px] m-4">
@@ -68,10 +76,7 @@ export default function ImportMagnetModal({ isOpen, onClose, item }: ImportMagne
           </h4>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
             Ingresá el magnet link para{" "}
-            <span className="font-medium text-gray-800 dark:text-white">
-              {"title" in item ? item.title : `Episodio ${item.episodeNumber}`}
-            </span>
-            .
+            <span className="font-medium text-gray-800 dark:text-white">{targetLabel}</span>.
           </p>
         </div>
         <form className="flex flex-col" onSubmit={handleSubmit}>

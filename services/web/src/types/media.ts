@@ -1,3 +1,6 @@
+import type { Movie } from "@/actions/movies";
+import type { Episode } from "@/actions/shows";
+
 export const MEDIA_TYPE = {
   MOVIE: "movie",
   SHOW: "show",
@@ -5,9 +8,14 @@ export const MEDIA_TYPE = {
 
 export type MediaType = (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
 
-// Placeholder hasta que el api exponga shows/episodes por GraphQL.
-// SearchTorrent sólo usa episodeNumber, para armar el "S01E02".
-export type Episode = {
-  id: string;
-  episodeNumber?: number | null;
-};
+// Discriminated union so a target is either a movie or an episode, never
+// both — an episode paired with MEDIA_TYPE.MOVIE was exactly how an episode
+// id used to reach a movieId argument with no compile error.
+export type AcquisitionTarget =
+  | { kind: "movie"; movie: Movie }
+  | {
+      kind: "episode";
+      episode: Episode;
+      showTitle: string;
+      seasonNumber: number;
+    };

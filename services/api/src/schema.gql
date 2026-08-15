@@ -108,6 +108,15 @@ type UploadTicket {
   expiresAt: DateTime!
 }
 
+type Episode {
+  id: ID!
+  episodeNumber: Int!
+  title: String
+  overview: String
+  releaseDate: DateTime
+  status: String!
+}
+
 type MediaSearchResult {
   id: Int!
   title: String!
@@ -124,15 +133,6 @@ type MediaSearchResult {
 type MediaRef {
   id: Int!
   type: String!
-}
-
-type Episode {
-  id: ID!
-  episodeNumber: Int!
-  title: String
-  overview: String
-  releaseDate: DateTime
-  status: String!
 }
 
 type Season {
@@ -228,7 +228,15 @@ type Mutation {
 
   """El worker pide borrar el torrent del cliente tras un encode exitoso"""
   downloadRemove(mediaSourceId: Int!): String!
-  createUploadTicket(movieId: Int!): UploadTicket!
+  createUploadTicket(movieId: Int, episodeId: Int): UploadTicket!
+
+  """Envía un release elegido a qBittorrent y lo asocia al episodio"""
+  addTorrentToEpisode(episodeId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Episode!
+
+  """
+  Manda un magnet pegado por el usuario a qBittorrent y lo asocia al episodio
+  """
+  addMagnetToEpisode(episodeId: Int!, magnet: String!, force: Boolean = false): Episode!
   addMedia(tmdbId: Int!, type: String!): MediaRef!
 }
 

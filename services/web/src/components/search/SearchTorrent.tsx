@@ -1,31 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Download, Loader2, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { Movie } from "@/actions/movies";
-import { MEDIA_TYPE, MediaType, Episode } from "@/types/media";
-import { Search, Download, Loader2 } from "lucide-react";
-import { TorrentResult } from "@/types/indexer";
+import { useEffect, useState } from "react";
+import {
+  addTorrentToMovieAction,
+  searchTorrentsAction,
+} from "@/actions/indexer";
+import { addTorrentToEpisodeAction } from "@/actions/shows";
 import Button from "@/components/ui/button/Button";
-import { searchTorrentsAction, addTorrentToMovieAction } from "@/actions/indexer";
+import type { TorrentResult } from "@/types/indexer";
+import type { AcquisitionTarget } from "@/types/media";
 
 interface SearchTorrentProps {
-  item: Movie | Episode;
-  mediaType: MediaType;
-  showTitle?: string;
-  seasonNumber?: number;
+  target: AcquisitionTarget | null;
   onClose?: () => void;
 }
 
-export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber, onClose }: SearchTorrentProps) {
+const CONFLICT_MESSAGE = "ya tiene una descarga en curso";
 
+export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   const formatBytes = (bytes: number | null) => {
     if (bytes === null) return "N/A";
     if (bytes === 0) return "0 B";
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB", "TB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+    return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
   };
 
   const [query, setQuery] = useState("");
@@ -34,27 +35,29 @@ export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber
   const [isLoading, setIsLoading] = useState(false);
   const [addingHash, setAddingHash] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
+  const [needsConfirm, setNeedsConfirm] = useState<TorrentResult | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    if (mediaType === MEDIA_TYPE.MOVIE) {
-      setQuery((item as Movie).title);
+    if (!target) return;
+
+    if (target.kind === "movie") {
+      setQuery(target.movie.title);
     } else {
-      const ep = item as Episode;
       // Limpiar caracteres raros del nombre de la serie
-      const cleanShowTitle = (showTitle || "")
+      const cleanShowTitle = (target.showTitle || "")
         .replace(/[^a-zA-Z0-9 ]/g, "")
         .replace(/\s+/g, " ")
         .trim();
-      
-      const s = String(seasonNumber ?? 0).padStart(2, "0");
-      const e = String(ep.episodeNumber ?? 0).padStart(2, "0");
+
+      const s = String(target.seasonNumber ?? 0).padStart(2, "0");
+      const e = String(target.episode.episodeNumber ?? 0).padStart(2, "0");
       setQuery(`${cleanShowTitle} S${s}E${e}`.trim());
     }
-  }, [item, mediaType, showTitle, seasonNumber]);
+  }, [target]);
 
   const filteredResults = results.filter((res) =>
-    (res.title || "").toLowerCase().includes(filter.toLowerCase())
+    (res.title || "").toLowerCase().includes(filter.toLowerCase()),
   );
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -72,34 +75,63 @@ export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber
     }
   };
 
+  const submitTorrent = async (res: TorrentResult, force: boolean) => {
+    if (!target) return;
+
+    const urls = res.items
+      .map((i) => i.downloadUrl)
+      .filter((u): u is string => !!u);
+
+    if (target.kind === "movie") {
+      await addTorrentToMovieAction(
+        Number(target.movie.id),
+        res.infoHash,
+        urls,
+        res.title,
+        force,
+      );
+    } else {
+      await addTorrentToEpisodeAction(
+        Number(target.episode.id),
+        res.infoHash,
+        urls,
+        res.title,
+        force,
+      );
+    }
+  };
+
   const handleAddTorrent = async (res: TorrentResult) => {
-    if (mediaType !== MEDIA_TYPE.MOVIE) return; // shows: sin GraphQL todavía
+    setAddingHash(res.infoHash);
+    setAddError(null);
+    setNeedsConfirm(null);
 
-    const urls = res.items.map((i) => i.downloadUrl).filter((u): u is string => !!u);
-    const movieId = Number((item as Movie).id);
+    try {
+      await submitTorrent(res, false);
+      router.refresh();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Error al agregar el torrent";
 
+      setAddError(message);
+      if (message.includes(CONFLICT_MESSAGE)) {
+        setNeedsConfirm(res);
+      }
+    } finally {
+      setAddingHash(null);
+    }
+  };
+
+  const handleConfirmReplace = async (res: TorrentResult) => {
     setAddingHash(res.infoHash);
     setAddError(null);
 
     try {
-      await addTorrentToMovieAction(movieId, res.infoHash, urls, res.title, false);
+      await submitTorrent(res, true);
+      setNeedsConfirm(null);
       router.refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al agregar el torrent';
-
-      if (message.includes('ya tiene una descarga en curso')) {
-        const replace = window.confirm(`${message}\n\n¿Reemplazar por este release?`);
-        if (replace) {
-          try {
-            await addTorrentToMovieAction(movieId, res.infoHash, urls, res.title, true);
-            router.refresh();
-          } catch (retryErr) {
-            setAddError(retryErr instanceof Error ? retryErr.message : 'Error al reemplazar');
-          }
-        }
-      } else {
-        setAddError(message);
-      }
+      setAddError(err instanceof Error ? err.message : "Error al reemplazar");
     } finally {
       setAddingHash(null);
     }
@@ -107,7 +139,6 @@ export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber
 
   return (
     <div className="flex-1 flex flex-col min-h-0 space-y-6 overflow-hidden">
-
       <form onSubmit={handleSearch} className="flex flex-shrink-0 gap-3">
         <div className="relative flex-1 ">
           <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -138,46 +169,91 @@ export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber
       )}
 
       {addError && (
-        <p className="flex-shrink-0 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
-          {addError}
-        </p>
+        <div className="flex-shrink-0 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
+          <p>{addError}</p>
+          {needsConfirm && (
+            <div className="mt-2 flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleConfirmReplace(needsConfirm)}
+                disabled={addingHash === needsConfirm.infoHash}
+                type="button"
+              >
+                {addingHash === needsConfirm.infoHash ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Reemplazar"
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setNeedsConfirm(null);
+                  setAddError(null);
+                }}
+                type="button"
+              >
+                Cancelar
+              </Button>
+            </div>
+          )}
+        </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-        <table className="w-full divide-y divide-gray-200 dark:divide-gray-800">
-          <thead className="bg-gray-50 dark:bg-white/[0.02]">
+      <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+        <table className="w-full flex-1 flex flex-col min-h-0 divide-y divide-gray-200 dark:divide-gray-800">
+          <thead className="block flex-shrink-0 bg-gray-50 dark:bg-white/[0.02]">
             <tr className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center w-full">
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Release Name ({filteredResults.length})</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">Size</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">S/L</th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Action</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Release Name ({filteredResults.length})
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
+                Size
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
+                S/L
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Action
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+          <tbody className="block flex-1 min-h-0 divide-y divide-gray-200 overflow-y-auto dark:divide-gray-800">
             {filteredResults.length > 0 ? (
               filteredResults.map((res) => (
-                <tr key={res.infoHash} className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center hover:bg-gray-50 dark:hover:bg-white/[0.01]">
+                <tr
+                  key={res.infoHash}
+                  className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center hover:bg-gray-50 dark:hover:bg-white/[0.01]"
+                >
                   <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                    <span className="font-medium line-clamp-1">{res.title || "Unknown Release"}</span>
+                    <span className="font-medium line-clamp-1">
+                      {res.title || "Unknown Release"}
+                    </span>
                     <div className="mt-1 flex flex-col gap-0.5 overflow-hidden">
-                      {res.infoUrl.map((indexerItem, idx) => indexerItem.downloadUrl && (
-                        <a
-                          key={idx}
-                          href={indexerItem.downloadUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] text-blue-500 hover:underline dark:text-blue-400 line-clamp-1"
-                        >
-                          {indexerItem.downloadUrl}
-                        </a>
-                      ))}
+                      {res.infoUrl.map(
+                        (indexerItem, idx) =>
+                          indexerItem.downloadUrl && (
+                            <a
+                              key={idx}
+                              href={indexerItem.downloadUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-blue-500 hover:underline dark:text-blue-400 line-clamp-1"
+                            >
+                              {indexerItem.downloadUrl}
+                            </a>
+                          ),
+                      )}
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                     {formatBytes(res.size)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm">
-                    <span className="text-green-500">{res.seeders}</span> / <span className="text-gray-400">{res.leechers}</span>
+                    <span className="text-green-500">{res.seeders}</span> /{" "}
+                    <span className="text-gray-400">{res.leechers}</span>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Button
@@ -198,10 +274,10 @@ export default function SearchTorrent({ item, mediaType, showTitle, seasonNumber
             ) : (
               <tr className="flex w-full">
                 <td className="flex-1 px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
-                  {isLoading 
-                    ? "Searching trackers..." 
-                    : results.length > 0 
-                      ? "No results match your filter." 
+                  {isLoading
+                    ? "Searching trackers..."
+                    : results.length > 0
+                      ? "No results match your filter."
                       : "No results yet. Try searching for a specific release."}
                 </td>
               </tr>

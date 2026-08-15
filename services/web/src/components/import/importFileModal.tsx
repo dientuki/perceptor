@@ -6,15 +6,13 @@ import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import Label from "@/components/form/Label";
 import { Video } from "lucide-react";
-import type { Movie } from "@/actions/movies";
-import type { Episode, MediaType } from "@/types/media";
+import type { AcquisitionTarget } from "@/types/media";
 import { createUploadTicketAction } from "@/actions/uploads";
 
 interface ImportFileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  item: Movie | Episode | null;
-  mediaType: MediaType;
+  target: AcquisitionTarget | null;
 }
 
 type UploadStatus = "idle" | "uploading" | "paused" | "error" | "done";
@@ -38,7 +36,7 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(1)} ${units[unit]}`;
 }
 
-export default function ImportFileModal({ isOpen, onClose, item, mediaType }: ImportFileModalProps) {
+export default function ImportFileModal({ isOpen, onClose, target }: ImportFileModalProps) {
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const [progress, setProgress] = useState({ sent: 0, total: 0 });
@@ -66,7 +64,7 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !item) return;
+    if (!file || !target) return;
 
     setError(null);
     setFileName(file.name);
@@ -77,11 +75,20 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
     // una sola vez, en el POST inicial (ver spec 002-auth-login).
     let ticket;
     try {
-      ticket = await createUploadTicketAction(Number(item.id));
+      ticket = await createUploadTicketAction(target);
     } catch (err) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Error al generar el permiso de subida.");
       return;
+    }
+
+    // El metadata key movieId mantiene su nombre y significado exactos aun
+    // para un film (NFR-1); episodeId es la contraparte para un episodio.
+    const targetMetadata: Record<string, string> = {};
+    if (target.kind === "movie") {
+      targetMetadata.movieId = String(target.movie.id);
+    } else {
+      targetMetadata.episodeId = String(target.episode.id);
     }
 
     const upload = new tus.Upload(file, {
@@ -93,9 +100,7 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
       },
       metadata: {
         filename: file.name,
-        // Sólo movies por ahora: la api (onUploadFinish) todavía no resuelve
-        // episodios, igual que el resto de este flujo hasta acá.
-        movieId: String(item.id),
+        ...targetMetadata,
       },
       onProgress: (bytesSent, bytesTotal) => setProgress({ sent: bytesSent, total: bytesTotal }),
       onSuccess: () => {
@@ -133,9 +138,14 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
     reset();
   };
 
-  if (!item) return null;
+  if (!target) return null;
 
   const percent = progress.total > 0 ? Math.round((progress.sent / progress.total) * 100) : 0;
+
+  const targetLabel =
+    target.kind === "movie"
+      ? target.movie.title
+      : `${target.showTitle} S${String(target.seasonNumber).padStart(2, "0")}E${String(target.episode.episodeNumber).padStart(2, "0")}`;
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} className="max-w-[700px] m-4">
@@ -147,7 +157,7 @@ export default function ImportFileModal({ isOpen, onClose, item, mediaType }: Im
           </h4>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
             Elegí el archivo de video para{" "}
-            <span className="font-medium text-gray-800 dark:text-white">{"title" in item ? item.title : `Episodio ${item.episodeNumber}`}</span>.
+            <span className="font-medium text-gray-800 dark:text-white">{targetLabel}</span>.
             {" "}Se sube por la red — podés pausarlo y reanudarlo si se corta.
           </p>
         </div>
