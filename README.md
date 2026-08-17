@@ -1,30 +1,23 @@
 # 👁️ Perceptor
 
-**Perceptor** is a self-hosted media automation platform: search for a title, let Perceptor find a
-release, download it, transcode it, and file it into your library — with no manual babysitting in
-between.
+**One Docker stack. One workflow. No complicated setup.**
 
-It's the successor to [perceptor-v1](https://github.com/dientuki/perceptor-v1), a single Next.js
-app with a SQLite database. This version splits the same idea into a proper service architecture
-(web, API, worker, queue, download client, indexer) so each piece can scale, fail, and be tested on
-its own.
+**Perceptor** is a self-hosted platform that automates the entire digital content workflow — from discovery and downloading to processing and organization. The project combines a modern web interface with a backend API and background workers, integrating external services to manage the entire content workflow from a single place.
 
-## What it does
+## Features
+🎬 Digital content management
+🔎 Automatic content discovery through external sources
+⬇️ Download management
+⚙️ Background processing with dedicated workers
+🎞️ Video conversion and optimization
+🗂️ Automatic content organization
+👤 User preferences and configuration
+🔐 Session management
+🚦 Job queue for asynchronous tasks
+🐳 Fully containerized development environment
+📦 Modular architecture designed to support additional integrations
 
-1. **Search** a title against TMDB's catalog.
-2. **Register** it in the library, tracked through its whole lifecycle (missing → downloading →
-   encoding → completed).
-3. **Find a release** via Prowlarr, an indexer that searches your configured torrent trackers.
-4. **Download** it through qBittorrent, one isolated folder per torrent so files never collide on
-   disk.
-5. **Detect completion** the moment qBittorrent finishes, via an AutoRun hook that calls back into
-   the API.
-6. **Inventory the files**: a worker scans the download folder, picks the main video file, and
-   reports the result back over GraphQL.
-7. **Transcode** with FFmpeg and file the result into the library. *(next up — see status below)*
-8. **Browse** the library from a web UI.
-
-### Pipeline status
+## Pipeline status
 
 | Stage | Where | Status |
 | :-- | :-- | :-- |
