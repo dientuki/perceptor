@@ -2,7 +2,7 @@
 title: AV1 Transcode — api slice
 service: api
 last_updated: 2026-08-17
-status: Approved            # Draft | Approved | Implemented
+status: Implemented            # Draft | Approved | Implemented
 ---
 
 # PLAN: AV1 Transcode — `api` (`api/plan.md`)

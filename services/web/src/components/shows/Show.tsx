@@ -1,7 +1,21 @@
 import Image from "next/image";
+import { setShowPreferredLanguagesAction } from "@/actions/languages";
 import type { Show as ShowRecord } from "@/actions/shows";
+import LanguagePicker from "@/components/media/LanguagePicker";
+import type { Language } from "@/types/languages";
 
-export default function Show({ show }: { show: ShowRecord }) {
+export default function Show({
+  show,
+  languageOptions,
+}: {
+  show: ShowRecord;
+  languageOptions: Language[];
+}) {
+  const setPreferredLanguages = setShowPreferredLanguagesAction.bind(
+    null,
+    show.id,
+  );
+
   return (
     <div className="flex flex-col gap-8 md:flex-row">
       {/* Poster a la izquierda */}
@@ -44,6 +58,14 @@ export default function Show({ show }: { show: ShowRecord }) {
           <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">
             {show.overview || "No overview available."}
           </p>
+        </div>
+
+        <div className="space-y-2">
+          <LanguagePicker
+            options={languageOptions}
+            selected={show.preferredLanguages ?? []}
+            action={setPreferredLanguages}
+          />
         </div>
       </div>
     </div>

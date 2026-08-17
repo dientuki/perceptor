@@ -383,6 +383,89 @@ already receives a `mediaType` prop for its own empty-state text and now forward
 `web` retypes this query by hand in `src/actions/shows.ts`'s `getShowById`, same as every other
 query — no codegen.
 
+### Language preferences drive the encode payload, in two different ISO vocabularies (`011-av1-transcode`)
+
+```graphql
+type Language {
+  id: ID!
+  iso2: String!
+  iso3: String!
+  name: String!
+}
+
+type Query {
+  languages: [Language!]!
+}
+
+type User {
+  preferredLanguages: [Language!]!
+}
+
+type Movie {
+  preferredLanguages: [Language!]!
+}
+
+type Show {
+  preferredLanguages: [Language!]!
+}
+
+type Mutation {
+  setPreferredLanguages(iso2: [String!]!): [Language!]!
+  setMoviePreferredLanguages(movieId: Int!, iso2: [String!]!): [Language!]!
+  setShowPreferredLanguages(showId: Int!, iso2: [String!]!): [Language!]!
+}
+
+type EncodeJobDetails {
+  # …every existing field, unchanged…
+  allowedLanguagesIso3: [String!]!
+}
+```
+
+`languages` reads the 20-row seeded `languages` table (`services/api/prisma/seeds/languages.ts`);
+`name` is a Spanish display string derived server-side from `iso2` (`src/languages/language-names.ts`),
+not stored. It is the only source web populates its language pickers from — never a hard-coded list.
+
+Three new join tables back the preferences: `UserLanguage` (global), `UserMovieLanguage` and
+`UserShowLanguage` (per title), each a composite-key row pointing at `Language`, cascading through
+the *ownership* row (`UserMovie`/`UserShow`), not through `User`/`Movie`/`Show` directly — a
+preference has no meaning once the title leaves the user's library. All three mutations **replace**
+the whole list; there is no add/remove pair, and `[]` clears it.
+
+**`User.preferredLanguages` is a type-level field, and that has a sharp edge.** It is exposed on the
+`me` query and deliberately **not** meant to appear on the admin `users`/`user(id)` queries — but
+`@ResolveField()` attaches to the GraphQL *type*, not to a specific query, and `UsersResolver` (the
+admin surface) returns the same `User` type `AuthResolver` does. Selecting `preferredLanguages`
+through `users`/`user(id)` therefore reaches the same resolver code, not a GraphQL validation error.
+The fix lives in the resolver itself (`src/auth/auth.resolver.ts`): it compares the resolved
+`@Parent()` user's id against `@CurrentUser()`'s id and returns `[]` for anyone but the caller,
+regardless of which query reached it. **Any future field added to `User` this way inherits the same
+risk** — a per-user field resolver is visible everywhere the type is, not just where it was intended,
+and needs the same identity guard if it must stay private.
+
+`Movie.preferredLanguages`/`Show.preferredLanguages` resolve to the **calling user's own** list for
+that title, never the merge across owners — the merge is an encode-time-only concept. Both mutations
+are scoped exactly like `movie(id)`/`show(id)` already are: an unowned title is refused with the
+existing `La película <id> no existe` / `Recurso no disponible para este usuario`, reused verbatim,
+never a new string. Neither mutation carries `@AllowService()`.
+
+`EncodeJobDetails.allowedLanguagesIso3` is where the two vocabularies meet. Every stored preference
+is ISO-639-1 (`es`, `en`, `ja`) — the same alphabet `Movie.originalLanguage`/`Show.originalLanguage`
+already use, since that's what TMDB returns. But `ffprobe` reports `tags.language` in ISO-639-2/B
+(`spa`, `eng`, `jpn`), and that's what the worker actually compares against. `allowedLanguagesIso3`
+is `api`'s merge — `{original} ∪ ⋃(global pref of every owner) ∪ ⋃(per-title pref of every owner)`,
+deduplicated, original first — resolved server-side into `iso3` before it ever leaves `api`, because
+`Language` (with both codes) only exists on this side of the boundary. `originalLanguageIso3` stays
+on the payload alongside it, not redundant with the list's first element: the worker needs to know
+*which* of the allowed languages is the mandatory one, and inferring that from list position is a
+rule that breaks the moment someone reorders the list. The field is hand-retyped in **two** places on
+the worker side with no compiler across either seam — `src/jobs/encode.job.ts`'s `EncodeJobDetails`
+and `src/encode/types.ts`'s `EncodeInput` — miss one and the field silently arrives `undefined`,
+which the rule functions would read as "keep the original language only," no error anywhere.
+
+A missing original-language audio track is a hard failure (`encodeFailed`, no new GraphQL surface) —
+replacing the previous behaviour of silently copying every audio track untranscoded. A missing *extra*
+language is not an error; the encode continues with what's present.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

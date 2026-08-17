@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
+import { getLanguages } from "@/actions/languages";
 import { getMovieById } from "@/actions/movies";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import Movie from "@/components/movies/Movie";
@@ -59,7 +60,10 @@ export default async function MovieDetailsPage({ params }: PageProps) {
     notFound();
   }
 
-  const movie = await getMovie(movieId);
+  const [movie, languages] = await Promise.all([
+    getMovie(movieId),
+    getLanguages(),
+  ]);
 
   if (!movie) {
     notFound();
@@ -72,7 +76,7 @@ export default async function MovieDetailsPage({ params }: PageProps) {
       <PageBreadcrumb pageTitle={movie.title} />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
-          <Movie movie={movie} />
+          <Movie movie={movie} languageOptions={languages} />
           <SearchTorrent target={target} />
         </div>
       </div>

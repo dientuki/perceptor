@@ -2,7 +2,7 @@
 title: AV1 Transcode — worker slice
 service: worker
 last_updated: 2026-08-17
-status: Approved            # Draft | Approved | Implemented
+status: Implemented            # Draft | Approved | Implemented
 ---
 
 # PLAN: AV1 Transcode — `worker` (`worker/plan.md`)

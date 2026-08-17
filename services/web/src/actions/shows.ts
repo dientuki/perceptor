@@ -5,6 +5,7 @@ import {
   redirectToClearSession,
 } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
+import type { Language } from "@/types/languages";
 
 export interface Episode {
   id: string;
@@ -35,6 +36,9 @@ export interface Show {
   seasonsSyncedAt?: string;
   // Only present when fetched via getShowById — getShows() doesn't request it
   seasons?: Season[];
+  // Only present when fetched via getShowById — getShows() must not select
+  // this field resolver, or a library listing turns into one query per row
+  preferredLanguages?: Language[];
 }
 
 const GET_SHOWS_QUERY = `
@@ -84,6 +88,11 @@ const GET_SHOW_QUERY = `
       isLiveAction
       status
       seasonsSyncedAt
+      preferredLanguages {
+        id
+        iso2
+        name
+      }
       seasons {
         id
         seasonNumber

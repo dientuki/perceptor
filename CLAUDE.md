@@ -13,7 +13,7 @@ Pipeline stage status today:
 | Download | qBittorrent — `torrent` service, `api` — `src/clients/torrent/client.ts` | working, per-torrent save path, for both a film and a single episode (`010-episode-acquisition`) |
 | Detect completion, update DB, enqueue job | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | working |
 | Scan downloaded files, inventory | `worker` — BullMQ consumer, talks to `api` over GraphQL | working |
-| Transcode | `worker` (FFmpeg) | not started — `ProcessJob` rows sit in `WAITING` |
+| Transcode | `worker` (FFmpeg) | working — H264/VC-1 to AV1 via `libsvtav1`, HEVC 4K tonemapped to 1080p SDR, audio to Opus keeping one track per allowed language, text subtitles only; remux/quality decided from `ffprobe` metadata, not the filename (`011-av1-transcode`) |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` | working (Jellyfin, opt-in from Settings, default `none`) |
 | Browse library | `api` — `src/movies/movies.resolver.ts`, `src/shows/shows.resolver.ts`, `src/episodes/episodes.resolver.ts`; `web` — `/movies`, `/shows` | working for both films and series, each a per-user listing behind its own query (`007-library-listing`); both detail pages (`/movies/<id>`, `/shows/<id>`) are per-user — a title another user owns answers `Recurso no disponible para este usuario` instead of rendering (`008-movie-detail`, `009-show-detail`); the show detail page also renders a season accordion (last season expanded by default) with three per-episode action buttons (buscar, importar archivo, añadir torrent), each wired to a real per-episode acquisition flow (`010-episode-acquisition`) |
 
@@ -219,40 +219,32 @@ is a worked example, written after the fact against a feature that shipped.
 
 ## Current state — do not treat these files as reference code
 
-Measured 2026-08-13, after `009-show-detail` landed. Re-run the typechecks rather than trusting the
-counts — the numbers are what an agent reports before and after a change to prove it added nothing.
+Measured 2026-08-17, after `011-av1-transcode` landed. Re-run the typechecks rather than trusting
+the counts — the numbers are what an agent reports before and after a change to prove it added
+nothing.
 
-**`api` — clean, 0 errors.** `bin/cli api npx --no tsc --noEmit`. The stale
-`src/auth/test/auth.service.spec.ts` (written against a `login()` signature that never existed —
-see `002-auth-login`'s spec, formerly Out of Scope there) is gone; deleting it is what took `api`
-from 3 errors to 0. The TMDB search slice that used to be listed here also now compiles;
-`TMDBClient.ts` is gone, replaced by `src/clients/tmdb/{client,types}.ts`. `005-movie-search` added
-a ninth suite (`movies.service.spec.ts`); `006-media-search` added a tenth
-(`shows.service.spec.ts`). `007-library-listing` added three cases to that tenth suite rather than
-an eleventh; `008-movie-detail` added three more to the ninth (`movies.service.spec.ts`'s
-`findOneFromDb` block) for the same reason; `009-show-detail` added four more to the tenth
-(`shows.service.spec.ts`'s own `findOneFromDb` block), same reasoning. Tests are now **94** across
-**10** suites (`bin/npm api test`, run 2026-08-13). `008-movie-detail` also deleted
-`src/movies/movies.controller.ts`, an unregistered REST controller left over from
-`005-movie-search` — it had no route registered anywhere and no caller.
+**`api` — clean, 0 errors.** `bin/cli api npx --no tsc --noEmit`. `010-episode-acquisition` added
+an eleventh suite (`episodes.service.spec.ts`); `011-av1-transcode` added a twelfth
+(`languages.service.spec.ts`) and a thirteenth (`process-jobs.service.spec.ts`). Tests are now
+**122** across **13** suites (`bin/npm api test`, run 2026-08-17). `services/api/CLAUDE.md` has the
+module-by-module detail.
 
-**`web` — 12 errors across the same 5 pre-GraphQL files**, none on a path the running UI uses:
+**`web` — 11 errors across 4 pre-GraphQL files**, none on a path the running UI uses:
 `components/import/importFolderModal.tsx` and `ImportMagnetSeasonModal.tsx` (both import a
 non-existent `@/actions/jobs`, both pass `value` to a component that only takes `defaultValue`),
-`components/search/SearchTorrentModal.tsx` (imports `@prisma/client` — a Constitution Article II
-violation), `SearchForm.tsx` and `ResultsForm.tsx` (missing `@/icons`, implicit `any`).
-`services/web/CLAUDE.md` has the table. (Previously logged here as 13 — that count was never
-correct; 12 is what the same five files have always produced.) The 6th error that used to be
-listed here — `Cannot find module '@/components/movies/Shows'` on `app/(dashboard)/shows/page.tsx`
-— is **gone**: `007-library-listing` finished that untracked paste into the real series listing.
-`009-show-detail` rewrote the (previously broken, uncommitted) `shows/[id]/page.tsx`,
-`components/shows/Show.tsx` and `components/shows/SeasonAccordion.tsx` from scratch against a real
-`show(id)` query — none of the three contribute an error either. Verified 2026-08-13: `bin/cli web
-npx --no tsc --noEmit` reports exactly 12 errors across those 5 files. `bin/npm web run build` still
-fails on them (`next.config.ts` sets no `ignoreBuildErrors`), independently of anything this feature
-touched.
+`SearchForm.tsx` and `ResultsForm.tsx` (missing `@/icons`, implicit `any`).
+`services/web/CLAUDE.md` has the table. `010-episode-acquisition` closed
+`SearchTorrentModal.tsx`'s `@prisma/client` import (a Constitution Article II violation), taking
+the count from 12/5 files to 11/4; `011-av1-transcode` verified it stayed there. `bin/npm web run
+build` still fails on the 4 remaining files (`next.config.ts` sets no `ignoreBuildErrors`),
+independently of anything either feature touched.
 
-**`worker` — clean, 0 errors.**
+**`worker` — clean, 0 errors, and now has real tests.** `011-av1-transcode` added
+`vitest.config.ts`'s first three real suites: `src/ffmpeg/remux-detection.spec.ts`,
+`src/ffmpeg/params.spec.ts`, `src/ffmpeg/buildCommand.spec.ts`, alongside the pre-existing
+`src/api/graphql-client.spec.ts`. Tests are now **31** across **4** suites (`bin/npm worker test`,
+run 2026-08-17) — the service's former "no tests, and no `vitest.config.ts`" debt entry is gone;
+see `services/worker/CLAUDE.md`.
 
 ## Known debt
 

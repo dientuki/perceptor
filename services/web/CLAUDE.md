@@ -194,6 +194,25 @@ this pattern for any new acquisition entry point rather than reintroducing a bar
 `009-show-detail`) — the placeholder stub that used to live in `src/types/media.ts` is gone. Import
 `Episode` from `@/actions/shows`, never redeclare it.
 
+## Language pickers, three call sites sharing one component (`011-av1-transcode`)
+
+`src/actions/languages.ts` (`getLanguages`, `setPreferredLanguagesAction`,
+`setMoviePreferredLanguagesAction`, `setShowPreferredLanguagesAction`) follows the standard
+server-action shape above; `getLanguages` uses `redirectToClearSession` (awaited during a Server
+Component render, on `/settings` and both detail pages), the three writes use
+`redirectIfUnauthenticated`. `src/components/media/LanguagePicker.tsx` is the one client component
+all three call sites share — a multi-select bound to a `useActionState` action, generic over
+`options`/`selected`/which action it's bound to. `src/components/settings/PreferredLanguagesCard.tsx`
+wraps it for the global preference and renders on `/settings` as its **own card**, not inside
+`SettingsForm` — that form posts through `updateSettings`/`EDITABLE_KEYS`, installation-wide
+key/value config, and a language preference is per-user, not a `SETTINGS_CATALOG` entry.
+`Movie.tsx` and `Show.tsx` each render the same `LanguagePicker` bound to their own per-title
+action; `Show.tsx` stays a Server Component, the picker is a client child. None of the three
+listing queries (`getMovies`/`getShows`, or the picker's own `options` source `getLanguages`) are
+touched by this — `Movie.preferredLanguages`/`Show.preferredLanguages` are `api` field resolvers
+that only run when selected, so `getMovieById`/`getShowById` select the field but the listing
+queries deliberately do not, or 200 rows in a listing become 200 preference queries.
+
 ## Library listings: two parallel screens, not one parameterized one (`007-library-listing`)
 
 `/movies` and `/shows` are deliberately **separate** implementations — `src/actions/movies.ts`'s
@@ -282,8 +301,11 @@ untracked paste into the real series listing. `009-show-detail` similarly rewrot
 `src/app/(dashboard)/shows/[id]/page.tsx`, `src/components/shows/Show.tsx` and
 `src/components/shows/SeasonAccordion.tsx` from scratch (they were broken, uncommitted drafts at
 the time); `010-episode-acquisition` wired `SeasonAccordion.tsx`'s three per-episode buttons to
-real modals (see the section above) — neither ever contributed to this count. Verified 2026-08-14:
-`bin/cli web npx --no tsc --noEmit` reports 11 errors across the 4 files above and nothing else.
+real modals (see the section above) — neither ever contributed to this count.
+`src/actions/languages.ts`, `src/types/languages.ts`, `LanguagePicker.tsx`,
+`PreferredLanguagesCard.tsx` and the touched fetches in `src/actions/{auth,movies,shows}.ts`
+(`011-av1-transcode`) don't contribute either. Verified 2026-08-17: `bin/cli web npx --no tsc
+--noEmit` reports 11 errors across the 4 files above and nothing else.
 
 `bin/npm web run lint` is **not** a usable gate today: `biome check` reports ~1598 errors and ~96
 warnings across the pre-existing template, with or without any given change. Judge a new file by

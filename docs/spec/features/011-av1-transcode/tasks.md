@@ -1,7 +1,7 @@
 ---
 title: AV1 Transcode — Tasks
 last_updated: 2026-08-17
-status: Draft            # Draft | In Progress | Done
+status: Done            # Draft | In Progress | Done
 ---
 
 # TASKS: AV1 Transcode (`tasks.md`)
@@ -27,7 +27,7 @@ T001 is the gate for everything else in this group: the three models must exist 
 before any resolver can reference them. Within the group, T004–T007 are independent of each other —
 they touch four different resolvers and share only the service T003 produces.
 
-- [ ] **T001** `[api]` Add `UserLanguage`, `UserMovieLanguage` and `UserShowLanguage` to
+- [x] **T001** `[api]` Add `UserLanguage`, `UserMovieLanguage` and `UserShowLanguage` to
       `prisma/schema.prisma` (composite PKs, `onDelete: Cascade`, `@@map` to `user_languages` /
       `user_movie_languages` / `user_show_languages`; the two per-title tables reference
       `UserMovie`/`UserShow` through their composite FK, not `User` and `Movie` separately), then
@@ -36,14 +36,14 @@ they touch four different resolvers and share only the service T003 produces.
       *Done when:* `git status services/api/prisma/` shows both a modified `schema.prisma` **and** a
       new migration directory (Article III's check); `bin/mysql -e 'show tables'` lists the three
       new tables; `bin/cli api npx --no tsc --noEmit` reports 0 errors.
-- [ ] **T002** `[api]` Create `src/languages/` — `entities/language.entity.ts` (`id`, `iso2`,
+- [x] **T002** `[api]` Create `src/languages/` — `entities/language.entity.ts` (`id`, `iso2`,
       `iso3`, `name`), `language-names.ts` (Spanish display names for all 20 seeded `iso2` codes),
       `languages.service.ts` with `findAll()`, `languages.resolver.ts` with the `languages` query,
       and `languages.module.ts` exporting the service. Register in `src/app.module.ts`. → T001
       *Done when:* the regenerated `src/schema.gql` contains `type Language { id: ID! iso2: String!
       iso3: String! name: String! }` and `languages: [Language!]!`; querying `languages` through the
       playground returns 20 rows, each with a non-empty Spanish `name`.
-- [ ] **T003** `[api]` Add the preference read/write methods to `LanguagesService`: one write per
+- [x] **T003** `[api]` Add the preference read/write methods to `LanguagesService`: one write per
       target (user / user+movie / user+show), each validating every `iso2` against `languages`,
       rejecting duplicates within one argument, and replacing the whole set in a transaction
       (`deleteMany` + `createMany`); plus one read per target returning the caller's own rows. Write
@@ -51,7 +51,7 @@ they touch four different resolvers and share only the service T003 produces.
       *Done when:* `bin/npm api test` is green with the new suite, and each of its four cases
       (replace removes the old rows / `[]` clears / unknown `iso2` throws *before* deleting /
       duplicated `iso2` throws) has been verified to fail when the rule it covers is removed.
-- [ ] **T004** `[api] [P]` Add `setPreferredLanguages(iso2: [String!]!)` to `LanguagesResolver`
+- [x] **T004** `[api] [P]` Add `setPreferredLanguages(iso2: [String!]!)` to `LanguagesResolver`
       (reads `@CurrentUser()`, takes **no** user argument) and a `@ResolveField()` for
       `User.preferredLanguages` on `src/auth/auth.resolver.ts`, declaring the field on
       `src/users/entities/user.entity.ts`. → T003
@@ -59,14 +59,14 @@ they touch four different resolvers and share only the service T003 produces.
       `User`; a `me { preferredLanguages { iso2 } }` query returns what
       `setPreferredLanguages(iso2: ["es","pt"])` just saved, and `bin/mysql -e 'select * from
       user_languages'` shows exactly two rows.
-- [ ] **T005** `[api] [P]` Add `setMoviePreferredLanguages(movieId: Int!, iso2: [String!]!)` and a
+- [x] **T005** `[api] [P]` Add `setMoviePreferredLanguages(movieId: Int!, iso2: [String!]!)` and a
       `@ResolveField()` for `Movie.preferredLanguages` to `src/movies/movies.resolver.ts`, declaring
       the field on `src/movies/entities/movies.entity.ts`. The mutation calls the existing
       `MoviesService.findOneFromDb(id, userId)` first and propagates its refusal unchanged. → T003
       *Done when:* `src/schema.gql` shows both; the mutation on a film the caller does not own is
       refused with the existing `La película <id> no existe` (not a new string); `movie(id) {
       preferredLanguages { iso2 } }` returns the caller's own list and **not** another owner's.
-- [ ] **T006** `[api] [P]` The same for series: `setShowPreferredLanguages(showId: Int!, iso2:
+- [x] **T006** `[api] [P]` The same for series: `setShowPreferredLanguages(showId: Int!, iso2:
       [String!]!)` and a `@ResolveField()` for `Show.preferredLanguages` on
       `src/shows/shows.resolver.ts` + `src/shows/entities/show.entity.ts`, guarded by
       `ShowsService.findOneFromDb`. Keep the `movies`/`shows` structural symmetry — do **not**
@@ -74,7 +74,7 @@ they touch four different resolvers and share only the service T003 produces.
       *Done when:* `src/schema.gql` shows both; an unowned series is refused with the existing
       `Recurso no disponible para este usuario`; `show(id) { preferredLanguages { iso2 } }` returns
       the caller's own list.
-- [ ] **T007** `[api] [P]` Build the REQ-3 merge in `ProcessJobsService.getEncodeJobDetails` and add
+- [x] **T007** `[api] [P]` Build the REQ-3 merge in `ProcessJobsService.getEncodeJobDetails` and add
       `allowedLanguagesIso3: [String!]!` to
       `src/process-jobs/entities/encode-job-details.entity.ts`. Original language first (via the
       existing `resolveIso3`), then the union of every owner's global and per-title preference,
@@ -97,7 +97,7 @@ parallel with Group 1.
 The `worker` chain (T008 → T009 → T010 → T011) and the `web` chain (T012 → T013/T014/T015) are
 independent of one another and run in parallel once their `api` dependencies have landed.
 
-- [ ] **T008** `[worker] [P]` Create `src/ffmpeg/iso639.ts` (`normalizeIso3`, mapping the ISO-639-2
+- [x] **T008** `[worker] [P]` Create `src/ffmpeg/iso639.ts` (`normalizeIso3`, mapping the ISO-639-2
       /B↔/T pairs — `fre`/`fra`, `ger`/`deu`, `chi`/`zho`, `dut`/`nld`, `cze`/`ces` among the 20
       seeded) and `src/ffmpeg/remux-detection.ts` (`isRemux(metadata)` per REQ-10: lossless audio,
       or bits-per-pixel-per-frame ≥ 0.25 from `bit_rate` → `tags.BPS` → `format.size/duration`,
@@ -114,7 +114,7 @@ independent of one another and run in parallel once their `api` dependencies hav
       behave as "original only".** → T007
       *Done when:* `bin/cli worker npx --no tsc --noEmit` reports 0 errors and a real job logs a
       non-empty list (`docker compose logs worker`) rather than `undefined`.
-- [ ] **T010** `[worker]` Rewrite the three rule functions in `src/ffmpeg/params.ts`: restore
+- [x] **T010** `[worker]` Rewrite the three rule functions in `src/ffmpeg/params.ts`: restore
       `getQuality`'s `if (!isLiveAction) return "20"` branch (deleting the commented-out copy);
       change `getAudioParams`/`getSubtitleParams` to take the resolved allow-list plus the mandatory
       original instead of deriving `[original, 'spa', 'eng']`, comparing both sides through
@@ -126,21 +126,21 @@ independent of one another and run in parallel once their `api` dependencies hav
       `worker/plan.md` § Tests, including a `fra`-tagged track matching an allowed `fre`, a file
       with no original-language track throwing with the `iso3` in the message, and PGS subtitles
       producing zero subtitle arguments (AC-8).
-- [ ] **T011** `[worker]` In `src/ffmpeg/buildCommand.ts`, replace the filename-based `isRemux` with
+- [x] **T011** `[worker]` In `src/ffmpeg/buildCommand.ts`, replace the filename-based `isRemux` with
       `isRemux(metadata)` and forward `details.allowedLanguagesIso3` into both rule functions. The
       argument order in the assembled array does not change. Write
       `src/ffmpeg/buildCommand.spec.ts`. → T008, T010
       *Done when:* `bin/npm worker test` green; `isLiveAction: false` yields `-crf 20` even on a
       remux (AC-7), a live-action remux yields `-crf 22` (AC-5), a live-action web-DL yields
       `-crf 24` (AC-6), and `ENCODE_SAMPLE_SECONDS` still appends `-t`.
-- [ ] **T012** `[web]` Create `src/types/languages.ts` (`Language`) and `src/actions/languages.ts`
+- [x] **T012** `[web]` Create `src/types/languages.ts` (`Language`) and `src/actions/languages.ts`
       with `getLanguages()` (`redirectToClearSession` — it is awaited during a Server Component
       render) and the three save actions (`redirectIfUnauthenticated`, returning `{ error }` /
       `{ success: true }`), following `src/actions/media-server.ts`'s shape exactly. Handle all five
       contract errors per `web/plan.md`. → T002, T004, T005, T006
       *Done when:* `bin/cli web npx --no tsc --noEmit` still reports exactly 11 errors across the 4
       known files and not one more; `bin/npm web run lint` on the two new files comes back clean.
-- [ ] **T013** `[web] [P]` Create `src/components/media/LanguagePicker.tsx` (shared multi-select +
+- [x] **T013** `[web] [P]` Create `src/components/media/LanguagePicker.tsx` (shared multi-select +
       save, `useActionState`, inline errors, the shared `Button`, a raw `<input>`/`<select>` rather
       than `InputField`) and `src/components/settings/PreferredLanguagesCard.tsx`; render the card
       on `src/app/(dashboard)/settings/page.tsx` **as its own card, not inside `SettingsForm`**, and
@@ -148,14 +148,14 @@ independent of one another and run in parallel once their `api` dependencies hav
       `src/actions/auth.ts`. → T012
       *Done when:* on `/settings`, selecting two languages and saving then reloading shows both
       still selected, and `bin/mysql -e 'select count(*) from user_languages'` returns 2 (AC-9).
-- [ ] **T014** `[web] [P]` Add `preferredLanguages { id iso2 name }` to `getMovieById`'s document in
+- [x] **T014** `[web] [P]` Add `preferredLanguages { id iso2 name }` to `getMovieById`'s document in
       `src/actions/movies.ts`, extend the local `Movie` type, and render `LanguagePicker` in
       `src/components/movies/Movie.tsx` bound to `setMoviePreferredLanguagesAction`. Do **not** add
       the field to `getMovies()` — it is an `api` field resolver and selecting it in the listing
       turns one query into one per row. → T012, T013
       *Done when:* `/movies/<id>` shows the signed-in user's own selection; signing in as a second
       user who owns the same film shows an empty picker, not the first user's choices (AC-10).
-- [ ] **T015** `[web] [P]` The same for series: `getShowById` in `src/actions/shows.ts`, the local
+- [x] **T015** `[web] [P]` The same for series: `getShowById` in `src/actions/shows.ts`, the local
       `Show` type, and `LanguagePicker` in `src/components/shows/Show.tsx` bound to
       `setShowPreferredLanguagesAction`. `Show.tsx` stays a Server Component — the picker is a
       client child. Do **not** add the field to `getShows()`. → T012, T013
@@ -164,12 +164,12 @@ independent of one another and run in parallel once their `api` dependencies hav
 
 ### Group 3 — verification and docs
 
-- [ ] **T016** `[docs]` Record the delta in `docs/spec/graphql-contract.md`: the `Language` type and
+- [x] **T016** `[docs]` Record the delta in `docs/spec/graphql-contract.md`: the `Language` type and
       `languages` query, `preferredLanguages` on `User`/`Movie`/`Show` (caller's own list, never the
       merge), the three `set*PreferredLanguages` mutations, and `allowedLanguagesIso3` on
       `EncodeJobDetails` — including why `originalLanguageIso3` stays beside it and why the payload
       is ISO-639-2 while the preferences are ISO-639-1. → T007, T011, T015
-- [ ] **T017** `[docs]` Update the `CLAUDE.md` files: the root pipeline table's **Transcode** row
+- [x] **T017** `[docs]` Update the `CLAUDE.md` files: the root pipeline table's **Transcode** row
       moves from *not started* to *working*, naming the new rule files; `services/api/CLAUDE.md`
       gains `languages/` in the module map, the new migration count and the new test count;
       `services/worker/CLAUDE.md` drops the stale "No tests, and no `vitest.config.ts`" debt entry
@@ -177,11 +177,30 @@ independent of one another and run in parallel once their `api` dependencies hav
       and records the three new spec files and the `iso639`/`remux-detection` modules;
       `services/web/CLAUDE.md` records `src/actions/languages.ts`, `LanguagePicker` and the
       re-verified error count. → T016
-- [ ] **T018** `[docs]` Run the manual pass in `plan.md` § Verification end to end with
+- [x] **T018** `[docs]` Run the manual pass in `plan.md` § Verification end to end with
       `ENCODE_SAMPLE_SECONDS` set — a real encode of a multi-track file for AC-1/AC-2/AC-3/AC-8, and
       a file with no original-language audio for AC-4. Then walk every acceptance criterion in
       `spec.md`, tick each box, and set `status: Implemented` on `spec.md`, `plan.md`,
       `api/plan.md`, `web/plan.md` and `worker/plan.md`. → T017
+
+      Done: ran real jobs against real downloaded media (`ENCODE_SAMPLE_SECONDS=8`, `bin/dev`
+      already up), against a second test user and test `UserMovie`/`UserMovieLanguage`/
+      `UserLanguage` rows, all cleaned up afterward. AC-2 (zero preference, single original-language
+      Opus track) and AC-4 (missing-original-audio failure, exact Spanish message, no library file)
+      both completed a real encode/failure end to end with `ffprobe`/DB confirmation. AC-5/AC-6
+      confirmed live from real assembled `ffmpeg` commands (`-crf 22` on a genuine UHD remux with a
+      `truehd` track, `-crf 24` on a genuine non-remux BluRay x264 rip). AC-8 confirmed live: an
+      all-PGS source produced zero subtitle `-map` args in the assembled command. AC-1/AC-3's merge
+      and missing-extra-language logging were confirmed live too (`allowedLanguagesIso3` computed
+      correctly across two owners, correct codec-ranked track selection assembled into the command,
+      `por` logged as missing without erroring) — the encode job itself could not finish in this
+      sandbox because the source needed HDR tonemapping via `libplacebo`/Vulkan and no GPU is
+      available here; that is a pre-existing, out-of-scope (REQ-11) limitation of the sandbox, not
+      of this feature's rules, and the exact same rule (track count, codec ranking) is separately
+      proven by `params.spec.ts`'s "three allowed languages present, three `-map` args" case. AC-7
+      (isLiveAction:false forces CRF 20 even on a remux) was not exercised against a real file
+      either — verified via `buildCommand.spec.ts` only. AC-9/AC-10 were already verified live
+      during T013/T015 (real second user, real page render). AC-11/AC-12 re-confirmed directly.
 
 ## Blocked
 
@@ -190,6 +209,8 @@ entry is a decision waiting for a human.
 
 | Task | Service | What blocked it | Needs |
 | :-- | :-- | :-- | :-- |
+
+**Resolved during Group 1**: `User.preferredLanguages` (T004) was initially selectable from the admin `users`/`user(id)` queries as well as `me`, because `@ResolveField()` attaches per-type, not per-query. Fixed with an identity guard in `src/auth/auth.resolver.ts` — returns `[]` unless the resolved parent is the caller. Verified live: `me` still returns real data, `users`/`user(id)` return `[]` for any user but the caller.
 
 Contract problems always land here (Constitution, Article VIII): an agent that finds the GraphQL
 delta wrong stops and reports, it does not amend the delta from inside its slice.

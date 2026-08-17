@@ -39,6 +39,16 @@ export class EncodeJobDetails {
   @Field()
   originalLanguageIso3: string;
 
+  // Every ISO-639-2/B code the encode is allowed to keep for audio/subtitles —
+  // the original language plus the union of every owner's global and
+  // per-title preference (REQ-3), deduplicated, original first. Never empty.
+  // originalLanguageIso3 stays a separate field even though it duplicates the
+  // first element here: the worker needs to know *which* of these is
+  // mandatory (REQ-6), and inferring that from list position is a rule that
+  // breaks the first time someone reorders the list.
+  @Field(() => [String])
+  allowedLanguagesIso3: string[];
+
   @Field()
   isLiveAction: boolean;
 

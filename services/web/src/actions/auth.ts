@@ -1,16 +1,19 @@
-'use server'
+"use server";
 
-import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
-import { fetchGraphQL } from '@/lib/graphql-client';
-import { redirectToClearSession } from '@/lib/auth-session';
-import { CONFIG } from '@/lib/config';
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { redirectToClearSession } from "@/lib/auth-session";
+import { CONFIG } from "@/lib/config";
+import { fetchGraphQL } from "@/lib/graphql-client";
+
+import type { Language } from "@/types/languages";
 
 export interface CurrentUser {
   id: string;
   name: string;
   username: string;
   isAdmin: boolean;
+  preferredLanguages: Language[];
 }
 
 const LOGIN_MUTATION = `
@@ -25,68 +28,72 @@ const LOGIN_MUTATION = `
       }
     }
   }
-`
+`;
 
-export async function loginAction(redirectTo: string, prevState: any, formData: FormData) {
-  const username = formData.get('username')
-  const password = formData.get('password')
-  const rememberMe = formData.get('rememberMe') === 'on'
-  const destination = (redirectTo && redirectTo.startsWith('/')) ? redirectTo : '/dashboard';
+export async function loginAction(
+  redirectTo: string,
+  prevState: any,
+  formData: FormData,
+) {
+  const username = formData.get("username");
+  const password = formData.get("password");
+  const rememberMe = formData.get("rememberMe") === "on";
+  const destination =
+    redirectTo && redirectTo.startsWith("/") ? redirectTo : "/dashboard";
 
   try {
     const { data, errors } = await fetchGraphQL(LOGIN_MUTATION, {
-        loginInput: { username, password, rememberMe }
+      loginInput: { username, password, rememberMe },
     });
 
     // Manejo de errores específicos de GraphQL
     if (errors && errors.length > 0) {
-      return { error: errors[0].message || 'Error al iniciar sesión' }
+      return { error: errors[0].message || "Error al iniciar sesión" };
     }
 
-    const token = data?.login?.access_token
+    const token = data?.login?.access_token;
     if (!token) {
-      return { error: 'No se recibió un token válido.' }
+      return { error: "No se recibió un token válido." };
     }
 
     // Guardar el token retornado en una cookie HttpOnly.
     // rememberMe: cookie persistente de 30 días. Sin tildar: cookie de sesión
     // (ni maxAge ni expires), el navegador la descarta al cerrarse.
-    const cookieStore = await cookies()
+    const cookieStore = await cookies();
     cookieStore.set(CONFIG.authCookie, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
       ...(rememberMe ? { maxAge: 60 * 60 * 24 * 30 } : {}),
-    })
-
+    });
   } catch (err) {
-    return { error: 'Error de conexión con el servidor GraphQL.' }
+    return { error: "Error de conexión con el servidor GraphQL." };
   }
 
-  redirect(destination)
+  redirect(destination);
 }
 
 const LOGOUT_MUTATION = `
   mutation Logout {
     logout
   }
-`
+`;
 
 export async function logoutAction() {
   // Best-effort: the mutation needs the cookie still present as its bearer
   // credential, so it must run before the cookie is deleted. A failed
   // no-op logout must not prevent the user from actually signing out locally.
   try {
-    await fetchGraphQL(LOGOUT_MUTATION)
+    await fetchGraphQL(LOGOUT_MUTATION);
   } catch (err) {
     // swallow — see comment above
   }
 
-  const cookieStore = await cookies()
-  cookieStore.delete(CONFIG.authCookie)
+  const cookieStore = await cookies();
+  cookieStore.delete(CONFIG.authCookie);
 
-  redirect('/login')
+  redirect("/login");
 }
 
 const ME_QUERY = `
@@ -96,9 +103,14 @@ const ME_QUERY = `
       name
       username
       isAdmin
+      preferredLanguages {
+        id
+        iso2
+        name
+      }
     }
   }
-`
+`;
 
 export async function getCurrentUser(): Promise<CurrentUser> {
   const { data, errors } = await fetchGraphQL<{ me: CurrentUser }>(ME_QUERY);
@@ -111,11 +123,11 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     // is what redirectIfUnauthenticated does, and would crash in this
     // context). See src/app/api/auth/clear-session/route.ts.
     redirectToClearSession(errors);
-    throw new Error(errors[0]?.message || 'Error al obtener el usuario actual');
+    throw new Error(errors[0]?.message || "Error al obtener el usuario actual");
   }
 
   if (!data?.me) {
-    throw new Error('El API no devolvió el usuario actual');
+    throw new Error("El API no devolvió el usuario actual");
   }
 
   return data.me;

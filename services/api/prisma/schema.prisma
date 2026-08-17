@@ -71,6 +71,8 @@ model User {
   movies UserMovie[]
   shows  UserShow[]
 
+  languages UserLanguage[]
+
   @@map("users")
 }
 
@@ -84,6 +86,8 @@ model UserMovie {
   movie   Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+
+  languages UserMovieLanguage[]
 
   @@id([userId, movieId])
   @@index([movieId])
@@ -101,6 +105,8 @@ model UserShow {
 
   createdAt DateTime @default(now())
 
+  languages UserShowLanguage[]
+
   @@id([userId, showId])
   @@index([showId])
   @@map("user_shows")
@@ -111,7 +117,57 @@ model Language {
   iso2 String @unique
   iso3 String
 
+  userPreferences      UserLanguage[]
+  userMoviePreferences UserMovieLanguage[]
+  userShowPreferences  UserShowLanguage[]
+
   @@map("languages")
+}
+
+// A user's global language preference, applied to every title in their
+// library unless overridden per-title (see UserMovieLanguage/UserShowLanguage).
+model UserLanguage {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  languageId Int
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  @@id([userId, languageId])
+  @@index([languageId])
+  @@map("user_languages")
+}
+
+// A user's extra per-title language preference for a film, added to their
+// global preference. Keyed through UserMovie (not User + Movie separately)
+// so the preference is removed automatically when the ownership row is.
+model UserMovieLanguage {
+  userId  String
+  movieId Int
+  userMovie UserMovie @relation(fields: [userId, movieId], references: [userId, movieId], onDelete: Cascade)
+
+  languageId Int
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  @@id([userId, movieId, languageId])
+  @@index([languageId])
+  @@map("user_movie_languages")
+}
+
+// A user's extra per-title language preference for a series, added to their
+// global preference. Keyed through UserShow (not User + Show separately) so
+// the preference is removed automatically when the ownership row is.
+model UserShowLanguage {
+  userId String
+  showId Int
+  userShow UserShow @relation(fields: [userId, showId], references: [userId, showId], onDelete: Cascade)
+
+  languageId Int
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  @@id([userId, showId, languageId])
+  @@index([languageId])
+  @@map("user_show_languages")
 }
 
 // Origen del material para un pedido: torrent, archivo o carpeta local

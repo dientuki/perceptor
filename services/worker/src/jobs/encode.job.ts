@@ -15,6 +15,7 @@ export type EncodeJobDetails = {
   year: number | null;
   originalLanguage: string;
   originalLanguageIso3: string;
+  allowedLanguagesIso3: string[];
   isLiveAction: boolean;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -41,7 +42,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 isLiveAction
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedLanguagesIso3 isLiveAction
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot
       }
@@ -52,6 +53,10 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   if (!details) {
     throw new Error(`processJob ${processJobId} no existe`);
   }
+
+  console.log(
+    `[encode] ${processJobId}: allowedLanguagesIso3=${JSON.stringify(details.allowedLanguagesIso3)} originalLanguageIso3=${details.originalLanguageIso3}`,
+  );
 
   try {
     const outputPath = buildOutputPath(details);
@@ -85,7 +90,11 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     const { ffmpegCommand } = await encode(
       details.inputFilePath,
       outputPath,
-      { originalLanguageIso3: details.originalLanguageIso3, isLiveAction: details.isLiveAction },
+      {
+        originalLanguageIso3: details.originalLanguageIso3,
+        allowedLanguagesIso3: details.allowedLanguagesIso3,
+        isLiveAction: details.isLiveAction,
+      },
       onProgress,
     );
 

@@ -43,6 +43,7 @@ export class ProcessJobsService {
 
     if (processJob.movie) {
       const { movie } = processJob;
+      const originalLanguageIso3 = await this.resolveIso3(movie.originalLanguage);
       return {
         ...base,
         kind: 'MOVIE',
@@ -50,18 +51,20 @@ export class ProcessJobsService {
         title: movie.title,
         year: movie.releaseDate?.getFullYear() ?? null,
         originalLanguage: movie.originalLanguage,
-        originalLanguageIso3: await this.resolveIso3(movie.originalLanguage),
+        originalLanguageIso3,
         isLiveAction: movie.isLiveAction,
         seasonNumber: null,
         episodeNumber: null,
         episodeTitle: null,
         outputRoot: await this.resolveOutputRoot('path_movies'),
+        allowedLanguagesIso3: await this.mergeMovieAllowedLanguages(movie.id, originalLanguageIso3),
       };
     }
 
     if (processJob.episode) {
       const { episode } = processJob;
       const { show } = episode.season;
+      const originalLanguageIso3 = await this.resolveIso3(show.originalLanguage);
       return {
         ...base,
         kind: 'EPISODE',
@@ -69,12 +72,13 @@ export class ProcessJobsService {
         title: show.title,
         year: show.releaseDate?.getFullYear() ?? null,
         originalLanguage: show.originalLanguage,
-        originalLanguageIso3: await this.resolveIso3(show.originalLanguage),
+        originalLanguageIso3,
         isLiveAction: show.isLiveAction,
         seasonNumber: episode.season.seasonNumber,
         episodeNumber: episode.episodeNumber,
         episodeTitle: episode.title,
         outputRoot: await this.resolveOutputRoot('path_shows'),
+        allowedLanguagesIso3: await this.mergeShowAllowedLanguages(show.id, originalLanguageIso3),
       };
     }
 
@@ -105,6 +109,54 @@ export class ProcessJobsService {
   private async resolveIso3(originalLanguageIso2: string): Promise<string> {
     const language = await this.prisma.language.findUnique({ where: { iso2: originalLanguageIso2 } });
     return language?.iso3 ?? 'eng';
+  }
+
+  // REQ-3: the set of languages the encode may keep is {original} ∪ every
+  // owner's global preference ∪ every owner's per-title preference,
+  // deduplicated, original first. A `Set` gives us both the dedup and the
+  // insertion-order guarantee for free. A title with no owners falls through
+  // to just the original — no special case needed (see plan.md's risk list).
+  private async mergeMovieAllowedLanguages(movieId: number, originalLanguageIso3: string): Promise<string[]> {
+    const owners = await this.prisma.userMovie.findMany({
+      where: { movieId },
+      select: {
+        user: { select: { languages: { select: { language: { select: { iso3: true } } } } } },
+        languages: { select: { language: { select: { iso3: true } } } },
+      },
+    });
+
+    return this.collectAllowedLanguages(originalLanguageIso3, owners);
+  }
+
+  private async mergeShowAllowedLanguages(showId: number, originalLanguageIso3: string): Promise<string[]> {
+    const owners = await this.prisma.userShow.findMany({
+      where: { showId },
+      select: {
+        user: { select: { languages: { select: { language: { select: { iso3: true } } } } } },
+        languages: { select: { language: { select: { iso3: true } } } },
+      },
+    });
+
+    return this.collectAllowedLanguages(originalLanguageIso3, owners);
+  }
+
+  private collectAllowedLanguages(
+    originalLanguageIso3: string,
+    owners: Array<{
+      user: { languages: Array<{ language: { iso3: string } }> };
+      languages: Array<{ language: { iso3: string } }>;
+    }>,
+  ): string[] {
+    const iso3Codes = new Set<string>([originalLanguageIso3]);
+    for (const owner of owners) {
+      for (const globalPref of owner.user.languages) {
+        iso3Codes.add(globalPref.language.iso3);
+      }
+      for (const titlePref of owner.languages) {
+        iso3Codes.add(titlePref.language.iso3);
+      }
+    }
+    return Array.from(iso3Codes);
   }
 
   async encodeStarted(processJobId: number) {

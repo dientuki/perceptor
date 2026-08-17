@@ -5,6 +5,7 @@
 // de la query, mismo criterio que paths/build-output-path.ts.
 export type EncodeInput = {
   originalLanguageIso3: string;
+  allowedLanguagesIso3: string[];
   isLiveAction: boolean;
 };
 

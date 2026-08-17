@@ -20,6 +20,7 @@ import { MediaServerModule } from './media-server/media-server.module';
 import { MediaModule } from './media/media.module';
 import { ShowsModule } from './shows/shows.module';
 import { EpisodesModule } from './episodes/episodes.module';
+import { LanguagesModule } from './languages/languages.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { EpisodesModule } from './episodes/episodes.module';
     MediaModule,
     ShowsModule,
     EpisodesModule,
+    LanguagesModule,
   ],
   providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })

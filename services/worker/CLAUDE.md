@@ -36,7 +36,7 @@ src/api/graphql-client.ts  fetchGraphQL — throws on json.errors, deliberately
 src/jobs/                the two handlers
 src/scan/scan-folder.ts  file inventory for source-ready
 src/encode/              the driver seam (see below)
-src/ffmpeg/              buildCommand · params · metadata · runner
+src/ffmpeg/              buildCommand · params · metadata · runner · remux-detection · iso639
 src/paths/build-output-path.ts   composes the final library path
 ```
 
@@ -72,6 +72,36 @@ The worker does **not** read `DOWNLOADS_DIR`/`DESTINATIONS_DIR`; it never read t
 latter was removed. Reintroducing an env lookup for a destination path violates Constitution,
 Article V.
 
+## Audio/subtitle/quality rules read a resolved list, never guess (`011-av1-transcode`)
+
+`src/ffmpeg/params.ts`'s `getAudioParams`/`getSubtitleParams` take the allow-list `api` already
+merged and resolved (`EncodeInput.allowedLanguagesIso3`, plus the mandatory
+`originalLanguageIso3`) — they no longer derive their own `[original, 'spa', 'eng']`. This service
+never queries the database and never re-derives that list from an env var (Constitution, Article
+III); a missing edit to either `EncodeJobDetails` (`src/jobs/encode.job.ts`) or `EncodeInput`
+(`src/encode/types.ts`) means the field silently arrives `undefined`, which reads as "keep the
+original language only" with no error anywhere.
+
+Every language comparison in `params.ts` goes through `src/ffmpeg/iso639.ts`'s `normalizeIso3`
+first, on both sides. The seeded `languages` table stores ISO-639-2/**B** (`fre`, `ger`, `chi`,
+`dut`, `cze`), but Matroska files commonly tag the same languages ISO-639-2/**T** (`fra`, `deu`,
+`zho`, `nld`, `ces`) — comparing the raw strings silently drops a track the user actually asked
+for.
+
+A missing track in the title's **original** language is a hard failure — `getAudioParams` throws
+`El archivo no tiene ninguna pista de audio en el idioma original (<iso3>)`, which propagates out of
+`handleEncode`'s existing `try` and is reported through `encodeFailed`, no new plumbing. A missing
+track in any other allowed language is not an error; it's logged and skipped.
+
+`src/ffmpeg/remux-detection.ts`'s `isRemux(metadata, filename)` replaced a filename-substring guess
+in `buildCommand.ts` with a decision from the `ffprobe` metadata itself: a lossless audio track
+(`truehd`/`mlp`/`pcm_*`/`dts` with a `DTS-HD MA` profile), or bits-per-pixel-per-frame ≥ 0.25 — read
+from the video stream's `bit_rate`, then its `BPS` tag, then `format.size/duration`. **`ffprobe`
+reports `avg_frame_rate` as a rational string** (`"24000/1001"`), never a plain number — parsing it
+with `Number(...)` silently misclassifies every file as non-remux, forever, with no error anywhere;
+`remux-detection.spec.ts` proves this by asserting the naive implementation gets the case wrong. The
+filename substring is the last resort only, reached when no bitrate at all can be computed.
+
 ## Errors must not be swallowed
 
 `src/api/graphql-client.ts` throws on `json.errors`, and the comment at the top says why: `web`
@@ -89,20 +119,18 @@ leaves a half-written file at the destination.
 | :-- | :-- |
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate |
-| `bin/npm worker test` | `vitest run` — **fails with exit 1 today**: `No test files found`, see below |
+| `bin/npm worker test` | `vitest run` — 4 suites, 31 tests, green (`011-av1-transcode` added the first three real specs) |
 | `docker compose logs -f worker` | the job loop |
 
 ## Known debt
 
-- **No tests, and no `vitest.config.ts`.** Vitest is a devDependency and `"test": "vitest run"` is
-  declared, but there is not a single spec file — so the command does not quietly pass, it prints
-  `No test files found` and **exits 1**. Any CI that runs it is red before it starts. This is the
-  largest gap in the service, and it
-  matters more here than anywhere else: a wrong FFmpeg argument or a wrong output path produces a
-  job marked `completed` and a file nobody can find — no error in any log (Constitution,
-  Article IX). The obvious first targets are the pure functions: `ffmpeg/buildCommand.ts`,
-  `ffmpeg/params.ts`, `paths/build-output-path.ts`. Adding the config is part of writing the first
-  test.
+- **Test coverage is still partial.** `011-av1-transcode` added `vitest.config.ts` and the first
+  real specs (`src/ffmpeg/remux-detection.spec.ts`, `src/ffmpeg/params.spec.ts`,
+  `src/ffmpeg/buildCommand.spec.ts`, alongside the pre-existing `src/api/graphql-client.spec.ts`) —
+  the rule-dense files that decide *what* an encode keeps are now covered. `paths/build-output-path.ts`
+  and `ffmpeg/runner.ts` still have none. A wrong FFmpeg argument or a wrong output path on an
+  uncovered path still produces a job marked `completed` and a file nobody can find — no error in
+  any log (Constitution, Article IX).
 - **No linter or formatter.** No ESLint, no Prettier, no Biome — `api` has the first two, `web` has
   Biome, this service has nothing. Match the surrounding file by eye.
 - **Dependency skew with `api`**: `ioredis` ^5 here vs ^6 there, `@types/node` ^22 vs ^24. Not

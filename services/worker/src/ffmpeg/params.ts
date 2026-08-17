@@ -1,11 +1,13 @@
 // src/core/ffmpeg/params.ts
 
+import { normalizeIso3 } from './iso639';
+
 type quality = 'remux' | 'web';
 
 function getQuality(isLiveAction: boolean, quality: quality) {
   //anime 20, remux 22, para amz/web 24
 
-  //if (!isLiveAction) return "20";
+  if (!isLiveAction) return "20";
 
   if (quality === "remux") return "22";
 
@@ -83,7 +85,7 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
     if (hasDolbyVision) {
         return [
         "-map", "0:v:0",
-        "-vf", "scale=1920:2160,libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto",
+        "-vf", "libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto",
         "-c:v", "libsvtav1",
         "-crf", getQuality(isLiveAction, quality),
         "-preset", "4",
@@ -93,16 +95,25 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
       ];
     }
 
-    const hasHDR10 = Array.isArray(videoStream.side_data_list) && 
-      videoStream.side_data_list.some((sideData: any) => 
-        sideData.side_data_type === "Mastering display metadata" || 
-        sideData.side_data_type === "Content light level metadata"
-      );
+    //const hasHDR10 = Array.isArray(videoStream.side_data_list) && 
+    //  videoStream.side_data_list.some((sideData: any) => 
+    //    sideData.side_data_type === "Mastering display metadata" || 
+    //    sideData.side_data_type === "Content light level metadata"
+    //  );
+
+    const hasHDR10 = 
+      videoStream.color_transfer === 'smpte2084' || 
+      videoStream.color_transfer === 'arib-std-b67' || 
+      videoStream.color_primaries === 'bt2020' ||
+      (Array.isArray(videoStream.side_data_list) && videoStream.side_data_list.some((s: any) => 
+        s.side_data_type === "Mastering display metadata" ||
+        s.side_data_type === "Content light level metadata"
+      ));
 
     if (hasHDR10) {
       return [
         "-map", "0:v:0",
-        "-vf", "scale=1920:2160,libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto",
+        "-vf", "libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto",
         "-c:v", "libsvtav1",
         "-crf", getQuality(isLiveAction, quality),
         "-preset", "4",
@@ -111,6 +122,38 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
         "-metadata:s:v:0", 'title=AV1 1080p (Tonemapped from 4K HDR10)'
       ];
     }
+
+    return [
+      "-map", "0:v:0",
+      "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease",
+      "-c:v", "libsvtav1",
+      "-crf", getQuality(isLiveAction, quality),
+      "-preset", "4",
+      "-pix_fmt", "yuv420p10le",
+      "-color_range", "tv",
+      "-colorspace", "bt709",
+      "-color_primaries", "bt709",
+      "-color_trc", "bt709",
+      "-svtav1-params", svtav1,
+      "-metadata:s:v:0", 'title=AV1 1080p (Downscaled from 4K SDR)'
+    ];
+  }
+
+  if (codec === 'vc1') {
+    return [
+      "-map", "0:v:0",
+      "-c:v", "libsvtav1",
+      "-crf", getQuality(isLiveAction, quality),
+      "-preset", "4",
+      // Convertimos de 8-bit (yuv420p) a 10-bit para evitar banding en AV1
+      "-pix_fmt", "yuv420p10le",
+      "-color_range", "tv",
+      "-colorspace", "bt709",
+      "-color_primaries", "bt709",
+      "-color_trc", "bt709",
+      "-svtav1-params", `${svtav1}:tune=0`,
+      "-metadata:s:v:0", "title=AV1 1080p (SDR from VC-1)"
+    ];
   }
 
   // REGLA: Para cualquier otra cosa (AV1, HEVC, VC1, etc.), solo copiar.
@@ -122,33 +165,58 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
 }
 
 // src/core/ffmpeg/params.ts
-export function getAudioParams(audioStreams: any[], originalLang: string) {
-  // Aseguramos que sea 'eng' por defecto si viene vacío, pero respetamos el parámetro
-  const allowedLangs = Array.from(new Set([originalLang.toLowerCase(), 'spa', 'eng'])); // Evita duplicados si original es spa
-  
+//
+// REQ-4/REQ-6/REQ-7: the caller (buildFfmpegCommand) resolves the allow-list
+// server-side (api merges every owner's preference — see spec.md § REQ-3)
+// and hands it here already deduplicated, alongside the one language that is
+// mandatory. This function never derives its own list — see
+// docs/spec/features/011-av1-transcode/worker/plan.md, step 5.
+export function getAudioParams(
+  audioStreams: any[],
+  allowedLanguagesIso3: string[],
+  originalLanguageIso3: string,
+) {
+  // Both sides of every comparison go through normalizeIso3: ffprobe may tag
+  // a track with the ISO-639-2/T form (e.g. "fra") while the allow-list
+  // arrives in the /B form the `languages` table seeds ("fre") — see
+  // src/ffmpeg/iso639.ts.
+  const allowedLangs = Array.from(
+    new Set(allowedLanguagesIso3.map((lang) => normalizeIso3(lang))),
+  );
+  const originalLang = normalizeIso3(originalLanguageIso3);
+
   const blacklistWords = ['commentary', 'description', 'visual', 'sdh'];
   const priority = ['truehd', 'dts', 'eac3', 'ac3'];
 
   // 1. Filtrado inicial
   const candidates = audioStreams.filter(s => {
-    const lang = (s.tags?.language || "").toLowerCase();
+    const lang = normalizeIso3(s.tags?.language || "");
     const title = (s.tags?.title || "").toLowerCase();
     return allowedLangs.includes(lang) && !blacklistWords.some(word => title.includes(word));
   });
 
-  // 2. VALIDACIÓN CRUCIAL: ¿Está el idioma original entre los candidatos?
-  const hasOriginal = candidates.some(s => (s.tags?.language || "").toLowerCase() === originalLang.toLowerCase());
+  // 2. REQ-6: the original language is the only mandatory one. Its absence
+  // after filtering is a hard failure — no more copy-all fallback, which
+  // used to ship a file with the wrong audio and report success.
+  const hasOriginal = candidates.some(s => normalizeIso3(s.tags?.language || "") === originalLang);
 
-  // Si no hay idioma original (o el filtro nos dejó vacíos), COPY ALL
-  if (!hasOriginal || candidates.length === 0) {
-    console.warn(`[ffmpeg] no se encontró el idioma original (${originalLang}) tras filtrar. Haciendo COPY de todos los audios.`);
-    return ["-map", "0:a", "-c:a", "copy"];
+  if (!hasOriginal) {
+    throw new Error(
+      `El archivo no tiene ninguna pista de audio en el idioma original (${originalLanguageIso3})`,
+    );
   }
 
   // 3. Selección de UN solo mejor stream por idioma
   const selectedStreams: any[] = [];
   allowedLangs.forEach(langCode => {
-    let langStreams = candidates.filter(s => (s.tags?.language || "").toLowerCase() === langCode);
+    let langStreams = candidates.filter(s => normalizeIso3(s.tags?.language || "") === langCode);
+
+    // REQ-7: a requested language with no track present is not a failure —
+    // log it and move on. Only the original language (checked above) is
+    // mandatory.
+    if (langStreams.length === 0 && langCode !== originalLang) {
+      console.warn(`[ffmpeg] idioma permitido "${langCode}" no tiene pista de audio en el archivo; se continúa sin él.`);
+    }
 
     if (langStreams.length > 0) {
       // ---- NUEVA REGLA PARA ESPAÑOL (LATINO) ----
@@ -245,13 +313,17 @@ const languageMap: Record<string, string> = {
     eng: "English",
   };
 
-export function getSubtitleParams(subtitleStreams: any[], originalLang: string) {
-  const langOriginal = (originalLang || 'eng').toLowerCase();
-  const allowedLangs = Array.from(new Set([langOriginal, 'spa', 'eng']));
+export function getSubtitleParams(subtitleStreams: any[], allowedLanguagesIso3: string[]) {
+  // Same list the caller resolved for getAudioParams (REQ-8 shares the one
+  // allow-list with REQ-4 — see the assumption at the top of spec.md). Both
+  // sides normalized for the same /B-vs-/T reason as the audio track match.
+  const allowedLangs = Array.from(
+    new Set(allowedLanguagesIso3.map((lang) => normalizeIso3(lang))),
+  );
 
   // 1. Filtrado por tus 3 reglas
   const filtered = subtitleStreams.filter(s => {
-    const lang = (s.tags?.language || "").toLowerCase();
+    const lang = normalizeIso3(s.tags?.language || "");
     const bps = parseInt(s.tags?.BPS || "999"); // Si no tiene BPS, asumimos que es válido
     const codec = (s.codec_name || "").toLowerCase(); // guard: algún stream sin codec_name no debe tirar TypeError acá
 

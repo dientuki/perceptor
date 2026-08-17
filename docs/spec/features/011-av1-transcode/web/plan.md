@@ -2,7 +2,7 @@
 title: AV1 Transcode — web slice
 service: web
 last_updated: 2026-08-17
-status: Approved            # Draft | Approved | Implemented
+status: Implemented            # Draft | Approved | Implemented
 ---
 
 # PLAN: AV1 Transcode — `web` (`web/plan.md`)

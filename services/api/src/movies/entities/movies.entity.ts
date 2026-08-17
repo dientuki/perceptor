@@ -1,4 +1,5 @@
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
+import { Language } from '@/languages/entities/language.entity';
 
 @ObjectType()
 export class Movie {
@@ -40,4 +41,11 @@ export class Movie {
 
   @Field()
   updatedAt: Date;
+
+  // Resolved by MoviesResolver's @ResolveField() — the calling user's own
+  // per-title preference, never the merged set of every owner (that merge is
+  // encode-time only, see process-jobs.service.ts). Never populated by
+  // MoviesService itself.
+  @Field(() => [Language])
+  preferredLanguages: Language[];
 }

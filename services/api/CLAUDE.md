@@ -139,6 +139,20 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `SET … NX` so two concurrent registrations of the same series fetch once. `Show.seasonsSyncedAt`
   is set only once every season and episode has been written; it stays `null` on any failure or if
   hydration never ran, and the next `register()` for that series retries whenever it is `null`.
+- `languages/` — `LanguagesService`/`LanguagesResolver` (`011-av1-transcode`): the `languages`
+  query (reads the seeded `Language` table, deriving a Spanish `name` per `iso2` from
+  `language-names.ts`, not stored), plus the preference read/write methods backing
+  `setPreferredLanguages`/`setMoviePreferredLanguages`/`setShowPreferredLanguages` — each write
+  validates every `iso2` against `languages`, rejects duplicates within one argument, then replaces
+  the whole set atomically (`deleteMany` + `createMany` in a `$transaction`). Exported so `auth/`,
+  `movies/` and `shows/` can each host their own `@ResolveField()` for `preferredLanguages`, one per
+  type, deliberately not centralised into a shared resolver (same reasoning as the `movies`/`shows`
+  structural-twin pattern below). `User.preferredLanguages` (`auth.resolver.ts`) is a
+  worked example of a sharp edge in Nest's code-first GraphQL: a `@ResolveField()` attaches to the
+  **type**, not the query that reaches it, so without an identity guard comparing `@Parent()` against
+  `@CurrentUser()`, the field would also be readable through the admin `users`/`user(id)` queries
+  even though it is meant to be self-service only — see `docs/spec/graphql-contract.md`'s
+  `011-av1-transcode` section for the full story.
 - `media-sources/` — the `MediaSource` row that represents one acquisition attempt.
 - `episodes/` — `EpisodesService`/`EpisodesResolver` (`010-episode-acquisition`), `MoviesService`'s
   structural twin one level deeper: `findOneFromDb(episodeId, userId)` scoped through
@@ -157,7 +171,13 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   same way a movie-owned one does; a source already `ERROR` (superseded by a `force` replacement)
   is left untouched rather than acted on.
 - `process-jobs/` — the `ProcessJob` lifecycle: `sourceScanned` → encode queued → `encodeCompleted`.
-  Resolves `outputRoot` for the worker.
+  Resolves `outputRoot` for the worker. Since `011-av1-transcode`, `getEncodeJobDetails` also
+  resolves `allowedLanguagesIso3`: the title's original language (via the existing `resolveIso3`,
+  unchanged) followed by the union of every owner's global and per-title language preference,
+  deduplicated, selecting `language.iso3` from the join and never `iso2` — owners come from
+  `UserMovie` for a film and from `UserShow` on `episode.season.showId` for an episode. This is the
+  one place the merge happens; `Movie.preferredLanguages`/`Show.preferredLanguages` (in `movies/`
+  and `shows/` below) deliberately return only the calling user's own list, never this merge.
 - `settings/` — key/value settings with a typed catalog in `settings.catalog.ts` and server-side
   validation in `updateMany`.
 - `media-roots/` — the two declared roots and every path translation. See below.
@@ -241,17 +261,21 @@ declares its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — that 
 not a database one. If `api` needs a movie/show discriminator it must be added to `schema.prisma`
 and migrated first.
 
-There are 12 models (`Setting`, `User`, `UserMovie`, `UserShow`, `Language`, `MediaSource`,
-`SourceFile`, `ProcessJob`, `Movie`, `Show`, `Season`, `Episode` — verify with
-`grep -c "^model " prisma/schema.prisma` rather than trusting this list) and 15 migrations (counted
-2026-08-12, the newest being `add_show_status_enum`) — `010-episode-acquisition` added **no**
-migration, since `MediaSource.episodeId`/`SourceFile.episodeId`/`ProcessJob.episodeId` already
-existed unused. `Show`/`Season`/`Episode` have a module (`shows/`), are registered through
-`searchMedia`/`addMedia` (`type: "show"`, `006-media-search`), and since `007-library-listing` are
-**read back through the `shows` query** — a per-user listing. Since `009-show-detail` there is also
-a `show(id)` query exposing `Season`/`Episode` (see `shows/` above), and since
-`010-episode-acquisition` a sibling `episodes/` module exposes two mutations directly on `Episode`
-(see `episodes/` above).
+There are 15 models (`Setting`, `User`, `UserMovie`, `UserShow`, `Language`, `MediaSource`,
+`SourceFile`, `ProcessJob`, `Movie`, `Show`, `Season`, `Episode`, `UserLanguage`,
+`UserMovieLanguage`, `UserShowLanguage` — verify with `grep -c "^model " prisma/schema.prisma`
+rather than trusting this list) and 17 migrations (counted 2026-08-17, the newest being
+`add_language_preferences`) — `010-episode-acquisition` added **no** migration, since
+`MediaSource.episodeId`/`SourceFile.episodeId`/`ProcessJob.episodeId` already existed unused.
+`011-av1-transcode` added the three `*Language` join tables in one additive migration (`CREATE
+TABLE` only, no `ALTER`), each with a composite PK and `onDelete: Cascade`; the two per-title
+tables reference `UserMovie`/`UserShow` through their composite FK rather than `User`+`Movie`/`Show`
+separately, so a language preference is removed automatically when the title leaves the library.
+`Show`/`Season`/`Episode` have a module (`shows/`), are registered through `searchMedia`/`addMedia`
+(`type: "show"`, `006-media-search`), and since `007-library-listing` are **read back through the
+`shows` query** — a per-user listing. Since `009-show-detail` there is also a `show(id)` query
+exposing `Season`/`Episode` (see `shows/` above), and since `010-episode-acquisition` a sibling
+`episodes/` module exposes two mutations directly on `Episode` (see `episodes/` above).
 
 ## Tests
 
@@ -279,20 +303,25 @@ structure now, not the scaffolding pattern its name might suggest from memory.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-14, after `010-episode-acquisition`, `bin/cli api npx --no tsc --noEmit` reports **0
-errors** and `bin/npm api test` is green at **104** tests across **11** suites. `episodes/` is the
-new eleventh suite (`episodes.service.spec.ts`, 9 cases, including one that asserts a created
-`MediaSource` carries `episodeId` and never `movieId` — verified to fail when that field is
-swapped); `upload-tickets.service.spec.ts` gained one cross-target case (a ticket minted for a
-movie refused, and left unspent, when presented for an episode). `movies.service.spec.ts` gained a
-`findOneFromDb` block — three cases, asserting the ownership `where` clause and verified to fail
-when that clause is removed, the same technique `007-library-listing` used on
-`shows.service.spec.ts`'s `findAll` block. `src/movies/movies.controller.ts`,
-an unregistered REST controller left over from before `005-movie-search` scoped `MoviesService`,
-is gone. The previously-listed `src/auth/test/auth.service.spec.ts` (two `'user' is possibly
-'null'`, one wrong arity — written against a `login()` signature that never existed) is gone: it
-was deleted ahead of `002-auth-login`, whose spec had originally left "fixing" it explicitly Out of
-Scope before the file was removed entirely, taking those 3 errors with it.
+As of 2026-08-17, after `011-av1-transcode`, `bin/cli api npx --no tsc --noEmit` reports **0
+errors** and `bin/npm api test` is green at **122** tests across **13** suites. `episodes/` is the
+eleventh suite (`episodes.service.spec.ts`, from `010-episode-acquisition`, 9 cases, including one
+that asserts a created `MediaSource` carries `episodeId` and never `movieId` — verified to fail
+when that field is swapped); `upload-tickets.service.spec.ts` gained one cross-target case (a
+ticket minted for a movie refused, and left unspent, when presented for an episode).
+`011-av1-transcode` added a twelfth suite, `languages.service.spec.ts` (13 cases across the three
+preference targets — replace/clear/unknown-`iso2`/duplicate, each verified to fail by fault
+injection when the rule it covers is removed), and a thirteenth, `process-jobs.service.spec.ts` (5
+cases covering the `allowedLanguagesIso3` merge — the case asserting `iso3` output was verified to
+fail when the select is switched to `iso2`). `movies.service.spec.ts` gained a `findOneFromDb`
+block — three cases, asserting the ownership `where` clause and verified to fail when that clause
+is removed, the same technique `007-library-listing` used on `shows.service.spec.ts`'s `findAll`
+block. `src/movies/movies.controller.ts`, an unregistered REST controller left over from before
+`005-movie-search` scoped `MoviesService`, is gone. The previously-listed
+`src/auth/test/auth.service.spec.ts` (two `'user' is possibly 'null'`, one wrong arity — written
+against a `login()` signature that never existed) is gone: it was deleted ahead of `002-auth-login`,
+whose spec had originally left "fixing" it explicitly Out of Scope before the file was removed
+entirely, taking those 3 errors with it.
 
 The TMDB search slice that used to be listed here **now compiles**; `src/clients/TMDBClient.ts` is
 gone, replaced by `src/clients/tmdb/{client,types}.ts`. Treat that vertical as ordinary code again.

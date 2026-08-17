@@ -1,4 +1,5 @@
 import { getVideoParams, getAudioParams, getSubtitleParams } from './params';
+import { isRemux } from './remux-detection';
 import type { EncodeInput } from '../encode/types';
 
 interface FfmpegMetadata {
@@ -27,10 +28,10 @@ export function buildFfmpegCommand(
   const aStreams = metadata.streams.filter((s) => s.codec_type === "audio");
   const sStreams = metadata.streams.filter((s) => s.codec_type === "subtitle");
 
-  // Detectamos si es REMUX buscando la palabra en el nombre del archivo o en el título del metadata
-  const isRemux = input.toLowerCase().includes("remux") ||
-                  (metadata.format?.tags?.title || "").toLowerCase().includes("remux");
-  const quality = isRemux ? "remux" : "web";
+  // REQ-10: remux detection reads the ffprobe metadata, not the filename.
+  // The filename is only consulted inside isRemux itself, as the last resort
+  // when no bitrate at all can be computed (src/ffmpeg/remux-detection.ts).
+  const quality = isRemux(metadata, input) ? "remux" : "web";
 
   // -progress pipe:1: emite out_time_us=/progress= por stdout en formato
   // key=value, que runner.ts parsea para reportar progreso real (antes no
@@ -49,8 +50,8 @@ export function buildFfmpegCommand(
     "-loglevel",
     "error",
     ...getVideoParams(vStream, details.isLiveAction, quality),
-    ...getAudioParams(aStreams, details.originalLanguageIso3),
-    ...getSubtitleParams(sStreams, details.originalLanguageIso3),
+    ...getAudioParams(aStreams, details.allowedLanguagesIso3, details.originalLanguageIso3),
+    ...getSubtitleParams(sStreams, details.allowedLanguagesIso3),
     "-map_metadata:g",
     "-1",
   ];

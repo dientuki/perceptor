@@ -2,6 +2,7 @@
 
 import { redirectToClearSession } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
+import type { Language } from "@/types/languages";
 
 export interface Movie {
   id: string;
@@ -13,6 +14,7 @@ export interface Movie {
   originalLanguage: string;
   isLiveAction: boolean;
   status: string;
+  preferredLanguages: Language[];
 }
 
 export async function getMovies(): Promise<Movie[]> {
@@ -59,6 +61,11 @@ const GET_MOVIE_QUERY = `
       originalLanguage
       isLiveAction
       status
+      preferredLanguages {
+        id
+        iso2
+        name
+      }
     }
   }
 `;

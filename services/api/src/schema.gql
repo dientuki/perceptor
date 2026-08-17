@@ -7,12 +7,20 @@ type Item {
   title: String!
 }
 
+type Language {
+  id: ID!
+  iso2: String!
+  iso3: String!
+  name: String!
+}
+
 type User {
   id: ID!
   name: String!
   username: String!
   isAdmin: Boolean!
   isEnabled: Boolean!
+  preferredLanguages: [Language!]!
 }
 
 type LoginResponse {
@@ -34,6 +42,7 @@ type Movie {
   mediaSourceId: Float
   createdAt: DateTime!
   updatedAt: DateTime!
+  preferredLanguages: [Language!]!
 }
 
 """
@@ -87,6 +96,7 @@ type EncodeJobDetails {
   year: Int
   originalLanguage: String!
   originalLanguageIso3: String!
+  allowedLanguagesIso3: [String!]!
   isLiveAction: Boolean!
   seasonNumber: Int
   episodeNumber: Int
@@ -156,12 +166,18 @@ type Show {
   createdAt: DateTime!
   updatedAt: DateTime!
   seasons: [Season!]!
+  preferredLanguages: [Language!]!
 }
 
 type Query {
   ping: String!
   items: [Item!]!
   me: User!
+
+  """
+  The full seeded catalog of languages the web pickers read from — never a hard-coded list.
+  """
+  languages: [Language!]!
   users: [User!]!
   user(id: ID!): User!
   movies: [Movie!]!
@@ -193,6 +209,9 @@ type Mutation {
   """Inicia sesión y retorna un JWT"""
   login(loginInput: LoginInput!): LoginResponse!
   logout: Boolean!
+
+  """Replaces the caller's global language preference; [] clears it."""
+  setPreferredLanguages(iso2: [String!]!): [Language!]!
   createUser(createUserInput: CreateUserInput!): User!
   updateUser(updateUserInput: UpdateUserInput!): User!
   removeUser(id: ID!): User!
@@ -204,6 +223,9 @@ type Mutation {
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la película
   """
   addMagnetToMovie(movieId: Int!, magnet: String!, force: Boolean = false): Movie!
+
+  """Reemplaza la preferencia de idiomas del usuario para esta película"""
+  setMoviePreferredLanguages(movieId: Int!, iso2: [String!]!): [Language!]!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
 
   """Aviso del cliente de torrents de que una descarga terminó"""
@@ -238,6 +260,9 @@ type Mutation {
   """
   addMagnetToEpisode(episodeId: Int!, magnet: String!, force: Boolean = false): Episode!
   addMedia(tmdbId: Int!, type: String!): MediaRef!
+
+  """Reemplaza la preferencia de idiomas del usuario para una serie puntual"""
+  setShowPreferredLanguages(showId: Int!, iso2: [String!]!): [Language!]!
 }
 
 input LoginInput {

@@ -1,4 +1,5 @@
 import { ObjectType, Field, ID } from '@nestjs/graphql';
+import { Language } from '@/languages/entities/language.entity';
 
 @ObjectType()
 export class User {
@@ -16,4 +17,12 @@ export class User {
 
   @Field()
   isEnabled: boolean;
+
+  // Resolved on `me` only (AuthResolver's @ResolveField) — never on the
+  // admin `users`/`user(id)` queries, by design (011-av1-transcode spec).
+  // Optional in TS: nothing that constructs a bare User (UsersService,
+  // AuthService.getProfile) populates it — the field resolver supplies it
+  // only when a query actually selects it.
+  @Field(() => [Language])
+  preferredLanguages?: Language[];
 }

@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-17
 last_updated: 2026-08-17
-status: Approved         # Draft | Approved | Implemented | Superseded
+status: Implemented         # Draft | Approved | Implemented | Superseded
 services: [api, web, worker]
 ---
 
@@ -51,51 +51,51 @@ and `009-show-detail`) gain a language picker.
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Global preference)**: A signed-in user must be able to choose **N** preferred
+- [x] **REQ-1 (Global preference)**: A signed-in user must be able to choose **N** preferred
       languages (zero, one or several) that apply to every title in their library. Zero chosen
       languages means the encode keeps only the title's original language.
-- [ ] **REQ-2 (Per-title preference)**: A signed-in user must be able to choose **N** additional
+- [x] **REQ-2 (Per-title preference)**: A signed-in user must be able to choose **N** additional
       languages for one specific film or series. These are *added to* that user's global
       preference, never a replacement for it.
-- [ ] **REQ-3 (Merge across owners)**: The set of languages an encode is allowed to keep must be
+- [x] **REQ-3 (Merge across owners)**: The set of languages an encode is allowed to keep must be
       `{original language} ∪ ⋃(global preference of every owner) ∪ ⋃(per-title preference of every
       owner)`, deduplicated. A title with two owners keeps what both of them asked for, because the
       encode produces exactly one file and both of them will watch it. Ownership is the existing
       `UserMovie`/`UserShow` join (`005-movie-search`, `006-media-search`); for an episode it is
       resolved through its season's show.
-- [ ] **REQ-4 (One audio track per allowed language)**: For each allowed language present in the
+- [x] **REQ-4 (One audio track per allowed language)**: For each allowed language present in the
       file, the encode must keep exactly one track — the best one, ranked by source codec
       (`truehd` > `dts` > `eac3` > `ac3` > anything else), then by channel count descending, then
       by bitrate descending. Tracks whose title contains `commentary`, `description`, `visual` or
       `sdh` must be discarded before ranking. When several Spanish tracks exist and at least one is
       titled `latin`/`latino`, the ranking must be restricted to those.
-- [ ] **REQ-5 (Audio output format)**: Every kept audio track must be re-encoded to Opus with VBR
+- [x] **REQ-5 (Audio output format)**: Every kept audio track must be re-encoded to Opus with VBR
       on, at 128k for stereo or less, 320k for 5.1, 512k for 7.1, carrying its `language` tag and a
       title naming the layout and the codec.
-- [ ] **REQ-6 (Missing original audio is a failure)**: If, after filtering, the file has no audio
+- [x] **REQ-6 (Missing original audio is a failure)**: If, after filtering, the file has no audio
       track in the title's original language, the job must fail — the `ProcessJob` ends `ERROR` (the
       `EncodeStatus` value; there is no `FAILED`) with a message naming the language that was
       missing, and no file is written to the library.
       This replaces today's fallback of copying every audio track untranscoded, which shipped a
       file with the wrong audio and reported success.
-- [ ] **REQ-7 (Missing extra language is not a failure)**: If a language a user asked for has no
+- [x] **REQ-7 (Missing extra language is not a failure)**: If a language a user asked for has no
       track in the file, the encode must continue with whatever is present and record what was
       missing in the job log. Only the original language is mandatory.
-- [ ] **REQ-8 (Subtitles: text only)**: The encode must keep only text subtitles — `subrip`,
+- [x] **REQ-8 (Subtitles: text only)**: The encode must keep only text subtitles — `subrip`,
       `mov_text` or `tx3g` — in an allowed language, and only when their `BPS` tag is greater than
       2 or absent. Image subtitles (PGS, VobSub) and empty tracks must be discarded. A kept
       subtitle whose title is empty or written entirely in capitals must have its title replaced
       with the language's name.
-- [ ] **REQ-9 (Quality)**: The CRF must be 20 when the title is not live action, 22 when the source
+- [x] **REQ-9 (Quality)**: The CRF must be 20 when the title is not live action, 22 when the source
       is a disc remux, and 24 otherwise — evaluated in that order, so an animated remux gets 20.
-- [ ] **REQ-10 (Remux detection from the container)**: Whether a source is a remux must be decided
+- [x] **REQ-10 (Remux detection from the container)**: Whether a source is a remux must be decided
       from its `ffprobe` metadata, not its filename. A file must be treated as a remux when it
       carries a lossless audio track (`truehd`, `mlp`, any `pcm_*`, or `dts` with a `DTS-HD MA`
       profile) **or** when its video bitrate per pixel per frame is at least 0.25. That figure must
       be derived from the video stream's `bit_rate`, falling back to its `BPS` tag, falling back to
       `format.size / format.duration`. The filename remains the last resort only when no bitrate at
       all can be computed.
-- [ ] **REQ-11 (Video rules unchanged)**: The video decisions this feature inherits must keep
+- [x] **REQ-11 (Video rules unchanged)**: The video decisions this feature inherits must keep
       behaving as they do today: H264 and VC-1 are converted to 10-bit AV1; HEVC at 4K is brought
       down to 1080p, tonemapped through `libplacebo` when it carries Dolby Vision or HDR10 and
       plainly rescaled when it is SDR; every other codec is copied. A file with no video stream is
@@ -103,27 +103,27 @@ and `009-show-detail`) gain a language picker.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Rules are covered by tests)**: `src/ffmpeg/params.ts` and `src/ffmpeg/buildCommand.ts`
+- [x] **NFR-1 (Rules are covered by tests)**: `src/ffmpeg/params.ts` and `src/ffmpeg/buildCommand.ts`
       must be covered by Vitest specs, including the missing-original-audio failure, the
       remux-detected-from-metadata case and the zero-preferences case. This is the point of the
       feature that Article IX bites hardest on: today a wrong argument in these two files produces a
       completed job and an unusable file.
-- [ ] **NFR-2 (Hand-retyped contract)**: The new `processJob` payload field crosses into `worker`
+- [x] **NFR-2 (Hand-retyped contract)**: The new `processJob` payload field crosses into `worker`
       with no codegen between the two services. It must be retyped by hand in
       `services/worker/src/jobs/encode.job.ts` (`EncodeJobDetails`) *and* in
       `services/worker/src/encode/types.ts` (`EncodeInput`), and recorded in
       `docs/spec/graphql-contract.md`, because nothing will fail to compile if one side drifts
       (Constitution, Article VIII).
-- [ ] **NFR-3 (The worker never queries the database)**: The owner merge of REQ-3 must be resolved
+- [x] **NFR-3 (The worker never queries the database)**: The owner merge of REQ-3 must be resolved
       inside `api` and delivered to the worker already computed, exactly as `outputRoot` is today.
       The worker receives a finished list of ISO-639-2 codes and performs no lookup of its own
       (Constitution, Article III).
-- [ ] **NFR-4 (Codes cross the boundary as ISO-639-2)**: The allowed-language list handed to the
+- [x] **NFR-4 (Codes cross the boundary as ISO-639-2)**: The allowed-language list handed to the
       worker must be in ISO-639-2/B (`spa`, `eng`, `jpn`), because that is what `ffprobe` reports in
       `tags.language`. The UI and the stored preferences use ISO-639-1 (`es`, `en`, `ja`), matching
       `Movie.originalLanguage`/`Show.originalLanguage` as TMDB supplies them. The `languages` table
       is the only translation between the two.
-- [ ] **NFR-5 (No behaviour change for the mock driver)**: `ENCODE_DRIVER=mock` must keep working
+- [x] **NFR-5 (No behaviour change for the mock driver)**: `ENCODE_DRIVER=mock` must keep working
       unchanged. It is what makes the rest of the pipeline testable without FFmpeg, and it ignores
       the encode details by design.
 
@@ -268,34 +268,34 @@ rule is satisfied by a single additive migration with three `CREATE TABLE`s and 
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a Japanese film owned by user A (global preference `es`, `pt`) and user B (no
+- [x] **AC-1**: Given a Japanese film owned by user A (global preference `es`, `pt`) and user B (no
       global preference, per-title preference `en`), when it is encoded, then `ffprobe` on the
       output reports exactly four audio streams, all `opus`, tagged `jpn`, `spa`, `por`, `eng`.
-- [ ] **AC-2**: Given a title no owner has set any preference on, when it is encoded, then the
+- [x] **AC-2**: Given a title no owner has set any preference on, when it is encoded, then the
       output has exactly one audio stream, in the original language.
-- [ ] **AC-3**: Given the file of AC-1 but with no Portuguese track, when it is encoded, then the
+- [x] **AC-3**: Given the file of AC-1 but with no Portuguese track, when it is encoded, then the
       job completes with three audio streams and `docker compose logs worker` names `por` as
       missing.
-- [ ] **AC-4 (failure path)**: Given a file whose only audio track is `eng` for a title whose
+- [x] **AC-4 (failure path)**: Given a file whose only audio track is `eng` for a title whose
       original language is `jpn`, when it is encoded, then the `ProcessJob` row ends
       `status = ERROR` with `errorMessage` containing `jpn`, and no file exists under the library
       root — verified with `bin/mysql -e 'select status, errorMessage from process_jobs order by id
       desc limit 1'`.
-- [ ] **AC-5**: Given a 1080p Blu-ray remux whose filename does not contain the word `remux`, when
+- [x] **AC-5**: Given a 1080p Blu-ray remux whose filename does not contain the word `remux`, when
       it is encoded, then `ProcessJob.ffmpegCommand` contains `-crf 22`.
-- [ ] **AC-6**: Given a web-DL of the same title at ~8 Mbps, when it is encoded, then
+- [x] **AC-6**: Given a web-DL of the same title at ~8 Mbps, when it is encoded, then
       `ProcessJob.ffmpegCommand` contains `-crf 24`.
-- [ ] **AC-7**: Given a title with `isLiveAction = false`, when it is encoded, then
+- [x] **AC-7**: Given a title with `isLiveAction = false`, when it is encoded, then
       `ProcessJob.ffmpegCommand` contains `-crf 20`, whether or not the source is a remux.
-- [ ] **AC-8**: Given a source carrying PGS subtitles and no text subtitles, when it is encoded,
+- [x] **AC-8**: Given a source carrying PGS subtitles and no text subtitles, when it is encoded,
       then `ffprobe` on the output reports zero subtitle streams.
-- [ ] **AC-9**: Given a signed-in user on `/settings`, when they select two languages and save,
+- [x] **AC-9**: Given a signed-in user on `/settings`, when they select two languages and save,
       then reloading the page shows both still selected, and `bin/mysql -e 'select count(*) from
       user_languages'` returns 2.
-- [ ] **AC-10**: Given user A signed in, when they open a film that user B has set a per-title
+- [x] **AC-10**: Given user A signed in, when they open a film that user B has set a per-title
       language on, then the picker shows A's own selection and not B's.
-- [ ] **AC-11**: `bin/npm worker test` passes, including the new `params` and `buildCommand` specs.
-- [ ] **AC-12**: `bin/cli api npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit` each
+- [x] **AC-11**: `bin/npm worker test` passes, including the new `params` and `buildCommand` specs.
+- [x] **AC-12**: `bin/cli api npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit` each
       report 0 errors; `bin/cli web npx --no tsc --noEmit` still reports exactly the 11 known
       pre-GraphQL errors across the same 4 files (`services/web/CLAUDE.md` § Current state) and not
       one more.

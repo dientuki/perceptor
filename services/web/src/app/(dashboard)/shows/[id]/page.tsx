@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
+import { getLanguages } from "@/actions/languages";
 import { getShowById } from "@/actions/shows";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import SeasonAccordion from "@/components/shows/SeasonAccordion";
@@ -58,7 +59,10 @@ export default async function ShowDetailsPage({ params }: PageProps) {
     notFound();
   }
 
-  const show = await getShow(showId);
+  const [show, languageOptions] = await Promise.all([
+    getShow(showId),
+    getLanguages(),
+  ]);
 
   if (!show) {
     notFound();
@@ -75,7 +79,7 @@ export default async function ShowDetailsPage({ params }: PageProps) {
       <PageBreadcrumb pageTitle={show.title} />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
-          <Show show={show} />
+          <Show show={show} languageOptions={languageOptions} />
         </div>
       </div>
       <div className="mt-6 space-y-4">
