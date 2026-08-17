@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-13
 last_updated: 2026-08-13
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -249,57 +249,57 @@ attempts, which is exactly what a unique constraint would forbid.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a show the caller owns, clicking buscar on the row for season 4 episode 1 of a
+- [x] **AC-1**: Given a show the caller owns, clicking buscar on the row for season 4 episode 1 of a
       show named Reacher opens a modal whose input reads exactly `Reacher S04E01`, and the field can
       be edited before submitting.
-- [ ] **AC-2**: Submitting that search lists indexer results. With more results than fit the modal,
+- [x] **AC-2**: Submitting that search lists indexer results. With more results than fit the modal,
       scrolling the list keeps the column header fixed in place while the rows move under it
       (verified visually and by the header remaining in the viewport at scroll bottom).
-- [ ] **AC-3**: Typing in the filter control narrows the listed results without re-querying the
+- [x] **AC-3**: Typing in the filter control narrows the listed results without re-querying the
       indexer.
-- [ ] **AC-4**: Clicking a result creates one `media_sources` row with `episode_id` set to that
+- [x] **AC-4**: Clicking a result creates one `media_sources` row with `episode_id` set to that
       episode and `movie_id` unset, and the episode's status becomes `DOWNLOADING`. Verify with
       `bin/mysql -e "select id, kind, status, episode_id, info_hash from media_sources order by id desc limit 1"`
       and by reloading `/shows/<id>`.
-- [ ] **AC-5**: Pasting a valid magnet in the magnet modal produces the same result as AC-4 with
+- [x] **AC-5**: Pasting a valid magnet in the magnet modal produces the same result as AC-4 with
       `kind = TORRENT_FILE`, and the episode row shows `DOWNLOADING` after the modal closes.
-- [ ] **AC-6**: Uploading a file through the file modal completes, produces a `media_sources` row
+- [x] **AC-6**: Uploading a file through the file modal completes, produces a `media_sources` row
       with `kind = LOCAL_FILE`, `status = READY` and `episode_id` set, and moves the episode to
       `ENCODING` — without ever passing through `DOWNLOADING`, matching the film upload path.
-- [ ] **AC-7**: Firing `torrentCompleted` with the infoHash from AC-4 moves that `media_sources`
+- [x] **AC-7**: Firing `torrentCompleted` with the infoHash from AC-4 moves that `media_sources`
       row to `READY`, moves the **episode** to `ENCODING`, and enqueues one `bull:process` job
       (visible in Redis and in `docker compose logs api`). The show's other episodes are untouched.
-- [ ] **AC-8 (failure path)**: With user A's session, calling `addTorrentToEpisode` for an episode
+- [x] **AC-8 (failure path)**: With user A's session, calling `addTorrentToEpisode` for an episode
       of a show only user B owns returns a GraphQL error whose message is exactly
       `El episodio <id> no existe` — byte-identical to the response for an episode id that exists in
       no show at all. No `media_sources` row is created.
-- [ ] **AC-9 (failure path)**: A second acquisition request against an episode that already has an
+- [x] **AC-9 (failure path)**: A second acquisition request against an episode that already has an
       active source, with `force` unset, fails with
       `Este episodio ya tiene una descarga en curso. Confirmá para reemplazarla.` and creates no
       row. Retrying with `force: true` succeeds, and the previously active `media_sources` row is
       then `status = ERROR` with a non-null `error_message`.
-- [ ] **AC-10 (failure path)**: Following AC-9, firing `torrentCompleted` with the **superseded**
+- [x] **AC-10 (failure path)**: Following AC-9, firing `torrentCompleted` with the **superseded**
       infoHash leaves the episode in the state the replacement put it in — the demoted source does
       not move the episode.
-- [ ] **AC-11 (failure path)**: `createUploadTicket(movieId: 1, episodeId: 1)` and
+- [x] **AC-11 (failure path)**: `createUploadTicket(movieId: 1, episodeId: 1)` and
       `createUploadTicket` with neither argument both fail with
       `Indicá exactamente uno de movieId o episodeId`, and no ticket `jti` is written to Redis in
       either case.
-- [ ] **AC-12 (failure path)**: Pasting `not-a-magnet` into the episode magnet modal surfaces
+- [x] **AC-12 (failure path)**: Pasting `not-a-magnet` into the episode magnet modal surfaces
       `No parece un magnet link` in the modal, and no `media_sources` row is created.
-- [ ] **AC-13 (failure path)**: A completed episode download whose folder contains no video file
+- [x] **AC-13 (failure path)**: A completed episode download whose folder contains no video file
       leaves the `media_sources` row `ERROR` **and** the episode `ERROR` — not stuck in `ENCODING`.
-- [ ] **AC-14 (regression)**: The three film paths still work unchanged end to end — release search
+- [x] **AC-14 (regression)**: The three film paths still work unchanged end to end — release search
       from `/movies/<id>`, magnet import, and a full tus upload — each producing the same rows they
       produce today.
-- [ ] **AC-15**: `bin/npm api test` passes, including the NFR-5 case asserting that an episode id
+- [x] **AC-15**: `bin/npm api test` passes, including the NFR-5 case asserting that an episode id
       does not resolve through the film path and that the new mutations write `episodeId`, never
       `movieId`. The new test file opens with a comment naming that failure class.
-- [ ] **AC-16**: `bin/cli api npx --no tsc --noEmit` reports 0 errors, and
+- [x] **AC-16**: `bin/cli api npx --no tsc --noEmit` reports 0 errors, and
       `bin/cli web npx --no tsc --noEmit` reports exactly 11 across the 4 files named in NFR-3 —
       none of them a file this feature touches.
-- [ ] **AC-17**: `grep -rn "@prisma/client" services/web/src` returns nothing.
-- [ ] **AC-18**: `009-show-detail/spec.md` records that its REQ-5 and AC-4 are superseded by this
+- [x] **AC-17**: `grep -rn "@prisma/client" services/web/src` returns nothing.
+- [x] **AC-18**: `009-show-detail/spec.md` records that its REQ-5 and AC-4 are superseded by this
       feature, and the root `CLAUDE.md` no longer describes the episode buttons as inert.
 
 ## Out of Scope

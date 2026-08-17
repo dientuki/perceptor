@@ -140,8 +140,22 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   is set only once every season and episode has been written; it stays `null` on any failure or if
   hydration never ran, and the next `register()` for that series retries whenever it is `null`.
 - `media-sources/` — the `MediaSource` row that represents one acquisition attempt.
+- `episodes/` — `EpisodesService`/`EpisodesResolver` (`010-episode-acquisition`), `MoviesService`'s
+  structural twin one level deeper: `findOneFromDb(episodeId, userId)` scoped through
+  `season.show.users`, plus `addTorrentToEpisode`/`addMagnetToEpisode`, mirroring
+  `attachTorrentSource`'s ownership lookup, active-source conflict (`force`), demote-then-replace
+  and symmetric `infoHash` collision check — deliberately **not** factored into a shared base class
+  with `MoviesService`'s `attachTorrentSource`, same reasoning as `shows/`'s twin of `movies/`. As
+  part of this feature, `MoviesService.attachTorrentSource`'s own collision guard was extended to
+  also recognise an `infoHash` already owned by an **episode** (not just another movie) — closing a
+  hole where an episode-owned hash would otherwise fall through and get silently re-pointed at a
+  film. Reuses `src/shows/entities/episode.entity.ts`'s `Episode` type rather than declaring a
+  second one.
 - `downloads/` — `torrentCompleted`, the mutation qBittorrent's AutoRun hook calls; matches
-  **exclusively by infoHash** and silently ignores unknown hashes by design.
+  **exclusively by infoHash** and silently ignores unknown hashes by design. Since
+  `010-episode-acquisition`, an episode-owned `MediaSource` moves that `Episode` to `ENCODING` the
+  same way a movie-owned one does; a source already `ERROR` (superseded by a `force` replacement)
+  is left untouched rather than acted on.
 - `process-jobs/` — the `ProcessJob` lifecycle: `sourceScanned` → encode queued → `encodeCompleted`.
   Resolves `outputRoot` for the worker.
 - `settings/` — key/value settings with a typed catalog in `settings.catalog.ts` and server-side
@@ -162,6 +176,13 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   <id> no existe` a missing film already produced. `uploads.service.ts`'s `handleUploadFinish` keeps
   its own bare `prisma.movie.findUnique` — not a second ownership hole, since a ticket is now only
   mintable for a film the caller owns and `verifyAndSpend` binds it to that `movieId`.
+  Since `010-episode-acquisition`, `createUploadTicket(movieId: Int, episodeId: Int)` takes both
+  arguments nullable and requires **exactly one** (`Indicá exactamente uno de movieId o episodeId`
+  otherwise); `UploadTicketsService.mint`/`verifyAndSpend` take a `UploadTicketTarget = { movieId }
+  | { episodeId }` rather than a bare id, and the target check still runs **before** the Redis spend
+  (unchanged reasoning — a mismatch must not burn the ticket). `onUploadCreate`/`handleUploadFinish`
+  branch on whichever of `movieId`/`episodeId` the tus metadata carries; the metadata key names are
+  deliberately **not** unified into one — see root `CLAUDE.md` → Known debt.
 
 **Infrastructure**: `prisma/` (`PrismaModule` + `PrismaService`, effectively global), `redis/`,
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).
@@ -223,10 +244,14 @@ and migrated first.
 There are 12 models (`Setting`, `User`, `UserMovie`, `UserShow`, `Language`, `MediaSource`,
 `SourceFile`, `ProcessJob`, `Movie`, `Show`, `Season`, `Episode` — verify with
 `grep -c "^model " prisma/schema.prisma` rather than trusting this list) and 15 migrations (counted
-2026-08-12, the newest being `add_show_status_enum`). `Show`/`Season`/`Episode` have a module
-(`shows/`), are registered through `searchMedia`/`addMedia` (`type: "show"`, `006-media-search`),
-and since `007-library-listing` are **read back through the `shows` query** — a per-user listing.
-There is still no `show(id)` query and nothing exposes `Season`/`Episode` over GraphQL.
+2026-08-12, the newest being `add_show_status_enum`) — `010-episode-acquisition` added **no**
+migration, since `MediaSource.episodeId`/`SourceFile.episodeId`/`ProcessJob.episodeId` already
+existed unused. `Show`/`Season`/`Episode` have a module (`shows/`), are registered through
+`searchMedia`/`addMedia` (`type: "show"`, `006-media-search`), and since `007-library-listing` are
+**read back through the `shows` query** — a per-user listing. Since `009-show-detail` there is also
+a `show(id)` query exposing `Season`/`Episode` (see `shows/` above), and since
+`010-episode-acquisition` a sibling `episodes/` module exposes two mutations directly on `Episode`
+(see `episodes/` above).
 
 ## Tests
 
@@ -254,11 +279,15 @@ structure now, not the scaffolding pattern its name might suggest from memory.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-12, after `008-movie-detail`, `bin/cli api npx --no tsc --noEmit` reports **0
-errors** and `bin/npm api test` is green at **90** tests across **10** suites (`movies.service.spec.ts`
-gained a `findOneFromDb` block — three cases, asserting the ownership `where` clause and verified
-to fail when that clause is removed, the same technique `007-library-listing` used on
-`shows.service.spec.ts`'s `findAll` block — no eleventh suite). `src/movies/movies.controller.ts`,
+As of 2026-08-14, after `010-episode-acquisition`, `bin/cli api npx --no tsc --noEmit` reports **0
+errors** and `bin/npm api test` is green at **104** tests across **11** suites. `episodes/` is the
+new eleventh suite (`episodes.service.spec.ts`, 9 cases, including one that asserts a created
+`MediaSource` carries `episodeId` and never `movieId` — verified to fail when that field is
+swapped); `upload-tickets.service.spec.ts` gained one cross-target case (a ticket minted for a
+movie refused, and left unspent, when presented for an episode). `movies.service.spec.ts` gained a
+`findOneFromDb` block — three cases, asserting the ownership `where` clause and verified to fail
+when that clause is removed, the same technique `007-library-listing` used on
+`shows.service.spec.ts`'s `findAll` block. `src/movies/movies.controller.ts`,
 an unregistered REST controller left over from before `005-movie-search` scoped `MoviesService`,
 is gone. The previously-listed `src/auth/test/auth.service.spec.ts` (two `'user' is possibly
 'null'`, one wrong arity — written against a `login()` signature that never existed) is gone: it

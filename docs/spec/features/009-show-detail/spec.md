@@ -58,11 +58,13 @@ page would make the new route unreachable from the UI.
 - [x] **REQ-4 (Default expanded season)**: The season with the highest `seasonNumber` must be
       expanded when the page first renders — under REQ-2's amended ordering this is also the
       first section on the page; every other season must be collapsed.
-- [x] **REQ-5 (Episode action buttons, inert)**: Each episode row must display three buttons
-      (buscar, importar archivo, añadir torrent). Clicking any of them must have no observable
-      effect — no modal opens, no network request fires. The code that would wire them to a modal
-      is written but commented out, not deleted, so a future feature can uncomment rather than
-      rebuild it.
+- [x] **REQ-5 (Episode action buttons, inert)** — **superseded by `010-episode-acquisition`**:
+      Each episode row must display three buttons (buscar, importar archivo, añadir torrent).
+      Clicking any of them must have no observable effect — no modal opens, no network request
+      fires. The code that would wire them to a modal is written but commented out, not deleted,
+      so a future feature can uncomment rather than rebuild it. `010-episode-acquisition` REQ-1,
+      REQ-5 and REQ-6 wire these three buttons to real per-episode search, magnet and file-upload
+      flows; the buttons are no longer inert.
 - [x] **REQ-6 (Ownership-scoped read)**: A caller must only be able to fetch a show's detail data
       for a show linked to them through `UserShow`, identically to how `movie(id)` is scoped
       through `UserMovie` (`008-movie-detail`).
@@ -174,9 +176,12 @@ method) — no migration.
       first); every other season is collapsed.
 - [x] **AC-3**: Clicking a collapsed season's header expands it and reveals its episodes; clicking
       an expanded season's header collapses it again.
-- [x] **AC-4**: Each visible episode row shows three buttons (buscar, importar archivo, añadir
-      torrent); clicking any of them opens no modal and triggers no network request (verified via
-      browser dev tools — no new request in the network panel after the click).
+- [x] **AC-4** — **superseded by `010-episode-acquisition`**: Each visible episode row shows three
+      buttons (buscar, importar archivo, añadir torrent); clicking any of them opens no modal and
+      triggers no network request (verified via browser dev tools — no new request in the network
+      panel after the click). As of `010-episode-acquisition`, clicking each button opens its
+      corresponding modal (search, magnet, file) targeting that episode — see that spec's AC-1
+      through AC-6.
 - [x] **AC-5 (failure path)**: Given a show id that exists but belongs to a different user, when the
       caller navigates to `/shows/<that id>`, then the page renders the same
       `Recurso no disponible para este usuario` 404 the movie detail screen renders for an unowned

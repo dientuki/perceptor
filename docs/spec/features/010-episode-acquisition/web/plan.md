@@ -2,7 +2,7 @@
 title: Per-Episode Acquisition (Search, Magnet, File) — web slice
 service: web
 last_updated: 2026-08-13
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Per-Episode Acquisition — `web` (`web/plan.md`)

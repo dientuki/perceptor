@@ -2,7 +2,7 @@
 title: Per-Episode Acquisition (Search, Magnet, File) — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-08-13
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Per-Episode Acquisition (Search, Magnet, File) (`plan.md`)

@@ -9,13 +9,13 @@ Pipeline stage status today:
 | :-- | :-- | :-- |
 | Search catalog (TMDB) | `api` — `src/media/` (dispatch + `searchMedia`/`addMedia`), `src/movies/movies.service.ts`, `src/shows/shows.service.ts`, `src/clients/tmdb/{client,types}.ts` | working for films and series, per-user library, parameterized by media type (`006-media-search`) |
 | Register title in DB | `api` — `media`/`movies`/`shows` modules + Prisma | working (read + CRUD service); a registered series also fetches its seasons/episodes in the background |
-| Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `api` — `src/clients/indexer/client.ts` | working; alternativa manual: pegar un magnet (`addMagnetToMovie`, `src/clients/torrent/magnet.ts`) — mismo `MediaSource`/AutoRun de ahí en más |
-| Download | qBittorrent — `torrent` service, `api` — `src/clients/torrent/client.ts` | working, per-torrent save path |
+| Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `api` — `src/clients/indexer/client.ts` | working for both a film and a single episode; alternativa manual: pegar un magnet (`addMagnetToMovie`/`addMagnetToEpisode`, `src/clients/torrent/magnet.ts`) — mismo `MediaSource`/AutoRun de ahí en más |
+| Download | qBittorrent — `torrent` service, `api` — `src/clients/torrent/client.ts` | working, per-torrent save path, for both a film and a single episode (`010-episode-acquisition`) |
 | Detect completion, update DB, enqueue job | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | working |
 | Scan downloaded files, inventory | `worker` — BullMQ consumer, talks to `api` over GraphQL | working |
 | Transcode | `worker` (FFmpeg) | not started — `ProcessJob` rows sit in `WAITING` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` | working (Jellyfin, opt-in from Settings, default `none`) |
-| Browse library | `api` — `src/movies/movies.resolver.ts`, `src/shows/shows.resolver.ts`; `web` — `/movies`, `/shows` | working for both films and series, each a per-user listing behind its own query (`007-library-listing`); both detail pages (`/movies/<id>`, `/shows/<id>`) are per-user — a title another user owns answers `Recurso no disponible para este usuario` instead of rendering (`008-movie-detail`, `009-show-detail`); the show detail page also renders a season accordion (last season expanded by default) with three per-episode action buttons that are visible but inert — no episode-level acquisition path exists yet |
+| Browse library | `api` — `src/movies/movies.resolver.ts`, `src/shows/shows.resolver.ts`, `src/episodes/episodes.resolver.ts`; `web` — `/movies`, `/shows` | working for both films and series, each a per-user listing behind its own query (`007-library-listing`); both detail pages (`/movies/<id>`, `/shows/<id>`) are per-user — a title another user owns answers `Recurso no disponible para este usuario` instead of rendering (`008-movie-detail`, `009-show-detail`); the show detail page also renders a season accordion (last season expanded by default) with three per-episode action buttons (buscar, importar archivo, añadir torrent), each wired to a real per-episode acquisition flow (`010-episode-acquisition`) |
 
 ## Layout
 

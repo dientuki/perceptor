@@ -167,9 +167,32 @@ Below the show's own metadata (rendered by `src/components/shows/Show.tsx`, `Mov
 minus the acquisition buttons — a series has none at that level), the page renders one
 `src/components/shows/SeasonAccordion.tsx` per season, the highest `seasonNumber` expanded by
 default (computed once via `Math.max`, not per-season inside the render loop). Each episode row
-renders three buttons (buscar / importar archivo / añadir torrent) whose `onClick` is written but
-commented out — there is no episode-level acquisition path yet, so wiring them to a real modal is
-scope creep for a future feature, not a bug to fix here.
+renders three buttons (buscar / importar archivo / añadir torrent); since `010-episode-acquisition`
+these are wired to the same three modals `Movie.tsx` uses for a film — see the section below.
+
+## Per-episode acquisition and the `AcquisitionTarget` union (`010-episode-acquisition`)
+
+`SearchTorrentModal.tsx`, `SearchTorrent.tsx`, `importMagnetModal.tsx` and `importFileModal.tsx`
+all take a single `target: AcquisitionTarget | null` prop instead of the old `item`/`mediaType`
+pair:
+
+```ts
+export type AcquisitionTarget =
+  | { kind: "movie"; movie: Movie }
+  | { kind: "episode"; episode: Episode; showTitle: string; seasonNumber: number };
+```
+
+(`src/types/media.ts`). This exists to make illegal states unrepresentable — before this feature,
+`item`/`mediaType` could disagree (an episode paired with `MEDIA_TYPE.MOVIE`), which is exactly how
+an episode id used to reach a film mutation's `movieId` argument with no compile error. Every
+caller builds a `target` locally (`Movie.tsx` for a film, `SeasonAccordion.tsx` for an episode,
+holding `activeEpisode` state and setting it **before** opening a modal — all three modals early-
+return `null` on a null target) and passes the same `target` to whichever modal(s) it opens. Follow
+this pattern for any new acquisition entry point rather than reintroducing a bare id/type pair.
+
+`Episode` is now a single type, re-exported from `src/actions/shows.ts` (the real one, added by
+`009-show-detail`) — the placeholder stub that used to live in `src/types/media.ts` is gone. Import
+`Episode` from `@/actions/shows`, never redeclare it.
 
 ## Library listings: two parallel screens, not one parameterized one (`007-library-listing`)
 
@@ -240,17 +263,16 @@ toolchain here is its own decision and deserves its own spec.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-13, after `009-show-detail`, `bin/cli web npx --no tsc --noEmit` reports **12 errors
-across 5 files**, unchanged since `005-movie-search`. All are leftovers from a pre-GraphQL version
-of the app; none are on a path the running UI uses. (Previously logged here as 13 — that was never
-the real count; these same five files have always produced 12, confirmed while implementing
-`002-auth-login`.)
+As of 2026-08-14, after `010-episode-acquisition`, `bin/cli web npx --no tsc --noEmit` reports **11
+errors across 4 files**, down from 12 across 5 — `src/components/search/SearchTorrentModal.tsx`'s
+`@prisma/client` import is gone, retyped against `AcquisitionTarget` (this service's last Article II
+violation; `grep -rn "@prisma/client" services/web/src` now returns nothing). The remaining 4 are
+unchanged leftovers from a pre-GraphQL version of the app; none are on a path the running UI uses.
 
 | File | Problem |
 | :-- | :-- |
 | `src/components/import/importFolderModal.tsx` | imports `@/actions/jobs` (does not exist); passes `value` to `InputField` |
-| `src/components/import/ImportMagnetSeasonModal.tsx` | same two, for shows/seasons the API doesn't expose yet |
-| `src/components/search/SearchTorrentModal.tsx` | imports `@prisma/client` — a direct Constitution Article II violation |
+| `src/components/import/ImportMagnetSeasonModal.tsx` | same two, for season-level bulk import — deliberately out of scope for `010-episode-acquisition` (episode-level only), kept as-is |
 | `src/components/search/SearchForm.tsx` | imports `../../icons` (no `src/icons/`); implicit `any` props |
 | `src/components/search/ResultsForm.tsx` | untyped destructured props (5 implicit `any`) |
 
@@ -258,10 +280,10 @@ The 6th error that used to be listed here — `Cannot find module '@/components/
 `src/app/(dashboard)/shows/page.tsx` — is **gone as of `007-library-listing`**, which finished that
 untracked paste into the real series listing. `009-show-detail` similarly rewrote
 `src/app/(dashboard)/shows/[id]/page.tsx`, `src/components/shows/Show.tsx` and
-`src/components/shows/SeasonAccordion.tsx` from scratch (they were broken, uncommitted drafts —
-none of the three ever contributed to this count, but they were the last untracked paste of this
-kind in the repo). Verified 2026-08-13: `bin/cli web npx --no tsc --noEmit` reports 12 errors across
-the 5 files above and nothing else.
+`src/components/shows/SeasonAccordion.tsx` from scratch (they were broken, uncommitted drafts at
+the time); `010-episode-acquisition` wired `SeasonAccordion.tsx`'s three per-episode buttons to
+real modals (see the section above) — neither ever contributed to this count. Verified 2026-08-14:
+`bin/cli web npx --no tsc --noEmit` reports 11 errors across the 4 files above and nothing else.
 
 `bin/npm web run lint` is **not** a usable gate today: `biome check` reports ~1598 errors and ~96
 warnings across the pre-existing template, with or without any given change. Judge a new file by

@@ -1,7 +1,7 @@
 ---
 title: Per-Episode Acquisition (Search, Magnet, File) — Tasks
 last_updated: 2026-08-13
-status: In Progress
+status: Done
 ---
 
 # TASKS: Per-Episode Acquisition (Search, Magnet, File) (`tasks.md`)
@@ -143,7 +143,7 @@ starting earlier means writing against a signature that does not exist yet. Read
       target and send exactly one of the two now-nullable arguments, **by name**. → T005, T012
       *Done when:* a film upload still mints a ticket (unchanged behaviour) and an episode upload
       mints one too; neither ever sends `undefined` for the id it is not using.
-- [ ] **T015** `[web]` Retype `src/components/search/SearchTorrentModal.tsx` against the union and
+- [x] **T015** `[web]` Retype `src/components/search/SearchTorrentModal.tsx` against the union and
       remove its `@prisma/client` import. → T012
       *Done when:* `grep -rn "@prisma/client" services/web/src` returns **nothing** — this file is
       the service's last violation of Constitution Article II.
@@ -165,7 +165,7 @@ starting earlier means writing against a signature that does not exist yet. Read
       *Done when:* an episode magnet and an episode file upload both land on the episode; the film
       paths are unchanged; an invalid magnet renders `No parece un magnet link` inline in the modal,
       never through `alert()`.
-- [ ] **T018** `[web]` Wire `src/components/shows/SeasonAccordion.tsx`: hold `activeEpisode` and the
+- [x] **T018** `[web]` Wire `src/components/shows/SeasonAccordion.tsx`: hold `activeEpisode` and the
       three `useModal()` triples in the accordion and pass the open handlers into `EpisodeRow` as
       props (the handlers must set `activeEpisode` **before** opening, or every modal early-returns
       `null`); accept `showTitle`. Pass `show.title` down from
@@ -177,21 +177,21 @@ starting earlier means writing against a signature that does not exist yet. Read
 
 ### Group 5 — verification and docs
 
-- [ ] **T019** `[docs]` Annotate `docs/spec/features/009-show-detail/spec.md` to record that its
+- [x] **T019** `[docs]` Annotate `docs/spec/features/009-show-detail/spec.md` to record that its
       **REQ-5** (buttons inert, wiring commented out) and **AC-4** (a click opens no modal and fires
       no request) are superseded by `010-episode-acquisition`, and update the root `CLAUDE.md`
       pipeline table: the **Find release (indexer)** and **Download** rows now cover single
       episodes, and the **Browse library** row must stop describing the episode buttons as "visible
       but inert". → T018
       *Done when:* no document in the repo still asserts the episode buttons do nothing.
-- [ ] **T020** `[docs]` Update `services/api/CLAUDE.md` (module map gains `episodes/`; the
+- [x] **T020** `[docs]` Update `services/api/CLAUDE.md` (module map gains `episodes/`; the
       `uploads/` paragraph's `createUploadTicket` description; the test/typecheck counts) and
       `services/web/CLAUDE.md` (the 12-errors-across-5-files table becomes 11 across 4; the
       `009-show-detail` paragraph saying the episode buttons are deliberately unwired; the
       `Episode`-type and `AcquisitionTarget` convention). → T018
       *Done when:* both files' "Current state" sections match freshly re-run `tsc` and test output,
       not the numbers written here.
-- [ ] **T021** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack
+- [x] **T021** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack
       (`plan.md` § Verification has the manual pass), tick each box, and set `status: Implemented`
       on `spec.md`, `plan.md`, `api/plan.md`, `web/plan.md` and this file. → T019, T020
       *Done when:* all 18 ACs are ticked with the observed result, or any that cannot be reached is
