@@ -5,17 +5,17 @@
 **Perceptor** is a self-hosted platform that automates the entire digital content workflow — from discovery and downloading to processing and organization. The project combines a modern web interface with a backend API and background workers, integrating external services to manage the entire content workflow from a single place.
 
 ## Features
-🎬 Digital content management
-🔎 Automatic content discovery through external sources
-⬇️ Download management
-⚙️ Background processing with dedicated workers
-🎞️ Video conversion and optimization
-🗂️ Automatic content organization
-👤 User preferences and configuration
-🔐 Session management
-🚦 Job queue for asynchronous tasks
-🐳 Fully containerized development environment
-📦 Modular architecture designed to support additional integrations
+- 🎬 Digital content management
+- 🔎 Automatic content discovery through external sources
+- ⬇️ Download management
+- ⚙️ Background processing with dedicated workers
+- 🎞️ Video conversion and optimization
+- 🗂️ Automatic content organization
+- 👤 User preferences and configuration
+- 🔐 Session management
+- 🚦 Job queue for asynchronous tasks
+- 🐳 Fully containerized development environment
+- 📦 Modular architecture designed to support additional integrations
 
 ## Pipeline status
 
