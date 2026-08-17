@@ -79,4 +79,13 @@ export class EncodeJobDetails {
   // sobre esto, nunca lee env para el destino.
   @Field()
   outputRoot: string;
+
+  // The downloads ROOT itself, resolved with resolveFromRoot('downloads', '.') —
+  // not the path_downloads setting. Torrents save under
+  // <downloadsRoot>/<path_downloads>/<hash>, while tus uploads stage under
+  // <downloadsRoot>/imports/<uploadId>; the worker's REQ-12 containment check
+  // has to cover both, so it needs the root, not the narrower path_downloads
+  // segment.
+  @Field()
+  downloadsRoot: string;
 }

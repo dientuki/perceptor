@@ -39,6 +39,7 @@ export class ProcessJobsService {
       sourceKind: mediaSource.kind,
       infoHash: mediaSource.infoHash,
       downloadPath: mediaSource.downloadPath,
+      downloadsRoot: await this.mediaRoots.resolveFromRoot('downloads', '.'),
     };
 
     if (processJob.movie) {

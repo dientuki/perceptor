@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-17
 last_updated: 2026-08-17
-status: Approved         # Draft | Approved | Implemented | Superseded
+status: Implemented         # Draft | Approved | Implemented | Superseded
 services: [api, worker]
 ---
 
@@ -226,51 +226,75 @@ documenting a policy the code does not follow.
 - [ ] **AC-1**: Given a torrent added from the indexer, when it finishes downloading, then
       `bin/mysql -e 'select id, status from media_sources order by id desc limit 1'` reports
       `SCANNED`, `source_files` holds exactly one row for that source pointing at the largest video
-      file in the folder, and `process_jobs` holds one row for it in `QUEUED`.
+      file in the folder, and `process_jobs` holds one row for it in `QUEUED`. Pre-existing,
+      unchanged behaviour — the production `media_sources`/`source_files` tables observed this
+      session already carry rows in exactly this shape, but a fresh torrent was not run live to
+      re-confirm it as part of closing this feature.
 - [ ] **AC-2**: Given that job, when the encode completes, then the file exists at
       `<library>/<Title> (<year>) [tmdbid=<id>]/<Title> (<year>).mkv`, and
       `bin/mysql -e 'select status, filePath from movies where id = <id>'` reports `COMPLETED` and
-      that same path.
-- [ ] **AC-3**: When the encode has finished, then no `.working.mkv` remains beside the source and
-      no `.part.mkv` remains in the destination folder.
-- [ ] **AC-4**: Given a film imported by uploading a file from `/movies/<id>`, when its encode
-      completes, then `<downloads>/imports/<uploadId>/` no longer exists. **Fails today** — the
-      uploaded file is never deleted.
-- [ ] **AC-5**: Given a film acquired as a torrent, when its encode completes, then the torrent is
-      gone from qBittorrent's list and its save path no longer exists on disk.
-- [ ] **AC-6 (failure path)**: Given the `torrent` container stopped, when an encode completes, then
-      `bin/mysql -e 'select status, errorMessage from process_jobs order by id desc limit 1'` reports
-      `COMPLETED` with no error message, the encoded file is in the library, and
-      `docker compose logs worker` records the cleanup failure. **Fails today** — the job is marked
-      `ERROR` and the film with it.
-- [ ] **AC-7 (failure path)**: Given a `MediaSource` whose `downloadPath` is edited to a path outside
-      the downloads root, when its encode completes, then that path still exists on disk and
-      `docker compose logs worker` records that the deletion was refused. **Fails today** — the path
-      is deleted unchecked.
+      that same path. Pre-existing, unchanged behaviour — confirmed observationally (`movies` row id
+      13, `Kill Speed (2010)`, matches this exact shape) but not re-exercised with a fresh encode.
+- [x] **AC-3**: When the encode has finished, then no `.working.mkv` remains beside the source and
+      no `.part.mkv` remains in the destination folder. Confirmed live: `find /media -name
+      '*.part.mkv' -o -name '*.working.mkv'` inside the `worker` container returns nothing.
+- [x] **AC-4**: Given a film imported by uploading a file from `/movies/<id>`, when its encode
+      completes, then `<downloads>/imports/<uploadId>/` no longer exists. Before this feature: the
+      block guarding deletion was `if (details.infoHash)`, which a `LOCAL_FILE` source never
+      satisfies. After: `cleanupSource` branches on `sourceKind === 'LOCAL_FILE'` — proven by
+      `cleanup-source.spec.ts` reverting the branch back to `infoHash` and observing exactly the
+      predicted test failures (below).
+- [x] **AC-5**: Given a film acquired as a torrent, when its encode completes, then the torrent is
+      gone from qBittorrent's list and its save path no longer exists on disk. Unchanged torrent
+      path, covered by `cleanup-source.spec.ts`'s `TORRENT_SEARCH`/`TORRENT_FILE` cases
+      (`downloadRemove` + recursive delete) and consistent with production `media_sources` rows
+      observed with `kind: TORRENT_SEARCH`.
+- [x] **AC-6 (failure path)**: Given the `torrent` container stopped, when an encode completes, then
+      `process_jobs` reports `COMPLETED` with no error message, the encoded file is in the library,
+      and `docker compose logs worker` records the cleanup failure. Before: the block ran inside the
+      encode's `try`, so a throwing `downloadRemove` reached the `catch` and fired `encodeFailed`.
+      After: `encode.job.ts` calls `cleanupSource` in its own `try` **after** the encode's
+      `try/catch` has already closed — confirmed by direct code read (`src/jobs/encode.job.ts`) —
+      and `cleanup-source.spec.ts` proves a throwing `fetchGraphQL`/`rm` leaves `cleanupSource`
+      resolved, never rejected.
+- [x] **AC-7 (failure path)**: Given a `MediaSource` whose `downloadPath` is edited to a path outside
+      the downloads root, when its encode completes, then that path still exists on disk and the
+      deletion is refused and logged. Before: `rm(details.downloadPath, ...)` ran unchecked. After:
+      `cleanupSource` calls `isInsideRoot(downloadsRoot, downloadPath)` first and returns without
+      deleting when it is `false` — confirmed by code read and by `cleanup-source.spec.ts`'s
+      outside-root and empty-root cases.
 - [ ] **AC-8 (failure path)**: Given a completed download whose folder contains no video file, when
       it is scanned, then `media_sources.status` is `ERROR` with
       `errorMessage = 'Escaneo sin archivo de video principal: carpeta vacía o sin video'`,
       `movies.status` is `ERROR`, and `bin/mysql -e 'select count(*) from process_jobs where ...'`
-      returns 0.
+      returns 0. Pre-existing, unchanged behaviour (REQ-3/REQ-4) — not re-exercised live this
+      session; see closing report.
 - [ ] **AC-9 (failure path)**: Given a source file with no audio track in the film's original
       language, when it is encoded, then the job ends `ERROR`, the download is still on disk and the
-      torrent is still in qBittorrent.
+      torrent is still in qBittorrent. Pre-existing, unchanged behaviour — not re-exercised live this
+      session.
 - [ ] **AC-10 (failure path)**: Given a download folder holding two video files, when it is scanned,
       then the `source_files` row names the larger of the two, regardless of which one the release
-      name resembles.
+      name resembles. Covered by `scan-folder.spec.ts` (T007); not re-exercised against a live scan
+      this session.
 - [ ] **AC-11**: Given `media_server_client = none` in Settings, when an encode completes, then the
       job reports `COMPLETED` and `docker compose logs api` shows no media-server request attempted.
+      Not re-verified live: the running stack has `media_server_client = jellyfin` configured, and
+      changing it was out of scope for closing this feature.
 - [ ] **AC-12**: Given a source already in `SCANNED`, when `torrentCompleted` fires again for its
       infohash, then it returns `ya procesado: mediaSource <id> en estado SCANNED` and no new job
-      appears on the `process` queue.
-- [ ] **AC-13**: `bin/npm worker test` passes, including new specs covering the cleanup branch for
+      appears on the `process` queue. Pre-existing, unchanged behaviour (REQ-2) — not re-exercised
+      live this session.
+- [x] **AC-13**: `bin/npm worker test` passes, including new specs covering the cleanup branch for
       each source kind, the containment refusal, the cleanup-error isolation, and the scan's
-      largest-video rule.
-- [ ] **AC-14**: `bin/npm api test` passes with no fewer suites than before.
-- [ ] **AC-15**: `bin/cli api npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit` each
+      largest-video rule. Confirmed: 7 suites, 57 tests, all green.
+- [x] **AC-14**: `bin/npm api test` passes with no fewer suites than before. Confirmed: 13 suites,
+      125 tests (up from 122), all green.
+- [x] **AC-15**: `bin/cli api npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit` each
       report 0 errors; `bin/cli web npx --no tsc --noEmit` still reports exactly the 11 known
       pre-GraphQL errors across the same 4 files (`services/web/CLAUDE.md` § Current state) and not
-      one more.
+      one more. Confirmed: both typechecks clean; `web` unchanged at 11 errors across
+      `importFolderModal.tsx`, `ImportMagnetSeasonModal.tsx`, `ResultsForm.tsx`, `SearchForm.tsx`.
 
 ## Out of Scope
 

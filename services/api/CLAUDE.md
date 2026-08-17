@@ -171,7 +171,11 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   same way a movie-owned one does; a source already `ERROR` (superseded by a `force` replacement)
   is left untouched rather than acted on.
 - `process-jobs/` — the `ProcessJob` lifecycle: `sourceScanned` → encode queued → `encodeCompleted`.
-  Resolves `outputRoot` for the worker. Since `011-av1-transcode`, `getEncodeJobDetails` also
+  Resolves `outputRoot` for the worker. Since `012-post-download-processing`, it also resolves
+  `downloadsRoot` (`resolveFromRoot('downloads', '.')` — the root itself, not `path_downloads`,
+  because a torrent's save path and a tus upload's staging directory sit under different segments
+  of it) into the shared `base` object, so the worker can verify a source's `downloadPath` is
+  contained before deleting it. Since `011-av1-transcode`, `getEncodeJobDetails` also
   resolves `allowedLanguagesIso3`: the title's original language (via the existing `resolveIso3`,
   unchanged) followed by the union of every owner's global and per-title language preference,
   deduplicated, selecting `language.iso3` from the join and never `iso2` — owners come from
@@ -303,8 +307,13 @@ structure now, not the scaffolding pattern its name might suggest from memory.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-17, after `011-av1-transcode`, `bin/cli api npx --no tsc --noEmit` reports **0
-errors** and `bin/npm api test` is green at **122** tests across **13** suites. `episodes/` is the
+As of 2026-08-17, after `012-post-download-processing`, `bin/cli api npx --no tsc --noEmit` reports
+**0 errors** and `bin/npm api test` is green at **125** tests across **13** suites —
+`012-post-download-processing` added a `downloadsRoot` `describe` block to
+`process-jobs.service.spec.ts` (3 cases: `resolveFromRoot` called with exactly `('downloads', '.')`,
+verified to fail when switched to the `path_downloads` setting; the resolved value present on both
+a `MOVIE` and an `EPISODE` payload), no new suite. Before that, after `011-av1-transcode`, the count
+was 122 across 13 suites. `episodes/` is the
 eleventh suite (`episodes.service.spec.ts`, from `010-episode-acquisition`, 9 cases, including one
 that asserts a created `MediaSource` carries `episodeId` and never `movieId` — verified to fail
 when that field is swapped); `upload-tickets.service.spec.ts` gained one cross-target case (a

@@ -105,6 +105,52 @@ describe('ProcessJobsService', () => {
     languages: titleIso3s.map((iso3) => ({ language: { iso3 } })),
   });
 
+  // This block exists because getEncodeJobDetails's downloadsRoot is the only
+  // input the worker's cleanup containment check (REQ-12) has to decide
+  // whether a path is safe to delete. Resolving the narrower `path_downloads`
+  // setting instead of the downloads root itself would make every uploaded
+  // file — staged under `<root>/imports/<uploadId>`, outside `path_downloads`
+  // — fail that check, so cleanup would silently skip it forever, with no
+  // error anywhere and the disk filling up (012-post-download-processing's
+  // REQ-10/REQ-12, and the bug this feature exists to fix).
+  describe('getEncodeJobDetails — downloadsRoot', () => {
+    it('resolves the downloads root itself, not the path_downloads setting', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+
+      await service.getEncodeJobDetails(1);
+
+      expect(mediaRoots.resolveFromRoot).toHaveBeenCalledWith('downloads', '.');
+    });
+
+    it('carries the resolved downloads root on a MOVIE payload', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      mediaRoots.resolveFromRoot.mockImplementation((rootId: string) =>
+        Promise.resolve(rootId === 'downloads' ? '/downloads' : '/library/Movies'),
+      );
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.downloadsRoot).toBe('/downloads');
+    });
+
+    it('carries the resolved downloads root on an EPISODE payload', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userShow.findMany.mockResolvedValue([]);
+      mediaRoots.resolveFromRoot.mockImplementation((rootId: string) =>
+        Promise.resolve(rootId === 'downloads' ? '/downloads' : '/library/Shows'),
+      );
+
+      const details = await service.getEncodeJobDetails(2);
+
+      expect(details.downloadsRoot).toBe('/downloads');
+    });
+  });
+
   describe('getEncodeJobDetails — REQ-3 language merge', () => {
     it('unions two owners with different global preferences and one per-title extra', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());

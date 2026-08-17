@@ -2,7 +2,7 @@
 title: Post-Download Processing — worker slice
 service: worker
 last_updated: 2026-08-17
-status: Approved            # Draft | Approved | Implemented
+status: Implemented            # Draft | Approved | Implemented
 ---
 
 # PLAN: Post-Download Processing — `worker` (`worker/plan.md`)

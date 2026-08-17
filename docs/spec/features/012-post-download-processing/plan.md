@@ -2,7 +2,7 @@
 title: Post-Download Processing — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-08-17
-status: Approved            # Draft | Approved | Implemented
+status: Implemented            # Draft | Approved | Implemented
 ---
 
 # PLAN: Post-Download Processing (`plan.md`)

@@ -33,11 +33,12 @@ Flat capability folders, not Nest-style modules. No path aliases — relative im
 src/index.ts             the two Workers, the umask, the signal handling
 src/queue/types.ts       queue/job names and payload shapes
 src/api/graphql-client.ts  fetchGraphQL — throws on json.errors, deliberately
-src/jobs/                the two handlers
+src/jobs/                the two handlers, plus cleanup-source.ts (post-encode source deletion)
 src/scan/scan-folder.ts  file inventory for source-ready
 src/encode/              the driver seam (see below)
 src/ffmpeg/              buildCommand · params · metadata · runner · remux-detection · iso639
 src/paths/build-output-path.ts   composes the final library path
+src/paths/is-inside-root.ts      pure containment check, used before any delete
 ```
 
 ## The encode driver seam
@@ -102,12 +103,33 @@ with `Number(...)` silently misclassifies every file as non-remux, forever, with
 `remux-detection.spec.ts` proves this by asserting the naive implementation gets the case wrong. The
 filename substring is the last resort only, reached when no bitrate at all can be computed.
 
+## Post-encode cleanup, and where deleting a source lives (`012-post-download-processing`)
+
+`src/jobs/cleanup-source.ts`'s `cleanupSource(input)` is called from `encode.job.ts` **after** the
+encode's own `try/catch` has closed — not from inside it — wrapped in a second `try` whose `catch`
+only logs. That placement is the fix for what used to be the worst failure mode here: a cleanup
+error (qBittorrent unreachable, `EACCES` on the download folder) could flip an already-`COMPLETED`
+`ProcessJob`, and the film with it, back to `ERROR` — permanently, since neither queue configures
+`attempts`. `cleanupSource` branches on `sourceKind`, not `infoHash`: every source kind is deleted
+now, including a `LOCAL_FILE` (a tus upload), which previously had a null `infoHash` and was never
+cleaned up at all. Before deleting anything it calls `isInsideRoot(downloadsRoot, downloadPath)`
+(`src/paths/is-inside-root.ts`) and refuses, logging, if the path is not contained — `downloadsRoot`
+arrives resolved on `EncodeJobDetails`, the same way `outputRoot` does; a missing or empty root is
+treated as **refuse**, never as "everything passes".
+
 ## Errors must not be swallowed
 
 `src/api/graphql-client.ts` throws on `json.errors`, and the comment at the top says why: `web`
 renders errors to a user, but a worker that swallowed one would mark the job completed without
 having written anything. Preserve that. A caught-and-logged error that lets a job report success is
 this service's central failure mode.
+
+**One documented exception**: `cleanup-source.ts` catches and logs every error it can produce —
+a throwing `fetchGraphQL` (torrent client unreachable) or a throwing `rm`/`rmdir` — instead of
+letting it propagate. This is deliberate, not an oversight: cleanup runs after the encode has
+already succeeded and the `ProcessJob` already reports `COMPLETED`; letting a cleanup failure
+propagate would demote a job that produced a perfectly good file. The reasoning is written as a
+comment at the top of the file itself.
 
 Same reasoning applies to long-running work: `ffmpeg/runner.ts` handles signals for the whole
 duration and writes through a working path before an atomic move, so a killed container never
@@ -119,7 +141,7 @@ leaves a half-written file at the destination.
 | :-- | :-- |
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate |
-| `bin/npm worker test` | `vitest run` — 4 suites, 31 tests, green (`011-av1-transcode` added the first three real specs) |
+| `bin/npm worker test` | `vitest run` — 7 suites, 57 tests, green (`011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 
 ## Known debt
@@ -127,10 +149,12 @@ leaves a half-written file at the destination.
 - **Test coverage is still partial.** `011-av1-transcode` added `vitest.config.ts` and the first
   real specs (`src/ffmpeg/remux-detection.spec.ts`, `src/ffmpeg/params.spec.ts`,
   `src/ffmpeg/buildCommand.spec.ts`, alongside the pre-existing `src/api/graphql-client.spec.ts`) —
-  the rule-dense files that decide *what* an encode keeps are now covered. `paths/build-output-path.ts`
-  and `ffmpeg/runner.ts` still have none. A wrong FFmpeg argument or a wrong output path on an
-  uncovered path still produces a job marked `completed` and a file nobody can find — no error in
-  any log (Constitution, Article IX).
+  the rule-dense files that decide *what* an encode keeps are now covered. `012-post-download-processing`
+  added the first specs for the flow around the encode (`src/paths/is-inside-root.spec.ts`,
+  `src/jobs/cleanup-source.spec.ts`, `src/scan/scan-folder.spec.ts`). `paths/build-output-path.ts`,
+  `ffmpeg/runner.ts` and `handleEncode`'s own orchestration in `jobs/encode.job.ts` still have none.
+  A wrong FFmpeg argument or a wrong output path on an uncovered path still produces a job marked
+  `completed` and a file nobody can find — no error in any log (Constitution, Article IX).
 - **No linter or formatter.** No ESLint, no Prettier, no Biome — `api` has the first two, `web` has
   Biome, this service has nothing. Match the surrounding file by eye.
 - **Dependency skew with `api`**: `ioredis` ^5 here vs ^6 there, `@types/node` ^22 vs ^24. Not

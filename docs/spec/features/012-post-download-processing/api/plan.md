@@ -2,7 +2,7 @@
 title: Post-Download Processing — api slice
 service: api
 last_updated: 2026-08-17
-status: Approved            # Draft | Approved | Implemented
+status: Implemented            # Draft | Approved | Implemented
 ---
 
 # PLAN: Post-Download Processing — `api` (`api/plan.md`)

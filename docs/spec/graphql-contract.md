@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.4.0
+spec_version: 1.5.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-13
+last_updated: 2026-08-17
 status: Approved
 target_service: api, web, worker
 ---
@@ -465,6 +465,41 @@ which the rule functions would read as "keep the original language only," no err
 A missing original-language audio track is a hard failure (`encodeFailed`, no new GraphQL surface) —
 replacing the previous behaviour of silently copying every audio track untranscoded. A missing *extra*
 language is not an error; the encode continues with what's present.
+
+### The encode payload carries the downloads root (`012-post-download-processing`)
+
+```graphql
+type EncodeJobDetails {
+  # …every existing field, unchanged…
+  downloadsRoot: String!
+}
+```
+
+Resolved in `services/api/src/process-jobs/process-jobs.service.ts` with
+`mediaRoots.resolveFromRoot('downloads', '.')` — the **root itself**, not the `path_downloads`
+setting. Torrents save under `<root>/<path_downloads>/<hash>` while tus uploads stage under
+`<root>/imports/<uploadId>`, and the worker's containment check (`REQ-12`) has to cover both, so it
+needs the root, not the narrower segment either kind happens to live under.
+
+It is non-null and, like `outputRoot`, an absolute **container** path that reaches `worker` and
+stops there — it never crosses into `web`. If the downloads root is not mounted,
+`resolveFromRoot` throws and the whole `processJob(id)` query fails with the existing
+`La raíz "<label>" no está montada en este container — revisá HOST_DOWNLOADS_DIR en el .env y
+volvé a levantar el stack.` — the worker cannot usefully encode into a stack whose volumes are
+wrong, so failing loudly here is the intended outcome, not something a consumer should catch.
+
+`downloadRemove(mediaSourceId: Int!): String!` is unchanged, including its
+`omitido: mediaSource <id> no es un torrent` response for a source with no infohash. What changed
+is on the `worker` side, in `src/jobs/cleanup-source.ts`: that string no longer means "nothing to
+delete" — the worker calls `downloadRemove` only for a torrent (branching on `sourceKind`), but
+deletes files for every source kind. Reading `omitido: …` as "cleanup is done" would silently
+reinstate the bug this feature fixes, where an uploaded file's `imports/<uploadId>` directory was
+never removed.
+
+Consumer obligations: `worker` adds `downloadsRoot` to the `processJob(id)` query and to the local
+`EncodeJobDetails` type in `src/jobs/encode.job.ts` — both, in the same edit, per the usual
+hand-retyped-contract risk this document warns about. `web` has no obligation; it never queries
+`processJob`.
 
 ### The one non-GraphQL route
 

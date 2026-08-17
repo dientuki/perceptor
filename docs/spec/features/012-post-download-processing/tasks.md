@@ -1,7 +1,7 @@
 ---
 title: Post-Download Processing — Tasks
 last_updated: 2026-08-17
-status: Draft            # Draft | In Progress | Done
+status: Done            # Draft | In Progress | Done
 ---
 
 # TASKS: Post-Download Processing (`tasks.md`)
@@ -23,10 +23,10 @@ script, `docker-compose.yaml`, Dockerfile or `.env.example` key moves — the vo
 
 ### Group 1 — `api`: the contract
 
-T001 is the only task the `worker` slice waits on. T002 and T003 are independent of each other and
-of nothing else in this group depends on them, so both may run alongside T001's follow-up work.
+T001 is the only task the `worker` slice waits on. T002 depends on T001; T003 depends on nothing in
+this group and may run alongside T001.
 
-- [ ] **T001** `[api]` Add `downloadsRoot` to `src/process-jobs/entities/encode-job-details.entity.ts`
+- [x] **T001** `[api]` Add `downloadsRoot` to `src/process-jobs/entities/encode-job-details.entity.ts`
       as a non-null `@Field()` beside `outputRoot`, with a comment recording that it is the
       downloads **root** and not `path_downloads` (torrents save under `<root>/<path_downloads>/<hash>`,
       uploads stage under `<root>/imports/<uploadId>`; containment has to cover both). Resolve it in
@@ -34,7 +34,7 @@ of nothing else in this group depends on them, so both may run alongside T001's 
       with `this.mediaRoots.resolveFromRoot('downloads', '.')`.
       *Done when:* `bin/cli api cat src/schema.gql | grep downloadsRoot` prints
       `downloadsRoot: String!`; `bin/cli api npx --no tsc --noEmit` reports 0 errors.
-- [ ] **T002** `[api] [P]` Add a `downloadsRoot` `describe` block to
+- [x] **T002** `[api] [P]` Add a `downloadsRoot` `describe` block to
       `src/process-jobs/process-jobs.service.spec.ts`, opening with a header comment naming the
       silent failure (resolving the wrong root makes every uploaded file fail the worker's
       containment check, so cleanup skips it forever, with no error in any log). Three cases:
@@ -43,7 +43,7 @@ of nothing else in this group depends on them, so both may run alongside T001's 
       *Done when:* `bin/npm api test` is green with the new block, and the first case is verified to
       **fail** when the argument is switched to the `path_downloads` setting (report the failing
       output, then restore).
-- [ ] **T003** `[api] [P]` Correct the comment above `SourceFile.filePath` in
+- [x] **T003** `[api] [P]` Correct the comment above `SourceFile.filePath` in
       `prisma/schema.prisma`: the original **is** deleted after a successful encode (REQ-10) — for
       torrents already, and for every source kind once this feature lands. Comment only.
       *Done when:* `bin/cli api npx prisma migrate status` reports no drift and
@@ -57,14 +57,14 @@ the only task that needs T001: the code compiles either way (there is no codegen
 is a runtime one — until the field ships, `downloadsRoot` arrives `undefined` and every cleanup
 refuses.
 
-- [ ] **T004** `[worker] [P]` Create `src/paths/is-inside-root.ts` exporting
+- [x] **T004** `[worker] [P]` Create `src/paths/is-inside-root.ts` exporting
       `isInsideRoot(root, candidate): boolean` — `resolve()` both, true only when equal or the
       candidate starts with `root + sep`; an empty or non-absolute root returns **false**. No
       filesystem access. Plus `src/paths/is-inside-root.spec.ts` per `worker/plan.md` § Tests.
       *Done when:* `bin/npm worker test` is green and the suite includes a case proving
       `/media/downloads-old` is not inside `/media/downloads`, and one proving an empty root
       refuses.
-- [ ] **T005** `[worker]` Create `src/jobs/cleanup-source.ts` exporting
+- [x] **T005** `[worker]` Create `src/jobs/cleanup-source.ts` exporting
       `cleanupSource(input): Promise<void>` with a locally declared `CleanupInput`
       (`mediaSourceId`, `sourceKind`, `infoHash`, `downloadPath`, `downloadsRoot`), following
       `src/paths/build-output-path.ts`'s narrow-input pattern. Order: `downloadRemove` first when
@@ -79,7 +79,7 @@ refuses.
       *Done when:* `bin/npm worker test` green; the `LOCAL_FILE` case is verified to **fail** when
       the branch is switched back to `infoHash` (report the failing output, then restore); a
       throwing `fetchGraphQL` and a throwing `rm` both leave `cleanupSource` resolved, not rejected.
-- [ ] **T006** `[worker]` Wire it into `src/jobs/encode.job.ts`: add `downloadsRoot: string` to the
+- [x] **T006** `[worker]` Wire it into `src/jobs/encode.job.ts`: add `downloadsRoot: string` to the
       local `EncodeJobDetails` type **and** to the `processJob(id)` query selection in the same
       edit; delete the `if (details.infoHash) { … }` block from inside the encode's `try`; call
       `cleanupSource(...)` after that `try/catch` closes, wrapped in its own `try` whose `catch`
@@ -88,7 +88,7 @@ refuses.
       *Done when:* `bin/cli worker npx --no tsc --noEmit` reports 0 errors;
       `grep -n "infoHash" src/jobs/encode.job.ts` shows no filesystem operation guarded by it; the
       cleanup call sits outside the `try` that wraps the encode.
-- [ ] **T007** `[worker] [P]` Create `src/scan/scan-folder.spec.ts` against a real `mkdtemp`: the
+- [x] **T007** `[worker] [P]` Create `src/scan/scan-folder.spec.ts` against a real `mkdtemp`: the
       largest video wins regardless of name, a larger non-video does not win, a folder with no video
       yields `matchedFilePath: null`, and a single-file `downloadPath` is inventoried as one entry.
       Header comment naming the silent failure — a wrong pick here encodes the sample instead of the
@@ -97,18 +97,18 @@ refuses.
 
 ### Group 3 — docs and verification
 
-- [ ] **T008** `[docs]` Add a `### The encode payload carries the downloads root
+- [x] **T008** `[docs]` Add a `### The encode payload carries the downloads root
       (012-post-download-processing)` section to `docs/spec/graphql-contract.md`, before
       `### The one non-GraphQL route`: the SDL, why it is the root and not `path_downloads`, why it
       is non-null, and that `downloadRemove`'s `omitido: …` response no longer means "nothing to
       delete". Bump `spec_version`. → T001
-- [ ] **T009** `[docs]` Update the affected `CLAUDE.md` files. `services/worker/CLAUDE.md`: the
+- [x] **T009** `[docs]` Update the affected `CLAUDE.md` files. `services/worker/CLAUDE.md`: the
       layout block gains `src/jobs/cleanup-source.ts` and `src/paths/is-inside-root.ts`, the dev-loop
       test count moves off 4 suites / 31 tests, and the "Errors must not be swallowed" section gains
       the one documented exception. `services/api/CLAUDE.md`: the `process-jobs/` bullet mentions
       `downloadsRoot`, and the test counts move. Root `CLAUDE.md`: no pipeline row changes status —
       say so rather than editing the table. → T006
-- [ ] **T010** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack per
+- [x] **T010** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack per
       `plan.md` § Verification — the four `bin/` gates, then the seven-step manual pass, with
       `ENCODE_DRIVER=mock` for everything except the AV1 checks. Tick each box, then set
       `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md` and `worker/plan.md`, and

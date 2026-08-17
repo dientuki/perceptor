@@ -1,8 +1,8 @@
-import { rm } from 'node:fs/promises';
 import type { Job } from 'bullmq';
 import { fetchGraphQL } from '../api/graphql-client';
 import { buildOutputPath } from '../paths/build-output-path';
 import { encode } from '../encode';
+import { cleanupSource } from './cleanup-source';
 import type { EncodeJob } from '../queue/types';
 
 export type EncodeJobDetails = {
@@ -25,6 +25,7 @@ export type EncodeJobDetails = {
   infoHash: string | null;
   downloadPath: string | null;
   outputRoot: string;
+  downloadsRoot: string;
 };
 
 type ProcessJobQueryResult = {
@@ -44,7 +45,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       processJob(id: $id) {
         id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedLanguagesIso3 isLiveAction
         seasonNumber episodeNumber episodeTitle
-        mediaSourceId sourceKind infoHash downloadPath outputRoot
+        mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
       }
     }`,
     { id: processJobId },
@@ -107,20 +108,6 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
 
     console.log(`[encode] ${processJobId}: completado -> ${outputPath}`);
 
-    // Sólo para torrents (infoHash no null): liberar el cliente y limpiar el
-    // savepath. La api no puede borrar la carpeta — no tiene montado el
-    // volumen de descargas — así que ese paso lo hace el worker.
-    if (details.infoHash) {
-      await fetchGraphQL(
-        `mutation ($id: Int!) { downloadRemove(mediaSourceId: $id) }`,
-        { id: details.mediaSourceId },
-      );
-
-      if (details.downloadPath) {
-        await rm(details.downloadPath, { recursive: true, force: true });
-      }
-    }
-
     // El aviso al media server (Jellyfin, si está configurado) lo dispara el
     // api dentro de encodeCompleted — tiene las settings y las raíces, el
     // worker no necesita enterarse.
@@ -133,5 +120,22 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     ).catch((err) => console.error(`[encode] no se pudo reportar el fallo de ${processJobId}:`, err));
 
     throw error;
+  }
+
+  // Cleanup runs after the encode's try/catch has already closed: the job is
+  // already reported completed at this point, and nothing here may flip it
+  // back to failed. cleanupSource itself never throws (see its header
+  // comment), but this second try is a deliberate line of defence in case it
+  // ever does despite that contract.
+  try {
+    await cleanupSource({
+      mediaSourceId: details.mediaSourceId,
+      sourceKind: details.sourceKind,
+      infoHash: details.infoHash,
+      downloadPath: details.downloadPath,
+      downloadsRoot: details.downloadsRoot,
+    });
+  } catch (err) {
+    console.error(`[encode] ${processJobId}: cleanupSource falló inesperadamente:`, err);
   }
 }

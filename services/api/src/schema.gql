@@ -106,6 +106,7 @@ type EncodeJobDetails {
   infoHash: String
   downloadPath: String
   outputRoot: String!
+  downloadsRoot: String!
 }
 
 type MediaServerOption {
