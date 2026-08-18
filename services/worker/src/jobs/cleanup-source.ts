@@ -12,6 +12,10 @@ export type CleanupInput = {
   infoHash: string | null;
   downloadPath: string | null;
   downloadsRoot: string;
+  inputFilePath: string;
+  removeTorrent: boolean;
+  deleteInputFile: boolean;
+  deleteDownloadPath: boolean;
 };
 
 // Post-encode cleanup for the source that produced a completed file (REQ-10).
@@ -29,7 +33,17 @@ export type CleanupInput = {
 // function is caught and logged with the `[cleanup]` prefix and the
 // mediaSource id, never rethrown.
 export async function cleanupSource(input: CleanupInput): Promise<void> {
-  const { mediaSourceId, sourceKind, infoHash, downloadPath, downloadsRoot } = input;
+  const {
+    mediaSourceId,
+    sourceKind,
+    infoHash,
+    downloadPath,
+    downloadsRoot,
+    inputFilePath,
+    removeTorrent,
+    deleteInputFile,
+    deleteDownloadPath,
+  } = input;
 
   // A torrent must be removed from the client whatever else happens, and
   // before anything on disk moves so the client releases its file handles
@@ -38,15 +52,43 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
   // but calling it unconditionally would be a wasted round-trip for every
   // local file — the mutation call and the filesystem branch below are
   // deliberately guarded on two different things (see worker/plan.md).
-  if (infoHash) {
+  // `removeTorrent` (013-season-pack-processing) gates whether this is even
+  // the right job to do it: for a season pack it is only `true` on the last
+  // ProcessJob to finish, whatever the others ended as.
+  if (removeTorrent && infoHash) {
     try {
       await fetchGraphQL(
-        `mutation ($id: Int!) { downloadRemove(mediaSourceId: $id) }`,
+        `mutation ($id: Int!) { downloadRemove(mediaSourceId: $id, deleteFiles: false) }`,
         { id: mediaSourceId },
       );
     } catch (err) {
       console.error(`[cleanup] mediaSource ${mediaSourceId}: downloadRemove falló:`, err);
     }
+  }
+
+  // Per-episode input deletion (REQ-8/REQ-9, 013-season-pack-processing): a
+  // season pack releases each episode's own file as soon as that episode's
+  // encode succeeds, well before the whole download path is ever touched.
+  // `inputFilePath` is worker-reported data that made a round trip through
+  // the database (SourceFile.filePath), so it gets its own containment
+  // check — the one on downloadPath below does not cover it, the two paths
+  // differ for a pack.
+  if (deleteInputFile) {
+    if (!isInsideRoot(downloadsRoot, inputFilePath)) {
+      console.error(
+        `[cleanup] mediaSource ${mediaSourceId}: inputFilePath ${inputFilePath} no está dentro de downloadsRoot ${downloadsRoot} — no se borra`,
+      );
+    } else {
+      try {
+        await rm(inputFilePath, { force: true });
+      } catch (err) {
+        console.error(`[cleanup] mediaSource ${mediaSourceId}: no se pudo borrar ${inputFilePath}:`, err);
+      }
+    }
+  }
+
+  if (!deleteDownloadPath) {
+    return;
   }
 
   if (!downloadPath) {

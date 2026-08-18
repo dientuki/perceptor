@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SourceFileInput } from './dto/source-file.input';
+import { ScannedMatchInput } from './dto/scanned-match.input';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
 
 @Injectable()
@@ -26,11 +27,7 @@ export class MediaSourcesService {
     return this.findOneFlat(id);
   }
 
-  async sourceScanned(
-    mediaSourceId: number,
-    files: SourceFileInput[],
-    matchedFilePath: string | null,
-  ) {
+  async sourceScanned(mediaSourceId: number, files: SourceFileInput[], matches: ScannedMatchInput[]) {
     // Ids de ProcessJob a encolar en bull:encode. Se juntan durante la
     // transacción pero se encolan después de commitear (ver más abajo): si se
     // encolara adentro, el worker podría tomar el job antes de que la fila
@@ -40,7 +37,10 @@ export class MediaSourcesService {
     await this.prisma.$transaction(async (tx) => {
       const mediaSource = await tx.mediaSource.findUnique({
         where: { id: mediaSourceId },
-        include: { movie: { select: { id: true } } },
+        include: {
+          movie: { select: { id: true } },
+          season: { include: { episodes: { select: { id: true, episodeNumber: true } } } },
+        },
       });
       if (!mediaSource) {
         throw new NotFoundException(`El mediaSource ${mediaSourceId} no existe`);
@@ -55,18 +55,86 @@ export class MediaSourcesService {
         console.log(`[sourceScanned] mediaSource ${mediaSourceId} ya estaba SCANNED, re-escaneando`);
       }
 
-      // SourceFile no es un inventario de la carpeta: es "qué archivo pertenece
-      // a esta película/episodio". Un torrent puede traer el .mkv junto con
-      // varios .nfo, samples o .parts — sólo el ganador (el video más grande,
-      // ya elegido por el worker en matchedFilePath) se persiste.
-      if (matchedFilePath === null) {
-        // Carpeta vacía o sin video: única rama de error que maneja la api.
-        // No se crea ningún SourceFile.
+      if (!movieId && !mediaSource.episodeId && !mediaSource.season) {
+        throw new BadRequestException(
+          `El mediaSource ${mediaSourceId} no apunta a ninguna película, episodio ni temporada`,
+        );
+      }
+
+      // El .find() valida que cada match.filePath sea uno de los archivos que el
+      // worker reportó haber escaneado, aunque de la fila en sí ya no se
+      // persista nada más que filePath (fileName/size vivían sólo para
+      // mostrarse, y nunca se leyeron de vuelta — ver plan).
+      for (const match of matches) {
+        const inFiles = files.some((file) => file.filePath === match.filePath);
+        if (!inFiles) {
+          throw new BadRequestException(
+            `matchedFilePath ${match.filePath} no está en la lista de files reportada`,
+          );
+        }
+      }
+
+      // Un episodio o una película ignoran los números parseados por el
+      // worker: la búsqueda de S01E02 en el nombre del archivo sólo importa
+      // cuando el mediaSource apunta a una temporada entera.
+      const episodeIdByNumber = new Map<number, number>();
+      if (mediaSource.season) {
+        for (const episode of mediaSource.season.episodes) {
+          episodeIdByNumber.set(episode.episodeNumber, episode.id);
+        }
+      }
+
+      const resolvedMatches: { filePath: string; episodeId: number | null }[] = [];
+
+      for (const match of matches) {
+        if (mediaSource.episodeId) {
+          resolvedMatches.push({ filePath: match.filePath, episodeId: mediaSource.episodeId });
+          continue;
+        }
+
+        if (movieId) {
+          resolvedMatches.push({ filePath: match.filePath, episodeId: null });
+          continue;
+        }
+
+        // Sólo queda el caso temporada: un match cuyo seasonNumber parseado no
+        // coincide con el de la temporada pedida, o cuyo episodeNumber no
+        // existe en ella, queda sin resolver — no se adivina.
+        if (mediaSource.season) {
+          if (match.seasonNumber != null && match.seasonNumber !== mediaSource.season.seasonNumber) {
+            console.log(
+              `[sourceScanned] mediaSource ${mediaSourceId}: se descarta ${match.filePath} (seasonNumber ${match.seasonNumber} no coincide con la temporada ${mediaSource.season.seasonNumber})`,
+            );
+            continue;
+          }
+
+          const episodeId =
+            match.episodeNumber != null ? episodeIdByNumber.get(match.episodeNumber) : undefined;
+          if (episodeId === undefined) {
+            console.log(
+              `[sourceScanned] mediaSource ${mediaSourceId}: se descarta ${match.filePath} (episodeNumber ${match.episodeNumber} sin episodio en la temporada)`,
+            );
+            continue;
+          }
+
+          resolvedMatches.push({ filePath: match.filePath, episodeId });
+        }
+      }
+
+      // hasUnmatchedFiles: sólo cuenta lo que el worker marcó como video y que
+      // no terminó resuelto — un .nfo/.srt nunca lo activa (ver dto isVideo).
+      const resolvedPaths = new Set(resolvedMatches.map((m) => m.filePath));
+      const hasUnmatchedFiles = files.some((file) => file.isVideo && !resolvedPaths.has(file.filePath));
+
+      if (resolvedMatches.length === 0) {
+        // Carpeta vacía, sin video, o (para una temporada) ningún video se pudo
+        // resolver a un episodio: única rama de error que maneja la api. No se
+        // crea ningún SourceFile ni ProcessJob.
         const errorMessage = 'Escaneo sin archivo de video principal: carpeta vacía o sin video';
 
         await tx.mediaSource.update({
           where: { id: mediaSourceId },
-          data: { status: 'ERROR', errorMessage },
+          data: { status: 'ERROR', errorMessage, hasUnmatchedFiles },
         });
 
         // Un paso más allá de lo pedido: si no se marca la película, queda en
@@ -87,62 +155,77 @@ export class MediaSourcesService {
         return;
       }
 
-      // El .find() valida que matchedFilePath sea uno de los archivos que el
-      // worker reportó haber escaneado, aunque de la fila en sí ya no se
-      // persista nada más que filePath (fileName/size vivían sólo para
-      // mostrarse, y nunca se leyeron de vuelta — ver plan).
-      const matchedFile = files.find((file) => file.filePath === matchedFilePath);
-      if (!matchedFile) {
-        throw new BadRequestException(
-          `matchedFilePath ${matchedFilePath} no está en la lista de files reportada`,
-        );
-      }
-
-      const sourceFile = await tx.sourceFile.upsert({
-        where: { mediaSourceId_filePath: { mediaSourceId, filePath: matchedFilePath } },
-        create: { mediaSourceId, filePath: matchedFilePath, movieId, episodeId: mediaSource.episodeId },
-        update: { movieId, episodeId: mediaSource.episodeId },
-      });
-      const matchedSourceFileId = sourceFile.id;
-
-      // Find-or-create: si ya existe un ProcessJob para este SourceFile no se
-      // toca ni se resetea — un re-scan no puede tirar para atrás un job que ya
-      // está ENCODING.
-      const existing = await tx.processJob.findUnique({
-        where: { sourceFileId: matchedSourceFileId },
-      });
-
-      if (existing) {
-        // WAITING acá significa que la fila se creó en un re-scan anterior
-        // pero nunca se llegó a encolar (por ejemplo, si el add() de abajo
-        // falló esa vez) — este re-scan es la palanca para recuperarlo. Si
-        // ya está QUEUED/ENCODING/COMPLETED/ERROR no se toca.
-        if (existing.status === 'WAITING') {
-          processJobIdsToQueue.push(existing.id);
-        } else {
-          console.log(
-            `[sourceScanned] ProcessJob ${existing.id} ya existe para sourceFile ${matchedSourceFileId}, no se toca`,
-          );
-        }
-      } else {
-        const created = await tx.processJob.create({
-          data: {
-            sourceFileId: matchedSourceFileId,
+      for (const resolved of resolvedMatches) {
+        // SourceFile no es un inventario de la carpeta: es "qué archivo
+        // pertenece a esta película/episodio". Un torrent puede traer el .mkv
+        // junto con varios .nfo, samples o .parts — sólo los ganadores (uno
+        // por episodio, o el video más grande para una película/episodio
+        // suelto, ya elegidos por el worker) se persisten.
+        const sourceFile = await tx.sourceFile.upsert({
+          where: { mediaSourceId_filePath: { mediaSourceId, filePath: resolved.filePath } },
+          create: {
+            mediaSourceId,
+            filePath: resolved.filePath,
             movieId,
-            episodeId: mediaSource.episodeId,
-            status: 'WAITING',
+            episodeId: resolved.episodeId,
           },
+          update: { movieId, episodeId: resolved.episodeId },
         });
-        processJobIdsToQueue.push(created.id);
+        const sourceFileId = sourceFile.id;
+
+        // Find-or-create: si ya existe un ProcessJob para este SourceFile no se
+        // toca ni se resetea — un re-scan no puede tirar para atrás un job que
+        // ya está ENCODING.
+        const existing = await tx.processJob.findUnique({
+          where: { sourceFileId },
+        });
+
+        let jobCreatedOrRequeued = false;
+
+        if (existing) {
+          // WAITING acá significa que la fila se creó en un re-scan anterior
+          // pero nunca se llegó a encolar (por ejemplo, si el add() de abajo
+          // falló esa vez) — este re-scan es la palanca para recuperarlo. Si
+          // ya está QUEUED/ENCODING/COMPLETED/ERROR no se toca.
+          if (existing.status === 'WAITING') {
+            processJobIdsToQueue.push(existing.id);
+            jobCreatedOrRequeued = true;
+          } else {
+            console.log(
+              `[sourceScanned] ProcessJob ${existing.id} ya existe para sourceFile ${sourceFileId}, no se toca`,
+            );
+          }
+        } else {
+          const created = await tx.processJob.create({
+            data: {
+              sourceFileId,
+              movieId,
+              episodeId: resolved.episodeId,
+              status: 'WAITING',
+            },
+          });
+          processJobIdsToQueue.push(created.id);
+          jobCreatedOrRequeued = true;
+        }
+
+        // Cada episodio sigue su propio job: para un episodio suelto esto
+        // repite lo que DownloadsService ya hizo (inofensivo); para una
+        // temporada es el único lugar donde pasa.
+        if (jobCreatedOrRequeued && resolved.episodeId) {
+          await tx.episode.update({
+            where: { id: resolved.episodeId },
+            data: { status: 'ENCODING' },
+          });
+        }
       }
 
-      // SCANNED = "el archivo del release quedó identificado en source_files".
-      // errorMessage se limpia para que un re-scan exitoso borre el diagnóstico
-      // del intento anterior. Movie.status no se toca: downloads.service ya lo
-      // puso en ENCODING y sigue siendo verdad.
+      // SCANNED = "el/los archivo(s) del release quedaron identificados en
+      // source_files". errorMessage se limpia para que un re-scan exitoso
+      // borre el diagnóstico del intento anterior. Movie.status no se toca:
+      // downloads.service ya lo puso en ENCODING y sigue siendo verdad.
       await tx.mediaSource.update({
         where: { id: mediaSourceId },
-        data: { status: 'SCANNED', errorMessage: null },
+        data: { status: 'SCANNED', errorMessage: null, hasUnmatchedFiles },
       });
     });
 

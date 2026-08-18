@@ -32,6 +32,22 @@ type ProcessJobQueryResult = {
   processJob: EncodeJobDetails | null;
 };
 
+// Retyped from EncodeCompletedResult (docs/spec/graphql-contract.md,
+// 013-season-pack-processing). The three booleans are instructions computed
+// server-side from sibling ProcessJob rows and hasUnmatchedFiles — the
+// worker cannot see either, so it never approximates them, only executes
+// whichever arrive true (NFR-2/NFR-3, see below).
+type EncodeCompletedResult = {
+  message: string;
+  removeTorrent: boolean;
+  deleteInputFile: boolean;
+  deleteDownloadPath: boolean;
+};
+
+type EncodeCompletedMutationResult = {
+  encodeCompleted: EncodeCompletedResult;
+};
+
 // Mínimo salto de progreso entre mutations a la api. Con el mock (10 pasos)
 // esto ya viene grueso; con FFmpeg real (stderr cada pocos ms) es lo que evita
 // convertir un encode de 2 horas en una mutation por línea de log.
@@ -58,6 +74,8 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   console.log(
     `[encode] ${processJobId}: allowedLanguagesIso3=${JSON.stringify(details.allowedLanguagesIso3)} originalLanguageIso3=${details.originalLanguageIso3}`,
   );
+
+  let encodeCompleted: EncodeCompletedResult | undefined;
 
   try {
     const outputPath = buildOutputPath(details);
@@ -99,14 +117,20 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       onProgress,
     );
 
-    await fetchGraphQL(
+    const result = await fetchGraphQL<EncodeCompletedMutationResult>(
       `mutation ($id: Int!, $out: String!, $cmd: String!) {
-        encodeCompleted(processJobId: $id, outputFilePath: $out, ffmpegCommand: $cmd)
+        encodeCompleted(processJobId: $id, outputFilePath: $out, ffmpegCommand: $cmd) {
+          message
+          removeTorrent
+          deleteInputFile
+          deleteDownloadPath
+        }
       }`,
       { id: processJobId, out: outputPath, cmd: ffmpegCommand },
     );
+    encodeCompleted = result.encodeCompleted;
 
-    console.log(`[encode] ${processJobId}: completado -> ${outputPath}`);
+    console.log(`[encode] ${processJobId}: ${encodeCompleted.message} -> ${outputPath}`);
 
     // El aviso al media server (Jellyfin, si está configurado) lo dispara el
     // api dentro de encodeCompleted — tiene las settings y las raíces, el
@@ -127,14 +151,42 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   // back to failed. cleanupSource itself never throws (see its header
   // comment), but this second try is a deliberate line of defence in case it
   // ever does despite that contract.
+  //
+  // The three instructions below are computed server-side (sibling
+  // ProcessJob rows, hasUnmatchedFiles) and the worker cannot see either
+  // (013-season-pack-processing). If any arrives undefined — the field was
+  // dropped from the mutation selection, or api predates this feature —
+  // cleanup is skipped entirely and the missing field is named loudly: never
+  // read a missing instruction as false (leaks torrents/files forever) and
+  // never as true (deletes something nobody decided to delete).
   try {
-    await cleanupSource({
-      mediaSourceId: details.mediaSourceId,
-      sourceKind: details.sourceKind,
-      infoHash: details.infoHash,
-      downloadPath: details.downloadPath,
-      downloadsRoot: details.downloadsRoot,
-    });
+    if (!encodeCompleted) {
+      console.error(`[encode] ${processJobId}: encodeCompleted no devolvió resultado — cleanup omitido`);
+    } else {
+      const { removeTorrent, deleteInputFile, deleteDownloadPath } = encodeCompleted;
+      const missing: string[] = [];
+      if (removeTorrent === undefined) missing.push('removeTorrent');
+      if (deleteInputFile === undefined) missing.push('deleteInputFile');
+      if (deleteDownloadPath === undefined) missing.push('deleteDownloadPath');
+
+      if (missing.length > 0) {
+        console.error(
+          `[encode] ${processJobId}: encodeCompleted no trajo ${missing.join(', ')} — cleanup omitido`,
+        );
+      } else {
+        await cleanupSource({
+          mediaSourceId: details.mediaSourceId,
+          sourceKind: details.sourceKind,
+          infoHash: details.infoHash,
+          downloadPath: details.downloadPath,
+          downloadsRoot: details.downloadsRoot,
+          inputFilePath: details.inputFilePath,
+          removeTorrent,
+          deleteInputFile,
+          deleteDownloadPath,
+        });
+      }
+    }
   } catch (err) {
     console.error(`[encode] ${processJobId}: cleanupSource falló inesperadamente:`, err);
   }

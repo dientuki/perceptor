@@ -83,7 +83,9 @@ type MediaSource {
   releaseTitle: String
   movieId: Int
   episodeId: Int
+  seasonId: Int
   errorMessage: String
+  hasUnmatchedFiles: Boolean!
 }
 
 type EncodeJobDetails {
@@ -107,6 +109,13 @@ type EncodeJobDetails {
   downloadPath: String
   outputRoot: String!
   downloadsRoot: String!
+}
+
+type EncodeCompletedResult {
+  message: String!
+  removeTorrent: Boolean!
+  deleteInputFile: Boolean!
+  deleteDownloadPath: Boolean!
 }
 
 type MediaServerOption {
@@ -235,7 +244,7 @@ type Mutation {
   """
   El worker reporta el inventario de archivos de un MediaSource ya descargado
   """
-  sourceScanned(mediaSourceId: Int!, files: [SourceFileInput!]!, matchedFilePath: String): MediaSource!
+  sourceScanned(mediaSourceId: Int!, files: [SourceFileInput!]!, matches: [ScannedMatchInput!]!): MediaSource!
 
   """El worker avisa que arrancó a encodear un ProcessJob"""
   encodeStarted(processJobId: Int!): String!
@@ -244,13 +253,13 @@ type Mutation {
   encodeProgress(processJobId: Int!, progress: Int!): String!
 
   """El worker avisa que un encode terminó bien"""
-  encodeCompleted(processJobId: Int!, outputFilePath: String!, ffmpegCommand: String!): String!
+  encodeCompleted(processJobId: Int!, outputFilePath: String!, ffmpegCommand: String!): EncodeCompletedResult!
 
   """El worker avisa que un encode falló"""
   encodeFailed(processJobId: Int!, errorMessage: String!): String!
 
   """El worker pide borrar el torrent del cliente tras un encode exitoso"""
-  downloadRemove(mediaSourceId: Int!): String!
+  downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!
   createUploadTicket(movieId: Int, episodeId: Int): UploadTicket!
 
   """Envía un release elegido a qBittorrent y lo asocia al episodio"""
@@ -264,6 +273,11 @@ type Mutation {
 
   """Reemplaza la preferencia de idiomas del usuario para una serie puntual"""
   setShowPreferredLanguages(showId: Int!, iso2: [String!]!): [Language!]!
+
+  """
+  Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la temporada
+  """
+  addMagnetToSeason(seasonId: Int!, magnet: String!, force: Boolean = false): Season!
 }
 
 input LoginInput {
@@ -295,4 +309,11 @@ input SourceFileInput {
   filePath: String!
   fileName: String!
   size: Float
+  isVideo: Boolean!
+}
+
+input ScannedMatchInput {
+  filePath: String!
+  seasonNumber: Int
+  episodeNumber: Int
 }

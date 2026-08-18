@@ -2,6 +2,7 @@ import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { MediaSourcesService } from './media-sources.service';
 import { MediaSource } from './entities/media-source.entity';
 import { SourceFileInput } from './dto/source-file.input';
+import { ScannedMatchInput } from './dto/scanned-match.input';
 import { AllowService } from '@/auth/decorators/allow-service.decorator';
 
 @Resolver(() => MediaSource)
@@ -22,8 +23,8 @@ export class MediaSourcesResolver {
   async sourceScanned(
     @Args('mediaSourceId', { type: () => Int }) mediaSourceId: number,
     @Args('files', { type: () => [SourceFileInput] }) files: SourceFileInput[],
-    @Args('matchedFilePath', { type: () => String, nullable: true }) matchedFilePath: string | null,
+    @Args('matches', { type: () => [ScannedMatchInput] }) matches: ScannedMatchInput[],
   ) {
-    return this.mediaSourcesService.sourceScanned(mediaSourceId, files, matchedFilePath);
+    return this.mediaSourcesService.sourceScanned(mediaSourceId, files, matches);
   }
 }

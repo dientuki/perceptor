@@ -501,6 +501,95 @@ Consumer obligations: `worker` adds `downloadsRoot` to the `processJob(id)` quer
 hand-retyped-contract risk this document warns about. `web` has no obligation; it never queries
 `processJob`.
 
+### Season packs replace `matchedFilePath` with a fan-out (`013-season-pack-processing`)
+
+```graphql
+input SourceFileInput {
+  # …existing…
+  isVideo: Boolean!
+}
+input ScannedMatchInput {
+  filePath: String!
+  seasonNumber: Int
+  episodeNumber: Int
+}
+type MediaSource {
+  # …existing…
+  seasonId: Int
+  hasUnmatchedFiles: Boolean!
+}
+type EncodeCompletedResult {
+  message: String!
+  removeTorrent: Boolean!
+  deleteInputFile: Boolean!
+  deleteDownloadPath: Boolean!
+}
+type Mutation {
+  sourceScanned(mediaSourceId: Int!, files: [SourceFileInput!]!, matches: [ScannedMatchInput!]!): MediaSource!
+  encodeCompleted(processJobId: Int!, outputFilePath: String!, ffmpegCommand: String!): EncodeCompletedResult!
+  downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!
+  addMagnetToSeason(seasonId: Int!, magnet: String!, force: Boolean = false): Season!
+}
+```
+
+**`matchedFilePath: String` → `matches: [ScannedMatchInput!]!` was safe to replace outright**, not
+additively, because it had exactly one consumer (`worker`'s `source-ready.job.ts`) and both sides
+of the seam changed in the same feature's commits. A source used to report a single winning file;
+now it reports every file it resolved to an episode (or, for a film/single episode, still exactly
+one). `matches: []` — or every match failing to resolve — reaches the same `ERROR` branch the old
+empty-scan case did.
+
+**`SourceFileInput.isVideo`** exists so `api` never has to guess a file's kind from its extension. The
+`VIDEO_EXTENSIONS` list lives once, in `services/worker/src/scan/scan-folder.ts`; `api` trusts the
+flag the worker reports per file. Duplicating that list into `api` was considered and rejected
+during planning — the two lists would drift silently, and the failure mode is invisible: a sidecar
+misclassified as video (or a video misclassified as a sidecar) changes `hasUnmatchedFiles`, which
+changes whether `deleteDownloadPath` ever fires, with no error anywhere.
+
+**`MediaSource.hasUnmatchedFiles`** is recomputed on every `sourceScanned` call, never accumulated —
+true when at least one *video* file of the download resolved to no episode. It does not count
+non-video files: a `.nfo`/`.srt` sidecar sitting next to every matched episode does not suppress
+cleanup.
+
+**`EncodeCompletedResult`** replaces `encodeCompleted`'s bare `String!` return. The three booleans are
+the cleanup verdict for the `ProcessJob` that just finished, computed server-side because only
+`api` can see the sibling jobs of a season pack's shared `MediaSource`:
+
+| Flag | True when |
+| :-- | :-- |
+| `removeTorrent` | No sibling `ProcessJob` of this source is left non-terminal — this is the **last** job to finish, whether it succeeded or not. |
+| `deleteInputFile` | The source has **more than one** `ProcessJob` (a season-pack episode; false for a film or a single-episode source). |
+| `deleteDownloadPath` | **Every** job of the source ended `COMPLETED` **and** `hasUnmatchedFiles` is `false`. |
+
+A film or single-episode source (one job) always resolves to `(true, false, true)` — today's
+behaviour, preserved exactly. A season pack's episodes each get `(false, true, false)` until the
+last one finishes, which flips `removeTorrent` (and `deleteDownloadPath`, if nothing went wrong) —
+this is intentional, not a race to fix: qBittorrent holds the torrent, showing it as "missing files"
+for the duration of the pack, but the download itself completed before any encode started, so no
+file the torrent is seeding disappears out from under it mid-download. See `spec.md`'s Risks table.
+
+**`downloadRemove`'s new `deleteFiles` argument** defaults to `true` — unchanged default, unchanged
+behaviour for any caller that omits it. The season-pack cleanup pipeline is the one caller that
+always passes `false`: the worker's `cleanup-source.ts` now owns every filesystem deletion behind
+its own `isInsideRoot` checks, so `downloadRemove` there only has to detach the torrent from
+qBittorrent, not touch its files.
+
+**`addMagnetToSeason`** is the minimal trigger this feature needed to create a season-scoped
+`MediaSource` at all — nothing else does, and without it the fan-out above would have been
+untestable without hand-written SQL (Constitution Article III forbids that as more than
+inspection). It has no web UI by design (`spec.md` § Out of Scope); a season-request screen is a
+later feature. `Season` itself gains no new field — its active-source conflict is resolved
+server-side in `SeasonsService.attachTorrentSource`, scoped by `MediaSource.seasonId` the same way
+`EpisodesService.attachTorrentSource` is scoped by `episodeId`.
+
+Consumer obligations: `worker` adds `seasonId` to the `mediaSource(id)` query and to
+`MediaSourceQueryResult` in `source-ready.job.ts`, sends `matches` instead of `matchedFilePath`
+with `isVideo` on every file, and reads all four fields of `encodeCompleted`'s result in
+`encode.job.ts` — reading a missing field as `false` (silently skipping a deletion) or as `true`
+(silently deleting something live) is exactly the bug this document exists to prevent, so a missing
+field there is a hard `console.error` and cleanup is skipped entirely, never guessed. `web` has no
+obligation; it queries neither `sourceScanned`, `encodeCompleted`, nor `addMagnetToSeason`.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

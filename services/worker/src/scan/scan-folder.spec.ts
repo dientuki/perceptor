@@ -1,10 +1,9 @@
-// Defends REQ-3/REQ-4/AC-10: the scan's "main video" pick must be the
-// largest file carrying a known video extension, never a guess from the
-// filename. A wrong pick here is silent — the job still reports success,
-// but the ProcessJob it creates points at a sample or a .nfo/.srt instead
-// of the film, and nothing downstream notices. Also covers the no-video
-// folder (which must surface as an error upstream, not an empty success)
-// and the single-file downloadPath case (LOCAL_FILE sources).
+// Defends REQ-2/AC-10: scanFolder must enumerate every file in the download
+// with its size and isVideo flag, and must never itself pick a "main" file —
+// that selection now lives in select-matches.ts. A wrong isVideo flag here is
+// silent: it either drops a real episode from the season pipeline's candidate
+// list or lets a sidecar (.nfo/.srt) get treated as a video downstream. Also
+// covers the single-file downloadPath case (LOCAL_FILE sources).
 
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -24,37 +23,26 @@ describe('scanFolder', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it('picks the largest video file regardless of its name', async () => {
-    // A small file named to look like the real release, a bigger one named
-    // like a sample — the size rule must win over the name.
+  it('marks a .mkv file as video and a .nfo file as not video', async () => {
     await writeFile(join(root, 'Movie.Title.2024.1080p.mkv'), Buffer.alloc(100));
-    await writeFile(join(root, 'sample.mkv'), Buffer.alloc(10_000));
+    await writeFile(join(root, 'Movie.Title.2024.1080p.nfo'), Buffer.alloc(10));
 
     const result = await scanFolder(root);
 
-    expect(result.matchedFilePath).toBe(join(root, 'sample.mkv'));
     expect(result.files).toHaveLength(2);
+    expect(result.files.find((f) => f.fileName.endsWith('.mkv'))?.isVideo).toBe(true);
+    expect(result.files.find((f) => f.fileName.endsWith('.nfo'))?.isVideo).toBe(false);
   });
 
-  it('does not let a larger non-video file win over a smaller video file', async () => {
-    await writeFile(join(root, 'Movie.Title.2024.1080p.mkv'), Buffer.alloc(1_000));
-    await writeFile(join(root, 'Movie.Title.2024.1080p.nfo'), Buffer.alloc(1_000_000));
-
-    const result = await scanFolder(root);
-
-    expect(result.matchedFilePath).toBe(join(root, 'Movie.Title.2024.1080p.mkv'));
-    expect(result.files).toHaveLength(2);
-  });
-
-  it('yields a null matchedFilePath for a folder with no video file', async () => {
+  it('inventories every file in a folder with no video, none flagged as video', async () => {
     await writeFile(join(root, 'readme.txt'), Buffer.alloc(10));
     await mkdir(join(root, 'subs'));
     await writeFile(join(root, 'subs', 'movie.srt'), Buffer.alloc(20));
 
     const result = await scanFolder(root);
 
-    expect(result.matchedFilePath).toBeNull();
     expect(result.files).toHaveLength(2);
+    expect(result.files.every((f) => f.isVideo === false)).toBe(true);
   });
 
   it('inventories a single-file downloadPath as one entry', async () => {
@@ -64,8 +52,7 @@ describe('scanFolder', () => {
     const result = await scanFolder(filePath);
 
     expect(result.files).toEqual([
-      { filePath, fileName: 'Movie.Title.2024.1080p.mkv', size: 500 },
+      { filePath, fileName: 'Movie.Title.2024.1080p.mkv', size: 500, isVideo: true },
     ]);
-    expect(result.matchedFilePath).toBe(filePath);
   });
 });

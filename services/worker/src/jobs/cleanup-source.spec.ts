@@ -74,6 +74,10 @@ describe('cleanupSource — LOCAL_FILE', () => {
       infoHash: null,
       downloadPath: filePath,
       downloadsRoot: root,
+      inputFilePath: '',
+      removeTorrent: true,
+      deleteInputFile: false,
+      deleteDownloadPath: true,
     });
 
     await expect(readFile(filePath)).rejects.toThrow();
@@ -100,6 +104,10 @@ describe('cleanupSource — LOCAL_FILE', () => {
       infoHash: null,
       downloadPath: filePath,
       downloadsRoot: root,
+      inputFilePath: '',
+      removeTorrent: true,
+      deleteInputFile: false,
+      deleteDownloadPath: true,
     });
     await expect(readFile(filePath)).rejects.toThrow();
   });
@@ -119,6 +127,10 @@ describe('cleanupSource — LOCAL_FILE', () => {
         infoHash: null,
         downloadPath: filePath,
         downloadsRoot: root,
+        inputFilePath: '',
+        removeTorrent: true,
+        deleteInputFile: false,
+        deleteDownloadPath: true,
       }),
     ).resolves.toBeUndefined();
 
@@ -138,6 +150,10 @@ describe('cleanupSource — LOCAL_FILE', () => {
       infoHash: null,
       downloadPath: filePath,
       downloadsRoot: root,
+      inputFilePath: '',
+      removeTorrent: true,
+      deleteInputFile: false,
+      deleteDownloadPath: true,
     });
 
     expect(fetchGraphQLMock).not.toHaveBeenCalled();
@@ -157,6 +173,10 @@ describe('cleanupSource — LOCAL_FOLDER', () => {
       infoHash: null,
       downloadPath: folderPath,
       downloadsRoot: root,
+      inputFilePath: '',
+      removeTorrent: true,
+      deleteInputFile: false,
+      deleteDownloadPath: true,
     });
 
     expect(fetchGraphQLMock).not.toHaveBeenCalled();
@@ -176,6 +196,10 @@ describe('cleanupSource — TORRENT_SEARCH / TORRENT_FILE', () => {
       infoHash: 'abcd1234',
       downloadPath,
       downloadsRoot: root,
+      inputFilePath: '',
+      removeTorrent: true,
+      deleteInputFile: false,
+      deleteDownloadPath: true,
     });
 
     expect(fetchGraphQLMock).toHaveBeenCalledTimes(1);
@@ -197,6 +221,10 @@ describe('cleanupSource — TORRENT_SEARCH / TORRENT_FILE', () => {
       infoHash: 'efgh5678',
       downloadPath,
       downloadsRoot: root,
+      inputFilePath: '',
+      removeTorrent: true,
+      deleteInputFile: false,
+      deleteDownloadPath: true,
     });
 
     expect(fetchGraphQLMock).toHaveBeenCalledTimes(1);
@@ -217,6 +245,10 @@ describe('cleanupSource — containment (REQ-12)', () => {
         infoHash: 'ijkl9012',
         downloadPath: filePath,
         downloadsRoot: root,
+        inputFilePath: '',
+        removeTorrent: true,
+        deleteInputFile: false,
+        deleteDownloadPath: true,
       });
 
       // The torrent-client call still happens (guarded on infoHash, not
@@ -238,6 +270,10 @@ describe('cleanupSource — containment (REQ-12)', () => {
       infoHash: null,
       downloadPath: filePath,
       downloadsRoot: '' as unknown as string,
+      inputFilePath: '',
+      removeTorrent: true,
+      deleteInputFile: false,
+      deleteDownloadPath: true,
     });
     await expect(readFile(filePath, 'utf8')).resolves.toBe('x');
 
@@ -247,8 +283,126 @@ describe('cleanupSource — containment (REQ-12)', () => {
       infoHash: null,
       downloadPath: filePath,
       downloadsRoot: undefined as unknown as string,
+      inputFilePath: '',
+      removeTorrent: true,
+      deleteInputFile: false,
+      deleteDownloadPath: true,
     });
     await expect(readFile(filePath, 'utf8')).resolves.toBe('x');
+  });
+});
+
+// 013-season-pack-processing: each of the three actions now runs behind its
+// own flag, decided server-side by `api` and never inferred by the worker.
+// A wrong branch here deletes an input that has not been encoded yet — no
+// error anywhere, and the loss only surfaces when that episode's encode
+// fails much later (see worker/plan.md § Tests).
+describe('cleanupSource — per-flag gating (013-season-pack-processing)', () => {
+  it('removeTorrent alone calls downloadRemove with deleteFiles: false and touches no file', async () => {
+    const downloadPath = join(root, 'flag-torrent-only');
+    await mkdir(downloadPath, { recursive: true });
+    await writeFile(join(downloadPath, 'episode-1.mkv'), 'x');
+
+    await cleanupSource({
+      mediaSourceId: 20,
+      sourceKind: 'TORRENT_SEARCH',
+      infoHash: 'flag1234',
+      downloadPath,
+      downloadsRoot: root,
+      inputFilePath: '',
+      removeTorrent: true,
+      deleteInputFile: false,
+      deleteDownloadPath: false,
+    });
+
+    expect(fetchGraphQLMock).toHaveBeenCalledTimes(1);
+    expect(fetchGraphQLMock).toHaveBeenCalledWith(
+      expect.stringContaining('deleteFiles: false'),
+      { id: 20 },
+    );
+    await expect(readdir(downloadPath)).resolves.toEqual(['episode-1.mkv']);
+  });
+
+  it('deleteInputFile alone removes only that path and leaves the download folder', async () => {
+    const downloadPath = join(root, 'flag-input-only');
+    const inputFilePath = join(downloadPath, 'episode-1.mkv');
+    await mkdir(downloadPath, { recursive: true });
+    await writeFile(inputFilePath, 'x');
+    await writeFile(join(downloadPath, 'episode-2.mkv'), 'y');
+
+    await cleanupSource({
+      mediaSourceId: 21,
+      sourceKind: 'TORRENT_SEARCH',
+      infoHash: 'flag5678',
+      downloadPath,
+      downloadsRoot: root,
+      inputFilePath,
+      removeTorrent: false,
+      deleteInputFile: true,
+      deleteDownloadPath: false,
+    });
+
+    expect(fetchGraphQLMock).not.toHaveBeenCalled();
+    await expect(readFile(inputFilePath)).rejects.toThrow();
+    expect(await readdir(downloadPath)).toEqual(['episode-2.mkv']);
+  });
+
+  it('deleteDownloadPath alone keeps today\'s recursive/LOCAL_FILE behaviour', async () => {
+    const downloadPath = join(root, 'flag-path-only');
+    await mkdir(downloadPath, { recursive: true });
+    await writeFile(join(downloadPath, 'episode-3.mkv'), 'x');
+
+    await cleanupSource({
+      mediaSourceId: 22,
+      sourceKind: 'TORRENT_SEARCH',
+      infoHash: 'flag9012',
+      downloadPath,
+      downloadsRoot: root,
+      inputFilePath: '',
+      removeTorrent: false,
+      deleteInputFile: false,
+      deleteDownloadPath: true,
+    });
+
+    expect(fetchGraphQLMock).not.toHaveBeenCalled();
+    await expect(readdir(downloadPath)).rejects.toThrow();
+  });
+
+  // The guard on inputFilePath is separate from the one on downloadPath —
+  // see the report for the failing-output proof, taken by temporarily
+  // removing this second isInsideRoot() call and reverting it, rather than
+  // duplicated here as a second copy of this same test.
+  it('refuses an inputFilePath outside downloadsRoot without suppressing the other two actions', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'cleanup-outside-input-'));
+    const inputFilePath = join(outside, 'episode-1.mkv');
+    await writeFile(inputFilePath, 'x');
+
+    const downloadPath = join(root, 'flag-refuse-input');
+    await mkdir(downloadPath, { recursive: true });
+    await writeFile(join(downloadPath, 'episode-1.mkv'), 'y');
+
+    try {
+      await cleanupSource({
+        mediaSourceId: 23,
+        sourceKind: 'TORRENT_SEARCH',
+        infoHash: 'flag3456',
+        downloadPath,
+        downloadsRoot: root,
+        inputFilePath,
+        removeTorrent: true,
+        deleteInputFile: true,
+        deleteDownloadPath: true,
+      });
+
+      // removeTorrent still fired…
+      expect(fetchGraphQLMock).toHaveBeenCalledTimes(1);
+      // …the outside inputFilePath was refused and survives…
+      await expect(readFile(inputFilePath, 'utf8')).resolves.toBe('x');
+      // …and deleteDownloadPath still ran, unaffected by the refusal.
+      await expect(readdir(downloadPath)).rejects.toThrow();
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 });
 
@@ -267,6 +421,10 @@ describe('cleanupSource — error isolation (REQ-11)', () => {
         infoHash: 'mnop3456',
         downloadPath,
         downloadsRoot: root,
+        inputFilePath: '',
+        removeTorrent: true,
+        deleteInputFile: false,
+        deleteDownloadPath: true,
       }),
     ).resolves.toBeUndefined();
 
@@ -290,6 +448,10 @@ describe('cleanupSource — error isolation (REQ-11)', () => {
         infoHash: 'qrst7890',
         downloadPath,
         downloadsRoot: root,
+        inputFilePath: '',
+        removeTorrent: true,
+        deleteInputFile: false,
+        deleteDownloadPath: true,
       }),
     ).resolves.toBeUndefined();
   });

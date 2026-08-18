@@ -20,6 +20,12 @@ export class MediaSource {
   @Field(() => Int, { nullable: true })
   episodeId: number | null;
 
+  @Field(() => Int, { nullable: true })
+  seasonId: number | null;
+
   @Field(() => String, { nullable: true })
   errorMessage: string | null;
+
+  @Field()
+  hasUnmatchedFiles: boolean;
 }

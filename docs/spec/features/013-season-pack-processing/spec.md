@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan Farias
 created_at: 2026-08-17
 last_updated: 2026-08-17
-status: Approved
+status: Implemented
 services: [api, worker]
 ---
 
@@ -288,12 +288,12 @@ index.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a registered show whose season 2 has episodes 1–3, when `addMagnetToSeason` is
+- [x] **AC-1**: Given a registered show whose season 2 has episodes 1–3, when `addMagnetToSeason` is
       called with a magnet for a pack containing `Show.S02E01.mkv`, `Show.S02E02.mkv` and
       `Show.S02E03.mkv` and the download completes, then `bin/mysql -e 'select id, episode_id, status
       from process_jobs order by id desc limit 3'` shows three rows, one per episode of that season,
       and `select status from episodes where season_id = …` shows all three at `ENCODING`.
-- [ ] **AC-2**: After those three encodes finish, three files exist under
+- [x] **AC-2**: After those three encodes finish, three files exist under
       `<HOST_DESTINATIONS_DIR>/<path_shows>/<Show> (<year>) [tmdbid=<id>]/Season 02/`, named
       `<Show> S02E01 <episode title>.mkv` and so on, with the titles matching the `episodes` table and
       not the release file names.
@@ -324,15 +324,16 @@ index.
       third still reach `COMPLETED` with their output files in place, only the second episode is
       `ERROR`, the download directory is **not** deleted, and `Show.S02E02.mkv` is still inside it —
       the input a retry needs survives, while the two consumed inputs are gone.
-- [ ] **AC-8**: `bin/npm worker test` passes, including new specs that assert `S01E02`, `s1e2` and
+- [x] **AC-8**: `bin/npm worker test` passes, including new specs that assert `S01E02`, `s1e2` and
       `Show.S01E02.1080p-GRP.mkv` parse to `(1, 2)`, and that `S01E01E02`, `Season 01/episode 3.mkv`
       and `Show.1x02.mkv` parse to nothing.
-- [ ] **AC-9**: `bin/npm api test` passes, including a spec that walks the verdict table field by
-      field: `removeTorrent` only on the first sibling to complete; `deleteInputFile` only when the
-      source has more than one job; `deleteDownloadPath` `false` while a sibling is pending, `false`
-      when a sibling ended in `ERROR`, `false` when the source has unmatched files, and `true` only
-      for the last job of a fully successful, fully matched source.
-- [ ] **AC-10**: `bin/cli api npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit` both
+- [x] **AC-9**: `bin/npm api test` passes, including a spec that walks the verdict table field by
+      field: `removeTorrent` only on the last sibling to finish (whatever the others ended as);
+      `deleteInputFile` only when the source has more than one job; `deleteDownloadPath` `false`
+      while a sibling is pending, `false` when a sibling ended in `ERROR`, `false` when the source
+      has unmatched files, and `true` only for the last job of a fully successful, fully matched
+      source.
+- [x] **AC-10**: `bin/cli api npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit` both
       report 0 errors.
 
 ## Out of Scope

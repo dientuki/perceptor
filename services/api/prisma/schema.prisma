@@ -199,6 +199,12 @@ model MediaSource {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Set by sourceScanned, recomputed on every scan (never accumulated): true when at
+  // least one *video* file of this download resolved to no episode. Suppresses deletion
+  // of the whole download path so the unclassified files stay on disk, but does not
+  // suppress the per-episode input deletions for files that did resolve and encode.
+  hasUnmatchedFiles Boolean @default(false)
+
   @@index([status])
   @@map("media_sources")
 }

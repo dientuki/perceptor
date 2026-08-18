@@ -12,8 +12,8 @@ Pipeline stage status today:
 | Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `api` — `src/clients/indexer/client.ts` | working for both a film and a single episode; alternativa manual: pegar un magnet (`addMagnetToMovie`/`addMagnetToEpisode`, `src/clients/torrent/magnet.ts`) — mismo `MediaSource`/AutoRun de ahí en más |
 | Download | qBittorrent — `torrent` service, `api` — `src/clients/torrent/client.ts` | working, per-torrent save path, for both a film and a single episode (`010-episode-acquisition`) |
 | Detect completion, update DB, enqueue job | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | working |
-| Scan downloaded files, inventory | `worker` — BullMQ consumer, talks to `api` over GraphQL | working |
-| Transcode | `worker` (FFmpeg) | working — H264/VC-1 to AV1 via `libsvtav1`, HEVC 4K tonemapped to 1080p SDR, audio to Opus keeping one track per allowed language, text subtitles only; remux/quality decided from `ffprobe` metadata, not the filename (`011-av1-transcode`) |
+| Scan downloaded files, inventory | `worker` — BullMQ consumer, talks to `api` over GraphQL | working for both a single file and a season pack — the worker enumerates every file, flags each `isVideo`, and resolves it to an episode by parsing `SxxEyy` from the file name (a single-file/single-episode source still resolves to the one largest video, as before); the episode name itself comes from the api, never the filename (`013-season-pack-processing`) |
+| Transcode | `worker` (FFmpeg) | working — H264/VC-1 to AV1 via `libsvtav1`, HEVC 4K tonemapped to 1080p SDR, audio to Opus keeping one track per allowed language, text subtitles only; remux/quality decided from `ffprobe` metadata, not the filename (`011-av1-transcode`); a season pack fans out into one `ProcessJob` per resolved episode sharing one `MediaSource`, with per-episode-file and whole-folder cleanup timed off the pack's own completion, not the first episode to finish (`013-season-pack-processing`) — acquiring a season pack itself is api-only today (`addMagnetToSeason`), with no web UI yet |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` | working (Jellyfin, opt-in from Settings, default `none`) |
 | Browse library | `api` — `src/movies/movies.resolver.ts`, `src/shows/shows.resolver.ts`, `src/episodes/episodes.resolver.ts`; `web` — `/movies`, `/shows` | working for both films and series, each a per-user listing behind its own query (`007-library-listing`); both detail pages (`/movies/<id>`, `/shows/<id>`) are per-user — a title another user owns answers `Recurso no disponible para este usuario` instead of rendering (`008-movie-detail`, `009-show-detail`); the show detail page also renders a season accordion (last season expanded by default) with three per-episode action buttons (buscar, importar archivo, añadir torrent), each wired to a real per-episode acquisition flow (`010-episode-acquisition`) |
 
@@ -219,14 +219,14 @@ is a worked example, written after the fact against a feature that shipped.
 
 ## Current state — do not treat these files as reference code
 
-Measured 2026-08-17, after `011-av1-transcode` landed. Re-run the typechecks rather than trusting
-the counts — the numbers are what an agent reports before and after a change to prove it added
-nothing.
+Measured 2026-08-18, after `013-season-pack-processing` landed. Re-run the typechecks rather than
+trusting the counts — the numbers are what an agent reports before and after a change to prove it
+added nothing.
 
-**`api` — clean, 0 errors.** `bin/cli api npx --no tsc --noEmit`. `010-episode-acquisition` added
-an eleventh suite (`episodes.service.spec.ts`); `011-av1-transcode` added a twelfth
-(`languages.service.spec.ts`) and a thirteenth (`process-jobs.service.spec.ts`). Tests are now
-**122** across **13** suites (`bin/npm api test`, run 2026-08-17). `services/api/CLAUDE.md` has the
+**`api` — clean, 0 errors.** `bin/cli api npx --no tsc --noEmit`. `013-season-pack-processing`
+added a fourteenth suite (`media-sources.service.spec.ts`, the `sourceScanned` fan-out) and a
+fifteenth (`seasons.service.spec.ts`, the new `addMagnetToSeason` module). Tests are now **152**
+across **15** suites (`bin/npm api test`, run 2026-08-18). `services/api/CLAUDE.md` has the
 module-by-module detail.
 
 **`web` — 11 errors across 4 pre-GraphQL files**, none on a path the running UI uses:
@@ -235,16 +235,17 @@ non-existent `@/actions/jobs`, both pass `value` to a component that only takes 
 `SearchForm.tsx` and `ResultsForm.tsx` (missing `@/icons`, implicit `any`).
 `services/web/CLAUDE.md` has the table. `010-episode-acquisition` closed
 `SearchTorrentModal.tsx`'s `@prisma/client` import (a Constitution Article II violation), taking
-the count from 12/5 files to 11/4; `011-av1-transcode` verified it stayed there. `bin/npm web run
-build` still fails on the 4 remaining files (`next.config.ts` sets no `ignoreBuildErrors`),
-independently of anything either feature touched.
+the count from 12/5 files to 11/4; every feature since has verified it stayed there —
+`013-season-pack-processing` has no `[web]` tasks by design and did not touch this count.
+`bin/npm web run build` still fails on the 4 remaining files (`next.config.ts` sets no
+`ignoreBuildErrors`), independently of anything any of these features touched.
 
-**`worker` — clean, 0 errors, and now has real tests.** `011-av1-transcode` added
-`vitest.config.ts`'s first three real suites: `src/ffmpeg/remux-detection.spec.ts`,
-`src/ffmpeg/params.spec.ts`, `src/ffmpeg/buildCommand.spec.ts`, alongside the pre-existing
-`src/api/graphql-client.spec.ts`. Tests are now **31** across **4** suites (`bin/npm worker test`,
-run 2026-08-17) — the service's former "no tests, and no `vitest.config.ts`" debt entry is gone;
-see `services/worker/CLAUDE.md`.
+**`worker` — clean, 0 errors.** `013-season-pack-processing` split
+`scan-folder.ts`'s old two-jobs-in-one (enumerate + pick a winner) into enumeration-only plus two
+new pure modules, `scan/parse-episode.ts` and `scan/select-matches.ts`, each with its own spec, and
+extended `cleanup-source.spec.ts` for the three newly-gated cleanup flags. Tests are now **75**
+across **9** suites (`bin/npm worker test`, run 2026-08-18) — up from the 57/7 `011-av1-transcode`
+left behind. See `services/worker/CLAUDE.md`.
 
 ## Known debt
 

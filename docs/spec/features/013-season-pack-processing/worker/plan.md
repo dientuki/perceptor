@@ -2,7 +2,7 @@
 title: Season Pack Post-Download Processing — worker slice
 service: worker
 last_updated: 2026-08-17
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Season Pack Post-Download Processing — `worker` (`worker/plan.md`)

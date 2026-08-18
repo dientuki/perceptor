@@ -153,7 +153,20 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `@CurrentUser()`, the field would also be readable through the admin `users`/`user(id)` queries
   even though it is meant to be self-service only — see `docs/spec/graphql-contract.md`'s
   `011-av1-transcode` section for the full story.
-- `media-sources/` — the `MediaSource` row that represents one acquisition attempt.
+- `media-sources/` — the `MediaSource` row that represents one acquisition attempt. Exposes
+  `seasonId`/`hasUnmatchedFiles` on the entity (`013-season-pack-processing`). Since that feature,
+  `sourceScanned` no longer reports one winning file (`matchedFilePath`) — it takes
+  `matches: [ScannedMatchInput!]!`, one entry per file the worker resolved to an episode (a
+  film/single-episode source still reports exactly one, both numbers `null`). The service loads the
+  source with its season's episodes, refuses a source that targets nothing with `El mediaSource <id>
+  no apunta a ninguna película, episodio ni temporada`, maps a season match to an episode by
+  `episodeNumber` (skipping a mismatched `seasonNumber` or an episode number the season doesn't
+  have), and writes `hasUnmatchedFiles` from the **video** entries only (`SourceFileInput.isVideo` —
+  the extension list lives once, in the worker, on purpose: see
+  `docs/spec/graphql-contract.md`'s `013` section for why a second copy is dangerous). The existing
+  empty-scan `ERROR` branch is now reached by `matches: []` **or** by every match resolving to
+  nothing; the transaction, the never-reset-a-`ProcessJob`-past-`WAITING` rule and the
+  enqueue-after-commit block are unchanged.
 - `episodes/` — `EpisodesService`/`EpisodesResolver` (`010-episode-acquisition`), `MoviesService`'s
   structural twin one level deeper: `findOneFromDb(episodeId, userId)` scoped through
   `season.show.users`, plus `addTorrentToEpisode`/`addMagnetToEpisode`, mirroring
@@ -165,13 +178,37 @@ GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
   hole where an episode-owned hash would otherwise fall through and get silently re-pointed at a
   film. Reuses `src/shows/entities/episode.entity.ts`'s `Episode` type rather than declaring a
   second one.
+- `seasons/` — `SeasonsService`/`SeasonsResolver` (`013-season-pack-processing`), the **third**
+  structural twin of `MoviesService.attachTorrentSource` (after `episodes/`) — same deliberate
+  non-abstraction, same reasoning. Exposes exactly one mutation,
+  `addMagnetToSeason(seasonId, magnet, force)`, ownership-scoped through `season.show.users` (a
+  `UserShow` join), a season-scoped active-source conflict on `MediaSource.seasonId`, and the same
+  demote-on-`force` ordering (qBittorrent accepts the magnet first, then the previous source is
+  demoted to `ERROR`, then the replacement `MediaSource` is created). Has no web UI by design — see
+  `docs/spec/features/013-season-pack-processing/spec.md` § Out of Scope; a season-request screen is
+  a later feature. Its final read is a `season.findUniqueOrThrow` that **must** `include` the
+  season's episodes — `Season.episodes` is `[Episode!]!`, non-null, and a bare row would fail the
+  mutation *after* the torrent was already accepted by qBittorrent, leaving an orphaned download
+  with no `MediaSource` to track it.
 - `downloads/` — `torrentCompleted`, the mutation qBittorrent's AutoRun hook calls; matches
   **exclusively by infoHash** and silently ignores unknown hashes by design. Since
   `010-episode-acquisition`, an episode-owned `MediaSource` moves that `Episode` to `ENCODING` the
   same way a movie-owned one does; a source already `ERROR` (superseded by a `force` replacement)
   is left untouched rather than acted on.
 - `process-jobs/` — the `ProcessJob` lifecycle: `sourceScanned` → encode queued → `encodeCompleted`.
-  Resolves `outputRoot` for the worker. Since `012-post-download-processing`, it also resolves
+  Resolves `outputRoot` for the worker. Since `013-season-pack-processing`, `encodeCompleted`
+  returns `EncodeCompletedResult` (`message`, `removeTorrent`, `deleteInputFile`,
+  `deleteDownloadPath`) instead of a bare string — the three booleans are the cleanup verdict for
+  the `ProcessJob` that just finished, computed from its sibling jobs (a season pack shares one
+  `MediaSource` across many `ProcessJob`s) and the source's `hasUnmatchedFiles`. See
+  `docs/spec/graphql-contract.md`'s `013` section for the full verdict table and the worked
+  examples; the short version is that a film/single-episode source (one job) always resolves to
+  `(true, false, true)` — today's behaviour, unchanged — while a season pack's episodes withhold
+  `removeTorrent`/`deleteDownloadPath` until the *last* job of the source finishes, whatever the
+  others ended as. `downloadRemove` also gained a `deleteFiles: Boolean = true` argument (default
+  unchanged); the cleanup pipeline is the one caller that always passes `false`, since
+  `worker`'s `cleanup-source.ts` now owns every filesystem deletion itself. Since
+  `012-post-download-processing`, it also resolves
   `downloadsRoot` (`resolveFromRoot('downloads', '.')` — the root itself, not `path_downloads`,
   because a torrent's save path and a tus upload's staging directory sit under different segments
   of it) into the shared `base` object, so the worker can verify a source's `downloadPath` is
@@ -307,8 +344,21 @@ structure now, not the scaffolding pattern its name might suggest from memory.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-17, after `012-post-download-processing`, `bin/cli api npx --no tsc --noEmit` reports
-**0 errors** and `bin/npm api test` is green at **125** tests across **13** suites —
+As of 2026-08-18, after `013-season-pack-processing`, `bin/cli api npx --no tsc --noEmit` reports
+**0 errors** and `bin/npm api test` is green at **152** tests across **15** suites.
+`013-season-pack-processing` added a fifteenth suite, `src/seasons/seasons.service.spec.ts` (12
+cases: ownership scoping indistinguishable from missing, the active-source conflict with/without
+`force`, the demote-after-accept-before-create ordering verified to fail when `updateMany` is moved
+after the create, and `infoHash` collisions against a movie/episode/different season), and a
+fourteenth, `src/media-sources/media-sources.service.spec.ts` (8 cases covering the `sourceScanned`
+fan-out — resolving by `episodeNumber` rather than array position, verified to fail under that fault
+injection; a `seasonNumber` mismatch or unknown `episodeNumber` being skipped and counted toward
+`hasUnmatchedFiles`; a non-video sidecar never counting toward it; two files racing one episode
+resolving to the same id). `process-jobs.service.spec.ts` gained the `encodeCompleted` cleanup
+verdict table (5 cases, the `deleteDownloadPath` ones verified to fail when the sibling-completeness
+check is dropped) plus a `deleteFiles`-forwarding case for `downloadRemove`.
+
+Before that, after `012-post-download-processing`, the count was 125 across 13 suites —
 `012-post-download-processing` added a `downloadsRoot` `describe` block to
 `process-jobs.service.spec.ts` (3 cases: `resolveFromRoot` called with exactly `('downloads', '.')`,
 verified to fail when switched to the `path_downloads` setting; the resolved value present on both

@@ -16,32 +16,42 @@ import { MediaServerService } from '@/media-server/media-server.service';
 describe('ProcessJobsService', () => {
   let service: ProcessJobsService;
   let prisma: {
-    processJob: { findUnique: jest.Mock };
+    processJob: { findUnique: jest.Mock; update: jest.Mock; findMany: jest.Mock };
     language: { findUnique: jest.Mock };
     userMovie: { findMany: jest.Mock };
     userShow: { findMany: jest.Mock };
+    movie: { update: jest.Mock };
+    episode: { update: jest.Mock };
+    mediaSource: { findUnique: jest.Mock };
   };
   let settings: { getMap: jest.Mock };
   let mediaRoots: { resolveFromRoot: jest.Mock };
+  let mediaServer: { notifyCreated: jest.Mock };
+  let torrentClient: { remove: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
-      processJob: { findUnique: jest.fn() },
+      processJob: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
       language: { findUnique: jest.fn() },
       userMovie: { findMany: jest.fn() },
       userShow: { findMany: jest.fn() },
+      movie: { update: jest.fn() },
+      episode: { update: jest.fn() },
+      mediaSource: { findUnique: jest.fn() },
     };
     settings = { getMap: jest.fn().mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' }) };
     mediaRoots = { resolveFromRoot: jest.fn().mockResolvedValue('/library/Movies') };
+    mediaServer = { notifyCreated: jest.fn().mockResolvedValue(undefined) };
+    torrentClient = { remove: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProcessJobsService,
         { provide: PrismaService, useValue: prisma },
-        { provide: QbittorrentClient, useValue: {} },
+        { provide: QbittorrentClient, useValue: torrentClient },
         { provide: SettingsService, useValue: settings },
         { provide: MediaRootsService, useValue: mediaRoots },
-        { provide: MediaServerService, useValue: {} },
+        { provide: MediaServerService, useValue: mediaServer },
       ],
     }).compile();
 
@@ -215,6 +225,130 @@ describe('ProcessJobsService', () => {
       const details = await service.getEncodeJobDetails(1);
 
       expect(details.allowedLanguagesIso3).toEqual(['jpn']);
+    });
+  });
+
+  // This block exists because encodeCompleted's three cleanup instructions
+  // (013-season-pack-processing, REQ-8/REQ-9/REQ-10/REQ-11) are the only
+  // signal the worker gets for when it is safe to delete a file. A wrong
+  // verdict here either deletes the input of a sibling episode that hasn't
+  // encoded yet — with every job still reporting COMPLETED — or never
+  // deletes the download path at all, filling the disk. Neither failure
+  // logs anything; the only proof is watching what a retry needs disappear
+  // or a folder never go away.
+  describe('encodeCompleted — cleanup verdict', () => {
+    // The completed job's own update() result, shaped like a single-job
+    // (film/episode) source unless overridden.
+    const completedJob = (overrides: Partial<Record<string, unknown>> = {}) => ({
+      id: 1,
+      movieId: 42,
+      episodeId: null,
+      sourceFile: { mediaSourceId: 10 },
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      prisma.movie.update.mockResolvedValue({});
+      prisma.episode.update.mockResolvedValue({});
+    });
+
+    it('single-job source: (removeTorrent: true, deleteInputFile: false, deleteDownloadPath: true)', async () => {
+      prisma.processJob.update.mockResolvedValue(completedJob());
+      prisma.processJob.findMany.mockResolvedValue([{ id: 1, status: 'COMPLETED' }]);
+      prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
+
+      const result = await service.encodeCompleted(1, '/library/movie.mkv', 'ffmpeg …');
+
+      expect(result.removeTorrent).toBe(true);
+      expect(result.deleteInputFile).toBe(false);
+      expect(result.deleteDownloadPath).toBe(true);
+    });
+
+    it('a middle job of a three-episode pack: (false, true, false)', async () => {
+      prisma.processJob.update.mockResolvedValue(completedJob({ movieId: null, episodeId: 2 }));
+      prisma.processJob.findMany.mockResolvedValue([
+        { id: 1, status: 'COMPLETED' },
+        { id: 2, status: 'COMPLETED' },
+        { id: 3, status: 'ENCODING' },
+      ]);
+      prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
+
+      const result = await service.encodeCompleted(2, '/library/ep2.mkv', 'ffmpeg …');
+
+      expect(result.removeTorrent).toBe(false);
+      expect(result.deleteInputFile).toBe(true);
+      expect(result.deleteDownloadPath).toBe(false);
+    });
+
+    it('last job of a pack with every sibling COMPLETED: (true, true, true)', async () => {
+      prisma.processJob.update.mockResolvedValue(completedJob({ movieId: null, episodeId: 3 }));
+      prisma.processJob.findMany.mockResolvedValue([
+        { id: 1, status: 'COMPLETED' },
+        { id: 2, status: 'COMPLETED' },
+        { id: 3, status: 'COMPLETED' },
+      ]);
+      prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
+
+      const result = await service.encodeCompleted(3, '/library/ep3.mkv', 'ffmpeg …');
+
+      expect(result.removeTorrent).toBe(true);
+      expect(result.deleteInputFile).toBe(true);
+      expect(result.deleteDownloadPath).toBe(true);
+    });
+
+    it('last job to finish, but a sibling ended in ERROR: (true, true, false)', async () => {
+      prisma.processJob.update.mockResolvedValue(completedJob({ movieId: null, episodeId: 3 }));
+      prisma.processJob.findMany.mockResolvedValue([
+        { id: 1, status: 'COMPLETED' },
+        { id: 2, status: 'ERROR' },
+        { id: 3, status: 'COMPLETED' },
+      ]);
+      prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
+
+      const result = await service.encodeCompleted(3, '/library/ep3.mkv', 'ffmpeg …');
+
+      expect(result.removeTorrent).toBe(true);
+      expect(result.deleteInputFile).toBe(true);
+      expect(result.deleteDownloadPath).toBe(false);
+    });
+
+    it('last job to finish, every sibling COMPLETED, but hasUnmatchedFiles: (true, true, false)', async () => {
+      prisma.processJob.update.mockResolvedValue(completedJob({ movieId: null, episodeId: 3 }));
+      prisma.processJob.findMany.mockResolvedValue([
+        { id: 1, status: 'COMPLETED' },
+        { id: 2, status: 'COMPLETED' },
+        { id: 3, status: 'COMPLETED' },
+      ]);
+      prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: true });
+
+      const result = await service.encodeCompleted(3, '/library/ep3.mkv', 'ffmpeg …');
+
+      expect(result.removeTorrent).toBe(true);
+      expect(result.deleteInputFile).toBe(true);
+      expect(result.deleteDownloadPath).toBe(false);
+    });
+  });
+
+  // downloadRemove is the only path that reaches the torrent client's own
+  // delete-files option. This exists because a silently-flipped default
+  // here would delete files through a path with no isInsideRoot guard in
+  // front of it — see spec.md's "downloadRemove(deleteFiles: false) looks
+  // like a regression" note in plan.md.
+  describe('downloadRemove — deleteFiles forwarding', () => {
+    it('forwards deleteFiles: false to torrentClient.remove unchanged', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({ id: 10, infoHash: 'abc123' });
+
+      await service.downloadRemove(10, false);
+
+      expect(torrentClient.remove).toHaveBeenCalledWith('abc123', false);
+    });
+
+    it('defaults deleteFiles to true when the caller omits it', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({ id: 10, infoHash: 'abc123' });
+
+      await service.downloadRemove(10);
+
+      expect(torrentClient.remove).toHaveBeenCalledWith('abc123', true);
     });
   });
 });

@@ -2,7 +2,7 @@
 title: Season Pack Post-Download Processing — Implementation Plan
 spec_version: 0.2.0
 last_updated: 2026-08-17
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Season Pack Post-Download Processing (`plan.md`)

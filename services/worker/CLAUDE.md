@@ -34,7 +34,9 @@ src/index.ts             the two Workers, the umask, the signal handling
 src/queue/types.ts       queue/job names and payload shapes
 src/api/graphql-client.ts  fetchGraphQL — throws on json.errors, deliberately
 src/jobs/                the two handlers, plus cleanup-source.ts (post-encode source deletion)
-src/scan/scan-folder.ts  file inventory for source-ready
+src/scan/scan-folder.ts  enumerates a download's files, flags each isVideo — no longer selects a winner
+src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly one pair
+src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode
 src/encode/              the driver seam (see below)
 src/ffmpeg/              buildCommand · params · metadata · runner · remux-detection · iso639
 src/paths/build-output-path.ts   composes the final library path
@@ -117,6 +119,23 @@ cleaned up at all. Before deleting anything it calls `isInsideRoot(downloadsRoot
 arrives resolved on `EncodeJobDetails`, the same way `outputRoot` does; a missing or empty root is
 treated as **refuse**, never as "everything passes".
 
+**Since `013-season-pack-processing`, each of the three actions is behind its own flag** —
+`removeTorrent`, `deleteInputFile`, `deleteDownloadPath`, all on `CleanupInput`, all computed
+server-side by `api`'s `encodeCompleted` (see `docs/spec/graphql-contract.md`'s `013` section for
+the verdict table) because only `api` can see a season pack's sibling `ProcessJob`s. `removeTorrent`
+now calls `downloadRemove(mediaSourceId, deleteFiles: false)` — the worker owns every filesystem
+deletion itself; qBittorrent is only asked to forget the torrent, never to touch its files.
+`deleteInputFile` deletes the one episode's resolved file (`CleanupInput.inputFilePath`) behind its
+**own** `isInsideRoot(downloadsRoot, inputFilePath)` check — deliberately separate from the
+`downloadPath` guard above it, since an input file's path is not the same string and must not be
+assumed contained just because the download folder is. `deleteDownloadPath` gates today's
+`LOCAL_FILE`/recursive branch, unchanged. `encode.job.ts` reads `EncodeCompletedResult`'s three
+booleans from the mutation response and, if any single one arrives `undefined` (a hand-typed
+GraphQL selection missing a field — nothing catches this at compile time, see
+`docs/spec/graphql-contract.md`'s "no codegen" section), skips `cleanupSource` entirely and
+`console.error`s the missing field's name: a missing instruction is never read as `false` (silently
+never cleaning up) and never as `true` (silently deleting something live).
+
 ## Errors must not be swallowed
 
 `src/api/graphql-client.ts` throws on `json.errors`, and the comment at the top says why: `web`
@@ -141,7 +160,7 @@ leaves a half-written file at the destination.
 | :-- | :-- |
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate |
-| `bin/npm worker test` | `vitest run` — 7 suites, 57 tests, green (`011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
+| `bin/npm worker test` | `vitest run` — 9 suites, 75 tests, green (`013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 
 ## Known debt

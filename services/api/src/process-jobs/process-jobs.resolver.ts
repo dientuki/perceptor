@@ -1,6 +1,7 @@
 import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { ProcessJobsService } from './process-jobs.service';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
+import { EncodeCompletedResult } from './entities/encode-completed-result.entity';
 import { AllowService } from '@/auth/decorators/allow-service.decorator';
 
 // Canal de comunicación worker <-> api para el paso 3 del pipeline (encode).
@@ -44,7 +45,7 @@ export class ProcessJobsResolver {
   }
 
   @AllowService()
-  @Mutation(() => String, {
+  @Mutation(() => EncodeCompletedResult, {
     name: 'encodeCompleted',
     description: 'El worker avisa que un encode terminó bien',
   })
@@ -73,7 +74,10 @@ export class ProcessJobsResolver {
     name: 'downloadRemove',
     description: 'El worker pide borrar el torrent del cliente tras un encode exitoso',
   })
-  async downloadRemove(@Args('mediaSourceId', { type: () => Int }) mediaSourceId: number) {
-    return this.processJobsService.downloadRemove(mediaSourceId);
+  async downloadRemove(
+    @Args('mediaSourceId', { type: () => Int }) mediaSourceId: number,
+    @Args('deleteFiles', { type: () => Boolean, nullable: true, defaultValue: true }) deleteFiles: boolean,
+  ) {
+    return this.processJobsService.downloadRemove(mediaSourceId, deleteFiles);
   }
 }

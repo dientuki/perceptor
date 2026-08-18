@@ -182,6 +182,7 @@ export class ProcessJobsService {
     const processJob = await this.prisma.processJob.update({
       where: { id: processJobId },
       data: { status: 'COMPLETED', progress: 100, outputFilePath, ffmpegCommand, errorMessage: null },
+      include: { sourceFile: { select: { mediaSourceId: true } } },
     });
 
     // Propaga a la media consolidada, igual que downloads.service hace con
@@ -202,7 +203,38 @@ export class ProcessJobsService {
     // avisa. notifyCreated se traga sus propios errores a propósito (ver ahí).
     await this.mediaServer.notifyCreated(outputFilePath);
 
-    return `completado: processJob ${processJobId}`;
+    // The three cleanup instructions (013-season-pack-processing). Computed
+    // here, never worker-side, because they depend on rows the worker cannot
+    // see: its sibling ProcessJobs and the source's hasUnmatchedFiles flag.
+    const mediaSourceId = processJob.sourceFile.mediaSourceId;
+    const [siblings, mediaSource] = await Promise.all([
+      this.prisma.processJob.findMany({
+        where: { sourceFile: { mediaSourceId } },
+        select: { id: true, status: true },
+      }),
+      this.prisma.mediaSource.findUnique({
+        where: { id: mediaSourceId },
+        select: { hasUnmatchedFiles: true },
+      }),
+    ]);
+
+    const nonTerminalStatuses = new Set(['WAITING', 'QUEUED', 'ENCODING']);
+    // Last to *finish*, not last to *succeed*: a pack whose fifth episode
+    // failed still drops the torrent once the tenth finishes.
+    const removeTorrent = !siblings.some((sibling) => nonTerminalStatuses.has(sibling.status));
+    // A season pack (>1 ProcessJob) releases each episode's input as it is
+    // consumed; a single-job source (film/single episode) leaves this false
+    // because deleteDownloadPath already removes everything.
+    const deleteInputFile = siblings.length > 1;
+    const deleteDownloadPath =
+      siblings.every((sibling) => sibling.status === 'COMPLETED') && mediaSource?.hasUnmatchedFiles === false;
+
+    return {
+      message: `completado: processJob ${processJobId}`,
+      removeTorrent,
+      deleteInputFile,
+      deleteDownloadPath,
+    };
   }
 
   async encodeFailed(processJobId: number, errorMessage: string) {
@@ -220,7 +252,12 @@ export class ProcessJobsService {
     return `error: processJob ${processJobId}`;
   }
 
-  async downloadRemove(mediaSourceId: number) {
+  // `deleteFiles` defaults to `true` for backward compatibility with any
+  // caller that predates this argument. This pipeline (encodeCompleted's
+  // removeTorrent instruction) always passes `false`: the worker owns every
+  // deletion, behind isInsideRoot, so the client is never asked to delete
+  // anything itself.
+  async downloadRemove(mediaSourceId: number, deleteFiles: boolean = true) {
     const mediaSource = await this.prisma.mediaSource.findUnique({ where: { id: mediaSourceId } });
     if (!mediaSource) {
       throw new NotFoundException(`El mediaSource ${mediaSourceId} no existe`);
@@ -232,7 +269,7 @@ export class ProcessJobsService {
       return `omitido: mediaSource ${mediaSourceId} no es un torrent`;
     }
 
-    await this.torrentClient.remove(mediaSource.infoHash, true);
+    await this.torrentClient.remove(mediaSource.infoHash, deleteFiles);
     return `removido: mediaSource ${mediaSourceId}`;
   }
 }
