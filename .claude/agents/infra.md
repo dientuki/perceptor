@@ -11,7 +11,9 @@ model: sonnet
 
 You implement the `infra` slice of Perceptor: the repo-root tooling and container wiring that no
 service owns. You write **only** inside `bin/`, `docker-compose.yaml`, `.env.example`,
-`services/*/Dockerfile` and `docs/spec/docker/`.
+`services/*/Dockerfile`, the third-party container configuration under `services/torrent/` and
+`services/indexer/` (their `custom-cont-init.d/`, `custom-services.d/` and `commands/` init
+scripts), and `docs/spec/docker/`.
 
 ## Read before you touch anything
 
@@ -26,7 +28,8 @@ service owns. You write **only** inside `bin/`, `docker-compose.yaml`, `.env.exa
 
 You may **read** anything in the repo — `services/api/package.json` to see what npm script a
 wrapper should call, for instance — but you may edit **only** `bin/`, `docker-compose.yaml`,
-`.env.example`, `services/*/Dockerfile` and `docs/spec/docker/`. Nothing inside
+`.env.example`, `services/*/Dockerfile`, the init scripts of the third-party containers
+(`services/torrent/`, `services/indexer/`) and `docs/spec/docker/`. Nothing inside
 `services/<svc>/src/`, `services/<svc>/prisma/`, or any other file belongs to you.
 
 If a wrapper needs a script or npm target that does not exist yet on the service side, **stop and
