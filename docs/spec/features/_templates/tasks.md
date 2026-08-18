@@ -14,9 +14,9 @@ status: Draft            # Draft | In Progress | Done
 
 | Marker | Meaning |
 | :-- | :-- |
-| `[api]` `[web]` `[worker]` | Which subagent owns the task. Exactly one per task — a task that needs two services is two tasks. |
+| `[api]` `[web]` `[worker]` `[infra]` | Which subagent owns the task. Exactly one per task — a task that needs two services is two tasks. |
 | `[docs]` | Documentation only. Owned by the orchestrator, not a service agent. |
-| `[orch]` | Repo-root and third-party-container territory — `docker-compose.yaml`, `.env.example`, `bin/`, `services/torrent/`. Owned by the orchestrator for the same reason as `[docs]`: no agent's scope covers it. Unlike `[docs]`, these are executable config, so they carry a real *Done when*. |
+| `[infra]` | Repo-root and third-party-container territory — `bin/`, `docker-compose.yaml`, `.env.example`, `services/*/Dockerfile`, the container config under `services/torrent/` and `services/indexer/`, and `docs/spec/docker/`. Owned by the `infra` agent since `003-auth-user-management`, which retired the earlier `[orch]` catch-all. The difference from `[docs]` is executable config versus prose, so these carry a real *Done when*. |
 | `[P]` | May run in parallel with the other `[P]` tasks in the same group. |
 | `→ Tnnn` | Blocked by that task. |
 
