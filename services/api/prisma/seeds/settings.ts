@@ -22,7 +22,7 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'tracker_client', value: 'prowlarr' },
     { key: 'tracker_host', value: 'indexer' },
     { key: 'tracker_port', value: '9696' },
-    { key: 'tracker_api_key', value: '' },
+    { key: 'tracker_api_key', value: process.env.INDEXER_API_KEY ?? '' },
 
     // 'none' por default: una instalación limpia no le habla a nadie. Host
     // vacío a propósito: 'localhost' parece un valor válido pero adentro del
@@ -47,13 +47,18 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'shows_enabled', value: 'false' },
   ];
 
-  // "Crear sólo si no existe": a diferencia de un upsert, esto no pisa valores
-  // reales ya configurados (tracker_api_key, movie_db_api_key, etc.) en corridas
-  // subsiguientes del seed.
+  // Create-only: unlike an upsert, this never overwrites a real value already
+  // configured (tracker_api_key, movie_db_api_key, etc.) on a later run of the
+  // seed. The one exception is a row that already exists but is still empty —
+  // the state every installation is in before a human (or, for
+  // tracker_api_key, INDEXER_API_KEY) supplies a real value — which gets
+  // backfilled instead of left blank forever.
   for (const setting of settings) {
     const existing = await prisma.setting.findUnique({ where: { key: setting.key } });
     if (!existing) {
       await prisma.setting.create({ data: setting });
+    } else if (existing.value === '' && setting.value !== '') {
+      await prisma.setting.update({ where: { key: setting.key }, data: { value: setting.value } });
     }
   }
 

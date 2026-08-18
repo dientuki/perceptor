@@ -102,6 +102,8 @@ services:
       - WEB_PORT=${WEB_PORT}
       # No default, ever (REQ-6) — auth.constants.ts's assertAuthEnv() fails boot loudly if unset.
       - JWT_SECRET=${JWT_SECRET}
+      # Prowlarr's API key, read by the settings seed as tracker_api_key (014-dev-stack-flaresolverr).
+      - INDEXER_API_KEY=${INDEXER_API_KEY}
       # Raíces que media-roots.module.ts arma como MEDIA_ROOTS: HOST_* es lo que
       # la UI muestra (la ruta real en la PC del usuario), CONTAINER_* es dónde
       # vive ese mismo mount adentro de este container.
@@ -295,28 +297,57 @@ services:
       - TZ=${TZ}
       - INDEXER_USER=${INDEXER_USER}
       - INDEXER_PASSWORD=${INDEXER_PASSWORD}
+      # Prowlarr's API key — declared, not discovered (014-dev-stack-flaresolverr). Applied to
+      # config.xml before Prowlarr starts by custom-cont-init.d/10-prowlarr-apikey, and read by
+      # custom-services.d/20-prowlarr-flaresolverr to talk to Prowlarr's own API.
+      - INDEXER_API_KEY=${INDEXER_API_KEY}
     volumes:
       - indexer_config:/config
     ports:
       - "${INDEXER_PORT}:9696"
+    depends_on:
+      flaresolverr:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9696/ping || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 15s      
+      start_period: 15s
     networks:
       - perceptor-net
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.indexer.rule=Host(`indexer.${DOMAIN}`)"
       - "traefik.http.routers.indexer.entrypoints=web"
-      - "traefik.http.services.indexer.loadbalancer.server.port=9696"      
+      - "traefik.http.services.indexer.loadbalancer.server.port=9696"
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.0
+    container_name: perceptor-cloudflare-proxy
+    restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      - TZ=${TZ}
+      - LOG_LEVEL=info
+    healthcheck:
+      # The image is python:slim-based — no curl, no wget — so the healthcheck calls the
+      # interpreter that is provably present instead. Verified against the running container.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8191/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - perceptor-net
+    # No ports:, no labels: — the only consumer is Prowlarr, on perceptor-net (REQ-8).
 
 volumes:
   mariadb_data:
   redis_data:
-  qbittorrent_config: # Nuevo volumen para la config de qBittorrent    
+  qbittorrent_config: # Nuevo volumen para la config de qBittorrent
   indexer_config: # Nuevo volumen para la config de Prowlarr
 
 networks:

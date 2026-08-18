@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan Farias
 created_at: 2026-08-17
 last_updated: 2026-08-17
-status: Approved
+status: Implemented
 services: [api, web, infra]
 ---
 
@@ -107,49 +107,49 @@ an accident. The second block is the new behaviour.
 
 #### What this feature adds
 
-- [ ] **REQ-8 (FlareSolverr is a stack service)**: The stack must include a `flaresolverr` service on
+- [x] **REQ-8 (FlareSolverr is a stack service)**: The stack must include a `flaresolverr` service on
       `perceptor-net`, brought up by `bin/dev` alongside the rest. It must pin an explicit image
       version rather than `latest` — every other image in the stack is pinned, and a proxy that
       silently changes browser behaviour between two `bin/dev` runs is a debugging trap. It must
       publish no host port and declare no Traefik labels: its only consumer is Prowlarr, on the same
       Docker network. Its healthcheck must use the interpreter already present in the image rather
       than assuming a shell utility that is not — the image ships neither `curl` nor `wget`.
-- [ ] **REQ-9 (Prowlarr is pre-configured against it)**: On a stack brought up with an empty
+- [x] **REQ-9 (Prowlarr is pre-configured against it)**: On a stack brought up with an empty
       `indexer_config` volume, Prowlarr must end up with a FlareSolverr indexer proxy pointing at the
       **service name**, not at any host or LAN address, and with a tag attached to that proxy, with no
       human opening Prowlarr's UI. Reaching that state must be idempotent: bringing the stack up again
       must not create a second proxy or a second tag, and must not overwrite a proxy that already
       points where it should.
-- [ ] **REQ-10 (Which indexers use the proxy stays the user's decision)**: The stack must **not**
+- [x] **REQ-10 (Which indexers use the proxy stays the user's decision)**: The stack must **not**
       attach the proxy's tag to any indexer. Only the indexers that actually sit behind Cloudflare
       benefit from it — two of thirteen on the live instance — and routing the rest through a headless
       browser makes every search slower for no gain. This is a deliberate stopping point, not an
       unfinished one.
-- [ ] **REQ-11 (The indexer API key is declared, not discovered)**: `INDEXER_API_KEY` must exist in
+- [x] **REQ-11 (The indexer API key is declared, not discovered)**: `INDEXER_API_KEY` must exist in
       `.env` as the single source of truth for Prowlarr's API key, and `bin/install` must populate it
       the same way it already populates `JWT_SECRET` and `SERVICE_TOKEN` — filling it only when empty,
       leaving an existing value alone. On a checkout whose `indexer_config` volume already holds a
       Prowlarr-generated key, `bin/install` must **adopt** that key rather than invent a new one, so
       that upgrading does not invalidate a working configuration.
-- [ ] **REQ-12 (Prowlarr adopts the declared key before it boots)**: The `indexer` container must
+- [x] **REQ-12 (Prowlarr adopts the declared key before it boots)**: The `indexer` container must
       apply `INDEXER_API_KEY` to Prowlarr's configuration **before** Prowlarr starts, on both a fresh
       volume and an existing one. Applying it afterwards through Prowlarr's API is not acceptable:
       changing the key at runtime makes Prowlarr restart itself, which turns every `bin/dev` into a
       restart loop for as long as the two values disagree. Writing a configuration file is not
       waiting on anything, so this is the one piece of Prowlarr setup that belongs before the app
       starts rather than beside it (contrast REQ-7).
-- [ ] **REQ-13 (Empty key fails loudly)**: If `INDEXER_API_KEY` is empty the `indexer` container must
+- [x] **REQ-13 (Empty key fails loudly)**: If `INDEXER_API_KEY` is empty the `indexer` container must
       fail with an explicit message and must not fall back to letting Prowlarr generate a random key.
       A random key boots a perfectly healthy Prowlarr that the `api` cannot authenticate against, and
       the resulting failure surfaces as an empty search result, not as an error — the same reasoning
       that already makes `10-prowlarr-credentials` abort on an empty `INDEXER_PASSWORD`.
-- [ ] **REQ-14 (The `api` reads the key from the environment)**: The `api` must receive
+- [x] **REQ-14 (The `api` reads the key from the environment)**: The `api` must receive
       `INDEXER_API_KEY` and its settings seed must use it as the value of `tracker_api_key`. Because
       the seed is deliberately create-if-not-exists — so that a re-run never overwrites a real
       configured value — it must additionally fill the row when it exists but is **empty**, which is
       the state every current installation is in before a human pastes the key. A row holding a
       non-empty value must be left untouched.
-- [ ] **REQ-15 (A failed indexer search says so)**: A search that the indexer does not answer
+- [x] **REQ-15 (A failed indexer search says so)**: A search that the indexer does not answer
       successfully must reach the user as an error, not as an empty result list. Today
       `ProwlarrClient.getData` (`services/api/src/clients/indexer/client.ts`) parses the response body
       without ever checking the status, so a `401` — the exact failure a wrong `tracker_api_key`
@@ -161,24 +161,24 @@ an accident. The second block is the new behaviour.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Idempotent across reruns and across volume resets)**: Every configuration step this
+- [x] **NFR-1 (Idempotent across reruns and across volume resets)**: Every configuration step this
       feature adds must converge to the same state whether it runs against a fresh volume, an already
       configured one, or a partially configured one interrupted halfway. The existing
       `10-prowlarr-credentials` is the model: read current state, compare, act only on a difference.
-- [ ] **NFR-2 (Upgrade path for existing checkouts)**: A developer pulling this feature must reach a
+- [x] **NFR-2 (Upgrade path for existing checkouts)**: A developer pulling this feature must reach a
       working stack by re-running `bin/install` and answering "no" to regenerating `.env`, exactly as
       documented for `002-auth-login`. Their existing Prowlarr configuration — indexers, credentials,
       and the proxy they configured by hand — must survive, and their already-populated
       `tracker_api_key` must keep working.
-- [ ] **NFR-3 (No new host dependency)**: The stack must remain startable with `bin/dev` and nothing
+- [x] **NFR-3 (No new host dependency)**: The stack must remain startable with `bin/dev` and nothing
       else. FlareSolverr moving inside the stack must remove the manual `docker run`, not add a
       second thing to remember. Article I: nothing runs on the host.
-- [ ] **NFR-4 (Language)**: Every file this feature creates or rewrites must be in English, including
+- [x] **NFR-4 (Language)**: Every file this feature creates or rewrites must be in English, including
       the shell comments inside the new container scripts. The Spanish comments in
       `docker-compose.yaml` and in the existing `services/indexer/` and `services/torrent/` scripts
       predate Article VI; this feature translates only the blocks it is already editing and leaves the
       rest, so the diff stays reviewable.
-- [ ] **NFR-5 (Secrets stay out of the repository)**: `INDEXER_API_KEY` is a generated secret. It
+- [x] **NFR-5 (Secrets stay out of the repository)**: `INDEXER_API_KEY` is a generated secret. It
       belongs in `.env` and in `.env.example` as an empty key with a comment, never with a value, and
       it must not appear in any document, including this one (Article V's sibling rule for paths, same
       spirit).
@@ -225,38 +225,38 @@ value for a `Setting` row whose key already exists.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: `bin/dev` brings up nine services, and `docker compose ps` reports `perceptor-flaresolverr`
+- [x] **AC-1**: `bin/dev` brings up nine services, and `docker compose ps` reports `perceptor-flaresolverr`
       as `healthy`.
-- [ ] **AC-2 (the "pre-configured" criterion)**: Given a stack stopped and its indexer volume removed
+- [x] **AC-2 (the "pre-configured" criterion)**: Given a stack stopped and its indexer volume removed
       with `docker compose down && docker volume rm perceptor_indexer_config`, when `bin/dev` runs to
       completion, then Prowlarr's `GET /api/v1/indexerproxy` returns exactly one proxy, with
       `implementation: "FlareSolverr"`, its `host` field set to the `flaresolverr` service URL, and a
       non-empty `tags` array — with no human having opened Prowlarr's UI.
-- [ ] **AC-3 (idempotence)**: Running `bin/dev` a second time against the volume left by AC-2 leaves
+- [x] **AC-3 (idempotence)**: Running `bin/dev` a second time against the volume left by AC-2 leaves
       `GET /api/v1/indexerproxy` and `GET /api/v1/tag` each returning the same single entry, with the
       same `id`.
-- [ ] **AC-4 (the key agrees in all three places)**: After AC-2, the `tracker_api_key` row returned by
+- [x] **AC-4 (the key agrees in all three places)**: After AC-2, the `tracker_api_key` row returned by
       ``bin/mysql -e 'select `key`, value from settings'`` holds the same value as `INDEXER_API_KEY` in
       `.env`, and the same value as the `<ApiKey>` element of `/config/config.xml` inside the `indexer`
       container.
-- [ ] **AC-5 (the proxy actually resolves)**: With the tag from AC-2 attached by hand to an indexer
+- [x] **AC-5 (the proxy actually resolves)**: With the tag from AC-2 attached by hand to an indexer
       that sits behind Cloudflare, a search from `/movies` returns results, and
       `docker compose logs flaresolverr` shows the corresponding request.
-- [ ] **AC-6 (failure path, empty key)**: With `INDEXER_API_KEY=` in `.env`, `bin/dev` leaves the
+- [x] **AC-6 (failure path, empty key)**: With `INDEXER_API_KEY=` in `.env`, `bin/dev` leaves the
       `indexer` container reporting an explicit error in `docker compose logs indexer`, and Prowlarr
       does not come up holding a randomly generated key.
-- [ ] **AC-7 (failure path, FlareSolverr down)**: With the `flaresolverr` service stopped, a search
+- [x] **AC-7 (failure path, FlareSolverr down)**: With the `flaresolverr` service stopped, a search
       against a tagged indexer fails visibly in Prowlarr's own logs rather than returning an empty
       result set that looks like "no releases found".
-- [ ] **AC-8 (upgrade path)**: On a checkout whose stack has been running before this feature, running
+- [x] **AC-8 (upgrade path)**: On a checkout whose stack has been running before this feature, running
       `bin/install` and answering "no" to regenerating `.env` writes `INDEXER_API_KEY` with the key
       already present in the `indexer` volume, and the subsequent `bin/dev` leaves Prowlarr's existing
       indexers and credentials intact.
-- [ ] **AC-9 (failure path, a wrong key is visible)**: With `tracker_api_key` set to a wrong value
+- [x] **AC-9 (failure path, a wrong key is visible)**: With `tracker_api_key` set to a wrong value
       from the Settings screen, a search from `/movies` shows `No se pudo consultar el indexer (HTTP
       401)` in the search dialog. It must not show an empty result table, which is what happens today
       and is indistinguishable from "nothing was released" (REQ-15).
-- [ ] **AC-10 (nothing regressed)**: `bin/cli api npx --no tsc --noEmit` reports 0 errors,
+- [x] **AC-10 (nothing regressed)**: `bin/cli api npx --no tsc --noEmit` reports 0 errors,
       `bin/npm api test` reports 122 pre-existing tests still passing plus the new indexer-client
       suite, `bin/npm web run build` fails on the same 4 pre-existing files and no others, and
       `git diff` shows `services/api/src/schema.gql` unchanged.

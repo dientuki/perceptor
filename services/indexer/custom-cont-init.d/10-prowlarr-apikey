@@ -1,0 +1,42 @@
+#!/usr/bin/with-contenv bash
+# with-contenv: custom-cont-init.d already runs inline during LinuxServer's init with the full
+# Docker environment attached, but the shebang still needs with-contenv for INDEXER_API_KEY to be
+# visible here — same reasoning as custom-services.d/10-prowlarr-credentials.
+#
+# Runs BEFORE Prowlarr starts (custom-cont-init.d, not custom-services.d): unlike the ApiKey,
+# which config.xml only gets from Prowlarr itself on first boot, this script is the one writing
+# the ApiKey — there is nothing to wait for, so writing the file up front avoids Prowlarr ever
+# generating a random key and then having to be told to change it at runtime (which makes it
+# restart itself). See docs/spec/features/014-dev-stack-flaresolverr/infra/plan.md REQ-12/REQ-13.
+
+set -euo pipefail
+
+CONFIG_XML="/config/config.xml"
+
+if [ -z "${INDEXER_API_KEY:-}" ]; then
+  echo "[10-prowlarr-apikey] ERROR: INDEXER_API_KEY is empty. Refusing to let Prowlarr generate its own random key — the api would never be able to authenticate against it. Aborting." >&2
+  exit 1
+fi
+
+if [ -f "${CONFIG_XML}" ]; then
+  current_key=$(sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' "${CONFIG_XML}")
+  if [ "${current_key}" = "${INDEXER_API_KEY}" ]; then
+    echo "[10-prowlarr-apikey] ${CONFIG_XML} already has the declared ApiKey, nothing to do."
+  elif [ -n "${current_key}" ]; then
+    echo "[10-prowlarr-apikey] rewriting <ApiKey> in ${CONFIG_XML} to match INDEXER_API_KEY..."
+    sed -i "s:<ApiKey>.*</ApiKey>:<ApiKey>${INDEXER_API_KEY}</ApiKey>:" "${CONFIG_XML}"
+  else
+    echo "[10-prowlarr-apikey] ERROR: ${CONFIG_XML} exists but has no <ApiKey> element to rewrite." >&2
+    exit 1
+  fi
+else
+  echo "[10-prowlarr-apikey] ${CONFIG_XML} does not exist yet, writing a minimal config with the declared ApiKey..."
+  mkdir -p "$(dirname "${CONFIG_XML}")"
+  cat > "${CONFIG_XML}" <<EOF
+<Config>
+  <ApiKey>${INDEXER_API_KEY}</ApiKey>
+</Config>
+EOF
+fi
+
+lsiown abc:abc "${CONFIG_XML}"

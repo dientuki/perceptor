@@ -2,7 +2,7 @@
 title: Development Stack Contract and FlareSolverr — web slice
 service: web
 last_updated: 2026-08-17
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Development Stack Contract and FlareSolverr — `web` (`web/plan.md`)

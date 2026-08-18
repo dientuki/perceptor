@@ -9,7 +9,7 @@ Pipeline stage status today:
 | :-- | :-- | :-- |
 | Search catalog (TMDB) | `api` — `src/media/` (dispatch + `searchMedia`/`addMedia`), `src/movies/movies.service.ts`, `src/shows/shows.service.ts`, `src/clients/tmdb/{client,types}.ts` | working for films and series, per-user library, parameterized by media type (`006-media-search`) |
 | Register title in DB | `api` — `media`/`movies`/`shows` modules + Prisma | working (read + CRUD service); a registered series also fetches its seasons/episodes in the background |
-| Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `api` — `src/clients/indexer/client.ts` | working for both a film and a single episode; alternativa manual: pegar un magnet (`addMagnetToMovie`/`addMagnetToEpisode`, `src/clients/torrent/magnet.ts`) — mismo `MediaSource`/AutoRun de ahí en más |
+| Find release (indexer) | Prowlarr — `indexer` service in `docker-compose.yaml`, `flaresolverr` service for Cloudflare-fronted trackers, `api` — `src/clients/indexer/client.ts` | working for both a film and a single episode; a fresh checkout needs no manual API-key paste or Prowlarr UI step — `bin/install` declares `INDEXER_API_KEY` and the `indexer` container adopts it before boot, pre-registering a FlareSolverr proxy the same way (`014-dev-stack-flaresolverr`); a failed indexer call now surfaces as an error in the search dialog instead of an empty result list; alternativa manual: pegar un magnet (`addMagnetToMovie`/`addMagnetToEpisode`, `src/clients/torrent/magnet.ts`) — mismo `MediaSource`/AutoRun de ahí en más |
 | Download | qBittorrent — `torrent` service, `api` — `src/clients/torrent/client.ts` | working, per-torrent save path, for both a film and a single episode (`010-episode-acquisition`) |
 | Detect completion, update DB, enqueue job | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | working |
 | Scan downloaded files, inventory | `worker` — BullMQ consumer, talks to `api` over GraphQL | working for both a single file and a season pack — the worker enumerates every file, flags each `isVideo`, and resolves it to an episode by parsing `SxxEyy` from the file name (a single-file/single-episode source still resolves to the one largest video, as before); the episode name itself comes from the api, never the filename (`013-season-pack-processing`) |
@@ -44,10 +44,12 @@ services/worker/         BullMQ + FFmpeg consumer        -> services/worker/CLAU
     Host(${DOMAIN})  Host(api.${DOMAIN})  Host(torrent.${DOMAIN})  Host(indexer.${DOMAIN})
         |                  |                     |                      |
    web  :3000  --GraphQL-->  api  :${API_PORT}   torrent (qBittorrent)  indexer (Prowlarr)
-                              |        \                 ^
-                        db (MariaDB) redis (queue)       | AutoRun hook on completion
-                                       |
-                       worker (no ingress, Redis queue only, calls back into api over GraphQL)
+                              |        \                 ^                |
+                        db (MariaDB) redis (queue)       | AutoRun hook   | proxy for Cloudflare-
+                                       |                    on completion | fronted trackers
+                       worker (no ingress, Redis queue                   v
+                        only, calls back into api over    flaresolverr (no ingress, perceptor-net only)
+                        GraphQL)
 ```
 
 - Everything shares the `perceptor-net` bridge network.
@@ -100,7 +102,7 @@ secret, never copy them into docs or code):
 `ADMIN_USER`, `ADMIN_PASSWORD`,
 `WEB_PORT`, `API_PORT`, `DB_PORT`, `REDIS_PORT`, `INDEXER_PORT`,
 `QBITTORRENT_WEBUI_PORT`, `QBITTORRENT_TORRENTING_PORT`, `QBITTORRENT_USER`, `QBITTORRENT_PASSWORD`,
-`INDEXER_USER`, `INDEXER_PASSWORD`,
+`INDEXER_USER`, `INDEXER_PASSWORD`, `INDEXER_API_KEY`,
 `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ROOT_PASSWORD`, `DATABASE_URL`,
 `REDIS_HOST`, `HOST_DOWNLOADS_DIR`, `HOST_DESTINATIONS_DIR`,
 `CONTAINER_DOWNLOADS_DIR`, `CONTAINER_DESTINATIONS_DIR`,
@@ -158,6 +160,17 @@ Note: the TMDB bearer token is **not** an `.env` variable and is not hardcoded i
 from the `movie_db_api_key` Settings key (`api`'s `src/clients/tmdb/client.ts` reads it from
 `SettingsService` on every call), editable from the Settings screen. A fresh install ships it empty,
 so `searchMovies`/the TMDB fallback fail with `401 Unauthorized` until an admin sets a real key.
+
+`INDEXER_API_KEY` is Prowlarr's own API key, but unlike the TMDB token it is **not** left for a human
+to paste in: `bin/install` generates it (or adopts one already present in the `indexer` volume, so an
+upgrade never invalidates a live install), the `indexer` container's
+`custom-cont-init.d/10-prowlarr-apikey` writes it into `/config/config.xml` before Prowlarr starts,
+and the `api`'s settings seed fills the `tracker_api_key` row from the same variable
+(`014-dev-stack-flaresolverr`). A second init script,
+`custom-services.d/20-prowlarr-flaresolverr`, then registers a FlareSolverr indexer proxy against
+Prowlarr's API pointed at the in-stack `flaresolverr` service — idempotent across reruns and volume
+resets — but does **not** attach that proxy's tag to any indexer; deciding which indexers actually
+sit behind Cloudflare stays a manual step in Prowlarr's UI.
 
 ## Conventions
 
@@ -219,15 +232,15 @@ is a worked example, written after the fact against a feature that shipped.
 
 ## Current state — do not treat these files as reference code
 
-Measured 2026-08-18, after `013-season-pack-processing` landed. Re-run the typechecks rather than
+Measured 2026-08-18, after `014-dev-stack-flaresolverr` landed. Re-run the typechecks rather than
 trusting the counts — the numbers are what an agent reports before and after a change to prove it
 added nothing.
 
-**`api` — clean, 0 errors.** `bin/cli api npx --no tsc --noEmit`. `013-season-pack-processing`
-added a fourteenth suite (`media-sources.service.spec.ts`, the `sourceScanned` fan-out) and a
-fifteenth (`seasons.service.spec.ts`, the new `addMagnetToSeason` module). Tests are now **152**
-across **15** suites (`bin/npm api test`, run 2026-08-18). `services/api/CLAUDE.md` has the
-module-by-module detail.
+**`api` — clean, 0 errors.** `bin/cli api npx --no tsc --noEmit`. `014-dev-stack-flaresolverr` added
+a sixteenth suite, `src/clients/indexer/client.spec.ts` (the `ServiceUnavailableException` REQ-15
+guards `getData` gained against a non-success indexer response). Tests are now **156** across **16**
+suites (`bin/npm api test`, run 2026-08-18). `services/api/CLAUDE.md` has the module-by-module
+detail.
 
 **`web` — 11 errors across 4 pre-GraphQL files**, none on a path the running UI uses:
 `components/import/importFolderModal.tsx` and `ImportMagnetSeasonModal.tsx` (both import a

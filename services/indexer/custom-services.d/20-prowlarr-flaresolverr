@@ -1,0 +1,103 @@
+#!/usr/bin/with-contenv bash
+# with-contenv (not a plain bash shebang): same reasoning as 10-prowlarr-credentials — an s6
+# service otherwise starts with an empty environment and never sees INDEXER_API_KEY.
+#
+# custom-services.d (not custom-cont-init.d): the key is declared via INDEXER_API_KEY and applied
+# to config.xml before Prowlarr starts by custom-cont-init.d/10-prowlarr-apikey, but this script
+# still has to wait for Prowlarr's HTTP API to come up and accept it — that wait can only happen
+# once Prowlarr itself is starting, which is exactly the deadlock custom-cont-init.d cannot avoid.
+#
+# Ensures a FlareSolverr indexer proxy pointing at the in-stack service, tagged "flaresolverr",
+# through Prowlarr's own API — idempotent across reruns and across a fresh volume (NFR-1). It does
+# NOT attach the tag to any indexer (REQ-10) — which indexers need a headless browser is a
+# judgement about specific trackers this script has no way to make.
+
+set -euo pipefail
+
+BASE_URL="http://localhost:9696"
+FLARESOLVERR_URL="http://flaresolverr:8191/"
+TAG_LABEL="flaresolverr"
+
+if [ -z "${INDEXER_API_KEY:-}" ]; then
+  echo "[20-prowlarr-flaresolverr] ERROR: INDEXER_API_KEY está vacío. No configuro el proxy." >&2
+  exit 1
+fi
+
+echo "[20-prowlarr-flaresolverr] esperando a que la API responda con la key declarada..."
+until curl -sf -o /dev/null -H "X-Api-Key: ${INDEXER_API_KEY}" "${BASE_URL}/api/v1/system/status"; do
+  sleep 2
+done
+
+# --- Tag ---------------------------------------------------------------
+
+tags=$(curl -sf -H "X-Api-Key: ${INDEXER_API_KEY}" "${BASE_URL}/api/v1/tag")
+tag_id=$(echo "${tags}" | jq -r --arg label "${TAG_LABEL}" '.[] | select(.label == $label) | .id')
+
+if [ -z "${tag_id}" ]; then
+  echo "[20-prowlarr-flaresolverr] creando tag '${TAG_LABEL}'..."
+  created_tag=$(curl -sf -X POST \
+    -H "X-Api-Key: ${INDEXER_API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d "{\"label\":\"${TAG_LABEL}\"}" \
+    "${BASE_URL}/api/v1/tag")
+  tag_id=$(echo "${created_tag}" | jq -r '.id')
+else
+  echo "[20-prowlarr-flaresolverr] tag '${TAG_LABEL}' ya existe (id=${tag_id})."
+fi
+
+# --- Indexer proxy -------------------------------------------------------
+
+proxies=$(curl -sf -H "X-Api-Key: ${INDEXER_API_KEY}" "${BASE_URL}/api/v1/indexerproxy")
+proxy=$(echo "${proxies}" | jq -c '[.[] | select(.implementation == "FlareSolverr")] | first // empty')
+
+if [ -z "${proxy}" ]; then
+  echo "[20-prowlarr-flaresolverr] no existe proxy FlareSolverr, creándolo..."
+  schema=$(curl -sf -H "X-Api-Key: ${INDEXER_API_KEY}" "${BASE_URL}/api/v1/indexerproxy/schema")
+  template=$(echo "${schema}" | jq -c '[.[] | select(.implementation == "FlareSolverr")] | first')
+
+  new_proxy=$(echo "${template}" | jq \
+    --arg host "${FLARESOLVERR_URL}" \
+    --arg name "${TAG_LABEL}" \
+    --argjson tagId "${tag_id}" \
+    '.name = $name
+     | .tags = [$tagId]
+     | .fields = (.fields | map(
+         if .name == "host" then .value = $host
+         elif .name == "requestTimeout" then .value = 60
+         else . end
+       ))')
+
+  curl -sf -X POST \
+    -H "X-Api-Key: ${INDEXER_API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d "${new_proxy}" \
+    "${BASE_URL}/api/v1/indexerproxy" > /dev/null
+
+  echo "[20-prowlarr-flaresolverr] proxy creado, apuntando a ${FLARESOLVERR_URL}."
+else
+  proxy_id=$(echo "${proxy}" | jq -r '.id')
+  current_host=$(echo "${proxy}" | jq -r '.fields[] | select(.name == "host") | .value')
+  has_tag=$(echo "${proxy}" | jq --argjson tagId "${tag_id}" '.tags | index($tagId) != null')
+
+  if [ "${current_host}" = "${FLARESOLVERR_URL}" ] && [ "${has_tag}" = "true" ]; then
+    echo "[20-prowlarr-flaresolverr] proxy ya apunta a ${FLARESOLVERR_URL} y tiene el tag, no piso nada."
+  else
+    echo "[20-prowlarr-flaresolverr] repuntando proxy existente (id=${proxy_id}) a ${FLARESOLVERR_URL}..."
+    updated_proxy=$(echo "${proxy}" | jq \
+      --arg host "${FLARESOLVERR_URL}" \
+      --argjson tagId "${tag_id}" \
+      '.fields = (.fields | map(if .name == "host" then .value = $host else . end))
+       | .tags = ((.tags + [$tagId]) | unique)')
+
+    curl -sf -X PUT \
+      -H "X-Api-Key: ${INDEXER_API_KEY}" \
+      -H "Content-Type: application/json" \
+      -d "${updated_proxy}" \
+      "${BASE_URL}/api/v1/indexerproxy/${proxy_id}" > /dev/null
+
+    echo "[20-prowlarr-flaresolverr] listo."
+  fi
+fi
+
+# Nada más que hacer — dormimos en vez de salir en 0 para no generar reinicios innecesarios.
+exec sleep infinity

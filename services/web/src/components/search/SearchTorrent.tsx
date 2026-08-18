@@ -35,6 +35,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [addingHash, setAddingHash] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState<TorrentResult | null>(null);
   const router = useRouter();
 
@@ -65,11 +66,17 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     if (!query.trim()) return;
 
     setIsLoading(true);
+    setSearchError(null);
+    setResults([]);
     try {
       const data = await searchTorrentsAction(query);
       setResults(data);
     } catch (error) {
       console.error({ error, query }, "Error al buscar torrents");
+      setResults([]);
+      setSearchError(
+        error instanceof Error ? error.message : "Error al buscar releases",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -165,6 +172,12 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
             placeholder="Filter results by title (e.g. 1080p, x265)..."
             className="w-full rounded-lg border border-gray-200 bg-transparent py-2 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 dark:border-gray-800 dark:text-white"
           />
+        </div>
+      )}
+
+      {searchError && (
+        <div className="flex-shrink-0 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
+          <p>{searchError}</p>
         </div>
       )}
 

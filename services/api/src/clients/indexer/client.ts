@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { IndexerClient, TorrentResult, TorrentInfo } from "./types";
 import { HTTP_METHOD } from "@/types/http";
 import { getScore } from "./score";
@@ -167,12 +167,21 @@ export class ProwlarrClient implements IndexerClient {
     const url = new URL("/api/v1/search", baseUrl);
     url.searchParams.set("query", query);
 
-    const res = await fetch(url.toString(), {
-      method: HTTP_METHOD.GET,
-      headers: {
-        "X-Api-Key": config.tracker_api_key,
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetch(url.toString(), {
+        method: HTTP_METHOD.GET,
+        headers: {
+          "X-Api-Key": config.tracker_api_key,
+        },
+      });
+    } catch {
+      throw new ServiceUnavailableException('No se pudo consultar el indexer');
+    }
+
+    if (!res.ok) {
+      throw new ServiceUnavailableException(`No se pudo consultar el indexer (HTTP ${res.status})`);
+    }
 
     const data = await res.json();
 

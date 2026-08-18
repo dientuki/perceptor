@@ -2,7 +2,7 @@
 title: Development Stack Contract and FlareSolverr — api slice
 service: api
 last_updated: 2026-08-17
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Development Stack Contract and FlareSolverr — `api` (`api/plan.md`)

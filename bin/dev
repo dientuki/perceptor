@@ -12,7 +12,7 @@ fi
 
 set -a; . ./.env; set +a
 
-SERVICES="db redis api web worker torrent indexer"
+SERVICES="db redis api web worker torrent indexer flaresolverr"
 if [ "${USE_TRAEFIK}" = "true" ]; then
   SERVICES="traefik $SERVICES"
 fi

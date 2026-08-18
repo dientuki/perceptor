@@ -96,6 +96,24 @@ if [ -z "$current_jwt_secret" ]; then
   ensure_env_var JWT_SECRET "$(openssl rand -hex 32)"
 fi
 
+current_indexer_api_key=$(grep '^INDEXER_API_KEY=' .env 2>/dev/null | cut -d= -f2-)
+if [ -z "$current_indexer_api_key" ]; then
+  echo "Buscando una INDEXER_API_KEY existente en el volumen de indexer..."
+  # --entrypoint /bin/sh evita la cadena /init de LinuxServer (no arranca nada) y --no-deps
+  # evita arrastrar a flaresolverr sólo para leer un archivo.
+  existing_key=$(docker compose run --rm --no-deps --entrypoint /bin/sh indexer \
+    -c 'sed -n "s:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p" /config/config.xml 2>/dev/null' | tr -d '\r\n')
+  if [ -n "$existing_key" ]; then
+    echo "Encontrada, adoptando la key existente del volumen de indexer (no invalida tu Prowlarr configurado)."
+    ensure_env_var INDEXER_API_KEY "$existing_key"
+  else
+    echo "No hay volumen previo, generando INDEXER_API_KEY..."
+    ensure_env_var INDEXER_API_KEY "$(openssl rand -hex 16)"
+  fi
+  echo "Nota: si tenías un FlareSolverr corriendo aparte con 'docker run', ya no hace falta —"
+  echo "ahora vive dentro del stack. Podés pararlo."
+fi
+
 set -a; . ./.env; set +a
 
 echo
