@@ -2,7 +2,7 @@
 title: Web Build Errors — web slice
 service: web
 last_updated: 2026-08-18
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Web Build Errors — `web` (`web/plan.md`)

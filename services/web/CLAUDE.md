@@ -282,41 +282,45 @@ toolchain here is its own decision and deserves its own spec.
 
 ## Current state — do not treat as reference code
 
-As of 2026-08-14, after `010-episode-acquisition`, `bin/cli web npx --no tsc --noEmit` reports **11
-errors across 4 files**, down from 12 across 5 — `src/components/search/SearchTorrentModal.tsx`'s
-`@prisma/client` import is gone, retyped against `AcquisitionTarget` (this service's last Article II
-violation; `grep -rn "@prisma/client" services/web/src` now returns nothing). The remaining 4 are
-unchanged leftovers from a pre-GraphQL version of the app; none are on a path the running UI uses.
+As of 2026-08-18, after `016-web-build-errors`, `bin/cli web npx --no tsc --noEmit` reports **0
+errors** and `bin/npm web run build` exits 0. Both blockers that used to sit here are closed.
 
-| File | Problem |
-| :-- | :-- |
-| `src/components/import/importFolderModal.tsx` | imports `@/actions/jobs` (does not exist); passes `value` to `InputField` |
-| `src/components/import/ImportMagnetSeasonModal.tsx` | same two, for season-level bulk import — deliberately out of scope for `010-episode-acquisition` (episode-level only), kept as-is |
-| `src/components/search/SearchForm.tsx` | imports `../../icons` (no `src/icons/`); implicit `any` props |
-| `src/components/search/ResultsForm.tsx` | untyped destructured props (5 implicit `any`) |
+**The 4 leftover files are deleted, not fixed** — they had zero consumers repo-wide, so REQ-5's
+default (delete what nothing imports) applied cleanly:
 
-The 6th error that used to be listed here — `Cannot find module '@/components/movies/Shows'` on
-`src/app/(dashboard)/shows/page.tsx` — is **gone as of `007-library-listing`**, which finished that
-untracked paste into the real series listing. `009-show-detail` similarly rewrote
-`src/app/(dashboard)/shows/[id]/page.tsx`, `src/components/shows/Show.tsx` and
-`src/components/shows/SeasonAccordion.tsx` from scratch (they were broken, uncommitted drafts at
-the time); `010-episode-acquisition` wired `SeasonAccordion.tsx`'s three per-episode buttons to
-real modals (see the section above) — neither ever contributed to this count.
-`src/actions/languages.ts`, `src/types/languages.ts`, `LanguagePicker.tsx`,
-`PreferredLanguagesCard.tsx` and the touched fetches in `src/actions/{auth,movies,shows}.ts`
-(`011-av1-transcode`) don't contribute either. Verified 2026-08-17: `bin/cli web npx --no tsc
---noEmit` reports 11 errors across the 4 files above and nothing else.
+- `src/components/import/importFolderModal.tsx` and `ImportMagnetSeasonModal.tsx` — both imported a
+  `@/actions/jobs` that never existed in any revision, and both used `alert()`, which this file
+  bans outright. Season-level bulk import stays unbuilt; `addMagnetToSeason` exists in `api` with no
+  UI, and building one is its own feature, not a byproduct of a build fix.
+- `src/components/search/SearchForm.tsx` and `ResultsForm.tsx` — pre-GraphQL ancestors of the live
+  `SearchContainer.tsx` + `SearchInput.tsx` pair. Keeping them would have meant two ways to search.
 
-`bin/npm web run lint` is **not** a usable gate today: `biome check` reports ~1598 errors and ~96
+**The typecheck passing did not mean the build passed.** `next build` still failed at "Generating
+static pages" — `Error occurred prerendering page "/movies/add"`,
+`Cannot read properties of null (reading 'useState')` — on every client component, not just that
+screen (confirmed during planning: forcing `dynamic = "force-dynamic"` just moved the same null
+dispatcher to Next's own `/_global-error`). Root cause: `next build` was running under
+`NODE_ENV=development` inside the dev container (`docker-compose.yaml` passes
+`NODE_ENV=${NODE_ENV}` into `web`, and the Dockerfile's `dev` stage hardcodes it too), which
+resolves React's development export conditions and produces a mismatched React instance. Fixed with
+one line in `package.json`: `"build": "NODE_ENV=production next build"`. The Dockerfile's `builder`
+stage never set `NODE_ENV`, so the production image build (`015-reproducible-image-builds`) already
+got `production` for free and was never affected — only `bin/npm web run build` in the dev
+container was.
+
+Fixing `NODE_ENV` surfaced a second, independent prerender failure it had been masking: `/login`
+failed with Next's documented `useSearchParams() should be wrapped in a suspense boundary` error
+(`LoginForm.tsx` calls it directly). Fixed with Next's own pattern — wrapping the page's
+`<LoginForm />` in `<Suspense>` — not a skip-prerender shortcut or a compiler suppression, both of
+which `016`'s spec ruled out.
+
+Neither blocker was closed by suppressing the compiler or opting a page out of prerendering — a
+repo-wide search for the banned escape hatches (see `016-web-build-errors/spec.md` REQ-3/REQ-8)
+comes back empty.
+
+`bin/npm web run lint` is **still not** a usable gate: `biome check` reports ~1598 errors and ~96
 warnings across the pre-existing template, with or without any given change. Judge a new file by
-running Biome on that file (a new action like `src/actions/shows.ts` should come back clean) rather
-than on the repo.
+running Biome on that file rather than on the repo.
 
-Files that used to be on this list and now compile: `SearchTorrent.tsx`,
-`src/app/(dashboard)/movies/[id]/page.tsx`, `src/actions/movies.ts`. The new
-`src/app/(dashboard)/movies/[id]/not-found.tsx` (`008-movie-detail`) is clean too — not among the
-12. `@/components/ui/modal` and
-`@/hooks/useModal` exist now, built for the import modals.
-
-Re-run the typecheck rather than trusting the count. The number is the point: report it before and
-after a change to prove you added nothing.
+Re-run the typecheck and the build rather than trusting these counts. The number is the point:
+report it before and after a change to prove you added nothing.

@@ -232,7 +232,7 @@ is a worked example, written after the fact against a feature that shipped.
 
 ## Current state — do not treat these files as reference code
 
-Measured 2026-08-18, after `014-dev-stack-flaresolverr` landed. Re-run the typechecks rather than
+Measured 2026-08-18, after `016-web-build-errors` landed. Re-run the typechecks rather than
 trusting the counts — the numbers are what an agent reports before and after a change to prove it
 added nothing.
 
@@ -242,16 +242,21 @@ guards `getData` gained against a non-success indexer response). Tests are now *
 suites (`bin/npm api test`, run 2026-08-18). `services/api/CLAUDE.md` has the module-by-module
 detail.
 
-**`web` — 11 errors across 4 pre-GraphQL files**, none on a path the running UI uses:
-`components/import/importFolderModal.tsx` and `ImportMagnetSeasonModal.tsx` (both import a
-non-existent `@/actions/jobs`, both pass `value` to a component that only takes `defaultValue`),
-`SearchForm.tsx` and `ResultsForm.tsx` (missing `@/icons`, implicit `any`).
-`services/web/CLAUDE.md` has the table. `010-episode-acquisition` closed
-`SearchTorrentModal.tsx`'s `@prisma/client` import (a Constitution Article II violation), taking
-the count from 12/5 files to 11/4; every feature since has verified it stayed there —
-`013-season-pack-processing` has no `[web]` tasks by design and did not touch this count.
-`bin/npm web run build` still fails on the 4 remaining files (`next.config.ts` sets no
-`ignoreBuildErrors`), independently of anything any of these features touched.
+**`web` — clean, 0 errors, `bin/npm web run build` exits 0.** `016-web-build-errors` closed the last
+4 files (`components/import/importFolderModal.tsx`, `ImportMagnetSeasonModal.tsx`,
+`components/search/SearchForm.tsx`, `ResultsForm.tsx` — all deleted, zero consumers, pre-GraphQL
+leftovers), taking the count from 11/4 to 0/0. The build had a second, independent blocker the
+typecheck was hiding: `next build` failed at "Generating static pages" with a null React dispatcher
+(`Cannot read properties of null (reading 'useState')`) on every client component. Root cause was
+`NODE_ENV=development` leaking into `next build` inside the dev container (`docker-compose.yaml`
+passes `NODE_ENV=${NODE_ENV}` into `web`, and the Dockerfile's `dev` stage hardcodes it too) — fixed
+with `"build": "NODE_ENV=production next build"` in `services/web/package.json`. The Dockerfile's
+`builder` stage never set `NODE_ENV`, so `next build` already ran under `production` there; the
+image build (`015-reproducible-image-builds`) was never affected by this, only
+`bin/npm web run build` in the dev container. `services/web/CLAUDE.md` has the detail, including a
+second prerender fix the ladder didn't anticipate (`/login` needed its `useSearchParams()` consumer
+wrapped in `<Suspense>`, Next's own documented pattern for that error — not one of REQ-7/REQ-8's
+banned shortcuts).
 
 **`worker` — clean, 0 errors.** `013-season-pack-processing` split
 `scan-folder.ts`'s old two-jobs-in-one (enumerate + pick a winner) into enumeration-only plus two

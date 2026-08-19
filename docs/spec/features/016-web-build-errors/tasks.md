@@ -1,7 +1,7 @@
 ---
 title: Web Build Errors — Tasks
 last_updated: 2026-08-18
-status: Draft
+status: Done
 ---
 
 # TASKS: Web Build Errors (`tasks.md`)
@@ -24,7 +24,7 @@ before `next build` ever reaches its prerender stage.
 
 ### Group 1 — dead code removal
 
-- [ ] **T001** `[web]` Delete the four unreferenced pre-GraphQL components:
+- [x] **T001** `[web]` Delete the four unreferenced pre-GraphQL components:
       `src/components/import/importFolderModal.tsx`,
       `src/components/import/ImportMagnetSeasonModal.tsx`,
       `src/components/search/SearchForm.tsx`, `src/components/search/ResultsForm.tsx`.
@@ -40,7 +40,7 @@ before `next build` ever reaches its prerender stage.
 Blocked by Group 1 in the strong sense: until T001 lands, `next build` stops at the typecheck and
 the failure this group fixes is not reachable.
 
-- [ ] **T002** `[web]` Make `next build` reach and pass "Generating static pages". First capture the
+- [x] **T002** `[web]` Make `next build` reach and pass "Generating static pages". First capture the
       baseline (`bin/npm web run build` should now fail with
       `Error occurred prerendering page "/movies/add"`), then walk the diagnosis ladder in
       `web/plan.md` and stop at the first rung that goes green: **rung 1** `NODE_ENV`
@@ -56,14 +56,14 @@ the failure this group fixes is not reachable.
       `Error occurred prerendering page` line (AC-1, AC-7), and
       `grep -rn "force-dynamic" services/web/src/app` returns nothing (AC-8).
 
-- [ ] **T003** `[web]` Prove the build is not silently passing: introduce a deliberate type error in
+- [x] **T003** `[web]` Prove the build is not silently passing: introduce a deliberate type error in
       `src/app/page.tsx`, run `bin/npm web run build`, then revert the file. → T002
       *Done when:* the build **fails** with that error present and exits 0 again after the revert,
       and `git status services/web/src/app/page.tsx` is clean (AC-5).
 
 ### Group 3 — verification and docs
 
-- [ ] **T004** `[docs] [P]` Manual acceptance pass. `bin/dev`, then sign in and open `/movies`,
+- [x] **T004** `[docs] [P]` Manual acceptance pass. `bin/dev`, then sign in and open `/movies`,
       `/movies/<id>`, `/shows` and `/shows/<id>`. This is the **only** gate that catches a UI
       regression — `web` has no test suite, and a green build proves prerender works, not that the
       screens render. Not optional. → T002
@@ -71,7 +71,7 @@ the failure this group fixes is not reachable.
       detail page and its three per-episode buttons (buscar / importar archivo / añadir torrent)
       (AC-6).
 
-- [ ] **T005** `[docs] [P]` Update the error counts to **0 errors / 0 files** in the "Current state"
+- [x] **T005** `[docs] [P]` Update the error counts to **0 errors / 0 files** in the "Current state"
       block of the root `CLAUDE.md` and in the error table plus "Current state" section of
       `services/web/CLAUDE.md`, writing the *measured* typecheck number from T001, never the
       expected one. Record that the prerender blocker existed and how it was fixed — and, **if T002
@@ -81,7 +81,7 @@ the failure this group fixes is not reachable.
       *Done when:* neither `CLAUDE.md` still claims 11 errors across 4 files, and both name the four
       deleted files as gone rather than pending (NFR-3).
 
-- [ ] **T006** `[docs]` Walk the acceptance criteria in `spec.md`, tick each box, and set
+- [x] **T006** `[docs]` Walk the acceptance criteria in `spec.md`, tick each box, and set
       `status: Implemented` on `spec.md`, `plan.md` and `web/plan.md`. Re-run the three closing
       greps as part of the walk:
       `grep -rn "ignoreBuildErrors\|@ts-ignore\|@ts-expect-error" services/web` (AC-3),
