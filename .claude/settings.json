@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose logs *)",
+      "Bash(docker compose ps *)",
+      "Bash(bin/cli api npx --no tsc --noEmit)",
+      "Bash(bin/cli api npx --no tsc --noEmit *)",
+      "Bash(bin/cli web npx --no tsc --noEmit)",
+      "Bash(bin/cli web npx --no tsc --noEmit *)",
+      "Bash(bin/cli worker npx --no tsc --noEmit)",
+      "Bash(bin/cli worker npx --no tsc --noEmit *)",
+      "Bash(bin/npm web exec tsc --noEmit)",
+      "Bash(bin/npm web exec tsc --noEmit *)",
+      "Bash(bin/npm api test)",
+      "Bash(bin/npm api test *)",
+      "Bash(bin/npm worker test)",
+      "Bash(bin/npm worker test *)",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Browser__get_page_text",
+      "mcp__Claude_Browser__find",
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__Claude_Browser__read_network_requests"
+    ]
+  }
+}

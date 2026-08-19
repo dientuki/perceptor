@@ -12,241 +12,160 @@ service: a schema change is an `api` change (Constitution, Article III).
 ## GraphQL is code-first
 
 `src/app.module.ts` configures `GraphQLModule.forRoot` with `autoSchemaFile` conditional on
-`NODE_ENV`: `join(process.cwd(), 'src/schema.gql')` in development, `true` (in-memory schema, no
-file written) when `NODE_ENV=production` — the `runner` image built by `bin/build`/`bin/prod` has
-no `/app/src` to write into (`015-reproducible-image-builds`). That means:
+`NODE_ENV`: a file at `src/schema.gql` in development, `true` (in-memory, nothing written) under
+`NODE_ENV=production`, because the `runner` image has no `/app/src` to write into.
 
 - The **source of truth** is the TypeScript decorators on resolvers, entities (`@ObjectType`,
-  `@Field`, …) and DTOs (`@InputType`, …) under each module's `entities/` and `dto/` directories.
-- In development, `src/schema.gql` is **generated on every boot** and marked "DO NOT MODIFY" at its
-  top. Never hand-edit it — change the decorators and let Nest regenerate it. In production the
-  schema is built the same way from the same decorators, it just never touches disk.
+  `@Field`, …) and DTOs (`@InputType`, …) under each module's `entities/` and `dto/`.
+- `src/schema.gql` is **regenerated on every boot** and marked "DO NOT MODIFY". Never hand-edit it —
+  change the decorators.
 - `playground`/`introspection` are on outside of `NODE_ENV=production`.
 
 ## Validation errors reach the caller as a plain string
 
-`main.ts`'s global `ValidationPipe` has a custom `exceptionFactory` (`003-auth-user-management`):
-it throws `BadRequestException` with a single string — the first `class-validator` constraint
-message — instead of Nest's default, which throws the raw `ValidationError[]` and serializes as
-the generic `"Bad Request Exception"` at the GraphQL error's top-level `message`, burying the real
-text under `extensions.originalError.message[0]`. Every consumer in `services/web/src/actions/*.ts`
-reads `errors[0].message` directly, so any DTO's `@MinLength`/`@IsNotEmpty` message (e.g.
-`create-user.input.ts`) now reaches the screen unmodified, the same way a plain
-`throw new BadRequestException('...')` always has.
+`main.ts`'s global `ValidationPipe` has a custom `exceptionFactory`: it throws `BadRequestException`
+with a single string — the first `class-validator` constraint message. Nest's default would throw
+the raw `ValidationError[]`, which serializes as a generic `"Bad Request Exception"` at the GraphQL
+error's top-level `message` and buries the real text under `extensions.originalError.message[0]`.
+Every consumer in `services/web/src/actions/*.ts` reads `errors[0].message` directly, so a DTO's
+`@MinLength`/`@IsNotEmpty` message reaches the screen unmodified.
 
 ## Prisma 7 via driver adapter
 
 `prisma/schema.prisma` declares `datasource db { provider = "mysql" }` with **no `url`** — the
-connection string is not read from the datasource block. Instead `src/prisma/prisma.service.ts`
-builds a `PrismaMariaDb` adapter (`@prisma/adapter-mariadb`) explicitly and passes it into
-`new PrismaClient({ adapter })`. Implications:
+connection string is not read from the datasource block. `src/prisma/prisma.service.ts` builds a
+`PrismaMariaDb` adapter (`@prisma/adapter-mariadb`) and passes it into `new PrismaClient({ adapter })`.
 
-- Don't expect `DATABASE_URL` alone to configure the client the way plain Prisma does — the
-  connection details currently live in the adapter constructor call (see Known debt below).
-- Migrations still work through `prisma migrate` as usual; the adapter only affects the runtime
-  client, not the CLI's own connection for migrations (which Prisma resolves separately).
-- `PrismaService` implements `OnModuleInit`/`OnModuleDestroy` to `$connect`/`$disconnect` with the
-  Nest lifecycle.
+- Don't expect `DATABASE_URL` alone to configure the client — connection details live in the adapter
+  constructor call (see Known debt).
+- Migrations still work through `prisma migrate`; the adapter only affects the runtime client, not
+  the CLI's own connection.
+- `PrismaService` implements `OnModuleInit`/`OnModuleDestroy` to `$connect`/`$disconnect`.
 
 ## Module map
 
-Every domain module is `<name>.module.ts` + `<name>.resolver.ts` + `<name>.service.ts`, with
-GraphQL types in `entities/` and inputs in `dto/`. Follow the neighbours.
+Every domain module is `<name>.module.ts` + `<name>.resolver.ts` + `<name>.service.ts`, with GraphQL
+types in `entities/` and inputs in `dto/`. Follow the neighbours.
 
-**Domain modules** (all registered in `app.module.ts`):
-
-- `auth/` — JWT + Passport (`passport-jwt`), the authentication boundary for the whole API
-  (`002-auth-login`). `guards/jwt-auth.guard.ts` exposes `JwtAuthGuard`, registered once as
-  `APP_GUARD` in `app.module.ts` — every GraphQL operation requires a valid credential by default.
-  Two `Reflector`-driven decorators carve out the exceptions: `decorators/public.decorator.ts`'s
-  `@Public()` (currently only on `login`) and `decorators/allow-service.decorator.ts`'s
-  `@AllowService()` (the worker/qBittorrent-reachable operations — see `auth.types.ts`). A request
-  carries one of two principal shapes, decided by `auth.types.ts`'s `toPrincipal()`: a **user**
-  principal (`{type:'user', id, username}`, checked against `session.service.ts`'s Redis-backed
-  session record so `logout` can actually revoke it — this is what makes AC-5 hold for a stateless
-  JWT) or a **service** principal (`{type:'service', name}`, no `id`, no expiry, minted by
-  `scripts/mint-service-token.ts` and never subjected to the session check). `session.service.ts`
-  also keeps a per-user reverse index (`user-sessions:<userId>`, a Redis SET of that user's live
-  `jti`s, refreshed on every `create()`) so `revokeAllForUser(userId)` can kill every session a user
-  holds in one shot — this is what `004-user-disable` uses to make a disable take effect
-  immediately instead of waiting for each session to expire. `guards/jwt-auth.guard.ts`
-  short-circuits for any non-GraphQL execution context, so it never touches `/uploads` — that REST
-  route is authenticated separately, per-request, by the ticket mechanism in `src/uploads/`.
-  `decorators/current-user.decorator.ts` exposes `@CurrentUser()`, typed to the principal union.
-  Specs under `auth/test/`. `guards/admin.guard.ts` exposes `AdminGuard` (`003-auth-user-management`),
-  applied at class level on `UsersResolver` — it re-reads `isAdmin` fresh from `PrismaService` on
-  every call rather than trusting the JWT, so a demoted admin's still-valid session stops working on
-  the very next request instead of at token expiry. `scripts/reset-password.ts` is the host-side
-  recovery path when no admin can sign in — run through `bin/reset-password`, never bare.
-- `users/` — CRUD over the `User` model. `isAdmin: Boolean!` (`003-auth-user-management`) gates the
-  whole module via `AdminGuard`; `remove()` refuses self-delete and refuses deleting the last admin.
-  `isEnabled: Boolean!` (`004-user-disable`) adds a second lever: `update()` refuses self-disable
-  and refuses disabling the last *enabled* admin (`{ isAdmin: true, isEnabled: true }` — counting
-  disabled admins would let someone lock the app out one disable at a time), same check order as
-  `remove()`. A successful disable calls `SessionService.revokeAllForUser()` in the same method, so
-  an already-open session dies immediately rather than at token expiry. `login()`
-  (`auth.service.ts`) refuses a disabled user's credentials with a distinct message, even if
-  correct.
-- `media/` — the boundary that turns a `type` argument into a choice of service
-  (`006-media-search`). `media.resolver.ts` exposes `searchMedia(query, type)` and
-  `addMedia(tmdbId, type)`, the only two catalog-search-and-register operations in the schema now;
-  `media-dispatch.service.ts` holds a `Record<MediaType, MediaTypeService>` lookup (`movie` →
-  `MoviesService`, `show` → `ShowsService`) and throws `BadRequestException('Tipo de medio no
-  soportado: <type>')` for anything else — the only user-facing string that lives above the
-  per-type services. `media-type.interface.ts` is the whole contract a per-type service
-  implements: `search(query, userId)` and `register(tmdbId, userId)`, nothing else — every other
-  detail (cache key, catalog endpoint, error strings, Prisma model) stays private to the
-  implementation, by design (see `006-media-search/spec.md` § Context & Goal for why). Adding a
-  third media type costs one new service plus one entry in the dispatch's lookup, not an edit to
-  the dispatch itself.
-- `movies/` — CRUD over `Movie`, plus `search`/`register` (`MoviesService`, implementing
-  `MediaTypeService` for `"movie"` — `src/movies/movies.service.ts`, no separate
-  `movies.search.ts`) and `addTorrentToMovie` / `addMagnetToMovie` (the two entry points into the
-  download pipeline). Since `005-movie-search`, `Movie` is a shared catalog row (`tmdbId @unique`,
-  never duplicated) joined to `User` through `UserMovie` (`userId`/`movieId` composite key, both
-  `onDelete: Cascade`): `movies` and `search`'s `inLibrary` are scoped to the caller via that join,
-  and `addTorrentToMovie`/`addMagnetToMovie` refuse a film the caller hasn't registered with the
-  same `La película <id> no existe` a missing film already produced. Since `008-movie-detail`,
-  `movie(id)` is scoped through that same join too — `findOneFromDb(id, userId)` is a `findFirst`
-  with `where: { id, users: { some: { userId } } }`, copied from `attachTorrentSource`'s clause —
-  so its `null` now means "not available to you", identically for a missing id and an unowned film;
-  no `@AllowService()` was added (the worker reads film metadata through `processJob` instead, see
-  `process-jobs/` below). The old `MoviesController` REST controller (unregistered, unreachable, a
-  `005-movie-search` leftover) was deleted rather than re-patched to the new signature.
-  `search` enriches its results with `mediaId`/`inLibrary` **after** the best-effort Redis cache
-  write in `cacheMovies` — that cache key is shared globally across all users, so ownership must
-  never be computed before it, or one user's `inLibrary` leaks into what every other user sees for
-  the film for the next 24h (see `movies.service.spec.ts`).
-- `shows/` — `ShowsService`, `MoviesService`'s structural twin implementing `MediaTypeService` for
-  `"show"` (`006-media-search`) — same cache-before-enrich ordering, same idempotent-link-via-
-  upsert shape, deliberately **not** factored into a shared base class with `MoviesService` (see
-  `006-media-search/spec.md` § Out of Scope). Since `007-library-listing` the module has a
-  resolver: `ShowsResolver` exposes exactly one query, `shows: [Show!]!`, backed by
-  `ShowsService.findAll(userId)` — a single `findMany` scoped through the `UserShow` join
-  (`where: { users: { some: { userId } } }`) and ordered `createdAt: 'desc'`, copying
-  `MoviesResolver`/`MoviesService.findAll` line for line, including the
-  `principal.type === 'user' ? principal.id : ''` narrowing. `Show.status` is a `MediaStatus` since
-  that same feature (`@default(MISSING)`, backfilled), but crosses GraphQL as a plain `String!`
-  exactly as `Movie.status` does; do not `registerEnumType` it for one type only.
-  Since `009-show-detail` the module also exposes `show(id: Int!): Show`, `MoviesResolver`/
-  `MoviesService.findOneFromDb`'s structural twin one level deeper: the same ownership-scoped
-  `findFirst` through `UserShow`, but with a nested `include` on `seasons`/`episodes`, both ordered
-  server-side (`orderBy: { seasonNumber: 'asc' }` / `{ episodeNumber: 'asc' }`). `null` means "not
-  available to you" — indistinguishable between nonexistent and unowned, same rule as `movie(id)`.
-  Two new entities carry the shape over GraphQL, `shows/entities/{season,episode}.entity.ts` —
-  plain `@ObjectType()`s, no image field, `Episode.status` a bare `String!` like the other two
-  status fields.
-  `register()` also kicks off a detached, never-awaited season/episode hydration
-  (`ShowsService.hydrate`) — one HTTP request for the season list, then one sequential
-  (never `Promise.all`, TMDB rate-limits) request per season for its episodes, claimed via a Redis
-  `SET … NX` so two concurrent registrations of the same series fetch once. `Show.seasonsSyncedAt`
-  is set only once every season and episode has been written; it stays `null` on any failure or if
-  hydration never ran, and the next `register()` for that series retries whenever it is `null`.
-- `languages/` — `LanguagesService`/`LanguagesResolver` (`011-av1-transcode`): the `languages`
-  query (reads the seeded `Language` table, deriving a Spanish `name` per `iso2` from
-  `language-names.ts`, not stored), plus the preference read/write methods backing
-  `setPreferredLanguages`/`setMoviePreferredLanguages`/`setShowPreferredLanguages` — each write
-  validates every `iso2` against `languages`, rejects duplicates within one argument, then replaces
-  the whole set atomically (`deleteMany` + `createMany` in a `$transaction`). Exported so `auth/`,
-  `movies/` and `shows/` can each host their own `@ResolveField()` for `preferredLanguages`, one per
-  type, deliberately not centralised into a shared resolver (same reasoning as the `movies`/`shows`
-  structural-twin pattern below). `User.preferredLanguages` (`auth.resolver.ts`) is a
-  worked example of a sharp edge in Nest's code-first GraphQL: a `@ResolveField()` attaches to the
-  **type**, not the query that reaches it, so without an identity guard comparing `@Parent()` against
-  `@CurrentUser()`, the field would also be readable through the admin `users`/`user(id)` queries
-  even though it is meant to be self-service only — see `docs/spec/graphql-contract.md`'s
-  `011-av1-transcode` section for the full story.
-- `media-sources/` — the `MediaSource` row that represents one acquisition attempt. Exposes
-  `seasonId`/`hasUnmatchedFiles` on the entity (`013-season-pack-processing`). Since that feature,
-  `sourceScanned` no longer reports one winning file (`matchedFilePath`) — it takes
-  `matches: [ScannedMatchInput!]!`, one entry per file the worker resolved to an episode (a
-  film/single-episode source still reports exactly one, both numbers `null`). The service loads the
-  source with its season's episodes, refuses a source that targets nothing with `El mediaSource <id>
-  no apunta a ninguna película, episodio ni temporada`, maps a season match to an episode by
-  `episodeNumber` (skipping a mismatched `seasonNumber` or an episode number the season doesn't
-  have), and writes `hasUnmatchedFiles` from the **video** entries only (`SourceFileInput.isVideo` —
-  the extension list lives once, in the worker, on purpose: see
-  `docs/spec/graphql-contract.md`'s `013` section for why a second copy is dangerous). The existing
-  empty-scan `ERROR` branch is now reached by `matches: []` **or** by every match resolving to
-  nothing; the transaction, the never-reset-a-`ProcessJob`-past-`WAITING` rule and the
-  enqueue-after-commit block are unchanged.
-- `episodes/` — `EpisodesService`/`EpisodesResolver` (`010-episode-acquisition`), `MoviesService`'s
-  structural twin one level deeper: `findOneFromDb(episodeId, userId)` scoped through
-  `season.show.users`, plus `addTorrentToEpisode`/`addMagnetToEpisode`, mirroring
-  `attachTorrentSource`'s ownership lookup, active-source conflict (`force`), demote-then-replace
-  and symmetric `infoHash` collision check — deliberately **not** factored into a shared base class
-  with `MoviesService`'s `attachTorrentSource`, same reasoning as `shows/`'s twin of `movies/`. As
-  part of this feature, `MoviesService.attachTorrentSource`'s own collision guard was extended to
-  also recognise an `infoHash` already owned by an **episode** (not just another movie) — closing a
-  hole where an episode-owned hash would otherwise fall through and get silently re-pointed at a
-  film. Reuses `src/shows/entities/episode.entity.ts`'s `Episode` type rather than declaring a
-  second one.
-- `seasons/` — `SeasonsService`/`SeasonsResolver` (`013-season-pack-processing`), the **third**
-  structural twin of `MoviesService.attachTorrentSource` (after `episodes/`) — same deliberate
-  non-abstraction, same reasoning. Exposes exactly one mutation,
-  `addMagnetToSeason(seasonId, magnet, force)`, ownership-scoped through `season.show.users` (a
-  `UserShow` join), a season-scoped active-source conflict on `MediaSource.seasonId`, and the same
-  demote-on-`force` ordering (qBittorrent accepts the magnet first, then the previous source is
-  demoted to `ERROR`, then the replacement `MediaSource` is created). Has no web UI by design — see
-  `docs/spec/features/013-season-pack-processing/spec.md` § Out of Scope; a season-request screen is
-  a later feature. Its final read is a `season.findUniqueOrThrow` that **must** `include` the
-  season's episodes — `Season.episodes` is `[Episode!]!`, non-null, and a bare row would fail the
-  mutation *after* the torrent was already accepted by qBittorrent, leaving an orphaned download
-  with no `MediaSource` to track it.
-- `downloads/` — `torrentCompleted`, the mutation qBittorrent's AutoRun hook calls; matches
-  **exclusively by infoHash** and silently ignores unknown hashes by design. Since
-  `010-episode-acquisition`, an episode-owned `MediaSource` moves that `Episode` to `ENCODING` the
-  same way a movie-owned one does; a source already `ERROR` (superseded by a `force` replacement)
-  is left untouched rather than acted on.
-- `process-jobs/` — the `ProcessJob` lifecycle: `sourceScanned` → encode queued → `encodeCompleted`.
-  Resolves `outputRoot` for the worker. Since `013-season-pack-processing`, `encodeCompleted`
-  returns `EncodeCompletedResult` (`message`, `removeTorrent`, `deleteInputFile`,
-  `deleteDownloadPath`) instead of a bare string — the three booleans are the cleanup verdict for
-  the `ProcessJob` that just finished, computed from its sibling jobs (a season pack shares one
-  `MediaSource` across many `ProcessJob`s) and the source's `hasUnmatchedFiles`. See
-  `docs/spec/graphql-contract.md`'s `013` section for the full verdict table and the worked
-  examples; the short version is that a film/single-episode source (one job) always resolves to
-  `(true, false, true)` — today's behaviour, unchanged — while a season pack's episodes withhold
-  `removeTorrent`/`deleteDownloadPath` until the *last* job of the source finishes, whatever the
-  others ended as. `downloadRemove` also gained a `deleteFiles: Boolean = true` argument (default
-  unchanged); the cleanup pipeline is the one caller that always passes `false`, since
-  `worker`'s `cleanup-source.ts` now owns every filesystem deletion itself. Since
-  `012-post-download-processing`, it also resolves
-  `downloadsRoot` (`resolveFromRoot('downloads', '.')` — the root itself, not `path_downloads`,
-  because a torrent's save path and a tus upload's staging directory sit under different segments
-  of it) into the shared `base` object, so the worker can verify a source's `downloadPath` is
-  contained before deleting it. Since `011-av1-transcode`, `getEncodeJobDetails` also
-  resolves `allowedLanguagesIso3`: the title's original language (via the existing `resolveIso3`,
-  unchanged) followed by the union of every owner's global and per-title language preference,
-  deduplicated, selecting `language.iso3` from the join and never `iso2` — owners come from
-  `UserMovie` for a film and from `UserShow` on `episode.season.showId` for an episode. This is the
-  one place the merge happens; `Movie.preferredLanguages`/`Show.preferredLanguages` (in `movies/`
-  and `shows/` below) deliberately return only the calling user's own list, never this merge.
-- `settings/` — key/value settings with a typed catalog in `settings.catalog.ts` and server-side
+- **`auth/`** — JWT + Passport, the authentication boundary for the whole API.
+  `guards/jwt-auth.guard.ts` is registered once as `APP_GUARD`, so **every GraphQL operation requires
+  a credential by default**. Two `Reflector` decorators carve out exceptions: `@Public()` (only on
+  `login`) and `@AllowService()` (the worker/qBittorrent-reachable operations). `auth.types.ts`'s
+  `toPrincipal()` decides between a **user** principal (`{type:'user', id, username}`, checked against
+  `session.service.ts`'s Redis session record so `logout` can actually revoke a stateless JWT) and a
+  **service** principal (`{type:'service', name}` — no id, no expiry, minted by
+  `scripts/mint-service-token.ts`, never session-checked). `SessionService` keeps a per-user reverse
+  index (`user-sessions:<userId>`) so `revokeAllForUser()` kills every live session at once.
+  The guard **short-circuits for non-GraphQL contexts**, so it never touches `/uploads` — that route
+  authenticates per-request by ticket. `guards/admin.guard.ts` is applied at class level on
+  `UsersResolver` and **re-reads `isAdmin` from the DB on every call** rather than trusting the JWT,
+  so a demoted admin stops working on the next request, not at token expiry.
+  `scripts/reset-password.ts` is the recovery path — run via `bin/reset-password`, never bare.
+- **`users/`** — CRUD over `User`, entirely behind `AdminGuard`. `remove()` refuses self-delete and
+  refuses deleting the last admin. `update()` refuses self-disable and refuses disabling the last
+  *enabled* admin (`{ isAdmin: true, isEnabled: true }` — counting disabled admins would let someone
+  lock the app out one disable at a time). A successful disable calls `revokeAllForUser()` in the same
+  method. `login()` refuses a disabled user with a distinct message, even on correct credentials.
+- **`media/`** — the boundary that turns a `type` argument into a choice of service. Exposes
+  `searchMedia(query, type)` and `addMedia(tmdbId, type)`, the only catalog operations in the schema.
+  `media-dispatch.service.ts` holds a `Record<MediaType, MediaTypeService>` lookup and throws for
+  anything else. `media-type.interface.ts` is the whole contract: `search(query, userId)` and
+  `register(tmdbId, userId)`, nothing else — cache keys, endpoints, error strings and Prisma models
+  stay private to each implementation by design. A third media type costs one new service plus one
+  lookup entry, not an edit to the dispatch.
+- **`movies/`** — CRUD over `Movie`, plus `search`/`register` (implementing `MediaTypeService`) and
+  `addTorrentToMovie`/`addMagnetToMovie`, the two entry points into the download pipeline. `Movie` is
+  a **shared catalog row** (`tmdbId @unique`, never duplicated) joined to `User` through `UserMovie`.
+  Everything user-visible is scoped through that join: `movies`, `search`'s `inLibrary`, and
+  `movie(id)` via `findOneFromDb(id, userId)` (a `findFirst` with
+  `where: { id, users: { some: { userId } } }`). A `null` from `movie(id)` therefore means "not
+  available to you", identically for a missing id and an unowned film. The acquisition mutations
+  refuse a film the caller hasn't registered with that same `La película <id> no existe`.
+  **Ordering trap:** `search` enriches results with `mediaId`/`inLibrary` *after* the Redis cache
+  write in `cacheMovies`. That cache key is global across all users — computing ownership before it
+  leaks one user's `inLibrary` into every other user's results for 24h (`movies.service.spec.ts`).
+- **`shows/`** — `ShowsService`, `MoviesService`'s structural twin, **deliberately not factored into
+  a shared base class** (see `006-media-search/spec.md` § Out of Scope). Same cache-before-enrich
+  ordering, same upsert-based idempotent linking, scoped through `UserShow`. `shows` is a per-user
+  listing; `show(id)` is `findOneFromDb`'s twin one level deeper, with a nested `include` on
+  `seasons`/`episodes` ordered server-side. `Show.status` is a `MediaStatus` in Prisma but crosses
+  GraphQL as a plain `String!`, exactly as `Movie.status` does — **do not `registerEnumType` it for
+  one type only.** `register()` kicks off a detached, never-awaited hydration (`ShowsService.hydrate`):
+  one request for the season list, then one **sequential** request per season (never `Promise.all` —
+  TMDB rate-limits), claimed via a Redis `SET … NX` so concurrent registrations fetch once.
+  `Show.seasonsSyncedAt` is set only once every season and episode is written; it stays `null` on any
+  failure, and the next `register()` retries whenever it is `null`.
+- **`languages/`** — the `languages` query (reads the seeded `Language` table, deriving a Spanish
+  `name` per `iso2` from `language-names.ts`, not stored) plus the preference writes backing
+  `setPreferredLanguages`/`setMoviePreferredLanguages`/`setShowPreferredLanguages`. Each write
+  validates every `iso2`, rejects duplicates within one argument, then replaces the whole set
+  atomically (`deleteMany` + `createMany` in a `$transaction`). Exported so `auth/`, `movies/` and
+  `shows/` each host their own `@ResolveField()` for `preferredLanguages` — deliberately not
+  centralised. **Sharp edge:** a `@ResolveField()` attaches to the *type*, not the query that reaches
+  it, so `User.preferredLanguages` needs an identity guard comparing `@Parent()` against
+  `@CurrentUser()` — without it the field is readable through the admin `users`/`user(id)` queries
+  even though it is self-service only.
+- **`media-sources/`** — the `MediaSource` row representing one acquisition attempt. `sourceScanned`
+  takes `matches: [ScannedMatchInput!]!`, one entry per file the worker resolved (a film or single
+  episode reports exactly one, both numbers `null`). The service loads the source with its season's
+  episodes, refuses a source targeting nothing, maps a season match to an episode by `episodeNumber`
+  (skipping a mismatched `seasonNumber` or an unknown number), and writes `hasUnmatchedFiles` from
+  the **video entries only** (`SourceFileInput.isVideo` — the extension list lives once, in the
+  worker, on purpose). The `ERROR` branch is reached by `matches: []` **or** by every match resolving
+  to nothing. The transaction, the never-reset-a-`ProcessJob`-past-`WAITING` rule and the
+  enqueue-after-commit block are load-bearing.
+- **`episodes/`** — `MoviesService`'s structural twin one level deeper: `findOneFromDb` scoped through
+  `season.show.users`, plus `addTorrentToEpisode`/`addMagnetToEpisode` mirroring
+  `attachTorrentSource`'s ownership lookup, active-source conflict (`force`), demote-then-replace and
+  symmetric `infoHash` collision check. `MoviesService.attachTorrentSource`'s collision guard also
+  recognises an `infoHash` owned by an **episode**, not just another movie — without that, an
+  episode-owned hash falls through and gets silently re-pointed at a film. Reuses
+  `shows/entities/episode.entity.ts` rather than declaring a second `Episode`.
+- **`seasons/`** — the **third** structural twin of `attachTorrentSource`, same deliberate
+  non-abstraction. Exactly one mutation, `addMagnetToSeason(seasonId, magnet, force)`, scoped through
+  `season.show.users`, with a season-scoped conflict on `MediaSource.seasonId` and the same
+  demote-on-`force` ordering (qBittorrent accepts the magnet first, *then* the previous source is
+  demoted, *then* the replacement is created). No web UI by design. Its final read is a
+  `season.findUniqueOrThrow` that **must `include` the episodes** — `Season.episodes` is non-null, so
+  a bare row fails the mutation *after* qBittorrent already accepted the torrent, orphaning the
+  download with no `MediaSource` tracking it.
+- **`downloads/`** — `torrentCompleted`, called by qBittorrent's AutoRun hook. Matches **exclusively
+  by infoHash** and silently ignores unknown hashes by design. An episode-owned source moves its
+  `Episode` to `ENCODING` just as a movie-owned one does; a source already `ERROR` (superseded by a
+  `force` replacement) is left untouched.
+- **`process-jobs/`** — the `ProcessJob` lifecycle: `sourceScanned` → encode queued →
+  `encodeCompleted`. Resolves `outputRoot` and `downloadsRoot` for the worker; `downloadsRoot` is
+  `resolveFromRoot('downloads', '.')` — the **root itself**, not `path_downloads`, because a torrent's
+  save path and a tus upload's staging directory sit under different segments of it.
+  `encodeCompleted` returns `EncodeCompletedResult` (`message`, `removeTorrent`, `deleteInputFile`,
+  `deleteDownloadPath`): the cleanup verdict for the job that just finished, computed from its sibling
+  jobs (a season pack shares one `MediaSource` across many jobs) and the source's
+  `hasUnmatchedFiles`. A one-job source always resolves to `(true, false, true)`; a season pack's
+  episodes withhold `removeTorrent`/`deleteDownloadPath` until the **last** job finishes, whatever the
+  others ended as — full verdict table in `docs/spec/graphql-contract.md` § 013. `downloadRemove`
+  takes `deleteFiles: Boolean = true`; the cleanup pipeline is the one caller passing `false`, since
+  the worker's `cleanup-source.ts` owns every filesystem deletion.
+  `getEncodeJobDetails` resolves `allowedLanguagesIso3`: the title's original language followed by the
+  union of every owner's global and per-title preference, deduplicated, selecting `language.iso3` and
+  **never `iso2`**. **This is the one place that merge happens** — `Movie.preferredLanguages` and
+  `Show.preferredLanguages` deliberately return only the calling user's own list.
+- **`settings/`** — key/value settings with a typed catalog in `settings.catalog.ts` and server-side
   validation in `updateMany`.
-- `media-roots/` — the two declared roots and every path translation. See below.
-- `media-server/` — post-encode notification (Jellyfin today), opt-in from Settings.
-- `indexer/` — Prowlarr search surface.
-- `uploads/` — the project's only REST route (tus). See the root `CLAUDE.md` for why. Authenticated
-  by ticket, not by `JwtAuthGuard` (that guard skips non-GraphQL contexts entirely): a signed-in
-  user mints one via the `createUploadTicket` mutation (`uploads.resolver.ts`, guarded, user
-  principals only — see `auth/`), the browser sends it as `Authorization: Bearer <ticket>` on the
-  tus `POST`, and `uploads.service.ts`'s `onUploadCreate` hook verifies and spends it exactly once
-  via `upload-tickets.service.ts` (a Redis `SET ... NX`, atomic so two concurrent POSTs can't both
-  win). Never re-checked on `PATCH` — by design, see `002-auth-login`'s spec. Since
-  `008-movie-detail`, `createUploadTicket` also requires the caller's `user_movies` link — it
-  injects `MoviesService` (`UploadsModule` imports `MoviesModule`) and calls the same
-  `findOneFromDb(movieId, principal.id)` `movie(id)` uses, refusing with the identical `La película
-  <id> no existe` a missing film already produced. `uploads.service.ts`'s `handleUploadFinish` keeps
-  its own bare `prisma.movie.findUnique` — not a second ownership hole, since a ticket is now only
-  mintable for a film the caller owns and `verifyAndSpend` binds it to that `movieId`.
-  Since `010-episode-acquisition`, `createUploadTicket(movieId: Int, episodeId: Int)` takes both
-  arguments nullable and requires **exactly one** (`Indicá exactamente uno de movieId o episodeId`
-  otherwise); `UploadTicketsService.mint`/`verifyAndSpend` take a `UploadTicketTarget = { movieId }
-  | { episodeId }` rather than a bare id, and the target check still runs **before** the Redis spend
-  (unchanged reasoning — a mismatch must not burn the ticket). `onUploadCreate`/`handleUploadFinish`
-  branch on whichever of `movieId`/`episodeId` the tus metadata carries; the metadata key names are
-  deliberately **not** unified into one — see root `CLAUDE.md` → Known debt.
+- **`media-roots/`** — the two declared roots and every path translation. See below.
+- **`media-server/`** — post-encode notification (Jellyfin today), opt-in from Settings.
+- **`indexer/`** — Prowlarr search surface.
+- **`uploads/`** — the project's only REST route (tus); see the root `CLAUDE.md` for why.
+  Authenticated **by ticket, not by `JwtAuthGuard`** (which skips non-GraphQL contexts): a signed-in
+  user mints one via `createUploadTicket`, the browser sends it as `Authorization: Bearer <ticket>` on
+  the tus `POST`, and `onUploadCreate` verifies and spends it exactly once via a Redis `SET … NX`
+  (atomic, so two concurrent POSTs can't both win). Never re-checked on `PATCH`, by design.
+  `createUploadTicket(movieId: Int, episodeId: Int)` takes both nullable and requires **exactly one**;
+  `UploadTicketsService.mint`/`verifyAndSpend` take a `UploadTicketTarget = { movieId } | { episodeId }`,
+  and the target check runs **before** the Redis spend — a mismatch must not burn the ticket. It also
+  requires the caller's `user_movies` link, calling the same `findOneFromDb` that `movie(id)` uses.
+  `handleUploadFinish` keeps a bare `prisma.movie.findUnique` — not an ownership hole, since a ticket
+  is only mintable for an owned film and is bound to that target. The tus metadata key names are
+  deliberately **not** unified — see root `CLAUDE.md` → Known debt.
 
 **Infrastructure**: `prisma/` (`PrismaModule` + `PrismaService`, effectively global), `redis/`,
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).
@@ -259,39 +178,35 @@ Loose `app.*` files at `src/` root wire it together and expose a trivial REST he
 
 ## Commands
 
-Everything through `bin/npm api …` from the repo root (never bare `npm`/`npx`/`prisma` — see root
-`CLAUDE.md`):
+Everything through `bin/npm api …` from the repo root (never bare `npm`/`npx`/`prisma`):
 
 | Command | Purpose |
 | :-- | :-- |
-| `bin/npm api run start:dev` | Nest in watch mode (this is what the `dev` Docker stage runs) |
+| `bin/npm api run start:dev` | Nest in watch mode (what the `dev` Docker stage runs) |
 | `bin/npm api test` | Jest unit tests (`*.spec.ts`) |
 | `bin/npm api run test:cov` | Jest with coverage, written to `coverage/` |
 | `bin/npm api run test:e2e` | Jest e2e suite, config in `test/jest-e2e.json` |
-| `bin/npm api run lint` | ESLint over `src/apps/libs/test` with `--fix` |
-| `bin/npm api run prisma:generate` | `prisma generate` — regenerate `@prisma/client` |
+| `bin/npm api run lint` | ESLint with `--fix` |
+| `bin/npm api run prisma:generate` | regenerate `@prisma/client` |
 | `bin/npm api run prisma:migrate` | `prisma migrate dev` — run after `bin/dbinit` on a fresh DB |
 
-Seed data runs via `prisma/seeds/index.ts`, wired as the `seed` command in `prisma.config.ts`
-(`ts-node prisma/seeds/index.ts`); `prisma migrate dev` prompts to run it automatically. It calls
-`seedLanguages`, `seedUsers`, `seedMovies`, `seedSettings` and `seedMediaSource` in turn
-(`prisma/seeds/{languages,users,movie,settings,media-source}.ts`). `prisma/seeds/settings.ts`
-seeds `path_downloads`/`path_movies`/`path_shows` as segments relative to the roots declared in
-`.env` (`.`/`Movies`/`Shows`) — see `src/media-roots/` below — plus torrent/tracker/media-server/TMDB
-config keys. Create-only (checks `findUnique` before `create`), so re-running the seed never
-clobbers real values (API keys, a custom path) already set through the UI.
+Seed data runs via `prisma/seeds/index.ts`, wired as the `seed` command in `prisma.config.ts`;
+`prisma migrate dev` prompts to run it. It calls `seedLanguages`, `seedUsers`, `seedMovies`,
+`seedSettings` and `seedMediaSource` in turn. `prisma/seeds/settings.ts` seeds
+`path_downloads`/`path_movies`/`path_shows` as **segments relative to the declared roots**
+(`.`/`Movies`/`Shows`), plus torrent/tracker/media-server/TMDB config keys. All create-only (checks
+`findUnique` before `create`), so re-running never clobbers a real value already set through the UI.
 
 `src/media-roots/` is the single owner of "is this path inside a declared root?" — used by settings
-validation (`SettingsService.updateMany`), by `QbittorrentClient` to resolve `path_downloads` to an
-absolute container path, and by `ProcessJobsService` to resolve `path_movies`/`path_shows` into the
-`outputRoot` the worker uses to build the final file path. `MediaRootsService.resolveFromRoot()` is
-the actual traversal/symlink guard — see its own doc comments and `media-roots.service.spec.ts` for
-the escape suite it defends against.
+validation, by `QbittorrentClient` to resolve `path_downloads`, and by `ProcessJobsService` to resolve
+`path_movies`/`path_shows` into the worker's `outputRoot`. `MediaRootsService.resolveFromRoot()` is
+the actual traversal/symlink guard — see its doc comments and `media-roots.service.spec.ts` for the
+escape suite it defends against.
 
 ## Schema/enum reality check
 
-`prisma/schema.prisma` defines exactly four enums — verify with
-`grep -n '^enum' prisma/schema.prisma` rather than trusting this list:
+`prisma/schema.prisma` defines exactly four enums — verify with `grep -n '^enum' prisma/schema.prisma`
+rather than trusting this list:
 
 | Enum | Values |
 | :-- | :-- |
@@ -300,96 +215,44 @@ the escape suite it defends against.
 | `EncodeStatus` | `WAITING`, `QUEUED`, `ENCODING`, `COMPLETED`, `ERROR` |
 | `MediaStatus` | `MISSING`, `DOWNLOADING`, `ENCODING`, `COMPLETED`, `ERROR` |
 
-**There is no `MEDIA_TYPE` or `MediaType` enum**, here or anywhere in Prisma. `services/web`
-declares its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — that is a web-side type,
-not a database one. If `api` needs a movie/show discriminator it must be added to `schema.prisma`
-and migrated first.
+**There is no `MEDIA_TYPE` or `MediaType` enum**, here or anywhere in Prisma. `services/web` declares
+its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — a web-side type, not a database one.
+A movie/show discriminator in `api` would have to be added to `schema.prisma` and migrated first.
 
-There are 15 models (`Setting`, `User`, `UserMovie`, `UserShow`, `Language`, `MediaSource`,
-`SourceFile`, `ProcessJob`, `Movie`, `Show`, `Season`, `Episode`, `UserLanguage`,
-`UserMovieLanguage`, `UserShowLanguage` — verify with `grep -c "^model " prisma/schema.prisma`
-rather than trusting this list) and 17 migrations (counted 2026-08-17, the newest being
-`add_language_preferences`) — `010-episode-acquisition` added **no** migration, since
-`MediaSource.episodeId`/`SourceFile.episodeId`/`ProcessJob.episodeId` already existed unused.
-`011-av1-transcode` added the three `*Language` join tables in one additive migration (`CREATE
-TABLE` only, no `ALTER`), each with a composite PK and `onDelete: Cascade`; the two per-title
-tables reference `UserMovie`/`UserShow` through their composite FK rather than `User`+`Movie`/`Show`
-separately, so a language preference is removed automatically when the title leaves the library.
-`Show`/`Season`/`Episode` have a module (`shows/`), are registered through `searchMedia`/`addMedia`
-(`type: "show"`, `006-media-search`), and since `007-library-listing` are **read back through the
-`shows` query** — a per-user listing. Since `009-show-detail` there is also a `show(id)` query
-exposing `Season`/`Episode` (see `shows/` above), and since `010-episode-acquisition` a sibling
-`episodes/` module exposes two mutations directly on `Episode` (see `episodes/` above).
+There are 15 models and 17 migrations (counted 2026-08-17) — verify with
+`grep -c "^model " prisma/schema.prisma` rather than trusting the number. Worth knowing: the three
+`*Language` join tables reference `UserMovie`/`UserShow` through their composite FK rather than
+`User`+`Movie`/`Show` separately, so a language preference disappears automatically when the title
+leaves the library.
 
 ## Tests
 
-- Unit specs are `*.spec.ts` colocated under `src/` (jest `rootDir: "src"` in `package.json`).
-- E2E specs live in `test/*.e2e-spec.ts` with their own config at `test/jest-e2e.json`, run via
-  `bin/npm api run test:e2e`. Note `src/auth/test/auth.e2e-spec.ts` is picked up by **both**
-  configs, because the default `testRegex` also matches `e2e-spec`.
+- Unit specs are `*.spec.ts` colocated under `src/` (jest `rootDir: "src"`).
+- E2E specs live in `test/*.e2e-spec.ts` with their own config. Note `src/auth/test/auth.e2e-spec.ts`
+  is picked up by **both** configs, because the default `testRegex` also matches `e2e-spec`.
 
 **Two styles coexist. Only one is the convention.**
 
 Follow `src/media-roots/media-roots.service.spec.ts` and `src/clients/torrent/magnet.spec.ts`:
-`describe` for the unit, `it(...)` strings in the indicative (`it('rejects a symlink pointing
-outside the root')`), a header comment stating *what class of bug this defends against*, and real
-fixtures where mocking would defeat the purpose — `media-roots.service.spec.ts` runs against a
-real `mkdtemp` with real symlinks because a bug there is a real path traversal.
+`describe` for the unit, `it(...)` strings in the indicative (`it('rejects a symlink pointing outside
+the root')`), a header comment stating *what class of bug this defends against*, and real fixtures
+where mocking would defeat the purpose — `media-roots.service.spec.ts` runs against a real `mkdtemp`
+with real symlinks because a bug there is a real path traversal. Both files still have Spanish
+`it(...)` strings predating Article VI: copy their *structure*, write new prose in English.
 
-Both of those files currently have Spanish `it(...)` strings; they predate Constitution Article VI.
-Copy their *structure*, write the new prose in English.
+The house technique is **fault injection** — a case earns its place by being verified to fail when
+the rule it covers is removed (an ownership `where` clause dropped, a `select` switched from `iso3`
+to `iso2`, a demote moved after its create). Write new cases that way.
 
 Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts` — those 18-line
-`expect(service).toBeDefined()` files are `nest g` scaffolding. Constitution, Article IX has the
-rule. `src/users/users.service.spec.ts` **used to be** on this list; `004-user-disable` rewrote it
-into a real suite (see its own header comment for what it defends against) — follow *that* file's
-structure now, not the scaffolding pattern its name might suggest from memory.
+`expect(service).toBeDefined()` files are `nest g` scaffolding (Constitution, Article IX).
+`src/users/users.service.spec.ts` *used to be* on that list and is now a real suite; follow it.
 
-## Current state — do not treat as reference code
+## Current state
 
-As of 2026-08-18, after `013-season-pack-processing`, `bin/cli api npx --no tsc --noEmit` reports
-**0 errors** and `bin/npm api test` is green at **152** tests across **15** suites.
-`013-season-pack-processing` added a fifteenth suite, `src/seasons/seasons.service.spec.ts` (12
-cases: ownership scoping indistinguishable from missing, the active-source conflict with/without
-`force`, the demote-after-accept-before-create ordering verified to fail when `updateMany` is moved
-after the create, and `infoHash` collisions against a movie/episode/different season), and a
-fourteenth, `src/media-sources/media-sources.service.spec.ts` (8 cases covering the `sourceScanned`
-fan-out — resolving by `episodeNumber` rather than array position, verified to fail under that fault
-injection; a `seasonNumber` mismatch or unknown `episodeNumber` being skipped and counted toward
-`hasUnmatchedFiles`; a non-video sidecar never counting toward it; two files racing one episode
-resolving to the same id). `process-jobs.service.spec.ts` gained the `encodeCompleted` cleanup
-verdict table (5 cases, the `deleteDownloadPath` ones verified to fail when the sibling-completeness
-check is dropped) plus a `deleteFiles`-forwarding case for `downloadRemove`.
-
-Before that, after `012-post-download-processing`, the count was 125 across 13 suites —
-`012-post-download-processing` added a `downloadsRoot` `describe` block to
-`process-jobs.service.spec.ts` (3 cases: `resolveFromRoot` called with exactly `('downloads', '.')`,
-verified to fail when switched to the `path_downloads` setting; the resolved value present on both
-a `MOVIE` and an `EPISODE` payload), no new suite. Before that, after `011-av1-transcode`, the count
-was 122 across 13 suites. `episodes/` is the
-eleventh suite (`episodes.service.spec.ts`, from `010-episode-acquisition`, 9 cases, including one
-that asserts a created `MediaSource` carries `episodeId` and never `movieId` — verified to fail
-when that field is swapped); `upload-tickets.service.spec.ts` gained one cross-target case (a
-ticket minted for a movie refused, and left unspent, when presented for an episode).
-`011-av1-transcode` added a twelfth suite, `languages.service.spec.ts` (13 cases across the three
-preference targets — replace/clear/unknown-`iso2`/duplicate, each verified to fail by fault
-injection when the rule it covers is removed), and a thirteenth, `process-jobs.service.spec.ts` (5
-cases covering the `allowedLanguagesIso3` merge — the case asserting `iso3` output was verified to
-fail when the select is switched to `iso2`). `movies.service.spec.ts` gained a `findOneFromDb`
-block — three cases, asserting the ownership `where` clause and verified to fail when that clause
-is removed, the same technique `007-library-listing` used on `shows.service.spec.ts`'s `findAll`
-block. `src/movies/movies.controller.ts`, an unregistered REST controller left over from before
-`005-movie-search` scoped `MoviesService`, is gone. The previously-listed
-`src/auth/test/auth.service.spec.ts` (two `'user' is possibly 'null'`, one wrong arity — written
-against a `login()` signature that never existed) is gone: it was deleted ahead of `002-auth-login`,
-whose spec had originally left "fixing" it explicitly Out of Scope before the file was removed
-entirely, taking those 3 errors with it.
-
-The TMDB search slice that used to be listed here **now compiles**; `src/clients/TMDBClient.ts` is
-gone, replaced by `src/clients/tmdb/{client,types}.ts`. Treat that vertical as ordinary code again.
-
-Re-run the typecheck and the test suite rather than trusting these counts — the numbers are the
-useful part, and they are what an agent reports before/after to prove it added nothing.
+As of 2026-08-18: `bin/cli api npx --no tsc --noEmit` reports **0 errors**, `bin/npm api test` is
+green at **156** tests across **16** suites. **Re-run both rather than trusting these numbers** —
+they exist so an agent can prove a change added nothing, not as a fact to cite.
 
 ## Known debt
 
