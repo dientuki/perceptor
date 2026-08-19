@@ -92,7 +92,7 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
     }
 
     const upload = new tus.Upload(file, {
-      endpoint: process.env.NEXT_PUBLIC_UPLOAD_URL,
+      endpoint: ticket.endpoint,
       chunkSize: CHUNK_SIZE,
       retryDelays: RETRY_DELAYS,
       headers: {

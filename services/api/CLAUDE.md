@@ -11,13 +11,16 @@ service: a schema change is an `api` change (Constitution, Article III).
 
 ## GraphQL is code-first
 
-`src/app.module.ts` configures `GraphQLModule.forRoot` with `autoSchemaFile:
-join(process.cwd(), 'src/schema.gql')`. That means:
+`src/app.module.ts` configures `GraphQLModule.forRoot` with `autoSchemaFile` conditional on
+`NODE_ENV`: `join(process.cwd(), 'src/schema.gql')` in development, `true` (in-memory schema, no
+file written) when `NODE_ENV=production` — the `runner` image built by `bin/build`/`bin/prod` has
+no `/app/src` to write into (`015-reproducible-image-builds`). That means:
 
 - The **source of truth** is the TypeScript decorators on resolvers, entities (`@ObjectType`,
   `@Field`, …) and DTOs (`@InputType`, …) under each module's `entities/` and `dto/` directories.
-- `src/schema.gql` is **generated on every boot** and marked "DO NOT MODIFY" at its top. Never
-  hand-edit it — change the decorators and let Nest regenerate it.
+- In development, `src/schema.gql` is **generated on every boot** and marked "DO NOT MODIFY" at its
+  top. Never hand-edit it — change the decorators and let Nest regenerate it. In production the
+  schema is built the same way from the same decorators, it just never touches disk.
 - `playground`/`introspection` are on outside of `NODE_ENV=production`.
 
 ## Validation errors reach the caller as a plain string

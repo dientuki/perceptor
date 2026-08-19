@@ -1,0 +1,17 @@
+# Deny list of generated/host artifacts (015-reproducible-image-builds). Never an
+# allow list: an allow list silently drops files a build needs (public/,
+# next.config.ts) and only fails inside the running container.
+
+node_modules/
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+.env*
+!.env.example
+
+.next/
+next-env.d.ts

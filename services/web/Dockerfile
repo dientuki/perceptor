@@ -1,20 +1,3 @@
-## Usamos Node.js LTS más reciente basado en Alpine
-#FROM node:24.18.0-alpine
-#
-## Instalamos libc6-compat (muy recomendado en Alpine para compatibilidad con dependencias nativas de Next.js/SWC)
-#RUN apk add --no-cache libc6-compat
-#
-#WORKDIR /app
-#
-## Exponemos el puerto por defecto de Next.js
-#EXPOSE 3000
-#
-## Comando para iniciar en modo desarrollo
-#CMD ["sh", "-c", "if [ ! -d node_modules ]; then npm install; fi && npm run dev"]
-
-# ==========================================
-# 1. BASE: Entorno común (Alpine + libc6)
-# ==========================================
 FROM node:24.18.0-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app

@@ -17,7 +17,7 @@ if [ "${USE_TRAEFIK}" = "true" ]; then
   SERVICES="traefik $SERVICES"
 fi
 
-COMPOSE_FILES="-f docker-compose.yaml"
+COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.dev.yaml"
 if [ "${USE_GPU}" = "true" ]; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yaml"
 fi

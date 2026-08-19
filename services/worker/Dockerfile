@@ -18,7 +18,16 @@ ENV NODE_ENV=development
 CMD ["sh", "-c", "if [ ! -d node_modules ]; then npm install; fi && npm run dev"]
 
 # ==========================================
-# 3. RUNNER: Imagen Final de Producción
+# 3. BUILDER: Compila TypeScript a dist/ (nunca se publica esta etapa)
+# ==========================================
+FROM base AS builder
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# ==========================================
+# 4. RUNNER: Imagen Final de Producción
 # ==========================================
 FROM base AS runner
 ENV NODE_ENV=production
@@ -33,10 +42,12 @@ COPY package*.json ./
 # Instalamos únicamente dependencias de producción (omitimos devDependencies)
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
-# Copiamos todo el código fuente del worker
-COPY --chown=workerjs:nodejs . .
+# Copiamos solo el resultado compilado por la etapa builder — nunca el
+# código fuente ni node_modules de desarrollo (imagen reproducible, no
+# depende de lo que haya en el host).
+COPY --from=builder --chown=workerjs:nodejs /app/dist ./dist
 
 USER workerjs
 
-# Al no requerir compilación, ejecutamos directamente el script de inicio
-CMD ["npm", "start"]
+# dist/index.js fue compilado por el build, no heredado del contexto.
+CMD ["node", "dist/index.js"]

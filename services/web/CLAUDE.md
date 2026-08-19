@@ -64,6 +64,17 @@ renamed field, a new non-null argument or an unhandled error condition all compi
 fail at runtime. Read `docs/spec/graphql-contract.md` before changing anything that crosses the
 boundary.
 
+**A server action can also enrich its return value with something that never touched GraphQL.**
+`createUploadTicketAction` (`src/actions/uploads.ts`) reads `process.env.PUBLIC_UPLOAD_URL` on the
+server and adds it to the object as `endpoint`, alongside the ticket the mutation actually
+returned. This is what the upload modal (`components/import/importFileModal.tsx`) reads instead of
+a `NEXT_PUBLIC_*` variable: `NEXT_PUBLIC_*` is inlined into the browser bundle at *build* time,
+which breaks a reproducible image (the value would be baked into whichever `.env` happened to be
+present when `next build` ran); resolving it server-side at *request* time keeps the image
+deployment-agnostic (`015-reproducible-image-builds`). If the variable is unset the action throws
+before the modal ever constructs the upload, rather than letting `tus.Upload({ endpoint: undefined
+})` fail silently.
+
 ## Auth
 
 The auth cookie's name is not a literal string in call sites — it comes from `CONFIG.authCookie` in

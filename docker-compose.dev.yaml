@@ -1,0 +1,29 @@
+# Overlay de desarrollo: monta el código fuente de cada servicio Node dentro del container
+# (bind mount `./services/<svc>:/app`) y agrega las variables que sólo tienen sentido en dev
+# (`NODE_ENV`, `WATCHPACK_POLLING`). Sin este overlay, `docker-compose.yaml` describe el runtime
+# de producción — target `runner`, sin bind mount, corriendo lo que el build empaquetó.
+#
+# bin/dev lo suma siempre con -f docker-compose.dev.yaml; bin/prod y bin/build nunca lo incluyen
+# — esa omisión es lo que hace que `bin/prod` corra la imagen que construyó en vez de esconderla
+# detrás del working copy del host. Mismo mecanismo que docker-compose.gpu.yaml (USE_GPU): compose
+# agrega los volumes del overlay a la lista de la base en vez de reemplazarla, así que los mounts
+# de media (${HOST_DOWNLOADS_DIR}, ${HOST_DESTINATIONS_DIR}) sobreviven junto al mount de código.
+services:
+  web:
+    volumes:
+      - ./services/web:/app
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - WATCHPACK_POLLING=true
+
+  api:
+    volumes:
+      - ./services/api:/app
+    environment:
+      - NODE_ENV=${NODE_ENV}
+
+  worker:
+    volumes:
+      - ./services/worker:/app
+    environment:
+      - NODE_ENV=${NODE_ENV}

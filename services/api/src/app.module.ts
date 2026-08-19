@@ -28,7 +28,10 @@ import { SeasonsModule } from './seasons/seasons.module';
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
       // Genera el archivo schema.gql automáticamente en la raíz
-      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+      // In production the runner image has no `src/` (only `dist`, `prisma`, `node_modules` and
+      // `package*.json` are copied), so the schema is built in memory instead of written to disk.
+      autoSchemaFile:
+        process.env.NODE_ENV === 'production' ? true : join(process.cwd(), 'src/schema.gql'),
       // Pasa el request y response de Express al contexto de GraphQL
       context: ({ req, res }) => ({ req, res }),
       // Muestra el Sandbox/Playground de Apollo solo si NO estás en prod

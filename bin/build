@@ -1,0 +1,38 @@
+#!/bin/bash
+# Construye imágenes (stage runner de cada Dockerfile) sin levantar contenedores.
+# Lee USE_GPU de .env para sumar el overlay docker-compose.gpu.yaml (mapea
+# /dev/dri al worker). Acepta un servicio opcional entre web/api/worker/torrent/
+# indexer; sin argumento construye los cinco. db, redis, traefik y flaresolverr
+# no tienen build: en el compose y no son targets válidos.
+set -e
+cd "$(dirname "$0")/.."
+
+if [ ! -f .env ]; then
+  echo ".env no existe. Corré bin/install primero."
+  exit 1
+fi
+
+set -a; . ./.env; set +a
+
+BUILDABLE="web api worker torrent indexer"
+
+if [ -n "$1" ]; then
+  case " $BUILDABLE " in
+    *" $1 "*)
+      TARGETS="$1"
+      ;;
+    *)
+      echo "Uso: bin/build [web|api|worker|torrent|indexer]"
+      exit 1
+      ;;
+  esac
+else
+  TARGETS="$BUILDABLE"
+fi
+
+COMPOSE_FILES="-f docker-compose.yaml"
+if [ "${USE_GPU}" = "true" ]; then
+  COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yaml"
+fi
+
+BUILD_TARGET=runner docker compose $COMPOSE_FILES build $TARGETS

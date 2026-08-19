@@ -3,8 +3,8 @@ title: Reproducible Image Builds
 spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-18
-last_updated: 2026-08-18
-status: Draft
+last_updated: 2026-08-19
+status: Implemented
 services: [infra, api, web, worker]
 ---
 
@@ -12,182 +12,193 @@ services: [infra, api, web, worker]
 
 ## Context & Goal
 
-Perceptor construye cinco imágenes propias (`web`, `api`, `worker`, `torrent`, `indexer`) y consume
-cuatro de terceros (`db`, `redis`, `traefik`, `flaresolverr`). El stack funciona en la máquina del
-desarrollador, pero funciona *gracias a* ella: los tres servicios Node se levantan en su stage
-`dev`, que no copia código — el código llega por bind mount (`./services/<svc>:/app`) y las
-dependencias se instalan en el primer arranque (`if [ ! -d node_modules ]; then npm install; fi`).
-La imagen que se construye hoy para esos tres es, literalmente, `node:24.18.0-alpine` + `apk add` y
-un `CMD`.
+Perceptor builds five images of its own (`web`, `api`, `worker`, `torrent`, `indexer`) and consumes
+four third-party ones (`db`, `redis`, `traefik`, `flaresolverr`). The stack works on the developer's
+machine, but it works *because of* it: the three Node services come up in their `dev` stage, which
+copies no code — the code arrives through a bind mount (`./services/<svc>:/app`) and the
+dependencies are installed on first boot (`if [ ! -d node_modules ]; then npm install; fi`). The
+image built today for those three is, literally, `node:24.18.0-alpine` + `apk add` + a `CMD`.
 
-Los stages `runner`, que sí copian código, nunca se ejercitan desde cero: `bin/prod` los levanta con
-los mismos bind mounts encima, tapando lo que la imagen trae, y sin `.dockerignore` en ningún
-contexto sus `COPY . .` arrastran el `node_modules`, el `dist` y el `.next` del host (1.1 GB sólo en
-`services/web/.next`), además de `services/api/.env`. En el `worker` la dependencia es total: su
-stage `runner` corre `npm start` → `node dist/index.js` pero **nunca ejecuta `npm run build`**, y
-`tsc` es devDependency — el `dist/` que sirve es el del host.
+The `runner` stages, which do copy code, are never exercised from scratch: `bin/prod` starts them
+with the same bind mounts on top, covering whatever the image brought, and with no `.dockerignore`
+in any context their `COPY . .` drags in the host's `node_modules`, `dist` and `.next` (1.1 GB in
+`services/web/.next` alone), plus `services/api/.env`. In the `worker` the dependency is total: its
+`runner` stage runs `npm start` → `node dist/index.js` but **never runs `npm run build`**, and `tsc`
+is a devDependency — the `dist/` it serves is the host's.
 
-Esta feature deja `bin/prod` construyendo las cinco imágenes propias desde un checkout limpio, sin
-artefactos previos y sin secretos adentro, y levantando el mismo stack funcional de hoy — sin tocar
-el flujo de desarrollo (`bin/dev`: bind mount + hot reload). Es el paso previo a CI/CD: no publica
-imágenes, no configura GHCR ni GitHub Actions, no versiona imágenes. Ningún stage del pipeline de
-`CLAUDE.md` cambia de estado; lo que cambia es que ese pipeline pasa a ser construible en una
-máquina que no es la del autor.
+This feature leaves `bin/prod` building the five own images from a clean checkout, with no prior
+artifacts and no secrets inside, and bringing up the same working stack as today — without touching
+the development flow (`bin/dev`: bind mount + hot reload). It is the step before CI/CD: it publishes
+no images, configures neither GHCR nor GitHub Actions, and does not version images. No pipeline
+stage in `CLAUDE.md` changes status; what changes is that the pipeline becomes buildable on a
+machine that is not the author's.
 
-## Estado actual
+## Current state
 
-Lo que sigue son hallazgos verificados contra el repositorio, no supuestos.
+What follows are findings verified against the repository, not assumptions.
 
-### 1. Organización y contextos de build
+### 1. Organisation and build contexts
 
-| Servicio | Contexto | Dockerfile | `target` en compose | Base image |
+| Service | Context | Dockerfile | `target` in compose | Base image |
 | :-- | :-- | :-- | :-- | :-- |
 | `web` | `./services/web` | `services/web/Dockerfile` (default) | `${BUILD_TARGET:-dev}` | `node:24.18.0-alpine` |
 | `api` | `./services/api` | `services/api/Dockerfile` (default) | `${BUILD_TARGET:-dev}` | `node:24.18.0-alpine` |
 | `worker` | `./services/worker` | `services/worker/Dockerfile` (default) | `${BUILD_TARGET:-dev}` | `node:24.18.0-alpine` + `ffmpeg mkvtoolnix vulkan-loader mesa-vulkan-intel libc6-compat` |
-| `torrent` | `./services/torrent` | default | — (sin `target`) | `lscr.io/linuxserver/qbittorrent:5.2.3` |
-| `indexer` | `./services/indexer` | default | — (sin `target`) | `lscr.io/linuxserver/prowlarr:2.5.2` + `apk add jq` |
+| `torrent` | `./services/torrent` | default | — (no `target`) | `lscr.io/linuxserver/qbittorrent:5.2.3` |
+| `indexer` | `./services/indexer` | default | — (no `target`) | `lscr.io/linuxserver/prowlarr:2.5.2` + `apk add jq` |
 
-Todos los `build:` usan contexto por servicio, sin `args:`, sin `image:` declarada — los nombres
-`perceptor-*` que se ven en `docker ps` son `container_name`, no tags de imagen. Las líneas
-`#dockerfile: docker/web.Dockerfile` comentadas en los tres servicios Node apuntan a un directorio
-`docker/` que no existe en el repo.
+Every `build:` uses a per-service context, with no `args:` and no declared `image:` — the
+`perceptor-*` names visible in `docker ps` are `container_name`, not image tags. The commented-out
+`#dockerfile: docker/web.Dockerfile` lines in the three Node services point at a `docker/` directory
+that does not exist in the repo.
 
-Stages por Dockerfile:
+Stages per Dockerfile:
 
-- `api`: `base` → `dev` / `builder` → `runner`, más ~15 líneas de un Dockerfile viejo comentadas
-  arriba de todo.
-- `web`: `base` → `dev` / `builder` → `runner`. Mismo bloque comentado.
-- `worker`: `base` → `dev` / `runner`. **No hay `builder`.**
-- `torrent` / `indexer`: single-stage sobre la imagen de LinuxServer; sólo `RUN sed`/`apk add` y
-  `COPY --chmod=755` de los scripts de init. **Ya son reproducibles y no se tocan.**
+- `api`: `base` → `dev` / `builder` → `runner`, plus ~15 lines of an old Dockerfile commented out at
+  the top.
+- `web`: `base` → `dev` / `builder` → `runner`. Same commented block.
+- `worker`: `base` → `dev` / `runner`. **There is no `builder`.**
+- `torrent` / `indexer`: single-stage on top of the LinuxServer image; only `RUN sed`/`apk add` and
+  a `COPY --chmod=755` of the init scripts. **They are already reproducible and are not touched.**
 
-### 2. Dependencias entre builds
+### 2. Dependencies between builds
 
-Ninguna imagen depende del build de otra: no hay base image compartida entre servicios ni un stage
-que copie de otro contexto. Las dependencias son de arranque (`depends_on` + healthchecks), no de
-build. Los cinco pueden construirse en paralelo.
+No image depends on another's build: there is no shared base image across services and no stage
+copying from another context. The dependencies are startup ones (`depends_on` + healthchecks), not
+build ones. All five can be built in parallel.
 
-### 3. Dependencias implícitas del host
+### 3. Implicit host dependencies
 
-- **No existe ningún `.dockerignore`** (`find . -name .dockerignore` no devuelve nada). Cada contexto
-  viaja completo al daemon: `services/web` con `node_modules` (467 MB) y `.next` (1.1 GB);
-  `services/api` con `node_modules` (687 MB), `dist` (2.2 MB) y **`services/api/.env`**, que contiene
-  `DATABASE_URL` con usuario y password; `services/worker` con `node_modules` (76 MB) y `dist`.
-- `api` (`builder`): `npm ci` + `npx prisma generate` y **después** `COPY . .`, que pisa el
-  `node_modules` recién instalado — y con él el cliente Prisma generado — con el del host.
-- `web` (`builder`): mismo patrón; además copia el `.next/` del host adentro antes de `npm run build`.
-- `worker` (`runner`): `npm ci --omit=dev` y luego `COPY . .`, que trae el `node_modules` completo del
-  host **y el `dist/`**. `CMD ["npm", "start"]` es `node dist/index.js` y `tsc` es devDependency: sin
-  ese `dist/` la imagen no arranca. Es la dependencia de artefacto previo más directa del repo.
-- `web`/`api` (`dev`): no copian nada; el `CMD` corre `npm install` en el primer arranque contra el
-  bind mount — de ahí los `start_period` de 60s/90s en sus healthchecks.
-- `web` (`runner`): copia `/app/public`, `/app/.next/standalone` y `/app/.next/static`;
-  `next.config.ts` sí declara `output: 'standalone'`, así que el stage es coherente. Pero
-  `bin/npm web run build` **falla hoy** con 11 errores de TypeScript en 4 archivos pre-GraphQL, sin
-  `ignoreBuildErrors` → el build de la imagen `web` falla, con o sin artefactos del host. Se resuelve
-  en la spec `016-web-build-errors`.
+- **No `.dockerignore` exists anywhere** (`find . -name .dockerignore` returns nothing). Every
+  context travels to the daemon in full: `services/web` with `node_modules` (467 MB) and `.next`
+  (1.1 GB); `services/api` with `node_modules` (687 MB), `dist` (2.2 MB) and **`services/api/.env`**,
+  which holds a `DATABASE_URL` with a user and a password; `services/worker` with `node_modules`
+  (76 MB) and `dist`.
+- `api` (`builder`): `npm ci` + `npx prisma generate` and **then** `COPY . .`, which overwrites the
+  freshly installed `node_modules` — and with it the generated Prisma client — with the host's.
+- `web` (`builder`): same pattern; it additionally copies the host's `.next/` inside before running
+  `npm run build`.
+- `worker` (`runner`): `npm ci --omit=dev` and then `COPY . .`, which brings in the host's full
+  `node_modules` **and its `dist/`**. `CMD ["npm", "start"]` is `node dist/index.js` and `tsc` is a
+  devDependency: without that `dist/` the image does not start. It is the most direct
+  prior-artifact dependency in the repo.
+- `web`/`api` (`dev`): they copy nothing; the `CMD` runs `npm install` on first boot against the bind
+  mount — hence the 60s/90s `start_period` in their healthchecks.
+- `web` (`runner`): copies `/app/public`, `/app/.next/standalone` and `/app/.next/static`;
+  `next.config.ts` does declare `output: 'standalone'`, so the stage is coherent. But
+  `bin/npm web run build` **fails today** with 11 TypeScript errors across 4 pre-GraphQL files, with
+  no `ignoreBuildErrors` → the `web` image build fails, with or without host artifacts. Resolved in
+  spec `016-web-build-errors`.
 
-### 4. Bind mounts vs. imagen
+### 4. Bind mounts vs. image
 
-`web`, `api` y `worker` montan `./services/<svc>:/app` **incondicionalmente**, sin importar el
-`target`. Con `BUILD_TARGET=runner` (`bin/prod`) ese mount tapa lo que el stage copió: para `web`,
-`/app/server.js` queda oculto tras el árbol fuente del host; para `api` y `worker`, lo que corre es
-el `dist/` del host. **El modo producción actual no ejecuta la imagen que construyó.**
+`web`, `api` and `worker` mount `./services/<svc>:/app` **unconditionally**, regardless of `target`.
+With `BUILD_TARGET=runner` (`bin/prod`) that mount covers whatever the stage copied: for `web`,
+`/app/server.js` is hidden behind the host's source tree; for `api` and `worker`, what runs is the
+host's `dist/`. **Production mode today does not run the image it built.**
 
-### 5. Variables y secretos
+### 5. Variables and secrets
 
-- Ninguna variable se usa hoy como `ARG` de build; no hay `build.args` en compose. Todo llega por
-  `environment:` en runtime.
-- **Excepción real**: `NEXT_PUBLIC_UPLOAD_URL`
-  (`services/web/src/components/import/importFileModal.tsx:95`, único lector). Next inlinea las
-  `NEXT_PUBLIC_*` **en tiempo de build**; hoy sólo se pasa como env de runtime. En `dev` funciona; en
-  una imagen `runner` quedaría `undefined` y el modal de subida apuntaría a la nada.
-- `next.config.ts` lee `DOMAIN` para `allowedDevOrigins` — sólo afecta a `next dev`, no al bundle.
-- `services/api/.env` es el único secreto que hoy termina dentro de una imagen. El `.env` de la raíz
-  no está en ningún contexto de build, pero existe además un `.env copy` en la raíz que tampoco debe
-  entrar nunca.
-- `torrent`/`indexer` no reciben secretos en build: `QBITTORRENT_PASSWORD`, `INDEXER_PASSWORD` e
-  `INDEXER_API_KEY` los leen sus scripts de init en runtime (`custom-cont-init.d/`,
-  `custom-services.d/`). Ese diseño ya es correcto.
+- No variable is used as a build `ARG` today; there is no `build.args` in compose. Everything
+  arrives through `environment:` at runtime.
+- **One real exception**: `NEXT_PUBLIC_UPLOAD_URL`
+  (`services/web/src/components/import/importFileModal.tsx:95`, its only reader). Next inlines
+  `NEXT_PUBLIC_*` **at build time**; today it is only passed as a runtime env var. In `dev` that
+  works; in a `runner` image it would be `undefined` and the upload modal would point nowhere.
+- `next.config.ts` reads `DOMAIN` for `allowedDevOrigins` — that only affects `next dev`, not the
+  bundle.
+- `services/api/.env` is the only secret that ends up inside an image today. The repo-root `.env` is
+  in no build context, but there is also a `.env copy` at the root that must never get in either.
+- `torrent`/`indexer` receive no secrets at build time: `QBITTORRENT_PASSWORD`, `INDEXER_PASSWORD`
+  and `INDEXER_API_KEY` are read by their init scripts at runtime (`custom-cont-init.d/`,
+  `custom-services.d/`). That design is already correct.
 
-### 6. Permisos y usuarios
+### 6. Permissions and users
 
-`api` y `worker` corren con `user: "${PUID}:${PGID}"` + `group_add: ${MEDIA_GID}` en compose, pero
-sus stages `runner` declaran `USER nestjs` / `USER workerjs` (uid/gid 1001) y hacen `--chown` a ese
-usuario. Compose gana en runtime, así que el árbol de la imagen queda propiedad de un uid que el
-proceso no es. Con bind mount no se nota; sin bind mount —que es el objetivo— hay que verificarlo.
-`torrent`/`indexer` ya resuelven el bit de ejecución con `COPY --chmod=755`, sin depender de los
-permisos del host.
+`api` and `worker` run with `user: "${PUID}:${PGID}"` + `group_add: ${MEDIA_GID}` in compose, but
+their `runner` stages declare `USER nestjs` / `USER workerjs` (uid/gid 1001) and `--chown` to that
+user. Compose wins at runtime, so the image tree ends up owned by a uid the process is not. With a
+bind mount it goes unnoticed; without one — which is the goal — it has to be verified.
+`torrent`/`indexer` already settle the execute bit with `COPY --chmod=755`, without depending on
+host permissions.
 
-## Decisiones tomadas
+## Decisions taken
 
-| # | Decisión |
+| # | Decision |
 | :-- | :-- |
-| **D1 — targets y mounts** | Se mantiene `target: ${BUILD_TARGET:-dev}`. Los bind mounts de código y las variables de desarrollo salen de `docker-compose.yaml` y pasan a un overlay **`docker-compose.dev.yaml`**, mismo mecanismo que el ya existente `docker-compose.gpu.yaml`. `bin/dev` suma el overlay con `-f`; `bin/prod` no. Así `bin/prod` corre las imágenes que construyó y `bin/dev` no cambia de comportamiento. |
-| **D2 — errores de TypeScript de `web`** | Fuera de esta spec: se corrigen en `016-web-build-errors`, prerequisito de REQ-9. |
-| **D3 — `NEXT_PUBLIC_UPLOAD_URL`** | Sale del bundle. La URL se resuelve en el servidor y llega al modal en runtime; la imagen de `web` queda agnóstica del despliegue. |
-| **D4 — `.dockerignore`** | Uno por servicio, en `services/web/`, `services/api/` y `services/worker/`. No se mueve el contexto a la raíz. Precedente en el repo: `services/web/.gitignore` existe por una razón análoga (Biome). |
+| **D1 — targets and mounts** | `target: ${BUILD_TARGET:-dev}` stays. The code bind mounts and the development-only variables move out of `docker-compose.yaml` into a **`docker-compose.dev.yaml`** overlay, the same mechanism as the existing `docker-compose.gpu.yaml`. `bin/dev` adds the overlay with `-f`; `bin/prod` does not. That way `bin/prod` runs the images it built and `bin/dev` does not change behaviour. |
+| **D2 — `web`'s TypeScript errors** | Out of this spec: fixed in `016-web-build-errors`, a prerequisite of REQ-9. |
+| **D3 — `NEXT_PUBLIC_UPLOAD_URL`** | Out of the bundle. The URL is resolved on the server and reaches the modal at runtime; the `web` image stays agnostic of the deployment. |
+| **D4 — `.dockerignore`** | One per service, in `services/web/`, `services/api/` and `services/worker/`. The context is not moved to the repo root. Precedent in the repo: `services/web/.gitignore` exists for an analogous reason (Biome). |
 
 ## Requirements
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Build definido)**: Los cinco servicios propios deben tener un `build:` que resuelva a
-      un Dockerfile versionado, con contexto explícito, sin líneas `dockerfile:` comentadas apuntando
-      a rutas inexistentes.
-- [ ] **REQ-2 (Build limpio)**: `bin/prod` debe construir las cinco imágenes desde un checkout sin
-      `node_modules`, sin `dist`, sin `.next` y sin `.env` por servicio, sin intervención manual.
-- [ ] **REQ-3 (Sin artefactos del host)**: Ninguna imagen debe contener ni depender de archivos
-      generados en el host. En particular, el stage de runtime del `worker` debe compilar su propio
-      `dist/` dentro del build (nuevo stage `builder`), no recibirlo por `COPY`.
-- [ ] **REQ-4 (Contexto acotado)**: Cada servicio Node debe traer su propio `.dockerignore`
-      excluyendo `node_modules`, salidas de compilación (`dist`, `.next`, `*.tsbuildinfo`),
-      `coverage` y todo `.env*` salvo `.env.example` (D4).
-- [ ] **REQ-5 (Sin secretos)**: Ninguna imagen construida debe contener un archivo `.env` ni
-      credenciales embebidas.
-- [ ] **REQ-6 (Overlay de desarrollo)**: Los bind mounts `./services/<svc>:/app` y las variables que
-      sólo aplican a desarrollo (`WATCHPACK_POLLING`) deben vivir en `docker-compose.dev.yaml`, que
-      sólo `bin/dev` incluye (D1). `docker-compose.yaml` describe el runtime.
-- [ ] **REQ-7 (`bin/build`)**: Debe existir un wrapper que construya sin levantar el stack, con la
-      misma pre-configuración que `bin/prod` (lee `.env`, fija `BUILD_TARGET=runner`, respeta los
-      flags de `.env`), y que acepte un servicio opcional para construir una sola imagen —
-      `bin/build` / `bin/build web`. Es lo que cubre NFR-1 sin pedirle al usuario un
-      `docker compose` a mano.
-- [ ] **REQ-8 (Stack funcional)**: Tras construir, `bin/prod` debe dar el mismo comportamiento
-      funcional que hoy: login, búsqueda TMDB, alta de release, descarga, procesado y biblioteca.
-- [ ] **REQ-9 (Build de `web` verde)**: El build de la imagen de `web` debe completar. Depende de
-      `016-web-build-errors`, que debe estar implementada antes (D2).
-- [ ] **REQ-10 (URL de subida en runtime)**: `web` no debe requerir ninguna variable `NEXT_PUBLIC_*`
-      en tiempo de build. La URL del endpoint de subida se resuelve en el servidor (server action en
-      `services/web/src/actions/uploads.ts`, que ya existe) y la consume `importFileModal.tsx`, hoy
-      su único lector. La variable pasa a llamarse `PUBLIC_UPLOAD_URL` dentro del container — el
-      nombre que `.env.example` ya usa en el host (D3).
-- [ ] **REQ-11 (Terceros intactos)**: `db`, `redis`, `traefik` y `flaresolverr` siguen usando sus
-      imágenes originales, sin `build:`.
-- [ ] **REQ-12 (Desarrollo intacto)**: `bin/dev` debe seguir dando bind mount de `./services/<svc>`,
-      hot reload (`next dev`, `nest start --watch`, `tsx watch`) y `node_modules` escrito en el
-      working copy del host, exactamente como hoy.
+- [x] **REQ-1 (Defined build)**: All five own services must have a `build:` resolving to a versioned
+      Dockerfile, with an explicit context, and no commented-out `dockerfile:` lines pointing at
+      paths that do not exist.
+- [x] **REQ-2 (Clean build)**: `bin/prod` must build the five images from a checkout with no
+      `node_modules`, no `dist`, no `.next` and no per-service `.env`, with no manual intervention.
+- [x] **REQ-3 (No host artifacts)**: No image may contain or depend on files generated on the host.
+      In particular, the `worker`'s runtime stage must compile its own `dist/` inside the build (a
+      new `builder` stage), not receive it through `COPY`.
+- [x] **REQ-4 (Bounded context)**: Each Node service must carry its own `.dockerignore` excluding
+      `node_modules`, build outputs (`dist`, `.next`, `*.tsbuildinfo`), `coverage` and every `.env*`
+      except `.env.example` (D4).
+- [x] **REQ-5 (No secrets)**: No built image may contain a `.env` file or embedded credentials.
+- [x] **REQ-6 (Development overlay)**: The `./services/<svc>:/app` bind mounts and the variables that
+      only apply to development (`WATCHPACK_POLLING`) must live in `docker-compose.dev.yaml`, which
+      only `bin/dev` includes (D1). `docker-compose.yaml` describes the runtime.
+- [x] **REQ-7 (`bin/build`)**: There must be a wrapper that builds without bringing the stack up,
+      with the same pre-configuration as `bin/prod` (reads `.env`, sets `BUILD_TARGET=runner`,
+      honours the flags in `.env`), accepting an optional service to build a single image —
+      `bin/build` / `bin/build web`. It is what covers NFR-1 without asking the user for a
+      hand-written `docker compose`.
+- [ ] **REQ-8 (Working stack)**: After building, `bin/prod` must give the same functional behaviour
+      as today: login, TMDB search, release registration, download, processing and library. The
+      stack is up under `bin/build`'s images and 8/9 services reach `healthy` (T015); the manual
+      functional walk itself is the user's to run and confirm.
+- [x] **REQ-9 (Green `web` build)**: The `web` image build must complete. Depends on
+      `016-web-build-errors`, which must be implemented first (D2).
+- [x] **REQ-10 (Upload URL at runtime)**: `web` must not require any `NEXT_PUBLIC_*` variable at
+      build time. The upload endpoint URL is resolved on the server (the server action in
+      `services/web/src/actions/uploads.ts`, which already exists) and consumed by
+      `importFileModal.tsx`, its only reader today. Inside the container the variable is renamed to
+      `PUBLIC_UPLOAD_URL` — the name `.env.example` already uses on the host (D3).
+- [x] **REQ-11 (Third parties untouched)**: `db`, `redis`, `traefik` and `flaresolverr` keep using
+      their original images, with no `build:`.
+- [x] **REQ-12 (Development untouched)**: `bin/dev` must keep giving a `./services/<svc>` bind mount,
+      hot reload (`next dev`, `nest start --watch`, `tsx watch`) and `node_modules` written into the
+      host working copy, exactly as today.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Verificación individual)**: Cada imagen debe poder construirse por separado vía
-      `bin/build <servicio>`, documentado en `CLAUDE.md`.
-- [ ] **NFR-2 (Sin cambio de arquitectura)**: No se cambian tecnologías, topología, contrato GraphQL,
-      ni el diseño de los scripts de init de `torrent`/`indexer`. Sólo lo necesario para que los
-      builds sean reproducibles.
-- [ ] **NFR-3 (Permisos coherentes)**: Sin bind mount, `api` y `worker` corriendo como
-      `${PUID}:${PGID}` deben poder leer su propio código y escribir en `${CONTAINER_DOWNLOADS_DIR}` /
-      `${CONTAINER_DESTINATIONS_DIR}`.
-- [ ] **NFR-4 (Documentación)**: `CLAUDE.md` (raíz, tabla de `bin/`) y `docs/spec/docker/` deben
-      reflejar el nuevo overlay, `bin/build`, y qué construye cada target.
-- [ ] **NFR-5 (Higiene)**: Se eliminan los bloques de Dockerfile comentados y las líneas
-      `#dockerfile: docker/*.Dockerfile` de compose — describen una organización que no existe.
+- [x] **NFR-1 (Per-image verification)**: Each image must be buildable on its own via
+      `bin/build <service>`, documented in `CLAUDE.md`.
+- [x] **NFR-2 (No architectural change)**: No change of technology, topology, GraphQL contract, or
+      the design of the `torrent`/`indexer` init scripts. Only what is needed to make the builds
+      reproducible.
+- [x] **NFR-3 (Coherent permissions)**: Without a bind mount, `api` and `worker` running as
+      `${PUID}:${PGID}` must be able to read their own code and write into
+      `${CONTAINER_DOWNLOADS_DIR}` / `${CONTAINER_DESTINATIONS_DIR}`.
+- [x] **NFR-4 (Documentation)**: The root `CLAUDE.md` must reflect the new overlay, `bin/build` (in
+      the `bin/` table) and what each target builds. This spec and its plans are the durable record
+      of the build contract — the same shape `014-dev-stack-flaresolverr` used for the development
+      stack. **`docs/spec/docker/` is not recreated**: its single file,
+      `traefik.md` (added by `27e2614`, superseded by `014-dev-stack-flaresolverr` and already
+      deleted in the working tree), is stale, and what that directory was meant to hold now lives in
+      the feature specs. The stale references to it in `CLAUDE.md` go with this feature's docs
+      task.
+- [x] **NFR-5 (Hygiene)**: The commented-out Dockerfile blocks and the
+      `#dockerfile: docker/*.Dockerfile` lines in compose are removed — they describe an
+      organisation that does not exist.
 
 ## GraphQL Contract Delta
 
-**None — esta feature no cruza el límite entre servicios.** REQ-10 mueve una lectura de variable de
-entorno del bundle del browser al servidor de `web`; no toca el schema de `api` ni ningún consumidor.
+**None — this feature does not cross the boundary between services.** REQ-10 moves an environment
+variable read from the browser bundle to `web`'s server; it touches neither `api`'s schema nor any
+consumer.
 
 ## Data Model Changes
 
@@ -195,42 +206,47 @@ entorno del bundle del browser al servidor de `web`; no toca el schema de `api` 
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: En un clon limpio (`git clone` + `bin/install`), sin `node_modules`, `dist` ni
-      `.next` en ningún servicio, `bin/build` termina con exit 0 y `docker images` lista las cinco
-      imágenes propias.
-- [ ] **AC-2**: `bin/build web` termina con exit 0 (falla hoy: errores de TypeScript, spec 016).
-- [ ] **AC-3**: Borrando `services/worker/dist` del host, `bin/build worker` produce igual una imagen
-      que arranca — el `dist/index.js` lo compiló el build.
-- [ ] **AC-4 (camino de fallo)**: Introducir un error de TypeScript en `services/api/src` hace
-      **fallar** `bin/build api`, en vez de producir una imagen que arranca y explota en runtime.
-- [ ] **AC-5**: `bin/bash api` sobre el container productivo no encuentra ningún `.env` en `/app`; lo
-      mismo para `web` y `worker`.
-- [ ] **AC-6**: El contexto enviado al daemon para cada servicio Node baja de cientos de MB a unos
-      pocos MB (visible en `transferring context` durante `bin/build`).
-- [ ] **AC-7**: `bin/prod` levanta los nueve servicios, todos llegan a `healthy`, y login + búsqueda
-      TMDB + alta de un magnet + procesado terminan igual que hoy.
-- [ ] **AC-8**: Con el stack levantado por `bin/prod`, el modal de subida de archivo resuelve su
-      endpoint correctamente (REQ-10) — la imagen no fue construida con esa URL adentro.
-- [ ] **AC-9**: `bin/dev` sigue dando hot reload: editar `services/web/src/app/page.tsx` se refleja
-      sin reconstruir la imagen, y `services/*/node_modules` sigue existiendo en el host.
-- [ ] **AC-10**: Ningún servicio de terceros (`db`, `redis`, `traefik`, `flaresolverr`) tiene
-      `build:`; `bin/build` no intenta construirlos.
+- [x] **AC-1**: On a clean clone (`git clone` + `bin/install`), with no `node_modules`, `dist` or
+      `.next` in any service, `bin/build` exits 0 and `docker images` lists the five own images.
+- [x] **AC-2**: `bin/build web` exits 0 (fails today: TypeScript errors, spec 016).
+- [x] **AC-3**: With `services/worker/dist` deleted from the host, `bin/build worker` still produces
+      an image that starts — the `dist/index.js` was compiled by the build.
+- [x] **AC-4 (failure path)**: Introducing a TypeScript error in `services/api/src` makes
+      `bin/build api` **fail**, instead of producing an image that starts and blows up at runtime.
+- [x] **AC-5**: `bin/bash api` against the production container finds no `.env` under `/app`; same
+      for `web` and `worker`.
+- [x] **AC-6**: The context sent to the daemon for each Node service drops from hundreds of MB to a
+      few MB (visible as `transferring context` during `bin/build`).
+- [ ] **AC-7**: `bin/prod` brings up the nine services, all reach `healthy`, and login + TMDB search
+      + adding a magnet + processing finish the same as today. 8/9 services reached `healthy` under
+      `bin/prod` (T015) — `traefik` stayed `unhealthy` for a reason unrelated to this feature (its
+      `/ping` healthcheck endpoint isn't enabled in this stack's Traefik config, pre-existing). The
+      functional pipeline walk (login, search, magnet, download, processing, library) has not been
+      run — pending the user's manual pass.
+- [ ] **AC-8**: With the stack up from `bin/prod`, the file upload modal resolves its endpoint
+      correctly (REQ-10) — the image was not built with that URL inside. Code path verified by
+      inspection (T003) and the running stack is ready for it (T015); the actual upload click-through
+      has not been run — pending the user's manual pass.
+- [x] **AC-9**: `bin/dev` still gives hot reload: editing `services/web/src/app/page.tsx` is
+      reflected without rebuilding the image, and `services/*/node_modules` still exists on the host.
+- [x] **AC-10**: No third-party service (`db`, `redis`, `traefik`, `flaresolverr`) has a `build:`;
+      `bin/build` does not try to build them.
 
 ## Out of Scope
 
-- **Publicar imágenes / GHCR / GitHub Actions.** Es el paso siguiente; esta feature sólo garantiza
-  que haya algo publicable.
-- **Versionado y tags de imágenes** (`image:` en compose, semver, `latest`). Requiere decidir el
-  registry primero.
-- **Optimizar tamaño de imagen** más allá de lo que exige la reproducibilidad. El `worker` gana un
-  stage `builder` porque hoy no compila nada, no por estética; no se persiguen `distroless`/`slim`.
-- **Cambiar servicios de terceros** ni los scripts de init de `torrent`/`indexer`, ya reproducibles.
-- **Los 11 errores de TypeScript de `web`** — spec `016-web-build-errors`.
-- **La estrategia de GPU del `worker`** (`vulkan-loader`/`mesa-vulkan-intel`, `USE_GPU`,
+- **Publishing images / GHCR / GitHub Actions.** That is the next step; this feature only guarantees
+  there is something publishable.
+- **Image versioning and tags** (`image:` in compose, semver, `latest`). Requires deciding on a
+  registry first.
+- **Optimising image size** beyond what reproducibility demands. The `worker` gains a `builder`
+  stage because it compiles nothing today, not for elegance; no `distroless`/`slim` is pursued.
+- **Changing third-party services** or the `torrent`/`indexer` init scripts, already reproducible.
+- **`web`'s 11 TypeScript errors** — spec `016-web-build-errors`.
+- **The `worker`'s GPU strategy** (`vulkan-loader`/`mesa-vulkan-intel`, `USE_GPU`,
   `docker-compose.gpu.yaml`) — spec `017-worker-gpu-strategy`.
-- **La deuda conocida** del DSN hardcodeado en `prisma.service.ts` y del `datasource db` sin `url`:
-  no afecta al build.
-- **La unificación de `movieId`/`mediaId`** (deuda registrada aparte).
-- **Migraciones/seed de Prisma al arrancar `runner`.** El stage corre `node dist/main.js` sin
-  `prisma migrate deploy`; quién aplica migraciones en producción es una pregunta de despliegue, no
-  de build.
+- **The known debt** of the hardcoded DSN in `prisma.service.ts` and the `datasource db` with no
+  `url`: it does not affect the build.
+- **Unifying `movieId`/`mediaId`** (debt recorded separately).
+- **Prisma migrations/seed on `runner` startup.** The stage runs `node dist/main.js` with no
+  `prisma migrate deploy`; who applies migrations in production is a deployment question, not a
+  build one.

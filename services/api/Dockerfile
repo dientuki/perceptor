@@ -1,18 +1,3 @@
-## Usamos Node.js LTS más reciente basado en Alpine
-#FROM node:24.18.0-alpine
-#
-## Instalamos libc6-compat (muy recomendado en Alpine para compatibilidad con dependencias nativas de Next.js/SWC)
-#RUN apk add --no-cache libc6-compat
-#
-#WORKDIR /app
-#
-## Exponemos el puerto por defecto de Next.js
-#EXPOSE 3000
-#
-## Comando para iniciar en modo desarrollo
-##CMD ["npm", "run", "dev"]
-#CMD ["sh", "-c", "if [ ! -f node_modules/.bin/nest ]; then npm install; fi && npm run start:dev"]
-
 # ==========================================
 # 1. BASE: Entorno común (Alpine + libc6)
 # ==========================================
@@ -51,6 +36,10 @@ RUN npm run build
 # Limpiamos las devDependencies para dejar solo las dependencias necesarias en producción
 RUN npm prune --omit=dev
 
+# Smoke test: if the prune above also stripped node_modules/.prisma/client,
+# fail the build here instead of at the login screen of the final container.
+RUN node -e "require('@prisma/client')"
+
 # ==========================================
 # 4. RUNNER: Imagen Final de Producción
 # ==========================================
@@ -72,5 +61,7 @@ USER nestjs
 EXPOSE 3000
 ENV PORT=3000
 
-# Punto de entrada de la aplicación NestJS compilada
-CMD ["node", "dist/main.js"]
+# Punto de entrada de la aplicación NestJS compilada. nest-cli.json declara
+# sourceRoot=src, así que "nest build" preserva ese prefijo dentro de dist/ —
+# el binario real queda en dist/src/main.js, no en dist/main.js.
+CMD ["node", "dist/src/main.js"]

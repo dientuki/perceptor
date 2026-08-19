@@ -27,7 +27,6 @@ services:
   web:
     build:
       context: ./services/web
-      #dockerfile: docker/web.Dockerfile
       target: ${BUILD_TARGET:-dev}
     container_name: perceptor-web
     ports:
@@ -35,26 +34,22 @@ services:
     dns:
       - 1.1.1.1
       - 8.8.8.8
-    volumes:
-      # Mapea services/web al directorio /app del contenedor.
-      # Esto hace que los node_modules instalados en el build se escriban
-      # directamente en services/web/node_modules de tu host.
-      - ./services/web:/app
     environment:
-      - NODE_ENV=${NODE_ENV}
-      # Necesario en Linux para que Next.js detecte cambios de archivos con Hot Reload/HMR a través de Docker
-      - WATCHPACK_POLLING=true
       - DOMAIN=${DOMAIN}
       - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
-      # NEXT_PUBLIC_ porque el modal de subida corre en el browser: necesita
-      # una URL que el browser pueda resolver, no la interna de Docker de
-      # arriba (esa sólo la ven los containers entre sí).
-      - NEXT_PUBLIC_UPLOAD_URL=${PUBLIC_UPLOAD_URL}
+      # Leída por un server action (services/web/src/actions/uploads.ts), no por
+      # el bundle del browser — necesita una URL resoluble desde afuera del
+      # stack, no la interna de Docker de arriba (esa sólo la ven los containers
+      # entre sí).
+      - PUBLIC_UPLOAD_URL=${PUBLIC_UPLOAD_URL}
     depends_on:
       api:
         condition: service_healthy      
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1"]
+      # 127.0.0.1, no localhost: el server.js standalone que genera Next
+      # sólo escucha en IPv4 (0.0.0.0:3000), y "localhost" en este contenedor
+      # resuelve primero a ::1 — wget se conecta ahí y se lo rechazan.
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -73,7 +68,6 @@ services:
   api:
     build:
       context: ./services/api
-      #dockerfile: docker/api.Dockerfile
       target: ${BUILD_TARGET:-dev}
     container_name: perceptor-api
     # No root: /uploads (ver src/uploads/) escribe en el disco de descargas, y
@@ -85,13 +79,11 @@ services:
     ports:
       - "${API_PORT}:${API_PORT}" # Mapeamos al puerto especificado para no chocar con Next.js
     volumes:
-      - ./services/api:/app
       - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
       # Sólo lectura: el api resuelve/valida rutas de biblioteca (media-roots),
       # nunca escribe ahí — eso lo hace el worker, que sí monta rw más abajo.
       - ${HOST_DESTINATIONS_DIR}:${CONTAINER_DESTINATIONS_DIR}:ro
     environment:
-      - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
       - PORT=${API_PORT}
       - REDIS_HOST=${REDIS_HOST}
@@ -175,7 +167,6 @@ services:
   worker:
     build:
       context: ./services/worker
-      #dockerfile: docker/worker.Dockerfile
       target: ${BUILD_TARGET:-dev}
     container_name: perceptor-worker
     # Verificado en vivo: ffmpeg con SVT-AV1 puede tardar ~9s en morir tras
@@ -191,11 +182,9 @@ services:
     group_add:
       - "${MEDIA_GID}"
     volumes:
-      - ./services/worker:/app
       - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
       - ${HOST_DESTINATIONS_DIR}:${CONTAINER_DESTINATIONS_DIR}
     environment:
-      - NODE_ENV=${NODE_ENV}
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql

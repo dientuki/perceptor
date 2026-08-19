@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 755.42816 188.88126"
+   width="755.42816"
+   height="188.88126"
+   version="1.1"
+   id="svg9"
+   sodipodi:docname="logo.svg"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview9"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.628"
+     inkscape:cx="288.08354"
+     inkscape:cy="214.98771"
+     inkscape:window-width="1920"
+     inkscape:window-height="1099"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg9" />
+  <defs
+     id="defs9">
+    <!-- Gradiente exacto de morado oscuro a azul claro -->
+    <linearGradient
+       id="perceptorGrad"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="0">
+      <stop
+         offset="0%"
+         stop-color="#2d2050"
+         id="stop1" />
+      <stop
+         offset="50%"
+         stop-color="#3c2a68"
+         id="stop2" />
+      <stop
+         offset="85%"
+         stop-color="#556cb2"
+         id="stop3" />
+      <stop
+         offset="100%"
+         stop-color="#72a5db"
+         id="stop4" />
+    </linearGradient>
+    <!-- Filtro de resplandor Neón Cian/Blanco -->
+    <filter
+       id="neonGlow"
+       x="-0.032120452"
+       y="-0.15912759"
+       width="1.0642409"
+       height="1.3182552">
+      <!-- Resplandor exterior azul cian -->
+      <feGaussianBlur
+         stdDeviation="6"
+         result="blur1"
+         id="feGaussianBlur4" />
+      <feFlood
+         flood-color="#8ce4ff"
+         flood-opacity="0.85"
+         result="color1"
+         id="feFlood4" />
+      <feComposite
+         in="color1"
+         in2="blur1"
+         operator="in"
+         result="glow1"
+         id="feComposite4" />
+      <!-- Resplandor medio cian intenso -->
+      <feGaussianBlur
+         stdDeviation="2.5"
+         result="blur2"
+         id="feGaussianBlur5" />
+      <feFlood
+         flood-color="#aeeeff"
+         flood-opacity="0.95"
+         result="color2"
+         id="feFlood5" />
+      <feComposite
+         in="color2"
+         in2="blur2"
+         operator="in"
+         result="glow2"
+         id="feComposite5" />
+      <!-- Resplandor interno blanco brillante -->
+      <feGaussianBlur
+         stdDeviation="1"
+         result="blur3"
+         id="feGaussianBlur6" />
+      <feFlood
+         flood-color="#ffffff"
+         flood-opacity="1"
+         result="color3"
+         id="feFlood6" />
+      <feComposite
+         in="color3"
+         in2="blur3"
+         operator="in"
+         result="glow3"
+         id="feComposite6" />
+      <feMerge
+         id="feMerge9">
+        <feMergeNode
+           in="glow1"
+           id="feMergeNode6" />
+        <feMergeNode
+           in="glow2"
+           id="feMergeNode7" />
+        <feMergeNode
+           in="glow3"
+           id="feMergeNode8" />
+        <feMergeNode
+           in="SourceGraphic"
+           id="feMergeNode9" />
+      </feMerge>
+    </filter>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#perceptorGrad"
+       id="linearGradient10"
+       x1="27.272762"
+       y1="122.24392"
+       x2="346.18507"
+       y2="122.24392"
+       gradientTransform="scale(2.2257784,0.44928103)"
+       gradientUnits="userSpaceOnUse" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#perceptorGrad"
+       id="linearGradient11"
+       x1="18.952778"
+       y1="64.239631"
+       x2="396.69106"
+       y2="64.239631"
+       gradientTransform="scale(1.9998718,0.50003205)"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <g
+     filter="url(#neonGlow)"
+     fill="url(#perceptorGrad)"
+     id="g9"
+     style="fill:url(#linearGradient11)"
+     transform="translate(-37.903125,-32.121875)">
+    <!-- Path vectorizado ultra preciso de la tipografía "Perceptor" -->
+    <text
+       x="50"
+       y="165"
+       font-family="Inter, Montserrat, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+       font-size="160px"
+       font-weight="900"
+       letter-spacing="-3"
+       id="text9"
+       style="fill:url(#linearGradient10)">Perceptor</text>
+  </g>
+</svg>

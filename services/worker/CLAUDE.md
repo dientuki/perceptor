@@ -159,7 +159,8 @@ leaves a half-written file at the destination.
 | Command | What |
 | :-- | :-- |
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
-| `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate |
+| `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate, against `tsconfig.json` (covers `src/**/*`, including `*.spec.ts`) |
+| `bin/npm worker run build` | `tsc -p tsconfig.build.json` — the `runner` image's `builder` stage runs this; `tsconfig.build.json` extends `tsconfig.json` but excludes `**/*.spec.ts`, so `dist/` ships no test code (`015-reproducible-image-builds`) |
 | `bin/npm worker test` | `vitest run` — 9 suites, 75 tests, green (`013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 

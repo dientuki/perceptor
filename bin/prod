@@ -1,8 +1,8 @@
 #!/bin/bash
-# Levanta el stack en modo producción (stage runner de cada Dockerfile). Lee
-# USE_TRAEFIK de .env para decidir si el servicio traefik entra en el docker
-# compose up, y USE_GPU para sumar el overlay docker-compose.gpu.yaml (mapea
-# /dev/dri al worker).
+# Levanta el stack en modo producción (stage runner de cada Dockerfile, sin
+# bind mounts de código). Lee USE_TRAEFIK de .env para decidir si el servicio
+# traefik entra en el docker compose up, y USE_GPU para sumar el overlay
+# docker-compose.gpu.yaml (mapea /dev/dri al worker).
 set -e
 cd "$(dirname "$0")/.."
 

@@ -94,14 +94,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user }) => {
               width={154}
               height={32}
               className="dark:hidden"
-              src="./images/logo/logo.svg"
+              src="./images/logo.svg"
               alt="Logo"
             />
             <Image
               width={154}
               height={32}
               className="hidden dark:block"
-              src="./images/logo/logo-dark.svg"
+              src="./images/logo.svg"
               alt="Logo"
             />
           </Link>

@@ -22,7 +22,7 @@ Pipeline stage status today:
 ```
 bin/                     host wrapper scripts (see below)
 docs/constitution.md     the non-negotiable rules — outranks every CLAUDE.md
-docs/spec/               component specs, e.g. docs/spec/docker/traefik.md
+docs/spec/               component specs, e.g. docs/spec/graphql-contract.md
 docs/spec/graphql-contract.md   the web/worker <-> api boundary
 docs/spec/features/      one directory per feature spec (see below)
 .claude/agents/          one implementer subagent per service
@@ -57,8 +57,10 @@ services/worker/         BullMQ + FFmpeg consumer        -> services/worker/CLAU
   `redis` and `api` healthy.
 - `web` and `worker` never touch the database directly — both go through `api`'s GraphQL endpoint
   (`INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql`).
-- Only containers with `traefik.enable=true` are routed — see `docs/spec/docker/traefik.md`
-  for the label contract.
+- Only containers with `traefik.enable=true` are routed — the label contract (`traefik.enable`,
+  the router's `Host()` rule, `entrypoints`, `loadbalancer.server.port`) is read off the routed
+  services already in `docker-compose.yaml` (`web`, `api`, `torrent`, `indexer`); also inlined in
+  `.claude/agents/infra.md`.
 
 ## Docker-first workflow
 
@@ -69,8 +71,9 @@ through the wrappers in `bin/`, which shell into the running containers.
 | Script | What it does | Example |
 | :-- | :-- | :-- |
 | `bin/install` | generates `.env` from `.env.example`, asking Traefik y/n + domain | run once, first checkout |
-| `bin/dev` | `docker compose up -d` in dev mode, reads `USE_TRAEFIK` from `.env` to include/exclude `traefik` | `bin/dev` |
-| `bin/prod` | same, `BUILD_TARGET=runner`, rebuilds images | `bin/prod` |
+| `bin/dev` | `docker compose up -d` in dev mode, reads `USE_TRAEFIK` from `.env` to include/exclude `traefik`, always adds the `docker-compose.dev.yaml` overlay | `bin/dev` |
+| `bin/prod` | same, `BUILD_TARGET=runner`, rebuilds and runs the image it built — no dev overlay | `bin/prod` |
+| `bin/build [service]` | builds the `runner` images without starting containers; no argument builds all five own services (`web`/`api`/`worker`/`torrent`/`indexer`) | `bin/build`, `bin/build web` |
 | `bin/cli <service> <cmd…>` | `docker compose exec -it <service> <cmd…>` | `bin/cli api npx prisma migrate status` |
 | `bin/npm [service] <args…>` | npm inside a service; **defaults to `web`** when the first arg is not `web`/`api`/`worker` | `bin/npm api run test`, `bin/npm run dev` (= web) |
 | `bin/bash <service>` | interactive `sh` in a container | `bin/bash api` |
@@ -91,6 +94,15 @@ published port (`WEB_PORT`, `API_PORT`, etc.) — Traefik only adds domain-based
 Source is bind-mounted (`./services/<svc>:/app`), so edits hot-reload. The dev stages install
 `node_modules` on first boot if the directory is missing, which means `node_modules` lands in your
 host working copy — that is intentional, and it is what your editor's TypeScript server reads.
+
+The bind mount and dev-only variables (`NODE_ENV`, `WATCHPACK_POLLING`) live in
+`docker-compose.dev.yaml`, an overlay in the same style as `docker-compose.gpu.yaml` — `bin/dev`
+always adds it with `-f`, `bin/prod`/`bin/build` never do. `docker-compose.yaml` on its own
+describes the runtime: no bind mount, `target: ${BUILD_TARGET:-dev}` falls back to `dev` only
+because nothing overrides it, and `bin/prod` runs exactly the `runner` image it built rather than
+hiding it behind the host's working copy (`015-reproducible-image-builds`). Each Node service also
+carries its own `.dockerignore`, so a `runner` build never picks up host `node_modules`, `dist`,
+`.next`, or a service's own `.env`.
 
 ## Environment
 

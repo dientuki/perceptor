@@ -7,6 +7,9 @@ import type { AcquisitionTarget } from '@/types/media';
 export interface UploadTicket {
   token: string;
   expiresAt: string;
+  // Filled in by this server action from `PUBLIC_UPLOAD_URL`, not by the
+  // mutation below — do not go looking for it in `schema.gql`.
+  endpoint: string;
 }
 
 // CHANGED: both arguments are now nullable on the API side — exactly one must
@@ -28,10 +31,9 @@ export async function createUploadTicketAction(target: AcquisitionTarget): Promi
       ? { movieId: Number(target.movie.id), episodeId: undefined }
       : { movieId: undefined, episodeId: Number(target.episode.id) };
 
-  const { data, errors } = await fetchGraphQL<{ createUploadTicket: UploadTicket }>(
-    CREATE_UPLOAD_TICKET_MUTATION,
-    variables,
-  );
+  const { data, errors } = await fetchGraphQL<{
+    createUploadTicket: Omit<UploadTicket, 'endpoint'>;
+  }>(CREATE_UPLOAD_TICKET_MUTATION, variables);
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
@@ -42,5 +44,10 @@ export async function createUploadTicketAction(target: AcquisitionTarget): Promi
     throw new Error('El API no devolvió el permiso de subida');
   }
 
-  return data.createUploadTicket;
+  const endpoint = process.env.PUBLIC_UPLOAD_URL;
+  if (!endpoint) {
+    throw new Error('La variable de entorno PUBLIC_UPLOAD_URL no está configurada');
+  }
+
+  return { ...data.createUploadTicket, endpoint };
 }
