@@ -1,0 +1,21 @@
+#!/bin/bash
+# Resetea la base de datos y la cola: migrate reset + seed (igual que bin/install)
+# más un FLUSHALL de Redis, para volver a un estado limpio sin tener que rearmar
+# todo el stack. Destructivo a propósito — pensado para el loop de desarrollo,
+# no para producción.
+set -e
+cd "$(dirname "$0")/.."
+
+echo "Reseteando la base y aplicando migraciones de Prisma..."
+bin/cli api npx --no prisma migrate reset --force
+
+# migrate reset no siembra solo pese a que prisma.config.ts declara un
+# comando de seed (ver bin/install) — hay que correrlo aparte.
+echo "Sembrando datos iniciales..."
+bin/cli api npx --no ts-node prisma/seeds/index.ts
+
+echo "Limpiando Redis..."
+docker compose exec -T redis redis-cli FLUSHALL
+
+echo
+echo "Listo."

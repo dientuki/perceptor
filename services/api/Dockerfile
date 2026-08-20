@@ -11,6 +11,13 @@ WORKDIR /app
 FROM base AS dev
 ENV NODE_ENV=development
 EXPOSE 3000
+# El container corre como PUID:PGID (docker-compose.yaml), no como root. Sin el
+# bind mount de docker-compose.dev.yaml, /app queda con el dueño que le dio
+# WORKDIR (root) y "npm install" falla con EACCES al escribir package-lock.json.
+# node:alpine trae un usuario "node" en 1000:1000 (el default de PUID/PGID en
+# .env.example) — chown acá es sólo la red de seguridad para ese caso; con el
+# bind mount normal, el dueño real del host manda.
+RUN chown node:node /app
 # Verifica el binario real (no sólo si la carpeta existe: un node_modules a
 # medias pasaría el chequeo y "npx prisma generate" quedaría pidiendo
 # confirmación interactiva en medio del arranque del container). --no en npx

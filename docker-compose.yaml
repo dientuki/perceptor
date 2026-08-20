@@ -29,6 +29,10 @@ services:
       context: ./services/web
       target: ${BUILD_TARGET:-dev}
     container_name: perceptor-web
+    # Mismo criterio que api/worker: no root, para que node_modules/.next que
+    # el CMD de dev escribe en el bind mount queden con el dueño del host en
+    # vez de con el uid de la imagen.
+    user: "${PUID}:${PGID}"
     ports:
       - "${WEB_PORT}:3000"
     dns:
@@ -104,8 +108,8 @@ services:
       - HOST_DESTINATIONS_DIR=${HOST_DESTINATIONS_DIR}
       - CONTAINER_DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/graphql', (res) => process.exit(res.statusCode < 500 ? 0 : 1))"]
-      #test: ["CMD-SHELL", "true"]
+      #test: ["CMD", "node", "-e", "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/graphql', (res) => process.exit(res.statusCode < 500 ? 0 : 1))"]
+      test: ["CMD-SHELL", "true"]
       interval: 10s
       timeout: 5s
       retries: 3

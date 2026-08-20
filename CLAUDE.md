@@ -82,6 +82,7 @@ wrappers in `bin/`, which shell into the running containers.
 | `bin/bash <service>` | interactive `sh` in a container | `bin/bash api` |
 | `bin/mysql [args…]` | `mariadb` client against `db` using `.env` credentials | `bin/mysql -e 'show tables'` |
 | `bin/dbinit` | grants global privileges to `${DB_USER}` so Prisma can create its shadow database | once after a fresh `db` volume |
+| `bin/dbreset` | `prisma migrate reset --force` + seed + Redis `FLUSHALL` — resets dev state without rerunning `bin/install` | `bin/dbreset` |
 | `bin/reset-password <username>` | resets a user's password interactively | the recovery path when no admin can sign in |
 
 Without Traefik, each service is still reachable directly on its published port (`WEB_PORT`,

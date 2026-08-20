@@ -8,6 +8,10 @@ WORKDIR /app
 FROM base AS dev
 ENV NODE_ENV=development
 EXPOSE 3000
+# Ver el comentario equivalente en services/api/Dockerfile: red de seguridad
+# para cuando /app no tiene el bind mount de docker-compose.dev.yaml encima.
+# También necesario ahora que el container corre como PUID:PGID, no como root.
+RUN chown node:node /app
 CMD ["sh", "-c", "if [ ! -d node_modules ]; then npm install; fi && npm run dev"]
 
 # ==========================================

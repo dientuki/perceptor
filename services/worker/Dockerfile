@@ -20,6 +20,9 @@ WORKDIR /app
 # ==========================================
 FROM base AS dev
 ENV NODE_ENV=development
+# Ver el comentario equivalente en services/api/Dockerfile: red de seguridad
+# para cuando /app no tiene el bind mount de docker-compose.dev.yaml encima.
+RUN chown node:node /app
 CMD ["sh", "-c", "if [ ! -d node_modules ]; then npm install; fi && npm run dev"]
 
 # ==========================================

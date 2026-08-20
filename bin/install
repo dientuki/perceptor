@@ -102,9 +102,15 @@ fi
 
 set -a; . ./.env; set +a
 
+# Mismo overlay que bin/dev: sin docker-compose.dev.yaml no hay bind mount
+# ./services/<svc>:/app, así que /app queda como lo dejó el Dockerfile (root,
+# creado por WORKDIR) y el "npm install" del CMD de dev, corriendo como
+# PUID:PGID, falla con EACCES al escribir package-lock.json.
+COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.dev.yaml"
+
 echo
 echo "Levantando db, redis y api..."
-BUILD_TARGET=dev docker compose up -d --wait --wait-timeout 180 db redis api
+BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 180 db redis api web torrent indexer flaresolverr torrent
 
 # Un container "healthy" no implica un container instalado: node_modules está
 # bind-mounteado desde el host, así que se puede borrar con el container arriba
@@ -119,7 +125,7 @@ if ! docker compose exec -T api test -x node_modules/.bin/prisma; then
   # dependencias nuevas.
   echo "Reiniciando api para que levante con las dependencias nuevas..."
   docker compose restart api
-  BUILD_TARGET=dev docker compose up -d --wait --wait-timeout 300 api
+  BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 300 api
 fi
 
 # SERVICE_TOKEN recién se puede mintear con api ya arriba (el script vive en
@@ -138,18 +144,11 @@ fi
 echo "Otorgando privilegios a ${DB_USER} en MariaDB..."
 bin/dbinit
 
-echo "Reseteando la base y aplicando migraciones de Prisma..."
-bin/cli api npx --no prisma migrate reset --force
-
-# migrate reset no siembra solo pese a que prisma.config.ts declara un
-# comando de seed (verificado: la tabla languages queda en 0 filas después
-# del reset) — hay que correrlo aparte.
-echo "Sembrando datos iniciales..."
-bin/cli api npx --no ts-node prisma/seeds/index.ts
+bin/dbreset
 
 echo
 echo "Frenando los containers..."
 docker compose stop
 
 echo
-echo "Listo. Corré bin/dev para levantar el stack (web, api, db, redis, torrent, indexer)."
+echo "Listo. Corré bin/dev para levantar el stack."
