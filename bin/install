@@ -85,6 +85,10 @@ fi
 current_indexer_api_key=$(grep '^INDEXER_API_KEY=' .env 2>/dev/null | cut -d= -f2-)
 if [ -z "$current_indexer_api_key" ]; then
   echo "Buscando una INDEXER_API_KEY existente en el volumen de indexer..."
+  # Build aparte y silencioso: si se lo dejamos a "docker compose run", un build
+  # necesario (imagen ausente) manda su log a stdout y se mezcla con el resultado
+  # del sed de más abajo — ese log terminó una vez escrito en INDEXER_API_KEY.
+  docker compose build --quiet indexer
   # --entrypoint /bin/sh evita la cadena /init de LinuxServer (no arranca nada) y --no-deps
   # evita arrastrar a flaresolverr sólo para leer un archivo.
   existing_key=$(docker compose run --rm --no-deps --entrypoint /bin/sh indexer \
