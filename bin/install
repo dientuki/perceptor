@@ -113,8 +113,8 @@ set -a; . ./.env; set +a
 COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.dev.yaml"
 
 echo
-echo "Levantando db, redis y api..."
-BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 180 db redis api web torrent indexer flaresolverr torrent
+echo "Levantando servicios... puede tardar un minuto si es la primera vez que los containers se crean."
+BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 180 db redis api web torrent indexer flaresolverr torrent worker
 
 # Un container "healthy" no implica un container instalado: node_modules está
 # bind-mounteado desde el host, así que se puede borrar con el container arriba
@@ -156,3 +156,4 @@ docker compose stop
 
 echo
 echo "Listo. Corré bin/dev para levantar el stack."
+echo "Recuerda que tu usuario es: ${ADMIN_USER} y la contraseña: ${ADMIN_PASSWORD}."
