@@ -88,6 +88,10 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.UPLOAD_TICKET_WRONG_EPISODE]: 'The upload ticket does not belong to this episode',
   [ERROR_KEYS.UPLOAD_METADATA_INCOMPLETE]: 'Upload metadata is incomplete',
 
+  // ffprobe-logs
+  [ERROR_KEYS.FFPROBE_LOG_NOT_FOUND]: 'ffprobe log {id} does not exist',
+  [ERROR_KEYS.FFPROBE_LOG_EMPTY_PAYLOAD]: 'recordFfprobe requires a non-empty file and ffprobe payload',
+
   // class-validator DTO constraints
   [ERROR_KEYS.VALIDATION_SETTING_KEY_REQUIRED]: 'The key is required',
   [ERROR_KEYS.VALIDATION_SETTING_VALUE_REQUIRED]: 'The value is required',

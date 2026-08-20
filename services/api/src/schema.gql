@@ -182,6 +182,13 @@ type Show {
   preferredLanguages: [Language!]!
 }
 
+type FfprobeLog {
+  id: Int!
+  file: String!
+  ffprobe: String!
+  createdAt: DateTime!
+}
+
 type Query {
   ping: String!
   items: [Item!]!
@@ -217,6 +224,12 @@ type Query {
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
   shows: [Show!]!
   show(id: Int!): Show
+
+  """List recorded ffprobe payloads, newest first"""
+  ffprobeLogs(file: String, take: Int! = 50, skip: Int! = 0): [FfprobeLog!]!
+
+  """Fetch one recorded ffprobe payload by id"""
+  ffprobeLog(id: Int!): FfprobeLog!
 }
 
 type Mutation {
@@ -284,6 +297,12 @@ type Mutation {
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la temporada
   """
   addMagnetToSeason(seasonId: Int!, magnet: String!, force: Boolean = false): Season!
+
+  """The worker reports one raw ffprobe payload before an encode starts"""
+  recordFfprobe(file: String!, ffprobe: String!): FfprobeLog!
+
+  """Delete one recorded ffprobe payload by id"""
+  deleteFfprobeLog(id: Int!): Boolean!
 }
 
 input LoginInput {

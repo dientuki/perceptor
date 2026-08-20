@@ -22,6 +22,7 @@ import { ShowsModule } from './shows/shows.module';
 import { EpisodesModule } from './episodes/episodes.module';
 import { LanguagesModule } from './languages/languages.module';
 import { SeasonsModule } from './seasons/seasons.module';
+import { FfprobeLogsModule } from './ffprobe-logs/ffprobe-logs.module';
 import { formatGraphQLError } from './i18n/graphql-error.formatter';
 
 @Module({
@@ -62,6 +63,7 @@ import { formatGraphQLError } from './i18n/graphql-error.formatter';
     EpisodesModule,
     LanguagesModule,
     SeasonsModule,
+    FfprobeLogsModule,
   ],
   providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })

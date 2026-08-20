@@ -677,6 +677,7 @@ The full vocabulary, by owner:
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
 | `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.indexer.unavailable`, `error.indexer.no_infohash` |
 | `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.processJob.not_found` |
+| `api` — ffprobe-logs | `error.ffprobeLog.not_found`, `error.ffprobeLog.empty_payload` |
 | `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
 | `api` — uploads (REST) | `error.upload.ticket_expired`, `error.upload.ticket_wrong_movie`, `error.upload.ticket_wrong_episode`, `error.upload.metadata_incomplete` |
 | `api` — DTO validation | `error.validation.setting_key_required`, `error.validation.setting_value_required`, `error.validation.user_id_required`, `error.validation.login_username_required`, `error.validation.login_password_required`, `error.validation.user_name_required`, `error.validation.username_min_length`, `error.validation.password_min_length` |
@@ -690,6 +691,75 @@ locale is active — they only ever produce English `message`/`errorMessage` tex
 `Query.supportedLocales` is the one place the supported set crosses the boundary, and it exists
 so `setUiLocale` and any future locale picker have a single source of truth to validate against
 instead of a second hardcoded list in `web`.
+
+### The ffprobe log is written before the encode, not after (`023-ffprobe-log`)
+
+```graphql
+type FfprobeLog {
+  id: Int!
+  file: String!
+  ffprobe: String!
+  createdAt: DateTime!
+}
+
+type Query {
+  ffprobeLogs(file: String, take: Int! = 50, skip: Int! = 0): [FfprobeLog!]!
+  ffprobeLog(id: Int!): FfprobeLog!
+}
+
+type Mutation {
+  recordFfprobe(file: String!, ffprobe: String!): FfprobeLog!
+  deleteFfprobeLog(id: Int!): Boolean!
+}
+```
+
+Purely additive — no existing type, field or argument changed, so `web` needed no change at all and
+consumes none of this.
+
+`ffprobe` is the raw `ffprobe` stdout as a `String`, **not** a JSON scalar: this repo has no custom
+scalars, and `errorParams` above already travels hand-encoded the same way. That is not just
+consistency — the stored bytes must stay byte-identical to what `ffprobe` emitted, because a row is
+meant to be pasted straight into the case corpus at `services/worker/ffmpeg/`, which is verbatim
+probe output. A scalar that round-trips through `JSON.parse`/`JSON.stringify` reorders keys and
+reformats numbers, and the corpus would quietly drift from reality. For the same reason
+`getMetadata` in `services/worker/src/ffmpeg/metadata.ts` returns `{ metadata, raw }` rather than
+re-serializing its parsed value.
+
+`ffprobeLogs` orders `createdAt` descending then `id` descending, so paging stays stable when
+several probes land inside the same second; `file` filters on **exact equality**, never a prefix or
+a `LIKE`. `take`/`skip` are non-null with defaults — Nest emits `Int! = 50` for an argument carrying
+a `defaultValue`, so the generated SDL reads `Int!` where `spec.md`'s delta wrote `Int`. Same
+behaviour for every caller; the shipped `schema.gql` above is the authority.
+
+**The authorization split is per method, and it is load-bearing.** `recordFfprobe` carries
+`@AllowService()` — it is the worker's write path, called with `SERVICE_TOKEN`. The other three
+carry `@UseGuards(AdminGuard)` **individually**. `AdminGuard` rejects any principal whose
+`type !== 'user'`, so the class-level placement `UsersResolver` uses would also reject the worker on
+`recordFfprobe` — and the worker swallows that rejection by design (below), so the table would stay
+empty forever with no error anywhere except one line in the worker log. `services/api/src/ffprobe-logs/ffprobe-logs.resolver.spec.ts`
+asserts the wiring off the metadata Nest actually sees, because no runtime test would catch it.
+
+Consumer obligations: `worker` calls **only** `recordFfprobe`, selects `{ id }` and discards the
+result. It treats **every** error in this feature as non-fatal — `error.ffprobeLog.empty_payload`, a
+stale `SERVICE_TOKEN` giving `error.auth.unauthenticated`, a transport failure, anything unforeseen:
+`console.error` and the encode continues. This is the second documented exception to the worker's
+"errors must not be swallowed" rule, and the reasoning is `cleanupSource`'s from
+`012-post-download-processing` — a diagnostic write must never demote a job that produced a good
+file. The `try/catch` therefore wraps the `fetchGraphQL` call **only**; widening it to cover the
+probe would turn a real `ffprobe` failure into a silent skip and let the encode run with no
+metadata.
+
+**Timing is part of the contract, not an implementation detail.** The mutation is sent after
+`ffprobe` returns and **before** FFmpeg starts, not when the encode finishes. An encode that fails,
+or a container killed mid-transcode, is exactly the case worth having evidence for. Mechanically
+this is why `EncodeFn` (`services/worker/src/encode/types.ts`) gained a required `onProbe(file, ffprobe)`
+callback alongside `onProgress`: the encode driver is a documented no-GraphQL seam, so the driver
+invokes the callback and `jobs/encode.job.ts` owns the network call. Returning the probe out of the
+driver would have been simpler and wrong — the driver only returns once the encode has finished.
+
+`web` consumes none of these keys and gets no `messages/{en,es}.json` entry for them; the English
+`message` is the fallback anyone reading them sees, which is REQ-8 of `018-ui-i18n` working as
+designed.
 
 ### The one non-GraphQL route
 

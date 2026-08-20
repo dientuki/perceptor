@@ -13,7 +13,7 @@ const DRIVERS: Record<string, EncodeFn> = {
   ffmpeg: encodeFfmpeg,
 };
 
-export const encode: EncodeFn = (input, output, details, onProgress) => {
+export const encode: EncodeFn = (input, output, details, onProgress, onProbe) => {
   const driverName = process.env.ENCODE_DRIVER ?? 'mock';
   const driver = DRIVERS[driverName];
   if (!driver) {
@@ -25,5 +25,5 @@ export const encode: EncodeFn = (input, output, details, onProgress) => {
     );
   }
 
-  return driver(input, output, details, onProgress);
+  return driver(input, output, details, onProgress, onProbe);
 };

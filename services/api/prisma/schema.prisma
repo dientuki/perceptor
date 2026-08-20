@@ -362,3 +362,17 @@ model Episode {
   @@unique([seasonId, episodeNumber])
   @@map("episodes")
 }
+
+// Append-only diagnostic log of every ffprobe run in the worker, kept independent
+// of ProcessJob/SourceFile/MediaSource so it survives cascades that delete the media.
+model FfprobeLog {
+  id Int @id @default(autoincrement())
+
+  file    String @db.VarChar(500)
+  ffprobe String @db.MediumText
+
+  createdAt DateTime @default(now())
+
+  @@index([file])
+  @@map("ffprobe_logs")
+}

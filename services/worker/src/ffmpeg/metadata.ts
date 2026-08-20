@@ -21,7 +21,10 @@ export async function getMetadata(filePath: string) {
       '-of', 'json',
       filePath,
     ]);
-    return JSON.parse(stdout);
+    // `raw` is the untouched ffprobe stdout, never re-serialized — a
+    // JSON.stringify of the parsed value would reorder keys and reformat
+    // numbers, which is exactly what the caller must not send onward.
+    return { metadata: JSON.parse(stdout), raw: stdout };
   } catch (error) {
     console.error(`[ffmpeg] error en ffprobe al analizar ${filePath}:`, error);
     // Se propaga la causa real (antes se perdía en un mensaje genérico) — el

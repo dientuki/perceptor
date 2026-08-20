@@ -83,6 +83,10 @@ export const ERROR_KEYS = {
   UPLOAD_TICKET_WRONG_EPISODE: 'error.upload.ticket_wrong_episode',
   UPLOAD_METADATA_INCOMPLETE: 'error.upload.metadata_incomplete',
 
+  // ffprobe-logs
+  FFPROBE_LOG_NOT_FOUND: 'error.ffprobeLog.not_found',
+  FFPROBE_LOG_EMPTY_PAYLOAD: 'error.ffprobeLog.empty_payload',
+
   // class-validator DTO constraints (018 REQ-9). Not part of `spec.md`'s error
   // tables — spec.md doesn't name these eight, so the keys are named here,
   // consistently with the rest of the vocabulary. `main.ts`'s

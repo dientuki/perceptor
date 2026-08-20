@@ -169,6 +169,18 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   union of every owner's global and per-title preference, deduplicated, selecting `language.iso3` and
   **never `iso2`**. **This is the one place that merge happens** — `Movie.preferredLanguages` and
   `Show.preferredLanguages` deliberately return only the calling user's own list.
+- **`ffprobe-logs/`** — an append-only diagnostic log: one row per `ffprobe` the worker runs, holding
+  the probed path and the raw JSON as an opaque `MediumText` string this service never parses.
+  `recordFfprobe` is the worker's write path and carries `@AllowService()`; `ffprobeLogs`,
+  `ffprobeLog` and `deleteFfprobeLog` carry `@UseGuards(AdminGuard)` **per method**.
+  **Do not lift `AdminGuard` to class level the way `UsersResolver` does it** — it rejects any
+  principal whose `type !== 'user'`, so at class level it would also reject the worker on
+  `recordFfprobe`, and the worker swallows that rejection by design (`023-ffprobe-log` NFR-1). The
+  table would stay empty forever with no error anywhere. `ffprobe-logs.resolver.spec.ts` asserts the
+  split off the metadata Nest actually resolves, reading the class **and** method targets, because
+  nothing at runtime would surface the mistake. The model has **no relation** to `ProcessJob` or
+  `MediaSource` on purpose: a cascade would delete the evidence along with the media, and the file
+  path is the only (deliberately weak) join key.
 - **`settings/`** — key/value settings with a typed catalog in `settings.catalog.ts` and server-side
   validation in `updateMany`.
 - **`media-roots/`** — the two declared roots and every path translation. See below.
@@ -270,8 +282,8 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-08-20 (`018-ui-i18n`): `bin/cli api npx --no tsc --noEmit` reports **0 errors**,
-`bin/npm api test` is green at **179** tests across **19** suites. **Re-run both rather than
+As of 2026-08-20 (`023-ffprobe-log`): `bin/cli api npx --no tsc --noEmit` reports **0 errors**,
+`bin/npm api test` is green at **190** tests across **21** suites. **Re-run both rather than
 trusting these numbers** — they exist so an agent can prove a change added nothing, not as a fact
 to cite.
 

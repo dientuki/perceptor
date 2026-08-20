@@ -23,7 +23,7 @@ const STEPS = 10;
 // resto del pipeline (mover a la biblioteca, borrar el torrent, avisar al
 // media server) contra datos de verdad. Se elige con ENCODE_DRIVER=mock
 // (default) en src/encode/index.ts.
-export const encodeMock: EncodeFn = async (input, output, _details, onProgress) => {
+export const encodeMock: EncodeFn = async (input, output, _details, onProgress, _onProbe) => {
   const workingPath = toWorkingPath(output);
   await mkdir(dirname(output), { recursive: true });
   await copyFile(input, workingPath);

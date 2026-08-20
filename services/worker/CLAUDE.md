@@ -51,6 +51,17 @@ src/paths/is-inside-root.ts      pure containment check, used before any delete
 name). New encode behaviour goes behind that interface, never inline in a job handler — the mock
 is what makes the surrounding workflow testable without FFmpeg.
 
+`EncodeFn` takes two callbacks, and both exist for the same reason: the driver reports outward
+rather than reaching for the network itself. `onProgress(progress)` is the long-standing one;
+`023-ffprobe-log` added `onProbe(file, ffprobe)`, invoked by `encode.ffmpeg.ts` right after
+`getMetadata` returns and **before** `buildFfmpegCommand`, carrying the raw `ffprobe` stdout
+(which is why `ffmpeg/metadata.ts` returns `{ metadata, raw }` instead of only the parsed object).
+`jobs/encode.job.ts` owns the `recordFfprobe` GraphQL call behind it. Putting that call inside the
+driver would have been shorter and wrong twice over — it would break the no-GraphQL rule above, and
+the mock could not exercise it, so no test could reach it without FFmpeg. It is a **required**
+parameter on purpose: an optional callback a call site forgets to pass compiles clean and records
+nothing forever, with no error anywhere.
+
 `EncodeInput` in `encode/types.ts` is a deliberate *subset* of `EncodeJobDetails`
 (`jobs/encode.job.ts`), retyped locally rather than imported, so the driver isn't coupled to the
 full shape of the GraphQL query. `paths/build-output-path.ts` does the same with `OutputPathInput`.
@@ -192,12 +203,25 @@ instead of unreadable stringified JSON; the three boot-time infrastructure error
 (`INTERNAL_GRAPHQL_URL`/`SERVICE_TOKEN` unset, a non-2xx HTTP status) stay plain, unkeyed `Error`s
 on purpose — no user ever sees them.
 
-**One documented exception**: `cleanup-source.ts` catches and logs every error it can produce —
+**Two documented exceptions.** First, `cleanup-source.ts` catches and logs every error it can produce —
 a throwing `fetchGraphQL` (torrent client unreachable) or a throwing `rm`/`rmdir` — instead of
 letting it propagate. This is deliberate, not an oversight: cleanup runs after the encode has
 already succeeded and the `ProcessJob` already reports `COMPLETED`; letting a cleanup failure
 propagate would demote a job that produced a perfectly good file. The reasoning is written as a
 comment at the top of the file itself.
+
+Second, `jobs/encode.job.ts`'s `onProbe` catches every error `recordFfprobe` can produce — `api`
+unreachable, a stale `SERVICE_TOKEN`, the mutation rejecting the payload — logs one line and
+continues the encode (`023-ffprobe-log` NFR-1). Same reasoning as `cleanup-source.ts`: the ffprobe
+log is diagnostic, and a diagnostic write must never demote a job that produced a good file. The
+`try/catch` wraps the `fetchGraphQL` call and **nothing else** — widening it to cover the probe
+would turn a real `ffprobe` failure into a silent skip, and the encode would run on with no
+metadata. `encode.job.spec.ts` has a case pinning exactly that.
+
+Note what this exception costs: a recording failure is invisible outside the worker log, so a
+miswiring on the `api` side (`AdminGuard` reaching `recordFfprobe`) leaves `ffprobe_logs` empty
+forever with nothing failing anywhere. That is why the guard split is asserted by a test in `api`
+rather than trusted.
 
 Same reasoning applies to long-running work: `ffmpeg/runner.ts` handles signals for the whole
 duration and writes through a working path before an atomic move, so a killed container never
@@ -210,7 +234,7 @@ leaves a half-written file at the destination.
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate, against `tsconfig.json` (covers `src/**/*`, including `*.spec.ts`) |
 | `bin/npm worker run build` | `tsc -p tsconfig.build.json` — the `runner` image's `builder` stage runs this; `tsconfig.build.json` extends `tsconfig.json` but excludes `**/*.spec.ts`, so `dist/` ships no test code (`015-reproducible-image-builds`) |
-| `bin/npm worker test` | `vitest run` — 12 suites, 102 tests, green (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `017-worker-gpu-strategy` added `ffmpeg/vulkan.spec.ts` and the first `getVideoParams` coverage in `ffmpeg/params.spec.ts`; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
+| `bin/npm worker test` | `vitest run` — 13 suites, 116 tests, green as of `023-ffprobe-log`, which added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `017-worker-gpu-strategy` added `ffmpeg/vulkan.spec.ts` and the first `getVideoParams` coverage in `ffmpeg/params.spec.ts`; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 
 ## Known debt

@@ -109,6 +109,23 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       }
     };
 
+    // Recorded once per encode, before FFmpeg starts (REQ-1, 023-ffprobe-log).
+    // The try/catch below covers only the fetchGraphQL call — widening it
+    // would swallow a real ffprobe failure and let the encode continue with
+    // no metadata (worker/plan.md § Steps 5).
+    const onProbe = async (file: string, ffprobe: string) => {
+      try {
+        await fetchGraphQL(
+          `mutation ($file: String!, $ffprobe: String!) {
+            recordFfprobe(file: $file, ffprobe: $ffprobe) { id }
+          }`,
+          { file, ffprobe },
+        );
+      } catch (err) {
+        console.error(`[encode] ${processJobId}: failed to record ffprobe, continuing encode:`, err);
+      }
+    };
+
     const { ffmpegCommand } = await encode(
       details.inputFilePath,
       outputPath,
@@ -118,6 +135,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         isLiveAction: details.isLiveAction,
       },
       onProgress,
+      onProbe,
     );
 
     const result = await fetchGraphQL<EncodeCompletedMutationResult>(

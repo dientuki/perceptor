@@ -198,7 +198,7 @@ a worked example, written after the fact against a feature that shipped.
 ## Current state
 
 All three services typecheck clean (0 errors) and `bin/npm web run build` exits 0, measured
-2026-08-20 after `018-ui-i18n`. Test counts then: `api` 179/19 suites, `worker` 102/12.
+2026-08-20 after `023-ffprobe-log`. Test counts then: `api` 190/21 suites, `worker` 116/13.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

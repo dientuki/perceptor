@@ -25,7 +25,7 @@ function toPartPath(output: string): string {
 // los streams del archivo y los datos de la media, corre ffmpeg + mkvmerge.
 // Sin escrituras a la base ni llamadas GraphQL acá — eso lo hace
 // jobs/encode.job.ts con lo que este driver devuelve.
-export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress) => {
+export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress, onProbe) => {
   const workingPath = toWorkingPath(input);
   const partPath = toPartPath(output);
 
@@ -33,7 +33,11 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress)
   // mkvmerge — no acá. El encode puede tardar horas; crearla ya en este punto
   // deja una carpeta vacía visible en la biblioteca (y al media server) todo
   // ese tiempo, fingiendo contenido que todavía no existe.
-  const metadata = await getMetadata(input);
+  const { metadata, raw } = await getMetadata(input);
+
+  // Recorded before the command is built, and awaited: a container killed
+  // mid-encode must still leave the probe on record (REQ-1, 023-ffprobe-log).
+  await onProbe(input, raw);
 
   // Con ENCODE_SAMPLE_SECONDS seteado sólo se encodean esos segundos (ver
   // buildFfmpegCommand), así que el progreso también se calcula contra ese
