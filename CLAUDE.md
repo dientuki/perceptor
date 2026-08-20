@@ -15,7 +15,7 @@ implementation detail.
 | Download | qBittorrent (`torrent`), `api` — `src/clients/torrent/client.ts`, per-torrent save path | `010` |
 | Detect completion, enqueue | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | — |
 | Scan files, inventory | `worker` — enumerates every file, resolves episodes by parsing `SxxEyy`; episode names come from the api, never the filename | `013` |
-| Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K tonemapped to 1080p SDR, Opus audio; decided from `ffprobe`, not the filename. A season pack fans out into one `ProcessJob` per episode | `011`, `013` |
+| Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K tonemapped to 1080p SDR, Opus audio; decided from `ffprobe`, not the filename. The 4K tonemap runs on GPU (`libplacebo`/Vulkan) when the host has one, or a software chain otherwise — detected at worker startup, not configured. A season pack fans out into one `ProcessJob` per episode | `011`, `013`, `017` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`) | — |
 | Browse library | `api` — the three resolvers; `web` — `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010` |
 
@@ -130,6 +130,11 @@ Rules that are not obvious from the variable names:
   stays manual in Prowlarr's UI (`014-dev-stack-flaresolverr`).
 - **`BUILD_TARGET`** picks the Dockerfile stage (`dev` by default, `runner` for production); every
   Dockerfile has `base` / `dev` / `builder` / `runner`.
+- **`USE_GPU` is an opt-out, not an opt-in.** `bin/dev`/`bin/prod`/`bin/build` attach
+  `docker-compose.gpu.yaml` (mapping `/dev/dri` into `worker`) whenever the host has a render node,
+  and the worker probes at startup whether `libplacebo` can actually initialize Vulkan there,
+  falling back to a software tonemap chain when it can't. Only the literal string `false` forces the
+  CPU path on both sides; there is no value that forces GPU use. `017-worker-gpu-strategy`.
 - **The media server is not in `docker-compose.yaml`** — Jellyfin is assumed to run outside the stack.
   That is why `MediaServerService.notifyCreated` translates the container output path to the host path
   via `MediaRootsService.containerToHostPath()` before sending it.

@@ -3,6 +3,7 @@ import { PROCESS_QUEUE, SOURCE_READY_JOB, ENCODE_QUEUE, ENCODE_JOB } from './que
 import type { SourceReadyJob, EncodeJob } from './queue/types';
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
+import { probeVulkan } from './ffmpeg/vulkan';
 
 // El container corre como PUID:PGID (ver docker-compose.yaml, "user:"), no
 // root: sin esto el umask por defecto (022) deja carpetas 755/root y archivos
@@ -21,65 +22,85 @@ const connection = {
   port: Number(process.env.REDIS_PORT ?? 6379),
 };
 
-const scanWorker = new Worker<SourceReadyJob>(
-  PROCESS_QUEUE,
-  async (job) => {
-    if (job.name !== SOURCE_READY_JOB) {
-      console.log(`[worker] job desconocido ${job.name}, se ignora`);
-      return;
-    }
+// This service is "type": "commonjs" — no top-level await. The probe result
+// must be memoized before either Worker starts pulling encode jobs (REQ-1,
+// NFR-1), so the whole startup is wrapped in this async bootstrap rather
+// than switching the package to ESM as a side effect of this feature.
+async function main() {
+  // REQ-6: the selected path and the reason for it, logged exactly once at
+  // startup — "no Vulkan device", "forced off by USE_GPU=false" or "Vulkan
+  // in use". probeVulkan() itself never rejects (NFR-2), so this can't
+  // block the boot on a wedged driver.
+  const { available, reason } = await probeVulkan();
+  console.log(
+    `[worker] tonemap path: ${available ? 'Vulkan (libplacebo)' : 'CPU (zscale/tonemap)'} — reason: ${reason}`,
+  );
 
-    await handleSourceReady(job);
-  },
-  {
-    connection,
-    // Un escaneo es IO sobre una carpeta y un encode no debe arrancar N veces
-    // por accidente.
-    concurrency: 1,
-  },
-);
+  const scanWorker = new Worker<SourceReadyJob>(
+    PROCESS_QUEUE,
+    async (job) => {
+      if (job.name !== SOURCE_READY_JOB) {
+        console.log(`[worker] job desconocido ${job.name}, se ignora`);
+        return;
+      }
 
-// Worker separado, no un job name más en `process`: un encode puede tardar
-// horas, y con concurrency:1 en una sola cola compartida o los escaneos
-// quedan bloqueados detrás de FFmpeg, o se arriesgan N FFmpeg simultáneos.
-// Cada Worker abre su propia conexión bloqueante, así que este puede estar
-// horas ocupado sin frenar al de arriba.
-const encodeWorker = new Worker<EncodeJob>(
-  ENCODE_QUEUE,
-  async (job) => {
-    if (job.name !== ENCODE_JOB) {
-      console.log(`[worker] job desconocido ${job.name}, se ignora`);
-      return;
-    }
+      await handleSourceReady(job);
+    },
+    {
+      connection,
+      // Un escaneo es IO sobre una carpeta y un encode no debe arrancar N veces
+      // por accidente.
+      concurrency: 1,
+    },
+  );
 
-    await handleEncode(job);
-  },
-  {
-    connection,
-    concurrency: 1,
-  },
-);
+  // Worker separado, no un job name más en `process`: un encode puede tardar
+  // horas, y con concurrency:1 en una sola cola compartida o los escaneos
+  // quedan bloqueados detrás de FFmpeg, o se arriesgan N FFmpeg simultáneos.
+  // Cada Worker abre su propia conexión bloqueante, así que este puede estar
+  // horas ocupado sin frenar al de arriba.
+  const encodeWorker = new Worker<EncodeJob>(
+    ENCODE_QUEUE,
+    async (job) => {
+      if (job.name !== ENCODE_JOB) {
+        console.log(`[worker] job desconocido ${job.name}, se ignora`);
+        return;
+      }
 
-scanWorker.on('completed', (job) => {
-  console.log(`[worker] completado ${job.id}`);
+      await handleEncode(job);
+    },
+    {
+      connection,
+      concurrency: 1,
+    },
+  );
+
+  scanWorker.on('completed', (job) => {
+    console.log(`[worker] completado ${job.id}`);
+  });
+
+  scanWorker.on('failed', (job, err) => {
+    console.error(`[worker] falló ${job?.id}:`, err);
+  });
+
+  encodeWorker.on('completed', (job) => {
+    console.log(`[worker] encode completado ${job.id}`);
+  });
+
+  encodeWorker.on('failed', (job, err) => {
+    console.error(`[worker] encode falló ${job?.id}:`, err);
+  });
+
+  process.on('SIGTERM', () => {
+    void scanWorker.close();
+    void encodeWorker.close();
+  });
+
+  console.log('[worker] escuchando la cola', PROCESS_QUEUE);
+  console.log('[worker] escuchando la cola', ENCODE_QUEUE);
+}
+
+main().catch((error) => {
+  console.error('[worker] fatal error en el bootstrap:', error);
+  process.exit(1);
 });
-
-scanWorker.on('failed', (job, err) => {
-  console.error(`[worker] falló ${job?.id}:`, err);
-});
-
-encodeWorker.on('completed', (job) => {
-  console.log(`[worker] encode completado ${job.id}`);
-});
-
-encodeWorker.on('failed', (job, err) => {
-  console.error(`[worker] encode falló ${job?.id}:`, err);
-});
-
-process.on('SIGTERM', () => {
-  void scanWorker.close();
-  void encodeWorker.close();
-});
-
-console.log('[worker] escuchando la cola', PROCESS_QUEUE);
-console.log('[worker] escuchando la cola', ENCODE_QUEUE);

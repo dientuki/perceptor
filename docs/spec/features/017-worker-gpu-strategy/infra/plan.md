@@ -1,8 +1,8 @@
 ---
 title: Worker GPU Strategy — infra slice
 service: infra
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-20
+status: Implemented
 ---
 
 # PLAN: Worker GPU Strategy — `infra` (`infra/plan.md`)

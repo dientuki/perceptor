@@ -1,8 +1,8 @@
 ---
 title: Worker GPU Strategy — worker slice
 service: worker
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-20
+status: Implemented
 ---
 
 # PLAN: Worker GPU Strategy — `worker` (`worker/plan.md`)

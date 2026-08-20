@@ -1,7 +1,9 @@
 #!/bin/bash
 # Levanta el stack en modo desarrollo. Lee USE_TRAEFIK de .env para decidir si
-# el servicio traefik entra en el docker compose up, y USE_GPU para sumar el
-# overlay docker-compose.gpu.yaml (mapea /dev/dri al worker).
+# el servicio traefik entra en el docker compose up. Suma el overlay
+# docker-compose.gpu.yaml (mapea /dev/dri al worker) cuando el host tiene un
+# render node en /dev/dri, salvo que USE_GPU sea exactamente "false" — la
+# única forma de forzar el path por CPU.
 set -e
 cd "$(dirname "$0")/.."
 
@@ -18,7 +20,7 @@ if [ "${USE_TRAEFIK}" = "true" ]; then
 fi
 
 COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.dev.yaml"
-if [ "${USE_GPU}" = "true" ]; then
+if [ -d /dev/dri ] && [ "${USE_GPU}" != "false" ]; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yaml"
 fi
 

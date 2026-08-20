@@ -55,7 +55,8 @@ Perceptor is the whole path as a single product:
 - 📦 **Season packs fan out correctly**: every file is enumerated, matched to its episode by
   `SxxEyy`, and each becomes its own job — cleanup waits for the whole pack, not the first episode
   to finish.
-- ⚡ **Optional GPU acceleration** for the tonemap/scale pass (`USE_GPU=true`).
+- ⚡ **GPU acceleration, auto-detected** for the tonemap pass — used automatically when the host has
+  a usable Vulkan device, with a software fallback otherwise (`USE_GPU=false` forces the CPU path).
 
 ### Enjoy
 - 🗂️ **Automatic filing** into your library layout.
@@ -134,7 +135,9 @@ You only need Docker and Docker Compose.
    ```bash
    bin/dev
    ```
-   Reads `USE_TRAEFIK` and `USE_GPU` from `.env` to decide which compose files to include. Without
+   Reads `USE_TRAEFIK` from `.env` to decide whether to include Traefik, and attaches the GPU
+   overlay automatically when the host has a render node at `/dev/dri` (`USE_GPU=false` in `.env`
+   forces it off). Without
    Traefik, reach each service directly: `http://localhost:${WEB_PORT}`,
    `http://localhost:${API_PORT}/graphql`. First boot installs each service's `node_modules` into
    your working copy — that's intentional, and it's what your editor's TypeScript server reads.
@@ -199,11 +202,10 @@ Rough edges, stated plainly:
   reachable from the running UI. Dev mode is unaffected. Tracked as spec `016-web-build-errors`.
 - **Production images aren't reproducible yet.** The three Node services run their `dev` stage and
   install dependencies at first boot. Tracked as spec `015-reproducible-image-builds`.
-- **The worker image is tied to Intel/Mesa Vulkan** for the `libplacebo` tonemap filter. Tracked as
-  spec `017-worker-gpu-strategy`.
 - **Season packs are api-only.** `addMagnetToSeason` works; there's no web UI for it yet.
-- **AV1 encoding is CPU-bound by design** — neither Intel iGPUs nor most dGPUs can encode AV1 in
-  hardware. `USE_GPU` accelerates the tonemap/scale pass only.
+- **AV1 encoding is CPU-bound by design** — no current consumer GPU encodes AV1 in hardware. `USE_GPU`
+  only affects the tonemap pass; leaving it unset auto-detects a usable Vulkan device and falls back
+  to a software chain when there isn't one (`017-worker-gpu-strategy`).
 - **Which indexers sit behind Cloudflare is a manual call.** The FlareSolverr proxy is registered
   automatically, but tagging the indexers that need it stays a step in Prowlarr's UI.
 - **Jellyfin is the only media server client** implemented so far, and it's expected to run outside

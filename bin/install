@@ -57,20 +57,6 @@ if [ "$generate_env" = true ]; then
       ;;
   esac
 
-  read -rp "¿Usar la GPU del host para acelerar el encode (tonemap 4K HDR/DoVi)? [y/N] " use_gpu
-  case "$use_gpu" in
-    [yY]*)
-      set_env_var USE_GPU true
-      echo
-      echo "GPU activada. Necesita /dev/dri en el host (GPU Intel confirmada; otras GPUs con"
-      echo "soporte Vulkan probablemente funcionen, no probado). El encode AV1 en sí sigue"
-      echo "corriendo por CPU siempre — ninguna GPU acá lo hace por hardware."
-      ;;
-    *)
-      set_env_var USE_GPU false
-      ;;
-  esac
-
   read -rp "Ingrese la carpeta de descargas [./data/downloads]: " downloads_dir
   set_env_var HOST_DOWNLOADS_DIR "${downloads_dir:-./data/downloads}"
 

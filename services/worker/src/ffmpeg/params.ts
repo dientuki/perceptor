@@ -14,7 +14,34 @@ function getQuality(isLiveAction: boolean, quality: quality) {
   return "24";
 }
 
-export function getVideoParams(videoStream: any, isLiveAction: boolean, quality: quality = 'web') {
+// The software tonemap chain both HDR10 and Dolby Vision branches fall back
+// to when no usable Vulkan device is available (see
+// docs/spec/features/017-worker-gpu-strategy/worker/plan.md, step 3).
+// Verified against the real binary on a synthetic bt2020/smpte2084 4K
+// source, encoded through libsvtav1 exactly as production does: the output
+// lands on 1920x1080 with color_primaries=bt709, color_transfer=bt709 and
+// color_space=bt709, same as the libplacebo path. Scaling before
+// tonemapping is deliberate — tonemap is expensive per-pixel work, and doing
+// it after the downscale means four times fewer pixels to process than
+// doing it on the native 4K frame.
+const SOFTWARE_TONEMAP_VF =
+  'scale=1920:1080:force_original_aspect_ratio=decrease,' +
+  'zscale=t=linear:npl=100,' +
+  'format=gbrpf32le,' +
+  'zscale=p=bt709,' +
+  'tonemap=tonemap=hable:desat=0,' +
+  'zscale=t=bt709:m=bt709:r=tv,' +
+  'format=yuv420p10le';
+
+const GPU_TONEMAP_VF =
+  'libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto';
+
+export function getVideoParams(
+  videoStream: any,
+  isLiveAction: boolean,
+  vulkanAvailable: boolean,
+  quality: quality = 'web',
+) {
   // Sin stream de video no hay nada que codificar (archivo corrupto o sólo
   // audio) — mejor un error claro acá que un TypeError al leer .codec_name.
   if (!videoStream) {
@@ -85,12 +112,17 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
     if (hasDolbyVision) {
         return [
         "-map", "0:v:0",
-        "-vf", "libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto",
+        // REQ-7: on the software path a Dolby Vision source is tonemapped as
+        // its HDR10 base layer — the RPU is not applied. Documented quality
+        // regression, never an error.
+        "-vf", vulkanAvailable ? GPU_TONEMAP_VF : SOFTWARE_TONEMAP_VF,
         "-c:v", "libsvtav1",
         "-crf", getQuality(isLiveAction, quality),
         "-preset", "4",
         "-pix_fmt", "yuv420p10le",
         "-svtav1-params", svtav1,
+        // REQ-6: byte-identical on both paths — the title names the source,
+        // not the engine that tonemapped it.
         "-metadata:s:v:0", 'title=AV1 1080p (Tonemapped from 4K DoVi)'
       ];
     }
@@ -113,12 +145,13 @@ export function getVideoParams(videoStream: any, isLiveAction: boolean, quality:
     if (hasHDR10) {
       return [
         "-map", "0:v:0",
-        "-vf", "libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto",
+        "-vf", vulkanAvailable ? GPU_TONEMAP_VF : SOFTWARE_TONEMAP_VF,
         "-c:v", "libsvtav1",
         "-crf", getQuality(isLiveAction, quality),
         "-preset", "4",
         "-pix_fmt", "yuv420p10le",
         "-svtav1-params", svtav1,
+        // REQ-6: byte-identical on both paths.
         "-metadata:s:v:0", 'title=AV1 1080p (Tonemapped from 4K HDR10)'
       ];
     }

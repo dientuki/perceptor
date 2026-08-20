@@ -1,8 +1,8 @@
 ---
 title: Worker GPU Strategy — Implementation Plan
 spec_version: 0.2.0
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-20
+status: Implemented
 ---
 
 # PLAN: Worker GPU Strategy (`plan.md`)

@@ -194,6 +194,7 @@ services:
       - ENCODE_DRIVER=${ENCODE_DRIVER}
       - ENCODE_SAMPLE_SECONDS=${ENCODE_SAMPLE_SECONDS}
       - ENCODE_MOCK_SECONDS=${ENCODE_MOCK_SECONDS}
+      - USE_GPU=${USE_GPU}
     depends_on:
       redis:
         condition: service_healthy

@@ -63,9 +63,9 @@ completed and nothing was written. If the contract does not give you what you ne
 
 ## Tests
 
-Vitest is declared in `package.json` (`"test": "vitest run"`) but **there is no test and no
-`vitest.config.ts` in this service yet.** If a task assigns you the first test, you will need to
-add the config; say so in your report, because that is a new build-level fact.
+Vitest is declared in `package.json` (`"test": "vitest run"`) and `vitest.config.ts` exists. The
+baseline is 9 suites / 75 tests — re-run `bin/npm worker test` rather than trusting this number; it
+exists so you can prove a change added nothing, not as a fact to cite.
 
 Article IX applies with force here — this service fails silently by nature: a wrong FFmpeg
 argument or a wrong output path produces a job marked completed and a file nobody can find. The
@@ -86,7 +86,7 @@ Article I).
 
 ```bash
 bin/cli worker npx --no tsc --noEmit   # typecheck — today the only real gate
-bin/npm worker test                    # vitest; exits 1 today — "No test files found"
+bin/npm worker test                    # vitest — baseline 9 suites / 75 tests
 docker compose logs -f worker          # the job loop
 ```
 
@@ -97,9 +97,8 @@ surrounding file's style by eye; do not introduce a toolchain as a side effect o
 
 - `bin/cli worker npx --no tsc --noEmit` is clean. This service is `strict: true`, so the
   typecheck is a real gate — treat any new error as a failure, not a warning.
-- `bin/npm worker test` — say plainly what happened. Until this service has its first spec file the
-  command **exits 1** with `No test files found`; report that as a known-red baseline, not as
-  "tests passed".
+- `bin/npm worker test` — say plainly what happened, and report the real suite/test counts. The
+  baseline is 9 suites / 75 tests; a new task should raise that number, not just stay green.
 - If the job payload changed, you have confirmed by reading that
   `services/api/src/queue/types.ts` matches — and reported it if it does not.
 

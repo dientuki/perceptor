@@ -3,8 +3,8 @@ title: Worker GPU Strategy
 spec_version: 0.2.0
 author: Juan Farias
 created_at: 2026-08-18
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-20
+status: Implemented
 services: [infra, worker]
 ---
 
@@ -55,51 +55,49 @@ changes where one filter runs and on which machines the image will boot.
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Vulkan probe)**: The worker must determine, once per process at startup, whether a
+- [x] **REQ-1 (Vulkan probe)**: The worker must determine, once per process at startup, whether a
       usable Vulkan device is available, by exercising ffmpeg's own Vulkan initialization rather
       than by inspecting `/dev/dri`, the host OS, or any environment variable. A render node that
       exists but has no matching driver — an AMD card with only the Intel driver installed — must
       resolve to **unusable**.
-- [ ] **REQ-2 (Software fallback chain)**: When Vulkan is unusable, both `libplacebo` branches in
+- [x] **REQ-2 (Software fallback chain)**: When Vulkan is unusable, both `libplacebo` branches in
       `getVideoParams` must emit an equivalent software chain. The output must carry the same
       geometry (1920x1080) and the same output colorimetry (`bt709` primaries, transfer and
       matrix) as the GPU path produces.
-- [ ] **REQ-3 (One image)**: The decision is runtime-only. No build-time GPU variant, no second
+- [x] **REQ-3 (One image)**: The decision is runtime-only. No build-time GPU variant, no second
       image tag, no separate Dockerfile stage. A single `runner` image must serve every host.
-- [ ] **REQ-4 (Starts without a render node)**: The `worker` container must start and complete an
+- [x] **REQ-4 (Starts without a render node)**: The `worker` container must start and complete an
       encode on a host that has no `/dev/dri` at all, which is every Docker Desktop on Windows.
-- [ ] **REQ-5 (The host mapping is detected, not declared)**: `bin/dev`, `bin/prod` and `bin/build`
+- [x] **REQ-5 (The host mapping is detected, not declared)**: `bin/dev`, `bin/prod` and `bin/build`
       must include the GPU overlay based on whether the host actually exposes a render node.
       `USE_GPU` is retained **only as an explicit opt-out** — set to `false` it forces the CPU path
       even on a capable host, which is what makes REQ-2 testable on a developer machine that has a
       GPU. The `bin/install` question is removed; there is no longer a correct answer for a human
       to give.
-- [ ] **REQ-6 (The decision is observable)**: The selected path and the reason for it must be
+- [x] **REQ-6 (The decision is observable)**: The selected path and the reason for it must be
       logged exactly once at worker startup, distinguishing "no Vulkan device", "forced off by
       `USE_GPU=false`" and "Vulkan in use". The FFmpeg output metadata title is **unchanged** on
       both paths — it describes the source (`Tonemapped from 4K HDR10`), not the engine, and
       changing it per path would make two library files disagree about the same source material.
-- [ ] **REQ-7 (Dolby Vision on the fallback)**: On the software path a Dolby Vision source is
+- [x] **REQ-7 (Dolby Vision on the fallback)**: On the software path a Dolby Vision source is
       tonemapped as its HDR10 base layer; the RPU is not applied. This is a documented quality
       regression on the fallback path, never an error, and must not fail the job.
-- [ ] **REQ-8 (AMD driver)**: The image must also carry the Mesa AMD Vulkan driver, so an AMD host
-      reaches the GPU path instead of silently falling back. `mesa-vulkan-ati` is the expected
-      package name but is **unverified** — the image is built `--no-cache`, so no package index is
-      present in a running container to confirm it against. `/plan-feature` resolves the exact name;
-      if no such package exists in the pinned Alpine release, AMD support drops out of this feature
-      and REQ-1's fallback covers those hosts correctly anyway.
+- [x] **REQ-8 (AMD driver)**: The image must also carry the Mesa AMD Vulkan driver, so an AMD host
+      reaches the GPU path instead of silently falling back. `mesa-vulkan-ati` (26.1.6-r0) confirmed
+      present in Alpine 3.24.1, the pinned `node:24.18.0-alpine` base, and added to the `base` stage
+      `apk add` line (T011).
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Probe cost)**: The probe result is memoized for the life of the process. It must not
+- [x] **NFR-1 (Probe cost)**: The probe result is memoized for the life of the process. It must not
       run per job — an encode queue at `concurrency: 1` may process hundreds of jobs.
-- [ ] **NFR-2 (The probe never fails an encode)**: A probe that errors, times out, or crashes must
+- [x] **NFR-2 (The probe never fails an encode)**: A probe that errors, times out, or crashes must
       degrade to the CPU path. An inconclusive probe is treated as "no Vulkan", never as a reason
       to fail the job. This is the article-IX case for this feature: the opposite choice yields a
       worker that fails every 4K HDR encode on hardware where the CPU path would have worked.
-- [ ] **NFR-3 (Quality policy untouched)**: No change to codec, CRF, preset or `-svtav1-params`.
+- [x] **NFR-3 (Quality policy untouched)**: No change to codec, CRF, preset or `-svtav1-params`.
       This feature decides *where* the tonemap runs, not what quality it targets.
-- [ ] **NFR-4 (No new environment variable)**: The runtime decision introduces no new `.env` key.
+- [x] **NFR-4 (No new environment variable)**: The runtime decision introduces no new `.env` key.
       `USE_GPU` changes meaning (opt-out rather than opt-in) and that change is documented in
       `.env.example`, the root `CLAUDE.md` and `README.md`.
 
@@ -126,25 +124,38 @@ The 4K HDR sample is **generated**, not supplied — every criterion below runs 
 with no media on hand. The synthetic clip is a short `bt2020`/`smpte2084` source produced with
 `ffmpeg -f lavfi` inside the worker container, and the result is asserted with `ffprobe`.
 
-- [ ] **AC-1**: Given a host with a working Vulkan device, when the synthetic HDR clip is pushed
+- [x] **AC-1**: Given a host with a working Vulkan device, when the synthetic HDR clip is pushed
       through the encode chain, then `ffprobe` on the output reports `width=1920`, `height=1080`,
       `color_primaries=bt709`, `color_transfer=bt709`, and the startup log line reads that Vulkan
-      is in use.
-- [ ] **AC-2**: Given the same host with `USE_GPU=false` in `.env`, when the same clip is encoded,
+      is in use. Verified in T013: `ffprobe` reported exactly that geometry/colorimetry, and the
+      startup log read `tonemap path: Vulkan (libplacebo) — reason: available`.
+- [x] **AC-2**: Given the same host with `USE_GPU=false` in `.env`, when the same clip is encoded,
       then `ffprobe` reports the same geometry and the same colorimetry as AC-1, and the startup log
-      names the forced-off reason.
-- [ ] **AC-3 (failure path)**: Given the GPU overlay is excluded so the container has no `/dev/dri`,
+      names the forced-off reason. Verified in T013 over the same source file: identical
+      `1920x1080`/`bt709` output, startup log read `tonemap path: CPU (zscale/tonemap) — reason:
+      forced-off`.
+- [x] **AC-3 (failure path)**: Given the GPU overlay is excluded so the container has no `/dev/dri`,
       when the worker starts and encodes the synthetic clip, then the job completes, the startup log
       names "no Vulkan device" as the reason, and `docker compose logs worker` contains no
-      `VK_ERROR_INCOMPATIBLE_DRIVER`.
-- [ ] **AC-4 (failure path)**: Given a host with no render node, when `bin/dev` runs, then the GPU
-      overlay is not added to the compose invocation and the `worker` container reaches a running
-      state. Today, with `USE_GPU=true` in `.env`, the same host fails to start the container at
-      all — that regression is the one this criterion pins.
-- [ ] **AC-5**: `bin/npm worker test` stays green and covers `getVideoParams` under both a usable
+      `VK_ERROR_INCOMPATIBLE_DRIVER`. Verified in T014: `/dev/dri` confirmed absent inside the
+      container, startup log read `reason: no-device`, the encode completed via the real
+      `encodeFfmpeg` driver, and a grep for `VK_ERROR_INCOMPATIBLE_DRIVER` found nothing.
+- [x] **AC-4 (failure path, partial)**: Given a host with no render node, when `bin/dev` runs, then
+      the GPU overlay is not added to the compose invocation and the `worker` container reaches a
+      running state. Today, with `USE_GPU=true` in `.env`, the same host fails to start the container
+      at all — that regression is the one this criterion pins. **Verified by branch-logic simulation
+      only** (T014): this development host has a real `/dev/dri`, so the true no-render-node case
+      cannot be exercised here. Substituting a nonexistent path into `bin/dev`'s exact
+      `[ -d /dev/dri ] && [ "${USE_GPU}" != "false" ]` test confirmed the overlay is correctly
+      omitted when the directory doesn't exist. **A real Windows/Docker Desktop confirmation remains
+      outstanding.**
+- [x] **AC-5**: `bin/npm worker test` stays green and covers `getVideoParams` under both a usable
       and an unusable Vulkan device, for the HDR10 branch and the Dolby Vision branch — four cases.
-- [ ] **AC-6**: `bin/cli worker npx --no tsc --noEmit` reports 0 errors, unchanged from before the
-      feature.
+      Landed in T005/T006: four `getVideoParams` cases plus title-equality assertions, and
+      `ffmpeg/vulkan.spec.ts` (T003/T004) covering the `USE_GPU` opt-out parse and probe-failure
+      paths. Suite grew from 9 suites/75 tests to **10 suites/92 tests**, all green.
+- [x] **AC-6**: `bin/cli worker npx --no tsc --noEmit` reports 0 errors, unchanged from before the
+      feature. Confirmed clean after T003–T008 and again in the closing verification pass.
 
 ## Out of Scope
 

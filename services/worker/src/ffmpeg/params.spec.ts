@@ -10,7 +10,7 @@
 // text.
 
 import { describe, expect, it } from 'vitest';
-import { getAudioParams, getSubtitleParams } from './params';
+import { getAudioParams, getSubtitleParams, getVideoParams } from './params';
 
 function audioStream(overrides: Record<string, any>) {
   return {
@@ -20,6 +20,18 @@ function audioStream(overrides: Record<string, any>) {
     channels: 2,
     bit_rate: '192000',
     tags: {},
+    ...overrides,
+  };
+}
+
+function videoStream(overrides: Record<string, any> = {}) {
+  return {
+    index: 0,
+    codec_type: 'video',
+    codec_name: 'hevc',
+    width: 3840,
+    height: 2160,
+    side_data_list: [],
     ...overrides,
   };
 }
@@ -155,5 +167,90 @@ describe('getSubtitleParams', () => {
     const params = getSubtitleParams(streams, ['eng']);
 
     expect(params).toContain('title=English');
+  });
+});
+
+// Defends REQ-2/REQ-6 (docs/spec/features/017-worker-gpu-strategy/spec.md):
+// getVideoParams had no coverage at all before this feature. A fallback
+// chain with the wrong operator order, a missing npl, or a lost bt709
+// output tag is not an error — it emits a washed-out or crushed 1080p file
+// that passes ffmpeg, passes mkvmerge, lands in the library and is marked
+// COMPLETED. Asserting the exact -vf string, and that the -metadata:s:v:0
+// title is identical across the true/false pair, is what would catch that
+// drift — nothing else in the suite would.
+describe('getVideoParams — 4K HDR tonemap branches (017-worker-gpu-strategy)', () => {
+  const GPU_VF =
+    'libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto';
+  const SOFTWARE_VF =
+    'scale=1920:1080:force_original_aspect_ratio=decrease,' +
+    'zscale=t=linear:npl=100,' +
+    'format=gbrpf32le,' +
+    'zscale=p=bt709,' +
+    'tonemap=tonemap=hable:desat=0,' +
+    'zscale=t=bt709:m=bt709:r=tv,' +
+    'format=yuv420p10le';
+
+  function vfOf(params: string[]): string | undefined {
+    const i = params.indexOf('-vf');
+    return i === -1 ? undefined : params[i + 1];
+  }
+
+  function titleOf(params: string[]): string | undefined {
+    const i = params.indexOf('-metadata:s:v:0');
+    return i === -1 ? undefined : params[i + 1];
+  }
+
+  it('emits the libplacebo chain for HDR10 when vulkanAvailable is true', () => {
+    const stream = videoStream({ color_transfer: 'smpte2084' });
+    const params = getVideoParams(stream, true, true);
+
+    expect(vfOf(params)).toBe(GPU_VF);
+  });
+
+  it('emits the software zscale/tonemap chain for HDR10 when vulkanAvailable is false', () => {
+    const stream = videoStream({ color_transfer: 'smpte2084' });
+    const params = getVideoParams(stream, true, false);
+
+    expect(vfOf(params)).toBe(SOFTWARE_VF);
+  });
+
+  it('emits the libplacebo chain for Dolby Vision when vulkanAvailable is true', () => {
+    const stream = videoStream({
+      side_data_list: [{ side_data_type: 'DOVI configuration record' }],
+    });
+    const params = getVideoParams(stream, true, true);
+
+    expect(vfOf(params)).toBe(GPU_VF);
+  });
+
+  it('emits the software zscale/tonemap chain for Dolby Vision when vulkanAvailable is false', () => {
+    const stream = videoStream({
+      side_data_list: [{ side_data_type: 'DOVI configuration record' }],
+    });
+    const params = getVideoParams(stream, true, false);
+
+    expect(vfOf(params)).toBe(SOFTWARE_VF);
+  });
+
+  it('keeps the DoVi -metadata:s:v:0 title byte-identical between the true/false pair (REQ-6)', () => {
+    const stream = videoStream({
+      side_data_list: [{ side_data_type: 'DOVI configuration record' }],
+    });
+
+    const withGpu = getVideoParams(stream, true, true);
+    const withoutGpu = getVideoParams(stream, true, false);
+
+    expect(titleOf(withGpu)).toBe(titleOf(withoutGpu));
+    expect(titleOf(withGpu)).toBe('title=AV1 1080p (Tonemapped from 4K DoVi)');
+  });
+
+  it('keeps the HDR10 -metadata:s:v:0 title byte-identical between the true/false pair (REQ-6)', () => {
+    const stream = videoStream({ color_transfer: 'smpte2084' });
+
+    const withGpu = getVideoParams(stream, true, true);
+    const withoutGpu = getVideoParams(stream, true, false);
+
+    expect(titleOf(withGpu)).toBe(titleOf(withoutGpu));
+    expect(titleOf(withGpu)).toBe('title=AV1 1080p (Tonemapped from 4K HDR10)');
   });
 });

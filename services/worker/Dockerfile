@@ -4,10 +4,15 @@
 FROM node:24.18.0-alpine AS base
 # Instalamos FFmpeg y librerías de compatibilidad requeridas por el worker.
 # mkvtoolnix: mkvmerge para el remux final (ver src/ffmpeg/runner.ts).
-# vulkan-loader + mesa-vulkan-intel: habilitan el filtro libplacebo (tonemap
-# 4K HDR/DoVi por GPU, ver src/ffmpeg/params.ts) cuando USE_GPU=true mapea
-# /dev/dri al contenedor. Sin esto libplacebo falla con VK_ERROR_INCOMPATIBLE_DRIVER.
-RUN apk add --no-cache ffmpeg mkvtoolnix vulkan-loader mesa-vulkan-intel libc6-compat
+# libplacebo (tonemap 4K HDR/DoVi, ver src/ffmpeg/params.ts) ya viene compilado
+# en el ffmpeg de Alpine (--enable-libplacebo) — estos paquetes no lo habilitan,
+# sólo le dan algo que hablar: vulkan-loader es el loader de Vulkan y
+# mesa-vulkan-intel/mesa-vulkan-ati son los drivers Intel y AMD respectivamente.
+# Sin un driver que matchee el hardware (y /dev/dri mapeado, ver
+# docker-compose.gpu.yaml), el filtro sigue presente pero falla con
+# VK_ERROR_INCOMPATIBLE_DRIVER — src/ffmpeg/vulkan.ts prueba esto en runtime y
+# cae a una cadena por software (017-worker-gpu-strategy) en vez de fallar el job.
+RUN apk add --no-cache ffmpeg mkvtoolnix vulkan-loader mesa-vulkan-intel mesa-vulkan-ati libc6-compat
 WORKDIR /app
 
 # ==========================================

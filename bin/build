@@ -1,9 +1,11 @@
 #!/bin/bash
 # Construye imágenes (stage runner de cada Dockerfile) sin levantar contenedores.
-# Lee USE_GPU de .env para sumar el overlay docker-compose.gpu.yaml (mapea
-# /dev/dri al worker). Acepta un servicio opcional entre web/api/worker/torrent/
-# indexer; sin argumento construye los cinco. db, redis, traefik y flaresolverr
-# no tienen build: en el compose y no son targets válidos.
+# Suma el overlay docker-compose.gpu.yaml (mapea /dev/dri al worker) cuando el
+# host tiene un render node en /dev/dri, salvo que USE_GPU sea exactamente
+# "false" — la única forma de forzar el path por CPU. Acepta un servicio
+# opcional entre web/api/worker/torrent/indexer; sin argumento construye los
+# cinco. db, redis, traefik y flaresolverr no tienen build: en el compose y no
+# son targets válidos.
 set -e
 cd "$(dirname "$0")/.."
 
@@ -31,7 +33,7 @@ else
 fi
 
 COMPOSE_FILES="-f docker-compose.yaml"
-if [ "${USE_GPU}" = "true" ]; then
+if [ -d /dev/dri ] && [ "${USE_GPU}" != "false" ]; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yaml"
 fi
 

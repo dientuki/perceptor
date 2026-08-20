@@ -3,6 +3,7 @@ import type { EncodeFn } from './types';
 import { getMetadata } from '../ffmpeg/metadata';
 import { buildFfmpegCommand } from '../ffmpeg/buildCommand';
 import { runFfmpeg } from '../ffmpeg/runner';
+import { isVulkanAvailable } from '../ffmpeg/vulkan';
 
 // El origen y el destino suelen estar en discos distintos (descargas en un
 // SSD/NVMe, biblioteca en uno mecánico, a veces ni el mismo filesystem). El
@@ -40,7 +41,11 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress)
   const sampleSeconds = process.env.ENCODE_SAMPLE_SECONDS;
   const durationSeconds = sampleSeconds ? Number(sampleSeconds) : Number(metadata.format?.duration ?? 0);
 
-  const args = buildFfmpegCommand(input, workingPath, metadata, details);
+  // isVulkanAvailable() reads the memo populated by the startup probe
+  // (src/index.ts) — this is the only place in the service that reads it;
+  // buildFfmpegCommand takes it as an argument rather than reading the memo
+  // itself, so its spec can drive both paths without stubbing a module.
+  const args = buildFfmpegCommand(input, workingPath, metadata, details, isVulkanAvailable());
   const ffmpegCommand = await runFfmpeg(args, workingPath, partPath, output, durationSeconds, onProgress);
 
   return { ffmpegCommand };
