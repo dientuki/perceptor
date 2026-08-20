@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 import { PrismaService } from '@/prisma/prisma.service'; // Ajustá la ruta según tu estructura
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
@@ -77,7 +79,7 @@ export class MoviesService implements MediaTypeService {
 
   async update(id: number, updateMovieDto: UpdateMovieDto) {
     const existing = await this.prisma.movie.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException(`La película ${id} no existe`);
+    if (!existing) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
 
     return this.prisma.movie.update({
       where: { id },
@@ -87,7 +89,7 @@ export class MoviesService implements MediaTypeService {
 
   async remove(id: number) {
     const existing = await this.prisma.movie.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException(`La película ${id} no existe`);
+    if (!existing) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
 
     return this.prisma.movie.delete({
       where: { id },
@@ -163,7 +165,7 @@ export class MoviesService implements MediaTypeService {
     try {
       detail = (await this.tmdb.details(MEDIA_TYPE.MOVIE, tmdbId)) as MovieDetail;
     } catch {
-      throw new NotFoundException('No encontramos la película en el catálogo');
+      throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_IN_CATALOG);
     }
 
     return {
@@ -255,12 +257,9 @@ export class MoviesService implements MediaTypeService {
   // indexer. El infoHash sale del propio magnet (parseMagnet no pega a la
   // red) — a partir de acá el flujo es idéntico a addTorrentToMovie.
   async addMagnetToMovie(movieId: number, input: { magnet: string; force: boolean }, userId: string) {
-    let parsed;
-    try {
-      parsed = parseMagnet(input.magnet);
-    } catch (err) {
-      throw new BadRequestException(err instanceof Error ? err.message : String(err));
-    }
+    // parseMagnet already throws a keyed BadRequestException (018 T010) — no
+    // re-wrap needed, just let it propagate so `extensions.i18n` survives.
+    const parsed = parseMagnet(input.magnet);
 
     return this.attachTorrentSource(
       movieId,
@@ -290,12 +289,10 @@ export class MoviesService implements MediaTypeService {
       where: { id: movieId, users: { some: { userId } } },
       include: { mediaSource: true, processJobs: true },
     });
-    if (!movie) throw new NotFoundException(`La película ${movieId} no existe`);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
     if (movie.mediaSourceId && !input.force) {
-      throw new ConflictException(
-        'Esta película ya tiene una descarga en curso. Confirmá para reemplazarla.',
-      );
+      throw i18nError.conflict(ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS);
     }
 
     // infoHash es @unique: si ya existe una fila con este hash, no podemos
@@ -313,15 +310,15 @@ export class MoviesService implements MediaTypeService {
     });
 
     if (existingSource && existingSource.movie && existingSource.movie.id !== movieId) {
-      throw new ConflictException(
-        `Ese magnet ya está asociado a «${existingSource.movie.title}»`,
-      );
+      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
+        title: existingSource.movie.title,
+      });
     }
 
     if (existingSource && existingSource.episode) {
-      throw new ConflictException(
-        `Ese magnet ya está asociado a «${episodeDisplayTitle(existingSource.episode)}»`,
-      );
+      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
+        title: episodeDisplayTitle(existingSource.episode),
+      });
     }
 
     // El savepath lo decide el client al agregar el torrent, así cada descarga cae

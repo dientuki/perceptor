@@ -1,16 +1,22 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
 import { getUsers } from "@/actions/users";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import UsersManager from "@/components/users/UsersManager";
 
-export const metadata: Metadata = {
-  title: "Users | Perceptor",
-  description: "Administración de usuarios",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("pages.users");
+
+  return {
+    title: t("metadataTitle"),
+    description: t("metadataDescription"),
+  };
+}
 
 export default async function UsersPage() {
+  const t = await getTranslations("pages.users");
   // Deliberately sequential, not Promise.all: getUsers() throws for a
   // non-admin (AdminGuard refuses it), which would race the isAdmin check
   // below and surface as an uncaught 500 instead of a clean 404. Checking
@@ -26,7 +32,7 @@ export default async function UsersPage() {
 
   return (
     <div>
-      <PageBreadcrumb pageTitle="Users" />
+      <PageBreadcrumb pageTitle={t("title")} />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
           <UsersManager users={users} currentUserId={user.id} />

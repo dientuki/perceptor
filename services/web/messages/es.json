@@ -1,0 +1,324 @@
+{
+  "common": {
+    "appName": "Perceptor",
+    "altUser": "Usuario",
+    "altLogo": "Logo",
+    "breadcrumb": {
+      "home": "Home"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Iniciá sesión",
+      "submit": "Iniciar sesión",
+      "subtitle": "Ingresá tu usuario y contraseña para iniciar sesión.",
+      "usernameLabel": "Usuario",
+      "usernamePlaceholder": "admin",
+      "passwordLabel": "Contraseña",
+      "passwordPlaceholder": "Ingresá tu contraseña",
+      "rememberMe": "Mantener la sesión iniciada",
+      "loggingIn": "Iniciando sesión..."
+    }
+  },
+  "errors": {
+    "auth": {
+      "unauthenticated": "No autenticado",
+      "invalidToken": "No se recibió un token válido.",
+      "currentUserFailed": "Error al obtener el usuario actual"
+    },
+    "upload": {
+      "ticket_expired": "El ticket de subida expiró, intentá de nuevo",
+      "ticket_wrong_movie": "El ticket de subida no corresponde a esta película",
+      "ticket_wrong_episode": "El ticket de subida no corresponde a este episodio",
+      "metadata_incomplete": "Los metadatos de la subida están incompletos",
+      "ticketMissing": "El API no devolvió el permiso de subida",
+      "endpointNotConfigured": "La variable de entorno PUBLIC_UPLOAD_URL no está configurada"
+    },
+    "network": {
+      "connectionFailed": "Error de conexión con el servidor GraphQL.",
+      "invalidResponse": "Respuesta inválida del servidor GraphQL."
+    },
+    "validation": {
+      "missingLocale": "Falta el idioma a guardar.",
+      "missingSettingsValues": "No hay valores para guardar.",
+      "passwordMismatch": "Las contraseñas no coinciden"
+    }
+  },
+  "landing": {
+    "badge": "Automatización de medios autohospedada",
+    "description": "Busca un título, y Perceptor se encarga del resto: lo registra, encuentra una release, la descarga, la transcodifica y la deja lista en tu biblioteca.",
+    "features": {
+      "search": "Buscar",
+      "download": "Descargar",
+      "transcode": "Transcodificar",
+      "organize": "Organizar"
+    },
+    "cta": "Ir al login",
+    "illustrationAlt": "Robot transformable estilo retro, decoración"
+  },
+  "nav": {
+    "dashboard": "Panel",
+    "movies": "Películas",
+    "shows": "Series",
+    "calendar": "Calendario",
+    "queue": "Cola",
+    "settings": "Configuración",
+    "users": "Usuarios"
+  },
+  "userMenu": {
+    "editProfile": "Editar perfil",
+    "accountSettings": "Configuración de la cuenta",
+    "support": "Soporte",
+    "signOut": "Cerrar sesión"
+  },
+  "notifications": {
+    "title": "Notificación",
+    "requestPermission": "solicita permiso para cambiar",
+    "projectLabel": "Proyecto",
+    "minutesAgo": "hace {minutes} min",
+    "hoursAgo": "hace {hours} h",
+    "viewAll": "Ver todas las notificaciones"
+  },
+  "header": {
+    "searchPlaceholder": "Buscar o escribí un comando...",
+    "toggleSidebar": "Alternar barra lateral"
+  },
+  "pages": {
+    "dashboard": {
+      "placeholder": "Panel"
+    },
+    "movies": {
+      "title": "Películas",
+      "metadataTitle": "Películas | Perceptor",
+      "metadataDescription": "Listado de películas seguidas"
+    },
+    "moviesAdd": {
+      "title": "Agregar película",
+      "metadataTitle": "Agregar película | Perceptor",
+      "metadataDescription": "Buscá y agregá una película a tu biblioteca"
+    },
+    "movieDetail": {
+      "metadataDescription": "Página de detalle de la película"
+    },
+    "shows": {
+      "title": "Series",
+      "metadataTitle": "Series | Perceptor",
+      "metadataDescription": "Listado de series seguidas"
+    },
+    "showsAdd": {
+      "title": "Agregar serie",
+      "metadataTitle": "Agregar serie | Perceptor",
+      "metadataDescription": "Buscá y agregá una serie a tu biblioteca"
+    },
+    "showDetail": {
+      "metadataDescription": "Página de detalle de la serie"
+    },
+    "settings": {
+      "title": "Configuración",
+      "metadataTitle": "Configuración | Perceptor",
+      "metadataDescription": "Configuración de rutas y servicios"
+    },
+    "users": {
+      "title": "Usuarios",
+      "metadataTitle": "Usuarios | Perceptor",
+      "metadataDescription": "Administración de usuarios"
+    },
+    "login": {
+      "metadataTitle": "Iniciar sesión | Perceptor",
+      "metadataDescription": "Página de inicio de sesión de Perceptor"
+    }
+  },
+  "notFound": {
+    "title": "Recurso no disponible",
+    "metadataTitle": "Recurso no disponible | Perceptor",
+    "message": "Recurso no disponible para este usuario",
+    "backToMovies": "Volver a películas",
+    "backToShows": "Volver a series"
+  },
+  "import": {
+    "file": {
+      "title": "Importar Video Local",
+      "description": "Elegí el archivo de video para <b>{target}</b>. Se sube por la red — podés pausarlo y reanudarlo si se corta.",
+      "fileLabel": "Archivo",
+      "statusUploading": "Subiendo… {percent}%",
+      "statusPaused": "Pausado",
+      "statusErrorDefault": "Error al subir",
+      "statusDone": "Completado",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "errorTicket": "Error al generar el permiso de subida.",
+      "errorUpload": "Error al subir el archivo."
+    },
+    "magnet": {
+      "title": "Importar Magnet",
+      "description": "Ingresá el magnet link para <b>{target}</b>.",
+      "label": "Magnet",
+      "placeholder": "magnet:?xt=urn:btih:da39a3ee...",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar",
+      "replace": "Reemplazar",
+      "processing": "Procesando...",
+      "errorDefault": "Error al importar el magnet.",
+      "conflictMarker": "ya tiene una descarga en curso"
+    }
+  },
+  "search": {
+    "container": {
+      "movieNoun": "película",
+      "showNoun": "serie",
+      "resultsEmptySearched": "No se encontraron resultados",
+      "resultsEmptyPrompt": "Buscá una {noun} para empezar",
+      "added": "Agregada",
+      "go": "Ir",
+      "addButton": "Agregar",
+      "adding": "Agregando...",
+      "errorSearch": "No se pudo completar la búsqueda. Intentá de nuevo.",
+      "errorAdd": "No se pudo agregar la {noun}. Intentá de nuevo."
+    },
+    "input": {
+      "placeholder": "Buscar {noun}...",
+      "searching": "Buscando...",
+      "submit": "Buscar"
+    },
+    "torrentModal": {
+      "title": "Buscador de Torrents",
+      "description": "Buscando lanzamientos para <b>{target}</b>."
+    },
+    "torrent": {
+      "inputPlaceholder": "Buscar lanzamientos...",
+      "filterPlaceholder": "Filtrar resultados por título (ej. 1080p, x265)...",
+      "searchButton": "Buscar",
+      "releaseNameHeader": "Nombre del release ({count})",
+      "sizeHeader": "Tamaño",
+      "slHeader": "S/L",
+      "actionHeader": "Acción",
+      "unknownRelease": "Release desconocido",
+      "searchErrorDefault": "Error al buscar releases",
+      "addErrorDefault": "Error al agregar el torrent",
+      "replaceErrorDefault": "Error al reemplazar",
+      "replace": "Reemplazar",
+      "cancel": "Cancelar",
+      "searchingTrackers": "Buscando en trackers...",
+      "noFilterMatch": "Ningún resultado coincide con el filtro.",
+      "noResultsYet": "Todavía no hay resultados. Probá buscar un release específico.",
+      "conflictMarker": "ya tiene una descarga en curso"
+    }
+  },
+  "media": {
+    "card": {
+      "noPoster": "Sin Poster"
+    },
+    "list": {
+      "emptyDefault": "No hay {noun} registradas",
+      "movieNoun": "películas",
+      "showNoun": "series"
+    },
+    "languagePicker": {
+      "defaultLabel": "Idiomas preferidos",
+      "helpText": "Mantené presionado Ctrl (o Cmd) para elegir varios.",
+      "saved": "Idiomas guardados.",
+      "save": "Guardar",
+      "saving": "Guardando..."
+    }
+  },
+  "movies": {
+    "detail": {
+      "noPoster": "No hay póster disponible",
+      "unknownYear": "Año desconocido",
+      "fileButton": "Archivo",
+      "magnetButton": "Magnet",
+      "synopsisTitle": "Sinopsis",
+      "noOverview": "Sin sinopsis disponible.",
+      "languagesTitle": "Idiomas"
+    }
+  },
+  "shows": {
+    "detail": {
+      "noPoster": "No hay póster disponible",
+      "unknownYear": "Año desconocido",
+      "synopsisTitle": "Sinopsis",
+      "noOverview": "Sin sinopsis disponible."
+    },
+    "seasonAccordion": {
+      "seasonLabel": "Temporada {number}",
+      "episodeDefaultTitle": "Episodio {number}",
+      "numberHeader": "#",
+      "titleHeader": "Título",
+      "releaseDateHeader": "Fecha de estreno",
+      "statusHeader": "Estado",
+      "actionsHeader": "Acciones",
+      "searchButtonTitle": "Buscar",
+      "importFileButtonTitle": "Importar archivo",
+      "addTorrentButtonTitle": "Añadir torrent"
+    }
+  },
+  "settings": {
+    "mediaServer": {
+      "label": "Media server",
+      "hostLabel": "Host",
+      "hostPlaceholder": "host.docker.internal",
+      "hostHint": "Vacío por defecto a propósito: 'localhost' acá sería este mismo servidor, no tu media server. Si corre en tu PC, usá host.docker.internal; si corre en otro container de este stack, el nombre de ese servicio.",
+      "portLabel": "Puerto",
+      "apiKeyLabel": "API key"
+    },
+    "pathPicker": {
+      "placeholder": "(carpeta raíz)",
+      "relativeHint": "Relativo a la raíz del repo.",
+      "notMountedHint": "Esta carpeta no está montada — revisá el .env y reiniciá el stack."
+    },
+    "form": {
+      "torrentSection": "Torrent",
+      "downloadsFolderLabel": "Carpeta de descargas",
+      "indexerSection": "Indexer",
+      "indexerApiKeyLabel": "API key del indexer",
+      "moviesShowsSection": "Películas y series",
+      "tmdbApiKeyLabel": "API key de TMDB",
+      "moviesEnabledLabel": "Habilitar películas",
+      "moviesFolderLabel": "Carpeta de películas",
+      "showsEnabledLabel": "Habilitar series",
+      "showsFolderLabel": "Carpeta de series",
+      "mediaServerSection": "Media server",
+      "saved": "Configuración guardada.",
+      "saving": "Guardando...",
+      "save": "Guardar"
+    },
+    "languages": {
+      "title": "Idiomas preferidos",
+      "description": "Se aplican a todo tu contenido. Se pueden agregar idiomas adicionales por título desde la ficha de cada película o serie.",
+      "label": "Idiomas"
+    }
+  },
+  "users": {
+    "create": {
+      "title": "Nuevo usuario",
+      "nameLabel": "Nombre",
+      "usernameLabel": "Usuario",
+      "passwordLabel": "Contraseña",
+      "passwordHint": "Mínimo 6 caracteres",
+      "passwordConfirmLabel": "Confirmar contraseña",
+      "submit": "Crear usuario",
+      "submitting": "Creando..."
+    },
+    "table": {
+      "title": "Usuarios",
+      "nameHeader": "Nombre",
+      "usernameHeader": "Usuario",
+      "roleHeader": "Rol",
+      "statusHeader": "Estado",
+      "roleAdmin": "Administrador",
+      "roleUser": "Usuario",
+      "statusEnabled": "Habilitado",
+      "statusDisabled": "Deshabilitado",
+      "disableSelfTitle": "No podés deshabilitar tu propio usuario",
+      "deleteSelfTitle": "No podés eliminar tu propio usuario",
+      "disabling": "Deshabilitando...",
+      "enabling": "Habilitando...",
+      "disable": "Deshabilitar",
+      "enable": "Habilitar",
+      "deleting": "Eliminando...",
+      "delete": "Eliminar"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 // src/app/api/auth/clear-session/route.ts
-import { cookies } from 'next/headers';
-import { type NextRequest, NextResponse } from 'next/server';
-import { CONFIG } from '@/lib/config';
+import { cookies } from "next/headers";
+import { type NextRequest, NextResponse } from "next/server";
+import { CONFIG } from "@/lib/config";
 
 /**
  * Deletes the session cookie and redirects to /login.
@@ -21,5 +21,5 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   cookieStore.delete(CONFIG.authCookie);
 
-  return NextResponse.redirect(new URL('/login', request.url));
+  return NextResponse.redirect(new URL("/login", request.url));
 }

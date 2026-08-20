@@ -1,9 +1,9 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthPrincipal } from '../auth.types';
-
-const FORBIDDEN_MESSAGE = 'No tenés permisos para administrar usuarios';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // Runs after JwtAuthGuard (APP_GUARD), which has already attached a
 // principal to the request — this guard only decides *authorization*, not
@@ -19,7 +19,7 @@ export class AdminGuard implements CanActivate {
     const principal = GqlExecutionContext.create(context).getContext().req.user as AuthPrincipal;
 
     if (principal.type !== 'user') {
-      throw new ForbiddenException(FORBIDDEN_MESSAGE);
+      throw i18nError.forbidden(ERROR_KEYS.AUTH_ADMIN_REQUIRED);
     }
 
     const user = await this.prisma.user.findUnique({
@@ -28,7 +28,7 @@ export class AdminGuard implements CanActivate {
     });
 
     if (!user?.isAdmin) {
-      throw new ForbiddenException(FORBIDDEN_MESSAGE);
+      throw i18nError.forbidden(ERROR_KEYS.AUTH_ADMIN_REQUIRED);
     }
 
     return true;

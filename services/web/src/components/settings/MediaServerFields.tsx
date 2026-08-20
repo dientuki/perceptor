@@ -1,10 +1,11 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
-import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
+import Label from "@/components/form/Label";
 import Select from "@/components/form/Select";
-import { MediaServerOption } from "@/types/media-server";
+import type { MediaServerOption } from "@/types/media-server";
 
 interface MediaServerFieldsProps {
   options: MediaServerOption[];
@@ -22,43 +23,62 @@ const NONE = "none";
 // no es 'none'. Con 'none' esos tres inputs no se renderizan → no viajan →
 // EDITABLE_KEYS los descarta y la DB conserva la config anterior (ver
 // actions/settings.ts): volver a elegir Jellyfin recupera host/port/api key.
-export default function MediaServerFields({ options, client, host, port, apiKey }: MediaServerFieldsProps) {
+export default function MediaServerFields({
+  options,
+  client,
+  host,
+  port,
+  apiKey,
+}: MediaServerFieldsProps) {
+  const t = useTranslations("settings.mediaServer");
   const [selected, setSelected] = useState(client || NONE);
 
   return (
     <div className="space-y-6">
       <div>
-        <Label htmlFor="media_server_client">Media server</Label>
+        <Label htmlFor="media_server_client">{t("label")}</Label>
         <Select
           id="media_server_client"
           name="media_server_client"
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
-          options={options.map((option) => ({ value: option.id, label: option.label }))}
+          options={options.map((option) => ({
+            value: option.id,
+            label: option.label,
+          }))}
         />
       </div>
 
       {selected !== NONE && (
         <>
           <div>
-            <Label htmlFor="media_server_host">Host</Label>
+            <Label htmlFor="media_server_host">{t("hostLabel")}</Label>
             <Input
               id="media_server_host"
               name="media_server_host"
               defaultValue={host}
-              placeholder="host.docker.internal"
-              hint="Vacío por defecto a propósito: 'localhost' acá sería este mismo servidor, no tu media server. Si corre en tu PC, usá host.docker.internal; si corre en otro container de este stack, el nombre de ese servicio."
+              placeholder={t("hostPlaceholder")}
+              hint={t("hostHint")}
             />
           </div>
 
           <div>
-            <Label htmlFor="media_server_port">Puerto</Label>
-            <Input id="media_server_port" name="media_server_port" defaultValue={port} />
+            <Label htmlFor="media_server_port">{t("portLabel")}</Label>
+            <Input
+              id="media_server_port"
+              name="media_server_port"
+              defaultValue={port}
+            />
           </div>
 
           <div>
-            <Label htmlFor="media_server_api_key">API key</Label>
-            <Input id="media_server_api_key" name="media_server_api_key" type="password" defaultValue={apiKey} />
+            <Label htmlFor="media_server_api_key">{t("apiKeyLabel")}</Label>
+            <Input
+              id="media_server_api_key"
+              name="media_server_api_key"
+              type="password"
+              defaultValue={apiKey}
+            />
           </div>
         </>
       )}

@@ -1,7 +1,9 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { normalize } from 'node:path';
 import { PrismaService } from '@/prisma/prisma.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { i18nError } from '@/i18n/i18n-error';
 import { SettingInput } from './dto/setting.input';
 import { getSettingCatalogEntry } from './settings.catalog';
 
@@ -38,7 +40,7 @@ export class SettingsService {
     for (const entry of entries) {
       const catalogEntry = getSettingCatalogEntry(entry.key);
       if (!catalogEntry) {
-        throw new BadRequestException(`Setting desconocida o no editable: "${entry.key}"`);
+        throw i18nError.badRequest(ERROR_KEYS.SETTING_NOT_EDITABLE, { key: entry.key });
       }
 
       if (catalogEntry.kind === 'path') {
@@ -50,17 +52,18 @@ export class SettingsService {
       }
 
       if (catalogEntry.kind === 'boolean' && entry.value !== 'true' && entry.value !== 'false') {
-        throw new BadRequestException(`"${entry.key}" tiene que ser "true" o "false"`);
+        throw i18nError.badRequest(ERROR_KEYS.SETTING_EXPECTED_BOOLEAN, { key: entry.key });
       }
 
       if (catalogEntry.kind === 'int' && !/^\d+$/.test(entry.value)) {
-        throw new BadRequestException(`"${entry.key}" tiene que ser un número`);
+        throw i18nError.badRequest(ERROR_KEYS.SETTING_EXPECTED_INT, { key: entry.key });
       }
 
       if (catalogEntry.kind === 'enum' && !catalogEntry.options!.includes(entry.value)) {
-        throw new BadRequestException(
-          `"${entry.key}" tiene que ser uno de: ${catalogEntry.options!.join(', ')}`,
-        );
+        throw i18nError.badRequest(ERROR_KEYS.SETTING_EXPECTED_ENUM, {
+          key: entry.key,
+          options: catalogEntry.options!.join(', '),
+        });
       }
 
       normalizedEntries.push(entry);

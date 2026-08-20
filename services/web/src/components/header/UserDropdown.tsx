@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import React, { useState } from "react";
 import { Dropdown } from "@/components/ui/dropdown/Dropdown";
 import { DropdownItem } from "@/components/ui/dropdown/DropdownItem";
@@ -12,11 +13,13 @@ interface UserDropdownProps {
 
 export default function UserDropdown({ user }: UserDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const t = useTranslations("userMenu");
+  const tCommon = useTranslations("common");
 
-function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
-  e.stopPropagation();
-  setIsOpen((prev) => !prev);
-}
+  function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
+    e.stopPropagation();
+    setIsOpen((prev) => !prev);
+  }
 
   function closeDropdown() {
     setIsOpen(false);
@@ -24,19 +27,16 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
   return (
     <div className="relative">
       <button
-        onClick={toggleDropdown} 
+        onClick={toggleDropdown}
         className="flex items-center text-gray-700 dark:text-gray-400 dropdown-toggle"
       >
         <span className="mr-3 overflow-hidden rounded-full h-11 w-11">
-          <Image
-            width={44}
-            height={44}
-            src="/images/avatar.png"
-            alt="User"
-          />
+          <Image width={44} height={44} src="/images/avatar.png" alt={tCommon("altUser")} />
         </span>
 
-        <span className="block mr-1 font-medium text-theme-sm">{user.name}</span>
+        <span className="block mr-1 font-medium text-theme-sm">
+          {user.name}
+        </span>
 
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
@@ -95,7 +95,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
                   fill=""
                 />
               </svg>
-              Edit profile
+              {t("editProfile")}
             </DropdownItem>
           </li>
           <li>
@@ -120,7 +120,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
                   fill=""
                 />
               </svg>
-              Account settings
+              {t("accountSettings")}
             </DropdownItem>
           </li>
           <li>
@@ -145,7 +145,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
                   fill=""
                 />
               </svg>
-              Support
+              {t("support")}
             </DropdownItem>
           </li>
         </ul>
@@ -169,7 +169,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
                 fill=""
               />
             </svg>
-            Sign out
+            {t("signOut")}
           </button>
         </form>
       </Dropdown>

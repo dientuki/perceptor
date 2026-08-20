@@ -7,7 +7,9 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
-import { UploadTicketsService } from './upload-tickets.service';
+import { ERROR_KEYS, ErrorKey } from '@/i18n/error-keys';
+import { MESSAGES_EN } from '@/i18n/messages.en';
+import { UploadTicketExpiredError, UploadTicketMismatchError, UploadTicketsService } from './upload-tickets.service';
 import type { UploadTicketTarget } from './upload-tickets.service';
 
 const ILLEGAL_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
@@ -16,21 +18,43 @@ function sanitizeFilename(name: string): string {
   return name.replace(ILLEGAL_CHARS, '').trim() || 'video';
 }
 
+type UploadErrorParams = Record<string, string | number>;
+
+// English rendering for a REST upload error, mirroring `i18n-error.ts`'s
+// `renderMessage` (that one builds a Nest `HttpException` response, which
+// this REST-only surface does not use). Kept local to `uploads/` rather than
+// exported from `i18n-error.ts`, whose surface belongs to the GraphQL error
+// path this task does not touch.
+function renderUploadMessage(key: ErrorKey, params?: UploadErrorParams): string {
+  const template = MESSAGES_EN[key];
+  if (!params) return template;
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => {
+    const value = params[name];
+    return value === undefined ? match : String(value);
+  });
+}
+
 // onUploadFinish and onUploadCreate both run inside tus's own request
 // handling, not Nest's HTTP pipeline — a plain ConflictException/
 // NotFoundException thrown there lands as just another Error and tus
 // answers with a generic 500. tus does know how to read
 // error.status_code/error.body (see @tus/server/dist/server.js::onError),
 // so both hooks throw this shape instead, and the browser gets the real
-// status code.
+// status code. `body` is now the REST twin of the GraphQL error envelope
+// (REQ-10): `{ message, i18n: { key, params? } }`, so `web`'s upload modal
+// can resolve it through the same catalog lookup as any other api error.
 class UploadHttpError extends Error {
   status_code: number;
   body: string;
 
-  constructor(status_code: number, message: string) {
+  constructor(status_code: number, key: ErrorKey, params?: UploadErrorParams) {
+    const message = renderUploadMessage(key, params);
     super(message);
     this.status_code = status_code;
-    this.body = message;
+    this.body = JSON.stringify({
+      message,
+      i18n: params !== undefined ? { key, params } : { key },
+    });
   }
 }
 
@@ -103,7 +127,7 @@ export class UploadsService implements OnModuleInit {
     const token = authorization?.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : null;
 
     if (!token) {
-      throw new UploadHttpError(401, 'El permiso de subida venció, volvé a intentar');
+      throw new UploadHttpError(401, ERROR_KEYS.UPLOAD_TICKET_EXPIRED);
     }
 
     const rawMovieId = upload.metadata?.movieId;
@@ -117,19 +141,16 @@ export class UploadsService implements OnModuleInit {
     try {
       await this.uploadTickets.verifyAndSpend(token, target);
     } catch (err) {
-      const mismatch =
-        err instanceof Error &&
-        (err.message === 'Upload ticket does not match the movie being uploaded' ||
-          err.message === 'Upload ticket does not match the episode being uploaded');
-      if (mismatch) {
+      if (err instanceof UploadTicketMismatchError) {
         throw new UploadHttpError(
           403,
-          isEpisode
-            ? 'El permiso de subida no corresponde a este episodio'
-            : 'El permiso de subida no corresponde a esta película',
+          err.target === 'episode' ? ERROR_KEYS.UPLOAD_TICKET_WRONG_EPISODE : ERROR_KEYS.UPLOAD_TICKET_WRONG_MOVIE,
         );
       }
-      throw new UploadHttpError(401, 'El permiso de subida venció, volvé a intentar');
+      if (err instanceof UploadTicketExpiredError) {
+        throw new UploadHttpError(401, ERROR_KEYS.UPLOAD_TICKET_EXPIRED);
+      }
+      throw err;
     }
 
     return {};
@@ -156,11 +177,11 @@ export class UploadsService implements OnModuleInit {
     if (isEpisode) {
       const episodeId = Number(rawEpisodeId);
       if (!episodeId || !rawPath) {
-        throw new UploadHttpError(400, 'Metadata de la subida incompleta (episodeId/filename)');
+        throw new UploadHttpError(400, ERROR_KEYS.UPLOAD_METADATA_INCOMPLETE);
       }
 
       const episode = await this.prisma.episode.findUnique({ where: { id: episodeId } });
-      if (!episode) throw new UploadHttpError(404, `El episodio ${episodeId} no existe`);
+      if (!episode) throw new UploadHttpError(404, ERROR_KEYS.EPISODE_NOT_FOUND, { id: episodeId });
 
       // Same active-source conflict rule as EpisodesService.attachTorrentSource
       // (010-episode-acquisition, T003): an episode is the pointed-at side of
@@ -171,10 +192,7 @@ export class UploadsService implements OnModuleInit {
         where: { episodeId, status: { not: 'ERROR' } },
       });
       if (activeSource) {
-        throw new UploadHttpError(
-          409,
-          'Este episodio ya tiene una descarga en curso. Confirmá para reemplazarla.',
-        );
+        throw new UploadHttpError(409, ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS);
       }
 
       const destPath = await this.moveUploadedFile(upload.id, rawPath, filename);
@@ -203,17 +221,14 @@ export class UploadsService implements OnModuleInit {
     const movieId = Number(rawMovieId);
 
     if (!movieId || !rawPath) {
-      throw new UploadHttpError(400, 'Metadata de la subida incompleta (movieId/filename)');
+      throw new UploadHttpError(400, ERROR_KEYS.UPLOAD_METADATA_INCOMPLETE);
     }
 
     const movie = await this.prisma.movie.findUnique({ where: { id: movieId } });
-    if (!movie) throw new UploadHttpError(404, `La película ${movieId} no existe`);
+    if (!movie) throw new UploadHttpError(404, ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
     if (movie.mediaSourceId) {
-      throw new UploadHttpError(
-        409,
-        'Esta película ya tiene una descarga en curso. Confirmá para reemplazarla.',
-      );
+      throw new UploadHttpError(409, ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS);
     }
 
     const destPath = await this.moveUploadedFile(upload.id, rawPath, filename);

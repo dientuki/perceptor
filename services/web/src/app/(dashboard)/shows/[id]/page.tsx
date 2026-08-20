@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { cache } from "react";
 import { getLanguages } from "@/actions/languages";
 import { getShowById } from "@/actions/shows";
@@ -9,13 +10,6 @@ import Show from "@/components/shows/Show";
 
 // generateMetadata y la página corren por separado; cache() colapsa los dos fetch en uno solo
 const getShow = cache(getShowById);
-
-// Metadata for the unavailable path — identical whether the id doesn't exist,
-// belongs to another user, or fails validation. Carries no show-derived text.
-const UNAVAILABLE_METADATA: Metadata = {
-  title: "Recurso no disponible | Perceptor",
-  description: "Recurso no disponible para este usuario",
-};
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -35,19 +29,30 @@ export async function generateMetadata({
   const { id } = await params;
   const showId = parseShowId(id);
 
+  // Metadata for the unavailable path — identical whether the id doesn't
+  // exist, belongs to another user, or fails validation. Carries no
+  // show-derived text.
+  const tNotFound = await getTranslations("notFound");
+  const unavailableMetadata: Metadata = {
+    title: tNotFound("metadataTitle"),
+    description: tNotFound("message"),
+  };
+
   if (showId === null) {
-    return UNAVAILABLE_METADATA;
+    return unavailableMetadata;
   }
 
   const show = await getShow(showId);
 
   if (!show) {
-    return UNAVAILABLE_METADATA;
+    return unavailableMetadata;
   }
+
+  const t = await getTranslations("pages.showDetail");
 
   return {
     title: `${show.title} | Perceptor`,
-    description: show.overview || "Show details page",
+    description: show.overview || t("metadataDescription"),
   };
 }
 

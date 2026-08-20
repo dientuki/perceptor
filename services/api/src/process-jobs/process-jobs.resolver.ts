@@ -58,15 +58,17 @@ export class ProcessJobsResolver {
   }
 
   @AllowService()
-  @Mutation(() => String, {
+  @Mutation(() => Boolean, {
     name: 'encodeFailed',
     description: 'El worker avisa que un encode falló',
   })
   async encodeFailed(
     @Args('processJobId', { type: () => Int }) processJobId: number,
+    @Args('errorKey') errorKey: string,
+    @Args('errorParams', { type: () => String, nullable: true }) errorParams: string | undefined,
     @Args('errorMessage') errorMessage: string,
   ) {
-    return this.processJobsService.encodeFailed(processJobId, errorMessage);
+    return this.processJobsService.encodeFailed(processJobId, errorKey, errorParams, errorMessage);
   }
 
   @AllowService()

@@ -1,15 +1,16 @@
 "use client";
 
-import Input from "@/components/form/input/InputField";
-import Label from "@/components/form/Label";
-import Button from "@/components/ui/button/Button";
-import PathPicker from "@/components/settings/PathPicker";
-import MediaServerFields from "@/components/settings/MediaServerFields";
+import { useTranslations } from "next-intl";
 import { useActionState } from "react";
 import { updateSettingsAction } from "@/actions/settings";
-import { Setting } from "@/types/settings";
-import { MediaRoot } from "@/types/media-roots";
-import { MediaServerOption } from "@/types/media-server";
+import Input from "@/components/form/input/InputField";
+import Label from "@/components/form/Label";
+import MediaServerFields from "@/components/settings/MediaServerFields";
+import PathPicker from "@/components/settings/PathPicker";
+import Button from "@/components/ui/button/Button";
+import type { MediaRoot } from "@/types/media-roots";
+import type { MediaServerOption } from "@/types/media-server";
+import type { Setting } from "@/types/settings";
 
 interface SettingsFormProps {
   settings: Setting[];
@@ -17,24 +18,38 @@ interface SettingsFormProps {
   mediaServerOptions: MediaServerOption[];
 }
 
-export default function SettingsForm({ settings, mediaRoots, mediaServerOptions }: SettingsFormProps) {
-  const [state, formAction, isPending] = useActionState(updateSettingsAction, null);
+export default function SettingsForm({
+  settings,
+  mediaRoots,
+  mediaServerOptions,
+}: SettingsFormProps) {
+  const t = useTranslations("settings.form");
+  const [state, formAction, isPending] = useActionState(
+    updateSettingsAction,
+    null,
+  );
 
-  const valueOf = (key: string) => settings.find((setting) => setting.key === key)?.value ?? "";
+  const valueOf = (key: string) =>
+    settings.find((setting) => setting.key === key)?.value ?? "";
   const rootOf = (id: string): MediaRoot =>
-    mediaRoots.find((root) => root.id === id) ?? { id, label: id, hostPath: "?", available: false };
+    mediaRoots.find((root) => root.id === id) ?? {
+      id,
+      label: id,
+      hostPath: "?",
+      available: false,
+    };
 
   return (
     <form action={formAction}>
       <div className="space-y-8 max-w-lg">
         <div>
           <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-            Torrent
+            {t("torrentSection")}
           </h3>
           <div className="space-y-6">
             <PathPicker
               settingKey="path_downloads"
-              label="Carpeta de descargas"
+              label={t("downloadsFolderLabel")}
               root={rootOf("downloads")}
               value={valueOf("path_downloads")}
             />
@@ -43,10 +58,10 @@ export default function SettingsForm({ settings, mediaRoots, mediaServerOptions 
 
         <div>
           <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-            Indexer
+            {t("indexerSection")}
           </h3>
           <div>
-            <Label htmlFor="tracker_api_key">API key del indexer</Label>
+            <Label htmlFor="tracker_api_key">{t("indexerApiKeyLabel")}</Label>
             <Input
               id="tracker_api_key"
               name="tracker_api_key"
@@ -58,11 +73,11 @@ export default function SettingsForm({ settings, mediaRoots, mediaServerOptions 
 
         <div>
           <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-            Películas y series
+            {t("moviesShowsSection")}
           </h3>
           <div className="space-y-6">
             <div>
-              <Label htmlFor="movie_db_api_key">API key de TMDB</Label>
+              <Label htmlFor="movie_db_api_key">{t("tmdbApiKeyLabel")}</Label>
               <Input
                 id="movie_db_api_key"
                 name="movie_db_api_key"
@@ -79,14 +94,17 @@ export default function SettingsForm({ settings, mediaRoots, mediaServerOptions 
                 defaultChecked={valueOf("movies_enabled") === "true"}
                 className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500 dark:border-gray-700"
               />
-              <label htmlFor="movies_enabled" className="text-sm text-gray-700 dark:text-gray-300">
-                Habilitar películas
+              <label
+                htmlFor="movies_enabled"
+                className="text-sm text-gray-700 dark:text-gray-300"
+              >
+                {t("moviesEnabledLabel")}
               </label>
             </div>
 
             <PathPicker
               settingKey="path_movies"
-              label="Carpeta de películas"
+              label={t("moviesFolderLabel")}
               root={rootOf("library")}
               value={valueOf("path_movies")}
             />
@@ -99,14 +117,17 @@ export default function SettingsForm({ settings, mediaRoots, mediaServerOptions 
                 defaultChecked={valueOf("shows_enabled") === "true"}
                 className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500 dark:border-gray-700"
               />
-              <label htmlFor="shows_enabled" className="text-sm text-gray-700 dark:text-gray-300">
-                Habilitar series
+              <label
+                htmlFor="shows_enabled"
+                className="text-sm text-gray-700 dark:text-gray-300"
+              >
+                {t("showsEnabledLabel")}
               </label>
             </div>
 
             <PathPicker
               settingKey="path_shows"
-              label="Carpeta de series"
+              label={t("showsFolderLabel")}
               root={rootOf("library")}
               value={valueOf("path_shows")}
             />
@@ -115,7 +136,7 @@ export default function SettingsForm({ settings, mediaRoots, mediaServerOptions 
 
         <div>
           <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-            Media server
+            {t("mediaServerSection")}
           </h3>
           <MediaServerFields
             options={mediaServerOptions}
@@ -133,12 +154,12 @@ export default function SettingsForm({ settings, mediaRoots, mediaServerOptions 
         )}
 
         {state && "success" in state && state.success && (
-          <p className="text-sm text-success-500">Configuración guardada.</p>
+          <p className="text-sm text-success-500">{t("saved")}</p>
         )}
 
         <div>
           <Button type="submit" size="sm" disabled={isPending}>
-            {isPending ? "Guardando..." : "Guardar"}
+            {isPending ? t("saving") : t("save")}
           </Button>
         </div>
       </div>

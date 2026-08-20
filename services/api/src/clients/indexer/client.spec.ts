@@ -36,9 +36,7 @@ describe('ProwlarrClient.getData (via search)', () => {
       json: async () => ({ message: 'Unauthorized' }),
     } as Response);
 
-    await expect(client.search('dune')).rejects.toThrow(
-      'No se pudo consultar el indexer (HTTP 401)',
-    );
+    await expect(client.search('dune')).rejects.toThrow('Could not reach the indexer');
   });
 
   it('raises with the status code on a 500', async () => {
@@ -48,15 +46,13 @@ describe('ProwlarrClient.getData (via search)', () => {
       json: async () => ({ message: 'Internal Server Error' }),
     } as Response);
 
-    await expect(client.search('dune')).rejects.toThrow(
-      'No se pudo consultar el indexer (HTTP 500)',
-    );
+    await expect(client.search('dune')).rejects.toThrow('Could not reach the indexer');
   });
 
   it('raises the no-status message when fetch itself fails (connection refused)', async () => {
     fetchSpy.mockRejectedValue(new Error('ECONNREFUSED'));
 
-    await expect(client.search('dune')).rejects.toThrow('No se pudo consultar el indexer');
+    await expect(client.search('dune')).rejects.toThrow('Could not reach the indexer');
   });
 
   it('returns an empty list without raising on a successful empty response', async () => {

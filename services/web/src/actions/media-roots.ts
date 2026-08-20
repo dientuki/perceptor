@@ -1,7 +1,8 @@
 'use server'
 
-import { fetchGraphQL } from '@/lib/graphql-client';
 import { redirectToClearSession } from '@/lib/auth-session';
+import { fetchGraphQL } from '@/lib/graphql-client';
+import { translateGraphQLError } from '@/lib/graphql-error';
 import { MediaRoot } from '@/types/media-roots';
 
 const MEDIA_ROOTS_QUERY = `
@@ -22,7 +23,7 @@ export async function getMediaRoots(): Promise<MediaRoot[]> {
     // Called directly from SettingsPage's Server Component render — cookie
     // mutation is illegal there, so hand off to the Route Handler instead.
     redirectToClearSession(errors);
-    throw new Error(errors[0]?.message || 'Error al obtener las raíces de media');
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   return data?.mediaRoots ?? [];

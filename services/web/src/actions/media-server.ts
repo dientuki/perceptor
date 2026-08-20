@@ -1,7 +1,8 @@
 'use server'
 
-import { fetchGraphQL } from '@/lib/graphql-client';
 import { redirectToClearSession } from '@/lib/auth-session';
+import { fetchGraphQL } from '@/lib/graphql-client';
+import { translateGraphQLError } from '@/lib/graphql-error';
 import { MediaServerOption } from '@/types/media-server';
 
 const MEDIA_SERVER_CLIENTS_QUERY = `
@@ -22,7 +23,7 @@ export async function getMediaServerOptions(): Promise<MediaServerOption[]> {
     // Called directly from SettingsPage's Server Component render — cookie
     // mutation is illegal there, so hand off to the Route Handler instead.
     redirectToClearSession(errors);
-    throw new Error(errors[0]?.message || 'Error al obtener los media servers soportados');
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   return data?.mediaServerClients ?? [];

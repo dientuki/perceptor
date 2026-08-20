@@ -1,7 +1,8 @@
 'use server'
 
-import { fetchGraphQL } from '@/lib/graphql-client';
 import { redirectIfUnauthenticated } from '@/lib/auth-session';
+import { fetchGraphQL } from '@/lib/graphql-client';
+import { translateGraphQLError } from '@/lib/graphql-error';
 import { TorrentResult } from '@/types/indexer';
 
 const SEARCH_TORRENTS_QUERY = `
@@ -28,7 +29,7 @@ export async function searchTorrentsAction(query: string): Promise<TorrentResult
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(errors[0]?.message || 'Error al buscar releases');
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   return data?.searchTorrents ?? [];
@@ -57,7 +58,7 @@ export async function addTorrentToMovieAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(errors[0]?.message || 'Error al agregar el torrent');
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   return data!.addTorrentToMovie;

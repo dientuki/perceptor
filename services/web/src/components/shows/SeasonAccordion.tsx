@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, FileVideo, Magnet, Search } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import type { Episode, Season } from "@/actions/shows";
 import ImportFileModal from "@/components/import/importFileModal";
@@ -34,6 +35,8 @@ function EpisodeRow({
   onOpenFileModal: (episode: Episode) => void;
   onOpenMagnetModal: (episode: Episode) => void;
 }) {
+  const t = useTranslations("shows.seasonAccordion");
+  const activeLocale = useLocale();
   return (
     <tr>
       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
@@ -41,7 +44,8 @@ function EpisodeRow({
       </td>
       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
         <div className="font-medium">
-          {episode.title || `Episodio ${episode.episodeNumber}`}
+          {episode.title ||
+            t("episodeDefaultTitle", { number: episode.episodeNumber })}
         </div>
         {episode.overview && (
           <div className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
@@ -51,7 +55,7 @@ function EpisodeRow({
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
         {episode.releaseDate
-          ? new Date(episode.releaseDate).toLocaleDateString()
+          ? new Date(episode.releaseDate).toLocaleDateString(activeLocale)
           : "-"}
       </td>
       <td className="px-4 py-3 text-sm">
@@ -68,7 +72,7 @@ function EpisodeRow({
           <Button
             size="sm"
             variant="outline"
-            title="Buscar"
+            title={t("searchButtonTitle")}
             onClick={() => onOpenSearchModal(episode)}
           >
             <Search size={16} />
@@ -76,7 +80,7 @@ function EpisodeRow({
           <Button
             size="sm"
             variant="outline"
-            title="Importar archivo"
+            title={t("importFileButtonTitle")}
             onClick={() => onOpenFileModal(episode)}
           >
             <FileVideo size={16} />
@@ -84,7 +88,7 @@ function EpisodeRow({
           <Button
             size="sm"
             variant="outline"
-            title="Añadir torrent"
+            title={t("addTorrentButtonTitle")}
             onClick={() => onOpenMagnetModal(episode)}
           >
             <Magnet size={16} className="text-red-500" />
@@ -104,6 +108,7 @@ export default function SeasonAccordion({
   defaultOpen: boolean;
   showTitle: string;
 }) {
+  const t = useTranslations("shows.seasonAccordion");
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [activeEpisode, setActiveEpisode] = useState<Episode | null>(null);
 
@@ -155,7 +160,7 @@ export default function SeasonAccordion({
         className="flex w-full items-center justify-between px-5 py-4 text-left"
       >
         <h4 className="text-base font-semibold text-gray-800 dark:text-white/90">
-          Temporada {season.seasonNumber}
+          {t("seasonLabel", { number: season.seasonNumber })}
         </h4>
         <ChevronDown
           size={20}
@@ -171,19 +176,19 @@ export default function SeasonAccordion({
             <thead className="bg-gray-50 dark:bg-white/[0.02]">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  #
+                  {t("numberHeader")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Título
+                  {t("titleHeader")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Fecha de estreno
+                  {t("releaseDateHeader")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Estado
+                  {t("statusHeader")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Acciones
+                  {t("actionsHeader")}
                 </th>
               </tr>
             </thead>

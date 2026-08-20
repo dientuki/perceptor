@@ -1,24 +1,28 @@
 "use client";
+import { Eye, EyeOff } from "lucide-react";
+import { useSearchParams } from "next/dist/client/components/navigation";
+import { useTranslations } from "next-intl";
+import { useActionState, useState } from "react";
+import { loginAction } from "@/actions/auth";
 import Checkbox from "@/components/form/input/Checkbox";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
-import { Eye, EyeOff } from 'lucide-react';
-import { useState, useActionState } from "react";
-import { loginAction } from "@/actions/auth";
-import { useSearchParams } from "next/dist/client/components/navigation";
 
 export default function LoginForm() {
+  const t = useTranslations("auth.login");
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('redirect') || '/dashboard';
+  const redirectTo = searchParams.get("redirect") || "/dashboard";
 
   // Enlazamos el argumento a la acción
   const loginWithRedirect = loginAction.bind(null, redirectTo);
-  
-  const [state, formAction, isPending] = useActionState(loginWithRedirect, null);
 
+  const [state, formAction, isPending] = useActionState(
+    loginWithRedirect,
+    null,
+  );
 
   return (
     <div className="flex flex-col flex-1 lg:w-1/2 w-full">
@@ -26,10 +30,10 @@ export default function LoginForm() {
         <div>
           <div className="mb-5 sm:mb-8">
             <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
-              Login
+              {t("title")}
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Enter your username and password to log in!
+              {t("subtitle")}
             </p>
           </div>
           <div>
@@ -37,24 +41,26 @@ export default function LoginForm() {
               <div className="space-y-6">
                 <div>
                   <Label>
-                    Username <span className="text-error-500">*</span>{" "}
+                    {t("usernameLabel")}{" "}
+                    <span className="text-error-500">*</span>{" "}
                   </Label>
                   <Input
                     name="username"
-                    placeholder="admin"
+                    placeholder={t("usernamePlaceholder")}
                     type="text"
                     required
                   />
                 </div>
                 <div>
                   <Label>
-                    Password <span className="text-error-500">*</span>{" "}
+                    {t("passwordLabel")}{" "}
+                    <span className="text-error-500">*</span>{" "}
                   </Label>
                   <div className="relative">
                     <Input
                       name="password"
                       type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
+                      placeholder={t("passwordPlaceholder")}
                       required
                     />
                     <span
@@ -77,14 +83,23 @@ export default function LoginForm() {
                 )}
 
                 <div className="flex items-center gap-3">
-                  <Checkbox name="rememberMe" checked={isChecked} onChange={setIsChecked} />
+                  <Checkbox
+                    name="rememberMe"
+                    checked={isChecked}
+                    onChange={setIsChecked}
+                  />
                   <span className="block font-normal text-gray-700 text-theme-sm dark:text-gray-400">
-                    Keep me logged in
+                    {t("rememberMe")}
                   </span>
                 </div>
                 <div>
-                  <Button type="submit" className="w-full" size="sm" disabled={isPending}>
-                    {isPending ? "Logging in..." : "Log in"}
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    size="sm"
+                    disabled={isPending}
+                  >
+                    {isPending ? t("loggingIn") : t("submit")}
                   </Button>
                 </div>
               </div>

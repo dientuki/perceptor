@@ -1,13 +1,15 @@
 "use client";
-import React, { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import * as tus from "tus-js-client";
-import { Modal } from "@/components/ui/modal";
-import Button from "@/components/ui/button/Button";
-import Label from "@/components/form/Label";
 import { Video } from "lucide-react";
-import type { AcquisitionTarget } from "@/types/media";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import type React from "react";
+import { useRef, useState } from "react";
+import * as tus from "tus-js-client";
 import { createUploadTicketAction } from "@/actions/uploads";
+import Label from "@/components/form/Label";
+import Button from "@/components/ui/button/Button";
+import { Modal } from "@/components/ui/modal";
+import type { AcquisitionTarget } from "@/types/media";
 
 interface ImportFileModalProps {
   isOpen: boolean;
@@ -24,6 +26,32 @@ type UploadStatus = "idle" | "uploading" | "paused" | "error" | "done";
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const RETRY_DELAYS = [0, 1000, 3000, 5000, 10000];
 
+/** Every key in the frozen vocabulary starts with this; the rest is the catalog path. */
+const ERROR_KEY_PREFIX = "error.";
+
+/**
+ * The body of a REST `/uploads` error (`services/api/src/uploads/uploads.service.ts`'s
+ * `UploadHttpError`), the tus-only twin of the GraphQL error envelope
+ * (`docs/spec/features/018-ui-i18n/spec.md` § "The error envelope — uploads"):
+ * `{ message, i18n: { key, params? } }` — no `extensions` wrapper, unlike GraphQL.
+ */
+interface RestErrorBody {
+  message?: string;
+  i18n?: {
+    key?: string;
+    params?: Record<string, string | number>;
+  };
+}
+
+function parseRestErrorBody(raw: string | undefined): RestErrorBody | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as RestErrorBody;
+  } catch {
+    return null;
+  }
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB"];
@@ -36,7 +64,17 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(1)} ${units[unit]}`;
 }
 
-export default function ImportFileModal({ isOpen, onClose, target }: ImportFileModalProps) {
+export default function ImportFileModal({
+  isOpen,
+  onClose,
+  target,
+}: ImportFileModalProps) {
+  const t = useTranslations("import.file");
+  // Not `translateGraphQLError` (src/lib/graphql-error.ts): that helper is
+  // server-only (`next-intl/server`'s `getTranslations`) and this modal is a
+  // Client Component. Same catalog namespace and lookup convention, minimal
+  // parallel implementation for the REST error shape.
+  const tErrors = useTranslations("errors");
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const [progress, setProgress] = useState({ sent: 0, total: 0 });
@@ -44,7 +82,7 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
   const uploadRef = useRef<tus.Upload | null>(null);
   const router = useRouter();
 
-  const title = "Importar Video Local";
+  const title = t("title");
 
   const reset = () => {
     uploadRef.current = null;
@@ -52,6 +90,32 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
     setFileName(null);
     setProgress({ sent: 0, total: 0 });
     setError(null);
+  };
+
+  // Reads `i18n.key` off a tus `DetailedError`'s response body when the
+  // failing request was the REST `/uploads` endpoint (onUploadCreate /
+  // onUploadFinish rejecting with `UploadHttpError`), falling back to the
+  // body's English `message`, then to the plain `Error.message`, then to
+  // the generic `errorUpload` copy. Never renders a bare key.
+  const translateUploadError = (err: Error | tus.DetailedError): string => {
+    const body =
+      err instanceof tus.DetailedError
+        ? parseRestErrorBody(err.originalResponse?.getBody())
+        : null;
+
+    const key = body?.i18n?.key;
+    if (key?.startsWith(ERROR_KEY_PREFIX)) {
+      const path = key.slice(ERROR_KEY_PREFIX.length);
+      if (tErrors.has(path)) {
+        try {
+          return tErrors(path, body?.i18n?.params);
+        } catch {
+          // Interpolation mismatch — fall through to the message below.
+        }
+      }
+    }
+
+    return body?.message || err.message || t("errorUpload");
   };
 
   const handleClose = () => {
@@ -78,7 +142,7 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
       ticket = await createUploadTicketAction(target);
     } catch (err) {
       setStatus("error");
-      setError(err instanceof Error ? err.message : "Error al generar el permiso de subida.");
+      setError(err instanceof Error ? err.message : t("errorTicket"));
       return;
     }
 
@@ -96,13 +160,14 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
       chunkSize: CHUNK_SIZE,
       retryDelays: RETRY_DELAYS,
       headers: {
-        Authorization: 'Bearer ' + ticket.token,
+        Authorization: "Bearer " + ticket.token,
       },
       metadata: {
         filename: file.name,
         ...targetMetadata,
       },
-      onProgress: (bytesSent, bytesTotal) => setProgress({ sent: bytesSent, total: bytesTotal }),
+      onProgress: (bytesSent, bytesTotal) =>
+        setProgress({ sent: bytesSent, total: bytesTotal }),
       onSuccess: () => {
         setStatus("done");
         onClose();
@@ -112,7 +177,7 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
       },
       onError: (err) => {
         setStatus("error");
-        setError(err.message || "Error al subir el archivo.");
+        setError(translateUploadError(err));
       },
     });
 
@@ -140,7 +205,8 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
 
   if (!target) return null;
 
-  const percent = progress.total > 0 ? Math.round((progress.sent / progress.total) * 100) : 0;
+  const percent =
+    progress.total > 0 ? Math.round((progress.sent / progress.total) * 100) : 0;
 
   const targetLabel =
     target.kind === "movie"
@@ -156,16 +222,21 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
             {title}
           </h4>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
-            Elegí el archivo de video para{" "}
-            <span className="font-medium text-gray-800 dark:text-white">{targetLabel}</span>.
-            {" "}Se sube por la red — podés pausarlo y reanudarlo si se corta.
+            {t.rich("description", {
+              target: targetLabel,
+              b: (chunks) => (
+                <span className="font-medium text-gray-800 dark:text-white">
+                  {chunks}
+                </span>
+              ),
+            })}
           </p>
         </div>
 
         <div className="px-2">
           {status === "idle" && (
             <>
-              <Label>Archivo</Label>
+              <Label>{t("fileLabel")}</Label>
               <input
                 type="file"
                 accept="video/*,.mkv,.mp4,.avi"
@@ -193,26 +264,36 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
 
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {status === "uploading" && `Subiendo… ${percent}%`}
-                  {status === "paused" && "Pausado"}
-                  {status === "error" && (error || "Error al subir")}
-                  {status === "done" && "Completado"}
+                  {status === "uploading" && t("statusUploading", { percent })}
+                  {status === "paused" && t("statusPaused")}
+                  {status === "error" && (error || t("statusErrorDefault"))}
+                  {status === "done" && t("statusDone")}
                 </span>
 
                 <div className="flex gap-2">
                   {status === "uploading" && (
-                    <Button size="sm" variant="outline" type="button" onClick={handlePause}>
-                      Pausar
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      onClick={handlePause}
+                    >
+                      {t("pause")}
                     </Button>
                   )}
                   {(status === "paused" || status === "error") && (
                     <Button size="sm" type="button" onClick={handleResume}>
-                      Reanudar
+                      {t("resume")}
                     </Button>
                   )}
                   {status !== "done" && (
-                    <Button size="sm" variant="outline" type="button" onClick={handleCancel}>
-                      Cancelar
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      onClick={handleCancel}
+                    >
+                      {t("cancel")}
                     </Button>
                   )}
                 </div>
@@ -222,8 +303,13 @@ export default function ImportFileModal({ isOpen, onClose, target }: ImportFileM
         </div>
 
         <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
-          <Button size="sm" variant="outline" onClick={handleClose} type="button">
-            Cerrar
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleClose}
+            type="button"
+          >
+            {t("close")}
           </Button>
         </div>
       </div>

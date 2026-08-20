@@ -1,18 +1,20 @@
 "use client";
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { useSidebar } from "../context/SidebarContext";
 
 import {
   Calendar,
   Film,
+  LayoutList,
   Popcorn,
   TvMinimal,
-  LayoutList,
   Users,
 } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import type React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSidebar } from "../context/SidebarContext";
 
 type NavItem = {
   name: string;
@@ -21,40 +23,6 @@ type NavItem = {
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
-const baseNavItems: NavItem[] = [
-  {
-    icon: <Popcorn />,
-    name: "Dashboard",
-    path: "/",
-  },
-  {
-    icon: <Film />,
-    name: "Movies",
-    path: "/movies",
-  },
-  {
-    icon: <TvMinimal />,
-    name: "Shows",
-    path: "/shows",
-  },
-  {
-    icon: <Calendar />,
-    name: "Calendar",
-    path: "/calendar",
-  },
-  {
-    icon: <LayoutList />,
-    name: "Quenue",
-    path: "/quenue",
-  },
-  {
-    //icon: <UserCircleIcon />,
-    icon: <LayoutList />,
-    name: "Settings",
-    path: "/settings",
-  },
-];
-
 interface AppSidebarProps {
   isAdmin?: boolean;
 }
@@ -62,11 +30,47 @@ interface AppSidebarProps {
 const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
+  const t = useTranslations("nav");
+  const tCommon = useTranslations("common");
+
+  const baseNavItems: NavItem[] = [
+    {
+      icon: <Popcorn />,
+      name: t("dashboard"),
+      path: "/",
+    },
+    {
+      icon: <Film />,
+      name: t("movies"),
+      path: "/movies",
+    },
+    {
+      icon: <TvMinimal />,
+      name: t("shows"),
+      path: "/shows",
+    },
+    {
+      icon: <Calendar />,
+      name: t("calendar"),
+      path: "/calendar",
+    },
+    {
+      icon: <LayoutList />,
+      name: t("queue"),
+      path: "/quenue",
+    },
+    {
+      //icon: <UserCircleIcon />,
+      icon: <LayoutList />,
+      name: t("settings"),
+      path: "/settings",
+    },
+  ];
 
   // Only the administrator sees the entry point — REQ-4's usability half. The
   // real control is api's AdminGuard (REQ-2); this is cosmetic, per web/plan.md.
   const navItems: NavItem[] = isAdmin
-    ? [...baseNavItems, { icon: <Users />, name: "Users", path: "/users" }]
+    ? [...baseNavItems, { icon: <Users />, name: t("users"), path: "/users" }]
     : baseNavItems;
 
   const renderMenuItems = (
@@ -276,14 +280,14 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
               <Image
                 className="dark:hidden"
                 src="/images/logo.svg"
-                alt="Logo"
+                alt={tCommon("altLogo")}
                 width={250}
                 height={62}
               />
               <Image
                 className="hidden dark:block"
                 src="/images/logo-dark.svg"
-                alt="Logo"
+                alt={tCommon("altLogo")}
                 width={250}
                 height={62}
               />
@@ -291,7 +295,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
           ) : (
             <Image
               src="/images/logo-icon.svg"
-              alt="Logo"
+              alt={tCommon("altLogo")}
               width={32}
               height={32}
             />

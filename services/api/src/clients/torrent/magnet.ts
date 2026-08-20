@@ -1,3 +1,6 @@
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { i18nError } from '@/i18n/i18n-error';
+
 export type ParsedMagnet = { infoHash: string; displayName: string | null };
 
 const HEX_40 = /^[0-9a-f]{40}$/i;
@@ -20,14 +23,16 @@ function base32ToHex(value: string): string {
 }
 
 // Saca el infoHash v1 (xt=urn:btih:) y el nombre (dn=) de un magnet link.
-// Sin red, sin Nest: sólo parseo de string. Tira Error con un mensaje pensado
-// para mostrarle al usuario si el magnet no sirve — nunca devuelve un hash a
-// medias, porque un hash que no coincide con el que reporta qBittorrent deja
-// la descarga colgada para siempre y sin ningún error (ver
+// Sin red: sólo parseo de string, pero SÍ importa de src/i18n — es un
+// `clients/` module, no un módulo Nest con DI, así que no hay ciclo ni
+// acoplamiento raro en tirar una i18nError real acá (018 T010). Tira una
+// BadRequestException ya keyed — nunca devuelve un hash a medias, porque un
+// hash que no coincide con el que reporta qBittorrent deja la descarga
+// colgada para siempre y sin ningún error (ver
 // downloads.service.ts::handleTorrentCompleted, que sólo matchea por hash).
 export function parseMagnet(magnet: string): ParsedMagnet {
   if (!magnet.startsWith('magnet:?')) {
-    throw new Error('No parece un magnet link');
+    throw i18nError.badRequest(ERROR_KEYS.MAGNET_NOT_A_MAGNET);
   }
 
   const params = new URLSearchParams(magnet.slice('magnet:?'.length));
@@ -42,15 +47,15 @@ export function parseMagnet(magnet: string): ParsedMagnet {
   if (btih) {
     if (HEX_40.test(btih)) return { infoHash: btih.toLowerCase(), displayName: readDisplayName(params) };
     if (BASE32_32.test(btih)) return { infoHash: base32ToHex(btih), displayName: readDisplayName(params) };
-    throw new Error('El magnet no tiene un infoHash válido');
+    throw i18nError.badRequest(ERROR_KEYS.MAGNET_INVALID_INFOHASH);
   }
 
   const hasV2Only = xts.some((xt) => /^urn:btmh:/i.test(xt));
   if (hasV2Only) {
-    throw new Error('Magnet de BitTorrent v2, todavía no soportado');
+    throw i18nError.badRequest(ERROR_KEYS.MAGNET_V2_UNSUPPORTED);
   }
 
-  throw new Error('El magnet no tiene un infoHash válido');
+  throw i18nError.badRequest(ERROR_KEYS.MAGNET_INVALID_INFOHASH);
 }
 
 function readDisplayName(params: URLSearchParams): string | null {

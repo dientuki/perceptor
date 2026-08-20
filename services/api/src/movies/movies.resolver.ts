@@ -1,11 +1,12 @@
 import { Resolver, Query, Mutation, Args, Int, ResolveField, Parent } from '@nestjs/graphql';
-import { NotFoundException } from '@nestjs/common';
 import { MoviesService } from './movies.service';
 import { Movie } from './entities/movies.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { LanguagesService } from '@/languages/languages.service';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 @Resolver(() => Movie)
 export class MoviesResolver {
@@ -95,7 +96,7 @@ export class MoviesResolver {
     // caller does not own (see movies.service.ts) — same ownership scoping
     // as movie(id), same message reused verbatim from 008-movie-detail.
     const movie = await this.moviesService.findOneFromDb(movieId, userId);
-    if (!movie) throw new NotFoundException(`La película ${movieId} no existe`);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
     return this.languagesService.setMoviePreferredLanguagesFor(userId, movieId, iso2);
   }
 }

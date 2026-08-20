@@ -96,11 +96,11 @@ describe('SeasonsService', () => {
     const magnet =
       'magnet:?xt=urn:btih:abc123def456abc123def456abc123def456abc1&dn=Reacher.S02.1080p';
 
-    it('throws "La temporada <id> no existe" for a missing or unowned season, and creates no source', async () => {
+    it('throws error.season.not_found for a missing or unowned season, and creates no source', async () => {
       prisma.season.findFirst.mockResolvedValue(null);
 
       await expect(service.addMagnetToSeason(42, { magnet, force: false }, 'user-2')).rejects.toThrow(
-        'La temporada 42 no existe',
+        'Season 42 does not exist',
       );
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
@@ -133,7 +133,7 @@ describe('SeasonsService', () => {
 
       await expect(
         service.addMagnetToSeason(42, { magnet, force: false }, 'user-1'),
-      ).rejects.toThrow('Esta temporada ya tiene una descarga en curso. Confirmá para reemplazarla.');
+      ).rejects.toThrow('This season already has a download in progress. Confirm to replace it.');
 
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
@@ -163,7 +163,12 @@ describe('SeasonsService', () => {
 
       expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
         where: { seasonId: 42, status: { not: 'ERROR' } },
-        data: { status: 'ERROR', errorMessage: expect.any(String) },
+        data: {
+          status: 'ERROR',
+          errorMessage: expect.any(String),
+          errorKey: 'error.source.replaced',
+          errorParams: null,
+        },
       });
     });
 
@@ -178,7 +183,7 @@ describe('SeasonsService', () => {
       });
 
       await expect(service.addMagnetToSeason(42, { magnet, force: false }, 'user-1')).rejects.toThrow(
-        'Ese magnet ya está asociado a «Dune»',
+        'That magnet is already attached to «Dune»',
       );
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
@@ -196,7 +201,7 @@ describe('SeasonsService', () => {
       });
 
       await expect(service.addMagnetToSeason(42, { magnet, force: false }, 'user-1')).rejects.toThrow(
-        'Ese magnet ya está asociado a «Reacher S03E01»',
+        'That magnet is already attached to «Reacher S03E01»',
       );
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
@@ -213,7 +218,7 @@ describe('SeasonsService', () => {
       });
 
       await expect(service.addMagnetToSeason(42, { magnet, force: false }, 'user-1')).rejects.toThrow(
-        'Ese magnet ya está asociado a «Reacher Temporada 1»',
+        'That magnet is already attached to «Reacher Temporada 1»',
       );
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();

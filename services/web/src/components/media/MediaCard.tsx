@@ -1,7 +1,10 @@
 // components/Media/MediaCard.tsx
-import { MEDIA_TYPE } from "@/types/media";
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { MEDIA_TYPE } from "@/types/media";
 
 interface MediaCardProps {
   item: any;
@@ -10,8 +13,16 @@ interface MediaCardProps {
   mediaType?: (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
 }
 
-export function MediaCard({ item, renderAction, showLink, mediaType }: MediaCardProps) {
-  const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : "N/A";
+export function MediaCard({
+  item,
+  renderAction,
+  showLink,
+  mediaType,
+}: MediaCardProps) {
+  const t = useTranslations("media.card");
+  const year = item.releaseDate
+    ? new Date(item.releaseDate).getFullYear()
+    : "N/A";
 
   const poster = item.posterUrl ? (
     <Image
@@ -22,7 +33,9 @@ export function MediaCard({ item, renderAction, showLink, mediaType }: MediaCard
       className="object-cover transition-transform duration-300 group-hover:scale-105"
     />
   ) : (
-    <span className="flex h-full items-center justify-center text-xs text-gray-400">Sin Poster</span>
+    <span className="flex h-full items-center justify-center text-xs text-gray-400">
+      {t("noPoster")}
+    </span>
   );
 
   return (
@@ -30,7 +43,14 @@ export function MediaCard({ item, renderAction, showLink, mediaType }: MediaCard
       {/* Poster */}
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
         {showLink ? (
-          <Link href={mediaType === MEDIA_TYPE.SHOW ? `/shows/${item.id}` : `/movies/${item.id}`} className="block h-full w-full">
+          <Link
+            href={
+              mediaType === MEDIA_TYPE.SHOW
+                ? `/shows/${item.id}`
+                : `/movies/${item.id}`
+            }
+            className="block h-full w-full"
+          >
             {poster}
           </Link>
         ) : (
@@ -38,16 +58,24 @@ export function MediaCard({ item, renderAction, showLink, mediaType }: MediaCard
         )}
       </div>
       {/* Slot para el Botón (encima del poster o donde prefieras) */}
-      {renderAction && (
-        renderAction(item)
-      )}
+      {renderAction && renderAction(item)}
 
       {/* Info */}
       <div className="mt-3 px-1">
-        <h3 className="line-clamp-2 text-sm font-semibold text-black dark:text-white" title={item.title}>
+        <h3
+          className="line-clamp-2 text-sm font-semibold text-black dark:text-white"
+          title={item.title}
+        >
           {item.title}
         </h3>
-        {item.overview && <p className="line-clamp-3 text-xs text-gray-500 dark:text-gray-400" title={item.overview}>{item.overview}</p>}
+        {item.overview && (
+          <p
+            className="line-clamp-3 text-xs text-gray-500 dark:text-gray-400"
+            title={item.overview}
+          >
+            {item.overview}
+          </p>
+        )}
         <p className="text-xs text-gray-500 dark:text-gray-400">{year}</p>
       </div>
     </div>

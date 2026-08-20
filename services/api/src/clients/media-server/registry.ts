@@ -1,5 +1,7 @@
 import { createJellyfinClient } from './jellyfin';
 import { MediaServerClient, MediaServerConfig, MediaServerFactory, MEDIA_SERVER_NONE } from './types';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { i18nError } from '@/i18n/i18n-error';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Para agregar un media server: escribí clients/media-server/<nombre>.ts que
@@ -29,6 +31,6 @@ export function createMediaServerClient(
 ): MediaServerClient | null {
   if (id === MEDIA_SERVER_NONE) return null;
   const entry = MEDIA_SERVERS[id as keyof typeof MEDIA_SERVERS];
-  if (!entry) throw new Error(`Media server desconocido: "${id}"`);
+  if (!entry) throw i18nError.badRequest(ERROR_KEYS.MEDIA_SERVER_UNKNOWN, { id });
   return entry.create(config);
 }

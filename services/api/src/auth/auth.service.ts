@@ -1,10 +1,12 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { SessionService } from './session.service';
 import { SESSION_TTL, REMEMBER_ME_TTL, ttlToSeconds } from './auth.constants';
 import type { UserJwtPayload } from './auth.types';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 @Injectable()
 export class AuthService {
@@ -44,14 +46,14 @@ export class AuthService {
     const user = await this.validateUser(username, pass);
 
     if (!user) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw i18nError.unauthorized(ERROR_KEYS.AUTH_INVALID_CREDENTIALS);
     }
 
     // A disabled user must not get a session, even with the correct password
     // (004-user-disable REQ-2) — this has to run before sessionService.create()
     // so a refused login never leaves a session record behind.
     if (!user.isEnabled) {
-      throw new UnauthorizedException('Tu cuenta está deshabilitada');
+      throw i18nError.unauthorized(ERROR_KEYS.AUTH_ACCOUNT_DISABLED);
     }
 
     const ttlSeconds = ttlToSeconds(rememberMe ? REMEMBER_ME_TTL : SESSION_TTL);
@@ -78,11 +80,14 @@ export class AuthService {
 
   // `me` necesita una lectura a la DB (no alcanza con lo que ya trae el
   // payload del JWT): es la única forma de detectar un usuario borrado
-  // después de que el token fue emitido.
+  // después de que el token fue emitido. A valid JWT with a live session
+  // that no longer resolves to a user row is functionally a revoked
+  // session, not "no credential at all" — hence session_expired, not
+  // unauthenticated.
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
-      throw new UnauthorizedException('No autenticado');
+      throw i18nError.unauthorized(ERROR_KEYS.AUTH_SESSION_EXPIRED);
     }
     const { password, ...result } = user;
     return result;

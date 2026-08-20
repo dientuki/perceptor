@@ -1,8 +1,8 @@
 ---
 title: UI Internationalization — api slice
 service: api
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-20
+status: Implemented
 ---
 
 # PLAN: UI Internationalization — `api` (`api/plan.md`)

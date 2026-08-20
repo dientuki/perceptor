@@ -11,6 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchGraphQL } from './graphql-client';
+import { KeyedError } from '../i18n/keyed-error';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -78,6 +79,59 @@ describe('fetchGraphQL', () => {
     expect(caught).toBeInstanceOf(Error);
     expect(caught).not.toBeInstanceOf(SyntaxError);
     expect((caught as Error).message).toMatch(/401/);
+  });
+
+  it('throws a KeyedError carrying the key and params from a 200 response with a keyed GraphQL error (018-ui-i18n REQ-11)', async () => {
+    setEnv('http://api:4000/graphql', 'service-token');
+
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        errors: [
+          {
+            message: 'Movie 42 does not exist',
+            extensions: {
+              code: 'NOT_FOUND',
+              i18n: { key: 'error.movie.not_found', params: { id: 42 } },
+            },
+          },
+        ],
+      }),
+    });
+
+    let caught: unknown;
+    try {
+      await fetchGraphQL('{ me { id } }');
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(KeyedError);
+    expect((caught as KeyedError).key).toBe('error.movie.not_found');
+    expect((caught as KeyedError).params).toEqual({ id: 42 });
+    expect((caught as KeyedError).message).toBe('Movie 42 does not exist');
+  });
+
+  it('throws a plain Error (not a KeyedError) when a GraphQL error carries no extensions.i18n', async () => {
+    setEnv('http://api:4000/graphql', 'service-token');
+
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ errors: [{ message: 'Unexpected server error' }] }),
+    });
+
+    let caught: unknown;
+    try {
+      await fetchGraphQL('{ me { id } }');
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(KeyedError);
+    expect((caught as Error).message).toMatch(/Unexpected server error/);
   });
 
   it('succeeds and sends the Authorization header when SERVICE_TOKEN is present', async () => {

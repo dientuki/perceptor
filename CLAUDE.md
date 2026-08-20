@@ -144,8 +144,12 @@ Rules that are not obvious from the variable names:
 - **Commits**: `[scope] lowercase message` — scopes seen so far are `[api]`, `[web]`, `[traefix]`.
 - **Language**: everything committed is English — comments, identifiers, docs, commit messages, test
   descriptions (`docs/constitution.md` → Article VI is the authority). The **exception is user-facing
-  copy**: error messages and UI text are Spanish, because the app is Spanish. Existing Spanish
-  comments are legacy, not a pattern to copy.
+  copy**, and since `018-ui-i18n` that copy is no longer hardcoded Spanish — it is catalog-driven.
+  `api`/`worker` produce English text plus an `extensions.i18n` key; `web` resolves the active
+  locale server-side (`User.uiLocale` → `Accept-Language` → `en`) and translates through
+  `services/web/messages/{en,es}.json`. `es` keeps the existing Rioplatense register verbatim.
+  See `docs/spec/graphql-contract.md` § "UI internationalization" for the full key vocabulary and
+  the error envelope shape. Existing Spanish comments in code are legacy, not a pattern to copy.
 - **Path alias**: `@/*` → `./src/*` in both `api` and `web`.
 - **API contract**: GraphQL only. `web` never touches the database; it calls the API through
   `fetchGraphQL` in `services/web/src/lib/graphql-client.ts`.
@@ -194,7 +198,7 @@ a worked example, written after the fact against a feature that shipped.
 ## Current state
 
 All three services typecheck clean (0 errors) and `bin/npm web run build` exits 0, measured
-2026-08-18 after `016-web-build-errors`. Test counts then: `api` 156/16 suites, `worker` 75/9.
+2026-08-20 after `018-ui-i18n`. Test counts then: `api` 179/19 suites, `worker` 102/12.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

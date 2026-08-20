@@ -66,12 +66,47 @@ would bake whichever `.env` was present during `next build` into the image; reso
 time keeps the image deployment-agnostic. If the variable is unset the action throws before the modal
 constructs the upload, rather than letting `tus.Upload({ endpoint: undefined })` fail silently.
 
+## UI internationalization (`018-ui-i18n`)
+
+`web` owns every string a user reads and is the only service that translates. `src/i18n/request.ts`
+(next-intl's `getRequestConfig`) resolves the active locale server-side, once per request, in REQ-1's
+order: `User.uiLocale` (via `getCurrentUserOrNull()`, below) → the request's `Accept-Language`
+header, language-range negotiated by `src/i18n/negotiate.ts` → `en`. `src/i18n/locales.ts`'s
+`SUPPORTED_LOCALES`/`DEFAULT_LOCALE` is the **one** list every consumer of the supported set reads
+— never hardcode `'es'`/`'en'` anywhere else. `src/app/layout.tsx` is `async`, sets `<html lang>`
+from the resolved locale, and wraps the tree in `NextIntlClientProvider` with the server-loaded
+catalog. Catalogs live at `messages/en.json`/`messages/es.json`; `es` keeps the existing Rioplatense
+register verbatim. `scripts/check-messages.mjs` (a plain script, not a test — this service adds no
+test runner) fails non-zero on catalog drift between the two files.
+
+**Every GraphQL/REST error is translated through a key, never rendered as raw API text.**
+`src/lib/graphql-error.ts`'s `translateGraphQLError(error)` reads `extensions.i18n.key`, looks it up
+in the `errors` catalog namespace (`error.auth.unauthenticated` → `errors.auth.unauthenticated`),
+`JSON.parse`s `extensions.i18n.params` when present, and falls back to the error's English `message`
+whenever there is no key, no catalog entry, or a parse failure — it must never return the raw key
+string. Every `src/actions/*.ts` read/write derives its error text through this helper now; the REST
+`/uploads` error body (`services/api/CLAUDE.md`'s uploads section) carries the same `{ message, i18n
+}` shape but **not** wrapped in `extensions`, so `importFileModal.tsx` reads it directly rather than
+reusing `translateGraphQLError`. See `docs/spec/graphql-contract.md` § "UI internationalization" for
+the full envelope and key vocabulary — `api` and `worker` own the keys; `web` never invents one.
+
+**Language names are not a catalog entry.** `LanguagePicker.tsx` renders each option through
+`Intl.DisplayNames([activeLocale], { type: 'language' })` and sorts with `localeCompare(...,
+activeLocale)` — `api`'s `languages` query returns English names only (display authority moved
+here); do not add a language-name list to either catalog.
+
 ## Auth
 
 The cookie name is never a literal at call sites — it comes from `CONFIG.authCookie`
 (`src/lib/config.ts`, value `"auth_token"`), defined in one place. `fetchGraphQL` reads that cookie
 and forwards it as `Authorization: Bearer …` on every server-action call; a server action that has a
 session and skips this is a defect, not a style choice.
+
+`src/lib/auth-session.ts`'s `isAuthError(errors)` matches on `error.extensions.i18n.key` against
+`error.auth.unauthenticated`/`error.auth.session_expired` — **not** on `error.message` text. Before
+`018-ui-i18n` it string-matched the literal Spanish sentences `api` returned, which meant
+translating those sentences would have silently broken session handling; the key is stable across
+locales by construction, so this now works identically no matter which language is rendering.
 
 Route gating is in `src/proxy.ts`: a cheap **presence check** on the cookie, redirecting
 unauthenticated requests away from protected routes and authenticated ones away from `/login`
@@ -224,7 +259,9 @@ No test file, no runner, no `test` script. This is the largest maturity gap of t
 The quality gate is the typecheck, Biome on the file you touched, and actually opening the page.
 
 Do **not** add Vitest or Playwright as a side effect of a feature task — introducing a test toolchain
-here is its own decision and deserves its own spec.
+here is its own decision and deserves its own spec. `scripts/check-messages.mjs` (`018-ui-i18n`) is
+a plain Node script, not an exception to this rule — it has no framework, no assertions, just a
+parity check with an exit code.
 
 ## Small conventions that are easy to get wrong
 
@@ -247,9 +284,9 @@ here is its own decision and deserves its own spec.
 
 ## Current state
 
-As of 2026-08-18: `bin/cli web npx --no tsc --noEmit` reports **0 errors** and `bin/npm web run build`
-exits 0. Re-run both rather than trusting this — report the numbers before and after a change to
-prove you added nothing.
+As of 2026-08-20 (`018-ui-i18n`): `bin/cli web npx --no tsc --noEmit` reports **0 errors** and
+`bin/npm web run build` exits 0. Re-run both rather than trusting this — report the numbers before
+and after a change to prove you added nothing.
 
 `bin/npm web run lint` is **not** a usable gate: `biome check` reports ~1598 errors and ~96 warnings
 across the pre-existing template, with or without any given change. Judge a new file by running Biome

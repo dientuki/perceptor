@@ -1,6 +1,13 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import { mkdir, rm, rename, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { KeyedError } from '../i18n/keyed-error';
+import { renderMessage } from '../i18n/messages.en';
+import {
+  ERROR_ENCODE_FFMPEG_FAILED,
+  ERROR_ENCODE_MKVMERGE_FAILED,
+  ERROR_ENCODE_NO_OUTPUT,
+} from '../i18n/error-keys';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -156,7 +163,16 @@ export function runFfmpeg(
 
     async function handleFfmpegClose(code: number | null) {
       if (code !== 0) {
-        settleReject(new Error(`ffmpeg terminó con código ${code}: ${stderrTail.slice(-10).join(' | ')}`));
+        // stderr is a param, not part of the sentence — this tail is what
+        // reaches encodeFailed's errorParams, kept exactly as before.
+        const params = { code: code ?? 0, stderr: stderrTail.slice(-10).join(' | ') };
+        settleReject(
+          new KeyedError(
+            ERROR_ENCODE_FFMPEG_FAILED,
+            renderMessage(ERROR_ENCODE_FFMPEG_FAILED, params),
+            params,
+          ),
+        );
         return;
       }
 
@@ -165,7 +181,14 @@ export function runFfmpeg(
       // reject() — con concurrency 1 eso ocupaba el worker de encode
       // indefinidamente. Ahora siempre se resuelve uno de los dos caminos.
       if (!(await exists(workingPath))) {
-        settleReject(new Error(`ffmpeg terminó con código 0 pero no generó ${workingPath}`));
+        const params = { path: workingPath };
+        settleReject(
+          new KeyedError(
+            ERROR_ENCODE_NO_OUTPUT,
+            renderMessage(ERROR_ENCODE_NO_OUTPUT, params),
+            params,
+          ),
+        );
         return;
       }
 
@@ -209,7 +232,14 @@ export function runFfmpeg(
 
     async function handleMergeClose(mergeCode: number | null, mergeStderr: string) {
       if (mergeCode !== 0) {
-        settleReject(new Error(`mkvmerge falló con código ${mergeCode}: ${mergeStderr.trim().slice(-500)}`));
+        const params = { code: mergeCode ?? 0, stderr: mergeStderr.trim().slice(-500) };
+        settleReject(
+          new KeyedError(
+            ERROR_ENCODE_MKVMERGE_FAILED,
+            renderMessage(ERROR_ENCODE_MKVMERGE_FAILED, params),
+            params,
+          ),
+        );
         return;
       }
 

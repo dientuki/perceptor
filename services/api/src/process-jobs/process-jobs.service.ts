@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { i18nError } from '@/i18n/i18n-error';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
 
 @Injectable()
@@ -27,7 +29,7 @@ export class ProcessJobsService {
     });
 
     if (!processJob) {
-      throw new NotFoundException(`El processJob ${id} no existe`);
+      throw i18nError.notFound(ERROR_KEYS.PROCESS_JOB_NOT_FOUND, { id });
     }
 
     const mediaSource = processJob.sourceFile.mediaSource;
@@ -98,7 +100,7 @@ export class ProcessJobsService {
     const config = await this.settings.getMap();
     const relPath = config[settingKey];
     if (relPath === undefined) {
-      throw new NotFoundException(`Falta la setting "${settingKey}" — configurala en Settings antes de encodear.`);
+      throw i18nError.notFound(ERROR_KEYS.SETTING_MISSING, { key: settingKey });
     }
     return this.mediaRoots.resolveFromRoot('library', relPath);
   }
@@ -237,10 +239,15 @@ export class ProcessJobsService {
     };
   }
 
-  async encodeFailed(processJobId: number, errorMessage: string) {
+  async encodeFailed(
+    processJobId: number,
+    errorKey: string,
+    errorParams: string | undefined,
+    errorMessage: string,
+  ) {
     const processJob = await this.prisma.processJob.update({
       where: { id: processJobId },
-      data: { status: 'ERROR', errorMessage },
+      data: { status: 'ERROR', errorKey, errorParams: errorParams ?? null, errorMessage },
     });
 
     if (processJob.movieId) {
@@ -249,7 +256,7 @@ export class ProcessJobsService {
       await this.prisma.episode.update({ where: { id: processJob.episodeId }, data: { status: 'ERROR' } });
     }
 
-    return `error: processJob ${processJobId}`;
+    return true;
   }
 
   // `deleteFiles` defaults to `true` for backward compatibility with any
@@ -260,7 +267,7 @@ export class ProcessJobsService {
   async downloadRemove(mediaSourceId: number, deleteFiles: boolean = true) {
     const mediaSource = await this.prisma.mediaSource.findUnique({ where: { id: mediaSourceId } });
     if (!mediaSource) {
-      throw new NotFoundException(`El mediaSource ${mediaSourceId} no existe`);
+      throw i18nError.notFound(ERROR_KEYS.SOURCE_NOT_FOUND, { id: mediaSourceId });
     }
 
     // LOCAL_FILE/LOCAL_FOLDER no tienen infoHash: no hay nada que sacarle al

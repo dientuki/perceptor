@@ -1,6 +1,12 @@
 // src/core/ffmpeg/params.ts
 
 import { normalizeIso3 } from './iso639';
+import { KeyedError } from '../i18n/keyed-error';
+import { renderMessage } from '../i18n/messages.en';
+import {
+  ERROR_ENCODE_NO_ORIGINAL_AUDIO,
+  ERROR_ENCODE_NO_VIDEO_STREAM,
+} from '../i18n/error-keys';
 
 type quality = 'remux' | 'web';
 
@@ -45,7 +51,10 @@ export function getVideoParams(
   // Sin stream de video no hay nada que codificar (archivo corrupto o sólo
   // audio) — mejor un error claro acá que un TypeError al leer .codec_name.
   if (!videoStream) {
-    throw new Error('El archivo de entrada no tiene ningún stream de video');
+    throw new KeyedError(
+      ERROR_ENCODE_NO_VIDEO_STREAM,
+      renderMessage(ERROR_ENCODE_NO_VIDEO_STREAM),
+    );
   }
 
   const codec = videoStream.codec_name;
@@ -234,8 +243,11 @@ export function getAudioParams(
   const hasOriginal = candidates.some(s => normalizeIso3(s.tags?.language || "") === originalLang);
 
   if (!hasOriginal) {
-    throw new Error(
-      `El archivo no tiene ninguna pista de audio en el idioma original (${originalLanguageIso3})`,
+    const params = { iso3: originalLanguageIso3 };
+    throw new KeyedError(
+      ERROR_ENCODE_NO_ORIGINAL_AUDIO,
+      renderMessage(ERROR_ENCODE_NO_ORIGINAL_AUDIO, params),
+      params,
     );
   }
 

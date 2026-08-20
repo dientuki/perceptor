@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { MESSAGES_EN } from '@/i18n/messages.en';
 
 @Injectable()
 export class DownloadsService {
@@ -46,10 +48,15 @@ export class DownloadsService {
     // no hay nada que decirle al worker. Se marca ERROR para que no quede colgada
     // en DOWNLOADING para siempre.
     if (!mediaSource.downloadPath) {
-      const errorMessage = 'Completado sin downloadPath registrado — no se puede encolar';
+      const errorMessage = MESSAGES_EN[ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH];
       await this.prisma.mediaSource.update({
         where: { id: mediaSource.id },
-        data: { status: 'ERROR', errorMessage },
+        data: {
+          status: 'ERROR',
+          errorMessage,
+          errorKey: ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH,
+          errorParams: null,
+        },
       });
       console.error(`[torrentCompleted] mediaSource ${mediaSource.id}: ${errorMessage}`);
       return `error: mediaSource ${mediaSource.id} sin downloadPath, marcado ERROR`;

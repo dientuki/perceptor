@@ -2,9 +2,12 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { cache } from "react";
 import { redirectToClearSession } from "@/lib/auth-session";
 import { CONFIG } from "@/lib/config";
 import { fetchGraphQL } from "@/lib/graphql-client";
+import { translateGraphQLError } from "@/lib/graphql-error";
 
 import type { Language } from "@/types/languages";
 
@@ -14,6 +17,7 @@ export interface CurrentUser {
   username: string;
   isAdmin: boolean;
   preferredLanguages: Language[];
+  uiLocale: string | null;
 }
 
 const LOGIN_MUTATION = `
@@ -48,12 +52,13 @@ export async function loginAction(
 
     // Manejo de errores específicos de GraphQL
     if (errors && errors.length > 0) {
-      return { error: errors[0].message || "Error al iniciar sesión" };
+      return { error: await translateGraphQLError(errors[0]) };
     }
 
     const token = data?.login?.access_token;
     if (!token) {
-      return { error: "No se recibió un token válido." };
+      const t = await getTranslations("errors");
+      return { error: t("auth.invalidToken") };
     }
 
     // Guardar el token retornado en una cookie HttpOnly.
@@ -68,7 +73,8 @@ export async function loginAction(
       ...(rememberMe ? { maxAge: 60 * 60 * 24 * 30 } : {}),
     });
   } catch (err) {
-    return { error: "Error de conexión con el servidor GraphQL." };
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
   }
 
   redirect(destination);
@@ -103,6 +109,7 @@ const ME_QUERY = `
       name
       username
       isAdmin
+      uiLocale
       preferredLanguages {
         id
         iso2
@@ -112,23 +119,50 @@ const ME_QUERY = `
   }
 `;
 
-export async function getCurrentUser(): Promise<CurrentUser> {
-  const { data, errors } = await fetchGraphQL<{ me: CurrentUser }>(ME_QUERY);
+// The actual `me` round trip, cache()-wrapped so multiple calls within one
+// request/render pass — from getCurrentUserOrNull(), getCurrentUser(), or
+// a future locale resolver — dedupe to a single GraphQL request.
+const fetchMe = cache(() => fetchGraphQL<{ me: CurrentUser }>(ME_QUERY));
+
+// Non-redirecting variant: returns null on any GraphQL error (or a missing
+// `me`) instead of redirecting to clear the session. This is safe to call
+// from contexts that must tolerate an anonymous request — such as locale
+// resolution on a public route like /login — where getCurrentUser()'s
+// redirectToClearSession would otherwise loop back to the same page.
+export async function getCurrentUserOrNull(): Promise<CurrentUser | null> {
+  const { data, errors } = await fetchMe();
 
   if (errors && errors.length > 0) {
+    return null;
+  }
+
+  if (!data?.me) {
+    return null;
+  }
+
+  return data.me;
+}
+
+export async function getCurrentUser(): Promise<CurrentUser> {
+  const user = await getCurrentUserOrNull();
+
+  if (!user) {
     // getCurrentUser() is only ever called from a Server Component's render
     // pass (the dashboard layout, the users page) — cookies can't be
     // mutated there, only read. redirectToClearSession hands the actual
     // cookie deletion off to a Route Handler instead of doing it here (which
     // is what redirectIfUnauthenticated does, and would crash in this
     // context). See src/app/api/auth/clear-session/route.ts.
+    // fetchMe() is cache()-wrapped, so this re-read is the same request as
+    // the one getCurrentUserOrNull() already made — no second round trip.
+    const { errors } = await fetchMe();
     redirectToClearSession(errors);
-    throw new Error(errors[0]?.message || "Error al obtener el usuario actual");
+    if (errors?.[0]) {
+      throw new Error(await translateGraphQLError(errors[0]));
+    }
+    const t = await getTranslations("errors");
+    throw new Error(t("auth.currentUserFailed"));
   }
 
-  if (!data?.me) {
-    throw new Error("El API no devolvió el usuario actual");
-  }
-
-  return data.me;
+  return user;
 }

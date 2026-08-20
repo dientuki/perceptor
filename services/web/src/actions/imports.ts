@@ -1,7 +1,8 @@
 'use server'
 
-import { fetchGraphQL } from '@/lib/graphql-client';
 import { redirectIfUnauthenticated } from '@/lib/auth-session';
+import { fetchGraphQL } from '@/lib/graphql-client';
+import { translateGraphQLError } from '@/lib/graphql-error';
 
 const ADD_MAGNET_MUTATION = `
   mutation AddMagnetToMovie($movieId: Int!, $magnet: String!, $force: Boolean) {
@@ -24,7 +25,7 @@ export async function importMagnetAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(errors[0]?.message || 'Error al importar el magnet');
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   return data!.addMagnetToMovie;

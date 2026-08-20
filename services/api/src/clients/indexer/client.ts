@@ -1,8 +1,10 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { IndexerClient, TorrentResult, TorrentInfo } from "./types";
 import { HTTP_METHOD } from "@/types/http";
 import { getScore } from "./score";
 import { SettingsService } from '@/settings/settings.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { i18nError } from '@/i18n/i18n-error';
 
 async function resolveInfoHash(item: any): Promise<string> {
   // 1️⃣ Si viene explícito
@@ -40,7 +42,7 @@ async function resolveInfoHash(item: any): Promise<string> {
     }
   }
 
-  throw new Error("No se pudo resolver infoHash");
+  throw i18nError.badRequest(ERROR_KEYS.INDEXER_NO_INFOHASH);
 }
 
 async function filterIAData(items: any[]): Promise<TorrentInfo> {
@@ -176,11 +178,11 @@ export class ProwlarrClient implements IndexerClient {
         },
       });
     } catch {
-      throw new ServiceUnavailableException('No se pudo consultar el indexer');
+      throw i18nError.serviceUnavailable(ERROR_KEYS.INDEXER_UNAVAILABLE);
     }
 
     if (!res.ok) {
-      throw new ServiceUnavailableException(`No se pudo consultar el indexer (HTTP ${res.status})`);
+      throw i18nError.serviceUnavailable(ERROR_KEYS.INDEXER_UNAVAILABLE, { status: res.status });
     }
 
     const data = await res.json();

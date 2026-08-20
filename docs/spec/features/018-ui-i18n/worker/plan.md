@@ -1,8 +1,8 @@
 ---
 title: UI Internationalization — worker slice
 service: worker
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-20
+status: Implemented
 ---
 
 # PLAN: UI Internationalization — `worker` (`worker/plan.md`)

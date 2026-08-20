@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { MediaList } from "@/components/media/MediaList";
 import Button from "@/components/ui/button/Button";
@@ -23,6 +24,8 @@ export default function SearchContainer({
   addAction,
   searchAction,
 }: SearchContainerProps) {
+  const t = useTranslations("search.container");
+  const noun = type === MEDIA_TYPE.SHOW ? t("showNoun") : t("movieNoun");
   const [results, setResults] = useState<MediaSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +47,7 @@ export default function SearchContainer({
       // Sin este catch el finally no corre y el botón queda deshabilitado para siempre
       console.error("Error al buscar:", err);
       setResults([]);
-      setError("No se pudo completar la búsqueda. Intentá de nuevo.");
+      setError(t("errorSearch"));
     } finally {
       setSearched(true);
       setLoading(false);
@@ -60,9 +63,7 @@ export default function SearchContainer({
       setAddedMediaIds((prev) => ({ ...prev, [item.id]: mediaId }));
     } catch (err) {
       console.error("Error al agregar:", err);
-      setError(
-        `No se pudo agregar la ${type === MEDIA_TYPE.SHOW ? "serie" : "película"}. Intentá de nuevo.`,
-      );
+      setError(t("errorAdd", { noun }));
     } finally {
       setAddingId(null);
     }
@@ -83,8 +84,8 @@ export default function SearchContainer({
         showLink={false}
         emptyMessage={
           searched
-            ? "No se encontraron resultados"
-            : `Buscá una ${type === MEDIA_TYPE.SHOW ? "serie" : "película"} para empezar`
+            ? t("resultsEmptySearched")
+            : t("resultsEmptyPrompt", { noun })
         }
         renderAction={(item: MediaSearchResult) => {
           const addedMediaId = addedMediaIds[item.id];
@@ -94,7 +95,7 @@ export default function SearchContainer({
             if (type === MEDIA_TYPE.SHOW) {
               return (
                 <span className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-100 px-4 py-3 text-sm font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                  Agregada
+                  {t("added")}
                 </span>
               );
             }
@@ -105,7 +106,7 @@ export default function SearchContainer({
                 href={`/movies/${mediaId}`}
                 className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
               >
-                Ir
+                {t("go")}
               </Link>
             );
           }
@@ -118,7 +119,7 @@ export default function SearchContainer({
               className="mt-2"
               disabled={addingId === item.id}
             >
-              {addingId === item.id ? "Agregando..." : "Agregar"}
+              {addingId === item.id ? t("adding") : t("addButton")}
             </Button>
           );
         }}

@@ -1,0 +1,324 @@
+{
+  "common": {
+    "appName": "Perceptor",
+    "altUser": "User",
+    "altLogo": "Logo",
+    "breadcrumb": {
+      "home": "Home"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "submit": "Sign in",
+      "subtitle": "Enter your username and password to log in!",
+      "usernameLabel": "Username",
+      "usernamePlaceholder": "admin",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "rememberMe": "Keep me logged in",
+      "loggingIn": "Logging in..."
+    }
+  },
+  "errors": {
+    "auth": {
+      "unauthenticated": "Not authenticated",
+      "invalidToken": "No valid token was received.",
+      "currentUserFailed": "Could not fetch the current user"
+    },
+    "upload": {
+      "ticket_expired": "The upload ticket expired, try again",
+      "ticket_wrong_movie": "The upload ticket does not belong to this movie",
+      "ticket_wrong_episode": "The upload ticket does not belong to this episode",
+      "metadata_incomplete": "Upload metadata is incomplete",
+      "ticketMissing": "The API did not return the upload permission",
+      "endpointNotConfigured": "The PUBLIC_UPLOAD_URL environment variable is not set"
+    },
+    "network": {
+      "connectionFailed": "Connection error with the GraphQL server.",
+      "invalidResponse": "Invalid response from the GraphQL server."
+    },
+    "validation": {
+      "missingLocale": "Missing language to save.",
+      "missingSettingsValues": "There are no values to save.",
+      "passwordMismatch": "Passwords do not match"
+    }
+  },
+  "landing": {
+    "badge": "Self-hosted media automation",
+    "description": "Search a title, and Perceptor takes care of the rest: it registers it, finds a release, downloads it, transcodes it and files it in your library.",
+    "features": {
+      "search": "Search",
+      "download": "Download",
+      "transcode": "Transcode",
+      "organize": "Organize"
+    },
+    "cta": "Go to login",
+    "illustrationAlt": "Retro-styled transformable robot, decorative"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "movies": "Movies",
+    "shows": "Shows",
+    "calendar": "Calendar",
+    "queue": "Queue",
+    "settings": "Settings",
+    "users": "Users"
+  },
+  "userMenu": {
+    "editProfile": "Edit profile",
+    "accountSettings": "Account settings",
+    "support": "Support",
+    "signOut": "Sign out"
+  },
+  "notifications": {
+    "title": "Notification",
+    "requestPermission": "requests permission to change",
+    "projectLabel": "Project",
+    "minutesAgo": "{minutes} min ago",
+    "hoursAgo": "{hours} hr ago",
+    "viewAll": "View All Notifications"
+  },
+  "header": {
+    "searchPlaceholder": "Search or type command...",
+    "toggleSidebar": "Toggle Sidebar"
+  },
+  "pages": {
+    "dashboard": {
+      "placeholder": "Dashboard"
+    },
+    "movies": {
+      "title": "Movies",
+      "metadataTitle": "Movies | Perceptor",
+      "metadataDescription": "List of tracked movies"
+    },
+    "moviesAdd": {
+      "title": "Add movie",
+      "metadataTitle": "Add movie | Perceptor",
+      "metadataDescription": "Search and add a movie to your library"
+    },
+    "movieDetail": {
+      "metadataDescription": "Movie details page"
+    },
+    "shows": {
+      "title": "Shows",
+      "metadataTitle": "Shows | Perceptor",
+      "metadataDescription": "List of tracked shows"
+    },
+    "showsAdd": {
+      "title": "Add show",
+      "metadataTitle": "Add show | Perceptor",
+      "metadataDescription": "Search and add a show to your library"
+    },
+    "showDetail": {
+      "metadataDescription": "Show details page"
+    },
+    "settings": {
+      "title": "Settings",
+      "metadataTitle": "Settings | Perceptor",
+      "metadataDescription": "Route and service configuration"
+    },
+    "users": {
+      "title": "Users",
+      "metadataTitle": "Users | Perceptor",
+      "metadataDescription": "User administration"
+    },
+    "login": {
+      "metadataTitle": "Login | Perceptor",
+      "metadataDescription": "Perceptor login page"
+    }
+  },
+  "notFound": {
+    "title": "Resource unavailable",
+    "metadataTitle": "Resource unavailable | Perceptor",
+    "message": "Resource not available for this user",
+    "backToMovies": "Back to movies",
+    "backToShows": "Back to shows"
+  },
+  "import": {
+    "file": {
+      "title": "Import Local Video",
+      "description": "Choose the video file for <b>{target}</b>. It uploads over the network — you can pause and resume it if it drops.",
+      "fileLabel": "File",
+      "statusUploading": "Uploading… {percent}%",
+      "statusPaused": "Paused",
+      "statusErrorDefault": "Upload failed",
+      "statusDone": "Done",
+      "pause": "Pause",
+      "resume": "Resume",
+      "cancel": "Cancel",
+      "close": "Close",
+      "errorTicket": "Could not generate the upload permission.",
+      "errorUpload": "Could not upload the file."
+    },
+    "magnet": {
+      "title": "Import Magnet",
+      "description": "Enter the magnet link for <b>{target}</b>.",
+      "label": "Magnet",
+      "placeholder": "magnet:?xt=urn:btih:da39a3ee...",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "replace": "Replace",
+      "processing": "Processing...",
+      "errorDefault": "Could not import the magnet.",
+      "conflictMarker": "already has a download in progress"
+    }
+  },
+  "search": {
+    "container": {
+      "movieNoun": "movie",
+      "showNoun": "series",
+      "resultsEmptySearched": "No results found",
+      "resultsEmptyPrompt": "Search for a {noun} to get started",
+      "added": "Added",
+      "go": "Go",
+      "addButton": "Add",
+      "adding": "Adding...",
+      "errorSearch": "Could not complete the search. Try again.",
+      "errorAdd": "Could not add the {noun}. Try again."
+    },
+    "input": {
+      "placeholder": "Search {noun}...",
+      "searching": "Searching...",
+      "submit": "Search"
+    },
+    "torrentModal": {
+      "title": "Torrent Search",
+      "description": "Searching releases for <b>{target}</b>."
+    },
+    "torrent": {
+      "inputPlaceholder": "Search for releases...",
+      "filterPlaceholder": "Filter results by title (e.g. 1080p, x265)...",
+      "searchButton": "Search",
+      "releaseNameHeader": "Release Name ({count})",
+      "sizeHeader": "Size",
+      "slHeader": "S/L",
+      "actionHeader": "Action",
+      "unknownRelease": "Unknown Release",
+      "searchErrorDefault": "Could not search releases",
+      "addErrorDefault": "Could not add the torrent",
+      "replaceErrorDefault": "Could not replace",
+      "replace": "Replace",
+      "cancel": "Cancel",
+      "searchingTrackers": "Searching trackers...",
+      "noFilterMatch": "No results match your filter.",
+      "noResultsYet": "No results yet. Try searching for a specific release.",
+      "conflictMarker": "already has a download in progress"
+    }
+  },
+  "media": {
+    "card": {
+      "noPoster": "No Poster"
+    },
+    "list": {
+      "emptyDefault": "No {noun} registered",
+      "movieNoun": "movies",
+      "showNoun": "series"
+    },
+    "languagePicker": {
+      "defaultLabel": "Preferred languages",
+      "helpText": "Hold Ctrl (or Cmd) to pick more than one.",
+      "saved": "Languages saved.",
+      "save": "Save",
+      "saving": "Saving..."
+    }
+  },
+  "movies": {
+    "detail": {
+      "noPoster": "No poster available",
+      "unknownYear": "Unknown Year",
+      "fileButton": "File",
+      "magnetButton": "Magnet",
+      "synopsisTitle": "Synopsis",
+      "noOverview": "No overview available.",
+      "languagesTitle": "Languages"
+    }
+  },
+  "shows": {
+    "detail": {
+      "noPoster": "No poster available",
+      "unknownYear": "Unknown Year",
+      "synopsisTitle": "Synopsis",
+      "noOverview": "No overview available."
+    },
+    "seasonAccordion": {
+      "seasonLabel": "Season {number}",
+      "episodeDefaultTitle": "Episode {number}",
+      "numberHeader": "#",
+      "titleHeader": "Title",
+      "releaseDateHeader": "Release date",
+      "statusHeader": "Status",
+      "actionsHeader": "Actions",
+      "searchButtonTitle": "Search",
+      "importFileButtonTitle": "Import file",
+      "addTorrentButtonTitle": "Add torrent"
+    }
+  },
+  "settings": {
+    "mediaServer": {
+      "label": "Media server",
+      "hostLabel": "Host",
+      "hostPlaceholder": "host.docker.internal",
+      "hostHint": "Empty by default on purpose: 'localhost' here would be this same server, not your media server. If it runs on your PC, use host.docker.internal; if it runs in another container of this stack, use that service's name.",
+      "portLabel": "Port",
+      "apiKeyLabel": "API key"
+    },
+    "pathPicker": {
+      "placeholder": "(root folder)",
+      "relativeHint": "Relative to the repo root.",
+      "notMountedHint": "This folder is not mounted — check your .env and restart the stack."
+    },
+    "form": {
+      "torrentSection": "Torrent",
+      "downloadsFolderLabel": "Downloads folder",
+      "indexerSection": "Indexer",
+      "indexerApiKeyLabel": "Indexer API key",
+      "moviesShowsSection": "Movies and series",
+      "tmdbApiKeyLabel": "TMDB API key",
+      "moviesEnabledLabel": "Enable movies",
+      "moviesFolderLabel": "Movies folder",
+      "showsEnabledLabel": "Enable series",
+      "showsFolderLabel": "Series folder",
+      "mediaServerSection": "Media server",
+      "saved": "Settings saved.",
+      "saving": "Saving...",
+      "save": "Save"
+    },
+    "languages": {
+      "title": "Preferred languages",
+      "description": "Applies to all your content. You can add extra languages per title from each movie or series page.",
+      "label": "Languages"
+    }
+  },
+  "users": {
+    "create": {
+      "title": "New user",
+      "nameLabel": "Name",
+      "usernameLabel": "Username",
+      "passwordLabel": "Password",
+      "passwordHint": "6 characters minimum",
+      "passwordConfirmLabel": "Confirm password",
+      "submit": "Create user",
+      "submitting": "Creating..."
+    },
+    "table": {
+      "title": "Users",
+      "nameHeader": "Name",
+      "usernameHeader": "Username",
+      "roleHeader": "Role",
+      "statusHeader": "Status",
+      "roleAdmin": "Administrator",
+      "roleUser": "User",
+      "statusEnabled": "Enabled",
+      "statusDisabled": "Disabled",
+      "disableSelfTitle": "You cannot disable your own user",
+      "deleteSelfTitle": "You cannot delete your own user",
+      "disabling": "Disabling...",
+      "enabling": "Enabling...",
+      "disable": "Disable",
+      "enable": "Enable",
+      "deleting": "Deleting...",
+      "delete": "Delete"
+    }
+  }
+}

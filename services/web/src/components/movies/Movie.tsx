@@ -1,6 +1,7 @@
 "use client";
 import { FileVideo, Magnet } from "lucide-react";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { setMoviePreferredLanguagesAction } from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
 import ImportFileModal from "@/components/import/importFileModal";
@@ -18,6 +19,7 @@ export default function Movie({
   movie: MovieRecord;
   languageOptions: Language[];
 }) {
+  const t = useTranslations("movies.detail");
   const {
     isOpen: isFileModalOpen,
     openModal: openFileModal,
@@ -50,7 +52,7 @@ export default function Movie({
           />
         ) : (
           <div className="flex aspect-[2/3] items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
-            <span className="text-gray-400 italic">No poster available</span>
+            <span className="text-gray-400 italic">{t("noPoster")}</span>
           </div>
         )}
       </div>
@@ -64,7 +66,7 @@ export default function Movie({
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {movie.releaseDate
               ? new Date(movie.releaseDate).getFullYear()
-              : "Unknown Year"}{" "}
+              : t("unknownYear")}{" "}
             • {movie.originalLanguage.toUpperCase()} • {movie.status}
           </p>
         </div>
@@ -72,26 +74,26 @@ export default function Movie({
         <div className="flex flex-wrap gap-3">
           <Button size="sm" variant="outline" onClick={openFileModal}>
             <FileVideo size={18} />
-            File
+            {t("fileButton")}
           </Button>
           <Button size="sm" variant="outline" onClick={openMagnetModal}>
             <Magnet size={18} className="text-red-500" />
-            Magnet
+            {t("magnetButton")}
           </Button>
         </div>
 
         <div className="space-y-2">
           <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-            Sinopsis
+            {t("synopsisTitle")}
           </h4>
           <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">
-            {movie.overview || "No overview available."}
+            {movie.overview || t("noOverview")}
           </p>
         </div>
 
         <div className="space-y-2 max-w-lg">
           <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-            Idiomas
+            {t("languagesTitle")}
           </h4>
           <LanguagePicker
             options={languageOptions}

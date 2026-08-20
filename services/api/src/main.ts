@@ -7,6 +7,8 @@ import type { ValidationError } from '@nestjs/common';
 import { json, urlencoded } from 'express';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { assertAuthEnv } from './auth/auth.constants';
+import { MESSAGES_EN } from '@/i18n/messages.en';
+import type { ErrorKey } from '@/i18n/error-keys';
 
 // /uploads (ver src/uploads/) recibe el body crudo de tus, potencialmente de
 // varios GB por request: no puede pasar por el body parser global. bodyParser:
@@ -49,6 +51,18 @@ async function bootstrap() {
   // media-roots.service.ts, settings.service.ts). None of this app's DTOs use
   // @ValidateNested, so the first top-level error's first constraint is
   // always the whole story — no children to walk.
+  //
+  // 018 REQ-9: every DTO's `message` option (see e.g.
+  // `auth/dto/login.input.ts`) is itself one of the `ERROR_KEYS.VALIDATION_*`
+  // key strings, not a rendered sentence — `class-validator`'s `message`
+  // option only accepts a plain string, so the key IS the string. This
+  // factory looks that string up in `MESSAGES_EN` and, when it resolves,
+  // builds the same `{ message, i18n: { key } }` response body every other
+  // exception in this app carries (`i18n-error.ts`), so
+  // `graphql-error.formatter.ts` lifts it into `extensions.i18n` exactly the
+  // same way. A `firstMessage` that is not a known key (e.g. Nest's own
+  // built-in fallback string) still degrades to the old plain-string
+  // behaviour, preserving the flattening this comment describes above.
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     transform: true,
@@ -57,6 +71,13 @@ async function bootstrap() {
       const firstMessage = firstError?.constraints
         ? Object.values(firstError.constraints)[0]
         : 'Validation failed';
+      const englishMessage = MESSAGES_EN[firstMessage];
+      if (englishMessage !== undefined) {
+        return new BadRequestException({
+          message: englishMessage,
+          i18n: { key: firstMessage as ErrorKey },
+        });
+      }
       return new BadRequestException(firstMessage);
     },
   }));

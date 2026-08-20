@@ -3,6 +3,9 @@ import { fetchGraphQL } from '../api/graphql-client';
 import { scanFolder } from '../scan/scan-folder';
 import { selectMatches, type Match, type SelectMatchesMode } from '../scan/select-matches';
 import type { SourceReadyJob } from '../queue/types';
+import { KeyedError } from '../i18n/keyed-error';
+import { renderMessage } from '../i18n/messages.en';
+import { ERROR_SOURCE_NO_DOWNLOAD_PATH, ERROR_SOURCE_NO_TARGET } from '../i18n/error-keys';
 
 type MediaSourceQueryResult = {
   mediaSource: {
@@ -35,8 +38,11 @@ function selectMode(mediaSource: NonNullable<MediaSourceQueryResult['mediaSource
   if (mediaSource.seasonId !== null) {
     return { kind: 'season' };
   }
-  throw new Error(
-    `mediaSource ${mediaSource.id} no apunta a ninguna película, episodio ni temporada`,
+  const params = { id: mediaSource.id };
+  throw new KeyedError(
+    ERROR_SOURCE_NO_TARGET,
+    renderMessage(ERROR_SOURCE_NO_TARGET, params),
+    params,
   );
 }
 
@@ -51,10 +57,18 @@ export async function handleSourceReady(job: Job<SourceReadyJob>): Promise<void>
   );
 
   if (!mediaSource) {
-    throw new Error(`mediaSource ${mediaSourceId} no existe`);
+    // No key in the frozen worker error table (docs/spec/features/018-ui-i18n/spec.md
+    // § "Error table — worker") covers "mediaSource not found" — the table's three
+    // api-owned keys are processJob.not_found, source.no_target and
+    // source.no_download_path only. Reported in English per Article VI rather than
+    // inventing a key outside the frozen contract; flagged to the orchestrator.
+    throw new Error(`mediaSource ${mediaSourceId} does not exist`);
   }
   if (!mediaSource.downloadPath) {
-    throw new Error(`mediaSource ${mediaSourceId} no tiene downloadPath`);
+    throw new KeyedError(
+      ERROR_SOURCE_NO_DOWNLOAD_PATH,
+      renderMessage(ERROR_SOURCE_NO_DOWNLOAD_PATH),
+    );
   }
 
   const mode = selectMode(mediaSource);

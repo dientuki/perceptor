@@ -1,8 +1,9 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Label from "@/components/form/Label";
-import { MediaRoot } from "@/types/media-roots";
+import type { MediaRoot } from "@/types/media-roots";
 
 interface PathPickerProps {
   settingKey: string;
@@ -18,11 +19,19 @@ interface PathPickerProps {
 // `name`: lo que viaja en el FormData es el hidden de abajo, que traduce
 // "vacío" a "." antes de que updateSettingsAction (actions/settings.ts) lo
 // vea — así ese filtro de blancos no descarta "quiero la raíz misma".
-export default function PathPicker({ settingKey, label, root, value }: PathPickerProps) {
+export default function PathPicker({
+  settingKey,
+  label,
+  root,
+  value,
+}: PathPickerProps) {
+  const t = useTranslations("settings.pathPicker");
   const [segment, setSegment] = useState(value === "." ? "" : value);
 
   const hostPathIsAbsolute = root.hostPath.startsWith("/");
-  const prefix = root.hostPath.endsWith("/") ? root.hostPath : `${root.hostPath}/`;
+  const prefix = root.hostPath.endsWith("/")
+    ? root.hostPath
+    : `${root.hostPath}/`;
   const submittedValue = segment.trim() === "" ? "." : segment.trim();
 
   return (
@@ -41,7 +50,7 @@ export default function PathPicker({ settingKey, label, root, value }: PathPicke
           type="text"
           value={segment}
           onChange={(e) => setSegment(e.target.value)}
-          placeholder="(carpeta raíz)"
+          placeholder={t("placeholder")}
           className="h-11 w-full min-w-0 bg-transparent px-2 text-sm text-gray-800 focus:outline-hidden dark:text-white/90"
         />
       </div>
@@ -49,13 +58,11 @@ export default function PathPicker({ settingKey, label, root, value }: PathPicke
       <input type="hidden" name={settingKey} value={submittedValue} />
 
       {!hostPathIsAbsolute && (
-        <p className="mt-1.5 text-xs text-gray-500">Relativo a la raíz del repo.</p>
+        <p className="mt-1.5 text-xs text-gray-500">{t("relativeHint")}</p>
       )}
 
       {!root.available && (
-        <p className="mt-1.5 text-xs text-error-500">
-          Esta carpeta no está montada — revisá el .env y reiniciá el stack.
-        </p>
+        <p className="mt-1.5 text-xs text-error-500">{t("notMountedHint")}</p>
       )}
     </div>
   );

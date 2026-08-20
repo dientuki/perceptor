@@ -112,11 +112,11 @@ describe('EpisodesService', () => {
       force: false,
     };
 
-    it('throws "El episodio <id> no existe" for a missing or unowned episode, and creates no source', async () => {
+    it('throws error.episode.not_found for a missing or unowned episode, and creates no source', async () => {
       prisma.episode.findFirst.mockResolvedValue(null);
 
       await expect(service.addTorrentToEpisode(42, validInput, 'user-2')).rejects.toThrow(
-        'El episodio 42 no existe',
+        'Episode 42 does not exist',
       );
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
@@ -149,7 +149,7 @@ describe('EpisodesService', () => {
 
       await expect(
         service.addTorrentToEpisode(42, { ...validInput, force: false }, 'user-1'),
-      ).rejects.toThrow('Este episodio ya tiene una descarga en curso. Confirmá para reemplazarla.');
+      ).rejects.toThrow('This episode already has a download in progress. Confirm to replace it.');
 
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
@@ -179,7 +179,12 @@ describe('EpisodesService', () => {
 
       expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
         where: { episodeId: 42, status: { not: 'ERROR' } },
-        data: { status: 'ERROR', errorMessage: expect.any(String) },
+        data: {
+          status: 'ERROR',
+          errorMessage: expect.any(String),
+          errorKey: 'error.source.replaced',
+          errorParams: null,
+        },
       });
     });
 
@@ -193,7 +198,7 @@ describe('EpisodesService', () => {
       });
 
       await expect(service.addTorrentToEpisode(42, validInput, 'user-1')).rejects.toThrow(
-        'Ese magnet ya está asociado a «Dune»',
+        'That magnet is already attached to «Dune»',
       );
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
@@ -210,7 +215,7 @@ describe('EpisodesService', () => {
       });
 
       await expect(service.addTorrentToEpisode(42, validInput, 'user-1')).rejects.toThrow(
-        'Ese magnet ya está asociado a «Reacher S04E01»',
+        'That magnet is already attached to «Reacher S04E01»',
       );
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();

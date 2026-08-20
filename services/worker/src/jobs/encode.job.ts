@@ -4,6 +4,9 @@ import { buildOutputPath } from '../paths/build-output-path';
 import { encode } from '../encode';
 import { cleanupSource } from './cleanup-source';
 import type { EncodeJob } from '../queue/types';
+import { KeyedError } from '../i18n/keyed-error';
+import { renderMessage } from '../i18n/messages.en';
+import { ERROR_ENCODE_UNEXPECTED } from '../i18n/error-keys';
 
 export type EncodeJobDetails = {
   id: number;
@@ -136,11 +139,29 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     // api dentro de encodeCompleted — tiene las settings y las raíces, el
     // worker no necesita enterarse.
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    // encodeFailed's errorKey is required (REQ-11, docs/spec/graphql-contract.md):
+    // there is no path where this reports a failure with no key. A KeyedError
+    // (every throw site in ffmpeg/, paths/, encode/ and graphql-client.ts) carries
+    // its own key/params; anything else — a bug, an uncaught library error — still
+    // needs one, so it falls back to the catch-all ERROR_ENCODE_UNEXPECTED with the
+    // raw message carried as a param rather than silently reporting no key at all.
+    const keyed = error instanceof KeyedError;
+    const errorKey = keyed ? error.key : ERROR_ENCODE_UNEXPECTED;
+    const errorParams = keyed
+      ? error.params
+      : { detail: error instanceof Error ? error.message : String(error) };
+    const errorMessage = renderMessage(errorKey, errorParams);
 
     await fetchGraphQL(
-      `mutation ($id: Int!, $msg: String!) { encodeFailed(processJobId: $id, errorMessage: $msg) }`,
-      { id: processJobId, msg: errorMessage },
+      `mutation ($id: Int!, $key: String!, $params: String, $msg: String!) {
+        encodeFailed(processJobId: $id, errorKey: $key, errorParams: $params, errorMessage: $msg)
+      }`,
+      {
+        id: processJobId,
+        key: errorKey,
+        params: errorParams ? JSON.stringify(errorParams) : undefined,
+        msg: errorMessage,
+      },
     ).catch((err) => console.error(`[encode] no se pudo reportar el fallo de ${processJobId}:`, err));
 
     throw error;

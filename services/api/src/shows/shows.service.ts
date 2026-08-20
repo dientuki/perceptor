@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
 import { MediaSearchResult, ShowDetail } from '@/clients/types';
@@ -227,7 +229,7 @@ export class ShowsService implements MediaTypeService {
     try {
       detail = (await this.tmdb.details(MEDIA_TYPE.SHOW, tmdbId)) as ShowDetail;
     } catch {
-      throw new NotFoundException('No encontramos la serie en el catálogo');
+      throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_IN_CATALOG);
     }
 
     return {

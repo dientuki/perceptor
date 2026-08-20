@@ -33,6 +33,7 @@ Flat capability folders, not Nest-style modules. No path aliases — relative im
 src/index.ts             the two Workers, the umask, the signal handling
 src/queue/types.ts       queue/job names and payload shapes
 src/api/graphql-client.ts  fetchGraphQL — throws on json.errors, deliberately
+src/i18n/                error-keys.ts · messages.en.ts · keyed-error.ts (see below)
 src/jobs/                the two handlers, plus cleanup-source.ts (post-encode source deletion)
 src/scan/scan-folder.ts  enumerates a download's files, flags each isVideo — no longer selects a winner
 src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly one pair
@@ -91,10 +92,10 @@ first, on both sides. The seeded `languages` table stores ISO-639-2/**B** (`fre`
 `zho`, `nld`, `ces`) — comparing the raw strings silently drops a track the user actually asked
 for.
 
-A missing track in the title's **original** language is a hard failure — `getAudioParams` throws
-`El archivo no tiene ninguna pista de audio en el idioma original (<iso3>)`, which propagates out of
-`handleEncode`'s existing `try` and is reported through `encodeFailed`, no new plumbing. A missing
-track in any other allowed language is not an error; it's logged and skipped.
+A missing track in the title's **original** language is a hard failure — `getAudioParams` throws a
+`KeyedError(ERROR_ENCODE_NO_ORIGINAL_AUDIO, { iso3 })`, which propagates out of `handleEncode`'s
+existing `try` and is reported through `encodeFailed`, no new plumbing. A missing track in any
+other allowed language is not an error; it's logged and skipped.
 
 `src/ffmpeg/remux-detection.ts`'s `isRemux(metadata, filename)` replaced a filename-substring guess
 in `buildCommand.ts` with a decision from the `ffprobe` metadata itself: a lossless audio track
@@ -136,12 +137,36 @@ GraphQL selection missing a field — nothing catches this at compile time, see
 `console.error`s the missing field's name: a missing instruction is never read as `false` (silently
 never cleaning up) and never as `true` (silently deleting something live).
 
+## Failures carry a translation key, never a rendered sentence (`018-ui-i18n`)
+
+Every failure `encodeFailed` reports travels as a key plus interpolation params, not English prose
+folded into a sentence. `src/i18n/error-keys.ts` transcribes this service's own keys
+(`error.encode.*`) plus three keys **owned by `api`** and reused byte-identical
+(`error.processJob.not_found`, `error.source.no_target`, `error.source.no_download_path`) —
+nothing checks the two lists agree (`src/queue/types.ts`'s hand-sync pattern, same reasoning).
+`src/i18n/keyed-error.ts`'s `KeyedError extends Error` carries `key`/`params`, so an existing
+`throw`/`catch` site keeps working; `stderr`, exit `code`, `filePath` and `iso3` are always
+**params**, never interpolated into the message string itself. `src/i18n/messages.en.ts`'s
+`renderMessage(key, params)` produces the English `errorMessage` that still lands in
+`ProcessJob.errorMessage` for anyone reading `bin/mysql` with no catalog.
+
+`jobs/encode.job.ts`'s catch block reads `key`/`params` off a `KeyedError`, or falls back to the
+catch-all `error.encode.unexpected` (carrying the raw message as a `detail` param) for a throw that
+isn't one — `encodeFailed`'s `errorKey` argument is required, so a failure never reports with no
+key. This service never reads a locale and never translates into anything but English; rendering a
+key into the active UI language is `web`'s job — see `docs/spec/graphql-contract.md` § "UI
+internationalization" for the full envelope and vocabulary.
+
 ## Errors must not be swallowed
 
 `src/api/graphql-client.ts` throws on `json.errors`, and the comment at the top says why: `web`
 renders errors to a user, but a worker that swallowed one would mark the job completed without
 having written anything. Preserve that. A caught-and-logged error that lets a job report success is
-this service's central failure mode.
+this service's central failure mode. Since `018-ui-i18n`, if the incoming error carries
+`extensions.i18n.key`, it is re-thrown as a `KeyedError` so an `api` key round-trips as a key
+instead of unreadable stringified JSON; the three boot-time infrastructure errors in this same file
+(`INTERNAL_GRAPHQL_URL`/`SERVICE_TOKEN` unset, a non-2xx HTTP status) stay plain, unkeyed `Error`s
+on purpose — no user ever sees them.
 
 **One documented exception**: `cleanup-source.ts` catches and logs every error it can produce —
 a throwing `fetchGraphQL` (torrent client unreachable) or a throwing `rm`/`rmdir` — instead of
@@ -161,7 +186,7 @@ leaves a half-written file at the destination.
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate, against `tsconfig.json` (covers `src/**/*`, including `*.spec.ts`) |
 | `bin/npm worker run build` | `tsc -p tsconfig.build.json` — the `runner` image's `builder` stage runs this; `tsconfig.build.json` extends `tsconfig.json` but excludes `**/*.spec.ts`, so `dist/` ships no test code (`015-reproducible-image-builds`) |
-| `bin/npm worker test` | `vitest run` — 10 suites, 92 tests, green (`017-worker-gpu-strategy` added `ffmpeg/vulkan.spec.ts` and the first `getVideoParams` coverage in `ffmpeg/params.spec.ts`; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
+| `bin/npm worker test` | `vitest run` — 12 suites, 102 tests, green (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `017-worker-gpu-strategy` added `ffmpeg/vulkan.spec.ts` and the first `getVideoParams` coverage in `ffmpeg/params.spec.ts`; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 
 ## Known debt

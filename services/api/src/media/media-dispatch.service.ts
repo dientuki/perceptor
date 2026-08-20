@@ -1,8 +1,10 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { MoviesService } from '@/movies/movies.service';
 import { ShowsService } from '@/shows/shows.service';
 import { MediaTypeService } from './media-type.interface';
 import { MEDIA_TYPE, MediaType } from '@/types/media';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // The boundary that turns a media type into a choice of service. Nothing
 // media-type-specific lives here beyond the lookup table itself — adding a
@@ -27,7 +29,7 @@ export class MediaDispatchService {
   resolve(type: string): MediaTypeService {
     const service = this.services[type as MediaType];
     if (!service) {
-      throw new BadRequestException(`Tipo de medio no soportado: ${type}`);
+      throw i18nError.badRequest(ERROR_KEYS.MEDIA_UNSUPPORTED_TYPE, { type });
     }
     return service;
   }

@@ -68,6 +68,9 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // BCP-47 UI language tag. Null means unset — resolve from Accept-Language, then "en".
+  uiLocale String? @db.VarChar(35)
+
   movies UserMovie[]
   shows  UserShow[]
 
@@ -196,6 +199,10 @@ model MediaSource {
   sourceFiles SourceFile[]
 
   errorMessage String?  @db.Text
+  // Translation key for the failure, e.g. "error.source.scan_no_video". Null on rows written before 018.
+  errorKey     String?  @db.VarChar(100)
+  // Interpolation values for errorKey, a JSON object encoded as a string. Null when the key takes none.
+  errorParams  String?  @db.Text
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -256,6 +263,10 @@ model ProcessJob {
 
   status       EncodeStatus @default(WAITING)
   errorMessage String?      @db.Text
+  // Translation key for the failure, e.g. "error.encode.no_video_stream". Not exposed on any GraphQL type.
+  errorKey     String?      @db.VarChar(100)
+  // Interpolation values for errorKey, a JSON object encoded as a string. Not exposed on any GraphQL type.
+  errorParams  String?      @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

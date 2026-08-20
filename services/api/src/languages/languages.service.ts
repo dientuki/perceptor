@@ -1,5 +1,7 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { i18nError } from '@/i18n/i18n-error';
 import { Language } from './entities/language.entity';
 import { languageNameFor } from './language-names';
 
@@ -28,7 +30,7 @@ export class LanguagesService {
         iso3: row.iso3,
         name: languageNameFor(row.iso2),
       }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // Resolves every iso2 to its Language row, throwing on the first unknown
@@ -37,7 +39,7 @@ export class LanguagesService {
     const seen = new Set<string>();
     for (const iso2 of iso2Codes) {
       if (seen.has(iso2)) {
-        throw new BadRequestException(`El idioma ${iso2} está repetido`);
+        throw i18nError.badRequest(ERROR_KEYS.LANGUAGE_DUPLICATE, { iso2 });
       }
       seen.add(iso2);
     }
@@ -52,7 +54,7 @@ export class LanguagesService {
     return iso2Codes.map((iso2) => {
       const id = byIso2.get(iso2);
       if (id === undefined) {
-        throw new BadRequestException(`El idioma ${iso2} no está disponible`);
+        throw i18nError.badRequest(ERROR_KEYS.LANGUAGE_UNAVAILABLE, { iso2 });
       }
       return id;
     });

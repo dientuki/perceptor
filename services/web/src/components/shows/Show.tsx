@@ -1,16 +1,18 @@
 import Image from "next/image";
+import { getTranslations } from "next-intl/server";
 import { setShowPreferredLanguagesAction } from "@/actions/languages";
 import type { Show as ShowRecord } from "@/actions/shows";
 import LanguagePicker from "@/components/media/LanguagePicker";
 import type { Language } from "@/types/languages";
 
-export default function Show({
+export default async function Show({
   show,
   languageOptions,
 }: {
   show: ShowRecord;
   languageOptions: Language[];
 }) {
+  const t = await getTranslations("shows.detail");
   const setPreferredLanguages = setShowPreferredLanguagesAction.bind(
     null,
     show.id,
@@ -32,7 +34,7 @@ export default function Show({
           />
         ) : (
           <div className="flex aspect-[2/3] items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
-            <span className="text-gray-400 italic">No poster available</span>
+            <span className="text-gray-400 italic">{t("noPoster")}</span>
           </div>
         )}
       </div>
@@ -46,17 +48,17 @@ export default function Show({
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {show.releaseDate
               ? new Date(show.releaseDate).getFullYear()
-              : "Unknown Year"}{" "}
+              : t("unknownYear")}{" "}
             • {show.originalLanguage.toUpperCase()} • {show.status}
           </p>
         </div>
 
         <div className="space-y-2">
           <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-            Sinopsis
+            {t("synopsisTitle")}
           </h4>
           <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">
-            {show.overview || "No overview available."}
+            {show.overview || t("noOverview")}
           </p>
         </div>
 

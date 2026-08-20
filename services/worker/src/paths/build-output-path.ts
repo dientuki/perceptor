@@ -1,4 +1,7 @@
 import { join } from 'node:path';
+import { KeyedError } from '../i18n/keyed-error';
+import { renderMessage } from '../i18n/messages.en';
+import { ERROR_ENCODE_EPISODE_NUMBERS_MISSING } from '../i18n/error-keys';
 
 // Subconjunto de EncodeJobDetails (services/worker/src/jobs/encode.job.ts) que
 // hace falta para armar la ruta — tipado acá en vez de importado para no atar
@@ -58,7 +61,10 @@ export function buildOutputPath(details: OutputPathInput): string {
   }
 
   if (details.seasonNumber === null || details.episodeNumber === null) {
-    throw new Error('EPISODE sin seasonNumber/episodeNumber: no se puede armar la ruta de salida');
+    throw new KeyedError(
+      ERROR_ENCODE_EPISODE_NUMBERS_MISSING,
+      renderMessage(ERROR_ENCODE_EPISODE_NUMBERS_MISSING),
+    );
   }
 
   const seasonFolder = `Season ${pad2(details.seasonNumber)}`;

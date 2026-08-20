@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { fetchGraphQL } from "@/lib/graphql-client";
+import { getTranslations } from "next-intl/server";
 import { redirectIfUnauthenticated } from "@/lib/auth-session";
+import { fetchGraphQL } from "@/lib/graphql-client";
+import { translateGraphQLError } from "@/lib/graphql-error";
 import { AdminUser } from "@/types/users";
 
 const USERS_QUERY = `
@@ -24,7 +26,7 @@ export async function getUsers(): Promise<AdminUser[]> {
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(errors[0]?.message || "Error al obtener los usuarios");
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   return data?.users ?? [];
@@ -50,8 +52,10 @@ export async function createUserAction(
   const password = formData.get("password");
   const passwordConfirmation = formData.get("passwordConfirmation");
 
+  const t = await getTranslations("errors");
+
   if (password !== passwordConfirmation) {
-    return { error: "Las contraseñas no coinciden" };
+    return { error: t("validation.passwordMismatch") };
   }
 
   let result: Awaited<ReturnType<typeof fetchGraphQL>>;
@@ -60,16 +64,18 @@ export async function createUserAction(
       createUserInput: { name, username, password },
     });
   } catch (err) {
-    return { error: "Error de conexión con el servidor GraphQL." };
+    return { error: t("network.connectionFailed") };
   }
 
   const { errors } = result;
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    // Pass through unmodified — this is what surfaces REQ-6's duplicate-username
-    // message and the CreateUserInput validation messages verbatim.
-    return { error: errors[0].message };
+    // Translated via the API's `extensions.i18n.key` — this is what surfaces
+    // REQ-6's duplicate-username message and the CreateUserInput validation
+    // messages in the active locale, falling back to the English message if
+    // the catalog hasn't caught up with the key yet.
+    return { error: await translateGraphQLError(errors[0]) };
   }
 
   revalidatePath("/users");
@@ -103,16 +109,19 @@ export async function setUserEnabledAction(
       updateUserInput: { id, isEnabled },
     });
   } catch (err) {
-    return { error: "Error de conexión con el servidor GraphQL." };
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
   }
 
   const { errors } = result;
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    // Pass through unmodified — this is what surfaces REQ-5's self-disable and
-    // last-admin messages verbatim.
-    return { error: errors[0].message };
+    // Translated via the API's `extensions.i18n.key` — this is what surfaces
+    // REQ-5's self-disable and last-admin messages in the active locale,
+    // falling back to the English message if the catalog hasn't caught up
+    // with the key yet.
+    return { error: await translateGraphQLError(errors[0]) };
   }
 
   revalidatePath("/users");
@@ -137,16 +146,19 @@ export async function deleteUserAction(
   try {
     result = await fetchGraphQL(REMOVE_USER_MUTATION, { id });
   } catch (err) {
-    return { error: "Error de conexión con el servidor GraphQL." };
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
   }
 
   const { errors } = result;
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    // Pass through unmodified — this is what surfaces REQ-5's self-delete and
-    // last-admin messages (AC-7, AC-8) verbatim.
-    return { error: errors[0].message };
+    // Translated via the API's `extensions.i18n.key` — this is what surfaces
+    // REQ-5's self-delete and last-admin messages (AC-7, AC-8) in the active
+    // locale, falling back to the English message if the catalog hasn't
+    // caught up with the key yet.
+    return { error: await translateGraphQLError(errors[0]) };
   }
 
   revalidatePath("/users");

@@ -5,6 +5,7 @@ import {
   redirectToClearSession,
 } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
+import { translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
 
 export interface Episode {
@@ -121,7 +122,7 @@ export async function getShowById(id: number): Promise<Show | null> {
     // its generateMetadata) — cookie mutation is illegal there, so hand off
     // to the Route Handler instead of mutating the cookie in-process.
     redirectToClearSession(errors);
-    throw new Error(errors[0]?.message || "Error al obtener la serie");
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   // El API devuelve null cuando el id no existe o no pertenece al usuario;
@@ -157,7 +158,7 @@ export async function addTorrentToEpisodeAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(errors[0]?.message || "Error al agregar el torrent");
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   return data!.addTorrentToEpisode;
@@ -183,7 +184,7 @@ export async function addMagnetToEpisodeAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(errors[0]?.message || "Error al importar el magnet");
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   return data!.addMagnetToEpisode;

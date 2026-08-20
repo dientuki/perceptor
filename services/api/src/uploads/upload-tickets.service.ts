@@ -14,6 +14,18 @@ const UPLOAD_TICKET_KEY_PREFIX = 'upload:ticket:';
 // `MediaSearchResult`.
 export type UploadTicketTarget = { movieId: number } | { episodeId: number };
 
+// Typed twins of the plain `Error`s this service used to throw, so callers
+// (`uploads.service.ts`) can branch on `instanceof` instead of matching
+// English message text — the exact coupling REQ-14/`error.magnet.*` already
+// broke elsewhere in this feature (spec.md § "Error table — uploads").
+export class UploadTicketExpiredError extends Error {}
+
+export class UploadTicketMismatchError extends Error {
+  constructor(public readonly target: 'movie' | 'episode') {
+    super(`Upload ticket does not match the ${target} being uploaded`);
+  }
+}
+
 type UploadTicketPayload = {
   sub: string;
   movieId?: number;
@@ -74,11 +86,11 @@ export class UploadTicketsService {
     try {
       payload = this.jwtService.verify<DecodedUploadTicket>(token);
     } catch {
-      throw new Error('Invalid or expired upload ticket');
+      throw new UploadTicketExpiredError('Invalid or expired upload ticket');
     }
 
     if (payload.typ !== 'upload') {
-      throw new Error('Token is not an upload ticket');
+      throw new UploadTicketExpiredError('Token is not an upload ticket');
     }
 
     const matches =
@@ -87,13 +99,12 @@ export class UploadTicketsService {
         : payload.episodeId !== undefined && Number(payload.episodeId) === target.episodeId;
 
     if (!matches) {
-      const label = 'movieId' in target ? 'movie' : 'episode';
-      throw new Error(`Upload ticket does not match the ${label} being uploaded`);
+      throw new UploadTicketMismatchError('movieId' in target ? 'movie' : 'episode');
     }
 
     const secondsRemaining = payload.exp - Math.floor(Date.now() / 1000);
     if (secondsRemaining <= 0) {
-      throw new Error('Invalid or expired upload ticket');
+      throw new UploadTicketExpiredError('Invalid or expired upload ticket');
     }
 
     // Atomic SET ... NX: only the first spend of a given jti succeeds. A
@@ -108,7 +119,7 @@ export class UploadTicketsService {
       'NX',
     );
     if (spent !== 'OK') {
-      throw new Error('Upload ticket already used');
+      throw new UploadTicketExpiredError('Upload ticket already used');
     }
 
     return payload.sub;

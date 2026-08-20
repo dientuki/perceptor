@@ -1,8 +1,11 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
 import { SourceKind } from '@prisma/client';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { MESSAGES_EN } from '@/i18n/messages.en';
 
 // Structural twin of MoviesService.findOneFromDb, one relation deeper:
 // ownership runs through episode -> season -> show -> UserShow rather than
@@ -35,12 +38,9 @@ export class EpisodesService {
   // MoviesService.addMagnetToMovie de acá en más, una vez parseado el
   // infoHash del propio magnet.
   async addMagnetToEpisode(episodeId: number, input: { magnet: string; force: boolean }, userId: string) {
-    let parsed;
-    try {
-      parsed = parseMagnet(input.magnet);
-    } catch (err) {
-      throw new BadRequestException(err instanceof Error ? err.message : String(err));
-    }
+    // parseMagnet already throws a keyed BadRequestException (018 T010) — no
+    // re-wrap needed, just let it propagate so `extensions.i18n` survives.
+    const parsed = parseMagnet(input.magnet);
 
     return this.attachTorrentSource(
       episodeId,
@@ -71,16 +71,14 @@ export class EpisodesService {
     userId: string,
   ) {
     const episode = await this.findOneFromDb(episodeId, userId);
-    if (!episode) throw new NotFoundException(`El episodio ${episodeId} no existe`);
+    if (!episode) throw i18nError.notFound(ERROR_KEYS.EPISODE_NOT_FOUND, { id: episodeId });
 
     const activeSource = await this.prisma.mediaSource.findFirst({
       where: { episodeId, status: { not: 'ERROR' } },
     });
 
     if (activeSource && !input.force) {
-      throw new ConflictException(
-        'Este episodio ya tiene una descarga en curso. Confirmá para reemplazarla.',
-      );
+      throw i18nError.conflict(ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS);
     }
 
     // Symmetric with the check MoviesService.attachTorrentSource now does:
@@ -92,15 +90,15 @@ export class EpisodesService {
     });
 
     if (existingSource && existingSource.movie) {
-      throw new ConflictException(
-        `Ese magnet ya está asociado a «${existingSource.movie.title}»`,
-      );
+      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
+        title: existingSource.movie.title,
+      });
     }
 
     if (existingSource && existingSource.episodeId && existingSource.episodeId !== episodeId) {
-      throw new ConflictException(
-        `Ese magnet ya está asociado a «${this.episodeDisplayTitle(episode)}»`,
-      );
+      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
+        title: this.episodeDisplayTitle(episode),
+      });
     }
 
     // El savepath lo decide el client al agregar el torrent, así cada
@@ -115,7 +113,12 @@ export class EpisodesService {
     if (activeSource && input.force) {
       await this.prisma.mediaSource.updateMany({
         where: { episodeId, status: { not: 'ERROR' } },
-        data: { status: 'ERROR', errorMessage: 'Reemplazado por una nueva descarga' },
+        data: {
+          status: 'ERROR',
+          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+          errorKey: ERROR_KEYS.SOURCE_REPLACED,
+          errorParams: null,
+        },
       });
     }
 
@@ -129,6 +132,8 @@ export class EpisodesService {
             releaseTitle: input.releaseTitle,
             downloadPath,
             errorMessage: null,
+            errorKey: null,
+            errorParams: null,
             episodeId,
           },
         })

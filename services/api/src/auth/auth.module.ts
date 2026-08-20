@@ -8,6 +8,12 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { SessionService } from './session.service';
 import { getJwtSecret } from './auth.constants';
 import { LanguagesModule } from '@/languages/languages.module';
+// AuthResolver's setUiLocale mutation needs UsersService. Provided here
+// directly rather than importing UsersModule: UsersModule already imports
+// AuthModule (for SessionService), and importing it back would make the
+// module graph circular. PrismaModule is @Global(), so this instance shares
+// the same PrismaService the one inside UsersModule uses.
+import { UsersService } from '@/users/users.service';
 
 @Module({
   imports: [
@@ -23,7 +29,7 @@ import { LanguagesModule } from '@/languages/languages.module';
       useFactory: () => ({ secret: getJwtSecret() }),
     }),
   ],
-  providers: [AuthService, AuthResolver, JwtStrategy, SessionService],
+  providers: [AuthService, AuthResolver, JwtStrategy, SessionService, UsersService],
   // SessionService is exported so UsersModule can revoke a disabled user's
   // live sessions (004-user-disable REQ-3) without a second Redis wrapper.
   exports: [JwtModule, SessionService],

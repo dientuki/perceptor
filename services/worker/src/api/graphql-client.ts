@@ -3,6 +3,25 @@
 // Web renderiza los errores; un worker que se los tragara marcaría el job como
 // completed sin haber escrito nada. Es el único manejo de errores que hace
 // falta acá.
+//
+// Under 018-ui-i18n / REQ-11, an api error carries its i18n key on
+// extensions.i18n (see docs/spec/graphql-contract.md). That key is lifted
+// onto a KeyedError so it round-trips as a key instead of getting flattened
+// into unreadable JSON in ProcessJob.errorMessage. The three infrastructure
+// errors below (missing env, non-2xx HTTP) stay plain unkeyed Errors — they
+// are boot-time operator failures no user ever sees.
+
+import { KeyedError } from '../i18n/keyed-error';
+
+interface GraphQLErrorEntry {
+  message?: string;
+  extensions?: {
+    i18n?: {
+      key?: string;
+      params?: Record<string, string | number>;
+    };
+  };
+}
 
 export async function fetchGraphQL<T = unknown>(
   query: string,
@@ -47,7 +66,16 @@ export async function fetchGraphQL<T = unknown>(
   }
 
   if (json.errors && json.errors.length > 0) {
-    throw new Error(`Error de GraphQL: ${JSON.stringify(json.errors)}`);
+    const [first] = json.errors as GraphQLErrorEntry[];
+    const i18n = first?.extensions?.i18n;
+    if (i18n?.key) {
+      throw new KeyedError(
+        i18n.key,
+        first?.message ?? i18n.key,
+        i18n.params,
+      );
+    }
+    throw new Error(`GraphQL error: ${first?.message ?? JSON.stringify(json.errors)}`);
   }
 
   return json.data as T;

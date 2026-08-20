@@ -1,10 +1,12 @@
 "use server";
 
+import { getTranslations } from "next-intl/server";
 import {
   redirectIfUnauthenticated,
   redirectToClearSession,
 } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
+import { translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
 
 const LANGUAGES_QUERY = `
@@ -28,9 +30,7 @@ export async function getLanguages(): Promise<Language[]> {
     // pages) — cookie mutation is illegal there, so hand off to the Route
     // Handler instead.
     redirectToClearSession(errors);
-    throw new Error(
-      errors[0]?.message || "Error al obtener los idiomas disponibles",
-    );
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   return data?.languages ?? [];
@@ -57,16 +57,15 @@ export async function setPreferredLanguagesAction(
   try {
     result = await fetchGraphQL(SET_PREFERRED_LANGUAGES_MUTATION, { iso2 });
   } catch (_err) {
-    return { error: "Error de conexión con el servidor GraphQL." };
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
   }
 
   const { errors } = result;
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    return {
-      error: errors[0].message || "Error al guardar los idiomas preferidos",
-    };
+    return { error: await translateGraphQLError(errors[0]) };
   }
 
   return { success: true };
@@ -97,16 +96,15 @@ export async function setMoviePreferredLanguagesAction(
       iso2,
     });
   } catch (_err) {
-    return { error: "Error de conexión con el servidor GraphQL." };
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
   }
 
   const { errors } = result;
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    return {
-      error: errors[0].message || "Error al guardar los idiomas preferidos",
-    };
+    return { error: await translateGraphQLError(errors[0]) };
   }
 
   return { success: true };
@@ -137,16 +135,15 @@ export async function setShowPreferredLanguagesAction(
       iso2,
     });
   } catch (_err) {
-    return { error: "Error de conexión con el servidor GraphQL." };
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
   }
 
   const { errors } = result;
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    return {
-      error: errors[0].message || "Error al guardar los idiomas preferidos",
-    };
+    return { error: await translateGraphQLError(errors[0]) };
   }
 
   return { success: true };

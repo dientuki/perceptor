@@ -1,8 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SourceFileInput } from './dto/source-file.input';
 import { ScannedMatchInput } from './dto/scanned-match.input';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { i18nError } from '@/i18n/i18n-error';
+import { MESSAGES_EN } from '@/i18n/messages.en';
 
 @Injectable()
 export class MediaSourcesService {
@@ -43,7 +46,7 @@ export class MediaSourcesService {
         },
       });
       if (!mediaSource) {
-        throw new NotFoundException(`El mediaSource ${mediaSourceId} no existe`);
+        throw i18nError.notFound(ERROR_KEYS.SOURCE_NOT_FOUND, { id: mediaSourceId });
       }
 
       const movieId = mediaSource.movie?.id ?? null;
@@ -56,9 +59,7 @@ export class MediaSourcesService {
       }
 
       if (!movieId && !mediaSource.episodeId && !mediaSource.season) {
-        throw new BadRequestException(
-          `El mediaSource ${mediaSourceId} no apunta a ninguna película, episodio ni temporada`,
-        );
+        throw i18nError.badRequest(ERROR_KEYS.SOURCE_NO_TARGET, { id: mediaSourceId });
       }
 
       // El .find() valida que cada match.filePath sea uno de los archivos que el
@@ -68,9 +69,7 @@ export class MediaSourcesService {
       for (const match of matches) {
         const inFiles = files.some((file) => file.filePath === match.filePath);
         if (!inFiles) {
-          throw new BadRequestException(
-            `matchedFilePath ${match.filePath} no está en la lista de files reportada`,
-          );
+          throw i18nError.badRequest(ERROR_KEYS.SOURCE_MATCH_NOT_REPORTED, { filePath: match.filePath });
         }
       }
 
@@ -130,11 +129,17 @@ export class MediaSourcesService {
         // Carpeta vacía, sin video, o (para una temporada) ningún video se pudo
         // resolver a un episodio: única rama de error que maneja la api. No se
         // crea ningún SourceFile ni ProcessJob.
-        const errorMessage = 'Escaneo sin archivo de video principal: carpeta vacía o sin video';
+        const errorMessage = MESSAGES_EN[ERROR_KEYS.SOURCE_SCAN_NO_VIDEO];
 
         await tx.mediaSource.update({
           where: { id: mediaSourceId },
-          data: { status: 'ERROR', errorMessage, hasUnmatchedFiles },
+          data: {
+            status: 'ERROR',
+            errorMessage,
+            errorKey: ERROR_KEYS.SOURCE_SCAN_NO_VIDEO,
+            errorParams: null,
+            hasUnmatchedFiles,
+          },
         });
 
         // Un paso más allá de lo pedido: si no se marca la película, queda en
@@ -225,7 +230,13 @@ export class MediaSourcesService {
       // downloads.service ya lo puso en ENCODING y sigue siendo verdad.
       await tx.mediaSource.update({
         where: { id: mediaSourceId },
-        data: { status: 'SCANNED', errorMessage: null, hasUnmatchedFiles },
+        data: {
+          status: 'SCANNED',
+          errorMessage: null,
+          errorKey: null,
+          errorParams: null,
+          hasUnmatchedFiles,
+        },
       });
     });
 

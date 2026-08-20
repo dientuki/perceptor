@@ -116,7 +116,7 @@ describe('LanguagesService — preference writes', () => {
         languageFindMany.mockResolvedValue([spanish]); // 'xx' is not a row
 
         await expect(target.call(['es', 'xx'])).rejects.toThrow(
-          new BadRequestException('El idioma xx no está disponible'),
+          new BadRequestException('Language xx is not available'),
         );
 
         const model = target.txModel();
@@ -127,7 +127,7 @@ describe('LanguagesService — preference writes', () => {
 
       it('a duplicated iso2 in one argument throws before anything is deleted', async () => {
         await expect(target.call(['es', 'es'])).rejects.toThrow(
-          new BadRequestException('El idioma es está repetido'),
+          new BadRequestException('Language es is repeated'),
         );
 
         const model = target.txModel();

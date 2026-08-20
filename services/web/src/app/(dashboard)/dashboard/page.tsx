@@ -1,12 +1,7 @@
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+import { getTranslations } from "next-intl/server";
 
 export default async function DashboardPage() {
-  
+  const t = await getTranslations("pages.dashboard");
 
-  return (
-    <div>
-      dashboard
-    </div>
-  );
+  return <div>{t("placeholder")}</div>;
 }

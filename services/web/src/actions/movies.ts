@@ -2,6 +2,7 @@
 
 import { redirectToClearSession } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
+import { translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
 
 export interface Movie {
@@ -42,7 +43,7 @@ export async function getMovies(): Promise<Movie[]> {
     // matching what the client component's try/catch used to do silently —
     // there is no app/(dashboard)/error.tsx, so letting this throw would
     // surface Next's default error screen instead of the empty state.
-    console.error("Error al obtener películas:", errors[0]?.message);
+    console.error("Failed to fetch movies:", errors[0]?.message);
     return [];
   }
 
@@ -81,7 +82,7 @@ export async function getMovieById(id: number): Promise<Movie | null> {
     // its generateMetadata) — cookie mutation is illegal there, so hand off
     // to the Route Handler instead of mutating the cookie in-process.
     redirectToClearSession(errors);
-    throw new Error(errors[0]?.message || "Error al obtener la película");
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   // El API devuelve null cuando el id no existe; la página lo traduce a notFound()

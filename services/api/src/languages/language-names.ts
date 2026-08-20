@@ -1,33 +1,35 @@
-// Spanish display names for every `iso2` row seeded by
-// `prisma/seeds/languages.ts`. User-facing copy, so Spanish (Article VI's
-// stated exception) — this is what the `languages` query's `name` field is
-// derived from, never stored on the `Language` row itself.
+// English display names for every `iso2` row seeded by
+// `prisma/seeds/languages.ts`. This is what the `languages` query's `name`
+// field is derived from, never stored on the `Language` row itself.
+// `web` renders the locale-appropriate name via `Intl.DisplayNames`
+// (REQ-13, 018-ui-i18n) — this map is no longer the display authority, just
+// a stable English fallback/internal label.
 export const LANGUAGE_NAMES: Record<string, string> = {
-  es: 'Español',
-  en: 'Inglés',
-  pt: 'Portugués',
-  ja: 'Japonés',
-  ko: 'Coreano',
-  fr: 'Francés',
-  de: 'Alemán',
-  it: 'Italiano',
-  zh: 'Chino',
-  ru: 'Ruso',
+  es: 'Spanish',
+  en: 'English',
+  pt: 'Portuguese',
+  ja: 'Japanese',
+  ko: 'Korean',
+  fr: 'French',
+  de: 'German',
+  it: 'Italian',
+  zh: 'Chinese',
+  ru: 'Russian',
   hi: 'Hindi',
-  ar: 'Árabe',
-  sv: 'Sueco',
-  da: 'Danés',
-  nl: 'Neerlandés',
-  nb: 'Noruego',
-  pl: 'Polaco',
-  tr: 'Turco',
-  th: 'Tailandés',
-  cs: 'Checo',
+  ar: 'Arabic',
+  sv: 'Swedish',
+  da: 'Danish',
+  nl: 'Dutch',
+  nb: 'Norwegian',
+  pl: 'Polish',
+  tr: 'Turkish',
+  th: 'Thai',
+  cs: 'Czech',
 };
 
 // Falls back to the bare iso2 code rather than throwing: a seed row without a
-// Spanish name should still render something in the UI instead of breaking
-// the whole `languages` query for every code.
+// name should still render something instead of breaking the whole
+// `languages` query for every code.
 export function languageNameFor(iso2: string): string {
   return LANGUAGE_NAMES[iso2] ?? iso2;
 }

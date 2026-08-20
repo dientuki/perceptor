@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.5.0
+spec_version: 1.6.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-17
+last_updated: 2026-08-20
 status: Approved
 target_service: api, web, worker
 ---
@@ -589,6 +589,107 @@ with `isVideo` on every file, and reads all four fields of `encodeCompleted`'s r
 (silently deleting something live) is exactly the bug this document exists to prevent, so a missing
 field there is a hard `console.error` and cleanup is skipped entirely, never guessed. `web` has no
 obligation; it queries neither `sourceScanned`, `encodeCompleted`, nor `addMagnetToSeason`.
+
+### UI internationalization (`018-ui-i18n`)
+
+`User` gained `uiLocale: String` (nullable — `null` means "not set, fall through to
+`Accept-Language`"), plus `Query.supportedLocales: [String!]!` and
+`Mutation.setUiLocale(locale: String!): User!`. `MediaSource` gained `errorKey: String` and
+`errorParams: String` alongside its existing `errorMessage`; `ProcessJob` gained the same two
+columns but they are **not** exposed on the GraphQL type — only persisted, read back by nothing
+outside `api` itself. `Mutation.encodeFailed` changed arity from `(processJobId, errorMessage):
+String!` to `(processJobId: Int!, errorKey: String!, errorParams: String, errorMessage: String!):
+Boolean!` — a breaking change, which is why `017`'s note above about the queue payload applies
+here too: `worker` and `api` must ship this together, or a failed encode reports nothing and the
+`ProcessJob` sits in `ENCODING` forever with no error logged anywhere.
+
+```graphql
+type User {
+  uiLocale: String
+}
+
+type MediaSource {
+  errorKey: String
+  errorParams: String
+}
+
+type Query {
+  supportedLocales: [String!]!
+}
+
+type Mutation {
+  setUiLocale(locale: String!): User!
+  encodeFailed(
+    processJobId: Int!
+    errorKey: String!
+    errorParams: String
+    errorMessage: String!
+  ): Boolean!
+}
+```
+
+**The error envelope.** Every `api` exception that carries a key now arrives on the wire as:
+
+```json
+{
+  "message": "Movie 42 does not exist",
+  "extensions": {
+    "code": "NOT_FOUND",
+    "i18n": { "key": "error.movie.not_found", "params": { "id": 42 } }
+  }
+}
+```
+
+`message` is always English and always present — REQ-8's fallback, and the thing that keeps a row
+legible from `bin/mysql` with no catalog. `extensions.i18n` is present only when the throw site has
+been keyed; an un-migrated or genuinely unexpected error (a 500, a database error) passes through
+with no `i18n` extension at all — `web`'s `graphql-error.ts` and `worker`'s `graphql-client.ts` both
+fall back to `message` in that case, never rendering a bare key. `params`, when present, is a JSON
+object **encoded as a `String`**, not a JSON scalar — both sides `JSON.parse`/`JSON.stringify` it by
+hand, since this repo has no custom GraphQL scalars.
+
+The REST `/uploads` route (below) carries the same `{ key, params? }` shape under a top-level
+`i18n` field in its JSON error body — **not** wrapped in `extensions`, since it isn't a GraphQL
+response. `web`'s uploads modal reads that shape directly rather than reusing the GraphQL-shaped
+translator.
+
+**The key vocabulary is split across two hand-synced files**, the same pattern
+`services/*/src/queue/types.ts` already uses for the BullMQ payload: `api` owns
+`services/api/src/i18n/error-keys.ts`, `worker` owns `services/worker/src/i18n/error-keys.ts`.
+Three keys are defined by `api` and reused byte-identical by `worker` — `error.processJob.not_found`,
+`error.source.no_target`, `error.source.no_download_path` — because `worker` calls `api`'s
+`mediaSource`/`processJob` queries and needs to recognize the same failure, not invent a
+worker-local variant. Nothing checks the two lists agree; `worker`'s Docker build context
+(`./services/worker`) cannot physically see `../api`. `web` reads keys off the wire, translates
+them through its own catalog (`messages/{en,es}.json`, under an `errors.*` namespace with the
+leading `error.` stripped — `error.auth.unauthenticated` → `errors.auth.unauthenticated`), and
+never needs its own copy of the key *list*, since REQ-8's English fallback covers whatever a
+catalog gap leaves untranslated.
+
+The full vocabulary, by owner:
+
+| Owner | Keys |
+| :-- | :-- |
+| `api` — auth | `error.auth.unauthenticated`, `error.auth.session_expired`, `error.auth.invalid_credentials`, `error.auth.account_disabled`, `error.auth.admin_required` |
+| `api` — users | `error.user.username_taken`, `error.user.not_found`, `error.user.cannot_disable_self`, `error.user.cannot_disable_last_admin`, `error.user.cannot_delete_self`, `error.user.cannot_delete_last_admin`, `error.user.unsupported_locale` |
+| `api` — movies/shows/seasons/episodes | `error.movie.not_found`, `error.movie.not_in_catalog`, `error.movie.download_in_progress`, `error.show.not_available`, `error.show.not_in_catalog`, `error.season.not_found`, `error.season.download_in_progress`, `error.episode.not_found`, `error.episode.download_in_progress`, `error.magnet.already_attached`, `error.media.unsupported_type` |
+| `api` — magnet parsing | `error.magnet.not_a_magnet`, `error.magnet.invalid_infohash`, `error.magnet.v2_unsupported` |
+| `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
+| `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.indexer.unavailable`, `error.indexer.no_infohash` |
+| `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.processJob.not_found` |
+| `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
+| `api` — uploads (REST) | `error.upload.ticket_expired`, `error.upload.ticket_wrong_movie`, `error.upload.ticket_wrong_episode`, `error.upload.metadata_incomplete` |
+| `api` — DTO validation | `error.validation.setting_key_required`, `error.validation.setting_value_required`, `error.validation.user_id_required`, `error.validation.login_username_required`, `error.validation.login_password_required`, `error.validation.user_name_required`, `error.validation.username_min_length`, `error.validation.password_min_length` |
+| `worker` — encode pipeline | `error.encode.no_video_stream`, `error.encode.no_original_audio`, `error.encode.probe_failed`, `error.encode.ffmpeg_failed`, `error.encode.no_output`, `error.encode.mkvmerge_failed`, `error.encode.episode_numbers_missing`, `error.encode.unknown_driver`, `error.encode.unexpected` (catch-all for a non-`KeyedError` throw — `encodeFailed`'s `errorKey` is required, so a failure never reports with no key) |
+| `worker` — reused from `api` | `error.processJob.not_found`, `error.source.no_target`, `error.source.no_download_path` |
+
+**Locale resolution never crosses the GraphQL boundary as a header or argument.** `web` resolves
+the active locale itself, server-side, in this order: `User.uiLocale` (via `me`) → the request's
+`Accept-Language` header, language-range negotiated → `en`. `api` and `worker` never see which
+locale is active — they only ever produce English `message`/`errorMessage` text and a key.
+`Query.supportedLocales` is the one place the supported set crosses the boundary, and it exists
+so `setUiLocale` and any future locale picker have a single source of truth to validate against
+instead of a second hardcoded list in `web`.
 
 ### The one non-GraphQL route
 

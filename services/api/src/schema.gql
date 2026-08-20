@@ -20,6 +20,7 @@ type User {
   username: String!
   isAdmin: Boolean!
   isEnabled: Boolean!
+  uiLocale: String
   preferredLanguages: [Language!]!
 }
 
@@ -85,6 +86,8 @@ type MediaSource {
   episodeId: Int
   seasonId: Int
   errorMessage: String
+  errorKey: String
+  errorParams: String
   hasUnmatchedFiles: Boolean!
 }
 
@@ -182,6 +185,7 @@ type Show {
 type Query {
   ping: String!
   items: [Item!]!
+  supportedLocales: [String!]!
   me: User!
 
   """
@@ -216,6 +220,8 @@ type Query {
 }
 
 type Mutation {
+  setUiLocale(locale: String!): User!
+
   """Inicia sesión y retorna un JWT"""
   login(loginInput: LoginInput!): LoginResponse!
   logout: Boolean!
@@ -256,7 +262,7 @@ type Mutation {
   encodeCompleted(processJobId: Int!, outputFilePath: String!, ffmpegCommand: String!): EncodeCompletedResult!
 
   """El worker avisa que un encode falló"""
-  encodeFailed(processJobId: Int!, errorMessage: String!): String!
+  encodeFailed(processJobId: Int!, errorKey: String!, errorParams: String, errorMessage: String!): Boolean!
 
   """El worker pide borrar el torrent del cliente tras un encode exitoso"""
   downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!

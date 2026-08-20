@@ -2,6 +2,7 @@
 
 import { Download, Loader2, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import {
   addTorrentToMovieAction,
@@ -17,9 +18,10 @@ interface SearchTorrentProps {
   onClose?: () => void;
 }
 
-const CONFLICT_MESSAGE = "ya tiene una descarga en curso";
-
 export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
+  const t = useTranslations("search.torrent");
+  const CONFLICT_MESSAGE = t("conflictMarker");
+
   const formatBytes = (bytes: number | null) => {
     if (bytes === null) return "N/A";
     if (bytes === 0) return "0 B";
@@ -75,7 +77,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
       console.error({ error, query }, "Error al buscar torrents");
       setResults([]);
       setSearchError(
-        error instanceof Error ? error.message : "Error al buscar releases",
+        error instanceof Error ? error.message : t("searchErrorDefault"),
       );
     } finally {
       setIsLoading(false);
@@ -117,8 +119,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
       await submitTorrent(res, false);
       router.refresh();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Error al agregar el torrent";
+      const message = err instanceof Error ? err.message : t("addErrorDefault");
 
       setAddError(message);
       if (message.includes(CONFLICT_MESSAGE)) {
@@ -138,7 +139,9 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
       setNeedsConfirm(null);
       router.refresh();
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : "Error al reemplazar");
+      setAddError(
+        err instanceof Error ? err.message : t("replaceErrorDefault"),
+      );
     } finally {
       setAddingHash(null);
     }
@@ -153,12 +156,16 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search for releases..."
+            placeholder={t("inputPlaceholder")}
             className="w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-gray-800 dark:text-white"
           />
         </div>
         <Button type="submit" disabled={isLoading} className="min-w-[100px]">
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            t("searchButton")
+          )}
         </Button>
       </form>
 
@@ -169,7 +176,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
             type="text"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter results by title (e.g. 1080p, x265)..."
+            placeholder={t("filterPlaceholder")}
             className="w-full rounded-lg border border-gray-200 bg-transparent py-2 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 dark:border-gray-800 dark:text-white"
           />
         </div>
@@ -196,7 +203,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                 {addingHash === needsConfirm.infoHash ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Reemplazar"
+                  t("replace")
                 )}
               </Button>
               <Button
@@ -208,7 +215,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                 }}
                 type="button"
               >
-                Cancelar
+                {t("cancel")}
               </Button>
             </div>
           )}
@@ -220,16 +227,16 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
           <thead className="block flex-shrink-0 bg-gray-50 dark:bg-white/[0.02]">
             <tr className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center w-full">
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Release Name ({filteredResults.length})
+                {t("releaseNameHeader", { count: filteredResults.length })}
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
-                Size
+                {t("sizeHeader")}
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
-                S/L
+                {t("slHeader")}
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Action
+                {t("actionHeader")}
               </th>
             </tr>
           </thead>
@@ -242,7 +249,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                 >
                   <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                     <span className="font-medium line-clamp-1">
-                      {res.title || "Unknown Release"}
+                      {res.title || t("unknownRelease")}
                     </span>
                     <div className="mt-1 flex flex-col gap-0.5 overflow-hidden">
                       {res.infoUrl.map(
@@ -288,10 +295,10 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
               <tr className="flex w-full">
                 <td className="flex-1 px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                   {isLoading
-                    ? "Searching trackers..."
+                    ? t("searchingTrackers")
                     : results.length > 0
-                      ? "No results match your filter."
-                      : "No results yet. Try searching for a specific release."}
+                      ? t("noFilterMatch")
+                      : t("noResultsYet")}
                 </td>
               </tr>
             )}

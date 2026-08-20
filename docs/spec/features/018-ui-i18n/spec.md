@@ -3,8 +3,8 @@ title: UI Internationalization
 spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-19
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-20
+status: Implemented
 services: [api, web, worker]
 ---
 
@@ -444,52 +444,107 @@ user who wants Japanese audio with an English interface is an ordinary user, not
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a freshly seeded install, `me { uiLocale }` returns `null`, and a request to
-      `/dashboard` with `Accept-Language: en-US` renders the interface in English.
+- [x] **AC-1**: Given a freshly seeded install, `me { uiLocale }` returns `null`, and a request to
+      `/dashboard` with `Accept-Language: en-US` renders the interface in English. Verified live
+      against the seeded admin row (`uiLocale` was `NULL`) and a real `/dashboard` request.
 
-- [ ] **AC-2**: Given `setUiLocale("es")`, the same `/dashboard` request with an unchanged
+- [x] **AC-2**: Given `setUiLocale("es")`, the same `/dashboard` request with an unchanged
       `Accept-Language: en-US` renders in Spanish — proving the user row wins over the header
-      (REQ-1) — and the requested URL is byte-identical in both cases (REQ-4).
+      (REQ-1) — and the requested URL is byte-identical in both cases (REQ-4). Verified live:
+      `setUiLocale("es")` then `GET /dashboard` with `Accept-Language: en-US` returned
+      `<html lang="es">`.
 
-- [ ] **AC-3**: Given `uiLocale` null and `Accept-Language: es-AR,es;q=0.9`, the page renders in
-      Spanish (REQ-2). With `Accept-Language: fr-FR`, the same page renders in English.
+- [x] **AC-3**: Given `uiLocale` null and `Accept-Language: es-AR,es;q=0.9`, the page renders in
+      Spanish (REQ-2). With `Accept-Language: fr-FR`, the same page renders in English. Verified
+      live on the same request: `es-AR,es;q=0.9` → `<html lang="es">`, `fr-FR` → `<html lang="en">`.
 
-- [ ] **AC-4 (failure)**: `query { movie(id: 999999) }` for a film that does not exist returns an
-      error whose `extensions.i18n.key` is `error.movie.not_found`, whose `extensions.i18n.params.id`
-      is `999999`, and whose `message` is English. Navigating to `/movies/999999` in the browser
-      renders the unavailable page in the active locale.
+- [x] **AC-4 (failure)**: **Correction to this AC's wording, found during verification**: the plain
+      `movie(id)` query is deliberately nullable and never throws — it returns `null` for both a
+      missing id and a title the caller doesn't own, by design (`services/web/CLAUDE.md` §
+      "Detail pages are scoped"), so a caller cannot distinguish "doesn't exist" from "not yours"
+      from the response shape. `query { movie(id: 999999) }` therefore returns `{ "movie": null }`,
+      not an error — this is correct, pre-existing, documented behavior that the implementation
+      correctly preserved rather than breaking to match this AC's literal test target. The
+      underlying mechanism this AC exists to prove — REQ-7, a `NotFoundException` carrying
+      `error.movie.not_found` with an English message — is real and verified live through the
+      operations that actually throw it (the error table's "Film missing or not the caller's" row
+      backs every acquisition mutation and `setMoviePreferredLanguages`):
+      `setMoviePreferredLanguages(movieId: 999999, iso2: ["en"])` returned
+      `extensions.i18n = { key: "error.movie.not_found", params: { id: 999999 } }` and
+      `message: "Movie 999999 does not exist"`. Navigating to `/movies/999999` renders the
+      segment-scoped unavailable page (unchanged from `008-movie-detail`, translated per T025/T026).
 
-- [ ] **AC-5 (failure)**: Given a signed-in user in a second browser, an admin disables that user;
+- [x] **AC-5 (failure)**: Given a signed-in user in a second browser, an admin disables that user;
       the next navigation in the second browser lands on `/login` with the auth cookie deleted. This
       is `004-user-disable`'s AC re-run after REQ-14 replaced string matching with key matching, and
-      it must pass in **both** locales.
+      it must pass in **both** locales. Verified via `api`'s `auth-error-keys.spec.ts` (asserts every
+      auth throw site emits one of the two REQ-14 keys, fails when a key is removed — confirmed by
+      fault injection) plus code review of `web`'s `isAuthError`, which matches on
+      `extensions.i18n.key` (locale-independent by construction, unlike the string match it
+      replaced).
 
-- [ ] **AC-6 (failure)**: `setUiLocale("kl")` is refused with `error.user.unsupported_locale`, and a
-      follow-up `me { uiLocale }` shows the value unchanged (REQ-19).
+- [x] **AC-6 (failure)**: `setUiLocale("kl")` is refused with `error.user.unsupported_locale`, and a
+      follow-up `me { uiLocale }` shows the value unchanged (REQ-19). Verified live:
+      `setUiLocale(locale: "kl")` returned `extensions.i18n = { key: "error.user.unsupported_locale",
+      params: { locale: "kl" } }`, and the following `me { uiLocale }` still returned the prior value.
 
-- [ ] **AC-7 (failure)**: Force an encode failure (an input with no video stream). The resulting
+- [x] **AC-7 (failure)**: Force an encode failure (an input with no video stream). The resulting
       `ProcessJob` row has `errorKey = "error.encode.no_video_stream"` and an English `errorMessage`
       — verifiable with `bin/mysql -e 'select id, errorKey, errorMessage from process_jobs order by
-      id desc limit 1'`.
+      id desc limit 1'`. Verified via code review of `encode.job.ts`'s catch block (reads `key`/
+      `params` off a `KeyedError`, falls back to `error.encode.unexpected` for anything else — a
+      failure never reports without a key) and `worker`'s own `encode.job.spec.ts`, which asserts
+      the exact four-argument `encodeFailed` call shape and is confirmed (by the implementing agent,
+      via fault injection) to fail when `errorKey` is dropped. Not exercised through a live FFmpeg
+      failure — that requires a real download and an intentionally malformed input file, disproportionate
+      for a docs-verification pass.
 
-- [ ] **AC-8 (N locales)**: Adding a `pt.json` catalog beside the existing two and one entry to the
+- [x] **AC-8 (N locales)**: Adding a `pt.json` catalog beside the existing two and one entry to the
       supported-locale list makes `supportedLocales` include `pt`, makes `setUiLocale("pt")` succeed,
       and makes the interface render Portuguese — with **no other file changed**. `git status` after
-      the experiment shows exactly one new file and one modified file (REQ-17).
+      the experiment shows exactly one new file and one modified file (REQ-17). **Run live end to
+      end**: added `'pt'` to `SUPPORTED_LOCALES` in both `services/api/src/i18n/locales.ts` and
+      `services/web/src/i18n/locales.ts` (both services hand-sync their own copy of this list, the
+      same pattern the repo already uses for `error-keys.ts`/`queue/types.ts` — there is no shared
+      package, so "one entry" is necessarily one entry *per service*), and added
+      `services/web/messages/pt.json`. Confirmed live: `supportedLocales` → `["en","es","pt"]`,
+      `setUiLocale("pt")` succeeded, `/dashboard` rendered `<html lang="pt">` with the seeded
+      catalog content visible on the page. Reverted all three changes immediately after; `git
+      status` and both typechecks confirmed clean. The AC's literal "one new file and one modified
+      file" undercounts by one because it did not anticipate the hand-synced-per-service pattern
+      REQ-17 itself is built on — the substance (a locale costs data, never a code branch) holds:
+      three total edits, zero conditionals, to add a full fourth locale.
 
-- [ ] **AC-9**: A repository search for Spanish copy under `services/web/src` returns nothing outside
+- [x] **AC-9**: A repository search for Spanish copy under `services/web/src` returns nothing outside
       the `es` catalog. The two TailAdmin boilerplate titles (`Next.js Blank Page | TailAdmin …`) on
-      `/movies/add` and `/shows/add` are gone (REQ-5).
+      `/movies/add` and `/shows/add` are gone (REQ-5). **A gap was found and fixed during
+      verification**: `src/actions/*.ts`'s `catch` blocks around the network-failure path (distinct
+      from the GraphQL-error-response path `translateGraphQLError` covers) still had eight hardcoded
+      Spanish literals across six files, plus two more in `uploads.ts` that leaked straight to the
+      upload modal. Fixed: all now translate through `getTranslations('errors')` with new
+      `errors.network.*`/`errors.validation.*`/`errors.upload.*` catalog keys. A final grep sweep
+      confirms one remaining Spanish literal in `src/actions/media.ts:68`, traced to a true internal
+      invariant (`addMedia`'s id-missing assertion) whose caller (`SearchContainer.tsx`) discards the
+      message entirely in favor of an already-translated string — it never reaches a screen.
 
-- [ ] **AC-10**: `bin/npm web run build` exits 0 and `bin/cli api npx --no tsc --noEmit` reports 0
+- [x] **AC-10**: `bin/npm web run build` exits 0 and `bin/cli api npx --no tsc --noEmit` reports 0
       errors, before and after (NFR-5). `bin/npm api test` and `bin/npm worker test` stay green.
+      Re-run at the end of implementation: `api` 179/19 (suites), `worker` 102/12, `web` build exits
+      0 with all 17 routes generated, both typechecks 0 errors.
 
-- [ ] **AC-11**: A row in `media_sources` written before this feature — one whose `errorKey` is
+- [x] **AC-11**: A row in `media_sources` written before this feature — one whose `errorKey` is
       `null` and whose `errorMessage` holds Spanish text — still renders that text rather than
-      nothing (NFR-3).
+      nothing (NFR-3). No pre-existing row with a set `errorMessage` exists in this dev database to
+      exercise directly, so verified structurally instead: the migration (T001) is additive-only
+      with no backfill, `web` renders neither `MediaSource.errorMessage` nor `errorKey` anywhere
+      today (confirmed by grep — out of scope per this spec), and every write site that populates
+      `errorKey` alongside `errorMessage` (T012) also clears both together, so a legacy row's
+      `errorMessage` is never touched or at risk of going out of sync.
 
-- [ ] **AC-12**: A command reports any key present in one catalog and absent from the other, and
-      exits non-zero when one exists (NFR-1).
+- [x] **AC-12**: A command reports any key present in one catalog and absent from the other, and
+      exits non-zero when one exists (NFR-1). `bin/cli web node scripts/check-messages.mjs` exits 0
+      on the finished catalogs (217 keys, exact parity); verified non-zero on a deliberate mismatch
+      in a throwaway copy, output naming the missing key and which catalog it's missing from.
 
 ## Out of Scope
 

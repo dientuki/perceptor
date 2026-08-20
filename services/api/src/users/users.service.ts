@@ -1,10 +1,13 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../auth/session.service';
 import { CreateUserInput } from './dto/create-user.input';
 import { UpdateUserInput } from './dto/update-user.input';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { isSupportedLocale } from '@/i18n/locales';
 
 @Injectable()
 export class UsersService {
@@ -22,7 +25,7 @@ export class UsersService {
     });
 
     if (existingUser) {
-      throw new ConflictException('El nombre de usuario ya está registrado');
+      throw i18nError.conflict(ERROR_KEYS.USER_USERNAME_TAKEN);
     }
 
     // 2. Hash de la contraseña (10 salt rounds)
@@ -48,7 +51,7 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException(`Usuario con ID "${id}" no encontrado`);
+      throw i18nError.notFound(ERROR_KEYS.USER_NOT_FOUND, { id });
     }
 
     return user;
@@ -67,7 +70,7 @@ export class UsersService {
     const isDisabling = dataToUpdate.isEnabled === false;
     if (isDisabling) {
       if (id === requesterId) {
-        throw new BadRequestException('No podés deshabilitar tu propio usuario');
+        throw i18nError.badRequest(ERROR_KEYS.USER_CANNOT_DISABLE_SELF);
       }
 
       const target = await this.findOne(id);
@@ -79,7 +82,7 @@ export class UsersService {
           where: { isAdmin: true, isEnabled: true },
         });
         if (enabledAdminCount === 1) {
-          throw new BadRequestException('No podés deshabilitar al único administrador');
+          throw i18nError.badRequest(ERROR_KEYS.USER_CANNOT_DISABLE_LAST_ADMIN);
         }
       }
     }
@@ -97,7 +100,7 @@ export class UsersService {
         data: dataToUpdate,
       });
     } catch {
-      throw new NotFoundException(`Usuario con ID "${id}" no encontrado`);
+      throw i18nError.notFound(ERROR_KEYS.USER_NOT_FOUND, { id });
     }
 
     // NFR-3: a disable that doesn't also revoke the live session is a silent
@@ -114,7 +117,7 @@ export class UsersService {
     // Order matters (AC-7): a lone admin deleting themself must see the
     // "your own account" message, not the "last admin" one.
     if (id === requesterId) {
-      throw new BadRequestException('No podés eliminar tu propio usuario');
+      throw i18nError.badRequest(ERROR_KEYS.USER_CANNOT_DELETE_SELF);
     }
 
     const target = await this.findOne(id);
@@ -122,12 +125,28 @@ export class UsersService {
     if (target.isAdmin) {
       const adminCount = await this.prisma.user.count({ where: { isAdmin: true } });
       if (adminCount === 1) {
-        throw new BadRequestException('No podés eliminar al único administrador');
+        throw i18nError.badRequest(ERROR_KEYS.USER_CANNOT_DELETE_LAST_ADMIN);
       }
     }
 
     return await this.prisma.user.delete({
       where: { id },
+    });
+  }
+
+  // Validate-then-write, same shape as `LanguagesService`'s preference
+  // writes: nothing is persisted until the locale is confirmed to be one
+  // `web` actually ships a catalog for (REQ-19). An unsupported locale must
+  // leave the previous value untouched — AC-6 checks that explicitly, so the
+  // rejection has to happen before any `prisma.user.update` call, not after.
+  async setUiLocale(userId: string, locale: string): Promise<User> {
+    if (!isSupportedLocale(locale)) {
+      throw i18nError.badRequest(ERROR_KEYS.USER_UNSUPPORTED_LOCALE, { locale });
+    }
+
+    return await this.prisma.user.update({
+      where: { id: userId },
+      data: { uiLocale: locale },
     });
   }
 }

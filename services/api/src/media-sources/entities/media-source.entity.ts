@@ -26,6 +26,12 @@ export class MediaSource {
   @Field(() => String, { nullable: true })
   errorMessage: string | null;
 
+  @Field(() => String, { nullable: true })
+  errorKey: string | null;
+
+  @Field(() => String, { nullable: true })
+  errorParams: string | null;
+
   @Field()
   hasUnmatchedFiles: boolean;
 }

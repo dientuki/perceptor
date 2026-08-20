@@ -22,6 +22,7 @@ import { ShowsModule } from './shows/shows.module';
 import { EpisodesModule } from './episodes/episodes.module';
 import { LanguagesModule } from './languages/languages.module';
 import { SeasonsModule } from './seasons/seasons.module';
+import { formatGraphQLError } from './i18n/graphql-error.formatter';
 
 @Module({
   imports: [
@@ -38,6 +39,11 @@ import { SeasonsModule } from './seasons/seasons.module';
       playground: process.env.NODE_ENV !== 'production',
       // Desactiva la intro en producción por seguridad
       introspection: process.env.NODE_ENV !== 'production',
+      // Lifts `extensions.i18n` from a keyed HttpException onto the GraphQL
+      // error (018-ui-i18n REQ-7). See graphql-error.formatter.ts for why the
+      // key has to be read off `error.originalError` rather than anything
+      // @nestjs/apollo may have already transformed.
+      formatError: formatGraphQLError,
     }),
     PrismaModule,
     AuthModule,

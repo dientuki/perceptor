@@ -1,6 +1,9 @@
 // src/core/ffmpeg/metadata.ts
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { KeyedError } from '../i18n/keyed-error';
+import { renderMessage } from '../i18n/messages.en';
+import { ERROR_ENCODE_PROBE_FAILED } from '../i18n/error-keys';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,8 +26,14 @@ export async function getMetadata(filePath: string) {
     console.error(`[ffmpeg] error en ffprobe al analizar ${filePath}:`, error);
     // Se propaga la causa real (antes se perdía en un mensaje genérico) — el
     // caller (encode.ffmpeg.ts) la reporta tal cual vía encodeFailed.
-    throw new Error(
-      `No se pudo analizar el archivo de video (${filePath}): ${error instanceof Error ? error.message : String(error)}`,
+    const params = {
+      filePath,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+    throw new KeyedError(
+      ERROR_ENCODE_PROBE_FAILED,
+      renderMessage(ERROR_ENCODE_PROBE_FAILED, params),
+      params,
     );
   }
 }

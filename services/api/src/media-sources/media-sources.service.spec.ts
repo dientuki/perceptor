@@ -120,7 +120,7 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
     expect(tx.episode.update).toHaveBeenCalledWith({ where: { id: 555 }, data: { status: 'ENCODING' } });
     expect(tx.mediaSource.update).toHaveBeenCalledWith({
       where: { id: 10 },
-      data: { status: 'SCANNED', errorMessage: null, hasUnmatchedFiles: false },
+      data: { status: 'SCANNED', errorMessage: null, errorKey: null, errorParams: null, hasUnmatchedFiles: false },
     });
     expect(encodeQueue.addEncode).toHaveBeenCalledWith({ processJobId: 9000 });
   });
@@ -176,7 +176,7 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
     expect(tx.episode.update).toHaveBeenCalledWith({ where: { id: 303 }, data: { status: 'ENCODING' } });
     expect(tx.mediaSource.update).toHaveBeenCalledWith({
       where: { id: 20 },
-      data: { status: 'SCANNED', errorMessage: null, hasUnmatchedFiles: false },
+      data: { status: 'SCANNED', errorMessage: null, errorKey: null, errorParams: null, hasUnmatchedFiles: false },
     });
   });
 
@@ -203,7 +203,7 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
     );
     expect(tx.mediaSource.update).toHaveBeenCalledWith({
       where: { id: 30 },
-      data: { status: 'SCANNED', errorMessage: null, hasUnmatchedFiles: true },
+      data: { status: 'SCANNED', errorMessage: null, errorKey: null, errorParams: null, hasUnmatchedFiles: true },
     });
   });
 
@@ -229,7 +229,7 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
     );
     expect(tx.mediaSource.update).toHaveBeenCalledWith({
       where: { id: 40 },
-      data: { status: 'SCANNED', errorMessage: null, hasUnmatchedFiles: true },
+      data: { status: 'SCANNED', errorMessage: null, errorKey: null, errorParams: null, hasUnmatchedFiles: true },
     });
   });
 
@@ -254,7 +254,7 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
 
     expect(tx.mediaSource.update).toHaveBeenCalledWith({
       where: { id: 50 },
-      data: { status: 'SCANNED', errorMessage: null, hasUnmatchedFiles: false },
+      data: { status: 'SCANNED', errorMessage: null, errorKey: null, errorParams: null, hasUnmatchedFiles: false },
     });
   });
 
@@ -278,7 +278,7 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
 
     expect(tx.mediaSource.update).toHaveBeenCalledWith({
       where: { id: 60 },
-      data: { status: 'SCANNED', errorMessage: null, hasUnmatchedFiles: true },
+      data: { status: 'SCANNED', errorMessage: null, errorKey: null, errorParams: null, hasUnmatchedFiles: true },
     });
   });
 
@@ -299,7 +299,9 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
       where: { id: 70 },
       data: {
         status: 'ERROR',
-        errorMessage: 'Escaneo sin archivo de video principal: carpeta vacía o sin video',
+        errorMessage: 'Scan found no main video file: empty folder or no video',
+        errorKey: 'error.source.scan_no_video',
+        errorParams: null,
         hasUnmatchedFiles: false,
       },
     });

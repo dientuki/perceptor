@@ -1,8 +1,10 @@
-'use server'
+"use server";
 
-import { fetchGraphQL } from '@/lib/graphql-client';
-import { redirectIfUnauthenticated } from '@/lib/auth-session';
-import type { AcquisitionTarget } from '@/types/media';
+import { getTranslations } from "next-intl/server";
+import { redirectIfUnauthenticated } from "@/lib/auth-session";
+import { fetchGraphQL } from "@/lib/graphql-client";
+import { translateGraphQLError } from "@/lib/graphql-error";
+import type { AcquisitionTarget } from "@/types/media";
 
 export interface UploadTicket {
   token: string;
@@ -25,28 +27,32 @@ const CREATE_UPLOAD_TICKET_MUTATION = `
   }
 `;
 
-export async function createUploadTicketAction(target: AcquisitionTarget): Promise<UploadTicket> {
+export async function createUploadTicketAction(
+  target: AcquisitionTarget,
+): Promise<UploadTicket> {
   const variables =
-    target.kind === 'movie'
+    target.kind === "movie"
       ? { movieId: Number(target.movie.id), episodeId: undefined }
       : { movieId: undefined, episodeId: Number(target.episode.id) };
 
   const { data, errors } = await fetchGraphQL<{
-    createUploadTicket: Omit<UploadTicket, 'endpoint'>;
+    createUploadTicket: Omit<UploadTicket, "endpoint">;
   }>(CREATE_UPLOAD_TICKET_MUTATION, variables);
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(errors[0]?.message || 'Error al generar el permiso de subida');
+    throw new Error(await translateGraphQLError(errors[0]));
   }
 
   if (!data?.createUploadTicket) {
-    throw new Error('El API no devolvió el permiso de subida');
+    const t = await getTranslations("errors");
+    throw new Error(t("upload.ticketMissing"));
   }
 
   const endpoint = process.env.PUBLIC_UPLOAD_URL;
   if (!endpoint) {
-    throw new Error('La variable de entorno PUBLIC_UPLOAD_URL no está configurada');
+    const t = await getTranslations("errors");
+    throw new Error(t("upload.endpointNotConfigured"));
   }
 
   return { ...data.createUploadTicket, endpoint };

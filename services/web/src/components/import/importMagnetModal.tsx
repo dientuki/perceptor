@@ -1,12 +1,14 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { Modal } from "@/components/ui/modal";
-import Button from "@/components/ui/button/Button";
-import Label from "@/components/form/Label";
 import { Magnet } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { importMagnetAction } from "@/actions/imports";
 import { addMagnetToEpisodeAction } from "@/actions/shows";
+import Label from "@/components/form/Label";
+import Button from "@/components/ui/button/Button";
+import { Modal } from "@/components/ui/modal";
 import type { AcquisitionTarget } from "@/types/media";
 
 interface ImportMagnetModalProps {
@@ -15,9 +17,13 @@ interface ImportMagnetModalProps {
   target: AcquisitionTarget | null;
 }
 
-const CONFLICT_MESSAGE = "ya tiene una descarga en curso";
-
-export default function ImportMagnetModal({ isOpen, onClose, target }: ImportMagnetModalProps) {
+export default function ImportMagnetModal({
+  isOpen,
+  onClose,
+  target,
+}: ImportMagnetModalProps) {
+  const t = useTranslations("import.magnet");
+  const CONFLICT_MESSAGE = t("conflictMarker");
   const [magnet, setMagnet] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,14 +50,18 @@ export default function ImportMagnetModal({ isOpen, onClose, target }: ImportMag
       if (target.kind === "movie") {
         await importMagnetAction(Number(target.movie.id), magnet, needsConfirm);
       } else {
-        await addMagnetToEpisodeAction(Number(target.episode.id), magnet, needsConfirm);
+        await addMagnetToEpisodeAction(
+          Number(target.episode.id),
+          magnet,
+          needsConfirm,
+        );
       }
       onClose();
       // Mismo criterio que ImportFileModal/SearchTorrent: refrescar el server
       // component para que la película aparezca con su estado nuevo.
       router.refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error al importar el magnet.";
+      const message = err instanceof Error ? err.message : t("errorDefault");
       setError(message);
       setNeedsConfirm(message.includes(CONFLICT_MESSAGE));
     } finally {
@@ -72,16 +82,22 @@ export default function ImportMagnetModal({ isOpen, onClose, target }: ImportMag
         <div className="px-2 pr-14">
           <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90 flex items-center gap-2">
             <Magnet className="size-6 text-red-500" />
-            Importar Magnet
+            {t("title")}
           </h4>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
-            Ingresá el magnet link para{" "}
-            <span className="font-medium text-gray-800 dark:text-white">{targetLabel}</span>.
+            {t.rich("description", {
+              target: targetLabel,
+              b: (chunks) => (
+                <span className="font-medium text-gray-800 dark:text-white">
+                  {chunks}
+                </span>
+              ),
+            })}
           </p>
         </div>
         <form className="flex flex-col" onSubmit={handleSubmit}>
           <div className="px-2 overflow-y-auto custom-scrollbar">
-            <Label>Magnet</Label>
+            <Label>{t("label")}</Label>
             <input
               type="text"
               value={magnet}
@@ -90,7 +106,7 @@ export default function ImportMagnetModal({ isOpen, onClose, target }: ImportMag
                 setError(null);
                 setNeedsConfirm(false);
               }}
-              placeholder="magnet:?xt=urn:btih:da39a3ee..."
+              placeholder={t("placeholder")}
               autoFocus
               className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
             />
@@ -98,10 +114,18 @@ export default function ImportMagnetModal({ isOpen, onClose, target }: ImportMag
           </div>
           <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
             <Button size="sm" variant="outline" onClick={onClose} type="button">
-              Cancelar
+              {t("cancel")}
             </Button>
-            <Button size="sm" type="submit" disabled={isPending || !magnet.trim()}>
-              {isPending ? "Procesando..." : needsConfirm ? "Reemplazar" : "Confirmar"}
+            <Button
+              size="sm"
+              type="submit"
+              disabled={isPending || !magnet.trim()}
+            >
+              {isPending
+                ? t("processing")
+                : needsConfirm
+                  ? t("replace")
+                  : t("confirm")}
             </Button>
           </div>
         </form>

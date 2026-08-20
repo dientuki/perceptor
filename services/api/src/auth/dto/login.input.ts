@@ -1,14 +1,18 @@
 import { InputType, Field } from '@nestjs/graphql';
 import { IsBoolean, IsNotEmpty } from 'class-validator';
 
+import { ERROR_KEYS } from '@/i18n/error-keys';
+
 @InputType()
 export class LoginInput {
+  // The `message` option's value is the i18n key itself — see
+  // `settings/dto/setting.input.ts` for why (018 REQ-9).
   @Field()
-  @IsNotEmpty({ message: 'El usuario es requerido' })
+  @IsNotEmpty({ message: ERROR_KEYS.VALIDATION_LOGIN_USERNAME_REQUIRED })
   username: string;
 
   @Field()
-  @IsNotEmpty({ message: 'La contraseña es requerida' })
+  @IsNotEmpty({ message: ERROR_KEYS.VALIDATION_LOGIN_PASSWORD_REQUIRED })
   password: string;
 
   // `nullable: true` + `defaultValue: false` is what makes this render as

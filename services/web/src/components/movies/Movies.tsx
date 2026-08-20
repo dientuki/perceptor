@@ -1,6 +1,6 @@
-import { getMovies } from '@/actions/movies';
+import { getMovies } from "@/actions/movies";
 import { MediaList } from "@/components/media/MediaList";
-import { MEDIA_TYPE } from '@/types/media';
+import { MEDIA_TYPE } from "@/types/media";
 
 export default async function Movies() {
   const dbMovies = await getMovies();

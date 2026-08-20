@@ -30,6 +30,24 @@ error's top-level `message` and buries the real text under `extensions.originalE
 Every consumer in `services/web/src/actions/*.ts` reads `errors[0].message` directly, so a DTO's
 `@MinLength`/`@IsNotEmpty` message reaches the screen unmodified.
 
+## Errors carry a translation key (`018-ui-i18n`)
+
+Every user-facing exception is built through `src/i18n/i18n-error.ts`'s `i18nError.{notFound,
+badRequest, conflict, unauthorized, forbidden, serviceUnavailable}(key, params?)` — a thin factory
+over Nest's real exception classes (never a parallel hierarchy), whose response body is
+`{ message, i18n: { key, params? } }`. `key` is one of the constants in `src/i18n/error-keys.ts`;
+`message` is always the English rendering from `src/i18n/messages.en.ts`, `{param}`-interpolated.
+`src/i18n/graphql-error.formatter.ts`, wired into `GraphQLModule.forRoot`'s `formatError`, lifts
+`i18n` onto the outgoing error's `extensions` — a keyed throw arrives on the wire as
+`extensions.i18n = { key, params }`, an un-migrated or genuinely unexpected error passes through
+unchanged (no invented key). `main.ts`'s `exceptionFactory` (above) also understands a
+`class-validator` `message` option that is itself a key string, rendering it the same way.
+
+This service **only ever produces English** — translating a key into another language is `web`'s
+job (`docs/spec/graphql-contract.md` § "UI internationalization" has the full vocabulary and the
+error envelope shape). `User.uiLocale`, `Query.supportedLocales` and `Mutation.setUiLocale` exist
+so `web` can resolve and persist the active locale; `api` never reads `uiLocale` itself.
+
 ## Prisma 7 via driver adapter
 
 `prisma/schema.prisma` declares `datasource db { provider = "mysql" }` with **no `url`** — the
@@ -95,8 +113,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   TMDB rate-limits), claimed via a Redis `SET … NX` so concurrent registrations fetch once.
   `Show.seasonsSyncedAt` is set only once every season and episode is written; it stays `null` on any
   failure, and the next `register()` retries whenever it is `null`.
-- **`languages/`** — the `languages` query (reads the seeded `Language` table, deriving a Spanish
-  `name` per `iso2` from `language-names.ts`, not stored) plus the preference writes backing
+- **`languages/`** — the `languages` query (reads the seeded `Language` table, deriving an English
+  `name` per `iso2` from `language-names.ts`, not stored — `web` renders the localized display name
+  via `Intl.DisplayNames` since `018-ui-i18n`; this map is an internal English label, not the UI
+  string) plus the preference writes backing
   `setPreferredLanguages`/`setMoviePreferredLanguages`/`setShowPreferredLanguages`. Each write
   validates every `iso2`, rejects duplicates within one argument, then replaces the whole set
   atomically (`deleteMany` + `createMany` in a `$transaction`). Exported so `auth/`, `movies/` and
@@ -250,9 +270,10 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-08-18: `bin/cli api npx --no tsc --noEmit` reports **0 errors**, `bin/npm api test` is
-green at **156** tests across **16** suites. **Re-run both rather than trusting these numbers** —
-they exist so an agent can prove a change added nothing, not as a fact to cite.
+As of 2026-08-20 (`018-ui-i18n`): `bin/cli api npx --no tsc --noEmit` reports **0 errors**,
+`bin/npm api test` is green at **179** tests across **19** suites. **Re-run both rather than
+trusting these numbers** — they exist so an agent can prove a change added nothing, not as a fact
+to cite.
 
 ## Known debt
 

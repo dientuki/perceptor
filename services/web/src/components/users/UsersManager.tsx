@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useRef, useState } from "react";
 import {
   createUserAction,
@@ -32,6 +33,7 @@ export default function UsersManager({
 }
 
 function CreateUserForm() {
+  const t = useTranslations("users.create");
   const [state, formAction, isPending] = useActionState(createUserAction, null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -72,11 +74,11 @@ function CreateUserForm() {
   return (
     <form ref={formRef} action={formAction} className="space-y-6 max-w-lg">
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-        Nuevo usuario
+        {t("title")}
       </h3>
 
       <div>
-        <Label htmlFor="name">Nombre</Label>
+        <Label htmlFor="name">{t("nameLabel")}</Label>
         <Input
           id="name"
           name="name"
@@ -88,7 +90,7 @@ function CreateUserForm() {
       </div>
 
       <div>
-        <Label htmlFor="username">Usuario</Label>
+        <Label htmlFor="username">{t("usernameLabel")}</Label>
         <Input
           id="username"
           name="username"
@@ -101,19 +103,21 @@ function CreateUserForm() {
       </div>
 
       <div>
-        <Label htmlFor="password">Contraseña</Label>
+        <Label htmlFor="password">{t("passwordLabel")}</Label>
         <Input
           id="password"
           name="password"
           type="password"
           required
           autoComplete="new-password"
-          hint="Mínimo 6 caracteres"
+          hint={t("passwordHint")}
         />
       </div>
 
       <div>
-        <Label htmlFor="passwordConfirmation">Confirmar contraseña</Label>
+        <Label htmlFor="passwordConfirmation">
+          {t("passwordConfirmLabel")}
+        </Label>
         <Input
           id="passwordConfirmation"
           name="passwordConfirmation"
@@ -129,7 +133,7 @@ function CreateUserForm() {
 
       <div>
         <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? "Creando..." : "Crear usuario"}
+          {isPending ? t("submitting") : t("submit")}
         </Button>
       </div>
     </form>
@@ -137,26 +141,27 @@ function CreateUserForm() {
 }
 
 function UsersTable({ users, currentUserId }: UsersManagerProps) {
+  const t = useTranslations("users.table");
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-        Usuarios
+        {t("title")}
       </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-800">
               <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
-                Nombre
+                {t("nameHeader")}
               </th>
               <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
-                Usuario
+                {t("usernameHeader")}
               </th>
               <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
-                Rol
+                {t("roleHeader")}
               </th>
               <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
-                Estado
+                {t("statusHeader")}
               </th>
               <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
                 {" "}
@@ -184,6 +189,7 @@ interface UserRowProps {
 }
 
 function UserRow({ user, isSelf }: UserRowProps) {
+  const t = useTranslations("users.table");
   const [deleteState, deleteFormAction, isDeletePending] = useActionState(
     deleteUserAction,
     null,
@@ -209,22 +215,22 @@ function UserRow({ user, isSelf }: UserRowProps) {
         <td className="py-3 pr-4">
           {user.isAdmin ? (
             <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-500 dark:bg-brand-500/10">
-              Administrador
+              {t("roleAdmin")}
             </span>
           ) : (
             <span className="inline-flex items-center rounded-full bg-success-50 px-2.5 py-0.5 text-xs font-medium text-success-500 dark:bg-success-500/10">
-              Usuario
+              {t("roleUser")}
             </span>
           )}
         </td>
         <td className="py-3 pr-4">
           {user.isEnabled ? (
             <span className="inline-flex items-center rounded-full bg-success-50 px-2.5 py-0.5 text-xs font-medium text-success-500 dark:bg-success-500/10">
-              Habilitado
+              {t("statusEnabled")}
             </span>
           ) : (
             <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-500 dark:bg-brand-500/10">
-              Deshabilitado
+              {t("statusDisabled")}
             </span>
           )}
         </td>
@@ -242,17 +248,15 @@ function UserRow({ user, isSelf }: UserRowProps) {
                 size="sm"
                 variant="outline"
                 disabled={isSelf || isTogglePending}
-                title={
-                  isSelf ? "No podés deshabilitar tu propio usuario" : undefined
-                }
+                title={isSelf ? t("disableSelfTitle") : undefined}
               >
                 {isTogglePending
                   ? user.isEnabled
-                    ? "Deshabilitando..."
-                    : "Habilitando..."
+                    ? t("disabling")
+                    : t("enabling")
                   : user.isEnabled
-                    ? "Deshabilitar"
-                    : "Habilitar"}
+                    ? t("disable")
+                    : t("enable")}
               </Button>
             </form>
             <form action={deleteFormAction}>
@@ -262,11 +266,9 @@ function UserRow({ user, isSelf }: UserRowProps) {
                 size="sm"
                 variant="outline"
                 disabled={isSelf || isDeletePending}
-                title={
-                  isSelf ? "No podés eliminar tu propio usuario" : undefined
-                }
+                title={isSelf ? t("deleteSelfTitle") : undefined}
               >
-                {isDeletePending ? "Eliminando..." : "Eliminar"}
+                {isDeletePending ? t("deleting") : t("delete")}
               </Button>
             </form>
           </div>

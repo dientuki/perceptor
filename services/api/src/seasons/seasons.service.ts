@@ -1,8 +1,11 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
 import { SourceKind } from '@prisma/client';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { MESSAGES_EN } from '@/i18n/messages.en';
 
 // Structural twin of EpisodesService (episodes/episodes.service.ts), itself
 // a structural twin of MoviesService — the third deliberate copy, not a
@@ -31,12 +34,9 @@ export class SeasonsService {
   // EpisodesService.addMagnetToEpisode de acá en más, una vez parseado el
   // infoHash del propio magnet.
   async addMagnetToSeason(seasonId: number, input: { magnet: string; force: boolean }, userId: string) {
-    let parsed;
-    try {
-      parsed = parseMagnet(input.magnet);
-    } catch (err) {
-      throw new BadRequestException(err instanceof Error ? err.message : String(err));
-    }
+    // parseMagnet already throws a keyed BadRequestException (018 T010) — no
+    // re-wrap needed, just let it propagate so `extensions.i18n` survives.
+    const parsed = parseMagnet(input.magnet);
 
     return this.attachTorrentSource(
       seasonId,
@@ -62,16 +62,14 @@ export class SeasonsService {
     userId: string,
   ) {
     const season = await this.findOneFromDb(seasonId, userId);
-    if (!season) throw new NotFoundException(`La temporada ${seasonId} no existe`);
+    if (!season) throw i18nError.notFound(ERROR_KEYS.SEASON_NOT_FOUND, { id: seasonId });
 
     const activeSource = await this.prisma.mediaSource.findFirst({
       where: { seasonId, status: { not: 'ERROR' } },
     });
 
     if (activeSource && !input.force) {
-      throw new ConflictException(
-        'Esta temporada ya tiene una descarga en curso. Confirmá para reemplazarla.',
-      );
+      throw i18nError.conflict(ERROR_KEYS.SEASON_DOWNLOAD_IN_PROGRESS);
     }
 
     // Symmetric with the checks MoviesService/EpisodesService.attachTorrentSource
@@ -87,21 +85,21 @@ export class SeasonsService {
     });
 
     if (existingSource && existingSource.movie) {
-      throw new ConflictException(
-        `Ese magnet ya está asociado a «${existingSource.movie.title}»`,
-      );
+      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
+        title: existingSource.movie.title,
+      });
     }
 
     if (existingSource && existingSource.episode) {
-      throw new ConflictException(
-        `Ese magnet ya está asociado a «${this.episodeDisplayTitle(existingSource.episode)}»`,
-      );
+      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
+        title: this.episodeDisplayTitle(existingSource.episode),
+      });
     }
 
     if (existingSource && existingSource.season && existingSource.season.id !== seasonId) {
-      throw new ConflictException(
-        `Ese magnet ya está asociado a «${this.seasonDisplayTitle(existingSource.season)}»`,
-      );
+      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
+        title: this.seasonDisplayTitle(existingSource.season),
+      });
     }
 
     // El savepath lo decide el client al agregar el torrent, así cada
@@ -116,7 +114,12 @@ export class SeasonsService {
     if (activeSource && input.force) {
       await this.prisma.mediaSource.updateMany({
         where: { seasonId, status: { not: 'ERROR' } },
-        data: { status: 'ERROR', errorMessage: 'Reemplazado por una nueva descarga' },
+        data: {
+          status: 'ERROR',
+          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+          errorKey: ERROR_KEYS.SOURCE_REPLACED,
+          errorParams: null,
+        },
       });
     }
 
@@ -130,6 +133,8 @@ export class SeasonsService {
             releaseTitle: input.releaseTitle,
             downloadPath,
             errorMessage: null,
+            errorKey: null,
+            errorParams: null,
             seasonId,
           },
         })

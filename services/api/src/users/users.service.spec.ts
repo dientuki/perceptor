@@ -73,7 +73,7 @@ describe('UsersService', () => {
   describe('remove', () => {
     it('refuses to delete your own account, before touching the database', async () => {
       await expect(service.remove(admin.id, admin.id)).rejects.toThrow(
-        new BadRequestException('No podés eliminar tu propio usuario'),
+        new BadRequestException('You cannot delete your own user'),
       );
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
       expect(prisma.user.delete).not.toHaveBeenCalled();
@@ -84,7 +84,7 @@ describe('UsersService', () => {
       prisma.user.count.mockResolvedValue(1);
 
       await expect(service.remove(admin.id, other.id)).rejects.toThrow(
-        new BadRequestException('No podés eliminar al único administrador'),
+        new BadRequestException('You cannot delete the only administrator'),
       );
       expect(prisma.user.delete).not.toHaveBeenCalled();
     });
@@ -119,7 +119,7 @@ describe('UsersService', () => {
       // account", not "last administrator" — both conditions are true at
       // once, and only the order of checks decides which message wins.
       await expect(service.remove(admin.id, admin.id)).rejects.toThrow(
-        new BadRequestException('No podés eliminar tu propio usuario'),
+        new BadRequestException('You cannot delete your own user'),
       );
       expect(prisma.user.count).not.toHaveBeenCalled();
     });
@@ -148,7 +148,7 @@ describe('UsersService', () => {
     it('refuses to disable your own account, before touching the database', async () => {
       await expect(
         service.update(admin.id, { id: admin.id, isEnabled: false }, admin.id),
-      ).rejects.toThrow(new BadRequestException('No podés deshabilitar tu propio usuario'));
+      ).rejects.toThrow(new BadRequestException('You cannot disable your own user'));
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
       expect(prisma.user.update).not.toHaveBeenCalled();
       expect(sessionService.revokeAllForUser).not.toHaveBeenCalled();
@@ -164,7 +164,7 @@ describe('UsersService', () => {
 
       await expect(
         service.update(admin.id, { id: admin.id, isEnabled: false }, other.id),
-      ).rejects.toThrow(new BadRequestException('No podés deshabilitar al único administrador'));
+      ).rejects.toThrow(new BadRequestException('You cannot disable the only administrator'));
       expect(prisma.user.count).toHaveBeenCalledWith({
         where: { isAdmin: true, isEnabled: true },
       });
@@ -175,7 +175,7 @@ describe('UsersService', () => {
     it('checks self-disable before the last-admin check (AC-7 message priority)', async () => {
       await expect(
         service.update(admin.id, { id: admin.id, isEnabled: false }, admin.id),
-      ).rejects.toThrow(new BadRequestException('No podés deshabilitar tu propio usuario'));
+      ).rejects.toThrow(new BadRequestException('You cannot disable your own user'));
       expect(prisma.user.count).not.toHaveBeenCalled();
     });
 
@@ -226,6 +226,30 @@ describe('UsersService', () => {
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
       expect(prisma.user.count).not.toHaveBeenCalled();
       expect(sessionService.revokeAllForUser).not.toHaveBeenCalled();
+    });
+  });
+
+  // AC-6: a rejected locale must not be indistinguishable, at render time,
+  // from a bug in the resolver — `web` never ships a catalog for a locale
+  // that isn't in SUPPORTED_LOCALES, so the write must be refused before it
+  // ever reaches the database, and the previous value must be provably
+  // untouched afterwards.
+  describe('setUiLocale', () => {
+    it('stores an accepted locale', async () => {
+      prisma.user.update.mockResolvedValue({ ...other, uiLocale: 'es' });
+
+      const result = await service.setUiLocale(other.id, 'es');
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: other.id },
+        data: { uiLocale: 'es' },
+      });
+      expect(result.uiLocale).toBe('es');
+    });
+
+    it('refuses an unsupported locale before writing anything, and leaves the previous value unchanged', async () => {
+      await expect(service.setUiLocale(other.id, 'kl')).rejects.toThrow(BadRequestException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 });

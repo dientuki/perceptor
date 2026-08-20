@@ -1,11 +1,12 @@
 import { Resolver, Query, Mutation, ResolveField, Parent, Args, Int } from '@nestjs/graphql';
-import { NotFoundException } from '@nestjs/common';
 import { ShowsService } from './shows.service';
 import { Show } from './entities/show.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { LanguagesService } from '@/languages/languages.service';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 @Resolver(() => Show)
 export class ShowsResolver {
@@ -63,7 +64,7 @@ export class ShowsResolver {
     // nullable `show(id)` query above) — the mutation is where that null
     // becomes the refusal 009-show-detail already froze for this resource.
     const show = await this.showsService.findOneFromDb(showId, userId);
-    if (!show) throw new NotFoundException('Recurso no disponible para este usuario');
+    if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
     return this.languagesService.setShowPreferredLanguagesFor(userId, showId, iso2);
   }
 }

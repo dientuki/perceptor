@@ -1,22 +1,31 @@
 // src/lib/auth-session.ts
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { CONFIG } from '@/lib/config';
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { CONFIG } from "@/lib/config";
 
-const SESSION_ERROR_MESSAGES = ['No autenticado', 'Tu sesión expiró, iniciá sesión de nuevo'];
+const SESSION_ERROR_KEYS = [
+  "error.auth.unauthenticated",
+  "error.auth.session_expired",
+];
 
 /**
  * Checks a GraphQL `errors` array for an authentication failure, without
  * touching cookies or redirecting. Shared by `redirectIfUnauthenticated`
  * (Server Function / Route Handler callers, which may mutate cookies) and by
  * `redirectToClearSession` (Server Component render callers, which may not).
+ *
+ * Matches on `extensions.i18n.key`, not on the (translated) `message` — the
+ * key is stable across locales, so this must work identically regardless of
+ * which language the request is rendering in.
  */
 export function isAuthError(errors?: any[]): boolean {
   if (!errors || errors.length === 0) {
     return false;
   }
 
-  return errors.some((error) => SESSION_ERROR_MESSAGES.includes(error?.message));
+  return errors.some((error) =>
+    SESSION_ERROR_KEYS.includes(error?.extensions?.i18n?.key),
+  );
 }
 
 /**
@@ -40,7 +49,7 @@ export async function redirectIfUnauthenticated(errors?: any[]): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(CONFIG.authCookie);
 
-  redirect('/login');
+  redirect("/login");
 }
 
 /**
@@ -58,5 +67,5 @@ export function redirectToClearSession(errors?: any[]): void {
     return;
   }
 
-  redirect('/api/auth/clear-session');
+  redirect("/api/auth/clear-session");
 }

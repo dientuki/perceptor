@@ -1,12 +1,13 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 
-const domain = process.env.DOMAIN || 'localhost';
+const domain = process.env.DOMAIN || "localhost";
 
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   allowedDevOrigins: [domain],
-  output: 'standalone',
+  output: "standalone",
   images: {
     remotePatterns: [
       {
@@ -18,4 +19,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const withNextIntl = createNextIntlPlugin();
+
+export default withNextIntl(nextConfig);

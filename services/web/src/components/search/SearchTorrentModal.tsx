@@ -1,5 +1,6 @@
 "use client";
 import { Database } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Modal } from "@/components/ui/modal";
 import type { AcquisitionTarget } from "@/types/media";
 import SearchTorrent from "./SearchTorrent";
@@ -15,6 +16,7 @@ export default function SearchTorrentModal({
   onClose,
   target,
 }: SearchTorrentModalProps) {
+  const t = useTranslations("search.torrentModal");
   if (!target) return null;
 
   const titleText =
@@ -28,14 +30,17 @@ export default function SearchTorrentModal({
         <div className="px-2 pr-14 flex-shrink-0">
           <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90 flex items-center gap-2">
             <Database className="size-6 text-blue-500" />
-            Buscador de Torrents
+            {t("title")}
           </h4>
           <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
-            Buscando lanzamientos para{" "}
-            <span className="font-medium text-gray-800 dark:text-white">
-              {titleText}
-            </span>
-            .
+            {t.rich("description", {
+              target: titleText,
+              b: (chunks) => (
+                <span className="font-medium text-gray-800 dark:text-white">
+                  {chunks}
+                </span>
+              ),
+            })}
           </p>
         </div>
         <div className="px-2 flex flex-col flex-1 min-h-0">

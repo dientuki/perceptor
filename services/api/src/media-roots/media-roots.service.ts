@@ -1,7 +1,9 @@
-import { Inject, Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { existsSync } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { i18nError } from '@/i18n/i18n-error';
 import { MediaRoot } from './entities/media-root.entity';
 import { MediaRootConfig, MEDIA_ROOTS } from './media-roots.types';
 
@@ -55,7 +57,7 @@ export class MediaRootsService {
   private getRootConfig(rootId: string): MediaRootConfig {
     const root = this.roots.find((r) => r.id === rootId);
     if (!root) {
-      throw new NotFoundException(`Raíz de media desconocida: "${rootId}"`);
+      throw i18nError.notFound(ERROR_KEYS.MEDIA_ROOT_UNKNOWN, { rootId });
     }
     return root;
   }
@@ -102,24 +104,27 @@ export class MediaRootsService {
     const root = this.getRootConfig(rootId);
 
     if (!existsSync(root.containerPath)) {
-      throw new BadRequestException(
-        `La raíz "${root.label}" no está montada en este container — revisá HOST_${root.id === 'downloads' ? 'DOWNLOADS' : 'DESTINATIONS'}_DIR en el .env y volvé a levantar el stack.`,
-      );
+      const envVar = `HOST_${root.id === 'downloads' ? 'DOWNLOADS' : 'DESTINATIONS'}_DIR`;
+      throw i18nError.badRequest(ERROR_KEYS.MEDIA_ROOT_NOT_MOUNTED, { label: root.label, envVar });
     }
 
     if (typeof relPath !== 'string' || relPath.includes('\0')) {
-      throw new BadRequestException('Ruta inválida');
+      throw i18nError.badRequest(ERROR_KEYS.MEDIA_ROOT_INVALID_PATH);
     }
 
     if (isAbsolute(relPath)) {
-      throw new ForbiddenException(
-        `La ruta de "${root.label}" tiene que ser relativa a ${root.hostPath}, no una ruta absoluta`,
-      );
+      throw i18nError.forbidden(ERROR_KEYS.MEDIA_ROOT_ABSOLUTE_PATH, {
+        label: root.label,
+        hostPath: root.hostPath,
+      });
     }
 
     const normalized = normalize(relPath);
     if (normalized === '..' || normalized.startsWith(`..${sep}`)) {
-      throw new ForbiddenException(`La ruta se escapa de "${root.label}" (${root.hostPath})`);
+      throw i18nError.forbidden(ERROR_KEYS.MEDIA_ROOT_ESCAPES_ROOT, {
+        label: root.label,
+        hostPath: root.hostPath,
+      });
     }
 
     const candidate = resolve(root.containerPath, normalized);
@@ -127,7 +132,10 @@ export class MediaRootsService {
     const realRoot = await realpath(root.containerPath);
     const realAncestor = await this.realpathOfDeepestExisting(candidate);
     if (realAncestor !== realRoot && !realAncestor.startsWith(realRoot + sep)) {
-      throw new ForbiddenException(`La ruta se escapa de "${root.label}" (${root.hostPath})`);
+      throw i18nError.forbidden(ERROR_KEYS.MEDIA_ROOT_ESCAPES_ROOT, {
+        label: root.label,
+        hostPath: root.hostPath,
+      });
     }
 
     if (opts.mustExist) {
@@ -135,10 +143,10 @@ export class MediaRootsService {
       try {
         stats = await stat(candidate);
       } catch {
-        throw new BadRequestException(`La carpeta "${relPath}" no existe en "${root.label}"`);
+        throw i18nError.badRequest(ERROR_KEYS.MEDIA_ROOT_FOLDER_NOT_FOUND, { path: relPath, label: root.label });
       }
       if (!stats.isDirectory()) {
-        throw new BadRequestException(`"${relPath}" no es una carpeta`);
+        throw i18nError.badRequest(ERROR_KEYS.MEDIA_ROOT_NOT_A_FOLDER, { path: relPath });
       }
     }
 

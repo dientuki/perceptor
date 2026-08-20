@@ -2,6 +2,8 @@ import { CreateUserInput } from './create-user.input';
 import { InputType, Field, PartialType, ID } from '@nestjs/graphql';
 import { IsBoolean, IsNotEmpty, IsOptional } from 'class-validator';
 
+import { ERROR_KEYS } from '@/i18n/error-keys';
+
 @InputType()
 export class UpdateUserInput extends PartialType(CreateUserInput) {
   // A field with no class-validator decorator at all is invisible to
@@ -10,8 +12,11 @@ export class UpdateUserInput extends PartialType(CreateUserInput) {
   // `id: undefined`. Pre-existing bug from 003-auth-user-management,
   // surfaced here because it made every updateUser call (including the new
   // disable safeguards) fail before this fix.
+  //
+  // The `message` option's value is the i18n key itself — see
+  // `setting.input.ts` for why (018 REQ-9).
   @Field(() => ID)
-  @IsNotEmpty({ message: 'El id del usuario es requerido' })
+  @IsNotEmpty({ message: ERROR_KEYS.VALIDATION_USER_ID_REQUIRED })
   id: string;
 
   // Declared directly on this class, not inherited through PartialType(CreateUserInput):
