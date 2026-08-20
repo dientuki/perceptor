@@ -28,6 +28,12 @@ GraphQL and Redis, nothing else.
 
 You write **only** inside `services/worker/` and `docs/spec/features/NNN-*/worker/`.
 
+**Two directories inside your own service are not yours**: `services/worker/src/ffmpeg/` and
+`services/worker/ffmpeg/` belong to the `ffmpeg` agent (`.claude/agents/ffmpeg.md`), which owns the
+track-selection rules and the case corpus that proves them. Read them — you must, to know what
+`buildFfmpegCommand` returns — but do not edit them. A task that needs an argument rule changed is
+an `ffmpeg` task: **stop and report**.
+
 The producer side of your queue payload lives in `services/api/src/queue/types.ts`. You may
 **read** it — you must, to stay in sync — but you may not edit it. If the payload needs to change,
 **stop and report**: that is an `api` task and a contract change. This is not enforced by tooling;

@@ -14,3 +14,6 @@ npm-debug.log*
 !.env.example
 
 dist/
+
+# Fixture corpus for src/ffmpeg/cases.spec.ts — test data, never runtime.
+ffmpeg/

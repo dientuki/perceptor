@@ -106,6 +106,30 @@ with `Number(...)` silently misclassifies every file as non-remux, forever, with
 `remux-detection.spec.ts` proves this by asserting the naive implementation gets the case wrong. The
 filename substring is the last resort only, reached when no bitrate at all can be computed.
 
+## The rules in `src/ffmpeg/` have their own agent and their own corpus
+
+`services/worker/ffmpeg/` — outside `src/`, one JSON per case — holds the **verbatim `ffprobe`
+output of a real file** plus the exact FFmpeg argument array it must produce.
+`src/ffmpeg/cases.spec.ts` enumerates the directory and asserts the whole ordered command, so
+adding a case is adding a file: no spec is edited and no factory helper transcribes a stream by
+hand, which is what used to lose the one field that mattered (`disposition`, `NUMBER_OF_FRAMES`,
+`side_data_list`). A case that must fail carries `"throws": "error.encode.…"` instead of `ffmpeg`;
+one probe can back several cases (`6.json` is `1.json` with `vulkanAvailable: true`).
+
+The runner is built so it cannot report green while running less than the directory holds: a
+malformed case fails collection naming the file, an empty directory is an error rather than a
+vacuous pass, and `ENCODE_SAMPLE_SECONDS` is cleared per test because `buildCommand.ts` reads it
+from the environment and would append `-t N` to every expectation. `ffmpeg/` is in `.dockerignore`
+— it is test data and never ships in the image.
+
+`params.spec.ts` stays alongside it, for the cases no real file reproduces — the ISO-639-2 `fre`/
+`fra` pairing above all.
+
+**`src/ffmpeg/` and `ffmpeg/` are owned by the `ffmpeg` agent** (`.claude/agents/ffmpeg.md`), not by
+the `worker` agent. That file is also the **rule document**: what is kept and dropped for video,
+audio and subtitles, the regional-Spanish vocabulary, and the table of track titles written to the
+output. A rule change goes there and arrives with the case that proves it.
+
 ## Post-encode cleanup, and where deleting a source lives (`012-post-download-processing`)
 
 `src/jobs/cleanup-source.ts`'s `cleanupSource(input)` is called from `encode.job.ts` **after** the
@@ -191,7 +215,8 @@ leaves a half-written file at the destination.
 
 ## Known debt
 
-- **Test coverage is still partial.** `011-av1-transcode` added `vitest.config.ts` and the first
+- **Test coverage is still partial** *(less so in `src/ffmpeg/`, which now has the case corpus above)*.
+  `011-av1-transcode` added `vitest.config.ts` and the first
   real specs (`src/ffmpeg/remux-detection.spec.ts`, `src/ffmpeg/params.spec.ts`,
   `src/ffmpeg/buildCommand.spec.ts`, alongside the pre-existing `src/api/graphql-client.spec.ts`) —
   the rule-dense files that decide *what* an encode keeps are now covered. `012-post-download-processing`

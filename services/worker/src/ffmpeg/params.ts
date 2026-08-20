@@ -206,6 +206,31 @@ export function getVideoParams(
   ];
 }
 
+const LATIN_AMERICAN_MARKERS = ['latino', 'latin america', 'latinoamerica', 'latin', 'la', '419'];
+function titleWords(stream: any): string[] {
+  return (stream.tags?.title || '')
+    .toLowerCase()
+    .split(/[^a-z0-9À-ſ-]+/)
+    .filter((word: string) => word.length > 0);
+}
+
+function titleMarks(stream: any, markers: string[]): boolean {
+  const words = titleWords(stream);
+  const joined = words.join(' ');
+  return markers.some((marker) =>
+    marker.includes(' ') ? joined.includes(marker) : words.includes(marker),
+  );
+}
+
+function isLatinAmericanSpanish(stream: any): boolean {
+  return titleMarks(stream, LATIN_AMERICAN_MARKERS);
+}
+
+function preferring(streams: any[], isWorse: (stream: any) => boolean): any[] {
+  const better = streams.filter((stream) => !isWorse(stream));
+  return better.length > 0 ? better : streams;
+}
+
 // src/core/ffmpeg/params.ts
 //
 // REQ-4/REQ-6/REQ-7: the caller (buildFfmpegCommand) resolves the allow-list
@@ -264,18 +289,8 @@ export function getAudioParams(
     }
 
     if (langStreams.length > 0) {
-      // ---- NUEVA REGLA PARA ESPAÑOL (LATINO) ----
-      if (langCode === 'spa' && langStreams.length > 1) {
-        // Filtramos las que tengan "latin" o "latino" de forma explícita
-        const latinStreams = langStreams.filter(s => {
-          const title = (s.tags?.title || "").toLowerCase();
-          return title.includes('latin') || title.includes('latino');
-        });
-
-        // Si encontramos pistas con "latin/latino", trabajamos SOLO con esas para elegir la mejor
-        if (latinStreams.length > 0) {
-          langStreams = latinStreams;
-        }
+      if (langCode === 'spa') {
+        langStreams = preferring(langStreams, (s) => !isLatinAmericanSpanish(s));
       }
 
       langStreams.sort((a, b) => {
@@ -353,10 +368,50 @@ export function getAudioParams(
 
 // src/core/ffmpeg/params.ts
 
-const languageMap: Record<string, string> = {
-    spa: "Spanish",
-    eng: "English",
-  };
+const TEXT_SUBTITLE_CODECS = ['subrip', 'mov_text', 'tx3g'];
+
+const MIN_SUBTITLE_BYTES = 2000;
+const MIN_SUBTITLE_CUES = 100;
+
+const HEARING_IMPAIRED_MARKERS = ['sdh', 'cc'];
+const HEARING_IMPAIRED_PHRASES = ['hearing impaired', 'hearing-impaired'];
+
+const languageTitles: Record<string, string> = {
+  eng: 'English',
+};
+
+function isTextSubtitle(stream: any): boolean {
+  return TEXT_SUBTITLE_CODECS.includes((stream.codec_name || '').toLowerCase());
+}
+
+function hasCuePayload(stream: any): boolean {
+  const bytes = Number(stream.tags?.NUMBER_OF_BYTES);
+  if (Number.isFinite(bytes)) return bytes >= MIN_SUBTITLE_BYTES;
+
+  const cues = Number(stream.tags?.NUMBER_OF_FRAMES);
+  if (Number.isFinite(cues)) return cues >= MIN_SUBTITLE_CUES;
+
+  const bps = Number(stream.tags?.BPS);
+  if (Number.isFinite(bps)) return bps > 2;
+
+  return true;
+}
+
+function isHearingImpaired(stream: any): boolean {
+  if (stream.disposition?.hearing_impaired === 1) return true;
+
+  const words = titleWords(stream);
+  return (
+    HEARING_IMPAIRED_MARKERS.some((marker) => words.includes(marker)) ||
+    HEARING_IMPAIRED_PHRASES.some((phrase) => words.join(' ').includes(phrase))
+  );
+}
+
+function subtitleTitle(stream: any): string {
+  const lang = normalizeIso3(stream.tags?.language || 'und');
+  if (lang === 'spa') return isLatinAmericanSpanish(stream) ? 'Latino' : 'Español';
+  return languageTitles[lang] ?? lang;
+}
 
 export function getSubtitleParams(subtitleStreams: any[], allowedLanguagesIso3: string[]) {
   // Same list the caller resolved for getAudioParams (REQ-8 shares the one
@@ -366,64 +421,40 @@ export function getSubtitleParams(subtitleStreams: any[], allowedLanguagesIso3: 
     new Set(allowedLanguagesIso3.map((lang) => normalizeIso3(lang))),
   );
 
-  // 1. Filtrado por tus 3 reglas
-  const filtered = subtitleStreams.filter(s => {
-    const lang = normalizeIso3(s.tags?.language || "");
-    const bps = parseInt(s.tags?.BPS || "999"); // Si no tiene BPS, asumimos que es válido
-    const codec = (s.codec_name || "").toLowerCase(); // guard: algún stream sin codec_name no debe tirar TypeError acá
+  const candidates = subtitleStreams.filter(
+    (s) =>
+      allowedLangs.includes(normalizeIso3(s.tags?.language || '')) &&
+      isTextSubtitle(s) &&
+      hasCuePayload(s),
+  );
 
-    // Regla 1: Idioma
-    const isAllowedLang = allowedLangs.includes(lang);
-    
-    // Regla 2: BPS > 2 (Eliminar pistas vacías o corruptas)
-    const hasEnoughBitrate = bps > 2;
-    
-    // Regla 3: Solo subrip (SRT) o mov_text (MP4)
-    const isSubrip = ["subrip", "mov_text", "tx3g"].includes(codec);
+  const selected: any[] = [];
+  allowedLangs.forEach((langCode) => {
+    let langStreams = candidates.filter(
+      (s) => normalizeIso3(s.tags?.language || '') === langCode,
+    );
+    if (langStreams.length === 0) return;
 
-    return isAllowedLang && hasEnoughBitrate && isSubrip;
+    langStreams = preferring(langStreams, isHearingImpaired);
+    if (langCode === 'spa') {
+      langStreams = preferring(langStreams, (s) => !isLatinAmericanSpanish(s));
+    }
+
+    selected.push(...langStreams);
   });
 
-  if (filtered.length === 0) {
-    console.log('[ffmpeg] no se encontraron subtítulos Subrip que cumplan las reglas.');
+  if (selected.length === 0) {
+    console.log('[ffmpeg] no text subtitle in an allowed language survived the rules.');
     return [];
   }
 
-  // 2. Generar parámetros de mapeo
   const params: string[] = [];
-    
-  filtered.forEach((s, index) => {
-    const lang = (s.tags?.language || "und").toUpperCase();
-    //console.log(`[Stream #${s.index}] ${lang} - Codec: ${s.codec_name} (BPS: ${s.tags?.BPS || 'N/A'})`);
 
-    params.push("-map", `0:${s.index}`);
-    //params.push(`-c:s:${index}`, "copy"); // Copia directa ya que es texto
-    params.push(`-c:s:${index}`, "srt");
-
-    const title = s.tags?.title || "";
-    
-
-    const isAllCaps =
-      title.length > 0 &&
-      title === title.toUpperCase() &&
-      /[A-Z]/.test(title);
-
-    const shouldReplaceTitle =
-      title.trim() === "" || isAllCaps;
-
-    if (shouldReplaceTitle) {
-      const language = s.tags?.language || "und";
-      const languageName = languageMap[language] || language;
-
-      params.push(
-        `-metadata:s:s:${index}`,
-        `title=${languageName}`
-      );
-    }
-
-    
-    
+  selected.forEach((s, index) => {
+    params.push('-map', `0:${s.index}`);
+    params.push(`-c:s:${index}`, 'srt');
+    params.push(`-metadata:s:s:${index}`, `title=${subtitleTitle(s)}`);
   });
-  
+
   return params;
 }

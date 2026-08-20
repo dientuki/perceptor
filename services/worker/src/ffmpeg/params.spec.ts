@@ -168,6 +168,59 @@ describe('getSubtitleParams', () => {
 
     expect(params).toContain('title=English');
   });
+
+  // The corpus covers hearing-impaired tracks that carry the disposition flag
+  // (3.json sets it and titles itself SDH). No real file here tags it in the
+  // title alone, and no real file offers a hearing-impaired track as the only
+  // candidate — both are the cases where dropping it outright, instead of
+  // ranking it last, would silently ship a file with no subtitle at all.
+  it('drops a hearing-impaired track detected by title alone when another candidate exists', () => {
+    const streams = [
+      subtitleStream({ index: 4, tags: { language: 'eng', title: 'English SDH' } }),
+      subtitleStream({ index: 5, tags: { language: 'eng', title: 'English' } }),
+    ];
+
+    const params = getSubtitleParams(streams, ['eng']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:5');
+  });
+
+  it('keeps a hearing-impaired track when it is the only candidate in its language', () => {
+    const streams = [
+      subtitleStream({ index: 4, tags: { language: 'eng', title: 'SDH' }, disposition: { hearing_impaired: 1 } }),
+    ];
+
+    const params = getSubtitleParams(streams, ['eng']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:4');
+  });
+
+  it('keeps every Spanish track when nothing marks any of them as regional', () => {
+    const streams = [
+      subtitleStream({ index: 4, tags: { language: 'spa', title: 'BTM' } }),
+      subtitleStream({ index: 5, tags: { language: 'spa', title: 'BTM' } }),
+    ];
+
+    const params = getSubtitleParams(streams, ['spa']);
+
+    expect(mapArgCount(params)).toBe(2);
+    expect(params.filter((arg) => arg === 'title=Español')).toHaveLength(2);
+  });
+
+  it('does not read "la" out of the middle of a word when looking for a Latin American marker', () => {
+    const streams = [
+      subtitleStream({ index: 4, tags: { language: 'spa', title: 'Balaclava' } }),
+      subtitleStream({ index: 5, tags: { language: 'spa', title: 'Español LA' } }),
+    ];
+
+    const params = getSubtitleParams(streams, ['spa']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:5');
+    expect(params).toContain('title=Latino');
+  });
 });
 
 // Defends REQ-2/REQ-6 (docs/spec/features/017-worker-gpu-strategy/spec.md):
