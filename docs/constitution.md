@@ -145,6 +145,47 @@ Conversely, the 18-line `expect(service).toBeDefined()` files under `services/ap
 **Check** — every new test file opens with a comment naming the failure it prevents. If that
 sentence cannot be written, the test is probably not owed.
 
+## Article X — Prefer simplification
+
+A fix reduces or consolidates code. Removing a branch, collapsing two paths that do the same thing,
+or deleting something nothing imports are all preferable to adding.
+
+Do not add a layer, a flag, an abstraction or a special case unless the change is impossible without
+it. "Might be useful later" is not a reason; the later change can add it, with the use case in hand.
+
+This repository already carries deliberate duplication that outranks this article: `movies`/`shows`
+and the three twins of `attachTorrentSource` are kept separate on purpose (`006-media-search` § Out
+of Scope). Article X asks for less code, not for fewer files at any cost — collapsing those is a
+spec-level decision, not a cleanup.
+
+**Check** — the diff removes more than it adds, or the addition names the constraint that made it
+unavoidable.
+
+## Article XI — No comments
+
+Code carries no explanatory comments, no docblocks, no TODO/FIXME notes, no suppression directives,
+and no commented-out code. Intent is expressed through names, structure and tests; rationale belongs
+in the commit message, the PR, or the feature spec.
+
+Three exceptions, and only these:
+
+1. **A link to external documentation.** A URL for a third-party API or format that the code
+   implements against — the qBittorrent WebUI endpoint above each method in
+   `services/api/src/clients/torrent/client.ts` is the reference. The link is the exception, not the
+   prose around it.
+2. **The test header required by Article IX** — one paragraph at the top of a spec file naming the
+   class of failure it defends against. It is a filter for whether the test is owed, not
+   documentation. Inside the file this article applies in full: intent goes in the `describe` and
+   `it(...)` strings.
+3. **Doc comments on a security guard** — `MediaRootsService.resolveFromRoot()` is the one that
+   exists today. The reasoning a traversal guard defends against cannot live in its name.
+
+Shebangs are not comments. Existing comments outside these three cases are legacy: leave them until
+you are editing that code for another reason, since translating or deleting them wholesale creates
+noisy diffs (same rule Article VI applies to Spanish comments).
+
+**Check** — a new file has no comment that is not a URL, a test header, or a guard's doc comment.
+
 ---
 
 ## Changelog
@@ -152,3 +193,4 @@ sentence cannot be written, the test is probably not owed.
 | Version | Date | Change |
 | :-- | :-- | :-- |
 | 1.0.0 | 2026-08-09 | Ratified. Articles I–VI codify rules already in `CLAUDE.md`; VII–IX introduce spec-driven development. |
+| 1.1.0 | 2026-08-20 | Articles X (prefer simplification) and XI (no comments) added. XI names the three cases where a comment is still owed; Article VI is unchanged, since it governs the language of a comment, not whether one exists. |

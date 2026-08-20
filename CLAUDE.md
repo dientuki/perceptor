@@ -157,7 +157,7 @@ Rules that are not obvious from the variable names:
 
 ## Spec Driven Development
 
-`docs/constitution.md` holds the nine rules that outrank every other document here. When it and a
+`docs/constitution.md` holds the eleven rules that outrank every other document here. When it and a
 `CLAUDE.md` disagree, the constitution wins and the `CLAUDE.md` is the bug.
 
 A change starts as a feature spec when it touches more than one service, the Prisma schema, the
