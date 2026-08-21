@@ -28,8 +28,8 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
 
-  app.use(skipUploads(json()));
-  app.use(skipUploads(urlencoded({ extended: true })));
+  app.use(skipUploads(json({ limit: '2mb' })));
+  app.use(skipUploads(urlencoded({ extended: true, limit: '2mb' })));
 
   // Igual que el worker (ver services/worker/src/index.ts): sin esto, lo que
   // escribe la api (el archivo subido por /uploads) queda 644/root y el worker
