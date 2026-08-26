@@ -3,12 +3,22 @@ title: Worker GPU Strategy
 spec_version: 0.2.0
 author: Juan Farias
 created_at: 2026-08-18
-last_updated: 2026-08-20
-status: Implemented
+last_updated: 2026-08-25
+status: Superseded
+superseded_by: 024-retire-gpu-tonemap-strategy
 services: [infra, worker]
 ---
 
 # SPEC: Worker GPU Strategy (`spec.md`)
+
+> **Superseded by `024-retire-gpu-tonemap-strategy`.** Commit `8d9572d` removed the tonemap pass
+> entirely: the 4K HEVC branch now downscales to 1080p and preserves the source's HDR instead of
+> flattening it to bt709 SDR. This feature only ever decided **where the tonemap ran**, so with no
+> tonemap it has no subject. `024` removes the probe, the `vulkanAvailable` flag, both filter
+> chains, the Vulkan packages, the compose overlay, `USE_GPU` and the `/dev/dri` branches.
+>
+> Everything below describes a decision that was correct while the tonemap existed, and is kept as
+> the record of why the Vulkan stack was ever in the image. It no longer describes the code.
 
 ## Context & Goal
 
