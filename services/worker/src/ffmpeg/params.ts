@@ -42,6 +42,9 @@ const SOFTWARE_TONEMAP_VF =
 const GPU_TONEMAP_VF =
   'libplacebo=w=1920:h=1080:colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=auto';
 
+const HDR_DOWNSCALE_VF =
+  'scale=1920:1080:force_original_aspect_ratio=decrease';
+
 export function getVideoParams(
   videoStream: any,
   isLiveAction: boolean,
@@ -118,30 +121,6 @@ export function getVideoParams(
     const hasDolbyVision = Array.isArray(videoStream.side_data_list) && 
       videoStream.side_data_list.some((sideData: any) => sideData.side_data_type === "DOVI configuration record");
 
-    if (hasDolbyVision) {
-        return [
-        "-map", "0:v:0",
-        // REQ-7: on the software path a Dolby Vision source is tonemapped as
-        // its HDR10 base layer — the RPU is not applied. Documented quality
-        // regression, never an error.
-        "-vf", vulkanAvailable ? GPU_TONEMAP_VF : SOFTWARE_TONEMAP_VF,
-        "-c:v", "libsvtav1",
-        "-crf", getQuality(isLiveAction, quality),
-        "-preset", "4",
-        "-pix_fmt", "yuv420p10le",
-        "-svtav1-params", svtav1,
-        // REQ-6: byte-identical on both paths — the title names the source,
-        // not the engine that tonemapped it.
-        "-metadata:s:v:0", 'title=AV1 1080p (Tonemapped from 4K DoVi)'
-      ];
-    }
-
-    //const hasHDR10 = Array.isArray(videoStream.side_data_list) && 
-    //  videoStream.side_data_list.some((sideData: any) => 
-    //    sideData.side_data_type === "Mastering display metadata" || 
-    //    sideData.side_data_type === "Content light level metadata"
-    //  );
-
     const hasHDR10 = 
       videoStream.color_transfer === 'smpte2084' || 
       videoStream.color_transfer === 'arib-std-b67' || 
@@ -151,23 +130,32 @@ export function getVideoParams(
         s.side_data_type === "Content light level metadata"
       ));
 
-    if (hasHDR10) {
-      return [
-        "-map", "0:v:0",
-        "-vf", vulkanAvailable ? GPU_TONEMAP_VF : SOFTWARE_TONEMAP_VF,
-        "-c:v", "libsvtav1",
-        "-crf", getQuality(isLiveAction, quality),
-        "-preset", "4",
-        "-pix_fmt", "yuv420p10le",
-        "-svtav1-params", svtav1,
-        // REQ-6: byte-identical on both paths.
-        "-metadata:s:v:0", 'title=AV1 1080p (Tonemapped from 4K HDR10)'
-      ];
+    if (hasDolbyVision || hasHDR10) {
+        const from = hasDolbyVision ? "DoVi" : "HDR10";
+        return [
+          "-map", "0:v:0",
+          // REQ-7: on the software path a Dolby Vision source is tonemapped as
+          // its HDR10 base layer — the RPU is not applied. Documented quality
+          // regression, never an error.
+          "-vf", HDR_DOWNSCALE_VF,
+          "-c:v", "libsvtav1",
+          "-crf", getQuality(isLiveAction, quality),
+          "-preset", "4",
+          "-pix_fmt", "yuv420p10le",
+          "-svtav1-params", svtav1,
+          // REQ-6: byte-identical on both paths — the title names the source,
+          // not the engine that tonemapped it.
+          "-metadata:s:v:0", `title=AV1 1080p (Downscaled from 4K ${from})`,
+          "-color_range", "tv",
+          "-colorspace", "bt2020nc",
+          "-color_primaries", "bt2020",
+          "-color_trc", "smpte2084",
+        ];
     }
 
     return [
       "-map", "0:v:0",
-      "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease",
+      "-vf", HDR_DOWNSCALE_VF,
       "-c:v", "libsvtav1",
       "-crf", getQuality(isLiveAction, quality),
       "-preset", "4",
