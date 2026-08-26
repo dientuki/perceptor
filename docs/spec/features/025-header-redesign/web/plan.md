@@ -1,8 +1,8 @@
 ---
 title: Header redesign and 16px type base — web slice
 service: web
-last_updated: 2026-08-25
-status: Approved
+last_updated: 2026-08-26
+status: Implemented
 ---
 
 # PLAN: Header redesign and 16px type base — `web` (`web/plan.md`)

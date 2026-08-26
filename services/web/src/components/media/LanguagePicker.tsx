@@ -62,7 +62,7 @@ export default function LanguagePicker({
       <div>
         <label
           htmlFor="language-picker-select"
-          className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
+          className="mb-1.5 block font-medium text-gray-700 dark:text-gray-400"
         >
           {resolvedLabel}
         </label>
@@ -71,7 +71,7 @@ export default function LanguagePicker({
           name="iso2"
           multiple
           defaultValue={selectedIso2}
-          className="h-40 w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm text-gray-800 shadow-theme-xs focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+          className="h-40 w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-gray-800 shadow-theme-xs focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
         >
           {sortedOptions.map((option) => (
             <option key={option.id} value={option.iso2}>
@@ -83,13 +83,13 @@ export default function LanguagePicker({
       </div>
 
       {state && "error" in state && state.error && (
-        <p className="text-sm text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg">
+        <p className="text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg">
           {state.error}
         </p>
       )}
 
       {state && "success" in state && state.success && (
-        <p className="text-sm text-success-500">{t("saved")}</p>
+        <p className="text-success-500">{t("saved")}</p>
       )}
 
       <div>

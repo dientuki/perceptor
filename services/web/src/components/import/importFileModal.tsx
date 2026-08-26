@@ -221,7 +221,7 @@ export default function ImportFileModal({
             <Video className="size-6 text-blue-500" />
             {title}
           </h4>
-          <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
+          <p className="mb-6 text-gray-500 dark:text-gray-400 lg:mb-7">
             {t.rich("description", {
               target: targetLabel,
               b: (chunks) => (
@@ -241,14 +241,14 @@ export default function ImportFileModal({
                 type="file"
                 accept="video/*,.mkv,.mp4,.avi"
                 onChange={handleFileChange}
-                className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs file:mr-4 file:rounded-md file:border-0 file:bg-brand-500 file:px-3 file:py-1.5 file:text-white file:text-sm hover:file:bg-brand-600 dark:border-gray-700 dark:text-white/90"
+                className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-gray-800 shadow-theme-xs file:mr-4 file:rounded-md file:border-0 file:bg-brand-500 file:px-3 file:py-1.5 file:text-white hover:file:bg-brand-600 dark:border-gray-700 dark:text-white/90"
               />
             </>
           )}
 
           {status !== "idle" && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm text-gray-700 dark:text-gray-300">
+              <div className="flex items-center justify-between text-gray-700 dark:text-gray-300">
                 <span className="truncate">{fileName}</span>
                 <span className="shrink-0 text-gray-400">
                   {formatBytes(progress.sent)} / {formatBytes(progress.total)}

@@ -40,7 +40,7 @@ export default function PathPicker({
 
       <div className="flex items-stretch overflow-hidden rounded-lg border border-gray-300 shadow-theme-xs dark:border-gray-700">
         <span
-          className="flex items-center whitespace-nowrap bg-gray-50 px-3 text-sm text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+          className="flex items-center whitespace-nowrap bg-gray-50 px-3 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
           title={root.hostPath}
         >
           {prefix}
@@ -51,7 +51,7 @@ export default function PathPicker({
           value={segment}
           onChange={(e) => setSegment(e.target.value)}
           placeholder={t("placeholder")}
-          className="h-11 w-full min-w-0 bg-transparent px-2 text-sm text-gray-800 focus:outline-hidden dark:text-white/90"
+          className="h-11 w-full min-w-0 bg-transparent px-2 text-gray-800 focus:outline-hidden dark:text-white/90"
         />
       </div>
 

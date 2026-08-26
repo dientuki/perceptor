@@ -157,7 +157,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("inputPlaceholder")}
-            className="w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-gray-800 dark:text-white"
+            className="w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-10 pr-4 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-gray-800 dark:text-white"
           />
         </div>
         <Button type="submit" disabled={isLoading} className="min-w-[100px]">
@@ -177,19 +177,19 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder={t("filterPlaceholder")}
-            className="w-full rounded-lg border border-gray-200 bg-transparent py-2 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 dark:border-gray-800 dark:text-white"
+            className="w-full rounded-lg border border-gray-200 bg-transparent py-2 pl-10 pr-4 outline-none transition focus:border-blue-500 dark:border-gray-800 dark:text-white"
           />
         </div>
       )}
 
       {searchError && (
-        <div className="flex-shrink-0 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
+        <div className="flex-shrink-0 rounded-lg bg-red-50 px-4 py-3 text-red-700 dark:bg-red-500/10 dark:text-red-400">
           <p>{searchError}</p>
         </div>
       )}
 
       {addError && (
-        <div className="flex-shrink-0 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
+        <div className="flex-shrink-0 rounded-lg bg-red-50 px-4 py-3 text-red-700 dark:bg-red-500/10 dark:text-red-400">
           <p>{addError}</p>
           {needsConfirm && (
             <div className="mt-2 flex items-center gap-3">
@@ -247,7 +247,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                   key={res.infoHash}
                   className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center hover:bg-gray-50 dark:hover:bg-white/[0.01]"
                 >
-                  <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
                     <span className="font-medium line-clamp-1">
                       {res.title || t("unknownRelease")}
                     </span>
@@ -268,10 +268,10 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                       )}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                  <td className="whitespace-nowrap px-4 py-3 text-gray-500 dark:text-gray-400">
                     {formatBytes(res.size)}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm">
+                  <td className="whitespace-nowrap px-4 py-3">
                     <span className="text-green-500">{res.seeders}</span> /{" "}
                     <span className="text-gray-400">{res.leechers}</span>
                   </td>
@@ -293,7 +293,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
               ))
             ) : (
               <tr className="flex w-full">
-                <td className="flex-1 px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                <td className="flex-1 px-4 py-10 text-center text-gray-500 dark:text-gray-400">
                   {isLoading
                     ? t("searchingTrackers")
                     : results.length > 0

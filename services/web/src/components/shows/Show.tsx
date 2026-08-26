@@ -45,7 +45,7 @@ export default async function Show({
           <h3 className="mb-2 text-2xl font-bold text-gray-800 dark:text-white/90">
             {show.title}
           </h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-gray-500 dark:text-gray-400">
             {show.releaseDate
               ? new Date(show.releaseDate).getFullYear()
               : t("unknownYear")}{" "}
@@ -54,7 +54,7 @@ export default async function Show({
         </div>
 
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
+          <h4 className="font-semibold uppercase tracking-wider text-gray-400">
             {t("synopsisTitle")}
           </h4>
           <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">

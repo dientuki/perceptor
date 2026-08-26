@@ -32,7 +32,7 @@ export default function SearchTorrentModal({
             <Database className="size-6 text-blue-500" />
             {t("title")}
           </h4>
-          <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
+          <p className="mb-6 text-gray-500 dark:text-gray-400 lg:mb-7">
             {t.rich("description", {
               target: titleText,
               b: (chunks) => (

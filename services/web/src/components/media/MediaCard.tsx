@@ -63,7 +63,7 @@ export function MediaCard({
       {/* Info */}
       <div className="mt-3 px-1">
         <h3
-          className="line-clamp-2 text-sm font-semibold text-black dark:text-white"
+          className="line-clamp-2 font-semibold text-black dark:text-white"
           title={item.title}
         >
           {item.title}

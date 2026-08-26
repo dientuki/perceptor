@@ -43,7 +43,7 @@ export default function SettingsForm({
     <form action={formAction}>
       <div className="space-y-8 max-w-lg">
         <div>
-          <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <h3 className="mb-4 font-semibold text-gray-700 dark:text-gray-300">
             {t("torrentSection")}
           </h3>
           <div className="space-y-6">
@@ -57,7 +57,7 @@ export default function SettingsForm({
         </div>
 
         <div>
-          <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <h3 className="mb-4 font-semibold text-gray-700 dark:text-gray-300">
             {t("indexerSection")}
           </h3>
           <div>
@@ -72,7 +72,7 @@ export default function SettingsForm({
         </div>
 
         <div>
-          <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <h3 className="mb-4 font-semibold text-gray-700 dark:text-gray-300">
             {t("moviesShowsSection")}
           </h3>
           <div className="space-y-6">
@@ -96,7 +96,7 @@ export default function SettingsForm({
               />
               <label
                 htmlFor="movies_enabled"
-                className="text-sm text-gray-700 dark:text-gray-300"
+                className="text-gray-700 dark:text-gray-300"
               >
                 {t("moviesEnabledLabel")}
               </label>
@@ -119,7 +119,7 @@ export default function SettingsForm({
               />
               <label
                 htmlFor="shows_enabled"
-                className="text-sm text-gray-700 dark:text-gray-300"
+                className="text-gray-700 dark:text-gray-300"
               >
                 {t("showsEnabledLabel")}
               </label>
@@ -135,7 +135,7 @@ export default function SettingsForm({
         </div>
 
         <div>
-          <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <h3 className="mb-4 font-semibold text-gray-700 dark:text-gray-300">
             {t("mediaServerSection")}
           </h3>
           <MediaServerFields
@@ -148,13 +148,13 @@ export default function SettingsForm({
         </div>
 
         {state && "error" in state && state.error && (
-          <p className="text-sm text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg">
+          <p className="text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg">
             {state.error}
           </p>
         )}
 
         {state && "success" in state && state.success && (
-          <p className="text-sm text-success-500">{t("saved")}</p>
+          <p className="text-success-500">{t("saved")}</p>
         )}
 
         <div>

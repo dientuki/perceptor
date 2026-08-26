@@ -188,12 +188,12 @@
     cursor: pointer;
   }
   body {
-    @apply relative font-normal font-outfit z-1 bg-gray-50;
+    @apply relative font-normal font-outfit z-1 bg-gray-50 text-base;
   }
 }
 
 @utility menu-item {
-  @apply relative flex items-center w-full gap-3 px-3 py-2 font-medium rounded-lg text-theme-sm;
+  @apply relative flex items-center w-full gap-3 px-3 py-2 font-medium rounded-lg;
 }
 
 @utility menu-item-active {
@@ -229,7 +229,7 @@
 }
 
 @utility menu-dropdown-item {
-  @apply relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-theme-sm font-medium;
+  @apply relative flex items-center gap-3 rounded-lg px-3 py-2.5 font-medium;
 }
 
 @utility menu-dropdown-item-active {
@@ -374,11 +374,11 @@
 }
 
 .flatpickr-weekday {
-  @apply !text-theme-sm !font-medium !text-gray-500 dark:!text-gray-400 !bg-transparent;
+  @apply !font-medium !text-gray-500 dark:!text-gray-400 !bg-transparent;
 }
 
 .flatpickr-day {
-  @apply !flex !items-center !text-theme-sm !font-medium !text-gray-800 dark:!text-white/90 dark:hover:!border-gray-300 dark:hover:!bg-gray-900;
+  @apply !flex !items-center !font-medium !text-gray-800 dark:!text-white/90 dark:hover:!border-gray-300 dark:hover:!bg-gray-900;
 }
 .flatpickr-day.nextMonthDay,
 .flatpickr-day.prevMonthDay {
@@ -532,7 +532,7 @@ span.flatpickr-weekday,
   @apply hidden;
 }
 .fc-addEventButton-button {
-  @apply !rounded-lg !border-0 !bg-brand-500 !px-4 !py-2.5 !text-sm !font-medium hover:!bg-brand-600 focus:!shadow-none;
+  @apply !rounded-lg !border-0 !bg-brand-500 !px-4 !py-2.5 !font-medium hover:!bg-brand-600 focus:!shadow-none;
 }
 .fc-toolbar-title {
   @apply !text-lg !font-medium text-gray-800 dark:text-white/90;
@@ -541,7 +541,7 @@ span.flatpickr-weekday,
   @apply rounded-lg bg-gray-100 p-0.5 dark:bg-gray-900;
 }
 .fc-header-toolbar.fc-toolbar .fc-toolbar-chunk:last-child .fc-button {
-  @apply !h-auto !w-auto rounded-md !border-0 bg-transparent !px-5 !py-2 text-sm font-medium text-gray-500 hover:text-gray-700 focus:shadow-none! dark:text-gray-400;
+  @apply !h-auto !w-auto rounded-md !border-0 bg-transparent !px-5 !py-2 font-medium text-gray-500 hover:text-gray-700 focus:shadow-none! dark:text-gray-400;
 }
 .fc-header-toolbar.fc-toolbar
   .fc-toolbar-chunk:last-child
@@ -556,7 +556,7 @@ span.flatpickr-weekday,
   @apply !border-gray-200 dark:!border-gray-800;
 }
 .fc .fc-col-header-cell-cushion {
-  @apply !px-5 !py-4 text-sm font-medium uppercase text-gray-400;
+  @apply !px-5 !py-4 font-medium uppercase text-gray-400;
 }
 .fc .fc-daygrid-day.fc-day-today {
   @apply bg-transparent;
@@ -568,7 +568,7 @@ span.flatpickr-weekday,
   @apply rounded-sm bg-gray-100 dark:bg-white/[0.03];
 }
 .fc .fc-daygrid-day-number {
-  @apply !p-3 text-sm font-medium text-gray-700 dark:text-gray-400;
+  @apply !p-3 font-medium text-gray-700 dark:text-gray-400;
 }
 .fc .fc-daygrid-day-top {
   @apply !flex-row;
@@ -583,7 +583,7 @@ span.flatpickr-weekday,
   @apply rounded-lg py-2.5 pl-4 pr-3;
 }
 .event-fc-color .fc-event-title {
-  @apply p-0 text-sm font-normal text-gray-700;
+  @apply p-0 font-normal text-gray-700;
 }
 .fc-daygrid-event-dot {
   @apply w-1 h-5 ml-0 mr-3 border-none rounded-sm;
@@ -619,10 +619,10 @@ span.flatpickr-weekday,
   @apply bg-orange-500;
 }
 .fc-direction-ltr .fc-timegrid-slot-label-frame {
-  @apply px-3 py-1.5 text-left text-sm font-medium text-gray-500 dark:text-gray-400;
+  @apply px-3 py-1.5 text-left font-medium text-gray-500 dark:text-gray-400;
 }
 .fc .fc-timegrid-axis-cushion {
-  @apply text-sm font-medium text-gray-500 dark:text-gray-400;
+  @apply font-medium text-gray-500 dark:text-gray-400;
 }
 .custom-calendar .fc-h-event {
   background-color: transparent;

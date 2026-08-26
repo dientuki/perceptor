@@ -84,7 +84,7 @@ export default function ImportMagnetModal({
             <Magnet className="size-6 text-red-500" />
             {t("title")}
           </h4>
-          <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
+          <p className="mb-6 text-gray-500 dark:text-gray-400 lg:mb-7">
             {t.rich("description", {
               target: targetLabel,
               b: (chunks) => (
@@ -108,9 +108,9 @@ export default function ImportMagnetModal({
               }}
               placeholder={t("placeholder")}
               autoFocus
-              className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+              className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
             />
-            {error && <p className="mt-2 text-sm text-error-500">{error}</p>}
+            {error && <p className="mt-2 text-error-500">{error}</p>}
           </div>
           <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
             <Button size="sm" variant="outline" onClick={onClose} type="button">

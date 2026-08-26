@@ -69,18 +69,12 @@
   "userMenu": {
     "editProfile": "Editar perfil",
     "settings": "Ajustes",
-    "signOut": "Cerrar sesión"
-  },
-  "notifications": {
-    "title": "Notificación",
-    "requestPermission": "solicita permiso para cambiar",
-    "projectLabel": "Proyecto",
-    "minutesAgo": "hace {minutes} min",
-    "hoursAgo": "hace {hours} h",
-    "viewAll": "Ver todas las notificaciones"
+    "signOut": "Cerrar sesión",
+    "themeLight": "Modo claro",
+    "themeDark": "Modo oscuro"
   },
   "header": {
-    "searchPlaceholder": "Buscar o escribí un comando...",
+    "searchPlaceholder": "Buscar Películas & Series",
     "toggleSidebar": "Alternar barra lateral"
   },
   "pages": {

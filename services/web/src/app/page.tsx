@@ -48,7 +48,7 @@ export default async function Home() {
 
           <Link
             href="/login"
-            className="mt-10 inline-flex items-center gap-2 rounded-lg bg-brand-500 px-6 py-3.5 text-theme-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
+            className="mt-10 inline-flex items-center gap-2 rounded-lg bg-brand-500 px-6 py-3.5 font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
           >
             {t("cta")}
             <ArrowRight className="size-4" />
@@ -68,7 +68,7 @@ export default async function Home() {
 
 function Feature({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="flex min-w-[150px] items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-theme-sm font-medium text-gray-700 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300">
+    <div className="flex min-w-[150px] items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-2.5 font-medium text-gray-700 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300">
       <span className="text-brand-500 dark:text-brand-400">{icon}</span>
       {label}
     </div>

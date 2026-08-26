@@ -74,7 +74,7 @@ export default function SearchContainer({
       <SearchInput onSearch={handleSearch} loading={loading} type={type} />
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
+        <p className="rounded-lg bg-red-50 px-4 py-3 text-red-700 dark:bg-red-500/10 dark:text-red-400">
           {error}
         </p>
       )}
@@ -94,7 +94,7 @@ export default function SearchContainer({
           if (owned) {
             if (type === MEDIA_TYPE.SHOW) {
               return (
-                <span className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-100 px-4 py-3 text-sm font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                <span className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-100 px-4 py-3 font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                   {t("added")}
                 </span>
               );
@@ -104,7 +104,7 @@ export default function SearchContainer({
             return (
               <Link
                 href={`/movies/${mediaId}`}
-                className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
+                className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
               >
                 {t("go")}
               </Link>

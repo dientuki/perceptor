@@ -39,10 +39,10 @@ function EpisodeRow({
   const activeLocale = useLocale();
   return (
     <tr>
-      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
         {episode.episodeNumber}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
         <div className="font-medium">
           {episode.title ||
             t("episodeDefaultTitle", { number: episode.episodeNumber })}
@@ -53,12 +53,12 @@ function EpisodeRow({
           </div>
         )}
       </td>
-      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+      <td className="whitespace-nowrap px-4 py-3 text-gray-700 dark:text-gray-300">
         {episode.releaseDate
           ? new Date(episode.releaseDate).toLocaleDateString(activeLocale)
           : "-"}
       </td>
-      <td className="px-4 py-3 text-sm">
+      <td className="px-4 py-3">
         <span
           className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold uppercase tracking-wider ${statusBadgeClass(
             episode.status,
@@ -67,7 +67,7 @@ function EpisodeRow({
           {episode.status}
         </span>
       </td>
-      <td className="px-4 py-3 text-sm">
+      <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           <Button
             size="sm"

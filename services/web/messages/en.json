@@ -60,7 +60,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "movies": "Movies",
-    "shows": "Shows",
+    "shows": "Series",
     "calendar": "Calendar",
     "queue": "Queue",
     "settings": "Settings",
@@ -69,18 +69,12 @@
   "userMenu": {
     "editProfile": "Edit profile",
     "settings": "Settings",
-    "signOut": "Sign out"
-  },
-  "notifications": {
-    "title": "Notification",
-    "requestPermission": "requests permission to change",
-    "projectLabel": "Project",
-    "minutesAgo": "{minutes} min ago",
-    "hoursAgo": "{hours} hr ago",
-    "viewAll": "View All Notifications"
+    "signOut": "Sign out",
+    "themeLight": "Light mode",
+    "themeDark": "Dark mode"
   },
   "header": {
-    "searchPlaceholder": "Search or type command...",
+    "searchPlaceholder": "Search Movies & Series",
     "toggleSidebar": "Toggle Sidebar"
   },
   "pages": {
@@ -101,17 +95,17 @@
       "metadataDescription": "Movie details page"
     },
     "shows": {
-      "title": "Shows",
-      "metadataTitle": "Shows | Perceptor",
-      "metadataDescription": "List of tracked shows"
+      "title": "Series",
+      "metadataTitle": "Series | Perceptor",
+      "metadataDescription": "List of tracked series"
     },
     "showsAdd": {
-      "title": "Add show",
-      "metadataTitle": "Add show | Perceptor",
-      "metadataDescription": "Search and add a show to your library"
+      "title": "Add series",
+      "metadataTitle": "Add series | Perceptor",
+      "metadataDescription": "Search and add a series to your library"
     },
     "showDetail": {
-      "metadataDescription": "Show details page"
+      "metadataDescription": "Series details page"
     },
     "settings": {
       "title": "Settings",
@@ -133,7 +127,7 @@
     "metadataTitle": "Resource unavailable | Perceptor",
     "message": "Resource not available for this user",
     "backToMovies": "Back to movies",
-    "backToShows": "Back to shows"
+    "backToShows": "Back to series"
   },
   "import": {
     "file": {

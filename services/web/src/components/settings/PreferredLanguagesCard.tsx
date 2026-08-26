@@ -18,7 +18,7 @@ export default async function PreferredLanguagesCard({
   const t = await getTranslations("settings.languages");
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
-      <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+      <h3 className="mb-4 font-semibold text-gray-700 dark:text-gray-300">
         {t("title")}
       </h3>
       <p className="mb-4 text-xs text-gray-500">{t("description")}</p>

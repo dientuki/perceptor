@@ -13,7 +13,7 @@ import Button from "@/components/ui/button/Button";
 import type { AdminUser } from "@/types/users";
 
 const ERROR_CLASS =
-  "text-sm text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
+  "text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
 
 interface UsersManagerProps {
   users: AdminUser[];
@@ -73,7 +73,7 @@ function CreateUserForm() {
 
   return (
     <form ref={formRef} action={formAction} className="space-y-6 max-w-lg">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+      <h3 className="font-semibold text-gray-700 dark:text-gray-300">
         {t("title")}
       </h3>
 
@@ -144,26 +144,26 @@ function UsersTable({ users, currentUserId }: UsersManagerProps) {
   const t = useTranslations("users.table");
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+      <h3 className="font-semibold text-gray-700 dark:text-gray-300">
         {t("title")}
       </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-800">
-              <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
                 {t("nameHeader")}
               </th>
-              <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
                 {t("usernameHeader")}
               </th>
-              <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
                 {t("roleHeader")}
               </th>
-              <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
                 {t("statusHeader")}
               </th>
-              <th className="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
                 {" "}
               </th>
             </tr>
@@ -206,10 +206,10 @@ function UserRow({ user, isSelf }: UserRowProps) {
   return (
     <>
       <tr className="border-b border-gray-100 dark:border-gray-800/60">
-        <td className="py-3 pr-4 text-sm text-gray-800 dark:text-white/90">
+        <td className="py-3 pr-4 text-gray-800 dark:text-white/90">
           {user.name}
         </td>
-        <td className="py-3 pr-4 text-sm text-gray-800 dark:text-white/90">
+        <td className="py-3 pr-4 text-gray-800 dark:text-white/90">
           {user.username}
         </td>
         <td className="py-3 pr-4">

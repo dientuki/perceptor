@@ -254,13 +254,24 @@ template this project was bootstrapped from. A component under those directories
 probably template scaffolding, not dead code from this project — check before deleting.
 
 **`src/components/header/UserDropdown.tsx` is no longer template scaffolding** (`019-user-menu`).
-Its icons come from `lucide-react` (`User`/`Settings`/`LogOut`), not inline `<svg>` — do not
-reintroduce hand-copied SVG path data here. *Editar perfil* is deliberately a dead
-`DropdownItem`: no `href`, no navigation, just closes the panel — `020-profile-edit` will wire it
-to a modal later; do not "fix" it by pointing it at a `/profile` route in the meantime. The trigger
-button's `.dropdown-toggle` class is load-bearing: `Dropdown.tsx:25`'s outside-click handler
-special-cases it so a click on the trigger doesn't immediately re-close the panel it just opened —
-losing that class makes the menu appear to never open, with no error anywhere.
+Its icons come from `lucide-react` (`User`/`Settings`/`LogOut`, plus `Moon`/`Sun` since
+`025-header-redesign`), not inline `<svg>` — do not reintroduce hand-copied SVG path data here.
+*Editar perfil* is deliberately a dead `DropdownItem`: no `href`, no navigation, just closes the
+panel — `020-profile-edit` will wire it to a modal later; do not "fix" it by pointing it at a
+`/profile` route in the meantime. The trigger button's `.dropdown-toggle` class is load-bearing:
+`Dropdown.tsx:25`'s outside-click handler special-cases it so a click on the trigger doesn't
+immediately re-close the panel it just opened — losing that class makes the menu appear to never
+open, with no error anywhere.
+
+**The header (`src/layout/AppHeader.tsx`) is three elements at every breakpoint** since
+`025-header-redesign`: sidebar toggle, search form, avatar — no theme button, no notification
+bell, no quick-add icons, no mobile logo, no application-menu row. The theme toggle now lives
+inside `UserDropdown`'s dropdown, as a fourth `DropdownItem` wired to the same
+`useTheme()`/`ThemeContext`; `ThemeToggleButton` and `NotificationDropdown` were deleted as their
+last references went with it. `ThemeTogglerTwo` is untouched — the auth layout still renders it on
+the login screen, so don't delete it while cleaning up header remnants. The header search input is
+deliberately inert (`onSubmit` calls `preventDefault`); wiring it to a real search is its own
+future spec.
 
 ## Tests: there are none
 
@@ -282,6 +293,13 @@ parity check with an exit code.
   `Number(...)` at the call site, as `SearchTorrent.tsx` and `importMagnetModal.tsx` do.
 - **Errors render inline**, never through `alert()` or `window.confirm()`. The import modals are the
   reference.
+- **`text-sm` and `text-theme-sm` are banned.** Since `025-header-redesign`, `body` declares an
+  explicit `text-base` (16px) as the site's base size, and both classes were swept out of
+  `services/web/src`. The `--text-theme-sm` / `--text-theme-sm--line-height` tokens stay defined in
+  `globals.css`'s `@theme` block — `text-theme-xs` and `text-theme-xl` still resolve against that
+  scale — only their *use* is gone. Do not reintroduce either class, and do not compensate for a
+  page that now reads larger with a one-off `text-[14px]`: that drift is accepted, and each screen
+  gets re-tuned as the broader visual pass reaches it.
 - **`next build` must run under `NODE_ENV=production`** — `package.json`'s `build` script sets it
   explicitly, because the dev container passes `NODE_ENV=development` in. Building under
   `development` resolves React's development export conditions and produces a mismatched React

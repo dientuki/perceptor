@@ -32,7 +32,7 @@ export default function LoginForm() {
             <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
               {t("title")}
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-gray-500 dark:text-gray-400">
               {t("subtitle")}
             </p>
           </div>
@@ -77,7 +77,7 @@ export default function LoginForm() {
                 </div>
 
                 {state?.error && (
-                  <p className="text-sm text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg">
+                  <p className="text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg">
                     {state.error}
                   </p>
                 )}
@@ -88,7 +88,7 @@ export default function LoginForm() {
                     checked={isChecked}
                     onChange={setIsChecked}
                   />
-                  <span className="block font-normal text-gray-700 text-theme-sm dark:text-gray-400">
+                  <span className="block font-normal text-gray-700 dark:text-gray-400">
                     {t("rememberMe")}
                   </span>
                 </div>

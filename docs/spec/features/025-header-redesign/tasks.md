@@ -1,7 +1,7 @@
 ---
 title: Header redesign and 16px type base — Tasks
-last_updated: 2026-08-25
-status: Draft
+last_updated: 2026-08-26
+status: Done
 ---
 
 # TASKS: Header redesign and 16px type base (`tasks.md`)
@@ -28,7 +28,7 @@ touched. One agent, in order. "Parallel" here would only mean "conflicting".
 
 The header cannot drop the theme button until somewhere else can toggle the theme (REQ-4).
 
-- [ ] **T001** `[web]` Add the theme entry to
+- [x] **T001** `[web]` Add the theme entry to
       `services/web/src/components/header/UserDropdown.tsx`: a fourth `<li>` after *Configuración*,
       a `DropdownItem` with `onClick={toggleTheme}` (from `useTheme()`,
       `@/context/ThemeContext`) and `onItemClick={closeDropdown}`, rendering lucide `Moon` +
@@ -45,7 +45,7 @@ The header cannot drop the theme button until somewhere else can toggle the them
 
 ### Group 2 — the header itself
 
-- [ ] **T002** `[web]` Rewrite `services/web/src/layout/AppHeader.tsx` as one flex row, identical at
+- [x] **T002** `[web]` Rewrite `services/web/src/layout/AppHeader.tsx` as one flex row, identical at
       every breakpoint: sidebar toggle, search form (flex-grow), `<UserDropdown user={user} />`.
       **Remove**: the two-container `lg:flex-row` scaffolding, `isApplicationMenuOpen` +
       `toggleApplicationMenu` + the `useState` import, the collapsed icon row, the three-dot button,
@@ -65,7 +65,7 @@ The header cannot drop the theme button until somewhere else can toggle the them
 
 ### Group 3 — the removals
 
-- [ ] **T003** `[web]` Delete `services/web/src/components/header/NotificationDropdown.tsx` and
+- [x] **T003** `[web]` Delete `services/web/src/components/header/NotificationDropdown.tsx` and
       `services/web/src/components/common/ThemeToggleButton.tsx`, and delete the entire
       `notifications` namespace (`title`, `requestPermission`, `projectLabel`, `minutesAgo`,
       `hoursAgo`, `viewAll`) from **both** message catalogs. Do **not** delete
@@ -78,7 +78,7 @@ The header cannot drop the theme button until somewhere else can toggle the them
 
 ### Group 4 — the 16px base
 
-- [ ] **T004** `[web]` In `services/web/src/app/globals.css`: add `text-base` to the `body` `@apply`
+- [x] **T004** `[web]` In `services/web/src/app/globals.css`: add `text-base` to the `body` `@apply`
       (line ~190), and remove every `text-theme-sm` / `text-sm` / `!text-sm` occurrence — the
       `menu-item` and `menu-dropdown-item` `@utility` blocks, and the flatpickr / FullCalendar
       override blocks — leaving each surrounding class list otherwise intact. **Keep** the
@@ -87,7 +87,7 @@ The header cannot drop the theme button until somewhere else can toggle the them
       *Done when:* `grep -n 'text-sm\|text-theme-sm' services/web/src/app/globals.css` matches only
       the two `@theme` declarations, and DevTools reports computed `font-size: 16px` on `body`
       (AC-6).
-- [ ] **T005** `[web]` Remove every remaining `text-sm` / `text-theme-sm` from the 28 files listed
+- [x] **T005** `[web]` Remove every remaining `text-sm` / `text-theme-sm` from the 28 files listed
       in `web/plan.md` § Steps, step 8. Go file by file — **no repo-wide `sed`**, which would also
       hit the substring inside a longer class or a string literal. Do not compensate for a page that
       now reads larger by adding `text-[14px]` or any other one-off size: NFR-4 declares that drift
@@ -97,7 +97,7 @@ The header cannot drop the theme button until somewhere else can toggle the them
 
 ### Group 5 — verification and docs
 
-- [ ] **T006** `[web]` Run the full gate and report the numbers from before and after the change —
+- [x] **T006** `[web]` Run the full gate and report the numbers from before and after the change —
       this service has no test suite, so these plus the manual pass are the entire gate.
       → T005
       *Done when:* `bin/cli web npx --no tsc --noEmit` reports **0 errors**,
@@ -106,7 +106,7 @@ The header cannot drop the theme button until somewhere else can toggle the them
       `bin/cli web npx --no biome check <the touched files>` is clean on those files. Do **not** run
       `bin/npm web run lint` as a gate — it reports ~1598 pre-existing errors with or without this
       diff.
-- [ ] **T007** `[docs]` Update `services/web/CLAUDE.md`: in § "UI origin: TailAdmin template", record
+- [x] **T007** `[docs]` Update `services/web/CLAUDE.md`: in § "UI origin: TailAdmin template", record
       that the header is now three elements and that the theme toggle lives in `UserDropdown`
       (`ThemeToggleButton` deleted, `ThemeTogglerTwo` still used by the auth layout); add a
       convention line that `text-sm` and `text-theme-sm` are banned in favour of the 16px `body`
@@ -114,7 +114,7 @@ The header cannot drop the theme button until somewhere else can toggle the them
       changes status and no contract moves. → T006
       *Done when:* `services/web/CLAUDE.md` states all three facts and names
       `docs/spec/features/025-header-redesign/`.
-- [ ] **T008** `[docs]` Walk the nine acceptance criteria in `spec.md` against the running app —
+- [x] **T008** `[docs]` Walk the nine acceptance criteria in `spec.md` against the running app —
       AC-1 through AC-6 are visual and must be confirmed by a human in a browser at both desktop and
       375px width, since `web` has no test runner to assert them. Tick each box, then set
       `status: Implemented` on `spec.md`, `plan.md` and `web/plan.md`, and `status: Done` here.

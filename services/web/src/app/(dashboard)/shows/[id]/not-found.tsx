@@ -16,7 +16,7 @@ export default async function ShowNotFound() {
           <p className="text-gray-700 dark:text-gray-300">{t("message")}</p>
           <Link
             href="/shows"
-            className="inline-flex items-center justify-center rounded-lg bg-white px-5 py-3.5 text-sm font-medium text-gray-700 shadow-theme-xs ring-1 ring-inset ring-gray-300 transition hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-white/[0.03] dark:hover:text-gray-300"
+            className="inline-flex items-center justify-center rounded-lg bg-white px-5 py-3.5 font-medium text-gray-700 shadow-theme-xs ring-1 ring-inset ring-gray-300 transition hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-white/[0.03] dark:hover:text-gray-300"
           >
             {t("backToShows")}
           </Link>
