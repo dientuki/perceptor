@@ -1,8 +1,8 @@
 ---
 title: User Menu — Implementation Plan
 spec_version: 0.1.0
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-25
+status: Implemented
 ---
 
 # PLAN: User Menu (`plan.md`)
@@ -73,7 +73,7 @@ contract from inside the slice.
 | The `dropdown-toggle` class is dropped while cleaning up the trigger's `className` | Silent. `Dropdown`'s outside-click handler (`Dropdown.tsx:25`) special-cases `.dropdown-toggle` so that clicking the trigger does not immediately close what the trigger just opened. Without it, `mousedown` closes the panel before the button's `onClick` toggles it back — the menu looks like it never opens, and nothing errors. | Named in `web/plan.md` § Existing code to reuse as a class that must survive the rewrite; AC-2 catches it by requiring the panel to actually open. |
 | The trigger loses its accessible name | Silent to a sighted reviewer. Removing the visible name (REQ-1) leaves a button whose only child is an `<Image>`, so screen readers announce the alt text or nothing at all. | An explicit `aria-label` on the trigger button — see § Decisions below. |
 | An implementer gives *Editar perfil* a destination | The feature quietly grows a profile screen or a `/profile` route nobody specified, in the same PR. | REQ-7 and AC-5 (amended 2026-08-19) make the destination-less entry the expected result; `spec.md` § Out of Scope hands the editor to `020-profile-edit`, which builds it as a modal and never adds a route. |
-| `018-ui-i18n` lands first and this slice re-hardcodes Spanish | Silent regression: the file goes back to literals after the i18n migration moved it to keys, and only shows up as one untranslated menu for an `en` user. | NFR-1 scopes this feature to literals *as the file stands today*. Before implementing, check whether `018` has already touched `UserDropdown.tsx`; if it has, the labels come from the catalog and this plan's NFR-1 is stale — stop and report rather than reverting someone else's migration. |
+| `018-ui-i18n` lands first and this slice re-hardcodes Spanish | **Materialized.** The `web` agent stopped and reported: `UserDropdown.tsx` already uses `useTranslations("userMenu")`/`useTranslations("common")`. User decided (2026-08-25): keep the catalog — every visible string in the UI must be translated, none hardcoded. NFR-1 is amended accordingly to require catalog-driven copy; `userMenu` keys are updated to the new set. | Resolved. `web/plan.md` § Steps updated to use `useTranslations` with the new keys instead of literals. |
 
 ## Verification
 
@@ -101,8 +101,9 @@ Then the manual pass, with the stack up (`bin/dev`), signed in:
 
 ## Decisions this plan makes that `spec.md` did not cover
 
-- **The trigger gets `aria-label="Menú de usuario"`.** REQ-1 removes the only text in the button;
-  Spanish, because it is user-facing copy.
+- **The trigger gets an `aria-label`.** REQ-1 removes the only text in the button; per NFR-1
+  (amended 2026-08-25) it comes from a new `common.userMenuLabel` catalog key ("Menú de usuario" /
+  "User menu"), not a literal.
 - **The name is not interactive.** REQ-3 calls it "the first element", REQ-6 lists exactly three
   clickable entries and the name is not one of them. It renders as plain text, not a `DropdownItem`.
 - **Icons render at `size={18}`**, matching in-button lucide usage in `Movie.tsx:74`, rather than the

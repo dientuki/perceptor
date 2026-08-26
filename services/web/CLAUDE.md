@@ -253,6 +253,15 @@ already solved, and do not resolve `href` off `item.type`.
 template this project was bootstrapped from. A component under those directories that looks unused is
 probably template scaffolding, not dead code from this project — check before deleting.
 
+**`src/components/header/UserDropdown.tsx` is no longer template scaffolding** (`019-user-menu`).
+Its icons come from `lucide-react` (`User`/`Settings`/`LogOut`), not inline `<svg>` — do not
+reintroduce hand-copied SVG path data here. *Editar perfil* is deliberately a dead
+`DropdownItem`: no `href`, no navigation, just closes the panel — `020-profile-edit` will wire it
+to a modal later; do not "fix" it by pointing it at a `/profile` route in the meantime. The trigger
+button's `.dropdown-toggle` class is load-bearing: `Dropdown.tsx:25`'s outside-click handler
+special-cases it so a click on the trigger doesn't immediately re-close the panel it just opened —
+losing that class makes the menu appear to never open, with no error anywhere.
+
 ## Tests: there are none
 
 No test file, no runner, no `test` script. This is the largest maturity gap of the three services.

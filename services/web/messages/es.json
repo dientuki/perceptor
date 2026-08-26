@@ -3,6 +3,7 @@
     "appName": "Perceptor",
     "altUser": "Usuario",
     "altLogo": "Logo",
+    "userMenuLabel": "Menú de usuario",
     "breadcrumb": {
       "home": "Home"
     }
@@ -67,8 +68,7 @@
   },
   "userMenu": {
     "editProfile": "Editar perfil",
-    "accountSettings": "Configuración de la cuenta",
-    "support": "Soporte",
+    "settings": "Ajustes",
     "signOut": "Cerrar sesión"
   },
   "notifications": {

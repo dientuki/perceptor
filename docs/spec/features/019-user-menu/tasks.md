@@ -1,7 +1,7 @@
 ---
 title: User Menu — Tasks
 last_updated: 2026-08-19
-status: Draft
+status: Done
 ---
 
 # TASKS: User Menu (`tasks.md`)
@@ -27,7 +27,7 @@ icons are a single rewrite, and staging them would leave the header half-rewritt
 There is no `api` group because there is no contract delta and no migration — `spec.md` § GraphQL
 Contract Delta is **None**.
 
-- [ ] **T001** `[web]` Rewrite `services/web/src/components/header/UserDropdown.tsx` per
+- [x] **T001** `[web]` Rewrite `services/web/src/components/header/UserDropdown.tsx` per
       `web/plan.md` § Steps: avatar-only trigger with `aria-label="Menú de usuario"` and the
       `dropdown-toggle` class kept; the user's `name` as non-interactive first element of the panel;
       exactly two `DropdownItem` entries (*Editar perfil* with `User` and **no** `href` — a
@@ -47,7 +47,7 @@ Contract Delta is **None**.
 
 Depends on Group 1: there is nothing to verify or document until the component exists.
 
-- [ ] **T002** `[docs]` Update `services/web/CLAUDE.md`. → T001
+- [x] **T002** `[docs]` Update `services/web/CLAUDE.md`. → T001
       The header user menu is no longer TailAdmin scaffolding, which the "UI origin: TailAdmin
       template" section currently implies of everything under `src/components/`. Record: icons in
       this component come from `lucide-react` (no inline SVG); *Editar perfil* deliberately has no
@@ -58,7 +58,7 @@ Depends on Group 1: there is nothing to verify or document until the component e
       "Current state" counts for `web` are unchanged at 0/0.
       *Done when:* `services/web/CLAUDE.md` names `019-user-menu` and the three facts above, and
       `git diff --stat CLAUDE.md` is empty.
-- [ ] **T003** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack
+- [x] **T003** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack
       (`bin/dev`, signed in), following `plan.md` § Verification's five-step manual pass — including
       **AC-5**, where clicking *Editar perfil* is expected to land on a 404. Tick each box, then set
       `status: Implemented` on `spec.md`, `plan.md` and `web/plan.md`. → T001
@@ -72,6 +72,7 @@ first — there is no independent pair to overlap.
 
 | Task | Service | What blocked it | Needs |
 | :-- | :-- | :-- | :-- |
+| T001 | `[web]` | **Resolved 2026-08-25.** `018-ui-i18n` already migrated `UserDropdown.tsx` to `useTranslations`. User decided: keep the catalog. `spec.md` NFR-1, `plan.md`, `web/plan.md` amended and re-approved; T001 re-dispatched. | — | :-- |
 
 One thing that would legitimately land here rather than being worked around: if `018-ui-i18n` has
 already migrated `UserDropdown.tsx` to translation keys by the time T001 runs, NFR-1's "Spanish

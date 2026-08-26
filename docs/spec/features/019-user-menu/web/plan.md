@@ -1,8 +1,8 @@
 ---
 title: User Menu — web slice
 service: web
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-25
+status: Implemented
 ---
 
 # PLAN: User Menu — `web` (`web/plan.md`)
@@ -61,27 +61,39 @@ creating one.
 
 1. **Trigger** — remove the `<span>` holding `{user.name}` and the inline chevron `<svg>` from the
    button, leaving only the avatar span. Drop the avatar's now-pointless `mr-3`. Keep
-   `dropdown-toggle` in the `className`, keep `onClick={toggleDropdown}`. Add
-   `aria-label="Menú de usuario"` — with the text gone the button has no accessible name.
+   `dropdown-toggle` in the `className`, keep `onClick={toggleDropdown}`. Add an `aria-label` —
+   with the text gone the button has no accessible name. Per NFR-1 this must come from the catalog,
+   not a literal: add a new `common.userMenuLabel` key (`"Menú de usuario"` / `"User menu"`) rather
+   than reusing `common.altUser`, which is the `<Image alt>` for the avatar itself, not the button.
 2. **`isOpen` is still needed** for the panel, but nothing rotates any more; make sure removing the
    chevron does not leave an unused expression behind.
 3. **Panel header** — replace the two-line name/username block with the user's `name` alone as
    non-interactive text (REQ-3). It is the first element in the panel; it is not a `DropdownItem` and
-   is not clickable.
-4. **Entries** — reduce the `<ul>` to two `<li>`s:
-   - *Editar perfil* → icon `User`, **no `href`** (a `DropdownItem` that only runs `onItemClick`).
-   - *Ajustes* → `href="/settings"`, icon `Settings`.
-   Delete the *Account settings* and *Support* entries outright. Note that *Ajustes* is **not** the
-   old *Account settings* relabelled — that one pointed at `/profile` like the other two; this one
+   is not clickable. The name is user data, not UI copy — no catalog key.
+4. **Catalog keys** (NFR-1, amended 2026-08-25) — `018-ui-i18n` already migrated this file to
+   `useTranslations("userMenu")`/`useTranslations("common")`; keep using it. In both
+   `services/web/messages/en.json` and `services/web/messages/es.json`, under `userMenu`: keep
+   `editProfile` and `signOut`, add a new key for *Ajustes* (e.g. `settings`), and remove
+   `accountSettings` and `support` — their entries no longer exist. `es` keeps the current
+   Rioplatense wording for `editProfile`/`signOut`; the new `settings` key is `"Ajustes"`. Do not
+   hardcode any Spanish literal in the component.
+5. **Entries** — reduce the `<ul>` to two `<li>`s:
+   - `t("editProfile")` → icon `User`, **no `href`** (a `DropdownItem` that only runs `onItemClick`).
+   - `t("settings")` → `href="/settings"`, icon `Settings`.
+   Delete the *Account settings* and *Support* entries outright, along with their now-orphaned
+   `accountSettings`/`support` catalog keys. Note that the new *Ajustes* entry is **not** the old
+   *Account settings* relabelled — that one pointed at `/profile` like the other two; this one
    points at the real `/settings` route. No entry may reference `/profile`: that route is never
    built, since `020-profile-edit` opens a modal from this entry instead.
-5. **Sign out** — keep the `<form action={logoutAction}>` and its submit button; relabel to
-   *Cerrar sesión* and swap the inline SVG for `LogOut`.
-6. **Icon styling** — the inline SVGs used `fill-gray-500 group-hover:fill-gray-700 …`, which does
+6. **Sign out** — keep the `<form action={logoutAction}>` and its submit button; relabel with
+   `t("signOut")` and swap the inline SVG for `LogOut`.
+7. **Icon styling** — the inline SVGs used `fill-gray-500 group-hover:fill-gray-700 …`, which does
    nothing for lucide icons (they are stroke-based and inherit `currentColor`). Use text colour
    utilities on the icon or let it inherit from the entry's existing `text-gray-700 …
    dark:text-gray-400` classes. Do not port the `fill-*` classes across.
-7. **Verify no `<svg>` remains** in the file (AC-6).
+8. **Verify no `<svg>` remains** in the file (AC-6), and no hardcoded Spanish string was added
+   (`grep -n '"[A-ZÁÉÍÓÚÑ][a-záéíóúñ ]*"' services/web/src/components/header/UserDropdown.tsx` for
+   a sanity check — the component should only reference `t(...)` keys for copy).
 
 ## Contract obligations
 

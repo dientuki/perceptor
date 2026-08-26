@@ -3,8 +3,8 @@ title: User Menu
 spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-19
-last_updated: 2026-08-19
-status: Approved
+last_updated: 2026-08-25
+status: Implemented
 services: [web]
 ---
 
@@ -76,10 +76,13 @@ one anyway because it was asked for; it should not be read as a precedent for sp
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Spanish copy, literal)**: The visible labels must be Spanish string literals, matching
-      the rest of the app as it stands today. This feature must not introduce a translation catalog
-      or consume one — `018-ui-i18n` migrates this file along with the other ~40, and pre-empting it
-      here would create a second, private mechanism.
+- [ ] **NFR-1 (Catalog-driven copy)**: `018-ui-i18n` has already shipped and already migrated this
+      file to `useTranslations("userMenu")`/`useTranslations("common")` — this feature was drafted
+      against a stale assumption and is corrected here. Every visible label must come from the
+      `messages/{en,es}.json` catalog, not a hardcoded literal. The existing `userMenu` namespace is
+      updated to the new key set (`editProfile`, a new key for *Ajustes*, `signOut`); `accountSettings`
+      and `support` are removed since their entries no longer exist. `es` keeps the current
+      Rioplatense register; `en` gets the matching translation. No second, private i18n mechanism.
 - [ ] **NFR-2 (Reuse, do not add components)**: The existing `Dropdown` and `DropdownItem`
       (`src/components/ui/dropdown/`) must be reused unchanged, and the separator must be a border
       in the same style the current `<ul>` already uses. No menu library and no new shared component.
@@ -102,20 +105,20 @@ error condition changes. `logoutAction` is called exactly as it is today.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Signed in on any dashboard screen, the headbar shows a round avatar alone — the
+- [x] **AC-1**: Signed in on any dashboard screen, the headbar shows a round avatar alone — the
       user's name and the chevron are absent at every viewport width.
-- [ ] **AC-2**: Clicking the avatar opens the panel, which reads top to bottom: the user's name,
+- [x] **AC-2**: Clicking the avatar opens the panel, which reads top to bottom: the user's name,
       *Editar perfil*, *Ajustes*, a separator line, *Cerrar sesión* — and nothing else. The username
       appears nowhere in it.
-- [ ] **AC-3**: Clicking *Ajustes* lands on `/settings` with the panel closed.
-- [ ] **AC-4**: Clicking *Cerrar sesión* ends the session and leaves the browser on `/login`.
-- [ ] **AC-5** *(failure path)*: Clicking *Editar perfil* closes the panel and does nothing else —
+- [x] **AC-3**: Clicking *Ajustes* lands on `/settings` with the panel closed.
+- [x] **AC-4**: Clicking *Cerrar sesión* ends the session and leaves the browser on `/login`.
+- [x] **AC-5** *(failure path)*: Clicking *Editar perfil* closes the panel and does nothing else —
       the address bar is unchanged, no 404 appears, and no navigation happens. The dead entry is this
       feature's expected result, not a defect; `020-profile-edit` gives it the modal.
       `grep -rn "/profile" services/web/src` returns nothing.
-- [ ] **AC-6**: `grep -n "<svg" services/web/src/components/header/UserDropdown.tsx` returns
+- [x] **AC-6**: `grep -n "<svg" services/web/src/components/header/UserDropdown.tsx` returns
       nothing.
-- [ ] **AC-7**: `bin/cli web npx --no tsc --noEmit` reports 0 errors.
+- [x] **AC-7**: `bin/cli web npx --no tsc --noEmit` reports 0 errors.
 
 ## Out of Scope
 
