@@ -11,6 +11,7 @@ interface MediaCardProps {
   renderAction?: (item: any) => React.ReactNode;
   showLink: boolean; // Nueva propiedad para controlar si se muestra el enlace
   mediaType?: (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
+  showTypeBadge?: boolean; // Opt-in: a mixed grid needs it, a single-type grid doesn't
 }
 
 export function MediaCard({
@@ -18,8 +19,12 @@ export function MediaCard({
   renderAction,
   showLink,
   mediaType,
+  showTypeBadge = false,
 }: MediaCardProps) {
   const t = useTranslations("media.card");
+  // Read from the item's own type, never the `mediaType` prop — on a mixed
+  // grid that prop is one value for cards of two different kinds.
+  const isShow = item.type === MEDIA_TYPE.SHOW;
   const year = item.releaseDate
     ? new Date(item.releaseDate).getFullYear()
     : "N/A";
@@ -42,6 +47,15 @@ export function MediaCard({
     <div className="group relative flex flex-col rounded-xl border border-gray-200 bg-white p-2 shadow-sm transition-all hover:shadow-md dark:border-gray-800 dark:bg-white/[0.03]">
       {/* Poster */}
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+        {showTypeBadge && (
+          <span
+            className={`absolute left-2 top-2 z-10 rounded-full px-2 py-0.5 text-xs font-semibold uppercase text-white ${
+              isShow ? "bg-purple-500" : "bg-brand-500"
+            }`}
+          >
+            {isShow ? t("typeShow") : t("typeMovie")}
+          </span>
+        )}
         {showLink ? (
           <Link
             href={

@@ -196,6 +196,16 @@ export class MoviesService implements MediaTypeService {
       type: MEDIA_TYPE.MOVIE,
     }));
 
+    return this.cacheAndEnrich(results, userId);
+  }
+
+  // Steps 3-4 of the former search(): the cache write and the ownership
+  // enrichment, in this order and only this order — see 026-multi-search's
+  // MediaSearchService, the second caller of this method.
+  async cacheAndEnrich(
+    results: MediaSearchResult[],
+    userId: string,
+  ): Promise<MediaSearchResultEntity[]> {
     // 3. Disparar el upsert en Redis en BACKGROUND (sin 'await'). This MUST
     // run on the catalog-only `results` before ownership is attached below:
     // cacheMovies() serialises whatever it is handed into a shared, global

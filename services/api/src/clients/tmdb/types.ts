@@ -72,3 +72,21 @@ export interface TmdbEpisode {
 export interface TmdbSeasonDetails {
   episodes: TmdbEpisode[];
 }
+
+// Raw shape of a `search/multi` row: `media_type` discriminates between a
+// film row (`title`/`release_date`), a series row (`name`/`first_air_date`)
+// and every other kind TMDB may return (`person`, `collection`, `company`,
+// or a future value) — none of which this application models. Fields only
+// one kind sends are optional here; the mapper in `./multi.ts` decides which
+// rows are usable.
+export interface TmdbMultiSearchResult {
+  media_type: string;
+  id: number;
+  title?: string;
+  name?: string;
+  release_date?: string;
+  first_air_date?: string;
+  poster_path: string | null;
+  original_language: string;
+  overview: string;
+}

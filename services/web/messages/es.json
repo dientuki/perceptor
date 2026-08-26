@@ -120,6 +120,11 @@
     "login": {
       "metadataTitle": "Iniciar sesión | Perceptor",
       "metadataDescription": "Página de inicio de sesión de Perceptor"
+    },
+    "search": {
+      "title": "Resultados de búsqueda",
+      "metadataTitle": "Búsqueda | Perceptor",
+      "metadataDescription": "Resultados de búsqueda entre películas y series"
     }
   },
   "notFound": {
@@ -164,7 +169,6 @@
       "showNoun": "serie",
       "resultsEmptySearched": "No se encontraron resultados",
       "resultsEmptyPrompt": "Buscá una {noun} para empezar",
-      "added": "Agregada",
       "go": "Ir",
       "addButton": "Agregar",
       "adding": "Agregando...",
@@ -202,7 +206,9 @@
   },
   "media": {
     "card": {
-      "noPoster": "Sin Poster"
+      "noPoster": "Sin Poster",
+      "typeMovie": "PELÍCULA",
+      "typeShow": "SERIE"
     },
     "list": {
       "emptyDefault": "No hay {noun} registradas",

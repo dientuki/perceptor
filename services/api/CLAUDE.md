@@ -85,12 +85,20 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   lock the app out one disable at a time). A successful disable calls `revokeAllForUser()` in the same
   method. `login()` refuses a disabled user with a distinct message, even on correct credentials.
 - **`media/`** — the boundary that turns a `type` argument into a choice of service. Exposes
-  `searchMedia(query, type)` and `addMedia(tmdbId, type)`, the only catalog operations in the schema.
-  `media-dispatch.service.ts` holds a `Record<MediaType, MediaTypeService>` lookup and throws for
-  anything else. `media-type.interface.ts` is the whole contract: `search(query, userId)` and
-  `register(tmdbId, userId)`, nothing else — cache keys, endpoints, error strings and Prisma models
-  stay private to each implementation by design. A third media type costs one new service plus one
-  lookup entry, not an edit to the dispatch.
+  `searchMedia(query, type)`, `addMedia(tmdbId, type)` and, since `026-multi-search`,
+  `searchAllMedia(query)` — one search across both catalogs, films and series interleaved in the
+  catalog's own order. `media-dispatch.service.ts` holds a `Record<MediaType, MediaTypeService>`
+  lookup and throws for anything else; `026` added nothing to it. `media-type.interface.ts` is the
+  whole contract: `search(query, userId)`, `register(tmdbId, userId)` and, since `026`,
+  `cacheAndEnrich(results, userId)` — the best-effort cache write followed by caller-scoped
+  ownership enrichment, extracted out of each service's `search()` so both the per-type entry point
+  and the mixed one run the identical ordering-critical code. `media-search.service.ts` is the
+  fan-out for `searchAllMedia`: one `TmdbClient.searchMulti()` call, group rows by type, one
+  `cacheAndEnrich` per type via the existing dispatch, then rebuild the response by walking the
+  original ordered rows keyed by `${type}:${id}` — never the bare id, which collides across types.
+  Cache keys, endpoints, error strings and Prisma models stay private to each per-type
+  implementation by design. A third media type costs one new service plus one lookup entry, not an
+  edit to the dispatch.
 - **`movies/`** — CRUD over `Movie`, plus `search`/`register` (implementing `MediaTypeService`) and
   `addTorrentToMovie`/`addMagnetToMovie`, the two entry points into the download pipeline. `Movie` is
   a **shared catalog row** (`tmdbId @unique`, never duplicated) joined to `User` through `UserMovie`.
@@ -99,9 +107,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `where: { id, users: { some: { userId } } }`). A `null` from `movie(id)` therefore means "not
   available to you", identically for a missing id and an unowned film. The acquisition mutations
   refuse a film the caller hasn't registered with that same `La película <id> no existe`.
-  **Ordering trap:** `search` enriches results with `mediaId`/`inLibrary` *after* the Redis cache
-  write in `cacheMovies`. That cache key is global across all users — computing ownership before it
-  leaks one user's `inLibrary` into every other user's results for 24h (`movies.service.spec.ts`).
+  **Ordering trap:** `cacheAndEnrich` enriches results with `mediaId`/`inLibrary` *after* the Redis
+  cache write in `cacheMovies`. That cache key is global across all users — computing ownership
+  before it leaks one user's `inLibrary` into every other user's results for 24h
+  (`movies.service.spec.ts`, plus `media-search.service.spec.ts` for the mixed-search entry point).
 - **`shows/`** — `ShowsService`, `MoviesService`'s structural twin, **deliberately not factored into
   a shared base class** (see `006-media-search/spec.md` § Out of Scope). Same cache-before-enrich
   ordering, same upsert-based idempotent linking, scoped through `UserShow`. `shows` is a per-user
@@ -205,6 +214,8 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
 **`clients/`** is not a Nest module — plain adapter classes grouped by external system:
 `clients/tmdb/`, `clients/indexer/`, `clients/torrent/` (qBittorrent client + `magnet.ts` parser),
 `clients/media-server/` (with a `registry.ts`), plus the shared `clients/types.ts`.
+`clients/tmdb/multi.ts` is the pure mapper for `search/multi` rows (film/series discriminated by
+`media_type`, everything else dropped), used by `TmdbClient.searchMulti()`.
 
 Loose `app.*` files at `src/` root wire it together and expose a trivial REST health item.
 
@@ -282,8 +293,8 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-08-20 (`023-ffprobe-log`): `bin/cli api npx --no tsc --noEmit` reports **0 errors**,
-`bin/npm api test` is green at **190** tests across **21** suites. **Re-run both rather than
+As of 2026-08-26 (`026-multi-search`): `bin/cli api npx --no tsc --noEmit` reports **0 errors**,
+`bin/npm api test` is green at **203** tests across **23** suites. **Re-run both rather than
 trusting these numbers** — they exist so an agent can prove a change added nothing, not as a fact
 to cite.
 

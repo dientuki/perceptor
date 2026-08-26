@@ -4,7 +4,9 @@ import {
   TmdbMovieDetails,
   TmdbShowDetails,
   TmdbSeasonDetails,
+  TmdbMultiSearchResult,
 } from './types';
+import { mapMultiSearchResults } from './multi';
 import { MovieDBClient, MediaDetail, ShowDetail, MovieDetail, EpisodeDetail } from '@/clients/types';
 import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { HTTP_METHOD } from '@/types/http';
@@ -118,6 +120,12 @@ export class TmdbClient implements MovieDBClient {
   // 'thing' sería "movie", "tv", "person", "multi", etc.
   async search<T>(thing: string, query: string, page: number = 1): Promise<T[]> {
     return await this.fetchPage(`search/${thing}`, query, page) as T[];
+  }
+
+  // https://developer.themoviedb.org/reference/search-multi
+  async searchMulti(query: string, page: number = 1) {
+    const rows = await this.fetchPage<TmdbMultiSearchResult>('search/multi', query, page);
+    return mapMultiSearchResults(rows);
   }
 
   async details(thing: MediaType, id: number): Promise<MediaDetail> {

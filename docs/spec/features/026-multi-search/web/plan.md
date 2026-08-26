@@ -2,7 +2,7 @@
 title: Multi Search — web slice
 service: web
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Multi Search — `web` (`web/plan.md`)

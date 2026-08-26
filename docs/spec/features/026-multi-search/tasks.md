@@ -1,7 +1,7 @@
 ---
 title: Multi Search — Tasks
 last_updated: 2026-08-26
-status: In Progress
+status: Done
 ---
 
 # TASKS: Multi Search (`tasks.md`)
@@ -23,7 +23,7 @@ into § Blocked rather than adapting it locally.
 
 ### Group 1 — the catalog adapter
 
-- [ ] **T001** `[api]` Add the raw `search/multi` row shape to
+- [x] **T001** `[api]` Add the raw `search/multi` row shape to
       `services/api/src/clients/tmdb/types.ts`, then write `services/api/src/clients/tmdb/multi.ts`:
       one exported pure function mapping raw rows to `MediaSearchResult[]` (the `@/clients/types`
       catalog-only interface), keyed by `media_type` — `movie` reads `title`/`release_date`, `tv`
@@ -33,7 +33,7 @@ into § Blocked rather than adapting it locally.
       task, and the function is exported from a file that imports nothing from `src/media/`,
       `src/movies/` or `src/shows/`.
 
-- [ ] **T002** `[api]` Write `services/api/src/clients/tmdb/multi.spec.ts`, structured like
+- [x] **T002** `[api]` Write `services/api/src/clients/tmdb/multi.spec.ts`, structured like
       `src/clients/torrent/magnet.spec.ts`: a header comment naming the silent failure it defends
       against, English `it(...)` strings, each case verified to fail when the rule it covers is
       removed. Cover a film row, a series row (`type === "show"`, not `"tv"`), a `person` row
@@ -41,7 +41,7 @@ into § Blocked rather than adapting it locally.
       preserved across survivors, and a null `poster_path` yielding `posterUrl === null`. → T001
       *Done when:* `bin/npm api test` is green with these cases added to the previous total.
 
-- [ ] **T003** `[api]` Add `searchMulti(query, page?)` to `services/api/src/clients/tmdb/client.ts`,
+- [x] **T003** `[api]` Add `searchMulti(query, page?)` to `services/api/src/clients/tmdb/client.ts`,
       built on the existing private `fetchPage` against `search/multi` and returning T001's mapper
       output. The TMDB reference URL is the only comment owed (Article XI, exception 1). Do not
       touch `search()`, `details()` or `seasonDetails()`. → T001
@@ -50,7 +50,7 @@ into § Blocked rather than adapting it locally.
 
 ### Group 2 — the per-type seam
 
-- [ ] **T004** `[api]` Widen `services/api/src/media/media-type.interface.ts` with a third method,
+- [x] **T004** `[api]` Widen `services/api/src/media/media-type.interface.ts` with a third method,
       `cacheAndEnrich(results, userId)`, and implement it in **both**
       `services/api/src/movies/movies.service.ts` and `services/api/src/shows/shows.service.ts` by
       **moving** steps 3–4 of each `search()` into it — the best-effort cache write first, the
@@ -66,7 +66,7 @@ into § Blocked rather than adapting it locally.
 
 Depends on the adapter (Group 1) and the seam (Group 2) both existing.
 
-- [ ] **T005** `[api]` Add `services/api/src/media/media-search.service.ts` with one public method:
+- [x] **T005** `[api]` Add `services/api/src/media/media-search.service.ts` with one public method:
       blank/whitespace query returns `[]` before contacting the catalog; one `tmdb.searchMulti()`;
       group rows by `type`; one `MediaDispatchService.resolve(type).cacheAndEnrich(group, userId)`
       per group present; then rebuild the response by walking the **original** ordered rows, looking
@@ -79,7 +79,7 @@ Depends on the adapter (Group 1) and the seam (Group 2) both existing.
       String!): [MediaSearchResult!]!` added and **no other line changed**; a live query returns
       films and series in one list.
 
-- [ ] **T006** `[api]` Write `services/api/src/media/media-search.service.spec.ts` with the Article
+- [x] **T006** `[api]` Write `services/api/src/media/media-search.service.spec.ts` with the Article
       IX header comment. Five cases: (1) cache-before-enrich over a **mixed** set — assert on what is
       handed to each service to cache, and that neither cached object carries `inLibrary` or
       `mediaId`; (2) catalog order survives regrouping (film, series, film comes back in that order);
@@ -96,7 +96,7 @@ Everything here depends on Group 3: the query must exist before `web` can call i
 the order is real — the shared action component and the badge both land in files the results screen
 then consumes, and three of these tasks touch `messages/{en,es}.json`, so they do not overlap.
 
-- [ ] **T007** `[web] [P]` Add `searchAllMedia(query)` to `services/web/src/actions/media.ts`,
+- [x] **T007** `[web] [P]` Add `searchAllMedia(query)` to `services/web/src/actions/media.ts`,
       third export in the existing shape: `'use server'`, a module-level `SEARCH_ALL_MEDIA_QUERY`,
       `fetchGraphQL<T>`, `redirectIfUnauthenticated` then `translateGraphQLError`. Select **exactly**
       the fields `SEARCH_MEDIA_QUERY` selects. Short-circuit a blank query to `[]` before the round
@@ -104,7 +104,7 @@ then consumes, and three of these tasks touch `messages/{en,es}.json`, so they d
       *Done when:* `bin/cli web npx --no tsc --noEmit` stays at 0 errors and the action returns rows
       of both types against the running api.
 
-- [ ] **T008** `[web] [P]` Extract `SearchContainer.tsx`'s `renderAction` body into
+- [x] **T008** `[web] [P]` Extract `SearchContainer.tsx`'s `renderAction` body into
       `services/web/src/components/search/MediaResultAction.tsx` (client component: item, owned
       state, in-flight state, `onAdd`), and render it from `SearchContainer`. The owned branch is now
       one shape for both types — an `Ir` link to `/movies/<id>` or `/shows/<id>` — so the
@@ -118,7 +118,7 @@ then consumes, and three of these tasks touch `messages/{en,es}.json`, so they d
       `bin/cli web node scripts/check-messages.mjs` exits 0 and `grep -rn "container.added"
       services/web/src` returns nothing.
 
-- [ ] **T009** `[web]` Add the type badge to `services/web/src/components/media/MediaCard.tsx`,
+- [x] **T009** `[web]` Add the type badge to `services/web/src/components/media/MediaCard.tsx`,
       rendered only when asked for, threaded as an opt-in flag through
       `services/web/src/components/media/MediaList.tsx` and defaulting **off**. Absolutely positioned
       top-left over the poster, above the image in stacking order, opaque pill, uppercase,
@@ -129,7 +129,7 @@ then consumes, and three of these tasks touch `messages/{en,es}.json`, so they d
       *Done when:* `/movies`, `/shows`, `/movies/add` and `/shows/add` render with **no** badge, and
       `bin/cli web node scripts/check-messages.mjs` exits 0.
 
-- [ ] **T010** `[web]` Add `services/web/src/components/search/MultiSearchResults.tsx` (client: owns
+- [x] **T010** `[web]` Add `services/web/src/components/search/MultiSearchResults.tsx` (client: owns
       `addingId`/`addedMediaIds`, calls `addMedia(item.id, item.type)` per card, renders `MediaList`
       with `showLink={false}`, the badge flag on and `MediaResultAction` as `renderAction`, inline
       errors, never `alert()`) and `services/web/src/app/(dashboard)/search/page.tsx` (Server
@@ -142,7 +142,7 @@ then consumes, and three of these tasks touch `messages/{en,es}.json`, so they d
       and `shows`/`user_shows` by exactly one each (AC-5, AC-6); with `movie_db_api_key` cleared the
       page shows an inline error and stays usable, with no Next error screen (AC-11).
 
-- [ ] **T011** `[web]` Wire `services/web/src/layout/AppHeader.tsx`: give the input a `name`, replace
+- [x] **T011** `[web]` Wire `services/web/src/layout/AppHeader.tsx`: give the input a `name`, replace
       the `preventDefault`-only handler with one that pushes `/search?q=<encoded>` via `useRouter()`
       from `next/navigation`. Navigate even on an empty box — the action short-circuits and the page
       renders its empty state. Leave the ⌘K focus handler, the placeholder key and the
@@ -153,7 +153,7 @@ then consumes, and three of these tasks touch `messages/{en,es}.json`, so they d
 
 ### Group 5 — verification and docs
 
-- [ ] **T012** `[docs]` Update the affected `CLAUDE.md` files: `services/api/CLAUDE.md`'s module map
+- [x] **T012** `[docs]` Update the affected `CLAUDE.md` files: `services/api/CLAUDE.md`'s module map
       (`media/` now exposes a third operation and holds `MediaSearchService`; `MediaTypeService` is
       three methods, not two, and the third is where the cache-before-enrich ordering now lives for
       both entry points), `services/web/CLAUDE.md` (the header search is no longer inert; the
@@ -165,7 +165,7 @@ then consumes, and three of these tasks touch `messages/{en,es}.json`, so they d
       in particular `services/web/CLAUDE.md`'s "deliberately inert" header note and its
       "non-interactive `Agregada` badge" note are both gone.
 
-- [ ] **T013** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack —
+- [x] **T013** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack —
       including the manual pass in `plan.md` § Verification (the Redis reads for AC-7, the
       second-user pass for AC-10, the `/movies/add` regression for AC-15) — tick each box, then set
       `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md` and `web/plan.md`, and

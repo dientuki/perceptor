@@ -155,12 +155,34 @@ stays on the search screen and that card changes, tracked in local `addedMediaId
 next search.
 
 Each `MediaSearchResult` carries `mediaId` (the registered row's id, if *anyone* has registered it,
-else `null`) and `inLibrary` (true only for the caller). **`renderAction` treats a card as owned when
-`inLibrary` is true or it was added this session — never when `mediaId !== null` alone**, since a
-title someone else registered is still addable by the caller (that add only links them, it never
-re-downloads). The owned branch splits by type: a film renders an `Ir` link to `/movies/<mediaId>`, a
-series a non-interactive `Agregada` badge with no `href` (nothing has asked for it to link to
-`/shows/[id]`, which does exist).
+else `null`) and `inLibrary` (true only for the caller). **The action is owned by
+`MediaResultAction.tsx` (`026-multi-search`), shared by `SearchContainer` and `MultiSearchResults`
+so there is exactly one place that decides what a card's action looks like.** It treats a card as
+owned when `inLibrary` is true or it was added this session — never when `mediaId !== null` alone,
+since a title someone else registered is still addable by the caller (that add only links them, it
+never re-downloads). The owned branch is now **one shape for both types**: an `Ir` link to
+`/movies/<id>` for a film, `/shows/<id>` for a series — the old non-interactive `Agregada` badge for
+an owned series is gone.
+
+## Multi-catalog search (`/search`)
+
+Since `026-multi-search`, the header's search box is a real entry point, not inert: submitting it
+(`AppHeader.tsx`) pushes `/search?q=<encoded>` via `useRouter()`, even when the box is empty — the
+page's empty state handles that case, so there is no special-cased "don't navigate" branch.
+`app/(dashboard)/search/page.tsx` is a Server Component that awaits `searchParams` (a `Promise` in
+Next 16), calls `searchAllMedia(query)` (`src/actions/media.ts`) in a `try`/`catch`, and passes a
+translated error string down as a prop on failure rather than throwing — there is no
+`app/(dashboard)/error.tsx`, so an uncaught throw here would show Next's default error screen instead
+of a usable page. `MultiSearchResults.tsx` is the client component: it owns `addingId`/
+`addedMediaIds` exactly as `SearchContainer` does, calls `addMedia(item.id, item.type)` per card (the
+item's own type, not a screen-level one — this is what lets one page add a film and a series), and
+renders the shared `MediaList`/`MediaCard` with the type badge turned on.
+
+`MediaCard.tsx` renders a type badge (opaque pill, top-left over the poster; `bg-brand-500` for a
+film, `bg-purple-500` for a series; text from the message catalog) only when asked for — the flag is
+threaded through `MediaList.tsx` and **defaults off**, so `/movies`, `/shows`, `/movies/add` and
+`/shows/add` are unaffected. The badge reads `item.type`, never the `mediaType` prop, since on a
+mixed grid that prop is one value for cards of two kinds.
 
 `SearchInput.tsx`'s submit button is the shared `Button` (`src/components/ui/button/Button.tsx`,
 `bg-brand-500`), not a hand-rolled element — a `bg-primary` class silently compiles to nothing, since
@@ -269,9 +291,9 @@ bell, no quick-add icons, no mobile logo, no application-menu row. The theme tog
 inside `UserDropdown`'s dropdown, as a fourth `DropdownItem` wired to the same
 `useTheme()`/`ThemeContext`; `ThemeToggleButton` and `NotificationDropdown` were deleted as their
 last references went with it. `ThemeTogglerTwo` is untouched — the auth layout still renders it on
-the login screen, so don't delete it while cleaning up header remnants. The header search input is
-deliberately inert (`onSubmit` calls `preventDefault`); wiring it to a real search is its own
-future spec.
+the login screen, so don't delete it while cleaning up header remnants. Since `026-multi-search`
+the search input navigates to `/search?q=…` on submit (see § Multi-catalog search above) — it is no
+longer inert.
 
 ## Tests: there are none
 
@@ -311,7 +333,7 @@ parity check with an exit code.
 
 ## Current state
 
-As of 2026-08-20 (`018-ui-i18n`): `bin/cli web npx --no tsc --noEmit` reports **0 errors** and
+As of 2026-08-26 (`026-multi-search`): `bin/cli web npx --no tsc --noEmit` reports **0 errors** and
 `bin/npm web run build` exits 0. Re-run both rather than trusting this — report the numbers before
 and after a change to prove you added nothing.
 

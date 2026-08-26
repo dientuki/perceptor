@@ -1,5 +1,6 @@
 "use client";
 import { Menu, Search, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useEffect, useRef } from "react";
@@ -13,6 +14,7 @@ interface AppHeaderProps {
 
 const AppHeader: React.FC<AppHeaderProps> = ({ user }) => {
   const t = useTranslations("header");
+  const router = useRouter();
 
   const { isMobileOpen, toggleMobileSidebar } = useSidebar();
 
@@ -45,7 +47,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user }) => {
           {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
 
-        <form className="flex-grow" onSubmit={(e) => e.preventDefault()}>
+        <form
+          className="flex-grow"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const query = new FormData(e.currentTarget).get("q");
+            const value = typeof query === "string" ? query : "";
+            router.push(`/search?q=${encodeURIComponent(value)}`);
+          }}
+        >
           <div className="relative">
             <span className="absolute -translate-y-1/2 left-4 top-1/2 pointer-events-none">
               <Search className="text-gray-500 dark:text-gray-400" size={20} />
@@ -53,6 +63,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user }) => {
             <input
               ref={inputRef}
               type="text"
+              name="q"
               placeholder={t("searchPlaceholder")}
               className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-14 text-base text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />

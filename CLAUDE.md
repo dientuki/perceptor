@@ -9,7 +9,7 @@ implementation detail.
 
 | Stage | Where | Specs |
 | :-- | :-- | :-- |
-| Search catalog (TMDB) | `api` — `src/media/`, `src/movies/`, `src/shows/`, `src/clients/tmdb/` | `005`, `006` |
+| Search catalog (TMDB) | `api` — `src/media/`, `src/movies/`, `src/shows/`, `src/clients/tmdb/`; `web` — the header search box and `/search` | `005`, `006`, `026` |
 | Register title in DB | `api` — `media`/`movies`/`shows` + Prisma; a new series fetches its seasons/episodes in the background | `006` |
 | Find release | Prowlarr (`indexer`) + `flaresolverr`, `api` — `src/clients/indexer/client.ts`; manual fallback is pasting a magnet (`src/clients/torrent/magnet.ts`) | `010`, `014` |
 | Download | qBittorrent (`torrent`), `api` — `src/clients/torrent/client.ts`, per-torrent save path | `010` |

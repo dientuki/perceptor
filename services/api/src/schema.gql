@@ -222,6 +222,7 @@ type Query {
   """
   mediaServerClients: [MediaServerOption!]!
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
+  searchAllMedia(query: String!): [MediaSearchResult!]!
   shows: [Show!]!
   show(id: Int!): Show
 

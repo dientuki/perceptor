@@ -120,6 +120,11 @@
     "login": {
       "metadataTitle": "Login | Perceptor",
       "metadataDescription": "Perceptor login page"
+    },
+    "search": {
+      "title": "Search results",
+      "metadataTitle": "Search | Perceptor",
+      "metadataDescription": "Search results across movies and series"
     }
   },
   "notFound": {
@@ -164,7 +169,6 @@
       "showNoun": "series",
       "resultsEmptySearched": "No results found",
       "resultsEmptyPrompt": "Search for a {noun} to get started",
-      "added": "Added",
       "go": "Go",
       "addButton": "Add",
       "adding": "Adding...",
@@ -202,7 +206,9 @@
   },
   "media": {
     "card": {
-      "noPoster": "No Poster"
+      "noPoster": "No Poster",
+      "typeMovie": "MOVIE",
+      "typeShow": "SERIES"
     },
     "list": {
       "emptyDefault": "No {noun} registered",

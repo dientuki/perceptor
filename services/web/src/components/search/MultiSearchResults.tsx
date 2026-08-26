@@ -2,65 +2,46 @@
 
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { addMedia } from "@/actions/media";
 import { MediaList } from "@/components/media/MediaList";
-import { MEDIA_TYPE, type MediaType } from "@/types/media";
+import { MEDIA_TYPE } from "@/types/media";
 import type { MediaSearchResult } from "@/types/search";
 import { MediaResultAction } from "./MediaResultAction";
-import { SearchInput } from "./SearchInput";
 
-interface SearchContainerProps {
-  type: MediaType;
-  addAction: (id: number, type: MediaType) => Promise<string>;
-  searchAction: (
-    query: string,
-    type: MediaType,
-  ) => Promise<MediaSearchResult[]>;
+interface MultiSearchResultsProps {
+  results: MediaSearchResult[];
+  searched: boolean;
+  initialError?: string | null;
 }
 
-export default function SearchContainer({
-  type,
-  addAction,
-  searchAction,
-}: SearchContainerProps) {
+// Client-side twin of SearchContainer for the mixed /search screen: the
+// results are already fetched server-side, so this component only owns the
+// per-card add state and never calls searchAllMedia itself.
+export function MultiSearchResults({
+  results,
+  searched,
+  initialError = null,
+}: MultiSearchResultsProps) {
   const t = useTranslations("search.container");
-  const noun = type === MEDIA_TYPE.SHOW ? t("showNoun") : t("movieNoun");
-  const [results, setResults] = useState<MediaSearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searched, setSearched] = useState(false);
+  const [error, setError] = useState<string | null>(initialError);
   const [addingId, setAddingId] = useState<number | null>(null);
-  // TMDB id -> registered row id, for results added this session (before `inLibrary` would reflect it on a fresh search)
+  // TMDB id -> registered row id, for results added this session (before
+  // `inLibrary` would reflect it on a fresh search)
   const [addedMediaIds, setAddedMediaIds] = useState<Record<number, string>>(
     {},
   );
-
-  const handleSearch = async (query: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const data = await searchAction(query, type);
-      setResults(data);
-    } catch (err) {
-      // Sin este catch el finally no corre y el botón queda deshabilitado para siempre
-      console.error("Error al buscar:", err);
-      setResults([]);
-      setError(t("errorSearch"));
-    } finally {
-      setSearched(true);
-      setLoading(false);
-    }
-  };
 
   const handleAdd = async (item: MediaSearchResult) => {
     setAddingId(item.id);
     setError(null);
 
     try {
-      const mediaId = await addAction(item.id, type);
+      const mediaId = await addMedia(item.id, item.type);
       setAddedMediaIds((prev) => ({ ...prev, [item.id]: mediaId }));
     } catch (err) {
       console.error("Error al agregar:", err);
+      const noun =
+        item.type === MEDIA_TYPE.SHOW ? t("showNoun") : t("movieNoun");
       setError(t("errorAdd", { noun }));
     } finally {
       setAddingId(null);
@@ -69,8 +50,6 @@ export default function SearchContainer({
 
   return (
     <div className="space-y-6">
-      <SearchInput onSearch={handleSearch} loading={loading} type={type} />
-
       {error && (
         <p className="rounded-lg bg-red-50 px-4 py-3 text-red-700 dark:bg-red-500/10 dark:text-red-400">
           {error}
@@ -80,10 +59,13 @@ export default function SearchContainer({
       <MediaList
         items={results}
         showLink={false}
+        showTypeBadge
         emptyMessage={
           searched
             ? t("resultsEmptySearched")
-            : t("resultsEmptyPrompt", { noun })
+            : t("resultsEmptyPrompt", {
+                noun: `${t("movieNoun")} / ${t("showNoun")}`,
+              })
         }
         renderAction={(item: MediaSearchResult) => {
           const addedMediaId = addedMediaIds[item.id];

@@ -2,7 +2,7 @@
 title: Multi Search — api slice
 service: api
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Multi Search — `api` (`api/plan.md`)

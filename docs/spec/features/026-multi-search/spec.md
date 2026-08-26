@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-26
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -48,91 +48,91 @@ as it does today. Nothing here finds a release, downloads a byte, or encodes any
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (One search across both types)**: Searching must be possible without naming a media
+- [x] **REQ-1 (One search across both types)**: Searching must be possible without naming a media
       type. A single query must return films and series interleaved in one result list, ordered as
       the catalog ranks them — not films first and then series, and not two separate lists.
 
-- [ ] **REQ-2 (Unsupported catalog types are discarded, not errors)**: The catalog's mixed search
+- [x] **REQ-2 (Unsupported catalog types are discarded, not errors)**: The catalog's mixed search
       returns kinds this application does not model — people above all, and possibly collections or
       companies. Every result that is not a film or a series must be dropped silently before the
       response is built. It is not an error, it does not shorten the search, and it must never reach
       the user in any form.
 
-- [ ] **REQ-3 (Every kept result is cached under its own type's key)**: Each film in the response
+- [x] **REQ-3 (Every kept result is cached under its own type's key)**: Each film in the response
       must be cached exactly as a film-only search would cache it, and each series exactly as a
       series-only search would. A multi search followed by a registration must behave identically to
       a per-type search followed by the same registration, including when the catalog is unreachable
       by then.
 
-- [ ] **REQ-4 (The cached object still contains catalog data only)**: What is written to the cache
+- [x] **REQ-4 (The cached object still contains catalog data only)**: What is written to the cache
       by this search must contain nothing that depends on who asked — the same standing obligation
       `006-media-search` REQ-7 placed on every per-type service. The key is global; a per-caller
       field written into it is served to every other user until it expires.
 
-- [ ] **REQ-5 (Each result says whether it is mine, per type)**: Every kept result must carry the
+- [x] **REQ-5 (Each result says whether it is mine, per type)**: Every kept result must carry the
       registered row's id if anyone has registered it, and separately whether the **calling** user
       has it. Those two facts come from a different table for a film than for a series, and both must
       be resolved for a mixed page.
 
-- [ ] **REQ-6 (Blank searches never reach the catalog)**: A blank or whitespace-only query must
+- [x] **REQ-6 (Blank searches never reach the catalog)**: A blank or whitespace-only query must
       return an empty list without contacting the catalog.
 
-- [ ] **REQ-7 (The header search is the entry point)**: Submitting the header's search box must take
+- [x] **REQ-7 (The header search is the entry point)**: Submitting the header's search box must take
       the user to a results screen for that query. The query must be part of the address, so the
       screen can be reloaded and the link shared.
 
-- [ ] **REQ-8 (The result card keeps its current design plus a type badge)**: The poster, title,
+- [x] **REQ-8 (The result card keeps its current design plus a type badge)**: The poster, title,
       overview and year keep the layout they have today. A badge is added over the poster naming
       whether the entry is a film or a series, legible against an arbitrary poster image.
 
-- [ ] **REQ-9 (Each card acts according to its own type)**: A card's add action must register that
+- [x] **REQ-9 (Each card acts according to its own type)**: A card's add action must register that
       entry as the type the card itself declares, never as a type chosen by the screen. On one page
       some cards register films and others register series.
 
-- [ ] **REQ-10 (An owned entry offers to open it, for both types)**: A result already in the calling
+- [x] **REQ-10 (An owned entry offers to open it, for both types)**: A result already in the calling
       user's library must offer to go to that title's screen — `/movies/<id>` for a film,
       `/shows/<id>` for a series — instead of offering to add it again. This replaces the
       non-interactive "Agregada" badge series currently get, on **every** search screen, not only the
       new one: `/shows/add` gains the same link.
 
-- [ ] **REQ-11 (Adding stays on the results screen)**: Registering from a result must not navigate
+- [x] **REQ-11 (Adding stays on the results screen)**: Registering from a result must not navigate
       away. That card changes, the rest of the page stays as it is, and a second entry can be
       registered without searching again.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (The cache-ordering invariant is the silent failure here)**: Writing the cache after
+- [x] **NFR-1 (The cache-ordering invariant is the silent failure here)**: Writing the cache after
       ownership is attached produces a perfectly successful response and poisons a global key for 24
       hours, for every other user, with no error anywhere. `006-media-search` NFR-3 already requires
       each per-type service to assert this in its own suite; this feature adds a **third** path that
       writes those same keys, so it owes the same assertion — over a mixed result set, since that is
       the one place where getting it right for films and wrong for series is possible.
 
-- [ ] **NFR-2 (A library leak between users is silent)**: Reporting that this caller owns something
+- [x] **NFR-2 (A library leak between users is silent)**: Reporting that this caller owns something
       they do not, or returning another user's rows, is a successful response with wrong contents.
       Caller-scoping must be asserted over a mixed result set, with films and series owned by
       different users.
 
-- [ ] **NFR-3 (One search costs one catalog request)**: A mixed search must issue exactly one HTTP
+- [x] **NFR-3 (One search costs one catalog request)**: A mixed search must issue exactly one HTTP
       request to the catalog, not one per type. Ownership enrichment must likewise be bounded — a
       constant number of database queries per page, never one per result.
 
-- [ ] **NFR-4 (A malformed or unknown catalog row must not fail the page)**: The catalog's mixed
+- [x] **NFR-4 (A malformed or unknown catalog row must not fail the page)**: The catalog's mixed
       response is less uniform than a per-type one — fields differ between a film row and a series
       row, and a future `media_type` value is possible at any time. An unrecognised or incomplete row
       must be dropped like any other unsupported type, never surface as a broken card and never fail
       the whole search.
 
-- [ ] **NFR-5 (Not reachable by the service token)**: This is a user operation, like the two it sits
+- [x] **NFR-5 (Not reachable by the service token)**: This is a user operation, like the two it sits
       beside. It must not carry the exemption that lets the worker's or qBittorrent's credential
       through, and must resolve a real user principal.
 
-- [ ] **NFR-6 (Badge text is catalog-driven, like every other user-facing string)**: The badge reads
+- [x] **NFR-6 (Badge text is catalog-driven, like every other user-facing string)**: The badge reads
       through `services/web/messages/{en,es}.json`, not a hardcoded literal — `018-ui-i18n` applies
       here with no exception. `en` renders `MOVIE` / `SERIES` as in the attached design; `es` renders
       `PELÍCULA` / `SERIE`.
 
-- [ ] **NFR-7 (No breaking change to the existing contract)**: `searchMedia`, `addMedia`,
+- [x] **NFR-7 (No breaking change to the existing contract)**: `searchMedia`, `addMedia`,
       `MediaSearchResult` and `MediaRef` keep their names, arguments, fields and semantics.
       `/movies/add` and `/shows/add` keep working unchanged apart from REQ-10's link. `web` has no
       tests, so this is verified by opening both screens, not by a suite.
@@ -205,61 +205,61 @@ introduces no third key namespace — a `tmdb:multi:<query>` cache is explicitly
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a signed-in user anywhere in the dashboard, when they type `spider-man` into
+- [x] **AC-1**: Given a signed-in user anywhere in the dashboard, when they type `spider-man` into
       the header search box and press Enter, then they land on a results screen whose address
       contains that query, showing both films and series in one grid.
 
-- [ ] **AC-2**: Reloading that address, or opening it in a new tab, renders the same results without
+- [x] **AC-2**: Reloading that address, or opening it in a new tab, renders the same results without
       retyping the query.
 
-- [ ] **AC-3**: In those results, every card shows a badge over its poster reading `PELÍCULA` or
+- [x] **AC-3**: In those results, every card shows a badge over its poster reading `PELÍCULA` or
       `SERIE` under the `es` locale and `MOVIE` or `SERIES` under `en`, matching the card's own type.
 
-- [ ] **AC-4** *(failure path — the discard rule)*: Given a query whose catalog response contains
+- [x] **AC-4** *(failure path — the discard rule)*: Given a query whose catalog response contains
       people (`spider-man` returns actors), when the results render, then **no** card corresponds to
       a person: every card is a film or a series, and the response carries no `type` value other than
       `movie` and `show`.
 
-- [ ] **AC-5**: Given a film result that is not yet registered, when the user clicks add, then
+- [x] **AC-5**: Given a film result that is not yet registered, when the user clicks add, then
       `bin/mysql -e 'select count(*) from movies where tmdbId = <n>'` returns **1** and
       `user_movies` grows by exactly 1. Given a series result on the **same page**, the same click
       grows `shows` and `user_shows` instead — the film's tables are untouched.
 
-- [ ] **AC-6**: After the click in AC-5, the page has not navigated, that card no longer offers to
+- [x] **AC-6**: After the click in AC-5, the page has not navigated, that card no longer offers to
       add, and a second result on the same page can still be added.
 
-- [ ] **AC-7**: `bin/cli redis redis-cli get tmdb:movie:<tmdbId>` and
+- [x] **AC-7**: `bin/cli redis redis-cli get tmdb:movie:<tmdbId>` and
       `bin/cli redis redis-cli get tmdb:show:<tmdbId>` both return a JSON object after a mixed
       search, and **neither** contains `inLibrary` **nor** `mediaId`.
 
-- [ ] **AC-8**: Given a film and a series the calling user already has, when they appear in a mixed
+- [x] **AC-8**: Given a film and a series the calling user already has, when they appear in a mixed
       search, then both render `Ir`, linking to `/movies/<id>` and `/shows/<id>` respectively, and
       both links resolve to that title's detail page.
 
-- [ ] **AC-9** *(the change reaches the old screen too)*: Given the same owned series on
+- [x] **AC-9** *(the change reaches the old screen too)*: Given the same owned series on
       `/shows/add`, then it renders `Ir` linking to `/shows/<id>` rather than a non-interactive
       `Agregada` badge.
 
-- [ ] **AC-10** *(caller scoping)*: Given user A has registered a film and a series, when user B runs
+- [x] **AC-10** *(caller scoping)*: Given user A has registered a film and a series, when user B runs
       the same mixed search, then both entries offer `Agregar` to B and neither reports as owned —
       while `movies`/`shows` still hold exactly one row each.
 
-- [ ] **AC-11** *(failure path)*: Given `movie_db_api_key` is cleared in Settings, when a mixed
+- [x] **AC-11** *(failure path)*: Given `movie_db_api_key` is cleared in Settings, when a mixed
       search is submitted, then the results list is left untouched, an inline error renders, and the
       page stays usable — no unhandled error screen, no `alert()`.
 
-- [ ] **AC-12** *(failure path)*: Submitting the header search with an empty or whitespace-only query
+- [x] **AC-12** *(failure path)*: Submitting the header search with an empty or whitespace-only query
       contacts the catalog zero times — verifiable in `docker compose logs api` — and renders the
       empty state rather than an error.
 
-- [ ] **AC-13**: `bin/npm api test` passes, with the cache-before-enrich ordering (NFR-1) and the
+- [x] **AC-13**: `bin/npm api test` passes, with the cache-before-enrich ordering (NFR-1) and the
       caller-scoping (NFR-2) asserted over a **mixed** result set, in a suite whose header comment
       names the silent failure it defends against (Constitution, Article IX).
 
-- [ ] **AC-14**: `bin/cli api npx --no tsc --noEmit` and `bin/cli web npx --no tsc --noEmit` report
+- [x] **AC-14**: `bin/cli api npx --no tsc --noEmit` and `bin/cli web npx --no tsc --noEmit` report
       the same error counts as before the feature, and `bin/npm web run build` exits 0.
 
-- [ ] **AC-15** *(no contract regression)*: `grep -n "searchMedia\|addMedia" services/api/src/schema.gql`
+- [x] **AC-15** *(no contract regression)*: `grep -n "searchMedia\|addMedia" services/api/src/schema.gql`
       still shows both with their existing arguments, and `/movies/add` behaves exactly as before —
       search, add, `Ir` link, a film another user registered still offering `Agregar`.
 

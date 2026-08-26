@@ -12,6 +12,7 @@ interface MediaListProps {
   mediaType?: (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE]; // Puedes agregar más tipos si es necesario
   showLink?: boolean; // Nueva propiedad para controlar si se muestra el enlace
   emptyMessage?: string; // Sobreescribe el vacío por defecto ("registradas" no aplica en búsquedas)
+  showTypeBadge?: boolean; // Opt-in: only a mixed-type grid (the multi search) needs it
 }
 
 export function MediaList({
@@ -20,6 +21,7 @@ export function MediaList({
   mediaType = MEDIA_TYPE.MOVIE,
   showLink = false,
   emptyMessage,
+  showTypeBadge = false,
 }: MediaListProps) {
   const t = useTranslations("media.list");
 
@@ -46,6 +48,7 @@ export function MediaList({
           renderAction={renderAction}
           showLink={showLink}
           mediaType={mediaType}
+          showTypeBadge={showTypeBadge}
         />
       ))}
     </div>
