@@ -24,7 +24,6 @@ type CaseInput = {
   allowedLanguagesIso3: string[];
   originalLanguageIso3: string;
   isLiveAction: boolean;
-  vulkanAvailable: boolean;
 };
 
 type Case = {
@@ -63,7 +62,6 @@ function validate(fileName: string, raw: unknown): Case {
     allowedLanguagesIso3,
     originalLanguageIso3,
     isLiveAction,
-    vulkanAvailable,
   } = input as Record<string, unknown>;
 
   if (typeof file !== 'string') fail(fileName, 'input.file must be a string');
@@ -78,9 +76,6 @@ function validate(fileName: string, raw: unknown): Case {
     fail(fileName, 'input.originalLanguageIso3 must be a string');
   }
   if (typeof isLiveAction !== 'boolean') fail(fileName, 'input.isLiveAction must be a boolean');
-  if (typeof vulkanAvailable !== 'boolean') {
-    fail(fileName, 'input.vulkanAvailable must be a boolean');
-  }
 
   const probe = value.ffprobe;
   if (typeof probe !== 'object' || probe === null || !Array.isArray((probe as any).streams)) {
@@ -173,7 +168,6 @@ describe('ffmpeg cases', () => {
         input.output,
         parsed.ffprobe as any,
         details,
-        input.vulkanAvailable,
       );
 
     if (parsed.throws !== undefined) {

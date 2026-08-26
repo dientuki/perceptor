@@ -75,12 +75,15 @@ add the spelling and name the case that forced it.
 - **V1.** No video stream is a hard failure: `error.encode.no_video_stream`.
 - **V2.** H264 is transcoded to AV1 at its source resolution.
 - **V3.** HEVC/H265 at 4K (`width ≥ 3800` or `height ≥ 2100`) is downscaled to 1080p. Dolby Vision
-  and HDR10 are tonemapped — `libplacebo` when a Vulkan device is available, a software
-  `zscale`/`tonemap` chain when it is not, and the emitted track title must be **byte-identical**
-  between the two paths, because the title names the source, not the engine. 4K SDR is a plain
-  downscale. Cases `1.json`, `3.json`, `4.json`, `6.json`.
+  and HDR10 **preserve** their HDR through the downscale — `-colorspace bt2020nc`,
+  `-color_primaries bt2020`, `-color_trc smpte2084` — rather than flattening to bt709 SDR; the track
+  title reads `Downscaled from 4K …`. 4K SDR is a plain downscale to bt709. No GPU or Vulkan device
+  is involved in any of this — the worker has no tonemap filter and no device probe
+  (`024-retire-gpu-tonemap-strategy`). No case in the corpus currently exercises this branch; the
+  cases that did were retired along with the machinery they were written against (REQ-8 of `024`).
 - **V4.** VC-1 is transcoded to AV1 with explicit bt709 tags.
-- **V5.** Anything else is copied. An HEVC 1080p source is copied, not re-encoded — case `5.json`.
+- **V5.** Anything else is copied. An HEVC 1080p source is copied, not re-encoded. No case in the
+  corpus currently exercises this — the one that did (`5.json`) was retired (REQ-8 of `024`).
 - **V6.** Non-HEVC 4K is **not** downscaled today: a 4K H264 is transcoded at 4K, a 4K AV1 is copied
   at 4K. Known and deliberate. Do not change it without the user asking.
 
@@ -95,7 +98,8 @@ add the spelling and name the case that forced it.
 - **A4.** Latin American Spanish wins — see L1.
 - **A5.** No track in `originalLanguageIso3` is a hard failure:
   `error.encode.no_original_audio`, with the `iso3` as a param. Never a copy-all fallback — that
-  shipped files with the wrong audio and reported success. Case `7.json`.
+  shipped files with the wrong audio and reported success. No case in the corpus currently exercises
+  the `throws` path — the one that did (`7.json`) was retired (REQ-8 of `024`).
 - **A6.** A missing track in any *other* allowed language is logged and skipped, not an error.
 
 ### Subtitles
@@ -110,31 +114,32 @@ player, notice it, and send a new `ffprobe` to correct this file, than have the 
 random and silently lose the right one.
 
 - **S1 (hard).** Text codecs only — `subrip`, `mov_text`, `tx3g`. An image subtitle (PGS, VOBSUB) is
-  never emitted, not even as the last remaining candidate in a language. Case `4.json` is a file
-  whose subtitles are all PGS: the correct output is **zero** subtitle arguments.
+  never emitted, not even as the last remaining candidate in a language. No case in the corpus
+  currently exercises the all-PGS-so-zero-subtitles path — the one that did (`4.json`) was retired
+  (REQ-8 of `024`).
 - **S2 (hard).** Only languages in `allowedLanguagesIso3`, normalized as in A1.
 - **S3 (hard).** A track with no real cue payload is dropped. Measured from `NUMBER_OF_BYTES` and
   `NUMBER_OF_FRAMES`, not from `BPS` alone — `BPS` is a rounded integer and a short real track can
-  round to 0 just like an empty one. Reference points from the corpus: the empty tracks in `1.json`
-  are 46 cues / 804 bytes and 78 cues / 1610 bytes; the real ones on the same file are ~1700 cues /
-  ~55 kB, and a real 45-minute episode subtitle in `3.json` is ~670 cues / ~21 kB.
+  round to 0 just like an empty one. No case in the corpus currently pins the byte/frame thresholds —
+  the ones that did (`1.json`, `3.json`) were retired (REQ-8 of `024`).
 - **S4 (evidence).** Hearing-impaired loses to any non-hearing-impaired candidate in the same
   language, and is kept when it is the only one. Detected from `disposition.hearing_impaired`
-  **and** the title, because files tag it either way — `3.json` sets the disposition flag *and*
-  titles it `SDH`; other releases set neither.
+  **and** the title, because files tag it either way. Case `8.json` drops an English SDH track this
+  way (title-only detection).
 - **S5 (evidence).** Latin American Spanish beats Castilian — see L1. Beats, not replaces: when
-  nothing marks either one, both stay.
-- **S6.** Whatever survives S1–S5 is emitted, all of it. Case `1.json` keeps three Spanish tracks
-  because that file's group stamped every title `BTM` and zeroed all nineteen disposition flags:
-  there is genuinely nothing to choose on.
+  nothing marks either one, both stay. Case `8.json`.
+- **S6.** Whatever survives S1–S5 is emitted, all of it. No case currently exercises the
+  nothing-to-choose-on path where every candidate in a language survives — the one that did
+  (`1.json`) was retired (REQ-8 of `024`).
 
 ### Language identity
 
 - **L1 (regional Spanish).** Latin American markers: `latino`, `latin`, `latin america`, `LA`,
   `419`, `es-419`. Castilian markers: `españa`, `spain`, `castellano`, `EU`, `es-ES`.
-  The bare `LA`/`EU` spellings are real and came from `1.json` (`BTM DDP5.1 LA` vs `BTM DD 5.1 EU`)
-  — a rule matching only `latin|latino` misses that file entirely and picks the Spanish track by
-  accident of codec ranking.
+  The bare `LA`/`EU` spellings are real and came from a file tagging tracks `BTM DDP5.1 LA` vs
+  `BTM DD 5.1 EU` — a rule matching only `latin|latino` misses that file entirely and picks the
+  Spanish track by accident of codec ranking. The case that pinned it (`1.json`) was retired
+  (REQ-8 of `024`); the spellings stay here because the vocabulary itself is still real.
 - **L2 (track title).** The title written to the output is **always** replaced, never inherited.
   The library is homogeneous: the same language reads the same in every file, whatever the release
   group typed. `Spanish (Latin America)`, `BTM`, `FORCED` and an absent title all resolve through
@@ -163,8 +168,7 @@ not read by anything; `title` identifies the case.
     "file": "/downloads/…", "output": "/media/…",
     "allowedLanguagesIso3": ["eng", "spa"],
     "originalLanguageIso3": "eng",
-    "isLiveAction": true,
-    "vulkanAvailable": false
+    "isLiveAction": true
   },
   "ffprobe": { "streams": [], "format": {} },
   "ffmpeg": ["-i", "…"]
@@ -178,9 +182,9 @@ not read by anything; `title` identifies the case.
   that (the `fre`/`fra` pairing has no real file behind it).
 - `ffmpeg` is the complete ordered argument array. Show it to the user as a formatted command when
   you discuss it; store it as an array, because `-svtav1-params keyint=10s:scd=1:…` and
-  `title=AV1 1080p (Tonemapped from 4K DoVi)` cannot be re-split out of one string.
+  `title=AV1 1080p (Downscaled from 4K DoVi)` cannot be re-split out of one string.
 - A case that must fail carries `"throws": "error.encode.…"` **instead of** `ffmpeg`.
-- One probe can back several cases — `6.json` is `1.json` with `vulkanAvailable: true`.
+- One probe can back several cases when they differ in something other than the `ffprobe` itself.
 
 To probe a real file:
 
@@ -209,7 +213,7 @@ Everything through `bin/` (Constitution, Article I). Never `npm`, `npx` or `tsc`
 
 ```bash
 bin/npm worker test -- src/ffmpeg/cases.spec.ts   # the corpus alone
-bin/npm worker test                               # everything — baseline 13 suites / 113 tests
+bin/npm worker test                               # everything — baseline 12 suites / 93 tests
 bin/cli worker npx --no tsc --noEmit              # strict: true, a real gate
 ```
 

@@ -5,9 +5,9 @@
 #
 # bin/dev lo suma siempre con -f docker-compose.dev.yaml; bin/prod y bin/build nunca lo incluyen
 # — esa omisión es lo que hace que `bin/prod` corra la imagen que construyó en vez de esconderla
-# detrás del working copy del host. Mismo mecanismo que docker-compose.gpu.yaml (USE_GPU): compose
-# agrega los volumes del overlay a la lista de la base en vez de reemplazarla, así que los mounts
-# de media (${HOST_DOWNLOADS_DIR}, ${HOST_DESTINATIONS_DIR}) sobreviven junto al mount de código.
+# detrás del working copy del host. Un overlay de compose agrega sus volumes a la lista de la base
+# en vez de reemplazarla, así que los mounts de media (${HOST_DOWNLOADS_DIR}, ${HOST_DESTINATIONS_DIR})
+# sobreviven junto al mount de código.
 services:
   web:
     volumes:

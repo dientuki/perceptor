@@ -2,7 +2,7 @@
 title: Retire the GPU Tonemap Strategy — worker slice
 service: worker
 last_updated: 2026-08-25
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Retire the GPU Tonemap Strategy — `worker` (`worker/plan.md`)

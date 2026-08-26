@@ -2,7 +2,7 @@
 title: Retire the GPU Tonemap Strategy — ffmpeg slice
 service: ffmpeg
 last_updated: 2026-08-25
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Retire the GPU Tonemap Strategy — `ffmpeg` (`ffmpeg/plan.md`)

@@ -64,7 +64,6 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       '/out/Some.Anime.Movie.mkv',
       metadata,
       details({ isLiveAction: false }),
-      false,
     );
 
     expect(crfOf(args)).toBe('20');
@@ -84,7 +83,6 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       '/out/Some.Movie.Blu-ray.mkv',
       metadata,
       details({ isLiveAction: true }),
-      false,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -103,7 +101,6 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       '/out/Some.Movie.WEB-DL.mkv',
       metadata,
       details({ isLiveAction: true }),
-      false,
     );
 
     expect(crfOf(args)).toBe('24');
@@ -124,7 +121,6 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       '/out/Some.Movie.WEB-DL.mkv',
       metadata,
       details({ isLiveAction: true }),
-      false,
     );
 
     const i = args.indexOf('-t');
@@ -149,7 +145,6 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
         originalLanguageIso3: 'eng',
         allowedLanguagesIso3: ['eng', 'spa'],
       }),
-      false,
     );
 
     // One -map per selected audio stream: 0:0 (video) implicitly handled by
@@ -158,41 +153,5 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
     expect(args).toContain('0:2');
     expect(args.filter((a) => a === '-metadata:s:a:0').length).toBeGreaterThan(0);
     expect(args.filter((a) => a === '-metadata:s:a:1').length).toBeGreaterThan(0);
-  });
-
-  it('threads the vulkanAvailable argument through to getVideoParams', () => {
-    const metadata = {
-      streams: [
-        videoStream({
-          codec_name: 'hevc',
-          width: 3840,
-          height: 2160,
-          color_transfer: 'smpte2084',
-        }),
-        audioStream({ codec_name: 'ac3' }),
-      ],
-    };
-
-    const vfOf = (args: string[]) => args[args.indexOf('-vf') + 1];
-
-    const withGpu = buildFfmpegCommand(
-      'Some.Movie.HDR10.mkv',
-      '/out/Some.Movie.HDR10.mkv',
-      metadata,
-      details({ isLiveAction: true }),
-      true,
-    );
-
-    const withoutGpu = buildFfmpegCommand(
-      'Some.Movie.HDR10.mkv',
-      '/out/Some.Movie.HDR10.mkv',
-      metadata,
-      details({ isLiveAction: true }),
-      false,
-    );
-
-    expect(vfOf(withGpu)).toContain('libplacebo');
-    expect(vfOf(withoutGpu)).not.toContain('libplacebo');
-    expect(vfOf(withoutGpu)).toContain('zscale');
   });
 });

@@ -124,8 +124,7 @@ output of a real file** plus the exact FFmpeg argument array it must produce.
 `src/ffmpeg/cases.spec.ts` enumerates the directory and asserts the whole ordered command, so
 adding a case is adding a file: no spec is edited and no factory helper transcribes a stream by
 hand, which is what used to lose the one field that mattered (`disposition`, `NUMBER_OF_FRAMES`,
-`side_data_list`). A case that must fail carries `"throws": "error.encode.…"` instead of `ffmpeg`;
-one probe can back several cases (`6.json` is `1.json` with `vulkanAvailable: true`).
+`side_data_list`). A case that must fail carries `"throws": "error.encode.…"` instead of `ffmpeg`.
 
 The runner is built so it cannot report green while running less than the directory holds: a
 malformed case fails collection naming the file, an empty directory is an error rather than a
@@ -234,7 +233,7 @@ leaves a half-written file at the destination.
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate, against `tsconfig.json` (covers `src/**/*`, including `*.spec.ts`) |
 | `bin/npm worker run build` | `tsc -p tsconfig.build.json` — the `runner` image's `builder` stage runs this; `tsconfig.build.json` extends `tsconfig.json` but excludes `**/*.spec.ts`, so `dist/` ships no test code (`015-reproducible-image-builds`) |
-| `bin/npm worker test` | `vitest run` — 13 suites, 116 tests, green as of `023-ffprobe-log`, which added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `017-worker-gpu-strategy` added `ffmpeg/vulkan.spec.ts` and the first `getVideoParams` coverage in `ffmpeg/params.spec.ts`; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
+| `bin/npm worker test` | `vitest run` — 12 suites, 93 tests, green as of spec `024`, which deleted a startup-probe module's spec outright and reset the case corpus to one file (`ffmpeg/cases.spec.ts` now runs 1 case, not 8); `023-ffprobe-log` added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 
 ## Known debt
@@ -254,8 +253,10 @@ leaves a half-written file at the destination.
 - **Dependency skew with `api`**: `ioredis` ^5 here vs ^6 there, `@types/node` ^22 vs ^24. Not
   currently causing trouble; worth knowing before debugging a Redis behaviour difference.
 - FFmpeg and mkvtoolnix are installed in the `base` stage of `services/worker/Dockerfile`, shared
-  by `dev` and `runner`. `libplacebo` is compiled into that ffmpeg binary itself
-  (`--enable-libplacebo`) — the `vulkan-loader`/`mesa-vulkan-intel`/`mesa-vulkan-ati` packages
-  supply only the loader and drivers. `ffmpeg/vulkan.ts` probes at startup whether a usable device
-  exists and the encode falls back to a software tonemap chain when it doesn't
-  (`017-worker-gpu-strategy`) — do not assume `libplacebo` failing means the encode fails.
+  by `dev` and `runner`. Since spec `024`, the worker's HDR handling is a plain downscale that
+  preserves colour tags, on CPU, unconditionally — no filter chain choice, no device probe, no
+  render-node mapping anywhere in the stack. One Alpine sub-package spec `024` set out to remove
+  could not fully go: one of `ffmpeg`'s own components links a GPU-rendering library that Alpine's
+  package manager reinstalls transitively even with no explicit line naming it. It sits on disk,
+  linked by nothing — see spec `024`'s REQ-4 (`docs/spec/features/`) for why removing it outright
+  would mean compiling `ffmpeg` from source, out of proportion to a demolition feature.

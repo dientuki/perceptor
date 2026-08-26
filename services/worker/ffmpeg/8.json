@@ -8,8 +8,7 @@
       "spa"
     ],
     "originalLanguageIso3": "eng",
-    "isLiveAction": true,
-    "vulkanAvailable": true
+    "isLiveAction": true
   },
   "ffprobe": {
     "streams": [

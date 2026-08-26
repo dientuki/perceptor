@@ -45,8 +45,8 @@ Perceptor is the whole path as a single product:
   container adopts it before boot.
 
 ### Process
-- 🎞️ **H264 / VC-1 → AV1** via `libsvtav1`; **4K HDR10 and Dolby Vision tonemapped to 1080p SDR**;
-  audio to Opus.
+- 🎞️ **H264 / VC-1 → AV1** via `libsvtav1`; **4K HDR10 and Dolby Vision downscaled to 1080p with
+  their HDR preserved**, never flattened to SDR; audio to Opus.
 - 🗣️ **Language preferences you choose** — globally, plus extra languages per title. The encode
   keeps the original language plus the union of what every owner of that title asked for. Nobody
   ends up with a file they can't understand.
@@ -55,8 +55,6 @@ Perceptor is the whole path as a single product:
 - 📦 **Season packs fan out correctly**: every file is enumerated, matched to its episode by
   `SxxEyy`, and each becomes its own job — cleanup waits for the whole pack, not the first episode
   to finish.
-- ⚡ **GPU acceleration, auto-detected** for the tonemap pass — used automatically when the host has
-  a usable Vulkan device, with a software fallback otherwise (`USE_GPU=false` forces the CPU path).
 
 ### Enjoy
 - 🗂️ **Automatic filing** into your library layout.
@@ -135,9 +133,7 @@ You only need Docker and Docker Compose.
    ```bash
    bin/dev
    ```
-   Reads `USE_TRAEFIK` from `.env` to decide whether to include Traefik, and attaches the GPU
-   overlay automatically when the host has a render node at `/dev/dri` (`USE_GPU=false` in `.env`
-   forces it off). Without
+   Reads `USE_TRAEFIK` from `.env` to decide whether to include Traefik. Without
    Traefik, reach each service directly: `http://localhost:${WEB_PORT}`,
    `http://localhost:${API_PORT}/graphql`. First boot installs each service's `node_modules` into
    your working copy — that's intentional, and it's what your editor's TypeScript server reads.
@@ -203,9 +199,8 @@ Rough edges, stated plainly:
 - **Production images aren't reproducible yet.** The three Node services run their `dev` stage and
   install dependencies at first boot. Tracked as spec `015-reproducible-image-builds`.
 - **Season packs are api-only.** `addMagnetToSeason` works; there's no web UI for it yet.
-- **AV1 encoding is CPU-bound by design** — no current consumer GPU encodes AV1 in hardware. `USE_GPU`
-  only affects the tonemap pass; leaving it unset auto-detects a usable Vulkan device and falls back
-  to a software chain when there isn't one (`017-worker-gpu-strategy`).
+- **AV1 encoding is CPU-bound by design** — no current consumer GPU encodes AV1 in hardware, and
+  the pipeline has no GPU-accelerated stage of any kind.
 - **Which indexers sit behind Cloudflare is a manual call.** The FlareSolverr proxy is registered
   automatically, but tagging the indexers that need it stays a step in Prowlarr's UI.
 - **Jellyfin is the only media server client** implemented so far, and it's expected to run outside

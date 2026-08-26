@@ -23,7 +23,6 @@ export function buildFfmpegCommand(
   output: string,
   metadata: FfmpegMetadata,
   details: EncodeInput,
-  vulkanAvailable: boolean,
 ): string[] {
   const vStream = metadata.streams.find((s) => s.codec_type === "video");
   const aStreams = metadata.streams.filter((s) => s.codec_type === "audio");
@@ -50,7 +49,7 @@ export function buildFfmpegCommand(
     "-nostats",
     "-loglevel",
     "error",
-    ...getVideoParams(vStream, details.isLiveAction, vulkanAvailable, quality),
+    ...getVideoParams(vStream, details.isLiveAction, quality),
     ...getAudioParams(aStreams, details.allowedLanguagesIso3, details.originalLanguageIso3),
     ...getSubtitleParams(sStreams, details.allowedLanguagesIso3),
     "-map_metadata:g",

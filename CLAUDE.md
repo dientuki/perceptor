@@ -15,7 +15,7 @@ implementation detail.
 | Download | qBittorrent (`torrent`), `api` — `src/clients/torrent/client.ts`, per-torrent save path | `010` |
 | Detect completion, enqueue | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer) | — |
 | Scan files, inventory | `worker` — enumerates every file, resolves episodes by parsing `SxxEyy`; episode names come from the api, never the filename | `013` |
-| Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K tonemapped to 1080p SDR, Opus audio; decided from `ffprobe`, not the filename. The 4K tonemap runs on GPU (`libplacebo`/Vulkan) when the host has one, or a software chain otherwise — detected at worker startup, not configured. A season pack fans out into one `ProcessJob` per episode | `011`, `013`, `017` |
+| Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K downscaled to 1080p preserving HDR (Dolby Vision/HDR10 keep their colour tags rather than flattening to SDR), Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode | `011`, `013`, `024` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`) | — |
 | Browse library | `api` — the three resolvers; `web` — `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010` |
 
@@ -74,7 +74,7 @@ wrappers in `bin/`, which shell into the running containers.
 | Script | What it does | Example |
 | :-- | :-- | :-- |
 | `bin/install` | generates `.env` from `.env.example`, asking Traefik y/n + domain | run once, first checkout |
-| `bin/dev` | `docker compose up -d` in dev mode, reads `USE_TRAEFIK` from `.env`, always adds the `docker-compose.dev.yaml` overlay | `bin/dev` |
+| `bin/dev [args…]` | `docker compose up` in dev mode, reads `USE_TRAEFIK` from `.env`, always adds the `docker-compose.dev.yaml` overlay; any arguments are forwarded to `docker compose up` before the service list — pass `-d` yourself for detached, omit it to stream logs in the foreground | `bin/dev -d` |
 | `bin/prod` | same, `BUILD_TARGET=runner`, rebuilds and runs the image it built — no dev overlay | `bin/prod` |
 | `bin/build [service]` | builds the `runner` images without starting containers; no argument builds all five own services | `bin/build web` |
 | `bin/cli <service> <cmd…>` | `docker compose exec -it <service> <cmd…>` | `bin/cli api npx prisma migrate status` |
@@ -92,8 +92,8 @@ Source is bind-mounted (`./services/<svc>:/app`), so edits hot-reload. The dev s
 `node_modules` on first boot if missing, which means `node_modules` lands in your host working copy —
 intentional, and it is what your editor's TypeScript server reads.
 
-The bind mount and dev-only variables live in `docker-compose.dev.yaml`, an overlay in the same style
-as `docker-compose.gpu.yaml` — `bin/dev` always adds it with `-f`, `bin/prod`/`bin/build` never do.
+The bind mount and dev-only variables live in `docker-compose.dev.yaml`, a compose overlay —
+`bin/dev` always adds it with `-f`, `bin/prod`/`bin/build` never do.
 `docker-compose.yaml` on its own describes the runtime, so `bin/prod` runs exactly the `runner` image
 it built rather than hiding it behind the host's working copy. Each Node service carries its own
 `.dockerignore` (`015-reproducible-image-builds`).
@@ -131,11 +131,9 @@ Rules that are not obvious from the variable names:
   stays manual in Prowlarr's UI (`014-dev-stack-flaresolverr`).
 - **`BUILD_TARGET`** picks the Dockerfile stage (`dev` by default, `runner` for production); every
   Dockerfile has `base` / `dev` / `builder` / `runner`.
-- **`USE_GPU` is an opt-out, not an opt-in.** `bin/dev`/`bin/prod`/`bin/build` attach
-  `docker-compose.gpu.yaml` (mapping `/dev/dri` into `worker`) whenever the host has a render node,
-  and the worker probes at startup whether `libplacebo` can actually initialize Vulkan there,
-  falling back to a software tonemap chain when it can't. Only the literal string `false` forces the
-  CPU path on both sides; there is no value that forces GPU use. `017-worker-gpu-strategy`.
+- **The transcode path is unconditional.** `bin/dev`/`bin/prod`/`bin/build` produce the identical
+  `docker compose` invocation on every host, with nothing detected, opted out of, or asked about at
+  install time — see spec `024` (`docs/spec/features/`) for what this replaced and why.
 - **The media server is not in `docker-compose.yaml`** — Jellyfin is assumed to run outside the stack.
   That is why `MediaServerService.notifyCreated` translates the container output path to the host path
   via `MediaRootsService.containerToHostPath()` before sending it.

@@ -2,7 +2,7 @@
 title: Retire the GPU Tonemap Strategy — infra slice
 service: infra
 last_updated: 2026-08-25
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Retire the GPU Tonemap Strategy — `infra` (`infra/plan.md`)

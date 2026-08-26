@@ -3,7 +3,6 @@ import { PROCESS_QUEUE, SOURCE_READY_JOB, ENCODE_QUEUE, ENCODE_JOB } from './que
 import type { SourceReadyJob, EncodeJob } from './queue/types';
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
-import { probeVulkan } from './ffmpeg/vulkan';
 
 // El container corre como PUID:PGID (ver docker-compose.yaml, "user:"), no
 // root: sin esto el umask por defecto (022) deja carpetas 755/root y archivos
@@ -27,15 +26,6 @@ const connection = {
 // NFR-1), so the whole startup is wrapped in this async bootstrap rather
 // than switching the package to ESM as a side effect of this feature.
 async function main() {
-  // REQ-6: the selected path and the reason for it, logged exactly once at
-  // startup — "no Vulkan device", "forced off by USE_GPU=false" or "Vulkan
-  // in use". probeVulkan() itself never rejects (NFR-2), so this can't
-  // block the boot on a wedged driver.
-  const { available, reason } = await probeVulkan();
-  console.log(
-    `[worker] tonemap path: ${available ? 'Vulkan (libplacebo)' : 'CPU (zscale/tonemap)'} — reason: ${reason}`,
-  );
-
   const scanWorker = new Worker<SourceReadyJob>(
     PROCESS_QUEUE,
     async (job) => {

@@ -2,7 +2,7 @@
 title: Retire the GPU Tonemap Strategy — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-08-25
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Retire the GPU Tonemap Strategy (`plan.md`)
