@@ -293,8 +293,8 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-08-26 (`026-multi-search`): `bin/cli api npx --no tsc --noEmit` reports **0 errors**,
-`bin/npm api test` is green at **203** tests across **23** suites. **Re-run both rather than
+As of 2026-08-26 (`020-profile-edit`): `bin/cli api npx --no tsc --noEmit` reports **0 errors**,
+`bin/npm api test` is green at **208** tests across **23** suites. **Re-run both rather than
 trusting these numbers** — they exist so an agent can prove a change added nothing, not as a fact
 to cite.
 

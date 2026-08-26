@@ -42,7 +42,8 @@
     "validation": {
       "missingLocale": "Missing language to save.",
       "missingSettingsValues": "There are no values to save.",
-      "passwordMismatch": "Passwords do not match"
+      "passwordMismatch": "Passwords do not match",
+      "passwordPairIncomplete": "Fill in both password fields or leave both blank"
     }
   },
   "landing": {
@@ -72,6 +73,17 @@
     "signOut": "Sign out",
     "themeLight": "Light mode",
     "themeDark": "Dark mode"
+  },
+  "profile": {
+    "title": "Edit profile",
+    "nameLabel": "Name",
+    "usernameLabel": "Username",
+    "passwordLabel": "New password",
+    "passwordHint": "Leave blank to keep the current password",
+    "passwordConfirmLabel": "Confirm new password",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving..."
   },
   "header": {
     "searchPlaceholder": "Search Movies & Series",

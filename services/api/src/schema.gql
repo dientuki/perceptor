@@ -245,6 +245,7 @@ type Mutation {
   createUser(createUserInput: CreateUserInput!): User!
   updateUser(updateUserInput: UpdateUserInput!): User!
   removeUser(id: ID!): User!
+  updateProfile(updateProfileInput: UpdateProfileInput!): User!
 
   """Envía un release elegido a qBittorrent y lo asocia a la película"""
   addTorrentToMovie(movieId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
@@ -324,6 +325,12 @@ input UpdateUserInput {
   password: String
   id: ID!
   isEnabled: Boolean
+}
+
+input UpdateProfileInput {
+  name: String!
+  username: String!
+  password: String
 }
 
 input SettingInput {

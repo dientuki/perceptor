@@ -2,7 +2,7 @@
 title: Profile Edit — web slice
 service: web
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Profile Edit — `web` (`web/plan.md`)

@@ -42,7 +42,8 @@
     "validation": {
       "missingLocale": "Falta el idioma a guardar.",
       "missingSettingsValues": "No hay valores para guardar.",
-      "passwordMismatch": "Las contraseñas no coinciden"
+      "passwordMismatch": "Las contraseñas no coinciden",
+      "passwordPairIncomplete": "Completá ambos campos de contraseña o dejá los dos vacíos"
     }
   },
   "landing": {
@@ -72,6 +73,17 @@
     "signOut": "Cerrar sesión",
     "themeLight": "Modo claro",
     "themeDark": "Modo oscuro"
+  },
+  "profile": {
+    "title": "Editar perfil",
+    "nameLabel": "Nombre",
+    "usernameLabel": "Usuario",
+    "passwordLabel": "Nueva contraseña",
+    "passwordHint": "Dejá en blanco para mantener la contraseña actual",
+    "passwordConfirmLabel": "Confirmar nueva contraseña",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "saving": "Guardando..."
   },
   "header": {
     "searchPlaceholder": "Buscar Películas & Series",

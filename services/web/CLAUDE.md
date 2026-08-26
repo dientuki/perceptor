@@ -276,14 +276,19 @@ template this project was bootstrapped from. A component under those directories
 probably template scaffolding, not dead code from this project — check before deleting.
 
 **`src/components/header/UserDropdown.tsx` is no longer template scaffolding** (`019-user-menu`).
-Its icons come from `lucide-react` (`User`/`Settings`/`LogOut`, plus `Moon`/`Sun` since
+Its icons come from `lucide-react` (`UserPen`/`Settings`/`LogOut`, plus `Moon`/`Sun` since
 `025-header-redesign`), not inline `<svg>` — do not reintroduce hand-copied SVG path data here.
-*Editar perfil* is deliberately a dead `DropdownItem`: no `href`, no navigation, just closes the
-panel — `020-profile-edit` will wire it to a modal later; do not "fix" it by pointing it at a
-`/profile` route in the meantime. The trigger button's `.dropdown-toggle` class is load-bearing:
-`Dropdown.tsx:25`'s outside-click handler special-cases it so a click on the trigger doesn't
-immediately re-close the panel it just opened — losing that class makes the menu appear to never
-open, with no error anywhere.
+The trigger button's `.dropdown-toggle` class is load-bearing: `Dropdown.tsx:25`'s outside-click
+handler special-cases it so a click on the trigger doesn't immediately re-close the panel it just
+opened — losing that class makes the menu appear to never open, with no error anywhere.
+
+**`020-profile-edit`**: *Editar perfil* is now `onItemClick`-wired to open `ProfileModal`
+(`src/components/profile/ProfileModal.tsx`), still with no `href` — there is no `/profile` route
+and none is planned. `src/actions/profile.ts`'s `updateProfileAction` follows the standard
+server-action shape, with one deliberate addition: the two REQ-4 password-pair messages come from
+`useTranslations`/`getTranslations("errors")` rather than being hardcoded, since `018-ui-i18n` had
+already migrated this component's siblings by the time this feature landed — `translateGraphQLError`
+handles every error `api` returns, exactly like `createUserAction`.
 
 **The header (`src/layout/AppHeader.tsx`) is three elements at every breakpoint** since
 `025-header-redesign`: sidebar toggle, search form, avatar — no theme button, no notification
@@ -333,7 +338,7 @@ parity check with an exit code.
 
 ## Current state
 
-As of 2026-08-26 (`026-multi-search`): `bin/cli web npx --no tsc --noEmit` reports **0 errors** and
+As of 2026-08-26 (`020-profile-edit`): `bin/cli web npx --no tsc --noEmit` reports **0 errors** and
 `bin/npm web run build` exits 0. Re-run both rather than trusting this — report the numbers before
 and after a change to prove you added nothing.
 

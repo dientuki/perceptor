@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-19
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -41,54 +41,54 @@ adds no stage and moves none forward.
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Modal, not a route)**: *Editar perfil* in the header user menu must open a modal over
+- [x] **REQ-1 (Modal, not a route)**: *Editar perfil* in the header user menu must open a modal over
       the current screen. No `/profile` route (or any other new route) may be added, and the URL must
       not change when the modal opens or closes.
-- [ ] **REQ-2 (Fields)**: The modal must show exactly four inputs — `name`, `username`, a new
+- [x] **REQ-2 (Fields)**: The modal must show exactly four inputs — `name`, `username`, a new
       password and a password confirmation — plus a submit and a cancel/close control. `name` and
       `username` must arrive pre-filled with the current user's values.
-- [ ] **REQ-3 (Required fields)**: `name` and `username` are required. A submit with either one empty
+- [x] **REQ-3 (Required fields)**: `name` and `username` are required. A submit with either one empty
       must not reach the server.
-- [ ] **REQ-4 (Password is all-or-nothing)**: Both password fields empty means "do not change the
+- [x] **REQ-4 (Password is all-or-nothing)**: Both password fields empty means "do not change the
       password", and the request must carry no password at all. Both filled and matching means
       "change it". Exactly one of the two filled, or two filled that differ, must be refused before
       the request is sent, without clearing the rest of the form.
-- [ ] **REQ-5 (Front-end validation uses the browser)**: The client-side layer must be the browser's
+- [x] **REQ-5 (Front-end validation uses the browser)**: The client-side layer must be the browser's
       own constraint validation (`required`, `minlength`, and native validity reporting) — no
       validation library, no hand-rolled per-field error state. The pair rules in REQ-4 are the only
       client-side checks the browser cannot express on its own.
-- [ ] **REQ-6 (Server-side validation is authoritative)**: The API must re-validate everything
+- [x] **REQ-6 (Server-side validation is authoritative)**: The API must re-validate everything
       regardless of what the client did — `name` non-empty, `username` at least 3 characters and not
       already taken by another user, and, when present, a password of at least 6 characters stored
       hashed, never in plaintext.
-- [ ] **REQ-7 (Self only)**: `updateProfile` must act on the authenticated caller and on nobody else.
+- [x] **REQ-7 (Self only)**: `updateProfile` must act on the authenticated caller and on nobody else.
       It must accept no user id, and must be unable to change `isAdmin`, `isEnabled`, or any field
       other than `name`, `username` and `password`.
-- [ ] **REQ-8 (Error presentation)**: On any error returned by the server, the modal must stay open,
+- [x] **REQ-8 (Error presentation)**: On any error returned by the server, the modal must stay open,
       show the message in a red banner above the form, and move focus to the first field. No field
       values are lost.
-- [ ] **REQ-9 (Success)**: On success the modal must close, and the name shown in the header user
+- [x] **REQ-9 (Success)**: On success the modal must close, and the name shown in the header user
       menu must be the new one without the user reloading the page. If the name did not change, the
       header simply keeps showing the same value.
-- [ ] **REQ-10 (Session survives)**: A successful change — including a change of `username` or of the
+- [x] **REQ-10 (Session survives)**: A successful change — including a change of `username` or of the
       password — must leave the caller signed in, in this browser and in any other session they hold.
       No session is revoked and no redirect to `/login` happens.
-- [ ] **REQ-11 (Trigger icon)**: The *Editar perfil* entry in the header user menu must carry the
+- [x] **REQ-11 (Trigger icon)**: The *Editar perfil* entry in the header user menu must carry the
       `UserPen` icon from `lucide-react`, replacing the `User` icon `019-user-menu` gave it. Same
       `size={18}` as the other two entries; `Settings` and `LogOut` are untouched, and nothing else
       about the entry changes — it stays destination-less and becomes the modal's trigger per REQ-1.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Admin surface untouched)**: `updateUser`, `UpdateUserInput` and the `/users` screen
+- [x] **NFR-1 (Admin surface untouched)**: `updateUser`, `UpdateUserInput` and the `/users` screen
       must behave exactly as they do today. The self-service path is additive.
-- [ ] **NFR-2 (No current-password check)**: Changing the password does not require re-entering the
+- [x] **NFR-2 (No current-password check)**: Changing the password does not require re-entering the
       current one. This is a deliberate, recorded decision for a LAN-only application, not an
       oversight — see § Out of Scope.
-- [ ] **NFR-3 (Spanish copy, literal)**: Every visible label and message is a Spanish string literal,
+- [x] **NFR-3 (Spanish copy, literal)**: Every visible label and message is a Spanish string literal,
       matching the app as it stands. This feature must not introduce or consume a translation
       catalog — `018-ui-i18n` owns that migration and will pick this component up with the rest.
-- [ ] **NFR-4 (No typecheck or build regression)**: `bin/cli api npx --no tsc --noEmit` and
+- [x] **NFR-4 (No typecheck or build regression)**: `bin/cli api npx --no tsc --noEmit` and
       `bin/cli web npx --no tsc --noEmit` must both report 0 errors, and `bin/npm web run build` must
       exit 0, reported before and after the change.
 
@@ -154,36 +154,36 @@ surface could already write.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Signed in, clicking *Editar perfil* in the header menu opens a modal pre-filled with
+- [x] **AC-1**: Signed in, clicking *Editar perfil* in the header menu opens a modal pre-filled with
       the current `name` and `username`, with both password fields empty, and the browser's address
       bar unchanged.
-- [ ] **AC-2**: Changing `name` to a new value and submitting closes the modal, and the header user
+- [x] **AC-2**: Changing `name` to a new value and submitting closes the modal, and the header user
       menu shows the new name with no page reload. Reopening the modal shows the new value, and
       `bin/mysql -e 'select name from User where username = "<username>"'` prints it.
-- [ ] **AC-3**: Changing `username` to a free value and submitting closes the modal; the user stays
+- [x] **AC-3**: Changing `username` to a free value and submitting closes the modal; the user stays
       signed in (navigating to another screen does not bounce to `/login`), and signing out and back
       in with the new username succeeds.
-- [ ] **AC-4**: Filling both password fields with the same value of 6+ characters and submitting
+- [x] **AC-4**: Filling both password fields with the same value of 6+ characters and submitting
       closes the modal, the session stays alive, and signing out and back in with the new password
       succeeds while the old password is refused.
-- [ ] **AC-5** *(failure path)*: Submitting a `username` that another user already has leaves the
+- [x] **AC-5** *(failure path)*: Submitting a `username` that another user already has leaves the
       modal open with `El nombre de usuario ya está registrado` in a red banner above the form, focus
       on the first field, every entered value still in place, and the row unchanged in the database.
-- [ ] **AC-6** *(failure path)*: Clearing `name` and pressing submit is blocked by the browser itself
+- [x] **AC-6** *(failure path)*: Clearing `name` and pressing submit is blocked by the browser itself
       — no request leaves the page (nothing in the network log, no change in the database).
-- [ ] **AC-7** *(failure path)*: Filling only one of the two password fields, or two that differ,
+- [x] **AC-7** *(failure path)*: Filling only one of the two password fields, or two that differ,
       leaves the modal open with the corresponding `web` message in the red banner and no request
       sent to the API.
-- [ ] **AC-8** *(failure path)*: Calling `updateProfile` with a 3-character password (bypassing the
+- [x] **AC-8** *(failure path)*: Calling `updateProfile` with a 3-character password (bypassing the
       browser, e.g. from the GraphQL playground with a user cookie) returns
       `La contraseña debe tener al menos 6 caracteres` and leaves the row unchanged.
-- [ ] **AC-9** *(failure path)*: Calling `updateProfile` with the `SERVICE_TOKEN` as bearer returns
+- [x] **AC-9** *(failure path)*: Calling `updateProfile` with the `SERVICE_TOKEN` as bearer returns
       `No autenticado`.
-- [ ] **AC-10**: `grep -rn "\"/profile\"\|'/profile'" services/web/src` returns nothing, and no
+- [x] **AC-10**: `grep -rn "\"/profile\"\|'/profile'" services/web/src` returns nothing, and no
       `profile` directory exists under `services/web/src/app`.
-- [ ] **AC-11**: `bin/cli api npx --no tsc --noEmit` and `bin/cli web npx --no tsc --noEmit` both
+- [x] **AC-11**: `bin/cli api npx --no tsc --noEmit` and `bin/cli web npx --no tsc --noEmit` both
       report 0 errors; `bin/npm api test` reports no failures.
-- [ ] **AC-12**: The *Editar perfil* entry renders the pen-over-user glyph — `grep -n "UserPen"
+- [x] **AC-12**: The *Editar perfil* entry renders the pen-over-user glyph — `grep -n "UserPen"
       services/web/src/components/header/UserDropdown.tsx` matches the import and the render, and the
       bare `User` icon no longer appears in the JSX (REQ-11).
 

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -226,6 +226,75 @@ describe('UsersService', () => {
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
       expect(prisma.user.count).not.toHaveBeenCalled();
       expect(sessionService.revokeAllForUser).not.toHaveBeenCalled();
+    });
+  });
+
+  // This suite exists because otherwise `updateProfile` fails silently in
+  // three different ways (`020-profile-edit` plan.md § Risks): a future
+  // `...input` spread lets a caller escalate `isAdmin`/`isEnabled` with a
+  // normal-looking success; an omitted hash call writes a login-breaking
+  // plaintext password; and an unexcluded self-collision on the uniqueness
+  // check rejects a name-only edit forever with a confusing message.
+  describe('updateProfile', () => {
+    it('writes only name, username and password — never a spread of the input', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.update.mockResolvedValue(other);
+
+      await service.updateProfile(other.id, {
+        name: 'New Name',
+        username: 'newusername',
+        password: 'newpassword',
+      });
+
+      const writtenData = prisma.user.update.mock.calls[0][0].data;
+      expect(Object.keys(writtenData).sort()).toEqual(['name', 'password', 'username']);
+    });
+
+    it('hashes the password instead of writing it in plaintext', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.update.mockResolvedValue(other);
+
+      await service.updateProfile(other.id, {
+        name: other.name,
+        username: other.username,
+        password: 'newpassword',
+      });
+
+      const writtenData = prisma.user.update.mock.calls[0][0].data;
+      expect(writtenData.password).not.toBe('newpassword');
+      expect(await bcrypt.compare('newpassword', writtenData.password as string)).toBe(true);
+    });
+
+    it('omits password from the update payload entirely when none is given', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.update.mockResolvedValue(other);
+
+      await service.updateProfile(other.id, { name: 'New Name', username: other.username });
+
+      const writtenData = prisma.user.update.mock.calls[0][0].data;
+      expect('password' in writtenData).toBe(false);
+    });
+
+    it('accepts the caller keeping their own current username', async () => {
+      prisma.user.findUnique.mockResolvedValue(other);
+      prisma.user.update.mockResolvedValue(other);
+
+      await expect(
+        service.updateProfile(other.id, { name: 'New Name', username: other.username }),
+      ).resolves.toEqual(other);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: other.id },
+        data: { name: 'New Name', username: other.username },
+      });
+    });
+
+    it('rejects a username belonging to someone else', async () => {
+      prisma.user.findUnique.mockResolvedValue(admin);
+
+      await expect(
+        service.updateProfile(other.id, { name: other.name, username: admin.username }),
+      ).rejects.toThrow(new ConflictException('That username is already registered'));
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 

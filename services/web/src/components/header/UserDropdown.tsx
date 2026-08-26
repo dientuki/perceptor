@@ -1,11 +1,12 @@
 "use client";
-import { LogOut, Moon, Settings, Sun, User } from "lucide-react";
+import { LogOut, Moon, Settings, Sun, UserPen } from "lucide-react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useState } from "react";
 import type { CurrentUser } from "@/actions/auth";
 import { logoutAction } from "@/actions/auth";
+import ProfileModal from "@/components/profile/ProfileModal";
 import { Dropdown } from "@/components/ui/dropdown/Dropdown";
 import { DropdownItem } from "@/components/ui/dropdown/DropdownItem";
 import { useTheme } from "@/context/ThemeContext";
@@ -16,6 +17,7 @@ interface UserDropdownProps {
 
 export default function UserDropdown({ user }: UserDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const t = useTranslations("userMenu");
   const tCommon = useTranslations("common");
   const { theme, toggleTheme } = useTheme();
@@ -60,10 +62,13 @@ export default function UserDropdown({ user }: UserDropdownProps) {
         <ul className="flex flex-col gap-1 pt-4 pb-3 border-b border-gray-200 dark:border-gray-800">
           <li>
             <DropdownItem
-              onItemClick={closeDropdown}
+              onItemClick={() => {
+                closeDropdown();
+                setIsProfileOpen(true);
+              }}
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
-              <User size={18} />
+              <UserPen size={18} />
               {t("editProfile")}
             </DropdownItem>
           </li>
@@ -108,6 +113,12 @@ export default function UserDropdown({ user }: UserDropdownProps) {
           </button>
         </form>
       </Dropdown>
+
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        user={user}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 title: Profile Edit — api slice
 service: api
 last_updated: 2026-08-19
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Profile Edit — `api` (`api/plan.md`)
