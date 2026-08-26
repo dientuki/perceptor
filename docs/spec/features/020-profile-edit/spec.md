@@ -3,7 +3,7 @@ title: Profile Edit
 spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-19
-last_updated: 2026-08-19
+last_updated: 2026-08-26
 status: Approved
 services: [api, web]
 ---
@@ -73,6 +73,10 @@ adds no stage and moves none forward.
 - [ ] **REQ-10 (Session survives)**: A successful change — including a change of `username` or of the
       password — must leave the caller signed in, in this browser and in any other session they hold.
       No session is revoked and no redirect to `/login` happens.
+- [ ] **REQ-11 (Trigger icon)**: The *Editar perfil* entry in the header user menu must carry the
+      `UserPen` icon from `lucide-react`, replacing the `User` icon `019-user-menu` gave it. Same
+      `size={18}` as the other two entries; `Settings` and `LogOut` are untouched, and nothing else
+      about the entry changes — it stays destination-less and becomes the modal's trigger per REQ-1.
 
 ### Non-Functional & Operational Requirements
 
@@ -179,6 +183,9 @@ surface could already write.
       `profile` directory exists under `services/web/src/app`.
 - [ ] **AC-11**: `bin/cli api npx --no tsc --noEmit` and `bin/cli web npx --no tsc --noEmit` both
       report 0 errors; `bin/npm api test` reports no failures.
+- [ ] **AC-12**: The *Editar perfil* entry renders the pen-over-user glyph — `grep -n "UserPen"
+      services/web/src/components/header/UserDropdown.tsx` matches the import and the render, and the
+      bare `User` icon no longer appears in the JSX (REQ-11).
 
 ## Out of Scope
 

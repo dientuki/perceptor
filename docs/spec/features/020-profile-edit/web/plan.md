@@ -1,7 +1,7 @@
 ---
 title: Profile Edit — web slice
 service: web
-last_updated: 2026-08-19
+last_updated: 2026-08-26
 status: Approved
 ---
 
@@ -28,7 +28,7 @@ Writes are confined to `services/web/` and this directory. Anything else is a st
 | :-- | :-- | :-- |
 | `services/web/src/actions/profile.ts` | New | `'use server'`, `UPDATE_PROFILE_MUTATION`, `updateProfileAction`. |
 | `services/web/src/components/profile/ProfileModal.tsx` | New | The client modal: four controlled inputs, red banner, focus handling. |
-| `services/web/src/components/header/UserDropdown.tsx` | Modified | Holds the modal's open state; *Editar perfil* opens it instead of navigating. |
+| `services/web/src/components/header/UserDropdown.tsx` | Modified | Holds the modal's open state; *Editar perfil* opens it instead of navigating, and swaps its icon to `UserPen` (REQ-11). |
 
 ## Existing code to reuse
 
@@ -104,9 +104,14 @@ Writes are confined to `services/web/` and this directory. Anything else is a st
    *Editar perfil* `DropdownItem` gets `onItemClick={() => { closeDropdown();
    setIsProfileOpen(true); }}` and **no `href`** (a `DropdownItem` with `tag="button"`, its default);
    render `<ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} user={user} />`
-   as a sibling of the `Dropdown`. If `019-user-menu` has not landed yet, this means deleting that
-   entry's `href="/profile"` and nothing else from `019`'s rewrite — read `../plan.md` § Order of
-   Work before touching the file.
+   as a sibling of the `Dropdown`. `019-user-menu` has landed, so the entry is already
+   destination-less and already renders a lucide icon — there is no `href="/profile"` left to delete.
+   Read `../plan.md` § Order of Work before touching the file.
+7. **The icon** (REQ-11) — in the same file, change the `lucide-react` import on line 2 from `User`
+   to `UserPen` and the entry's `<User size={18} />` to `<UserPen size={18} />`. `Settings` and
+   `LogOut` stay as they are, and `size={18}` does not change. `User` disappears from the import
+   list entirely — `CurrentUser` and `UserDropdown` are unrelated identifiers, so a blind
+   search-and-replace on `User` breaks the file.
 
 ## Contract obligations
 

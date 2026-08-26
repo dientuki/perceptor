@@ -1,7 +1,7 @@
 ---
 title: Profile Edit — Implementation Plan
 spec_version: 0.1.0
-last_updated: 2026-08-19
+last_updated: 2026-08-26
 status: Approved
 ---
 
@@ -71,9 +71,15 @@ delta before `api` merges, but it cannot be *verified* until step 1 is up in the
 REQ-7 leaves *Editar perfil* as a destination-less `DropdownItem` — precisely so this feature can
 hang a modal on it. If `019` has landed, the `web` slice adds `onItemClick` state and the modal. If it
 has **not**, the `web` slice wires the modal onto the existing *Edit profile* entry, deletes its
-`href="/profile"`, and does nothing else from `019`'s rewrite — no icon swap, no trigger change, no
-entry deletions. Do not implement `019` from inside this feature, and stop and report if the file
+`href="/profile"`, and does nothing else from `019`'s rewrite — no trigger change, no entry
+deletions. Do not implement `019` from inside this feature, and stop and report if the file
 looks like neither shape.
+
+**Amended 2026-08-26.** `019` has landed, so the first branch is the live one: the `web` slice adds
+`onItemClick` state and the modal. The one thing this feature now *does* take from `019`'s territory
+is the icon — REQ-11 replaces *Editar perfil*'s `User` with `UserPen`. That is deliberate and scoped
+to that single entry, and it is the only exception to "no icon swap" above; `019`'s own documents are
+left alone, since the feature they describe shipped as written.
 
 ## Contract Freeze
 
