@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+    echo "Uso: $0 input.mkv [output.mkv]"
+    exit 1
+fi
+
+if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "Error: ffmpeg no está instalado."
+    exit 1
+fi
+
+INPUT="$1"
+OUTPUT="${2:-${INPUT%.*}.sample.mkv}"
+
+if [[ ! -f "$INPUT" ]]; then
+    echo "Error: no existe el archivo: $INPUT"
+    exit 1
+fi
+
+echo "Input:      $INPUT"
+echo "Output:     $OUTPUT"
+echo "Inicio:     ~5 minutos"
+echo "Duración:   60 segundos"
+echo "Resolución: máximo 1024x768"
+echo
+
+if ffmpeg \
+    -hide_banner -threads 0 -loglevel error \
+    -stats \
+    -y \
+    -ss 300 \
+    -i "$INPUT" \
+    -t 60 \
+    -map 0 \
+    -map_metadata 0 \
+    -map_chapters 0 \
+    -vf "scale=1024:768:force_original_aspect_ratio=decrease" \
+    -c:v libx264 \
+    -preset veryfast \
+    -crf 18 \
+    -c:a copy \
+    -c:s copy \
+    -c:d copy \
+    -c:t copy \
+    "$OUTPUT"
+then
+    echo
+    echo "Listo: $OUTPUT"
+else
+    echo
+    echo "Error: ffmpeg falló."
+    rm -f "$OUTPUT"
+    exit 1
+fi

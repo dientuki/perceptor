@@ -24,4 +24,4 @@ if [ -d /dev/dri ] && [ "${USE_GPU}" != "false" ]; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.gpu.yaml"
 fi
 
-BUILD_TARGET=dev docker compose $COMPOSE_FILES up $SERVICES
+BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d $SERVICES

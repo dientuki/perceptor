@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Asegura que estamos en la raíz del proyecto
+cd "$(dirname "$0")/.."
+
+# Carga las variables del .env
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+fi
+
+mkdir -p backup
+
+FILE="backup/$(date +%Y-%m-%d).sql"
+
+docker compose exec -T db mariadb-dump -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" > "${FILE}"
+
+if [ $? -eq 0 ]; then
+  echo "✅ Backup guardado en ${FILE}"
+else
+  echo "❌ Error al exportar la base de datos."
+fi
