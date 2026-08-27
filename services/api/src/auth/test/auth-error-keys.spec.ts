@@ -58,7 +58,6 @@ describe('auth throw sites carry the frozen i18n keys', () => {
       const resolver = new AuthResolver(
         {} as never,
         {} as never,
-        {} as never,
       );
 
       const key = await i18nKeyOfAsync(() => resolver.me({ type: 'service', name: 'svc' }));

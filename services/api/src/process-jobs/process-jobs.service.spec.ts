@@ -17,7 +17,7 @@ describe('ProcessJobsService', () => {
   let service: ProcessJobsService;
   let prisma: {
     processJob: { findUnique: jest.Mock; update: jest.Mock; findMany: jest.Mock };
-    language: { findUnique: jest.Mock };
+    language: { findUnique: jest.Mock; findMany: jest.Mock };
     userMovie: { findMany: jest.Mock };
     userShow: { findMany: jest.Mock };
     movie: { update: jest.Mock };
@@ -32,7 +32,7 @@ describe('ProcessJobsService', () => {
   beforeEach(async () => {
     prisma = {
       processJob: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
-      language: { findUnique: jest.fn() },
+      language: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       userMovie: { findMany: jest.fn() },
       userShow: { findMany: jest.fn() },
       movie: { update: jest.fn() },
@@ -108,10 +108,10 @@ describe('ProcessJobsService', () => {
   });
 
   // Owner row shape returned by both userMovie.findMany and userShow.findMany
-  // with the `select` used in the service — nested global (user.languages)
-  // and per-title (languages) preferences.
-  const owner = (globalIso3s: string[], titleIso3s: string[]) => ({
-    user: { languages: globalIso3s.map((iso3) => ({ language: { iso3 } })) },
+  // with the `select` used in the service — per-title (languages) preference
+  // only. The global level (029) is a `default_languages` setting, not a
+  // per-owner row anymore.
+  const owner = (titleIso3s: string[]) => ({
     languages: titleIso3s.map((iso3) => ({ language: { iso3 } })),
   });
 
@@ -161,24 +161,26 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  describe('getEncodeJobDetails — REQ-3 language merge', () => {
-    it('unions two owners with different global preferences and one per-title extra', async () => {
+  describe('getEncodeJobDetails — REQ-3/REQ-8 language merge', () => {
+    it('unions the original language, the installation default and one per-title extra', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      // resolveIso3 (original language) and resolveDefaultLanguagesIso3
+      // (default_languages) both call language table methods, so both must
+      // be stubbed distinctly.
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
-      prisma.userMovie.findMany.mockResolvedValue([
-        owner(['spa'], []),
-        owner([], ['eng']),
-      ]);
+      prisma.language.findMany.mockResolvedValue([{ iso2: 'es', iso3: 'spa' }]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', default_languages: 'es' });
+      prisma.userMovie.findMany.mockResolvedValue([owner(['eng'])]);
 
       const details = await service.getEncodeJobDetails(1);
 
       expect(details.allowedLanguagesIso3.sort()).toEqual(['eng', 'jpn', 'spa'].sort());
     });
 
-    it('always includes the original language even with zero preferences', async () => {
+    it('always includes the original language even with zero preferences and no default set', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
-      prisma.userMovie.findMany.mockResolvedValue([owner([], [])]);
+      prisma.userMovie.findMany.mockResolvedValue([owner([])]);
 
       const details = await service.getEncodeJobDetails(1);
 
@@ -188,7 +190,7 @@ describe('ProcessJobsService', () => {
     it('returns iso3 codes, not iso2 — fails if the join selects the wrong field', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
-      prisma.userMovie.findMany.mockResolvedValue([owner(['spa'], [])]);
+      prisma.userMovie.findMany.mockResolvedValue([owner(['spa'])]);
 
       const details = await service.getEncodeJobDetails(1);
 
@@ -203,7 +205,7 @@ describe('ProcessJobsService', () => {
     it('resolves an episode\'s owners through season.show, not through the episode', async () => {
       prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
-      prisma.userShow.findMany.mockResolvedValue([owner(['eng'], [])]);
+      prisma.userShow.findMany.mockResolvedValue([owner(['eng'])]);
 
       const details = await service.getEncodeJobDetails(2);
 
@@ -225,6 +227,24 @@ describe('ProcessJobsService', () => {
       const details = await service.getEncodeJobDetails(1);
 
       expect(details.allowedLanguagesIso3).toEqual(['jpn']);
+    });
+
+    // AC-8 / T011: the plan's headline silent failure — a forgotten
+    // `default_languages` read narrows every future encode with no error.
+    // This asserts the setting's codes land in the union alongside a
+    // per-title preference, original first, deduplicated.
+    it('unions default_languages with a per-title preference, original first, no duplicates', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.language.findMany.mockResolvedValue([{ iso2: 'es', iso3: 'spa' }]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', default_languages: 'es' });
+      prisma.userMovie.findMany.mockResolvedValue([owner(['fra'])]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.allowedLanguagesIso3[0]).toBe('jpn');
+      expect(details.allowedLanguagesIso3.sort()).toEqual(['fra', 'jpn', 'spa'].sort());
+      expect(new Set(details.allowedLanguagesIso3).size).toBe(details.allowedLanguagesIso3.length);
     });
   });
 

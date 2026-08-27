@@ -290,6 +290,29 @@
     }
   },
   "settings": {
+    "tabs": {
+      "general": "General",
+      "mediaManager": "Media Manager",
+      "mediaServer": "Media Server",
+      "torrentManager": "Torrent Manager",
+      "download": "Download",
+      "compression": "Compression"
+    },
+    "general": {
+      "uiLocaleLabel": "App language"
+    },
+    "download": {
+      "defaultLanguagesLabel": "Default download languages"
+    },
+    "compression": {
+      "enabledLabel": "Enable compression",
+      "presetLabel": "Preset",
+      "presets": {
+        "fast": "Fast",
+        "balanced": "Balanced",
+        "quality": "Quality"
+      }
+    },
     "mediaServer": {
       "label": "Media server",
       "hostLabel": "Host",
@@ -318,11 +341,6 @@
       "saved": "Settings saved.",
       "saving": "Saving...",
       "save": "Save"
-    },
-    "languages": {
-      "title": "Preferred languages",
-      "description": "Applies to all your content. You can add extra languages per title from each movie or series page.",
-      "label": "Languages"
     }
   },
   "users": {

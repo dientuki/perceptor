@@ -2,7 +2,7 @@
 title: Settings Screen Tabs — web slice
 service: web
 last_updated: 2026-08-27
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Settings Screen Tabs — `web` (`web/plan.md`)

@@ -22,7 +22,6 @@ describe('LanguagesService — preference writes', () => {
 
   let languageFindMany: jest.Mock;
   let tx: {
-    userLanguage: { deleteMany: jest.Mock; createMany: jest.Mock };
     userMovieLanguage: { deleteMany: jest.Mock; createMany: jest.Mock };
     userShowLanguage: { deleteMany: jest.Mock; createMany: jest.Mock };
   };
@@ -33,7 +32,6 @@ describe('LanguagesService — preference writes', () => {
     languageFindMany = jest.fn();
     readFindMany = jest.fn().mockResolvedValue([]);
     tx = {
-      userLanguage: { deleteMany: jest.fn(), createMany: jest.fn() },
       userMovieLanguage: { deleteMany: jest.fn(), createMany: jest.fn() },
       userShowLanguage: { deleteMany: jest.fn(), createMany: jest.fn() },
     };
@@ -43,7 +41,6 @@ describe('LanguagesService — preference writes', () => {
 
     const prisma = {
       language: { findMany: languageFindMany },
-      userLanguage: { findMany: readFindMany },
       userMovieLanguage: { findMany: readFindMany },
       userShowLanguage: { findMany: readFindMany },
       $transaction: transactionMock,
@@ -56,17 +53,13 @@ describe('LanguagesService — preference writes', () => {
     service = module.get<LanguagesService>(LanguagesService);
   });
 
-  // Table of the three write targets, exercised with the same four cases —
-  // they share the private validation helper and the deleteMany+createMany
-  // shape, so a bug in any one of them is a bug in all three.
+  // Table of the two per-title write targets, exercised with the same four
+  // cases — they share the private validation helper and the
+  // deleteMany+createMany shape, so a bug in one is a bug in both. The
+  // per-user global level (setPreferredLanguagesFor) was removed by
+  // 029-settings-screen-tabs; that level is now a `Setting`, not a table this
+  // service owns.
   const targets = [
-    {
-      name: 'setPreferredLanguagesFor (user)',
-      call: (iso2: string[]) => service.setPreferredLanguagesFor('user-1', iso2),
-      txModel: () => tx.userLanguage,
-      expectedDeleteWhere: { userId: 'user-1' },
-      expectedCreateRow: (languageId: number) => ({ userId: 'user-1', languageId }),
-    },
     {
       name: 'setMoviePreferredLanguagesFor (user + movie)',
       call: (iso2: string[]) => service.setMoviePreferredLanguagesFor('user-1', 42, iso2),
@@ -147,12 +140,12 @@ describe('LanguagesService — preference writes', () => {
     // resolve 'pt' to spanish's id if the map were built wrong.
     languageFindMany.mockResolvedValue([spanish, english, portuguese]);
 
-    await service.setPreferredLanguagesFor('user-1', ['pt', 'es']);
+    await service.setMoviePreferredLanguagesFor('user-1', 42, ['pt', 'es']);
 
-    expect(tx.userLanguage.createMany).toHaveBeenCalledWith({
+    expect(tx.userMovieLanguage.createMany).toHaveBeenCalledWith({
       data: [
-        { userId: 'user-1', languageId: portuguese.id },
-        { userId: 'user-1', languageId: spanish.id },
+        { userId: 'user-1', movieId: 42, languageId: portuguese.id },
+        { userId: 'user-1', movieId: 42, languageId: spanish.id },
       ],
     });
   });

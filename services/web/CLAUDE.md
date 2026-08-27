@@ -69,9 +69,13 @@ constructs the upload, rather than letting `tus.Upload({ endpoint: undefined })`
 ## UI internationalization (`018-ui-i18n`)
 
 `web` owns every string a user reads and is the only service that translates. `src/i18n/request.ts`
-(next-intl's `getRequestConfig`) resolves the active locale server-side, once per request, in REQ-1's
-order: `User.uiLocale` (via `getCurrentUserOrNull()`, below) → the request's `Accept-Language`
-header, language-range negotiated by `src/i18n/negotiate.ts` → `en`. `src/i18n/locales.ts`'s
+(next-intl's `getRequestConfig`) resolves the active locale server-side, once per request, in this
+order: `User.uiLocale` (via `getCurrentUserOrNull()`, below) → `defaultUiLocale` (the installation's
+default, an admin-only setting set from `/settings`'s General tab — `029-settings-screen-tabs`,
+guarded by `isSupportedLocale` and read via `getDefaultUiLocale()`/`redirectToClearSession` since it
+runs during render) → the request's `Accept-Language` header, language-range negotiated by
+`src/i18n/negotiate.ts` → `en`. This step runs for anonymous requests too — `defaultUiLocale` is
+`@Public()` on the `api` side for exactly this reason. `src/i18n/locales.ts`'s
 `SUPPORTED_LOCALES`/`DEFAULT_LOCALE` is the **one** list every consumer of the supported set reads
 — never hardcode `'es'`/`'en'` anywhere else. `src/app/layout.tsx` is `async`, sets `<html lang>`
 from the resolved locale, and wraps the tree in `NextIntlClientProvider` with the server-loaded
@@ -277,11 +281,14 @@ redeclare it.
 `src/components/media/LanguagePicker.tsx` is the one client component all three call sites share —
 a multi-select bound to a `useActionState` action, generic over `options`/`selected`/action.
 
-`PreferredLanguagesCard.tsx` wraps it for the global preference and renders on `/settings` as its
-**own card, not inside `SettingsForm`** — that form posts through `updateSettings`/`EDITABLE_KEYS`,
-installation-wide key/value config, and a language preference is per-user, not a `SETTINGS_CATALOG`
-entry. `Movie.tsx` and `Show.tsx` each bind the picker to their own per-title action; `Show.tsx`
-stays a Server Component with the picker as a client child.
+**The per-user global preference and its own save card are gone** (`029-settings-screen-tabs`):
+`PreferredLanguagesCard.tsx` no longer exists, `setPreferredLanguagesAction` no longer exists, and
+`User.preferredLanguages` no longer exists on the schema. The installation-wide level moved *into*
+`SettingsForm` as the `default_languages` setting (Descarga tab, `DownloadPanel.tsx`) — an ordinary
+`updateSettings`/`EDITABLE_KEYS` entry now, not a per-user write, since it applies to every user who
+hasn't set a per-title preference. `Movie.tsx` and `Show.tsx` still each bind `LanguagePicker` to
+their own per-title action — that level is untouched; `Show.tsx` stays a Server Component with the
+picker as a client child.
 
 **The listing queries deliberately do not select `preferredLanguages`.** They are `api` field
 resolvers that only run when selected — `getMovieById`/`getShowById` select them, `getMovies`/

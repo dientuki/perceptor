@@ -125,15 +125,15 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
 - **`languages/`** — the `languages` query (reads the seeded `Language` table, deriving an English
   `name` per `iso2` from `language-names.ts`, not stored — `web` renders the localized display name
   via `Intl.DisplayNames` since `018-ui-i18n`; this map is an internal English label, not the UI
-  string) plus the preference writes backing
-  `setPreferredLanguages`/`setMoviePreferredLanguages`/`setShowPreferredLanguages`. Each write
-  validates every `iso2`, rejects duplicates within one argument, then replaces the whole set
-  atomically (`deleteMany` + `createMany` in a `$transaction`). Exported so `auth/`, `movies/` and
-  `shows/` each host their own `@ResolveField()` for `preferredLanguages` — deliberately not
-  centralised. **Sharp edge:** a `@ResolveField()` attaches to the *type*, not the query that reaches
-  it, so `User.preferredLanguages` needs an identity guard comparing `@Parent()` against
-  `@CurrentUser()` — without it the field is readable through the admin `users`/`user(id)` queries
-  even though it is self-service only.
+  string) plus the per-title preference writes backing
+  `setMoviePreferredLanguages`/`setShowPreferredLanguages`. Each write validates every `iso2` through
+  `validateAndResolveLanguageIds` (public since `029-settings-screen-tabs`, reused by `settings/`'s
+  `default_languages` validation), rejects duplicates within one argument, then replaces the whole set
+  atomically (`deleteMany` + `createMany` in a `$transaction`). Exported so `movies/` and `shows/` each
+  host their own `@ResolveField()` for `preferredLanguages` — deliberately not centralised. **The
+  per-user global level is gone** (`029-settings-screen-tabs`): `setPreferredLanguages`,
+  `User.preferredLanguages` and the `UserLanguage` table no longer exist, replaced by the
+  installation-wide `default_languages` setting (see `settings/` below and `process-jobs/`'s merge).
 - **`media-sources/`** — the `MediaSource` row representing one acquisition attempt. `sourceScanned`
   takes `matches: [ScannedMatchInput!]!`, one entry per file the worker resolved (a film or single
   episode reports exactly one, both numbers `null`). The service loads the source with its season's
@@ -175,9 +175,11 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   takes `deleteFiles: Boolean = true`; the cleanup pipeline is the one caller passing `false`, since
   the worker's `cleanup-source.ts` owns every filesystem deletion.
   `getEncodeJobDetails` resolves `allowedLanguagesIso3`: the title's original language followed by the
-  union of every owner's global and per-title preference, deduplicated, selecting `language.iso3` and
-  **never `iso2`**. **This is the one place that merge happens** — `Movie.preferredLanguages` and
-  `Show.preferredLanguages` deliberately return only the calling user's own list.
+  union of the installation-wide `default_languages` setting (since `029-settings-screen-tabs`,
+  resolved iso2 → iso3 through `SettingsService`) and every owner's per-title preference,
+  deduplicated, selecting `language.iso3` and **never `iso2`**. **This is the one place that merge
+  happens** — `Movie.preferredLanguages` and `Show.preferredLanguages` deliberately return only the
+  calling user's own list.
 - **`ffprobe-logs/`** — an append-only diagnostic log: one row per `ffprobe` the worker runs, holding
   the probed path and the raw JSON as an opaque `MediumText` string this service never parses.
   `recordFfprobe` is the worker's write path and carries `@AllowService()`; `ffprobeLogs`,
@@ -191,7 +193,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `MediaSource` on purpose: a cascade would delete the evidence along with the media, and the file
   path is the only (deliberately weak) join key.
 - **`settings/`** — key/value settings with a typed catalog in `settings.catalog.ts` and server-side
-  validation in `updateMany`.
+  validation in `updateMany`. Since `029-settings-screen-tabs`, `settings`/`updateSettings` carry
+  `@UseGuards(AdminGuard)` **per method** (the `ffprobe-logs.resolver.ts` split, not
+  `UsersResolver`'s class-level form), and a third method, `@Public() defaultUiLocale`, deliberately
+  sits outside that guard — `web` reads it while rendering `/login`, before it knows who is asking.
+  The catalog's two newest keys are `ui_locale` (an ordinary `kind: 'enum'` entry, options from
+  `SUPPORTED_LOCALES`) and `default_languages` (a new `kind: 'languages'`, delegating to
+  `LanguagesService.validateAndResolveLanguageIds` — the installation-wide replacement for the old
+  per-user global language preference; see `languages/` and `process-jobs/`).
 - **`media-roots/`** — the two declared roots and every path translation. See below.
 - **`media-server/`** — post-encode notification (Jellyfin today), opt-in from Settings.
 - **`indexer/`** — Prowlarr search surface.

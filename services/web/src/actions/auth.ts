@@ -9,14 +9,11 @@ import { CONFIG } from "@/lib/config";
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { translateGraphQLError } from "@/lib/graphql-error";
 
-import type { Language } from "@/types/languages";
-
 export interface CurrentUser {
   id: string;
   name: string;
   username: string;
   isAdmin: boolean;
-  preferredLanguages: Language[];
   uiLocale: string | null;
 }
 
@@ -110,11 +107,6 @@ const ME_QUERY = `
       username
       isAdmin
       uiLocale
-      preferredLanguages {
-        id
-        iso2
-        name
-      }
     }
   }
 `;

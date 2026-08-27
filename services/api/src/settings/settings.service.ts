@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { normalize } from 'node:path';
 import { PrismaService } from '@/prisma/prisma.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { LanguagesService } from '@/languages/languages.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { SettingInput } from './dto/setting.input';
@@ -12,6 +13,7 @@ export class SettingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mediaRootsService: MediaRootsService,
+    private readonly languagesService: LanguagesService,
   ) {}
 
   async findAll() {
@@ -43,6 +45,17 @@ export class SettingsService {
         throw i18nError.badRequest(ERROR_KEYS.SETTING_NOT_EDITABLE, { key: entry.key });
       }
 
+      // `SettingInput.value` only guarantees a string now (029: relaxed from
+      // @IsNotEmpty() so `default_languages` can be cleared) — the emptiness
+      // rule moves here, per kind. `languages` is the one kind where "" is a
+      // legitimate value (the empty list), so it is excluded from this check.
+      if (
+        (catalogEntry.kind === 'path' || catalogEntry.kind === 'enum' || catalogEntry.kind === 'int') &&
+        entry.value === ''
+      ) {
+        throw i18nError.badRequest(ERROR_KEYS.VALIDATION_SETTING_VALUE_REQUIRED);
+      }
+
       if (catalogEntry.kind === 'path') {
         // No hace falta que exista todavía: el worker crea la carpeta en el
         // primer encode (ver build-output-path.ts / encode.ffmpeg.ts).
@@ -64,6 +77,22 @@ export class SettingsService {
           key: entry.key,
           options: catalogEntry.options!.join(', '),
         });
+      }
+
+      if (catalogEntry.kind === 'languages') {
+        // Split, trim, and drop empty segments *before* validating — "es,,en"
+        // or a trailing comma must never reach resolveLanguageIds as an
+        // empty-string code, which would either throw a confusing
+        // "unavailable ''" or, worse, silently normalize into a value the
+        // encode merge later reads as a language that doesn't exist.
+        const codes = entry.value
+          .split(',')
+          .map((code) => code.trim())
+          .filter((code) => code.length > 0);
+
+        await this.languagesService.validateAndResolveLanguageIds(codes);
+        normalizedEntries.push({ key: entry.key, value: codes.join(',') });
+        continue;
       }
 
       normalizedEntries.push(entry);

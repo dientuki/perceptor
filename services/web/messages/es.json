@@ -290,6 +290,29 @@
     }
   },
   "settings": {
+    "tabs": {
+      "general": "General",
+      "mediaManager": "Gestor de medios",
+      "mediaServer": "Media server",
+      "torrentManager": "Gestor de torrents",
+      "download": "Descarga",
+      "compression": "Compresión"
+    },
+    "general": {
+      "uiLocaleLabel": "Idioma de la aplicación"
+    },
+    "download": {
+      "defaultLanguagesLabel": "Idiomas de descarga por defecto"
+    },
+    "compression": {
+      "enabledLabel": "Habilitar compresión",
+      "presetLabel": "Preset",
+      "presets": {
+        "fast": "Rápido",
+        "balanced": "Equilibrado",
+        "quality": "Calidad"
+      }
+    },
     "mediaServer": {
       "label": "Media server",
       "hostLabel": "Host",
@@ -318,11 +341,6 @@
       "saved": "Configuración guardada.",
       "saving": "Guardando...",
       "save": "Guardar"
-    },
-    "languages": {
-      "title": "Idiomas preferidos",
-      "description": "Se aplican a todo tu contenido. Se pueden agregar idiomas adicionales por título desde la ficha de cada película o serie.",
-      "label": "Idiomas"
     }
   },
   "users": {

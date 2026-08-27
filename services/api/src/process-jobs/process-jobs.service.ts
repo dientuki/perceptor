@@ -114,16 +114,16 @@ export class ProcessJobsService {
     return language?.iso3 ?? 'eng';
   }
 
-  // REQ-3: the set of languages the encode may keep is {original} ∪ every
-  // owner's global preference ∪ every owner's per-title preference,
-  // deduplicated, original first. A `Set` gives us both the dedup and the
-  // insertion-order guarantee for free. A title with no owners falls through
-  // to just the original — no special case needed (see plan.md's risk list).
+  // REQ-3/REQ-8 (029): the set of languages the encode may keep is
+  // {original} ∪ the installation's `default_languages` setting ∪ every
+  // owner's per-title preference, deduplicated, original first. A `Set`
+  // gives us both the dedup and the insertion-order guarantee for free. A
+  // title with no owners and no default falls through to just the original —
+  // no special case needed (see plan.md's risk list).
   private async mergeMovieAllowedLanguages(movieId: number, originalLanguageIso3: string): Promise<string[]> {
     const owners = await this.prisma.userMovie.findMany({
       where: { movieId },
       select: {
-        user: { select: { languages: { select: { language: { select: { iso3: true } } } } } },
         languages: { select: { language: { select: { iso3: true } } } },
       },
     });
@@ -135,7 +135,6 @@ export class ProcessJobsService {
     const owners = await this.prisma.userShow.findMany({
       where: { showId },
       select: {
-        user: { select: { languages: { select: { language: { select: { iso3: true } } } } } },
         languages: { select: { language: { select: { iso3: true } } } },
       },
     });
@@ -143,18 +142,41 @@ export class ProcessJobsService {
     return this.collectAllowedLanguages(originalLanguageIso3, owners);
   }
 
-  private collectAllowedLanguages(
+  // Reads the installation-wide `default_languages` setting (iso2, comma
+  // separated) and resolves each code to iso3 the same way `resolveIso3`
+  // does for the title's original language. An unknown code is dropped
+  // rather than thrown here — `SettingsService.updateMany` is the only place
+  // that rejects an unknown code; by the time this runs the setting was
+  // already validated at write time, and a stale/renamed row must not break
+  // every encode that follows.
+  private async resolveDefaultLanguagesIso3(): Promise<string[]> {
+    const config = await this.settings.getMap();
+    const rawValue = config['default_languages'];
+    if (!rawValue) return [];
+
+    const iso2Codes = rawValue
+      .split(',')
+      .map((code) => code.trim())
+      .filter((code) => code.length > 0);
+    if (iso2Codes.length === 0) return [];
+
+    const rows = await this.prisma.language.findMany({ where: { iso2: { in: iso2Codes } } });
+    const byIso2 = new Map(rows.map((row) => [row.iso2, row.iso3]));
+
+    return iso2Codes.map((iso2) => byIso2.get(iso2)).filter((iso3): iso3 is string => iso3 !== undefined);
+  }
+
+  private async collectAllowedLanguages(
     originalLanguageIso3: string,
     owners: Array<{
-      user: { languages: Array<{ language: { iso3: string } }> };
       languages: Array<{ language: { iso3: string } }>;
     }>,
-  ): string[] {
+  ): Promise<string[]> {
     const iso3Codes = new Set<string>([originalLanguageIso3]);
+    for (const defaultIso3 of await this.resolveDefaultLanguagesIso3()) {
+      iso3Codes.add(defaultIso3);
+    }
     for (const owner of owners) {
-      for (const globalPref of owner.user.languages) {
-        iso3Codes.add(globalPref.language.iso3);
-      }
       for (const titlePref of owner.languages) {
         iso3Codes.add(titlePref.language.iso3);
       }

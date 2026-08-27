@@ -8,7 +8,8 @@ import { languageNameFor } from './language-names';
 // The single place that turns a `languages` row into the shape `web`'s
 // pickers render — see `clients/media-server/registry.ts` for the precedent
 // of "options come from one place, never a hard-coded list at the call
-// site". Preference read/write for the three mutations lands here too.
+// site". Preference read/write for the two per-title mutations lands here
+// too — the per-user global level moved to a `Setting` (029-settings-screen-tabs).
 //
 // Every write below shares the same shape: validate the whole `iso2` list
 // (no unknown code, no duplicate) *before* touching the database, then
@@ -33,9 +34,11 @@ export class LanguagesService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // Resolves every iso2 to its Language row, throwing on the first unknown
-  // or duplicated code — before any database write happens for the caller.
-  private async resolveLanguageIds(iso2Codes: string[]): Promise<number[]> {
+  // Validates a list of iso2 codes and resolves each to its Language row,
+  // throwing on the first unknown or duplicated code — before any database
+  // write happens for the caller. Public: `SettingsService` reuses this to
+  // validate `default_languages` without duplicating the check.
+  async validateAndResolveLanguageIds(iso2Codes: string[]): Promise<number[]> {
     const seen = new Set<string>();
     for (const iso2 of iso2Codes) {
       if (seen.has(iso2)) {
@@ -60,40 +63,16 @@ export class LanguagesService {
     });
   }
 
-  // A user's global preference (User.preferredLanguages). Replaces the
-  // whole set; [] clears it.
-  async setPreferredLanguagesFor(userId: string, iso2Codes: string[]): Promise<Language[]> {
-    const languageIds = await this.resolveLanguageIds(iso2Codes);
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.userLanguage.deleteMany({ where: { userId } });
-      if (languageIds.length > 0) {
-        await tx.userLanguage.createMany({
-          data: languageIds.map((languageId) => ({ userId, languageId })),
-        });
-      }
-    });
-
-    return this.findPreferredLanguagesFor(userId);
-  }
-
-  async findPreferredLanguagesFor(userId: string): Promise<Language[]> {
-    const rows = await this.prisma.userLanguage.findMany({
-      where: { userId },
-      include: { language: true },
-    });
-    return rows.map((row) => this.toLanguage(row.language));
-  }
-
-  // A user's per-title preference for a film, added to their global
-  // preference at encode time — never a replacement for it. Replaces the
-  // whole set for this (userId, movieId) pair; [] clears it.
+  // A user's per-title preference for a film, added to the installation's
+  // `default_languages` setting at encode time — never a replacement for it
+  // (029-settings-screen-tabs). Replaces the whole set for this
+  // (userId, movieId) pair; [] clears it.
   async setMoviePreferredLanguagesFor(
     userId: string,
     movieId: number,
     iso2Codes: string[],
   ): Promise<Language[]> {
-    const languageIds = await this.resolveLanguageIds(iso2Codes);
+    const languageIds = await this.validateAndResolveLanguageIds(iso2Codes);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userMovieLanguage.deleteMany({ where: { userId, movieId } });
@@ -115,15 +94,16 @@ export class LanguagesService {
     return rows.map((row) => this.toLanguage(row.language));
   }
 
-  // A user's per-title preference for a series, added to their global
-  // preference at encode time — never a replacement for it. Replaces the
-  // whole set for this (userId, showId) pair; [] clears it.
+  // A user's per-title preference for a series, added to the installation's
+  // `default_languages` setting at encode time — never a replacement for it
+  // (029-settings-screen-tabs). Replaces the whole set for this
+  // (userId, showId) pair; [] clears it.
   async setShowPreferredLanguagesFor(
     userId: string,
     showId: number,
     iso2Codes: string[],
   ): Promise<Language[]> {
-    const languageIds = await this.resolveLanguageIds(iso2Codes);
+    const languageIds = await this.validateAndResolveLanguageIds(iso2Codes);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userShowLanguage.deleteMany({ where: { userId, showId } });

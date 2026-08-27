@@ -5,9 +5,10 @@ import { TmdbClient } from '@/clients/tmdb/client';
 import { ProwlarrClient } from '@/clients/indexer/client';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { MediaRootsModule } from '@/media-roots/media-roots.module';
+import { LanguagesModule } from '@/languages/languages.module';
 
 @Module({
-  imports: [MediaRootsModule],
+  imports: [MediaRootsModule, LanguagesModule],
   providers: [SettingsResolver, SettingsService, TmdbClient, ProwlarrClient, QbittorrentClient],
   exports: [SettingsService, TmdbClient, ProwlarrClient, QbittorrentClient],
 })

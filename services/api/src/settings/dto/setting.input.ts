@@ -1,5 +1,5 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
@@ -12,7 +12,11 @@ export class SettingInput {
   @IsNotEmpty({ message: ERROR_KEYS.VALIDATION_SETTING_KEY_REQUIRED })
   key: string;
 
+  // Relaxed from @IsNotEmpty() to @IsString() so the empty string can reach
+  // `SettingsService.updateMany` (029 REQ-7: `default_languages` must be
+  // clearable). The emptiness rule now lives per-kind in the settings
+  // catalog rather than field-wide.
   @Field()
-  @IsNotEmpty({ message: ERROR_KEYS.VALIDATION_SETTING_VALUE_REQUIRED })
+  @IsString({ message: ERROR_KEYS.VALIDATION_SETTING_VALUE_REQUIRED })
   value: string;
 }

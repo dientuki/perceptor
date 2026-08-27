@@ -1,10 +1,11 @@
 import { MEDIA_SERVER_IDS } from '@/clients/media-server/registry';
+import { SUPPORTED_LOCALES } from '@/i18n/locales';
 
 // Gemelo server-side de EDITABLE_KEYS en services/web/src/actions/settings.ts
 // (client-only hasta ahora). `updateSettings` aceptaba cualquier key/value —
 // esto es lo que lo cierra: toda key que llega tiene que estar acá, y las de
 // tipo 'path' se validan contra media-roots antes de guardarse.
-export type SettingKind = 'path' | 'string' | 'boolean' | 'int' | 'secret' | 'enum';
+export type SettingKind = 'path' | 'string' | 'boolean' | 'int' | 'secret' | 'enum' | 'languages';
 
 export type SettingCatalogEntry = {
   kind: SettingKind;
@@ -34,6 +35,10 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   media_server_host: { kind: 'string' },
   media_server_port: { kind: 'int' },
   media_server_api_key: { kind: 'secret' },
+  // options viene de la lista soportada de locales (i18n/locales.ts), no de
+  // un literal acá — sumar un locale ahí lo vuelve válido acá automáticamente.
+  ui_locale: { kind: 'enum', options: [...SUPPORTED_LOCALES] },
+  default_languages: { kind: 'languages' },
 };
 
 export function getSettingCatalogEntry(key: string): SettingCatalogEntry | undefined {

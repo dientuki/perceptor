@@ -34,6 +34,30 @@ export async function getSettings(): Promise<Setting[]> {
   return data?.settings ?? [];
 }
 
+const DEFAULT_UI_LOCALE_QUERY = `
+  query DefaultUiLocale {
+    defaultUiLocale
+  }
+`;
+
+// Public on the api side (`@Public()`) — read while resolving the locale for
+// an anonymous request such as /login. Still goes through
+// redirectToClearSession rather than swallowing errors, because it is
+// awaited during a Server Component render pass (src/i18n/request.ts) where
+// cookie mutation is illegal.
+export async function getDefaultUiLocale(): Promise<string | null> {
+  const { data, errors } = await fetchGraphQL<{
+    defaultUiLocale: string | null;
+  }>(DEFAULT_UI_LOCALE_QUERY);
+
+  if (errors && errors.length > 0) {
+    redirectToClearSession(errors);
+    throw new Error(await translateGraphQLError(errors[0]));
+  }
+
+  return data?.defaultUiLocale ?? null;
+}
+
 const UPDATE_SETTINGS_MUTATION = `
   mutation UpdateSettings($entries: [SettingInput!]!) {
     updateSettings(entries: $entries) {
@@ -58,12 +82,23 @@ const EDITABLE_KEYS = [
   "media_server_host",
   "media_server_port",
   "media_server_api_key",
+  "ui_locale",
 ] as const;
 
-// Checkboxes nativos: si no están tildados, ni siquiera viajan en el FormData.
-// Por eso van aparte del filtro de EDITABLE_KEYS (que descarta ausentes/vacíos)
-// y se agregan siempre como entry explícita 'true'/'false'.
+// Rendered through Checkbox.tsx + a hidden input carrying an explicit
+// 'true'/'false' (the PathPicker hidden-input idiom — Checkbox.tsx is
+// controlled and renders no `name`d input of its own). Read explicitly
+// rather than through EDITABLE_KEYS's blank-value filter, and by the hidden
+// input's *value*, not `formData.has(key)` — the hidden input is always
+// present, so presence alone can no longer distinguish checked from
+// unchecked the way a native unchecked checkbox (absent from FormData) did.
 const BOOLEAN_KEYS = ["movies_enabled", "shows_enabled"] as const;
+
+// default_languages needs the same always-explicit treatment as
+// BOOLEAN_KEYS: "" is a valid value meaning "no default languages", and the
+// EDITABLE_KEYS filter (which drops blank values) would silently turn that
+// into "leave the previous value" instead of clearing the row.
+const ALWAYS_SENT_STRING_KEYS = ["default_languages"] as const;
 
 export async function updateSettingsAction(
   prevState: any,
@@ -77,7 +112,15 @@ export async function updateSettingsAction(
   );
 
   for (const key of BOOLEAN_KEYS) {
-    entries.push({ key, value: formData.has(key) ? "true" : "false" });
+    entries.push({
+      key,
+      value: formData.get(key) === "true" ? "true" : "false",
+    });
+  }
+
+  for (const key of ALWAYS_SENT_STRING_KEYS) {
+    const value = formData.get(key);
+    entries.push({ key, value: typeof value === "string" ? value : "" });
   }
 
   const t = await getTranslations("errors");
@@ -89,7 +132,7 @@ export async function updateSettingsAction(
   let result: Awaited<ReturnType<typeof fetchGraphQL>>;
   try {
     result = await fetchGraphQL(UPDATE_SETTINGS_MUTATION, { entries });
-  } catch (err) {
+  } catch (_err) {
     return { error: t("network.connectionFailed") };
   }
 

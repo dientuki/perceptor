@@ -1,5 +1,5 @@
 import { UseGuards } from '@nestjs/common';
-import { Resolver, Mutation, Query, Args, ResolveField, Parent } from '@nestjs/graphql';
+import { Resolver, Mutation, Query, Args } from '@nestjs/graphql';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
@@ -8,22 +8,21 @@ import { LoginInput } from './dto/login.input';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
-import { Language } from '@/languages/entities/language.entity';
-import { LanguagesService } from '@/languages/languages.service';
 import { SUPPORTED_LOCALES } from '@/i18n/locales';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import type { AuthPrincipal } from './auth.types';
 
-// @Resolver(() => User) rather than the parameterless form used before this
-// feature: a @ResolveField() needs a type to attach to. UsersResolver also
-// targets User (for the admin CRUD queries) — Nest merges fields from both
-// resolvers onto the one GraphQL type, so this does not duplicate anything.
+// @Resolver(() => User) rather than the parameterless form: UsersResolver
+// also targets User (for the admin CRUD queries) — Nest merges fields from
+// both resolvers onto the one GraphQL type, so this does not duplicate
+// anything. The `preferredLanguages` field this resolver used to attach here
+// moved out entirely with 029-settings-screen-tabs — the per-user global
+// level of that preference no longer exists.
 @Resolver(() => User)
 export class AuthResolver {
   constructor(
     private authService: AuthService,
-    private languagesService: LanguagesService,
     private usersService: UsersService,
   ) {}
 
@@ -89,25 +88,5 @@ export class AuthResolver {
       throw i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED);
     }
     return await this.authService.getProfile(principal.id);
-  }
-
-  // Field resolvers attach per-*type*, not per-query: because UsersResolver's
-  // admin `users`/`user(id)` queries also return `User`, this field is
-  // selectable there too, not just on `me`. Guard against reading someone
-  // else's preferences through that path — an admin has no reason to see
-  // another user's saved languages (see the feature spec's GraphQL Contract
-  // Delta) — by returning `[]` for any parent that isn't the caller, rather
-  // than throwing: nobody should be selecting this field outside `me` in the
-  // first place, so a quiet empty array is a better UX than a GraphQL error.
-  @ResolveField(() => [Language])
-  async preferredLanguages(
-    @Parent() user: User,
-    @CurrentUser() principal: AuthPrincipal,
-  ): Promise<Language[]> {
-    const callerId = principal.type === 'user' ? principal.id : '';
-    if (user.id !== callerId) {
-      return [];
-    }
-    return this.languagesService.findPreferredLanguagesFor(user.id);
   }
 }

@@ -2,7 +2,7 @@
 title: Settings Screen Tabs — api slice
 service: api
 last_updated: 2026-08-27
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Settings Screen Tabs — `api` (`api/plan.md`)

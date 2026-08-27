@@ -45,6 +45,9 @@ export async function seedSettings(prisma: PrismaClient) {
 
     { key: 'movies_enabled', value: 'true' },
     { key: 'shows_enabled', value: 'false' },
+
+    { key: 'ui_locale', value: '' },
+    { key: 'default_languages', value: '' },
   ];
 
   // Create-only: unlike an upsert, this never overwrites a real value already

@@ -59,18 +59,19 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
       name: t("queue"),
       path: "/quenue",
     },
-    {
-      //icon: <UserCircleIcon />,
-      icon: <LayoutList />,
-      name: t("settings"),
-      path: "/settings",
-    },
   ];
 
-  // Only the administrator sees the entry point — REQ-4's usability half. The
-  // real control is api's AdminGuard (REQ-2); this is cosmetic, per web/plan.md.
+  // Only the administrator sees the entry point — REQ-11's usability half.
+  // The real control is api's AdminGuard; this is cosmetic, per
+  // 029-settings-screen-tabs' web/plan.md (settings is now admin-only,
+  // same as users).
   const navItems: NavItem[] = isAdmin
-    ? [...baseNavItems, { icon: <Users />, name: t("users"), path: "/users" }]
+    ? [
+        ...baseNavItems,
+        //icon: <UserCircleIcon />,
+        { icon: <LayoutList />, name: t("settings"), path: "/settings" },
+        { icon: <Users />, name: t("users"), path: "/users" },
+      ]
     : baseNavItems;
 
   const renderMenuItems = (

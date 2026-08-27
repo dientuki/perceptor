@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.6.0
+spec_version: 1.7.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-20
+last_updated: 2026-08-27
 status: Approved
 target_service: api, web, worker
 ---
@@ -383,7 +383,7 @@ already receives a `mediaType` prop for its own empty-state text and now forward
 `web` retypes this query by hand in `src/actions/shows.ts`'s `getShowById`, same as every other
 query — no codegen.
 
-### Language preferences drive the encode payload, in two different ISO vocabularies (`011-av1-transcode`)
+### Language preferences drive the encode payload, in two different ISO vocabularies (`011-av1-transcode`, revised by `029-settings-screen-tabs`)
 
 ```graphql
 type Language {
@@ -397,10 +397,6 @@ type Query {
   languages: [Language!]!
 }
 
-type User {
-  preferredLanguages: [Language!]!
-}
-
 type Movie {
   preferredLanguages: [Language!]!
 }
@@ -410,7 +406,6 @@ type Show {
 }
 
 type Mutation {
-  setPreferredLanguages(iso2: [String!]!): [Language!]!
   setMoviePreferredLanguages(movieId: Int!, iso2: [String!]!): [Language!]!
   setShowPreferredLanguages(showId: Int!, iso2: [String!]!): [Language!]!
 }
@@ -425,28 +420,27 @@ type EncodeJobDetails {
 `name` is a Spanish display string derived server-side from `iso2` (`src/languages/language-names.ts`),
 not stored. It is the only source web populates its language pickers from — never a hard-coded list.
 
-Three new join tables back the preferences: `UserLanguage` (global), `UserMovieLanguage` and
-`UserShowLanguage` (per title), each a composite-key row pointing at `Language`, cascading through
-the *ownership* row (`UserMovie`/`UserShow`), not through `User`/`Movie`/`Show` directly — a
-preference has no meaning once the title leaves the user's library. All three mutations **replace**
-the whole list; there is no add/remove pair, and `[]` clears it.
-
-**`User.preferredLanguages` is a type-level field, and that has a sharp edge.** It is exposed on the
-`me` query and deliberately **not** meant to appear on the admin `users`/`user(id)` queries — but
-`@ResolveField()` attaches to the GraphQL *type*, not to a specific query, and `UsersResolver` (the
-admin surface) returns the same `User` type `AuthResolver` does. Selecting `preferredLanguages`
-through `users`/`user(id)` therefore reaches the same resolver code, not a GraphQL validation error.
-The fix lives in the resolver itself (`src/auth/auth.resolver.ts`): it compares the resolved
-`@Parent()` user's id against `@CurrentUser()`'s id and returns `[]` for anyone but the caller,
-regardless of which query reached it. **Any future field added to `User` this way inherits the same
-risk** — a per-user field resolver is visible everywhere the type is, not just where it was intended,
-and needs the same identity guard if it must stay private.
+Two join tables back the per-title preferences: `UserMovieLanguage` and `UserShowLanguage`, each a
+composite-key row pointing at `Language`, cascading through the *ownership* row (`UserMovie`/
+`UserShow`), not through `Movie`/`Show` directly — a preference has no meaning once the title leaves
+the user's library. Both mutations **replace** the whole list; there is no add/remove pair, and `[]`
+clears it.
 
 `Movie.preferredLanguages`/`Show.preferredLanguages` resolve to the **calling user's own** list for
 that title, never the merge across owners — the merge is an encode-time-only concept. Both mutations
 are scoped exactly like `movie(id)`/`show(id)` already are: an unowned title is refused with the
 existing `La película <id> no existe` / `Recurso no disponible para este usuario`, reused verbatim,
 never a new string. Neither mutation carries `@AllowService()`.
+
+**The per-user global level (`User.preferredLanguages`, `Mutation.setPreferredLanguages`,
+`UserLanguage`) is gone as of `029-settings-screen-tabs`.** It is replaced by the installation-wide
+`default_languages` setting (see "Settings become administrator-only" below) — one value administrators set from the
+Descarga tab, not a row per user. `collectAllowedLanguages` in
+`services/api/src/process-jobs/process-jobs.service.ts` now unions the title's original language ∪
+`default_languages` (resolved iso2 → iso3) ∪ each owner's per-title preference, original first,
+deduplicated — the per-title level above is completely unchanged; only the global level moved from a
+per-user table to a single setting. No backfill: the old `user_languages` rows were discarded with
+the table, since the project was still in development when this shipped.
 
 `EncodeJobDetails.allowedLanguagesIso3` is where the two vocabularies meet. Every stored preference
 is ISO-639-1 (`es`, `en`, `ja`) — the same alphabet `Movie.originalLanguage`/`Show.originalLanguage`
@@ -685,12 +679,53 @@ The full vocabulary, by owner:
 | `worker` — reused from `api` | `error.processJob.not_found`, `error.source.no_target`, `error.source.no_download_path` |
 
 **Locale resolution never crosses the GraphQL boundary as a header or argument.** `web` resolves
-the active locale itself, server-side, in this order: `User.uiLocale` (via `me`) → the request's
-`Accept-Language` header, language-range negotiated → `en`. `api` and `worker` never see which
-locale is active — they only ever produce English `message`/`errorMessage` text and a key.
+the active locale itself, server-side (the exact order gained a step in `029-settings-screen-tabs`,
+below). `api` and `worker` never see which locale is active — they only ever produce English
+`message`/`errorMessage` text and a key.
 `Query.supportedLocales` is the one place the supported set crosses the boundary, and it exists
 so `setUiLocale` and any future locale picker have a single source of truth to validate against
 instead of a second hardcoded list in `web`.
+
+### Settings become administrator-only, plus the installation default locale (`029-settings-screen-tabs`)
+
+```graphql
+type Query {
+  """
+  The installation's default UI language, or null when unset. Public: `web`
+  resolves the request locale before it knows who is asking.
+  """
+  defaultUiLocale: String
+
+  """Administrator only."""
+  settings: [Setting!]!
+}
+
+type Mutation {
+  """Administrator only."""
+  updateSettings(entries: [SettingInput!]!): [Setting!]!
+}
+```
+
+`Query.settings` and `Mutation.updateSettings` now require an administrator —
+`error.auth.admin_required`, the same refusal `users`/`updateUser` already return. `defaultUiLocale`
+is the one exception, `@Public()` like `login`, because `web` calls it while rendering `/login`,
+before it knows who is asking; `AdminGuard` is applied per method on `SettingsResolver`, never at
+class level, or that single query would break for every logged-out visitor.
+
+The settings catalog gained two keys: `ui_locale` (one of `Query.supportedLocales`, validated as an
+ordinary `enum` catalog entry — rejecting an unsupported value with `error.setting.expected_enum`,
+the same key `media_server_client` already uses) and `default_languages` (a comma-separated,
+possibly-empty, ordered list of ISO-639-1 codes, validated through the same
+`error.language.unavailable`/`error.language.duplicate` checks `setMoviePreferredLanguages` uses).
+`SettingInput.value`'s validation relaxed from `@IsNotEmpty()` to `@IsString()` so the empty string —
+"no default languages" — is representable on the wire; the per-kind emptiness rule now lives in the
+settings catalog instead.
+
+**Locale resolution order gained a step.** `web` now resolves the active locale as
+`User.uiLocale` (via `me`) → `defaultUiLocale` (if set and supported) → the request's
+`Accept-Language` header → `en`. This applies to every request, including an anonymous one — the
+installation default is what lets an administrator set the language once for every user who never
+picked their own.
 
 ### The ffprobe log is written before the encode, not after (`023-ffprobe-log`)
 

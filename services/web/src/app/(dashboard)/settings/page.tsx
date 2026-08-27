@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
 import { getLanguages } from "@/actions/languages";
@@ -6,7 +7,6 @@ import { getMediaRoots } from "@/actions/media-roots";
 import { getMediaServerOptions } from "@/actions/media-server";
 import { getSettings } from "@/actions/settings";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-import PreferredLanguagesCard from "@/components/settings/PreferredLanguagesCard";
 import SettingsForm from "@/components/settings/SettingsForm";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,13 +20,23 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function SettingsPage() {
   const t = await getTranslations("pages.settings");
-  const [settings, mediaRoots, mediaServerOptions, languages, currentUser] =
+
+  // Deliberately sequential, not Promise.all: getSettings() is admin-only
+  // now, and racing it with the isAdmin check below would turn api's
+  // AdminGuard refusal into an uncaught 500 instead of a clean 404 — the
+  // users/page.tsx precedent.
+  const user = await getCurrentUser();
+
+  if (!user.isAdmin) {
+    notFound();
+  }
+
+  const [settings, mediaRoots, mediaServerOptions, languages] =
     await Promise.all([
       getSettings(),
       getMediaRoots(),
       getMediaServerOptions(),
       getLanguages(),
-      getCurrentUser(),
     ]);
 
   return (
@@ -39,14 +49,10 @@ export default async function SettingsPage() {
               settings={settings}
               mediaRoots={mediaRoots}
               mediaServerOptions={mediaServerOptions}
+              languages={languages}
             />
           </div>
         </div>
-
-        <PreferredLanguagesCard
-          options={languages}
-          selected={currentUser.preferredLanguages}
-        />
       </div>
     </div>
   );

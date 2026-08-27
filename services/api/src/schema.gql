@@ -7,13 +7,6 @@ type Item {
   title: String!
 }
 
-type Language {
-  id: ID!
-  iso2: String!
-  iso3: String!
-  name: String!
-}
-
 type User {
   id: ID!
   name: String!
@@ -21,12 +14,18 @@ type User {
   isAdmin: Boolean!
   isEnabled: Boolean!
   uiLocale: String
-  preferredLanguages: [Language!]!
 }
 
 type LoginResponse {
   access_token: String!
   user: User!
+}
+
+type Language {
+  id: ID!
+  iso2: String!
+  iso3: String!
+  name: String!
 }
 
 type Movie {
@@ -194,21 +193,22 @@ type Query {
   items: [Item!]!
   supportedLocales: [String!]!
   me: User!
-
-  """
-  The full seeded catalog of languages the web pickers read from — never a hard-coded list.
-  """
-  languages: [Language!]!
   users: [User!]!
   user(id: ID!): User!
   movies: [Movie!]!
   movie(id: Int!): Movie
+  defaultUiLocale: String
   settings: [Setting!]!
 
   """
   Raíces de media declaradas por .env (descargas, biblioteca) — la UI arma "hostPath + segmento" con esto, nunca una ruta de container.
   """
   mediaRoots: [MediaRoot!]!
+
+  """
+  The full seeded catalog of languages the web pickers read from — never a hard-coded list.
+  """
+  languages: [Language!]!
 
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!): [TorrentResult!]!
@@ -239,9 +239,6 @@ type Mutation {
   """Inicia sesión y retorna un JWT"""
   login(loginInput: LoginInput!): LoginResponse!
   logout: Boolean!
-
-  """Replaces the caller's global language preference; [] clears it."""
-  setPreferredLanguages(iso2: [String!]!): [Language!]!
   createUser(createUserInput: CreateUserInput!): User!
   updateUser(updateUserInput: UpdateUserInput!): User!
   removeUser(id: ID!): User!

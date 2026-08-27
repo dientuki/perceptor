@@ -74,8 +74,6 @@ model User {
   movies UserMovie[]
   shows  UserShow[]
 
-  languages UserLanguage[]
-
   @@map("users")
 }
 
@@ -120,29 +118,16 @@ model Language {
   iso2 String @unique
   iso3 String
 
-  userPreferences      UserLanguage[]
   userMoviePreferences UserMovieLanguage[]
   userShowPreferences  UserShowLanguage[]
 
   @@map("languages")
 }
 
-// A user's global language preference, applied to every title in their
-// library unless overridden per-title (see UserMovieLanguage/UserShowLanguage).
-model UserLanguage {
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  languageId Int
-  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
-
-  @@id([userId, languageId])
-  @@index([languageId])
-  @@map("user_languages")
-}
-
-// A user's extra per-title language preference for a film, added to their
-// global preference. Keyed through UserMovie (not User + Movie separately)
+// A user's extra per-title language preference for a film, added to the
+// installation's `default_languages` setting (029-settings-screen-tabs;
+// the per-user global level, `UserLanguage`/`user_languages`, was dropped).
+// Keyed through UserMovie (not User + Movie separately)
 // so the preference is removed automatically when the ownership row is.
 model UserMovieLanguage {
   userId  String

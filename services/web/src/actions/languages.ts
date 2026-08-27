@@ -36,41 +36,6 @@ export async function getLanguages(): Promise<Language[]> {
   return data?.languages ?? [];
 }
 
-const SET_PREFERRED_LANGUAGES_MUTATION = `
-  mutation SetPreferredLanguages($iso2: [String!]!) {
-    setPreferredLanguages(iso2: $iso2) {
-      id
-      iso2
-      iso3
-      name
-    }
-  }
-`;
-
-export async function setPreferredLanguagesAction(
-  _prevState: unknown,
-  formData: FormData,
-): Promise<{ error?: string } | { success: true }> {
-  const iso2 = formData.getAll("iso2").map(String);
-
-  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
-  try {
-    result = await fetchGraphQL(SET_PREFERRED_LANGUAGES_MUTATION, { iso2 });
-  } catch (_err) {
-    const t = await getTranslations("errors");
-    return { error: t("network.connectionFailed") };
-  }
-
-  const { errors } = result;
-
-  if (errors && errors.length > 0) {
-    await redirectIfUnauthenticated(errors);
-    return { error: await translateGraphQLError(errors[0]) };
-  }
-
-  return { success: true };
-}
-
 const SET_MOVIE_PREFERRED_LANGUAGES_MUTATION = `
   mutation SetMoviePreferredLanguages($movieId: Int!, $iso2: [String!]!) {
     setMoviePreferredLanguages(movieId: $movieId, iso2: $iso2) {
