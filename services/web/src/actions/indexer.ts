@@ -2,8 +2,9 @@
 
 import { redirectIfUnauthenticated } from '@/lib/auth-session';
 import { fetchGraphQL } from '@/lib/graphql-client';
-import { translateGraphQLError } from '@/lib/graphql-error';
+import { toActionError, translateGraphQLError } from '@/lib/graphql-error';
 import { TorrentResult } from '@/types/indexer';
+import type { AcquisitionResult } from '@/types/media';
 
 const SEARCH_TORRENTS_QUERY = `
   query SearchTorrents($query: String!) {
@@ -50,7 +51,7 @@ export async function addTorrentToMovieAction(
   urls: string[],
   releaseTitle: string | null,
   force = false,
-): Promise<{ id: number; status: string }> {
+): Promise<AcquisitionResult> {
   const { data, errors } = await fetchGraphQL<{ addTorrentToMovie: { id: number; status: string } }>(
     ADD_TORRENT_MUTATION,
     { movieId, infoHash, urls, releaseTitle, force },
@@ -58,8 +59,8 @@ export async function addTorrentToMovieAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(await translateGraphQLError(errors[0]));
+    return await toActionError(errors[0]);
   }
 
-  return data!.addTorrentToMovie;
+  return { success: true, ...data!.addTorrentToMovie };
 }

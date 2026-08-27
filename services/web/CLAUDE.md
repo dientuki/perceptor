@@ -90,6 +90,21 @@ string. Every `src/actions/*.ts` read/write derives its error text through this 
 reusing `translateGraphQLError`. See `docs/spec/graphql-contract.md` § "UI internationalization" for
 the full envelope and key vocabulary — `api` and `worker` own the keys; `web` never invents one.
 
+**A Server Action `throw` loses `extensions.i18n.key`; branching on the key needs a return value.**
+`translateGraphQLError` upgrades the error *text*, but a component that needs to decide *which* UI
+to show (e.g. "already completed, offer to replace" versus "busy, offer to retry") needs the key
+itself, and the message survives a `throw new Error(...)` while the key does not. Since
+`027-replace-completed-media`, the five acquisition actions (`importMagnetAction`,
+`addTorrentToMovieAction`, `addTorrentToEpisodeAction`, `addMagnetToEpisodeAction`,
+`createUploadTicketAction`) no longer throw on a GraphQL error — they return
+`AcquisitionResult` (`src/types/media.ts`): `{ success: true; id; status } | { error: string;
+errorKey?: string }`, built with `toActionError(error)` (`src/lib/graphql-error.ts`), a thin wrapper
+around `translateGraphQLError` that additionally passes `extensions.i18n.key` through untouched.
+Components compare `errorKey` against catalog keys directly — never against a translated message
+substring. This replaced a `message.includes(t("conflictMarker"))` pattern that matched `api`'s
+**English** error text regardless of the active locale, which meant the "Reemplazar" affordance
+never appeared at all when rendering in `es`.
+
 **Language names are not a catalog entry.** `LanguagePicker.tsx` renders each option through
 `Intl.DisplayNames([activeLocale], { type: 'language' })` and sorts with `localeCompare(...,
 activeLocale)` — `api`'s `languages` query returns English names only (display authority moved
@@ -338,9 +353,9 @@ parity check with an exit code.
 
 ## Current state
 
-As of 2026-08-26 (`020-profile-edit`): `bin/cli web npx --no tsc --noEmit` reports **0 errors** and
-`bin/npm web run build` exits 0. Re-run both rather than trusting this — report the numbers before
-and after a change to prove you added nothing.
+As of 2026-08-26 (`027-replace-completed-media`): `bin/cli web npx --no tsc --noEmit` reports
+**0 errors** and `bin/npm web run build` exits 0. Re-run both rather than trusting this — report the
+numbers before and after a change to prove you added nothing.
 
 `bin/npm web run lint` is **not** a usable gate: `biome check` reports ~1598 errors and ~96 warnings
 across the pre-existing template, with or without any given change. Judge a new file by running Biome

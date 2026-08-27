@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-26
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -166,43 +166,43 @@ None.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a film in `COMPLETED`, when a magnet is submitted from the film detail
+- [x] **AC-1**: Given a film in `COMPLETED`, when a magnet is submitted from the film detail
       screen, then a warning appears naming the file that will be replaced, and no `MediaSource`
       row is created until the user confirms.
-- [ ] **AC-2**: Given the same film, when the user confirms, then `movies.status` becomes
+- [x] **AC-2**: Given the same film, when the user confirms, then `movies.status` becomes
       `DOWNLOADING`, `movies.file_path` still holds the original path, and the file at that path is
       still on disk — verifiable with `bin/mysql -e 'select status, file_path from movies where id=N'`
       plus `bin/cli worker ls -l <that path>`.
-- [ ] **AC-3 (failure path)**: Given a replacement in progress for that film, when the download is
+- [x] **AC-3 (failure path)**: Given a replacement in progress for that film, when the download is
       cancelled or the scan finds no video, then `movies.status` is `ERROR`, `movies.file_path` is
       unchanged, and the original file is **still on disk**. Playing it from the media server still
       works.
-- [ ] **AC-4**: Given the replacement's encode completes, then the title's library folder holds
+- [x] **AC-4**: Given the replacement's encode completes, then the title's library folder holds
       **exactly one** file, at the same path as before, whose size or mtime differs from the one
       recorded before the replacement started — the old file was overwritten in place, not
       duplicated. `movies.file_path` is unchanged because the path itself never moved.
-- [ ] **AC-5**: Given the same replacement, no file under `${HOST_DESTINATIONS_DIR}` other than that
+- [x] **AC-5**: Given the same replacement, no file under `${HOST_DESTINATIONS_DIR}` other than that
       one is created, modified or removed for the duration — verifiable by comparing
       `bin/cli worker find <library root> -newermt <start time>` before and after against the single
       expected path.
-- [ ] **AC-6 (failure path)**: `createUploadTicket(movieId: <a COMPLETED film>)` with no `force`
+- [x] **AC-6 (failure path)**: `createUploadTicket(movieId: <a COMPLETED film>)` with no `force`
       returns a GraphQL error carrying `extensions.i18n.key = "error.movie.already_completed"`, and
       no ticket is minted. The browser never starts the upload.
-- [ ] **AC-7**: `createUploadTicket(movieId: <the same film>, force: true)` mints a ticket; uploading
+- [x] **AC-7**: `createUploadTicket(movieId: <the same film>, force: true)` mints a ticket; uploading
       a file with it succeeds through `onUploadFinish`, creating a `LOCAL_FILE` `MediaSource` and
       setting the film to `ENCODING`.
-- [ ] **AC-8 (failure path)**: A ticket minted with `force: false` for a film that is *not* busy, used
+- [x] **AC-8 (failure path)**: A ticket minted with `force: false` for a film that is *not* busy, used
       for an upload that finishes after that film acquired a source, is refused at `onUploadFinish`
       with a `409` and the uploaded file is not adopted — the ticket's own decision governs, and no
       tus metadata key can turn a non-forcing ticket into a forcing one (REQ-7).
-- [ ] **AC-9**: With the UI locale set to `es`, the conflict and replacement messages render in
+- [x] **AC-9**: With the UI locale set to `es`, the conflict and replacement messages render in
       Spanish (no English text leaks through), and the confirm control appears — the case that is
       broken today because `errors.movie.*` is absent from `services/web/messages/es.json`.
-- [ ] **AC-10**: `addMagnetToSeason(seasonId: <season with COMPLETED episodes>, magnet: …)` without
+- [x] **AC-10**: `addMagnetToSeason(seasonId: <season with COMPLETED episodes>, magnet: …)` without
       `force` fails with `error.season.already_completed`; with `force: true` it proceeds, and each
       episode the new pack resolves to follows AC-2 through AC-5 individually.
-- [ ] **AC-11**: `bin/npm api test` passes and `bin/npm web run build` exits 0.
-- [ ] **AC-12**: `git diff` for this feature contains no `rm`, `unlink` or `rename` against a
+- [x] **AC-11**: `bin/npm api test` passes and `bin/npm web run build` exits 0.
+- [x] **AC-12**: `git diff` for this feature contains no `rm`, `unlink` or `rename` against a
       library path, and `services/worker/` is untouched (NFR-3).
 
 ## Out of Scope

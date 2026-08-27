@@ -68,3 +68,21 @@ export async function translateGraphQLError(
     return error.message;
   }
 }
+
+/**
+ * Turns a raw GraphQL error into the `{ error, errorKey }` shape a Server
+ * Action returns instead of throwing. `errorKey` is `extensions.i18n.key`
+ * passed through untouched — no `error.` prefix strip, unlike
+ * `translateGraphQLError`'s internal lookup — because components compare
+ * against the full `error.movie.already_completed` form to decide which
+ * confirmation to offer (REQ-11). A plain `throw new Error(...)` loses this
+ * key at the boundary, which is why a Server Action returns it instead.
+ */
+export async function toActionError(
+  error: GraphQLErrorLike,
+): Promise<{ error: string; errorKey?: string }> {
+  return {
+    error: await translateGraphQLError(error),
+    errorKey: error.extensions?.i18n?.key,
+  };
+}

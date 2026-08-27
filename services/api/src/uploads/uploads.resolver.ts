@@ -7,6 +7,8 @@ import { UploadTicket } from './entities/upload-ticket.entity';
 import { UploadTicketsService } from './upload-tickets.service';
 import { MoviesService } from '@/movies/movies.service';
 import { EpisodesService } from '@/episodes/episodes.service';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 @Resolver()
 export class UploadsResolver {
@@ -31,6 +33,7 @@ export class UploadsResolver {
   async createUploadTicket(
     @Args('movieId', { type: () => Int, nullable: true }) movieId: number | null | undefined,
     @Args('episodeId', { type: () => Int, nullable: true }) episodeId: number | null | undefined,
+    @Args('force', { type: () => Boolean, nullable: true, defaultValue: false }) force: boolean,
     @CurrentUser() principal: AuthPrincipal,
   ): Promise<UploadTicket> {
     if (principal.type !== 'user') {
@@ -49,13 +52,35 @@ export class UploadsResolver {
       if (!movie) {
         throw new NotFoundException(`La película ${movieId} no existe`);
       }
-      return await this.uploadTickets.mint(principal.id, { movieId: movieId as number });
+
+      // Pre-flight conflict check (REQ-6): reported here, before a single
+      // byte is uploaded, rather than at onUploadFinish after the browser
+      // spent minutes/hours on a multi-gigabyte tus upload.
+      if (movie.mediaSourceId && !force) {
+        throw i18nError.conflict(
+          movie.status === 'COMPLETED' ? ERROR_KEYS.MOVIE_ALREADY_COMPLETED : ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS,
+        );
+      }
+
+      return await this.uploadTickets.mint(principal.id, { movieId: movieId as number }, force);
     }
 
     const episode = await this.episodes.findOneFromDb(episodeId as number, principal.id);
     if (!episode) {
       throw new NotFoundException(`El episodio ${episodeId} no existe`);
     }
-    return await this.uploadTickets.mint(principal.id, { episodeId: episodeId as number });
+
+    // Episode's twin of the film check above: an episode is the pointed-at
+    // side of MediaSource, so "already has a source" is a non-ERROR
+    // MediaSource query, not a null-column check (mirrors
+    // EpisodesService.attachTorrentSource).
+    const activeSource = await this.episodes.findActiveSource(episodeId as number);
+    if (activeSource && !force) {
+      throw i18nError.conflict(
+        episode.status === 'COMPLETED' ? ERROR_KEYS.EPISODE_ALREADY_COMPLETED : ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS,
+      );
+    }
+
+    return await this.uploadTickets.mint(principal.id, { episodeId: episodeId as number }, force);
   }
 }

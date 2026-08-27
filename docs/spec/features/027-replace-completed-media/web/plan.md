@@ -2,7 +2,7 @@
 title: Replace a completed media — web slice
 service: web
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Replace a completed media — `web` (`web/plan.md`)

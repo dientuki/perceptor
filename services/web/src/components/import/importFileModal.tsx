@@ -7,6 +7,7 @@ import { useRef, useState } from "react";
 import * as tus from "tus-js-client";
 import { createUploadTicketAction } from "@/actions/uploads";
 import Label from "@/components/form/Label";
+import ReplaceWarning from "@/components/import/ReplaceWarning";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
 import type { AcquisitionTarget } from "@/types/media";
@@ -70,6 +71,7 @@ export default function ImportFileModal({
   target,
 }: ImportFileModalProps) {
   const t = useTranslations("import.file");
+  const tReplace = useTranslations("import.replace");
   // Not `translateGraphQLError` (src/lib/graphql-error.ts): that helper is
   // server-only (`next-intl/server`'s `getTranslations`) and this modal is a
   // Client Component. Same catalog namespace and lookup convention, minimal
@@ -79,10 +81,17 @@ export default function ImportFileModal({
   const [fileName, setFileName] = useState<string | null>(null);
   const [progress, setProgress] = useState({ sent: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const uploadRef = useRef<tus.Upload | null>(null);
   const router = useRouter();
 
   const title = t("title");
+
+  const isCompleted =
+    target !== null &&
+    (target.kind === "movie"
+      ? target.movie.status === "COMPLETED"
+      : target.episode.status === "COMPLETED");
 
   const reset = () => {
     uploadRef.current = null;
@@ -90,6 +99,7 @@ export default function ImportFileModal({
     setFileName(null);
     setProgress({ sent: 0, total: 0 });
     setError(null);
+    setReplaceConfirmed(false);
   };
 
   // Reads `i18n.key` off a tus `DetailedError`'s response body when the
@@ -136,15 +146,20 @@ export default function ImportFileModal({
     setStatus("uploading");
 
     // El ticket se pide antes de crear la subida: onUploadCreate lo verifica
-    // una sola vez, en el POST inicial (ver spec 002-auth-login).
-    let ticket;
-    try {
-      ticket = await createUploadTicketAction(target);
-    } catch (err) {
+    // una sola vez, en el POST inicial (ver spec 002-auth-login). `force`
+    // travels into the ticket itself (REQ-7) — the refusal for a COMPLETED
+    // target with no confirmation arrives here, before a single byte is
+    // sent (REQ-6).
+    const ticketResult = await createUploadTicketAction(
+      target,
+      isCompleted && replaceConfirmed,
+    );
+    if ("error" in ticketResult) {
       setStatus("error");
-      setError(err instanceof Error ? err.message : t("errorTicket"));
+      setError(ticketResult.error);
       return;
     }
+    const ticket = ticketResult.ticket;
 
     // El metadata key movieId mantiene su nombre y significado exactos aun
     // para un film (NFR-1); episodeId es la contraparte para un episodio.
@@ -234,7 +249,22 @@ export default function ImportFileModal({
         </div>
 
         <div className="px-2">
-          {status === "idle" && (
+          {status === "idle" && isCompleted && !replaceConfirmed && (
+            <>
+              <ReplaceWarning target={targetLabel} />
+              <div className="flex items-center gap-3 lg:justify-end">
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={() => setReplaceConfirmed(true)}
+                >
+                  {tReplace("confirm")}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {status === "idle" && (!isCompleted || replaceConfirmed) && (
             <>
               <Label>{t("fileLabel")}</Label>
               <input

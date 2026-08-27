@@ -2,7 +2,7 @@
 title: Replace a completed media — api slice
 service: api
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Replace a completed media — `api` (`api/plan.md`)

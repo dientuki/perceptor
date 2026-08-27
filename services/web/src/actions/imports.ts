@@ -2,7 +2,8 @@
 
 import { redirectIfUnauthenticated } from '@/lib/auth-session';
 import { fetchGraphQL } from '@/lib/graphql-client';
-import { translateGraphQLError } from '@/lib/graphql-error';
+import { toActionError } from '@/lib/graphql-error';
+import type { AcquisitionResult } from '@/types/media';
 
 const ADD_MAGNET_MUTATION = `
   mutation AddMagnetToMovie($movieId: Int!, $magnet: String!, $force: Boolean) {
@@ -17,7 +18,7 @@ export async function importMagnetAction(
   movieId: number,
   magnet: string,
   force = false,
-): Promise<{ id: number; status: string }> {
+): Promise<AcquisitionResult> {
   const { data, errors } = await fetchGraphQL<{ addMagnetToMovie: { id: number; status: string } }>(
     ADD_MAGNET_MUTATION,
     { movieId, magnet, force },
@@ -25,8 +26,8 @@ export async function importMagnetAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(await translateGraphQLError(errors[0]));
+    return await toActionError(errors[0]);
   }
 
-  return data!.addMagnetToMovie;
+  return { success: true, ...data!.addMagnetToMovie };
 }

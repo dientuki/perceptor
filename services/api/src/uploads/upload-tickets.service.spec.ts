@@ -13,6 +13,15 @@ import { UploadTicketsService } from './upload-tickets.service';
 // already depends on, because the property under test ("did the ticket
 // actually get consumed") can only be asserted by construction against a
 // mock.
+//
+// 027-replace-completed-media: the `force`/replace-marker cases below defend
+// against a forged replacement — a `force: false` ticket must never yield a
+// `true` decision from `isReplaceAuthorised`, whatever a browser later sends
+// as tus metadata. This fails silently in the worst way: the upload succeeds,
+// a good library file is overwritten, and the only evidence is that it is now
+// the wrong film. `verifyAndSpend` is the only place `force` can enter the
+// system (it is read out of the ticket's own signed payload), so these cases
+// exercise it directly rather than the resolver/service plumbing above it.
 describe('UploadTicketsService', () => {
   let redis: RedisService;
   let jwtService: JwtService;
@@ -33,7 +42,7 @@ describe('UploadTicketsService', () => {
   it('accepts a freshly minted ticket for the movie it was minted for', async () => {
     const ticket = await service.mint('user-1', { movieId: MOVIE_ID });
 
-    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toBe('user-1');
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toEqual({ userId: 'user-1', force: false });
   });
 
   it('rejects the same ticket presented a second time', async () => {
@@ -69,7 +78,7 @@ describe('UploadTicketsService', () => {
 
     // The mismatch above must not have burned the ticket — the correct
     // movieId still works afterwards (AC-12's whole point).
-    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toBe('user-1');
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toEqual({ userId: 'user-1', force: false });
   });
 
   it('rejects a ticket minted for a movie when presented for an episode, without spending it', async () => {
@@ -82,6 +91,48 @@ describe('UploadTicketsService', () => {
     // rejection would silently burn the ticket, and the legitimate movie
     // upload right below would then fail with "already used" — a failure
     // that would surface nowhere near the actual bug.
-    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toBe('user-1');
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toEqual({ userId: 'user-1', force: false });
+  });
+
+  it('resolves force: false for a ticket minted without confirming a replacement', async () => {
+    const ticket = await service.mint('user-1', { movieId: MOVIE_ID + 2 });
+
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID + 2 })).resolves.toEqual({
+      userId: 'user-1',
+      force: false,
+    });
+  });
+
+  it('resolves force: true only for a ticket minted with force: true', async () => {
+    const ticket = await service.mint('user-1', { movieId: MOVIE_ID + 3 }, true);
+
+    await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID + 3 })).resolves.toEqual({
+      userId: 'user-1',
+      force: true,
+    });
+  });
+
+  // The forged-replacement defence itself (REQ-7): the marker must exist
+  // ONLY when the ticket that authorised this upload id carried force: true.
+  // If `onUploadCreate` were changed to trust `upload.metadata` instead of
+  // this signed payload, a force: false ticket would still leave no marker
+  // here even though a malicious client's metadata claimed otherwise — these
+  // two cases would keep passing and the regression would show up only in
+  // `uploads.service.ts`, which is exactly the silent failure this file
+  // exists to catch before it gets that far.
+  describe('the replace marker', () => {
+    it('is absent for an upload id nothing ever wrote', async () => {
+      await expect(service.isReplaceAuthorised('never-written-upload-id')).resolves.toBe(false);
+    });
+
+    it('is visible only after markReplaceAuthorised was called for that id', async () => {
+      const uploadId = `spec-${randomUUID()}`;
+
+      await expect(service.isReplaceAuthorised(uploadId)).resolves.toBe(false);
+
+      await service.markReplaceAuthorised(uploadId);
+
+      await expect(service.isReplaceAuthorised(uploadId)).resolves.toBe(true);
+    });
   });
 });

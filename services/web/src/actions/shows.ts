@@ -5,8 +5,9 @@ import {
   redirectToClearSession,
 } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
-import { translateGraphQLError } from "@/lib/graphql-error";
+import { toActionError, translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
+import type { AcquisitionResult } from "@/types/media";
 
 export interface Episode {
   id: string;
@@ -145,7 +146,7 @@ export async function addTorrentToEpisodeAction(
   urls: string[],
   releaseTitle: string | null,
   force = false,
-): Promise<{ id: number; status: string }> {
+): Promise<AcquisitionResult> {
   const { data, errors } = await fetchGraphQL<{
     addTorrentToEpisode: { id: number; status: string };
   }>(ADD_TORRENT_TO_EPISODE_MUTATION, {
@@ -158,10 +159,10 @@ export async function addTorrentToEpisodeAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(await translateGraphQLError(errors[0]));
+    return await toActionError(errors[0]);
   }
 
-  return data!.addTorrentToEpisode;
+  return { success: true, ...data!.addTorrentToEpisode };
 }
 
 const ADD_MAGNET_TO_EPISODE_MUTATION = `
@@ -177,15 +178,15 @@ export async function addMagnetToEpisodeAction(
   episodeId: number,
   magnet: string,
   force = false,
-): Promise<{ id: number; status: string }> {
+): Promise<AcquisitionResult> {
   const { data, errors } = await fetchGraphQL<{
     addMagnetToEpisode: { id: number; status: string };
   }>(ADD_MAGNET_TO_EPISODE_MUTATION, { episodeId, magnet, force });
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(await translateGraphQLError(errors[0]));
+    return await toActionError(errors[0]);
   }
 
-  return data!.addMagnetToEpisode;
+  return { success: true, ...data!.addMagnetToEpisode };
 }

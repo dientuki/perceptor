@@ -200,13 +200,25 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   user mints one via `createUploadTicket`, the browser sends it as `Authorization: Bearer <ticket>` on
   the tus `POST`, and `onUploadCreate` verifies and spends it exactly once via a Redis `SET … NX`
   (atomic, so two concurrent POSTs can't both win). Never re-checked on `PATCH`, by design.
-  `createUploadTicket(movieId: Int, episodeId: Int)` takes both nullable and requires **exactly one**;
-  `UploadTicketsService.mint`/`verifyAndSpend` take a `UploadTicketTarget = { movieId } | { episodeId }`,
-  and the target check runs **before** the Redis spend — a mismatch must not burn the ticket. It also
-  requires the caller's `user_movies` link, calling the same `findOneFromDb` that `movie(id)` uses.
-  `handleUploadFinish` keeps a bare `prisma.movie.findUnique` — not an ownership hole, since a ticket
-  is only mintable for an owned film and is bound to that target. The tus metadata key names are
-  deliberately **not** unified — see root `CLAUDE.md` → Known debt.
+  `createUploadTicket(movieId: Int, episodeId: Int, force: Boolean = false)` takes both nullable and
+  requires **exactly one**; `UploadTicketsService.mint`/`verifyAndSpend` take a
+  `UploadTicketTarget = { movieId } | { episodeId }`, and the target check runs **before** the Redis
+  spend — a mismatch must not burn the ticket. It also requires the caller's `user_movies` link,
+  calling the same `findOneFromDb` that `movie(id)` uses. `handleUploadFinish` keeps a bare
+  `prisma.movie.findUnique` — not an ownership hole, since a ticket is only mintable for an owned film
+  and is bound to that target. The tus metadata key names are deliberately **not** unified — see root
+  `CLAUDE.md` → Known debt.
+  **Replacing a `COMPLETED` film or episode** (`027-replace-completed-media`): the resolver runs a
+  pre-flight conflict check *before* minting — same-shaped guard as `attachTorrentSource`'s
+  (`mediaSourceId`/active-`MediaSource` present), throwing `*_ALREADY_COMPLETED` when the target's
+  `status` is `COMPLETED` or `*_DOWNLOAD_IN_PROGRESS` otherwise. With `force: true` the ticket mints
+  and carries the flag in its signed payload; `onUploadCreate` writes a Redis marker
+  (`UPLOAD_REPLACE_KEY_PREFIX`, 7-day TTL, no delete method — the TTL is the cleanup) keyed by
+  `upload.id`, and `handleUploadFinish` reads that marker — **never** `upload.metadata`, which is
+  client-controlled and forging it must not authorise a replacement — to decide whether to skip its
+  existing `409`. Nothing here deletes a library file: the replacement encode's own atomic `rename`
+  overwrites the old output in place, so no code in this module or in `process-jobs/` touches disk for
+  the old file.
 
 **Infrastructure**: `prisma/` (`PrismaModule` + `PrismaService`, effectively global), `redis/`,
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).
@@ -293,10 +305,10 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-08-26 (`020-profile-edit`): `bin/cli api npx --no tsc --noEmit` reports **0 errors**,
-`bin/npm api test` is green at **208** tests across **23** suites. **Re-run both rather than
-trusting these numbers** — they exist so an agent can prove a change added nothing, not as a fact
-to cite.
+As of 2026-08-26 (`027-replace-completed-media`): `bin/cli api npx --no tsc --noEmit` reports
+**0 errors**, `bin/npm api test` is green at **215** tests across **23** suites. **Re-run both
+rather than trusting these numbers** — they exist so an agent can prove a change added nothing, not
+as a fact to cite.
 
 ## Known debt
 

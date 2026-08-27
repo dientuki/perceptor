@@ -19,3 +19,13 @@ export type AcquisitionTarget =
       showTitle: string;
       seasonNumber: number;
     };
+
+// The discriminated return of every acquisition Server Action (magnet,
+// torrent, upload ticket). A `throw` loses `extensions.i18n.key` at the
+// Server Action boundary — the message survives, the key does not — which is
+// why a refusal (including the expected "already completed" one) arrives as
+// data instead. Matches the `{ error?: string } | { success: true }` shape
+// services/web/CLAUDE.md documents for write actions.
+export type AcquisitionResult =
+  | { success: true; id: number; status: string }
+  | { error: string; errorKey?: string };

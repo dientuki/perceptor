@@ -302,7 +302,9 @@ export class MoviesService implements MediaTypeService {
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
     if (movie.mediaSourceId && !input.force) {
-      throw i18nError.conflict(ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS);
+      throw i18nError.conflict(
+        movie.status === 'COMPLETED' ? ERROR_KEYS.MOVIE_ALREADY_COMPLETED : ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS,
+      );
     }
 
     // infoHash es @unique: si ya existe una fila con este hash, no podemos

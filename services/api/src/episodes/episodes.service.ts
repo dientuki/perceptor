@@ -26,6 +26,18 @@ export class EpisodesService {
     });
   }
 
+  // Episode's twin of Movie.mediaSourceId: an episode is the pointed-at side
+  // of MediaSource, so "has an active source" is this query, not a
+  // null-column check. Reused by `attachTorrentSource` below and by
+  // `UploadsResolver.createUploadTicket`'s pre-flight conflict check
+  // (027-replace-completed-media REQ-6), so both entry points agree on the
+  // same definition of "busy".
+  async findActiveSource(episodeId: number) {
+    return this.prisma.mediaSource.findFirst({
+      where: { episodeId, status: { not: 'ERROR' } },
+    });
+  }
+
   async addTorrentToEpisode(
     episodeId: number,
     input: { infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
@@ -73,12 +85,12 @@ export class EpisodesService {
     const episode = await this.findOneFromDb(episodeId, userId);
     if (!episode) throw i18nError.notFound(ERROR_KEYS.EPISODE_NOT_FOUND, { id: episodeId });
 
-    const activeSource = await this.prisma.mediaSource.findFirst({
-      where: { episodeId, status: { not: 'ERROR' } },
-    });
+    const activeSource = await this.findActiveSource(episodeId);
 
     if (activeSource && !input.force) {
-      throw i18nError.conflict(ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS);
+      throw i18nError.conflict(
+        episode.status === 'COMPLETED' ? ERROR_KEYS.EPISODE_ALREADY_COMPLETED : ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS,
+      );
     }
 
     // Symmetric with the check MoviesService.attachTorrentSource now does:

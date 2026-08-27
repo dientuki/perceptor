@@ -7,9 +7,10 @@ import { useEffect, useState } from "react";
 import { importMagnetAction } from "@/actions/imports";
 import { addMagnetToEpisodeAction } from "@/actions/shows";
 import Label from "@/components/form/Label";
+import ReplaceWarning from "@/components/import/ReplaceWarning";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
-import type { AcquisitionTarget } from "@/types/media";
+import type { AcquisitionResult, AcquisitionTarget } from "@/types/media";
 
 interface ImportMagnetModalProps {
   isOpen: boolean;
@@ -17,27 +18,48 @@ interface ImportMagnetModalProps {
   target: AcquisitionTarget | null;
 }
 
+// The three "a finished file is about to be destroyed" keys — a stronger
+// warning than the "download in progress" trio below (REQ-11).
+const ALREADY_COMPLETED_KEYS = [
+  "error.movie.already_completed",
+  "error.episode.already_completed",
+  "error.season.already_completed",
+];
+
+const DOWNLOAD_IN_PROGRESS_KEYS = [
+  "error.movie.download_in_progress",
+  "error.episode.download_in_progress",
+  "error.season.download_in_progress",
+];
+
 export default function ImportMagnetModal({
   isOpen,
   onClose,
   target,
 }: ImportMagnetModalProps) {
   const t = useTranslations("import.magnet");
-  const CONFLICT_MESSAGE = t("conflictMarker");
   const [magnet, setMagnet] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const router = useRouter();
 
-  // Limpiar todo cuando cambia el target o se reabre el modal.
+  const isCompleted =
+    target !== null &&
+    (target.kind === "movie"
+      ? target.movie.status === "COMPLETED"
+      : target.episode.status === "COMPLETED");
+
+  // Limpiar todo cuando cambia el target o se reabre el modal. A COMPLETED
+  // target starts with the warning already shown and force already implied
+  // — the user has read the warning before typing, no wasted round trip.
   useEffect(() => {
     if (isOpen) {
       setMagnet("");
       setError(null);
-      setNeedsConfirm(false);
+      setNeedsConfirm(isCompleted);
     }
-  }, [isOpen, target]);
+  }, [isOpen, target, isCompleted]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,27 +68,34 @@ export default function ImportMagnetModal({
     setIsPending(true);
     setError(null);
 
-    try {
-      if (target.kind === "movie") {
-        await importMagnetAction(Number(target.movie.id), magnet, needsConfirm);
-      } else {
-        await addMagnetToEpisodeAction(
-          Number(target.episode.id),
-          magnet,
-          needsConfirm,
-        );
-      }
-      onClose();
-      // Mismo criterio que ImportFileModal/SearchTorrent: refrescar el server
-      // component para que la película aparezca con su estado nuevo.
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t("errorDefault");
-      setError(message);
-      setNeedsConfirm(message.includes(CONFLICT_MESSAGE));
-    } finally {
-      setIsPending(false);
+    const force = isCompleted || needsConfirm;
+    let result: AcquisitionResult;
+    if (target.kind === "movie") {
+      result = await importMagnetAction(Number(target.movie.id), magnet, force);
+    } else {
+      result = await addMagnetToEpisodeAction(
+        Number(target.episode.id),
+        magnet,
+        force,
+      );
     }
+
+    if ("error" in result) {
+      setError(result.error);
+      setNeedsConfirm(
+        !!result.errorKey &&
+          (ALREADY_COMPLETED_KEYS.includes(result.errorKey) ||
+            DOWNLOAD_IN_PROGRESS_KEYS.includes(result.errorKey)),
+      );
+      setIsPending(false);
+      return;
+    }
+
+    onClose();
+    // Mismo criterio que ImportFileModal/SearchTorrent: refrescar el server
+    // component para que la película aparezca con su estado nuevo.
+    router.refresh();
+    setIsPending(false);
   };
 
   if (!target) return null;
@@ -97,6 +126,7 @@ export default function ImportMagnetModal({
         </div>
         <form className="flex flex-col" onSubmit={handleSubmit}>
           <div className="px-2 overflow-y-auto custom-scrollbar">
+            {isCompleted && <ReplaceWarning target={targetLabel} />}
             <Label>{t("label")}</Label>
             <input
               type="text"
@@ -104,7 +134,7 @@ export default function ImportMagnetModal({
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setMagnet(e.target.value);
                 setError(null);
-                setNeedsConfirm(false);
+                setNeedsConfirm(isCompleted);
               }}
               placeholder={t("placeholder")}
               autoFocus

@@ -122,7 +122,7 @@ export class UploadsService implements OnModuleInit {
   // ever mints a ticket for one target, so metadata carrying both or neither
   // means the browser sent something a legitimate ticket flow never produces;
   // verifyAndSpend below rejects it the same way a mismatched target does.
-  async onUploadCreate(req: Request, upload: { metadata?: Record<string, string | null> }) {
+  async onUploadCreate(req: Request, upload: { id: string; metadata?: Record<string, string | null> }) {
     const authorization = req.headers.get('authorization');
     const token = authorization?.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : null;
 
@@ -138,8 +138,9 @@ export class UploadsService implements OnModuleInit {
       ? { episodeId: Number(rawEpisodeId) }
       : { movieId: Number(rawMovieId) };
 
+    let force = false;
     try {
-      await this.uploadTickets.verifyAndSpend(token, target);
+      ({ force } = await this.uploadTickets.verifyAndSpend(token, target));
     } catch (err) {
       if (err instanceof UploadTicketMismatchError) {
         throw new UploadHttpError(
@@ -151,6 +152,14 @@ export class UploadsService implements OnModuleInit {
         throw new UploadHttpError(401, ERROR_KEYS.UPLOAD_TICKET_EXPIRED);
       }
       throw err;
+    }
+
+    // 027-replace-completed-media: the ticket's own signed `force` is the
+    // only source of this decision (REQ-7) — record it here, keyed by tus
+    // upload id, so handleUploadFinish can read it without ever touching
+    // upload.metadata.
+    if (force) {
+      await this.uploadTickets.markReplaceAuthorised(upload.id);
     }
 
     return {};
@@ -191,7 +200,13 @@ export class UploadsService implements OnModuleInit {
       const activeSource = await this.prisma.mediaSource.findFirst({
         where: { episodeId, status: { not: 'ERROR' } },
       });
-      if (activeSource) {
+      // 027-replace-completed-media: the mid-upload race guard. The ticket's
+      // own decision (never upload.metadata — REQ-7) governs whether this
+      // conflict is skipped; createUploadTicket already refused an
+      // unconfirmed replacement before the upload started, so reaching here
+      // with `activeSource` set and no authorisation means the target became
+      // busy while the upload was in flight.
+      if (activeSource && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
         throw new UploadHttpError(409, ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS);
       }
 
@@ -227,7 +242,9 @@ export class UploadsService implements OnModuleInit {
     const movie = await this.prisma.movie.findUnique({ where: { id: movieId } });
     if (!movie) throw new UploadHttpError(404, ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
-    if (movie.mediaSourceId) {
+    // 027-replace-completed-media: same mid-upload race guard as the episode
+    // branch above, governed by the ticket's own decision (REQ-7).
+    if (movie.mediaSourceId && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
       throw new UploadHttpError(409, ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS);
     }
 

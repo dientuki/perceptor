@@ -69,7 +69,11 @@ export class SeasonsService {
     });
 
     if (activeSource && !input.force) {
-      throw i18nError.conflict(ERROR_KEYS.SEASON_DOWNLOAD_IN_PROGRESS);
+      const hasCompletedEpisode =
+        (await this.prisma.episode.count({ where: { seasonId, status: 'COMPLETED' } })) > 0;
+      throw i18nError.conflict(
+        hasCompletedEpisode ? ERROR_KEYS.SEASON_ALREADY_COMPLETED : ERROR_KEYS.SEASON_DOWNLOAD_IN_PROGRESS,
+      );
     }
 
     // Symmetric with the checks MoviesService/EpisodesService.attachTorrentSource

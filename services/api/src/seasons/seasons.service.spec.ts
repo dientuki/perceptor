@@ -35,6 +35,9 @@ describe('SeasonsService', () => {
       update: jest.Mock;
       create: jest.Mock;
     };
+    episode: {
+      count: jest.Mock;
+    };
   };
   let qbittorrent: { add: jest.Mock };
 
@@ -56,6 +59,9 @@ describe('SeasonsService', () => {
         updateMany: jest.fn(),
         update: jest.fn(),
         create: jest.fn(),
+      },
+      episode: {
+        count: jest.fn(),
       },
     };
     qbittorrent = { add: jest.fn() };
@@ -130,6 +136,7 @@ describe('SeasonsService', () => {
     it('rejects a second acquisition without force, and creates no row', async () => {
       prisma.season.findFirst.mockResolvedValue(season);
       prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, seasonId: 42, status: 'DOWNLOADING' });
+      prisma.episode.count.mockResolvedValue(0); // no COMPLETED episode — merely busy
 
       await expect(
         service.addMagnetToSeason(42, { magnet, force: false }, 'user-1'),
@@ -138,6 +145,26 @@ describe('SeasonsService', () => {
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
       expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+    });
+
+    // 027-replace-completed-media: the "at least one COMPLETED episode" branch
+    // — swapping this key for the merely-busy one would show the mild
+    // "a download is already running" copy to someone about to destroy
+    // already-downloaded episodes, with nothing failing anywhere.
+    it('rejects with error.season.already_completed when at least one episode is COMPLETED', async () => {
+      prisma.season.findFirst.mockResolvedValue(season);
+      prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, seasonId: 42, status: 'DOWNLOADING' });
+      prisma.episode.count.mockResolvedValue(1);
+
+      await expect(
+        service.addMagnetToSeason(42, { magnet, force: false }, 'user-1'),
+      ).rejects.toThrow('This season already has downloaded episodes. Confirm to replace the current files.');
+
+      expect(prisma.episode.count).toHaveBeenCalledWith({
+        where: { seasonId: 42, status: 'COMPLETED' },
+      });
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
     });
 
     it('with force, accepts the torrent then demotes the previously active source before creating the replacement', async () => {

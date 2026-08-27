@@ -3,7 +3,7 @@
 import { getTranslations } from "next-intl/server";
 import { redirectIfUnauthenticated } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
-import { translateGraphQLError } from "@/lib/graphql-error";
+import { toActionError } from "@/lib/graphql-error";
 import type { AcquisitionTarget } from "@/types/media";
 
 export interface UploadTicket {
@@ -14,13 +14,19 @@ export interface UploadTicket {
   endpoint: string;
 }
 
+export type CreateUploadTicketResult =
+  | { success: true; ticket: UploadTicket }
+  | { error: string; errorKey?: string };
+
 // CHANGED: both arguments are now nullable on the API side — exactly one must
 // be supplied. Sent by name below, never positionally, since a bare
 // positional id is how a film upload could silently mint a ticket for
-// `undefined` once `movieId` stopped being required.
+// `undefined` once `movieId` stopped being required. `force` is minted into
+// the ticket itself (REQ-7 — `onUploadFinish` reads the decision off the
+// verified ticket, not off anything the browser sends).
 const CREATE_UPLOAD_TICKET_MUTATION = `
-  mutation CreateUploadTicket($movieId: Int, $episodeId: Int) {
-    createUploadTicket(movieId: $movieId, episodeId: $episodeId) {
+  mutation CreateUploadTicket($movieId: Int, $episodeId: Int, $force: Boolean) {
+    createUploadTicket(movieId: $movieId, episodeId: $episodeId, force: $force) {
       token
       expiresAt
     }
@@ -29,11 +35,12 @@ const CREATE_UPLOAD_TICKET_MUTATION = `
 
 export async function createUploadTicketAction(
   target: AcquisitionTarget,
-): Promise<UploadTicket> {
+  force = false,
+): Promise<CreateUploadTicketResult> {
   const variables =
     target.kind === "movie"
-      ? { movieId: Number(target.movie.id), episodeId: undefined }
-      : { movieId: undefined, episodeId: Number(target.episode.id) };
+      ? { movieId: Number(target.movie.id), episodeId: undefined, force }
+      : { movieId: undefined, episodeId: Number(target.episode.id), force };
 
   const { data, errors } = await fetchGraphQL<{
     createUploadTicket: Omit<UploadTicket, "endpoint">;
@@ -41,19 +48,19 @@ export async function createUploadTicketAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    throw new Error(await translateGraphQLError(errors[0]));
+    return await toActionError(errors[0]);
   }
 
   if (!data?.createUploadTicket) {
     const t = await getTranslations("errors");
-    throw new Error(t("upload.ticketMissing"));
+    return { error: t("upload.ticketMissing") };
   }
 
   const endpoint = process.env.PUBLIC_UPLOAD_URL;
   if (!endpoint) {
     const t = await getTranslations("errors");
-    throw new Error(t("upload.endpointNotConfigured"));
+    return { error: t("upload.endpointNotConfigured") };
   }
 
-  return { ...data.createUploadTicket, endpoint };
+  return { success: true, ticket: { ...data.createUploadTicket, endpoint } };
 }

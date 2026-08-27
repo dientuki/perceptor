@@ -9,18 +9,32 @@ import {
   searchTorrentsAction,
 } from "@/actions/indexer";
 import { addTorrentToEpisodeAction } from "@/actions/shows";
+import ReplaceWarning from "@/components/import/ReplaceWarning";
 import Button from "@/components/ui/button/Button";
 import type { TorrentResult } from "@/types/indexer";
-import type { AcquisitionTarget } from "@/types/media";
+import type { AcquisitionResult, AcquisitionTarget } from "@/types/media";
 
 interface SearchTorrentProps {
   target: AcquisitionTarget | null;
   onClose?: () => void;
 }
 
+// The three "a finished file is about to be destroyed" keys — a stronger
+// warning than the "download in progress" trio below (REQ-11).
+const ALREADY_COMPLETED_KEYS = [
+  "error.movie.already_completed",
+  "error.episode.already_completed",
+  "error.season.already_completed",
+];
+
+const DOWNLOAD_IN_PROGRESS_KEYS = [
+  "error.movie.download_in_progress",
+  "error.episode.download_in_progress",
+  "error.season.download_in_progress",
+];
+
 export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   const t = useTranslations("search.torrent");
-  const CONFLICT_MESSAGE = t("conflictMarker");
 
   const formatBytes = (bytes: number | null) => {
     if (bytes === null) return "N/A";
@@ -84,30 +98,44 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     }
   };
 
-  const submitTorrent = async (res: TorrentResult, force: boolean) => {
-    if (!target) return;
+  const isCompleted =
+    target !== null &&
+    (target.kind === "movie"
+      ? target.movie.status === "COMPLETED"
+      : target.episode.status === "COMPLETED");
+
+  const targetLabel = target
+    ? target.kind === "movie"
+      ? target.movie.title
+      : `${target.showTitle} S${String(target.seasonNumber).padStart(2, "0")}E${String(target.episode.episodeNumber).padStart(2, "0")}`
+    : "";
+
+  const submitTorrent = async (
+    res: TorrentResult,
+    force: boolean,
+  ): Promise<AcquisitionResult | null> => {
+    if (!target) return null;
 
     const urls = res.items
       .map((i) => i.downloadUrl)
       .filter((u): u is string => !!u);
 
     if (target.kind === "movie") {
-      await addTorrentToMovieAction(
+      return await addTorrentToMovieAction(
         Number(target.movie.id),
         res.infoHash,
         urls,
         res.title,
         force,
       );
-    } else {
-      await addTorrentToEpisodeAction(
-        Number(target.episode.id),
-        res.infoHash,
-        urls,
-        res.title,
-        force,
-      );
     }
+    return await addTorrentToEpisodeAction(
+      Number(target.episode.id),
+      res.infoHash,
+      urls,
+      res.title,
+      force,
+    );
   };
 
   const handleAddTorrent = async (res: TorrentResult) => {
@@ -115,36 +143,34 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     setAddError(null);
     setNeedsConfirm(null);
 
-    try {
-      await submitTorrent(res, false);
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t("addErrorDefault");
-
-      setAddError(message);
-      if (message.includes(CONFLICT_MESSAGE)) {
+    const result = await submitTorrent(res, isCompleted);
+    if (result && "error" in result) {
+      setAddError(result.error);
+      if (
+        result.errorKey &&
+        (ALREADY_COMPLETED_KEYS.includes(result.errorKey) ||
+          DOWNLOAD_IN_PROGRESS_KEYS.includes(result.errorKey))
+      ) {
         setNeedsConfirm(res);
       }
-    } finally {
-      setAddingHash(null);
+    } else {
+      router.refresh();
     }
+    setAddingHash(null);
   };
 
   const handleConfirmReplace = async (res: TorrentResult) => {
     setAddingHash(res.infoHash);
     setAddError(null);
 
-    try {
-      await submitTorrent(res, true);
+    const result = await submitTorrent(res, true);
+    if (result && "error" in result) {
+      setAddError(result.error);
+    } else {
       setNeedsConfirm(null);
       router.refresh();
-    } catch (err) {
-      setAddError(
-        err instanceof Error ? err.message : t("replaceErrorDefault"),
-      );
-    } finally {
-      setAddingHash(null);
     }
+    setAddingHash(null);
   };
 
   return (
@@ -168,6 +194,12 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
           )}
         </Button>
       </form>
+
+      {isCompleted && (
+        <div className="flex-shrink-0">
+          <ReplaceWarning target={targetLabel} />
+        </div>
+      )}
 
       {results.length > 0 && (
         <div className="relative flex-shrink-0">

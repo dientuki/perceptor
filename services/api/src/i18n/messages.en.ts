@@ -32,14 +32,20 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.MOVIE_NOT_IN_CATALOG]: 'We could not find that movie in the catalog',
   [ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS]:
     'This movie already has a download in progress. Confirm to replace it.',
+  [ERROR_KEYS.MOVIE_ALREADY_COMPLETED]:
+    'This movie is already downloaded. Confirm to replace the current file.',
   [ERROR_KEYS.SHOW_NOT_AVAILABLE]: 'Resource not available for this user',
   [ERROR_KEYS.SHOW_NOT_IN_CATALOG]: 'We could not find that series in the catalog',
   [ERROR_KEYS.SEASON_NOT_FOUND]: 'Season {id} does not exist',
   [ERROR_KEYS.SEASON_DOWNLOAD_IN_PROGRESS]:
     'This season already has a download in progress. Confirm to replace it.',
+  [ERROR_KEYS.SEASON_ALREADY_COMPLETED]:
+    'This season already has downloaded episodes. Confirm to replace the current files.',
   [ERROR_KEYS.EPISODE_NOT_FOUND]: 'Episode {id} does not exist',
   [ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS]:
     'This episode already has a download in progress. Confirm to replace it.',
+  [ERROR_KEYS.EPISODE_ALREADY_COMPLETED]:
+    'This episode is already downloaded. Confirm to replace the current file.',
   [ERROR_KEYS.MAGNET_ALREADY_ATTACHED]: 'That magnet is already attached to «{title}»',
   [ERROR_KEYS.MEDIA_UNSUPPORTED_TYPE]: 'Unsupported media type: {type}',
 

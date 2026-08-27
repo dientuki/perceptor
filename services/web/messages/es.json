@@ -27,6 +27,18 @@
       "invalidToken": "No se recibió un token válido.",
       "currentUserFailed": "Error al obtener el usuario actual"
     },
+    "movie": {
+      "already_completed": "Esta película ya está descargada. Confirmá para reemplazar el archivo actual.",
+      "download_in_progress": "Esta película ya tiene una descarga en curso. Confirmá para reemplazarla."
+    },
+    "episode": {
+      "already_completed": "Este episodio ya está descargado. Confirmá para reemplazar el archivo actual.",
+      "download_in_progress": "Este episodio ya tiene una descarga en curso. Confirmá para reemplazarlo."
+    },
+    "season": {
+      "already_completed": "Esta temporada ya tiene episodios descargados. Confirmá para reemplazar los archivos actuales.",
+      "download_in_progress": "Esta temporada ya tiene una descarga en curso. Confirmá para reemplazarla."
+    },
     "upload": {
       "ticket_expired": "El ticket de subida expiró, intentá de nuevo",
       "ticket_wrong_movie": "El ticket de subida no corresponde a esta película",
@@ -147,6 +159,10 @@
     "backToShows": "Volver a series"
   },
   "import": {
+    "replace": {
+      "warning": "<b>{target}</b> ya está en la biblioteca. Reemplazarla va a sobrescribir el archivo actual, que se va a eliminar de forma permanente.",
+      "confirm": "Reemplazar archivo"
+    },
     "file": {
       "title": "Importar Video Local",
       "description": "Elegí el archivo de video para <b>{target}</b>. Se sube por la red — podés pausarlo y reanudarlo si se corta.",
@@ -171,8 +187,7 @@
       "confirm": "Confirmar",
       "replace": "Reemplazar",
       "processing": "Procesando...",
-      "errorDefault": "Error al importar el magnet.",
-      "conflictMarker": "ya tiene una descarga en curso"
+      "errorDefault": "Error al importar el magnet."
     }
   },
   "search": {
@@ -212,8 +227,7 @@
       "cancel": "Cancelar",
       "searchingTrackers": "Buscando en trackers...",
       "noFilterMatch": "Ningún resultado coincide con el filtro.",
-      "noResultsYet": "Todavía no hay resultados. Probá buscar un release específico.",
-      "conflictMarker": "ya tiene una descarga en curso"
+      "noResultsYet": "Todavía no hay resultados. Probá buscar un release específico."
     }
   },
   "media": {

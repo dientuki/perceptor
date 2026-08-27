@@ -7,6 +7,17 @@ import { UploadTicket } from './entities/upload-ticket.entity';
 
 const UPLOAD_TICKET_KEY_PREFIX = 'upload:ticket:';
 
+// The replace decision lives here, keyed by tus upload id, never in tus
+// metadata — a browser-authored metadata key would be a forged
+// authorisation (027-replace-completed-media, plan.md § Contract Freeze).
+// Absence of the key means NO replacement: this is a fail-closed design,
+// and a Redis outage or an expired marker on a long-paused upload both
+// resolve to "no replace", never the other way around.
+const UPLOAD_REPLACE_KEY_PREFIX = 'upload:replace:';
+// 7 days: long enough to cover a paused resumable upload, short enough that
+// a stale marker for an abandoned upload eventually stops mattering.
+const REPLACE_MARKER_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 // A ticket is minted for exactly one target — a movie or an episode — never
 // both. `movieId` keeps its name and meaning (010-episode-acquisition §
 // NFR-1); `episodeId` sits beside it rather than generalising into a single
@@ -32,6 +43,12 @@ type UploadTicketPayload = {
   episodeId?: number;
   typ: 'upload';
   jti: string;
+  // 027-replace-completed-media: the confirmed-replacement decision, signed
+  // into the ticket at mint time (REQ-7) so `onUploadFinish` never has to
+  // re-derive it from anything the browser controls. Absent on every ticket
+  // minted before this feature — `verifyAndSpend` below defaults it to
+  // `false` for that reason.
+  force?: boolean;
 };
 
 // `jwtService.verify<T>` returns exactly `T`, so `exp` has to be declared
@@ -55,13 +72,14 @@ export class UploadTicketsService {
     private readonly redis: RedisService,
   ) {}
 
-  async mint(userId: string, target: UploadTicketTarget): Promise<UploadTicket> {
+  async mint(userId: string, target: UploadTicketTarget, force = false): Promise<UploadTicket> {
     const jti = randomUUID();
     const payload: UploadTicketPayload = {
       sub: userId,
       ...('movieId' in target ? { movieId: target.movieId } : { episodeId: target.episodeId }),
       typ: 'upload',
       jti,
+      force,
     };
 
     const token = this.jwtService.sign(payload, { expiresIn: UPLOAD_TICKET_TTL_SECONDS });
@@ -78,10 +96,13 @@ export class UploadTicketsService {
    * ticket minted for one movie/episode and presented for another must not
    * be burned by the mismatch, or a client that mistakenly races two
    * uploads with the same ticket would lose the ticket it actually needed.
-   * Returns the ticket's owner `userId` on success, throws on any failure —
-   * callers decide the exact HTTP shape of that failure.
+   * Returns the ticket's owner `userId` and its signed `force` decision on
+   * success, throws on any failure — callers decide the exact HTTP shape of
+   * that failure. Returning an object rather than a bare string is
+   * deliberate (027-replace-completed-media): it makes `force` impossible
+   * to drop silently at the one call site that reads it.
    */
-  async verifyAndSpend(token: string, target: UploadTicketTarget): Promise<string> {
+  async verifyAndSpend(token: string, target: UploadTicketTarget): Promise<{ userId: string; force: boolean }> {
     let payload: DecodedUploadTicket;
     try {
       payload = this.jwtService.verify<DecodedUploadTicket>(token);
@@ -122,6 +143,27 @@ export class UploadTicketsService {
       throw new UploadTicketExpiredError('Upload ticket already used');
     }
 
-    return payload.sub;
+    return { userId: payload.sub, force: payload.force ?? false };
+  }
+
+  /**
+   * Records that this upload id was authorised, at ticket-mint time, to
+   * replace whatever the target currently has. Called by `onUploadCreate`
+   * only after `verifyAndSpend` resolved `force: true` — never from tus
+   * metadata (027-replace-completed-media, plan.md § Contract Freeze).
+   */
+  async markReplaceAuthorised(uploadId: string): Promise<void> {
+    await this.redis.set(`${UPLOAD_REPLACE_KEY_PREFIX}${uploadId}`, '1', 'EX', REPLACE_MARKER_TTL_SECONDS, 'NX');
+  }
+
+  /**
+   * Reads the replace decision `onUploadCreate` recorded for this upload id.
+   * Absence of the key — never written, expired, or a Redis hiccup — resolves
+   * to `false`: fail closed, so a replacement can only ever happen because
+   * this service itself recorded that it was authorised, never by default.
+   */
+  async isReplaceAuthorised(uploadId: string): Promise<boolean> {
+    const value = await this.redis.get(`${UPLOAD_REPLACE_KEY_PREFIX}${uploadId}`);
+    return value === '1';
   }
 }

@@ -281,7 +281,7 @@ type Mutation {
 
   """El worker pide borrar el torrent del cliente tras un encode exitoso"""
   downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!
-  createUploadTicket(movieId: Int, episodeId: Int): UploadTicket!
+  createUploadTicket(movieId: Int, episodeId: Int, force: Boolean = false): UploadTicket!
 
   """Envía un release elegido a qBittorrent y lo asocia al episodio"""
   addTorrentToEpisode(episodeId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Episode!

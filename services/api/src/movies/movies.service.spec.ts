@@ -1,10 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { HttpException } from '@nestjs/common';
 import { MoviesService } from './movies.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { MEDIA_TYPE } from '@/types/media';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+
+// A magnet with a valid infoHash, reused across the attachTorrentSource
+// cases below — parseMagnet() is the real implementation, not mocked.
+const MAGNET = 'magnet:?xt=urn:btih:5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c&dn=Test';
 
 // This suite exists because 005-movie-search's four riskiest paths all fail
 // with a perfectly successful response and nothing to notice:
@@ -242,6 +248,51 @@ describe('MoviesService', () => {
       // mismatched poster and no exception anywhere.
       expect(createData.posterUrl).toBe(posterUrl('/dune.jpg'));
       expect(createData.posterUrl).toBe('https://image.tmdb.org/t/p/w300/dune.jpg');
+    });
+  });
+
+  // This suite exists because otherwise the wrong warning reaches the user: a
+  // `COMPLETED` film swapping the "already completed" key for the "download
+  // in progress" one shows the mild "a download is already running" copy to
+  // someone about to destroy a finished file, with nothing failing anywhere.
+  describe('addMagnetToMovie (attachTorrentSource conflict key)', () => {
+    function expectI18nKey(promise: Promise<unknown>, key: string): Promise<void> {
+      return promise.then(
+        () => {
+          throw new Error('expected the call to reject');
+        },
+        error => {
+          expect(error).toBeInstanceOf(HttpException);
+          const response = (error as HttpException).getResponse() as { i18n?: { key: string } };
+          expect(response.i18n?.key).toBe(key);
+        },
+      );
+    }
+
+    it('answers error.movie.already_completed for a COMPLETED film with no force', async () => {
+      prisma.movie.findFirst.mockResolvedValue({
+        id: 7,
+        mediaSourceId: 99,
+        status: 'COMPLETED',
+      });
+
+      await expectI18nKey(
+        service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
+        ERROR_KEYS.MOVIE_ALREADY_COMPLETED,
+      );
+    });
+
+    it('still answers error.movie.download_in_progress for a merely-busy film', async () => {
+      prisma.movie.findFirst.mockResolvedValue({
+        id: 7,
+        mediaSourceId: 99,
+        status: 'DOWNLOADING',
+      });
+
+      await expectI18nKey(
+        service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
+        ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS,
+      );
     });
   });
 });

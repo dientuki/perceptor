@@ -27,6 +27,18 @@
       "invalidToken": "No valid token was received.",
       "currentUserFailed": "Could not fetch the current user"
     },
+    "movie": {
+      "already_completed": "This movie is already downloaded. Confirm to replace the current file.",
+      "download_in_progress": "This movie already has a download in progress. Confirm to replace it."
+    },
+    "episode": {
+      "already_completed": "This episode is already downloaded. Confirm to replace the current file.",
+      "download_in_progress": "This episode already has a download in progress. Confirm to replace it."
+    },
+    "season": {
+      "already_completed": "This season already has downloaded episodes. Confirm to replace the current files.",
+      "download_in_progress": "This season already has a download in progress. Confirm to replace it."
+    },
     "upload": {
       "ticket_expired": "The upload ticket expired, try again",
       "ticket_wrong_movie": "The upload ticket does not belong to this movie",
@@ -147,6 +159,10 @@
     "backToShows": "Back to series"
   },
   "import": {
+    "replace": {
+      "warning": "<b>{target}</b> is already in the library. Replacing it will overwrite the current file, which will be permanently deleted.",
+      "confirm": "Replace file"
+    },
     "file": {
       "title": "Import Local Video",
       "description": "Choose the video file for <b>{target}</b>. It uploads over the network — you can pause and resume it if it drops.",
@@ -171,8 +187,7 @@
       "confirm": "Confirm",
       "replace": "Replace",
       "processing": "Processing...",
-      "errorDefault": "Could not import the magnet.",
-      "conflictMarker": "already has a download in progress"
+      "errorDefault": "Could not import the magnet."
     }
   },
   "search": {
@@ -212,8 +227,7 @@
       "cancel": "Cancel",
       "searchingTrackers": "Searching trackers...",
       "noFilterMatch": "No results match your filter.",
-      "noResultsYet": "No results yet. Try searching for a specific release.",
-      "conflictMarker": "already has a download in progress"
+      "noResultsYet": "No results yet. Try searching for a specific release."
     }
   },
   "media": {
