@@ -140,6 +140,35 @@ true. This group may run alongside Group 1 in full.
 (the api half) and T007 (the display half). AC-6, AC-7 → T008. AC-8 → T009. AC-9 → T006+T009. AC-10
 → T002, T010. Every criterion is reachable; none is left to a task that does not exist.
 
+### Group 5 — post-implementation amendments (`web`, 2026-08-26)
+
+Four follow-up requests from the same session, done directly rather than through a fresh
+`/specify` round (single service, no schema/GraphQL delta). See `spec.md` § Post-Implementation
+Amendments and `web/plan.md`'s amendments table for the full detail.
+
+- [x] **T013** `[web]` Replace `PageBreadCrumb.tsx`'s breadcrumb `<nav>` with a `children` actions
+      slot; wire `/users` to render `AddUserButton` there instead of above the table. New
+      `UsersDialogsContext.tsx`/`UsersDialogsProvider` shares `modalTarget`/`deletingUser` between
+      the header and `UsersManager`, now in separate subtrees.
+      *Done when:* `/users` shows no "Home" breadcrumb link, "Add user" sits in the header next to
+      the title, and clicking it still opens the create modal.
+- [x] **T014** `[web]` Row action buttons (`UsersManager.tsx`) get real button chrome — background,
+      `ring-1` border, hover state — instead of a bare color-only icon.
+      *Done when:* each action button renders with a visible background/border, matching the shared
+      `Button` component's `outline` look (red-tinted for delete).
+- [x] **T015** `[web]` Add each action's translated label as visible text beside its icon, not only
+      as `title`/`aria-label`.
+      *Done when:* `Edit user`/`Disable user`/`Enable user`/`Delete user` (and their `es`
+      equivalents) render as visible button text.
+- [x] **T016** `[web]` Fix the actions column's auto-sizing gap: `w-px whitespace-nowrap` on the
+      actions `<th>`/`<td>`.
+      *Done when:* the Status and actions columns render adjacent with no unclaimed gap between
+      them.
+
+All four verified against the running dev containers: `tsc`, `bin/npm web run lint`,
+`check-messages.mjs` and `bin/npm web run build` clean after each; T013 additionally checked live
+in the browser (context wiring, modal open/close) since it introduces a new state-sharing path.
+
 ## Blocked
 
 | Task | Service | What blocked it | Needs |

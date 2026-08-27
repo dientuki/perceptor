@@ -157,7 +157,13 @@ export default function ProfileModal({
             </div>
           </div>
           <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
-            <Button size="sm" variant="outline" onClick={onClose} type="button">
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={onClose}
+              type="button"
+              ariaLabel={t("cancel")}
+            >
               {t("cancel")}
             </Button>
             <Button size="sm" type="submit" disabled={isPending}>

@@ -150,21 +150,28 @@ nearest example**, and re-derive it if you move a fetch between server and clien
 `src/actions/users.ts` (`getUsers`/`createUserAction`/`updateUserAction`/`deleteUserAction`/
 `setUserEnabledAction` — all four mutating actions take direct typed arguments, not
 `(prevState, formData)`), `src/app/(dashboard)/users/page.tsx`,
-`src/components/users/UsersManager.tsx` (table + "Add user" entry point, owns which of the two
-dialogs below is open and for whom), `src/components/users/UserModal.tsx` (create/edit, modelled on
+`src/components/users/UsersManager.tsx` (table, owns which of the two dialogs below is open and for
+whom via `UsersDialogsContext`), `src/components/users/UsersDialogsContext.tsx`
+(`UsersDialogsProvider`/`useUsersDialogs` — shares dialog state between the header button and the
+table, which live in separate subtrees), `src/components/users/AddUserButton.tsx` (the header
+trigger), `src/components/users/UserModal.tsx` (create/edit, modelled on
 `src/components/profile/ProfileModal.tsx`), `src/components/users/DeleteUserDialog.tsx` (delete
 confirmation), `src/types/users.ts` (`AdminUser`). The `isAdmin`-gated sidebar entry is wired through
 `src/layout/AdminShell.tsx` → `AppSidebar.tsx`.
 
 - `page.tsx` checks `getCurrentUser().isAdmin` and calls `notFound()` **before** calling `getUsers()`,
   **sequentially, never via `Promise.all`** — racing them turns `api`'s `AdminGuard` refusal into a
-  500 instead of a clean 404.
-- There is no standing create form. `UsersManager` renders one "Add user" button (`user-plus`) beside
-  the table; row actions are icons — `user-pen` edit, `user-x`/`user-check` disable/enable, `trash-2`
-  delete in red — each carrying a translated `title`/`aria-label`. The caller's own row renders
-  **none** of the three: not disabled buttons, absent entirely. That is a usability affordance only;
-  the real enforcement (self-disable, last-admin, session revocation) is server-side in
-  `UsersService`.
+  500 instead of a clean 404. It wraps its output in `UsersDialogsProvider` and passes
+  `<AddUserButton />` as `PageBreadcrumb`'s `children` — the header actions slot (§ Small
+  conventions below has the shared-component detail), not a button stacked above the table.
+- There is no standing create form. Row actions are icons with visible button chrome (background,
+  `ring-1` border, hover state) and a visible text label beside the icon, not a bare color-only
+  icon — `user-pen` edit, `user-x`/`user-check` disable/enable, `trash-2` delete in red — each also
+  carrying a translated `title`/`aria-label`. The actions `<th>`/`<td>` carry `w-px whitespace-nowrap`
+  so the table's auto column-sizing doesn't hand that column unclaimed width. The caller's own row
+  renders **none** of the three: not disabled buttons, absent entirely. That is a usability
+  affordance only; the real enforcement (self-disable, last-admin, session revocation) is
+  server-side in `UsersService`.
 - `UserModal` shows four fields (name, username, password, password confirmation) in create mode and
   **only name + username** in edit mode — an admin can never set another user's password from this
   screen; the recovery path for a locked-out user stays `bin/reset-password <username>`. Delete goes
@@ -345,6 +352,11 @@ parity check with an exit code.
 
 ## Small conventions that are easy to get wrong
 
+- **`PageBreadCrumb.tsx` has no breadcrumb link anymore.** Since `028-users-screen-refactor`'s
+  post-implementation amendments, its `<nav>` ("Home" link) was replaced by an optional `children`
+  slot next to the page title, for page-specific action buttons — `/users` is the only current
+  consumer (`AddUserButton`). Every other page passing `pageTitle` alone now renders an empty slot
+  there; that's expected, not a regression, until that page opts into its own actions.
 - **Controlled inputs use a raw `<input>`**, not `@/components/form/input/InputField`. That shared
   component's `InputProps` accepts `defaultValue` and *not* `value`; every controlled input
   (`PathPicker`, the import modals) uses a raw element with InputField's Tailwind classes copied in.

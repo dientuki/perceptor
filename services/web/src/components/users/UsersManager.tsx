@@ -1,17 +1,23 @@
 "use client";
 
-import { Trash2, UserCheck, UserPen, UserPlus, UserX } from "lucide-react";
+import { Trash2, UserCheck, UserPen, UserX } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { setUserEnabledAction } from "@/actions/users";
-import Button from "@/components/ui/button/Button";
 import DeleteUserDialog from "@/components/users/DeleteUserDialog";
 import UserModal from "@/components/users/UserModal";
+import { useUsersDialogs } from "@/components/users/UsersDialogsContext";
 import type { AdminUser } from "@/types/users";
 
 const ERROR_CLASS =
   "text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
+
+const ICON_BUTTON_CLASS =
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset ring-gray-300 bg-white text-gray-500 transition hover:bg-gray-50 hover:text-brand-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-white/[0.03] dark:hover:text-brand-400";
+
+const ICON_BUTTON_DANGER_CLASS =
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset ring-error-300 bg-white text-error-500 transition hover:bg-error-50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:ring-error-500/30 dark:hover:bg-error-500/10";
 
 interface UsersManagerProps {
   users: AdminUser[];
@@ -22,28 +28,11 @@ export default function UsersManager({
   users,
   currentUserId,
 }: UsersManagerProps) {
-  // "new" opens UserModal in create mode; an AdminUser opens it in edit mode
-  // for that user; null keeps it closed.
-  const [modalTarget, setModalTarget] = useState<AdminUser | "new" | null>(
-    null,
-  );
-  const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
-  const t = useTranslations("users");
+  const { modalTarget, setModalTarget, deletingUser, setDeletingUser } =
+    useUsersDialogs();
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          startIcon={<UserPlus className="size-4" />}
-          onClick={() => setModalTarget("new")}
-          title={t("add.title")}
-          ariaLabel={t("add.title")}
-        >
-          {t("add.label")}
-        </Button>
-      </div>
-
       <UsersTable
         users={users}
         currentUserId={currentUserId}
@@ -103,7 +92,7 @@ function UsersTable({
               <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
                 {t("statusHeader")}
               </th>
-              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
+              <th className="w-px py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
                 {" "}
               </th>
             </tr>
@@ -185,7 +174,7 @@ function UserRow({ user, isSelf, onEdit, onDelete }: UserRowProps) {
             </span>
           )}
         </td>
-        <td className="py-3 pr-4 text-right">
+        <td className="w-px py-3 pr-4 text-right whitespace-nowrap">
           {!isSelf && (
             <div className="flex justify-end gap-3">
               <button
@@ -193,9 +182,10 @@ function UserRow({ user, isSelf, onEdit, onDelete }: UserRowProps) {
                 onClick={() => onEdit(user)}
                 title={t("editTitle")}
                 aria-label={t("editTitle")}
-                className="text-gray-500 hover:text-brand-500 dark:text-gray-400 dark:hover:text-brand-400"
+                className={ICON_BUTTON_CLASS}
               >
-                <UserPen className="size-5" />
+                <UserPen className="size-4" />
+                {t("editTitle")}
               </button>
               <button
                 type="button"
@@ -205,22 +195,24 @@ function UserRow({ user, isSelf, onEdit, onDelete }: UserRowProps) {
                 aria-label={
                   user.isEnabled ? t("disableTitle") : t("enableTitle")
                 }
-                className="text-gray-500 hover:text-brand-500 disabled:opacity-50 dark:text-gray-400 dark:hover:text-brand-400"
+                className={ICON_BUTTON_CLASS}
               >
                 {user.isEnabled ? (
-                  <UserX className="size-5" />
+                  <UserX className="size-4" />
                 ) : (
-                  <UserCheck className="size-5" />
+                  <UserCheck className="size-4" />
                 )}
+                {user.isEnabled ? t("disableTitle") : t("enableTitle")}
               </button>
               <button
                 type="button"
                 onClick={() => onDelete(user)}
                 title={t("deleteTitle")}
                 aria-label={t("deleteTitle")}
-                className="text-error-500 hover:text-error-600"
+                className={ICON_BUTTON_DANGER_CLASS}
               >
-                <Trash2 className="size-5" />
+                <Trash2 className="size-4" />
+                {t("deleteTitle")}
               </button>
             </div>
           )}

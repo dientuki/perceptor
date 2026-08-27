@@ -36,9 +36,21 @@ Writes are confined to `services/web/` and this directory. Anything else is a st
 | `services/web/messages/es.json` | Modified | Same keys, Rioplatense register. |
 | `services/web/CLAUDE.md` | Modified | § "Admin user management" rewritten to describe what is actually there afterwards. |
 
-`src/app/(dashboard)/users/page.tsx` and `src/types/users.ts` need no change — the page's
-`isAdmin` → `notFound()` → `getUsers()` sequence and its comment about *not* using `Promise.all`
-stay exactly as they are, and `AdminUser` already carries every field the table renders.
+**Added in the 2026-08-26 post-implementation amendments** (see `../spec.md` § Post-Implementation
+Amendments):
+
+| File | New / Modified | What changes |
+| :-- | :-- | :-- |
+| `services/web/src/components/common/PageBreadCrumb.tsx` | Modified | The breadcrumb `<nav>` ("Home" link) is replaced by an optional `children` slot for page-specific action buttons; no longer `async` (dropped its only translation lookup). Affects every page using this component, not just `/users`. |
+| `services/web/src/components/users/AddUserButton.tsx` | New | The "Add user" trigger, now rendered in the header slot instead of above the table. |
+| `services/web/src/components/users/UsersDialogsContext.tsx` | New | `UsersDialogsProvider`/`useUsersDialogs` — shares `modalTarget`/`deletingUser` state between the header trigger and `UsersManager`, which are no longer in the same subtree. |
+| `services/web/src/components/users/UsersManager.tsx` | Modified (again) | Reads dialog state from context instead of local `useState`; no longer renders the "Add user" button itself; row action buttons gained visible button chrome (background/ring/hover) and a visible text label beside each icon; the actions `<th>`/`<td>` gained `w-px whitespace-nowrap` to remove the gap that opened up after Status. |
+| `services/web/src/app/(dashboard)/users/page.tsx` | Modified (again) | Wraps the page in `UsersDialogsProvider`; passes `<AddUserButton />` as `PageBreadcrumb`'s children. |
+
+`src/types/users.ts` needs no change — `AdminUser` already carries every field the table renders.
+`src/app/(dashboard)/users/page.tsx`'s `isAdmin` → `notFound()` → `getUsers()` sequence and its
+comment about *not* using `Promise.all` stay exactly as they are; the page changed only to add the
+provider wrapper and the header slot's children (see the amendments table above).
 
 ## Existing code to reuse
 

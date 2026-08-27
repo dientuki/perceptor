@@ -181,3 +181,31 @@ None. `User` already has every field this screen reads or writes.
   `password` from `UpdateUserInput` now that no screen sends it, is a contract change with no user
   benefit here; `web` simply never sends the field (NFR-1).
 - **Redesigning any other administration screen.** `/settings` keeps its current look.
+
+## Post-Implementation Amendments (2026-08-26)
+
+Four small refinements landed after the initial implementation closed, driven directly by user
+feedback in the same session rather than a new `/specify` round (Article VII — single service, no
+schema or GraphQL delta). Recorded here so the spec stays truthful about what `/users` actually
+does.
+
+- **Header actions slot replaces the breadcrumb.** `components/common/PageBreadCrumb.tsx`'s
+  `<nav>` (a "Home" breadcrumb link) is gone; the component now takes an optional `children` slot
+  next to the page title, for page-specific action buttons. `/users` is the first consumer: it
+  renders `AddUserButton` there instead of stacking the "Add user" button above the table. Every
+  other page using `PageBreadcrumb` (`movies`, `shows`, `settings`, `search`, the two detail pages,
+  the two add pages) loses the breadcrumb link and renders an empty slot until it opts into its own
+  actions — e.g. a future sort control on `/movies`, which is what prompted this change.
+- **Shared dialog state.** Because the "Add user" trigger now lives in the header (outside
+  `UsersManager`) while `UserModal` still opens from inside the table, a new
+  `components/users/UsersDialogsContext.tsx` (`UsersDialogsProvider` + `useUsersDialogs`) holds
+  `modalTarget`/`deletingUser` so both sides read and write the same state. `page.tsx` wraps the
+  header and the card in the provider.
+- **REQ-6 amendment — row actions are visible buttons, not bare icons.** The edit/disable-enable/
+  delete controls now render with real button chrome (background, `ring-1` border, hover state —
+  matching the shared `Button` component's `outline` look, red-tinted for delete) instead of a
+  color-only icon with no visible boundary, and each carries its translated label as visible text
+  next to the icon, not only as `title`/`aria-label`.
+- **Table layout fix.** The actions `<th>`/`<td>` gained `w-px whitespace-nowrap` so the table's
+  auto column-sizing stops handing that column unclaimed width — before this, a wide gap opened up
+  between the Status column and the action buttons.

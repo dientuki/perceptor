@@ -4,6 +4,8 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
 import { getUsers } from "@/actions/users";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+import AddUserButton from "@/components/users/AddUserButton";
+import { UsersDialogsProvider } from "@/components/users/UsersDialogsContext";
 import UsersManager from "@/components/users/UsersManager";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -31,13 +33,17 @@ export default async function UsersPage() {
   const users = await getUsers();
 
   return (
-    <div>
-      <PageBreadcrumb pageTitle={t("title")} />
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
-        <div className="space-y-6">
-          <UsersManager users={users} currentUserId={user.id} />
+    <UsersDialogsProvider>
+      <div>
+        <PageBreadcrumb pageTitle={t("title")}>
+          <AddUserButton />
+        </PageBreadcrumb>
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
+          <div className="space-y-6">
+            <UsersManager users={users} currentUserId={user.id} />
+          </div>
         </div>
       </div>
-    </div>
+    </UsersDialogsProvider>
   );
 }
