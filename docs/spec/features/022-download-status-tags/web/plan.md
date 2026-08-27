@@ -1,7 +1,7 @@
 ---
 title: Download Status and Torrent Tags — web slice
 service: web
-last_updated: 2026-08-19
+last_updated: 2026-08-27
 status: Approved            # Draft | Approved | Implemented
 ---
 
@@ -15,16 +15,27 @@ which fails every acquisition at runtime.
 ## Scope
 
 This slice owns the downloads panel on `/movies/<id>` and `/shows/<id>`, its refresh control, its
-three per-row actions with a delete confirmation, and the actions that back them. It also deletes
-the `force`/"Reemplazar" conflict flow, which no longer has a server-side counterpart.
+three per-row actions (start, stop, delete — **no force-start**, see `../spec.md` § Out of Scope)
+with a delete confirmation, and the actions that back them. It also removes the three
+`…_DOWNLOAD_IN_PROGRESS` keys, which no longer have a producer.
+
+It does **not** touch `force`, the `…_ALREADY_COMPLETED` keys, or the "Reemplazar" flow those drive:
+that is `027-replace-completed-media`'s completed-title replacement and it stays. The two components
+that list both key families keep the completed half and drop the downloading half.
+
+A row whose `kind` is `LOCAL_FILE` is an upload competing in the same race (REQ-19). It is listed
+like any other row, with its `status` and `label`, and it gets **no** action buttons — there is no
+torrent behind it to start, stop or delete.
 
 It is **not** deciding tags, race behaviour, cleanup or scoping — all of that is server-side and
 already settled by the time this slice starts. It never calls qBittorrent: every value on screen
 came from `api`, which read it (REQ-9). There is no polling (REQ-10).
 
-It must **not** adopt `next-intl` or read `extensions.i18n`. `018-ui-i18n` is Approved and not
-implemented; new copy here is Spanish literals at the render site, exactly like the rest of the
-tree today (`spec.md` NFR-3).
+**`018-ui-i18n` is implemented**, so every string this slice adds is a catalog key with an entry in
+both `services/web/messages/en.json` and `es.json`, read through `useTranslations`, and every error
+is resolved by `extensions.i18n.key` — never by matching message text. An earlier revision of this
+plan said the opposite and instructed Spanish literals at the render site; that was wrong
+(`../spec.md` NFR-3). The `es` register stays Rioplatense, matching the entries already there.
 
 Writes are confined to `services/web/` and this directory.
 
@@ -38,11 +49,15 @@ Writes are confined to `services/web/` and this directory.
 | `src/components/downloads/DeleteDownloadModal.tsx` | New | REQ-11's confirmation, on the existing `Modal` |
 | `src/app/(dashboard)/movies/[id]/page.tsx` | Modified | Fetch the film's downloads, render the panel |
 | `src/app/(dashboard)/shows/[id]/page.tsx` | Modified | Same for the show |
-| `src/actions/imports.ts` | Modified | Drop `force` from `importMagnetAction` |
-| `src/actions/indexer.ts` | Modified | Drop `force` from `addTorrentToMovieAction` |
-| `src/actions/shows.ts` | Modified | Drop `force` from both episode actions |
-| `src/components/import/importMagnetModal.tsx` | Modified | Delete `CONFLICT_MESSAGE`, `needsConfirm` and the "Reemplazar" relabel |
-| `src/components/search/SearchTorrent.tsx` | Modified | Delete the same matcher and its inline confirm banner |
+| `messages/en.json`, `messages/es.json` (service root, not `src/`) | Modified | Add the panel's keys and the two new error keys; **delete** the three `…_DOWNLOAD_IN_PROGRESS` entries |
+| `src/components/import/importMagnetModal.tsx` | Modified | Drop the three `…_DOWNLOAD_IN_PROGRESS` entries from its key array (lines 30-32); keep `…_ALREADY_COMPLETED`, `needsConfirm` and the "Reemplazar" relabel |
+| `src/components/search/SearchTorrent.tsx` | Modified | Same narrowing of its key array (lines 31-33); keep its confirm banner for the completed case |
+
+`src/actions/imports.ts`, `indexer.ts`, `shows.ts` and `uploads.ts` are **not** in this list: they
+keep their `force` argument, which is `027`'s and unrelated to what this feature removes.
+`src/components/import/importFileModal.tsx` is also absent — its missing confirm button for a
+downloading target stops mattering once `api` stops raising the message, and its `isCompleted`
+branch is the one that already works.
 
 ## Existing code to reuse
 
@@ -73,13 +88,17 @@ Writes are confined to `services/web/` and this directory.
 1. **Types and actions first.** `src/types/downloads.ts` with the `Download` shape hand-copied from
    `../spec.md`; `src/actions/downloads.ts` with the two reads and three mutations. Every field
    name comes from the spec, not from guessing at `api`'s source.
-2. **Delete the conflict flow.** Drop `force` from the four actions, then remove `CONFLICT_MESSAGE`,
-   `needsConfirm` and the "Reemplazar" states from `importMagnetModal.tsx` and `SearchTorrent.tsx`.
-   Do this before building the panel: it is the part that breaks acquisition if it lags behind
-   `api`, and it shrinks the diff the panel lands on top of.
+2. **Retire the downloading-conflict keys.** Drop the three `…_DOWNLOAD_IN_PROGRESS` entries from
+   `importMagnetModal.tsx`'s and `SearchTorrent.tsx`'s key arrays and from both JSON catalogs.
+   **Leave `…_ALREADY_COMPLETED`, `needsConfirm`, the "Reemplazar" relabel and every `force`
+   argument alone** — that is `027`'s completed-title flow and it must still work (AC-23). Do this
+   before building the panel: it shrinks the diff the panel lands on top of.
 3. **`DownloadsPanel.tsx`.** Rows from the action's result; percent and speed columns; the status
-   pill; the refresh control calling `router.refresh()`; force-start and stop buttons; delete
-   opening the confirmation.
+   pill; the refresh control calling `router.refresh()`; start and stop buttons; delete opening the
+   confirmation. Gate the three buttons on **`infoHash != null`**. Not on `kind` — `SourceKind` has
+   two torrent values and there is no codegen to catch a wrong literal — and not on `progress`: a
+   torrent that vanished from qBittorrent has a null `progress` and still needs its delete button.
+   `kind` is for the row's label, not for the branch.
 4. **`DeleteDownloadModal.tsx`** on `Modal` + `useModal`, naming what is about to be deleted and
    stating that the files go too.
 5. **Wire both pages**, joining the existing `Promise.all`.
@@ -104,15 +123,18 @@ because there is no compiler across the seam.
 
 Error conditions this slice must handle, not just the happy path:
 
-| From | Message | What `web` does |
-| :-- | :-- | :-- |
-| `movieDownloads` / `showDownloads` on an unowned title | `La película <id> no existe` / `Recurso no disponible para este usuario` | The page already handles the same answer from `getMovieById`/`getShowById`; do not add a second treatment |
-| `downloadStart` on a non-torrent source | `Esa descarga no es un torrent` | Surface in the panel; the button should not have been offered (REQ-18) |
-| Any control while qBittorrent is down | `qBittorrent rechazó la operación (<status>)` | Surface it and leave the row unchanged — do not optimistically update |
-| Absent/expired credential | `No autenticado` | The existing `auth-session.ts` helpers, per § Existing code to reuse |
+All of these arrive as `extensions.i18n.key` and are rendered from the catalogs — never matched as
+text.
 
-The three deleted Spanish conflict strings must not survive anywhere in `services/web/src`, in a
-matcher or in a literal.
+| From | Key | What `web` does |
+| :-- | :-- | :-- |
+| `movieDownloads` / `showDownloads` on an unowned title | `MOVIE_NOT_FOUND` / the show key | The page already handles the same answer from `getMovieById`/`getShowById`; do not add a second treatment |
+| `downloadStart` on a non-torrent source | `DOWNLOAD_NOT_A_TORRENT` | Surface in the panel; the button should not have been offered (REQ-18) |
+| Any control while qBittorrent is down | `TORRENT_CLIENT_REJECTED` | Surface it and leave the row unchanged — do not optimistically update |
+| Absent/expired credential | the existing auth key | The existing `auth-session.ts` helpers, per § Existing code to reuse |
+
+The three `…_DOWNLOAD_IN_PROGRESS` keys must not survive anywhere under `services/web` — not in a
+component array, not in either JSON catalog.
 
 ## Tests
 
@@ -131,10 +153,13 @@ here — same arrangement as every previous `web` slice.
 ```bash
 bin/cli web npx --no tsc --noEmit
 bin/npm web run build
-grep -rn "force" services/web/src/actions/
-grep -rn "ya tiene una descarga en curso" services/web/src
+grep -rn "download_in_progress" services/web/src services/web/messages
+grep -rn "already_completed" services/web/src services/web/messages
 grep -rn "@prisma/client" services/web/src
 ```
+
+The first grep must be **empty**; the second must still hit, unchanged — it is `027`'s and this
+slice does not touch it.
 
 Typecheck reports no more than the baseline measured before the change — and none of the remaining
 errors in a file this slice touched. `build` exits 0. The last three greps come back empty. Biome

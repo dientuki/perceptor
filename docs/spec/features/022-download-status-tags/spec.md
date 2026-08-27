@@ -3,7 +3,7 @@ title: Download Status and Torrent Tags
 spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-19
-last_updated: 2026-08-19
+last_updated: 2026-08-27
 status: Approved         # Draft | Approved | Implemented | Superseded
 services: [api, web]
 ---
@@ -38,17 +38,26 @@ time, which is what a user actually wants when a release is slow or dead.
 `services/api/prisma/schema.prisma` gives `Movie` a `mediaSourceId Int? @unique` — a database-level
 1:1, so a film physically cannot hold two sources. Episodes and seasons are already 1:N
 (`MediaSource.episodeId` / `.seasonId`), but all three `attachTorrentSource` implementations
-enforce a one-active-source rule in code, refusing a second request with
-`… ya tiene una descarga en curso. Confirmá para reemplazarla.` unless the caller passes
-`force: true`, which demotes the previous source to `ERROR`.
+enforce a one-active-source rule in code, refusing a second request with `…_DOWNLOAD_IN_PROGRESS`
+unless the caller passes `force: true`, which demotes the previous source to `ERROR`.
+
+The tus upload route has the same rule in four more places, and there it is a dead end rather than a
+prompt. `UploadsResolver.createUploadTicket` refuses before a byte is sent, and
+`UploadsService.onUploadFinish` refuses again if the target became busy mid-upload — but
+`services/web/src/components/import/importFileModal.tsx:252` only renders its confirm button when
+the target is `COMPLETED`, so a user uploading a file to a film that is merely *downloading* is told
+"confirm to replace it" and given nothing to confirm with. The magnet and search paths handle the
+same condition correctly, which is why this went unnoticed. This feature does not add the missing
+button: it removes the condition, so the message has no reason to be raised at all.
 
 This feature replaces all of that. Torrents are tagged when they are added, so qBittorrent's own
 sidebar becomes usable and `api` can fetch a title's torrents with one filtered call. The film and
 series detail pages grow a downloads panel showing, per download, how much is done and how fast it
-last went — values the **server** read from qBittorrent, refreshed when the user asks — with
-force-start, stop and delete controls acting on the torrent client. And a title may race several
-downloads at once: the first to finish stops the others while it keeps seeding, and the cleanup that
-already runs after a successful encode wipes the losers.
+last went — values the **server** read from qBittorrent, refreshed when the user asks — with start,
+stop and delete controls acting on the torrent client. And a title may race several acquisitions at
+once: the first to finish stops the others while it keeps seeding, and the cleanup that already runs
+after a successful encode wipes the losers. A file the user uploads by hand is one of those
+racers — the race is per target, not per torrent.
 
 In the root `CLAUDE.md` pipeline table the **Download** row stops being fire-and-forget: `api` now
 reads live state back out of qBittorrent and starts, stops and deletes torrents on the user's
@@ -57,9 +66,10 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
 
 ## Requirements
 
-> **Scope**: films, single episodes and season packs — every acquisition path that produces a
-> `MediaSource` with an `infoHash`. Uploads (`LOCAL_FILE`, `LOCAL_FOLDER`) have no torrent and are
-> deliberately absent from every screen and mutation this feature adds.
+> **Scope**: films, single episodes and season packs — **every** acquisition path that produces a
+> `MediaSource`, torrent or upload. A `LOCAL_FILE` source has no torrent, so it cannot be started,
+> stopped or deleted from the panel, but it is listed there and it competes in the same race as the
+> torrents of its target (REQ-19).
 
 ### Functional Requirements
 
@@ -89,21 +99,33 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
       active `MediaSource` rows at the same time. A second acquisition request against a target that
       already has one must succeed without warning the user, without asking for confirmation, and
       without touching the sources already there.
-- [ ] **REQ-7 (`force` is retired)**: The `force` argument must be removed from
-      `addTorrentToMovie`, `addMagnetToMovie`, `addTorrentToEpisode`, `addMagnetToEpisode` and
-      `addMagnetToSeason`, together with the three `ConflictException`s it guarded and the
-      demote-the-previous-source-to-`ERROR` path that `force: true` triggered. The two places in
-      `web` that detect the conflict by substring-matching the Spanish sentence
-      (`components/import/importMagnetModal.tsx`, `components/search/SearchTorrent.tsx`) must be
-      deleted rather than adapted, along with their `needsConfirm` / "Reemplazar" states. The
-      **cross-title** infoHash collision is unaffected and stays; re-sending the same infoHash to
+- [ ] **REQ-7 (The "download in progress" conflict is retired; the "already completed" one is not)**:
+      Seven guards today ask "does this target already have a source?" and answer with one of two
+      keys depending on the target's status — `…_ALREADY_COMPLETED` when it is `COMPLETED`,
+      `…_DOWNLOAD_IN_PROGRESS` otherwise. **Only the second branch is retired.** The guard's trigger
+      changes from "has a source" to "is `COMPLETED`", so a target that is merely downloading stops
+      conflicting at all: no exception, no message, no confirmation step, nothing for the user to
+      click through. Trusting the user here is the point — REQ-6 makes a second acquisition a normal
+      thing to do, and a prompt that always resolves to "yes, go ahead" is noise that trains people
+      to dismiss prompts.
+      The seven sites are `MoviesService.attachTorrentSource` (`movies.service.ts:304`),
+      `EpisodesService.attachTorrentSource` (`episodes.service.ts:92`),
+      `SeasonsService` (`seasons.service.ts:75`), `UploadsResolver.createUploadTicket`
+      (`uploads.resolver.ts:60` and `:78`) and the two mid-upload race guards in
+      `uploads.service.ts` (`:209`, `:247`).
+      **`force` stays on all five acquisition mutations and on `createUploadTicket`**, and so does
+      the demote-the-previous-source-to-`ERROR` path it authorises. Both belong to
+      `027-replace-completed-media`, which uses them to replace a **completed** title, and neither is
+      this feature's to remove — an earlier draft of this spec said otherwise and was wrong.
+      `MOVIE_ALREADY_COMPLETED` / `EPISODE_ALREADY_COMPLETED` / `SEASON_ALREADY_COMPLETED` and the
+      whole `UploadTicketsService.isReplaceAuthorised` mechanism are untouched.
+      The three `…_DOWNLOAD_IN_PROGRESS` keys lose every call site and must be deleted from
+      `src/i18n/error-keys.ts`, from both `messages.{en,es}.ts` and from
+      `services/web/messages/{en,es}.json`, along with the `web` code that reacts to them: the key
+      arrays and `needsConfirm` / "Reemplazar" states in `components/import/importMagnetModal.tsx`
+      and `components/search/SearchTorrent.tsx` keep only their `…_ALREADY_COMPLETED` entries.
+      The **cross-title** infoHash collision is unaffected and stays; re-sending the same infoHash to
       the same target stays idempotent, updating the existing row instead of creating a second.
-      **The tus upload route carries two more copies of the same conflict** — `uploads.service.ts`
-      raises a 409 with that sentence for an episode with an active source and for a film with a
-      non-null `Movie.mediaSourceId`, neither of which has a `force` escape hatch. Both go too. The
-      film one is not optional: the column it reads disappears with the data model change below.
-      Keeping the episode one would mean a user may race two torrents but may not upload a file
-      while one runs, which is incoherent with REQ-6.
 - [ ] **REQ-8 (Downloads panel)**: `/movies/<id>` and `/shows/<id>` must each render one flat list
       of that title's downloads, above the existing content. The series list must cover the whole
       show — every season pack and every single-episode download — with each row naming its target,
@@ -115,11 +137,13 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
 - [ ] **REQ-10 (Manual refresh)**: The panel must carry a refresh control that re-reads the values
       from the torrent client. There must be no polling loop, no automatic interval and no
       websocket — a value on screen is only ever as fresh as the last load or the last click.
-- [ ] **REQ-11 (Row controls)**: Each row must offer three actions, all executed against the torrent
-      client: **force-start**, **stop**, and **delete**. Force-start must be qBittorrent's force
-      start, not a plain resume — the point of the control is that it sometimes shakes a stalled
-      torrent loose. Delete must require an explicit confirmation in the interface before it fires,
-      and must remove the torrent **together with its files**.
+- [ ] **REQ-11 (Row controls)**: Each torrent-backed row must offer three actions, all executed
+      against the torrent client: **start**, **stop**, and **delete**. Start is qBittorrent's plain
+      resume (`torrents/start`) — **force start is deliberately not part of this feature** and is
+      listed under Out of Scope; it is a distinct torrent state that belongs to a screen of its own,
+      and building it here would put a rarely-correct control on every row. Delete must require an
+      explicit confirmation in the interface before it fires, and must remove the torrent
+      **together with its files**.
 - [ ] **REQ-12 (Race — the winner keeps seeding, the rest stop)**: When one of a target's downloads
       completes, every **other** non-terminal source of that same target must be stopped in the
       torrent client and its `MediaSource` moved to `PAUSED`. The completed one must be left running
@@ -146,9 +170,22 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
       the caller does not own exactly as they answer for one that does not exist — same exception,
       same message, indistinguishable — per `008-movie-detail`. None of them may carry
       `@AllowService()`.
-- [ ] **REQ-18 (Torrent-backed sources only)**: The panel must list only sources that have an
-      `infoHash`. A source without one must be refused by the three control mutations before any
-      call reaches the torrent client.
+- [ ] **REQ-18 (Every source is listed; only torrents are controllable)**: The panel must list
+      **every** non-terminal source of the target, including a `LOCAL_FILE` upload, so the user can
+      see the full field of a race rather than a subset of it. A source without an `infoHash` renders
+      with its `status` and `label` and with the three live torrent fields null, and the interface
+      must not offer it start, stop or delete. Each of the three control mutations must additionally
+      refuse such a source server-side, before any call reaches the torrent client — the interface
+      not offering a button is not a guarantee.
+- [ ] **REQ-19 (An upload joins the race in progress)**: Uploading a file to a target that already
+      has downloads running must be accepted — no conflict, no confirmation, nothing replaced — and
+      the resulting `LOCAL_FILE` source becomes a competitor in that target's race. Concretely: when
+      the upload completes it is subject to REQ-13's one-winner guard exactly like a completed
+      torrent, and if it wins it must trigger REQ-12's pause of every sibling and, once its encode
+      finishes, REQ-15's cleanup of them — torrents removed with their files, rows deleted. An upload
+      that arrives after a torrent has already reached `READY` or `SCANNED` must be ignored the same
+      way a losing torrent's completion is. The reverse case needs no rule: an upload is complete the
+      instant it lands, so there is nothing to pause when a torrent beats it.
 
 ### Non-Functional & Operational Requirements
 
@@ -164,12 +201,15 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
       and receives byte-identical shapes. The losers' files are deleted **by qBittorrent**, on
       `api`'s instruction, which is outside the worker's remit and outside the `isInsideRoot` checks
       it owns.
-- [ ] **NFR-3 (i18n sequencing)**: `018-ui-i18n` is Approved and **not implemented** — there is no
-      `services/web/messages/`, no `next-intl`, no `extensions.i18n` on any error. New copy in this
-      feature is therefore Spanish literals at their render sites, matching the current tree, and
-      `018` re-extracts them like everything else. This feature must not half-adopt `next-intl` or
-      start emitting `extensions.i18n`. It does *delete* two of the string-matchers `018` lists as
-      targets (REQ-7), which shrinks `018`'s work rather than conflicting with it.
+- [ ] **NFR-3 (i18n is catalog-driven, because `018` shipped)**: `018-ui-i18n` **is implemented** —
+      `services/api/src/i18n/error-keys.ts`, `messages.{en,es}.ts`, `extensions.i18n` on every error,
+      `next-intl` in `web` and `services/web/messages/{en,es}.json`. An earlier draft of this spec
+      asserted the opposite and planned Spanish literals at the render site; that was wrong and is
+      corrected here. Every string this feature adds — panel labels, the delete confirmation, the two
+      new error conditions — is a catalog key with an `en` and an `es` entry, and every error `api`
+      raises carries its `ERROR_KEYS` constant. No user-facing literal may be hardcoded at a render
+      site, and `web` must resolve errors through `extensions.i18n.key`, never by matching message
+      text. The `es` register stays Rioplatense, matching the entries already there.
 - [ ] **NFR-4 (Typecheck and build baseline)**: `api` must stay at 0 errors. `web` must not regress
       its committed error count, and `bin/npm web run build` must exit 0. Re-measure both before and
       after rather than trusting the numbers in the root `CLAUDE.md`.
@@ -179,7 +219,11 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
       not ignored (REQ-13) — the target ends with two `ProcessJob`s writing the same output path,
       and nothing logs a problem; **(b)** cleanup selecting siblings by tag rather than by target id
       (REQ-14) — a second series sharing a title string loses downloads the user never touched, and
-      the deletion succeeds, so there is no error to find.
+      the deletion succeeds, so there is no error to find. A third was introduced by REQ-19 and owes
+      the same treatment: **(c)** an *upload* winning a race and sweeping nothing, because
+      `downloadRemove`'s `!infoHash` early return fired before the sweep — the upload files
+      correctly, the encode succeeds, the user sees a finished title, and two torrents keep
+      downloading and seeding forever with no row and no log to point at them.
 - [ ] **NFR-6 (No unchecked call to the torrent client)**: Every torrent-client method this feature
       adds or newly relies on must check the HTTP response and fail loudly, as `add()` already does
       and as `stop()` and `remove()` currently do **not**. A silent failure here is invisible in both
@@ -209,7 +253,8 @@ mutations. Written as it will appear in the generated `services/api/src/schema.g
 ```graphql
 type Download {
   mediaSourceId: Int!
-  infoHash: String!
+  infoHash: String          # null for a LOCAL_FILE upload racing alongside torrents (REQ-18)
+  kind: String!             # SourceKind, plain String! — for display, not for branching
   label: String!            # "Transformers" | "Reacher S03E08" | "Reacher Temporada 3"
   releaseTitle: String
   movieId: Int
@@ -232,12 +277,10 @@ type Mutation {
   downloadStop(mediaSourceId: Int!): Download!
   downloadDelete(mediaSourceId: Int!): Boolean!
 
-  # CHANGED: `force: Boolean = false` removed from all five.
-  addTorrentToMovie(movieId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String): Movie!
-  addMagnetToMovie(movieId: Int!, magnet: String!): Movie!
-  addTorrentToEpisode(episodeId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String): Episode!
-  addMagnetToEpisode(episodeId: Int!, magnet: String!): Episode!
-  addMagnetToSeason(seasonId: Int!, magnet: String!): Season!
+  # UNCHANGED — the five acquisition mutations and `createUploadTicket` keep their
+  # `force: Boolean = false` argument. It authorises replacing a COMPLETED title
+  # (027-replace-completed-media) and is not this feature's to remove. Only the
+  # behaviour behind it narrows: see REQ-7.
 }
 
 type Movie {
@@ -269,6 +312,23 @@ Notes the SDL cannot carry:
   `downloadSpeed` come back `null`; `status`, `label` and the ids still come from the database. It
   is never silently dropped from the list, because "it vanished from qBittorrent" is exactly what
   the user needs to see.
+- **`infoHash != null` is the controllability test; `kind` is for display only.** `infoHash: null`
+  means this row is an upload and there is no torrent to start, stop or delete. `infoHash` present
+  with null `progress`/`torrentState` means the opposite: a torrent that exists in the database and
+  is *missing from qBittorrent* — a problem the user should see, and a row that must keep its delete
+  button. The two cases are distinguished by `infoHash`, never by whether the live fields are null.
+  `kind` is carried so the panel can say *what* a row is (`LOCAL_FILE` renders as an uploaded file
+  rather than as a download with no numbers); it is deliberately **not** the branching key, because
+  `SourceKind` has two torrent values (`TORRENT_SEARCH`, `TORRENT_FILE`) and a consumer testing
+  `kind === 'TORRENT'` against a hand-retyped enum would compile, render, and silently strip the
+  buttons off every row.
+- **`downloadRemove`'s existing `!infoHash` early return now sits in front of the loser sweep, and
+  that is a bug the implementation must avoid.** Today it answers `omitido: mediaSource <id> no es un
+  torrent` and returns. Under REQ-19 an upload can be the *winner*, and the worker calls
+  `downloadRemove` for it after a successful encode — so if the sweep is written after that early
+  return, an upload that wins a race leaves every losing torrent downloading forever, silently. The
+  sweep must run for a winner of either kind; only the winner's own `torrentClient.remove` is
+  skipped. The signature, the `omitido:` string and the return type are all unchanged.
 - **`progress` is 0..100, not qBittorrent's 0..1.** Converted once, server-side. A consumer that
   multiplies again renders 1%.
 - **`torrentState` is qBittorrent's raw state string**, not the mapped `SourceStatus`. `status` is
@@ -278,42 +338,55 @@ Notes the SDL cannot carry:
   services — `` `${show.title} S${SS}E${EE}` `` for an episode, `` `${show.title} Temporada ${n}` ``
   for a season, the plain title for a film. It is not the tag: it is Spanish where the tags are
   English, and zero-padded where the tags are not.
-- **Retiring `force` is a breaking change with five consumers in `web`**, all updated in the same
-  delivery: `actions/imports.ts` (`importMagnetAction`), `actions/indexer.ts`
-  (`addTorrentToMovieAction`), `actions/shows.ts` (`addTorrentToEpisodeAction`,
-  `addMagnetToEpisodeAction`), plus the two components that pass it. Because `force` had a default,
-  a consumer that simply stops sending it keeps compiling and keeps working — but a consumer that
-  *keeps* sending it fails at runtime with a GraphQL validation error on every call.
+- **The SDL does not change for the acquisition mutations at all, and that is the trap.** REQ-7
+  narrows what those mutations *do* — a downloading target stops conflicting — without touching a
+  single argument or type. No typechecker, no schema diff and no consumer sees anything. The three
+  `…_DOWNLOAD_IN_PROGRESS` keys vanishing from the catalogs is the only externally visible trace,
+  which is why REQ-7 names all seven call sites explicitly rather than describing the rule and
+  trusting an implementer to find them.
+- **`force` survives and must not be removed opportunistically.** It reads like dead weight once the
+  downloading conflict is gone, and it is not: it is `027-replace-completed-media`'s authorisation to
+  replace a **completed** title, on all five acquisition mutations and on `createUploadTicket`, and
+  the tus route carries a signed server-side copy of the same decision in
+  `UploadTicketsService`. Removing it would silently re-enable overwriting a finished film with no
+  confirmation — the exact failure 027 exists to prevent.
 - **`Movie.mediaSourceId: Float` is removed from the schema.** No consumer selects it — neither
   `GET_MOVIE_QUERY` in `services/web/src/actions/movies.ts` nor anything in `worker`. Its
   disappearance is a consequence of the data model change below, not an independent decision.
 - **No `@AllowService()` on any new operation.** A `SERVICE_TOKEN` principal is refused by the
   global `JwtAuthGuard` with `No autenticado`, matching `movie(id)` and `show(id)`.
 
-| Condition | HTTP / GraphQL error | Message the user sees |
+Every row is an `ERROR_KEYS` constant carrying `extensions.i18n` (NFR-3); `web` resolves it through
+`messages/{en,es}.json` and never by matching text.
+
+| Condition | HTTP / GraphQL error | Key |
 | :-- | :-- | :-- |
-| `movieDownloads` for a film that does not exist | `NotFoundException` | `La película <id> no existe` |
-| `movieDownloads` for a film the caller has no `UserMovie` link to | `NotFoundException` — identical to the row above | `La película <id> no existe` *(deliberately indistinguishable, per `005-movie-search` and `008-movie-detail`)* |
-| `showDownloads` for a show that does not exist, or that the caller has no `UserShow` link to | `NotFoundException` | `Recurso no disponible para este usuario` |
-| `mediaSourceId` does not exist | `NotFoundException` | `El mediaSource <id> no existe` |
-| The source exists but belongs to a title the caller does not own | `NotFoundException` — identical to the row above | `El mediaSource <id> no existe` |
-| The source has no `infoHash` (an upload) | `BadRequestException` | `Esa descarga no es un torrent` |
-| The torrent client refuses or is unreachable, on a **mutation** | `Error` (existing shape, thrown before any DB write) | `qBittorrent rechazó la operación (<status>)` |
+| `movieDownloads` for a film that does not exist | `NotFoundException` | `MOVIE_NOT_FOUND` (existing) |
+| `movieDownloads` for a film the caller has no `UserMovie` link to | `NotFoundException` — identical to the row above | `MOVIE_NOT_FOUND` *(deliberately indistinguishable, per `005-movie-search` and `008-movie-detail`)* |
+| `showDownloads` for a show that does not exist, or that the caller has no `UserShow` link to | `NotFoundException` | the existing show key |
+| `mediaSourceId` does not exist | `NotFoundException` | the existing `mediaSource` key |
+| The source exists but belongs to a title the caller does not own | `NotFoundException` — identical to the row above | same as above |
+| The source has no `infoHash` (an upload) | `BadRequestException` | **`DOWNLOAD_NOT_A_TORRENT`** — new |
+| The torrent client refuses or is unreachable, on a **mutation** | `Error` (thrown before any DB write) | **`TORRENT_CLIENT_REJECTED`** — new, taking the HTTP status as a parameter |
 | The torrent client is unreachable, on a **query** | none — not an error | rows render with `torrentState`, `progress` and `downloadSpeed` null |
-| Magnet is not a magnet link | `BadRequestException` (from `parseMagnet`, existing) | `No parece un magnet link` |
-| Magnet has no usable infoHash | `BadRequestException` (existing) | `El magnet no tiene un infoHash válido` |
-| BitTorrent v2 magnet | `BadRequestException` (existing) | `Magnet de BitTorrent v2, todavía no soportado` |
-| The infoHash is already attached to another title | `ConflictException` (existing, **kept**) | `Ese magnet ya está asociado a «<title>»` |
+| Magnet is not a magnet link | `BadRequestException` (from `parseMagnet`, existing) | existing |
+| Magnet has no usable infoHash | `BadRequestException` (existing) | existing |
+| BitTorrent v2 magnet | `BadRequestException` (existing) | existing |
+| The infoHash is already attached to another title | `ConflictException` (existing, **kept**) | existing |
+| Acquisition or upload against a **`COMPLETED`** target without `force` | `ConflictException` / `UploadHttpError(409)` (existing, **kept**) | `MOVIE_ALREADY_COMPLETED` / `EPISODE_ALREADY_COMPLETED` / `SEASON_ALREADY_COMPLETED` — untouched, owned by `027` |
+| Acquisition or upload against a target that is **downloading** | **none — no longer an error** | `MOVIE_DOWNLOAD_IN_PROGRESS` / `EPISODE_DOWNLOAD_IN_PROGRESS` / `SEASON_DOWNLOAD_IN_PROGRESS` are **deleted** from `error-keys.ts`, both `messages.{en,es}.ts` and both `web` catalogs (REQ-7) |
 | Any of the above with an absent or expired credential | `UnauthorizedException` (existing global guard) | unchanged from today |
 
-All five `… ya tiene una descarga en curso. Confirmá para reemplazarla.` conflicts are **deleted**,
-not reworded: the three GraphQL ones (film, episode, season) plus the two `UploadHttpError(409)`
-copies on the tus route (REQ-7). They are the only user-facing strings this feature removes, and
-REQ-7 requires the `web` matchers that depend on them to go with them.
+Two keys are new — `DOWNLOAD_NOT_A_TORRENT` and `TORRENT_CLIENT_REJECTED` — and each needs an `en`
+and an `es` entry in `messages.{en,es}.ts` and in `services/web/messages/{en,es}.json`.
+`TORRENT_CLIENT_REJECTED` follows the existing "qBittorrent rejected …" copy in shape, taking the
+status as a parameter rather than being concatenated into the string.
 
-Two strings are new: `Esa descarga no es un torrent` and `qBittorrent rechazó la operación
-(<status>)`. The second follows the existing `qBittorrent rechazó el torrent (<status>)` shape
-verbatim except for the noun. Everything else in the table already exists in `services/api/src`.
+Three keys are **removed**, and they are the only user-facing strings this feature deletes. Removing
+a key is a four-file change (`error-keys.ts`, `messages.en.ts`, `messages.es.ts`, and both `web`
+JSON catalogs) plus the `web` components that list them; a key left in a catalog with no producer is
+dead weight, and a key removed from `error-keys.ts` but left in a `web` array is a lookup that can
+never fire. Both halves must land together.
 
 ### The torrent client interface is a second, parallel contract
 
@@ -330,7 +403,6 @@ export type TorrentClientInfo = {
   root_path: string;  // unchanged — see the note below; this field is real and load-bearing
   progress: number;   // NEW — 0..1, exactly as qBittorrent reports it
   dlspeed: number;    // NEW — bytes per second
-  forceStarted: boolean; // NEW — qBittorrent's `force_start`
   tags: string[];     // NEW — split from qBittorrent's comma-concatenated string
 };
 
@@ -338,7 +410,6 @@ export type TorrentClient = {
   info: (tag?: string) => Promise<TorrentClientInfo[]>;                        // CHANGED
   add: (urls: string[], tags?: string[]) => Promise<string>;                   // CHANGED
   start: (hashes: string | string[]) => Promise<void>;                         // NEW
-  forceStart: (hashes: string | string[], value?: boolean) => Promise<void>;   // NEW
   stop: (hashes: string | string[]) => Promise<void>;                          // unchanged
   remove: (hashes: string | string[], deleteFiles?: boolean) => Promise<void>; // unchanged
   setSavePath: (path: string) => Promise<void>;                                // unchanged
@@ -354,11 +425,10 @@ is the authority where the two disagree:
 | `add` | `torrents/add` | existing `urls`, `savepath`, plus **`tags`** — a comma-separated list |
 | `info` | `torrents/info` | **`tag`** — a single URL-encoded tag name; omitted means every torrent |
 | `start` | `torrents/start` | `hashes`, `\|`-separated |
-| `forceStart` | `torrents/setForceStart` | `hashes`, plus **`value`** (`true`/`false`) |
 | `stop` | `torrents/stop` | `hashes` — already implemented, already correct for 5.0 |
 | `remove` | `torrents/delete` | `hashes`, `deleteFiles` — already implemented |
 
-Four things this pins down that would otherwise be guessed:
+Four things this pins down that would otherwise be guessed — the fourth by exclusion:
 
 - **Tags are applied on `add`, not in a second call.** `torrents/add` takes `tags` directly, so
   REQ-1 through REQ-3 need no `createTags`/`addTags` round trip and no window in which a torrent
@@ -369,12 +439,14 @@ Four things this pins down that would otherwise be guessed:
 - **`progress` is a float 0..1 at the client boundary.** The interface passes it through unchanged
   because that is what qBittorrent returns and an adapter that silently rescales is an adapter that
   lies; the ×100 to reach the GraphQL `Float` happens in the service, once.
-- **`forceStart` is a flag, not a verb.** `setForceStart(value: true)` marks the torrent forced; it
-  is not a synonym for `start`. REQ-11's control is satisfied by the observable end state — running
-  **and** marked forced in qBittorrent (AC-7) — not by any one endpoint. `torrents/info` reports the
-  flag back as `force_start`, which is why `TorrentClientInfo` carries `forceStarted`: without it the
-  panel cannot tell a forced torrent from a merely running one, and AC-7 is unverifiable from
-  inside the product.
+- **`torrents/setForceStart` is deliberately not added, and neither is `force_start` on
+  `TorrentClientInfo`.** Force start is a flag, not a verb — `setForceStart(value: true)` marks a
+  torrent forced, it is not a stronger `start` — and it is its own state with its own screen, out of
+  scope here (REQ-11). Adding the method now would leave an interface member with no caller, which is
+  exactly the condition `info()` was in before this feature. `mapTorrentState` must still *recognise*
+  `forcedDL` and `forcedMetaDL` (NFR-7), because a user can set the flag from qBittorrent's own UI
+  and the panel has to read that torrent correctly; recognising a state and being able to set it are
+  separate obligations.
 
 **`root_path` stays exactly as it is.** It is absent from the 5.0 wiki but present and populated in
 the running container, and it is not redundant with the `savepath` this project already forces.
@@ -411,7 +483,7 @@ a typechecker:
   exactly why. The same reasoning now applies to the rest: REQ-12's pause failing silently leaves a
   loser downloading with the database saying `PAUSED`, and a failed delete leaves the user's file on
   disk with the row gone. Every method this feature adds or calls must check, and surface the
-  failure as the error table's `qBittorrent rechazó la operación (<status>)`.
+  failure as the error table's `TORRENT_CLIENT_REJECTED`.
 
 New methods follow the conventions already in `client.ts` without exception: `new URL("<name>",
 await this.baseUrl())` for the path, `HTTP_METHOD` from `@/types/http` for the verb,
@@ -423,10 +495,14 @@ neighbours beats consistency with the wiki's verb column.
 
 Consumer obligations:
 
-- **`web`**: retype `Download` by hand in a new action module and drop `force` from the four actions
-  that pass it; delete the `CONFLICT_MESSAGE` substring matching and the `needsConfirm` /
-  "Reemplazar" flow in `importMagnetModal.tsx` and `SearchTorrent.tsx`; handle `progress` /
-  `downloadSpeed` / `torrentState` arriving `null` as a normal state and not as a loading state.
+- **`web`**: retype `Download` by hand in a new action module; **keep** `force` on the four
+  acquisition actions and on `createUploadTicket` (it is 027's completed-replacement authorisation),
+  but drop the three `…_DOWNLOAD_IN_PROGRESS` entries from the key arrays in `importMagnetModal.tsx`
+  and `SearchTorrent.tsx`, leaving their `…_ALREADY_COMPLETED` entries and the `needsConfirm` /
+  "Reemplazar" flow those drive; handle `progress` /
+  `downloadSpeed` / `torrentState` arriving `null` as a normal state and not as a loading state, and
+  branch on `infoHash != null` — not on `kind`, not on the live fields — to decide whether a row
+  gets its three buttons.
   There is no shared confirm dialog in `services/web/src/components/ui/` today — REQ-11's
   confirmation is built on the existing `Modal` + `useModal` pair.
 - **`worker`**: **no obligation.** It sends and receives identical shapes (NFR-2). If a change to
@@ -477,9 +553,10 @@ Three consequences worth stating so they are not rediscovered during implementat
 - [ ] **AC-6**: `/shows/<id>` lists a season-pack download and a single-episode download of the same
       show in one list, each row naming its target (`Reacher Temporada 3`, `Reacher S03E08`).
 - [ ] **AC-7**: Clicking stop on a row moves that torrent to a stopped state in qBittorrent's own
-      UI; clicking force-start moves it back and qBittorrent shows it as forced. In both cases the
-      panel's own status column must agree — `stoppedDL` must read as paused and `forcedDL` /
-      `forcedMetaDL` as downloading, never as an error (NFR-7).
+      UI; clicking start moves it back to downloading. In both cases the panel's own status column
+      must agree — `stoppedDL` must read as paused, never as an error (NFR-7). Separately, a torrent
+      force-started **from qBittorrent's own UI** must read in the panel as downloading: `forcedDL`
+      and `forcedMetaDL` are states this feature must recognise even though it never sets them.
 - [ ] **AC-8**: Clicking delete opens a confirmation; cancelling leaves the torrent in place;
       confirming removes it from qBittorrent **and** removes its files from disk.
 - [ ] **AC-9**: Given AC-4's two racing downloads, when one completes, qBittorrent shows the
@@ -497,8 +574,9 @@ Three consequences worth stating so they are not rediscovered during implementat
       returns a GraphQL error whose message is exactly `La película <id> no existe` —
       byte-identical to the response for a film id that exists nowhere.
 - [ ] **AC-13 (failure path)**: `downloadStart` against a `MediaSource` with `kind = LOCAL_FILE`
-      fails with `Esa descarga no es un torrent`, and `docker compose logs torrent` shows no request
-      reached qBittorrent.
+      fails with `DOWNLOAD_NOT_A_TORRENT`, and `docker compose logs torrent` shows no request
+      reached qBittorrent. The same source is nonetheless **listed** in the panel, with no start,
+      stop or delete button offered on its row (REQ-18).
 - [ ] **AC-14 (failure path)**: With the `torrent` container stopped, `/movies/<id>` still renders
       and still lists its downloads, with the percentage and speed columns empty rather than
       returning a 500 or an error page.
@@ -509,18 +587,36 @@ Three consequences worth stating so they are not rediscovered during implementat
       `PAUSED`, their `media_sources` rows still exist and their files are still on disk — nothing
       is deleted and nothing is resumed.
 - [ ] **AC-17 (failure path)**: With the `torrent` container stopped, clicking stop or delete on a
-      row surfaces `qBittorrent rechazó la operación (<status>)` in the interface and leaves the
+      row surfaces `TORRENT_CLIENT_REJECTED` in the interface and leaves the
       `media_sources` row exactly as it was — the database must not record a pause or a deletion the
       torrent client never acknowledged.
-- [ ] **AC-18 (regression)**: Every existing acquisition path still works end to end with `force`
-      gone — release search and magnet import from `/movies/<id>`, both from an episode row, and a
-      full tus upload — each producing the same rows it produces today, and the upload path still
-      reaching `ENCODING` without passing through `DOWNLOADING`.
+- [ ] **AC-18 (regression)**: Every existing acquisition path still works end to end — release
+      search and magnet import from `/movies/<id>`, both from an episode row, and a full tus upload —
+      each producing the same rows it produces today, and the upload path still reaching `ENCODING`
+      without passing through `DOWNLOADING`.
+- [ ] **AC-23 (regression, `027`)**: Replacing a **`COMPLETED`** film still asks for confirmation and
+      still refuses without it. Sending a release, a magnet, or starting an upload against a
+      completed title with `force: false` answers `…_ALREADY_COMPLETED`; the interface still offers
+      its "Reemplazar" control; and confirming still succeeds. Nothing in `027`'s ticket mechanism
+      changed — this criterion exists because an implementer removing the downloading branch is one
+      keystroke away from removing this one too.
 - [ ] **AC-19**: `bin/npm api run test` passes, including the two NFR-5 cases; each new test file
       opens with a comment naming the failure class it defends against.
 - [ ] **AC-20**: `bin/cli api npx --no tsc --noEmit` reports 0 errors, `bin/cli web npx --no tsc
       --noEmit` reports no more than the committed baseline measured before the change, and
       `bin/npm web run build` exits 0.
+- [ ] **AC-21 (REQ-19)**: With two torrents downloading for a film, uploading a file to that same
+      film through the tus route succeeds — **no 409, no confirmation prompt, no "confirm to replace
+      it" message anywhere**, which is the dead end this feature removes rather than repairs — and
+      `/movies/<id>` then lists
+      three rows: the two torrents with percentages, and the upload with its status and no buttons.
+      When the upload's encode completes, both torrents are stopped in qBittorrent and then removed
+      with their files, and `bin/mysql -e "select id, kind, status from media_sources where movie_id
+      = <id>"` returns only the upload's row.
+- [ ] **AC-22 (failure path, REQ-19)**: Uploading a file to a target whose torrent has already
+      reached `READY` leaves the target's status untouched and enqueues no second `bull:process` job
+      — the same guard as AC-15, exercised from the upload side rather than the `torrentCompleted`
+      side, because the upload route reaches `ENCODING` through its own code path.
 
 ## Out of Scope
 
@@ -539,11 +635,23 @@ Three consequences worth stating so they are not rediscovered during implementat
 - **A Transmission implementation.** `TORRENT_CLIENTS.TRANSMISSION` has been declared and
   unimplemented since before this feature; the new `TorrentClient` interface methods make that gap
   wider, and closing it is not this feature's job.
+- **Force start.** Removed from this feature by the user after the first draft. `torrents/setForceStart`
+  is a separate torrent *state*, not a stronger play button, and it belongs on a screen that can
+  present it as one — putting it on every panel row would offer, as the primary control, an action
+  that is wrong most of the time. The panel's start button is `torrents/start`. `mapTorrentState`
+  still has to recognise `forcedDL` and `forcedMetaDL` (NFR-7), because the user can set the flag in
+  qBittorrent directly; reading the state is in scope, setting it is not.
 - **Per-download bandwidth limits, priorities, file selection, or category management.** qBittorrent
   exposes all of them; none was asked for, and each is an independent addition to the client
   interface.
-- **Adopting `next-intl`.** See NFR-3. `018-ui-i18n` owns that migration and this feature must not
-  start it.
+- **Changing anything `027-replace-completed-media` owns.** The `force` argument, the
+  `…_ALREADY_COMPLETED` keys, `UploadTicketsService` and its signed replace decision, and the
+  "Reemplazar" confirmation for a finished title all stay exactly as they are. This feature narrows
+  *when* those guards fire; it does not touch what they do when they fire.
+- **Adding the missing confirm button to `importFileModal.tsx`.** It is a real bug today, and the
+  fix here is subtraction: once a downloading target stops conflicting, the message it was supposed
+  to confirm is never raised. The modal's existing `isCompleted` branch, which is the one that works,
+  stays.
 - **Renaming `movieId` on the acquisition mutations and the tus metadata key.** The root
   `CLAUDE.md`'s known-debt item stands. This feature narrows it by making `MediaSource.movieId` a
   real column with unchanged name and meaning; the cross-service rename remains its own work.
