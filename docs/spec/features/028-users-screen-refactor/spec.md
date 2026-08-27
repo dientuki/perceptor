@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-26
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -49,49 +49,49 @@ administration surface only.
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Add-user entry point)**: The always-visible create form must be gone. The users screen
+- [x] **REQ-1 (Add-user entry point)**: The always-visible create form must be gone. The users screen
       must offer a single **"Add user"** action, placed with the table's heading and carrying the
       `user-plus` icon, which opens the user modal in create mode.
-- [ ] **REQ-2 (Create modal)**: In create mode the modal must present four fields — name, username,
+- [x] **REQ-2 (Create modal)**: In create mode the modal must present four fields — name, username,
       password, password confirmation — and must create the user only when the two password fields
       match. On success it must close and the table must show the new user without a manual reload.
-- [ ] **REQ-3 (Edit action)**: Every row must carry an edit action with the `user-pen` icon that opens
+- [x] **REQ-3 (Edit action)**: Every row must carry an edit action with the `user-pen` icon that opens
       the same modal in edit mode, pre-filled with that user's current name and username.
-- [ ] **REQ-4 (Edit modal has no password)**: In edit mode the modal must present **only** name and
+- [x] **REQ-4 (Edit modal has no password)**: In edit mode the modal must present **only** name and
       username. An administrator must not be able to set another user's password from this screen;
       an edit must never alter the target's password, and must never alter their `isAdmin` or
       `isEnabled` state.
-- [ ] **REQ-5 (Modal buttons)**: The modal's Save action must be blue (the app's primary/brand
+- [x] **REQ-5 (Modal buttons)**: The modal's Save action must be blue (the app's primary/brand
       variant) and its Cancel action must be red, matching the destructive colour used by Delete.
       Cancel must discard the edit and leave the user unchanged.
-- [ ] **REQ-6 (Icon actions)**: The row actions must be icons rather than text labels — `user-x` to
+- [x] **REQ-6 (Icon actions)**: The row actions must be icons rather than text labels — `user-x` to
       disable an enabled user, `user-check` to enable a disabled one, `trash-2` in red for delete,
       `user-pen` for edit. Each must expose its meaning to a mouse-over and to assistive technology
       rather than relying on the glyph alone.
-- [ ] **REQ-7 (Delete confirmation)**: Delete must not act on the first click. It must open a
+- [x] **REQ-7 (Delete confirmation)**: Delete must not act on the first click. It must open a
       confirmation modal naming the user about to be deleted, with a red confirm action and a cancel
       that leaves the user in place.
-- [ ] **REQ-8 (No self-service from the table)**: The row belonging to the signed-in administrator
+- [x] **REQ-8 (No self-service from the table)**: The row belonging to the signed-in administrator
       must offer **no** edit, disable or delete action — edit joins the two that are already blocked.
       An admin edits their own name, username and password through the profile screen reachable from
       the user menu (`020-profile-edit`), exactly like any other user.
-- [ ] **REQ-9 (Rename onto a taken username)**: Updating a user to a username another user already
+- [x] **REQ-9 (Rename onto a taken username)**: Updating a user to a username another user already
       holds must be refused with the "username already registered" conflict, not with a
       "user not found" error. Keeping a user's own current username in an edit must succeed.
-- [ ] **REQ-10 (User errors are translated)**: Every `error.user.*` key `api` can emit must resolve
+- [x] **REQ-10 (User errors are translated)**: Every `error.user.*` key `api` can emit must resolve
       through `web`'s `en` and `es` catalogs, so a Spanish-locale admin never sees `api`'s English
       fallback for a user-management failure.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (No new authorisation surface)**: The screen remains administrator-only. `api`'s
+- [x] **NFR-1 (No new authorisation surface)**: The screen remains administrator-only. `api`'s
       class-level `AdminGuard` on `UsersResolver` and the existing self-action safeguards in
       `UsersService.update`/`remove` are the controls; nothing in this feature may relax or duplicate
       them, and the `web` action layer must keep sending only the fields the user actually edited.
-- [ ] **NFR-2 (Failures stay on screen)**: A rejected create, edit, toggle or delete must leave the
+- [x] **NFR-2 (Failures stay on screen)**: A rejected create, edit, toggle or delete must leave the
       modal open with the translated message visible and the typed values intact, never close
       silently or leave the table showing a change that did not happen.
-- [ ] **NFR-3 (No schema change)**: This feature adds no Prisma model, field or migration.
+- [x] **NFR-3 (No schema change)**: This feature adds no Prisma model, field or migration.
 
 ## GraphQL Contract Delta
 
@@ -140,31 +140,31 @@ None. `User` already has every field this screen reads or writes.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Loading `/users` as an administrator shows the table with no create form above it,
+- [x] **AC-1**: Loading `/users` as an administrator shows the table with no create form above it,
       and one "Add user" control carrying the `user-plus` icon.
-- [ ] **AC-2**: Clicking "Add user", filling name/username/password/confirmation with matching
+- [x] **AC-2**: Clicking "Add user", filling name/username/password/confirmation with matching
       passwords and saving closes the modal; the new user appears in the table and can sign in with
       the password entered.
-- [ ] **AC-3**: Clicking the `user-pen` icon on another user's row opens the modal pre-filled with
+- [x] **AC-3**: Clicking the `user-pen` icon on another user's row opens the modal pre-filled with
       that user's name and username, with no password field present. Changing the name and saving
       updates the row; that user can still sign in with their previous password.
-- [ ] **AC-4 (failure)**: Editing user B's username to user A's existing username and saving leaves
+- [x] **AC-4 (failure)**: Editing user B's username to user A's existing username and saving leaves
       the modal open showing `Ese nombre de usuario ya está registrado` (in `es`) — **not**
       `No se encontró el usuario` — and user B's username is unchanged in the table after a reload.
-- [ ] **AC-5 (failure)**: In the create modal, entering two different passwords and saving leaves the
+- [x] **AC-5 (failure)**: In the create modal, entering two different passwords and saving leaves the
       modal open with the mismatch message and creates no user.
-- [ ] **AC-6**: Clicking `trash-2` on another user's row opens a confirmation modal naming that user;
+- [x] **AC-6**: Clicking `trash-2` on another user's row opens a confirmation modal naming that user;
       Cancel closes it and the user is still in the table, Confirm removes the row.
-- [ ] **AC-7 (failure)**: With exactly one administrator in the database, confirming the delete of
+- [x] **AC-7 (failure)**: With exactly one administrator in the database, confirming the delete of
       that administrator from a second admin session leaves the user in place and shows
       `No podés eliminar al último administrador` in `es` — proving REQ-10, since that string is not
       what `api` sends.
-- [ ] **AC-8**: The signed-in administrator's own row shows none of the edit, disable or delete
+- [x] **AC-8**: The signed-in administrator's own row shows none of the edit, disable or delete
       actions, while `/profile` still lets them change their own name, username and password.
-- [ ] **AC-9**: `user-x` on an enabled user disables them and the icon becomes `user-check`; the
+- [x] **AC-9**: `user-x` on an enabled user disables them and the icon becomes `user-check`; the
       status badge follows, and that user's live session is revoked (existing `004` behaviour, not
       regressed).
-- [ ] **AC-10**: `bin/npm api run test` and `bin/npm web run build` both exit 0.
+- [x] **AC-10**: `bin/npm api run test` and `bin/npm web run build` both exit 0.
 
 ## Out of Scope
 

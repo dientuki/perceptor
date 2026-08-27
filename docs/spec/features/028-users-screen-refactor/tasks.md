@@ -1,7 +1,7 @@
 ---
 title: Users screen refactor — Tasks
 last_updated: 2026-08-26
-status: In Progress
+status: Done
 ---
 
 # TASKS: Users screen refactor (`tasks.md`)
@@ -24,7 +24,7 @@ There is no SDL delta in this feature, so this group is not a gate on Group 2 th
 whole edit path rests on: until it lands, a rename onto a taken username reports "user not found"
 and AC-4 is red no matter what `web` does.
 
-- [ ] **T001** `[api]` In `services/api/src/users/users.service.ts`, add the duplicate-username check
+- [x] **T001** `[api]` In `services/api/src/users/users.service.ts`, add the duplicate-username check
       to `update()`, copying the shape `updateProfile()` already uses: run it **only when
       `updateUserInput.username` is defined**, and throw
       `i18nError.conflict(ERROR_KEYS.USER_USERNAME_TAKEN)` when a row with that username exists whose
@@ -33,7 +33,7 @@ and AC-4 is red no matter what `web` does.
       the `try`/`catch` around `prisma.user.update` alone.
       *Done when:* `bin/cli api npx --no tsc --noEmit` prints nothing, `bin/npm api run test` is
       still green, and `git status --short services/api/prisma/` prints nothing.
-- [ ] **T002** `[api]` Extend the `update` describe block in
+- [x] **T002** `[api]` Extend the `update` describe block in
       `services/api/src/users/users.service.spec.ts` with exactly two cases: renaming a user onto
       another user's username throws `ConflictException` and never calls `prisma.user.update`; an
       update whose `username` equals the target's own current username reaches `prisma.user.update`
@@ -48,19 +48,19 @@ and AC-4 is red no matter what `web` does.
 Independent of Group 1: no SDL changed, so these are written against a contract that is already
 true. This group may run alongside Group 1 in full.
 
-- [ ] **T003** `[web] [P]` In `services/web/src/components/ui/button/Button.tsx`, add a `danger`
+- [x] **T003** `[web] [P]` In `services/web/src/components/ui/button/Button.tsx`, add a `danger`
       variant to the `variant` union (red, built the way `primary` is:
       `bg-error-500 text-white hover:bg-error-600 disabled:bg-error-300`) and an optional
       `ariaLabel` prop forwarded to the element's `aria-label`. Both additive — no existing call site
       changes.
       *Done when:* `bin/cli web npx --no tsc --noEmit` prints nothing and `bin/npm web run lint` is
       clean; no file outside `Button.tsx` is modified.
-- [ ] **T004** `[web] [P]` In `services/web/src/components/form/input/InputField.tsx`, add an
+- [x] **T004** `[web] [P]` In `services/web/src/components/form/input/InputField.tsx`, add an
       optional `value?: string` forwarded to the `<input>`, leaving `defaultValue` in place so every
       existing (uncontrolled) call site keeps working.
       *Done when:* `bin/cli web npx --no tsc --noEmit` prints nothing; no file outside
       `InputField.tsx` is modified.
-- [ ] **T005** `[web] [P]` Rework the `users` namespace and add the `errors.user` namespace in
+- [x] **T005** `[web] [P]` Rework the `users` namespace and add the `errors.user` namespace in
       `services/web/messages/en.json` and `services/web/messages/es.json`, per `web/plan.md` step 3:
       `users.add`, `users.modal`, `users.delete`, `users.table` (column headers and badges kept; the
       four text action labels replaced by tooltip/accessible-name strings; `disableSelfTitle` and
@@ -69,7 +69,7 @@ true. This group may run alongside Group 1 in full.
       `cannot_delete_last_admin`, `unsupported_locale`. `es` copy in the Rioplatense register, using
       the exact sentences in `spec.md`'s error table.
       *Done when:* `bin/cli web node scripts/check-messages.mjs` exits 0.
-- [ ] **T006** `[web] [P]` Convert the four actions in `services/web/src/actions/users.ts` from
+- [x] **T006** `[web] [P]` Convert the four actions in `services/web/src/actions/users.ts` from
       `(prevState, formData)` to direct arguments, per `web/plan.md` step 4:
       `createUserAction({ name, username, password, passwordConfirmation })` (keeps the mismatch
       check), **new** `updateUserAction({ id, name, username })` sending
@@ -86,7 +86,7 @@ true. This group may run alongside Group 1 in full.
 
 ### Group 3 — the screen (`web`)
 
-- [ ] **T007** `[web]` Create `services/web/src/components/users/UserModal.tsx`, modelled on
+- [x] **T007** `[web]` Create `services/web/src/components/users/UserModal.tsx`, modelled on
       `ProfileModal.tsx`: props `{ isOpen, onClose, user? }` where an absent `user` means create
       mode; controlled fields re-seeded by a `useEffect` keyed on `isOpen`; four fields in create
       mode and **name + username only** in edit mode (no hidden password field); `UserPlus` /
@@ -95,13 +95,13 @@ true. This group may run alongside Group 1 in full.
       → T003, T004, T005, T006
       *Done when:* opening the modal from a temporary trigger shows four fields for create and two
       for edit, and a rejected save leaves the modal open with the typed values intact.
-- [ ] **T008** `[web]` Create `services/web/src/components/users/DeleteUserDialog.tsx`: a `Modal`
+- [x] **T008** `[web]` Create `services/web/src/components/users/DeleteUserDialog.tsx`: a `Modal`
       (never `window.confirm()`) naming the target user, a `danger` confirm and an outline cancel,
       calling `deleteUserAction(user.id)`; on failure the dialog stays open showing the translated
       message. → T003, T005, T006
       *Done when:* `bin/cli web npx --no tsc --noEmit` prints nothing for this file and the dialog
       renders the target's name in its sentence.
-- [ ] **T009** `[web]` Rewrite `services/web/src/components/users/UsersManager.tsx` per
+- [x] **T009** `[web]` Rewrite `services/web/src/components/users/UsersManager.tsx` per
       `web/plan.md` step 7: delete `CreateUserForm` entirely, including the `defaultValue`-mirroring
       block and its comments; keep the table and its five columns; add the "Add user" `Button` with
       the `UserPlus` icon beside the table heading; lift the edit/delete dialog state to
@@ -115,12 +115,12 @@ true. This group may run alongside Group 1 in full.
 
 ### Group 4 — verification and docs
 
-- [ ] **T010** `[web]` Run the full `web` check set and fix anything it surfaces inside this
+- [x] **T010** `[web]` Run the full `web` check set and fix anything it surfaces inside this
       feature's files. → T009
       *Done when:* `bin/cli web npx --no tsc --noEmit` prints nothing, `bin/npm web run lint` is
       clean with no new suppression, `bin/cli web node scripts/check-messages.mjs` exits 0, and
       `bin/npm web run build` exits 0.
-- [ ] **T011** `[docs]` Update `services/web/CLAUDE.md` § "Admin user management": the component list
+- [x] **T011** `[docs]` Update `services/web/CLAUDE.md` § "Admin user management": the component list
       (`UserModal.tsx`, `DeleteUserDialog.tsx`), the four actions' new signatures, the fact that row
       actions are icons and the caller's own row renders none of them, and **remove** the now-false
       bullet about `formData.get("isEnabled") === "true"`. Keep the `page.tsx`
@@ -129,7 +129,7 @@ true. This group may run alongside Group 1 in full.
       status. → T002, T010
       *Done when:* every statement in that section is true of the code on disk, and the root
       `CLAUDE.md` test counts match a fresh `bin/npm api run test`.
-- [ ] **T012** `[docs]` Walk the acceptance criteria in `spec.md` — AC-1 through AC-9 by hand in the
+- [x] **T012** `[docs]` Walk the acceptance criteria in `spec.md` — AC-1 through AC-9 by hand in the
       browser as an administrator, once in `en` and once with `User.uiLocale = es`, following
       `plan.md` § Verification's manual pass; AC-10 from the command output of T002 and T010. Tick
       each box, then set `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md` and

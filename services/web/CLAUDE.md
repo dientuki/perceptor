@@ -147,19 +147,37 @@ nearest example**, and re-derive it if you move a fetch between server and clien
 
 ## Admin user management
 
-`src/actions/users.ts` (`getUsers`/`createUserAction`/`deleteUserAction`/`setUserEnabledAction`),
-`src/app/(dashboard)/users/page.tsx`, `src/components/users/UsersManager.tsx` (client table + create
-form), `src/types/users.ts` (`AdminUser`). The `isAdmin`-gated sidebar entry is wired through
+`src/actions/users.ts` (`getUsers`/`createUserAction`/`updateUserAction`/`deleteUserAction`/
+`setUserEnabledAction` — all four mutating actions take direct typed arguments, not
+`(prevState, formData)`), `src/app/(dashboard)/users/page.tsx`,
+`src/components/users/UsersManager.tsx` (table + "Add user" entry point, owns which of the two
+dialogs below is open and for whom), `src/components/users/UserModal.tsx` (create/edit, modelled on
+`src/components/profile/ProfileModal.tsx`), `src/components/users/DeleteUserDialog.tsx` (delete
+confirmation), `src/types/users.ts` (`AdminUser`). The `isAdmin`-gated sidebar entry is wired through
 `src/layout/AdminShell.tsx` → `AppSidebar.tsx`.
 
 - `page.tsx` checks `getCurrentUser().isAdmin` and calls `notFound()` **before** calling `getUsers()`,
   **sequentially, never via `Promise.all`** — racing them turns `api`'s `AdminGuard` refusal into a
   500 instead of a clean 404.
-- The per-row enable toggle and the delete button are disabled on the caller's own row as a usability
-  affordance only; the real enforcement (self-disable, last-admin, session revocation) is server-side.
-- `setUserEnabledAction` sends only `{ id, isEnabled }`, never the rest of `UpdateUserInput`, and
-  parses the target state as `=== 'true'` rather than a truthy check — `formData` values are always
-  strings and `"false"` is truthy.
+- There is no standing create form. `UsersManager` renders one "Add user" button (`user-plus`) beside
+  the table; row actions are icons — `user-pen` edit, `user-x`/`user-check` disable/enable, `trash-2`
+  delete in red — each carrying a translated `title`/`aria-label`. The caller's own row renders
+  **none** of the three: not disabled buttons, absent entirely. That is a usability affordance only;
+  the real enforcement (self-disable, last-admin, session revocation) is server-side in
+  `UsersService`.
+- `UserModal` shows four fields (name, username, password, password confirmation) in create mode and
+  **only name + username** in edit mode — an admin can never set another user's password from this
+  screen; the recovery path for a locked-out user stays `bin/reset-password <username>`. Delete goes
+  through `DeleteUserDialog`, never `window.confirm()`.
+- `updateUserAction({ id, name, username })` sends exactly those three fields — never `password`,
+  `isEnabled` or `isAdmin` — built field by field, not by spreading a form object. `updateUser`'s
+  duplicate-username check (`api`'s `UsersService.update()`) now matches `create()`/`updateProfile()`,
+  so renaming onto a taken username surfaces `error.user.username_taken`, not `error.user.not_found`.
+  `setUserEnabledAction(id, isEnabled)` takes the boolean directly; there is no more
+  `formData.get('isEnabled') === 'true'` string parsing to get wrong.
+- `errors.user.*` has a full entry in both `en.json` and `es.json` — every `api` user-management
+  error, including the pre-existing self-delete/last-admin ones, now translates instead of falling
+  back to `api`'s English message in `es`.
 
 ## Media search
 

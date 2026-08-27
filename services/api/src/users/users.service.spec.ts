@@ -18,6 +18,10 @@ import { User } from './entities/user.entity';
 // REQ-3 real — a disable that silently fails to revoke the live session is
 // exactly the Article IX failure NFR-3 names: nothing errors anywhere, and
 // the administrator believes the user is locked out when they are not.
+// `028-users-screen-refactor` added the duplicate-username guard: without
+// it, renaming a user onto another user's username reaches Prisma's unique
+// constraint and surfaces as `error.user.not_found`, a misleading message
+// for a conflict that has nothing to do with a missing row.
 describe('UsersService', () => {
   let service: UsersService;
   let prisma: {
@@ -226,6 +230,27 @@ describe('UsersService', () => {
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
       expect(prisma.user.count).not.toHaveBeenCalled();
       expect(sessionService.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('refuses to rename a user onto a username another user already holds', async () => {
+      prisma.user.findUnique.mockResolvedValue(admin);
+
+      await expect(
+        service.update(other.id, { id: other.id, username: admin.username }, admin.id),
+      ).rejects.toThrow(new ConflictException('That username is already registered'));
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('allows an update whose username matches the target\'s own current username', async () => {
+      prisma.user.findUnique.mockResolvedValue(other);
+      prisma.user.update.mockResolvedValue(other);
+
+      await service.update(other.id, { id: other.id, username: other.username }, admin.id);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: other.id },
+        data: { username: other.username },
+      });
     });
   });
 

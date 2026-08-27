@@ -2,7 +2,7 @@
 title: Users screen refactor — api slice
 service: api
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Users screen refactor — `api` (`api/plan.md`)

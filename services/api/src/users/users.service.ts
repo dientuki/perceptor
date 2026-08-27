@@ -64,6 +64,21 @@ export class UsersService {
     // para no intentarlo actualizar en la BD.
     const { id: _, ...dataToUpdate } = updateUserInput;
 
+    // Same duplicate-username guard as updateProfile(): a row with the
+    // target's own id is that user keeping their current username and must
+    // pass, only a different user's row is a real collision. Skipped when
+    // username is absent, or setUserEnabledAction's { id, isEnabled } payload
+    // (no username) would look up an arbitrary row and match it.
+    if (dataToUpdate.username !== undefined) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { username: dataToUpdate.username },
+      });
+
+      if (existingUser && existingUser.id !== id) {
+        throw i18nError.conflict(ERROR_KEYS.USER_USERNAME_TAKEN);
+      }
+    }
+
     // Only an actual disable (isEnabled === false, not undefined/true) runs
     // the REQ-5 safeguards — same ordering remove() uses: self-check first,
     // then the last-*enabled*-admin check, so a lone admin disabling

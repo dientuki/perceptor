@@ -56,6 +56,15 @@
       "missingSettingsValues": "No hay valores para guardar.",
       "passwordMismatch": "Las contraseñas no coinciden",
       "passwordPairIncomplete": "Completá ambos campos de contraseña o dejá los dos vacíos"
+    },
+    "user": {
+      "username_taken": "Ese nombre de usuario ya está registrado",
+      "not_found": "No se encontró el usuario",
+      "cannot_disable_self": "No podés deshabilitar tu propio usuario",
+      "cannot_disable_last_admin": "No podés deshabilitar al último administrador",
+      "cannot_delete_self": "No podés eliminar tu propio usuario",
+      "cannot_delete_last_admin": "No podés eliminar al último administrador",
+      "unsupported_locale": "El idioma \"{locale}\" no está soportado"
     }
   },
   "landing": {
@@ -317,15 +326,28 @@
     }
   },
   "users": {
-    "create": {
-      "title": "Nuevo usuario",
+    "add": {
+      "label": "Agregar usuario",
+      "title": "Agregar usuario"
+    },
+    "modal": {
+      "createTitle": "Nuevo usuario",
+      "editTitle": "Editar usuario",
       "nameLabel": "Nombre",
       "usernameLabel": "Usuario",
       "passwordLabel": "Contraseña",
       "passwordHint": "Mínimo 6 caracteres",
       "passwordConfirmLabel": "Confirmar contraseña",
-      "submit": "Crear usuario",
-      "submitting": "Creando..."
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "cancel": "Cancelar"
+    },
+    "delete": {
+      "title": "Eliminar usuario",
+      "message": "¿Estás seguro de que querés eliminar a {name}? Esta acción no se puede deshacer.",
+      "confirm": "Eliminar",
+      "cancel": "Cancelar",
+      "deleting": "Eliminando..."
     },
     "table": {
       "title": "Usuarios",
@@ -337,14 +359,10 @@
       "roleUser": "Usuario",
       "statusEnabled": "Habilitado",
       "statusDisabled": "Deshabilitado",
-      "disableSelfTitle": "No podés deshabilitar tu propio usuario",
-      "deleteSelfTitle": "No podés eliminar tu propio usuario",
-      "disabling": "Deshabilitando...",
-      "enabling": "Habilitando...",
-      "disable": "Deshabilitar",
-      "enable": "Habilitar",
-      "deleting": "Eliminando...",
-      "delete": "Eliminar"
+      "editTitle": "Editar usuario",
+      "disableTitle": "Deshabilitar usuario",
+      "enableTitle": "Habilitar usuario",
+      "deleteTitle": "Eliminar usuario"
     }
   }
 }

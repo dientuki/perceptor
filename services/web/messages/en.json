@@ -56,6 +56,15 @@
       "missingSettingsValues": "There are no values to save.",
       "passwordMismatch": "Passwords do not match",
       "passwordPairIncomplete": "Fill in both password fields or leave both blank"
+    },
+    "user": {
+      "username_taken": "That username is already registered",
+      "not_found": "User not found",
+      "cannot_disable_self": "You cannot disable your own user",
+      "cannot_disable_last_admin": "You cannot disable the last administrator",
+      "cannot_delete_self": "You cannot delete your own user",
+      "cannot_delete_last_admin": "You cannot delete the last administrator",
+      "unsupported_locale": "Locale \"{locale}\" is not supported"
     }
   },
   "landing": {
@@ -317,15 +326,28 @@
     }
   },
   "users": {
-    "create": {
-      "title": "New user",
+    "add": {
+      "label": "Add user",
+      "title": "Add user"
+    },
+    "modal": {
+      "createTitle": "New user",
+      "editTitle": "Edit user",
       "nameLabel": "Name",
       "usernameLabel": "Username",
       "passwordLabel": "Password",
       "passwordHint": "6 characters minimum",
       "passwordConfirmLabel": "Confirm password",
-      "submit": "Create user",
-      "submitting": "Creating..."
+      "save": "Save",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    },
+    "delete": {
+      "title": "Delete user",
+      "message": "Are you sure you want to delete {name}? This action cannot be undone.",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "deleting": "Deleting..."
     },
     "table": {
       "title": "Users",
@@ -337,14 +359,10 @@
       "roleUser": "User",
       "statusEnabled": "Enabled",
       "statusDisabled": "Disabled",
-      "disableSelfTitle": "You cannot disable your own user",
-      "deleteSelfTitle": "You cannot delete your own user",
-      "disabling": "Disabling...",
-      "enabling": "Enabling...",
-      "disable": "Disable",
-      "enable": "Enable",
-      "deleting": "Deleting...",
-      "delete": "Delete"
+      "editTitle": "Edit user",
+      "disableTitle": "Disable user",
+      "enableTitle": "Enable user",
+      "deleteTitle": "Delete user"
     }
   }
 }

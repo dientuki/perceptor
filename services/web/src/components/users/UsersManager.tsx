@@ -1,15 +1,13 @@
 "use client";
 
+import { Trash2, UserCheck, UserPen, UserPlus, UserX } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useActionState, useEffect, useRef, useState } from "react";
-import {
-  createUserAction,
-  deleteUserAction,
-  setUserEnabledAction,
-} from "@/actions/users";
-import Input from "@/components/form/input/InputField";
-import Label from "@/components/form/Label";
+import { useState } from "react";
+import { setUserEnabledAction } from "@/actions/users";
 import Button from "@/components/ui/button/Button";
+import DeleteUserDialog from "@/components/users/DeleteUserDialog";
+import UserModal from "@/components/users/UserModal";
 import type { AdminUser } from "@/types/users";
 
 const ERROR_CLASS =
@@ -24,123 +22,65 @@ export default function UsersManager({
   users,
   currentUserId,
 }: UsersManagerProps) {
+  // "new" opens UserModal in create mode; an AdminUser opens it in edit mode
+  // for that user; null keeps it closed.
+  const [modalTarget, setModalTarget] = useState<AdminUser | "new" | null>(
+    null,
+  );
+  const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
+  const t = useTranslations("users");
+
   return (
     <div className="space-y-8">
-      <CreateUserForm />
-      <UsersTable users={users} currentUserId={currentUserId} />
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          startIcon={<UserPlus className="size-4" />}
+          onClick={() => setModalTarget("new")}
+          title={t("add.title")}
+          ariaLabel={t("add.title")}
+        >
+          {t("add.label")}
+        </Button>
+      </div>
+
+      <UsersTable
+        users={users}
+        currentUserId={currentUserId}
+        onEdit={setModalTarget}
+        onDelete={setDeletingUser}
+      />
+
+      <UserModal
+        isOpen={modalTarget !== null}
+        onClose={() => setModalTarget(null)}
+        user={modalTarget && modalTarget !== "new" ? modalTarget : undefined}
+      />
+
+      {deletingUser && (
+        <DeleteUserDialog
+          isOpen={deletingUser !== null}
+          onClose={() => setDeletingUser(null)}
+          user={deletingUser}
+        />
+      )}
     </div>
   );
 }
 
-function CreateUserForm() {
-  const t = useTranslations("users.create");
-  const [state, formAction, isPending] = useActionState(createUserAction, null);
-  const formRef = useRef<HTMLFormElement>(null);
-
-  // React 19 resets every uncontrolled field of a `<form action={fn}>` natively
-  // (`HTMLFormElement.reset()`) the instant the form is submitted — before the
-  // async action even runs, regardless of whether it later succeeds or fails.
-  // That native reset restores each field's `value` to its current `defaultValue`
-  // DOM property, so mirroring what the user typed into `defaultValue` (via
-  // `onChange`) means the native reset is a no-op visually: the field still
-  // shows what was typed. Only on an actual successful create do we want the
-  // fields to end up empty, which the effect below does explicitly.
-  const [name, setName] = useState("");
-  const [username, setUsername] = useState("");
-
-  useEffect(() => {
-    if (state && "success" in state && state.success) {
-      setName("");
-      setUsername("");
-      const form = formRef.current;
-      if (form) {
-        const nameInput = form.elements.namedItem(
-          "name",
-        ) as HTMLInputElement | null;
-        const usernameInput = form.elements.namedItem(
-          "username",
-        ) as HTMLInputElement | null;
-        // Update the DOM's `defaultValue` synchronously before resetting — React's
-        // own re-render (from setName/setUsername above) is batched and would not
-        // have applied yet, so `form.reset()` would otherwise restore the stale,
-        // just-typed text instead of clearing the field.
-        if (nameInput) nameInput.defaultValue = "";
-        if (usernameInput) usernameInput.defaultValue = "";
-        form.reset();
-      }
-    }
-  }, [state]);
-
-  return (
-    <form ref={formRef} action={formAction} className="space-y-6 max-w-lg">
-      <h3 className="font-semibold text-gray-700 dark:text-gray-300">
-        {t("title")}
-      </h3>
-
-      <div>
-        <Label htmlFor="name">{t("nameLabel")}</Label>
-        <Input
-          id="name"
-          name="name"
-          type="text"
-          required
-          defaultValue={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="username">{t("usernameLabel")}</Label>
-        <Input
-          id="username"
-          name="username"
-          type="text"
-          required
-          minLength={3}
-          defaultValue={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="password">{t("passwordLabel")}</Label>
-        <Input
-          id="password"
-          name="password"
-          type="password"
-          required
-          autoComplete="new-password"
-          hint={t("passwordHint")}
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="passwordConfirmation">
-          {t("passwordConfirmLabel")}
-        </Label>
-        <Input
-          id="passwordConfirmation"
-          name="passwordConfirmation"
-          type="password"
-          required
-          autoComplete="new-password"
-        />
-      </div>
-
-      {state && "error" in state && state.error && (
-        <p className={ERROR_CLASS}>{state.error}</p>
-      )}
-
-      <div>
-        <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? t("submitting") : t("submit")}
-        </Button>
-      </div>
-    </form>
-  );
+interface UsersTableProps {
+  users: AdminUser[];
+  currentUserId: string;
+  onEdit: (user: AdminUser) => void;
+  onDelete: (user: AdminUser) => void;
 }
 
-function UsersTable({ users, currentUserId }: UsersManagerProps) {
+function UsersTable({
+  users,
+  currentUserId,
+  onEdit,
+  onDelete,
+}: UsersTableProps) {
   const t = useTranslations("users.table");
   return (
     <div className="space-y-4">
@@ -174,6 +114,8 @@ function UsersTable({ users, currentUserId }: UsersManagerProps) {
                 key={user.id}
                 user={user}
                 isSelf={user.id === currentUserId}
+                onEdit={onEdit}
+                onDelete={onDelete}
               />
             ))}
           </tbody>
@@ -186,22 +128,31 @@ function UsersTable({ users, currentUserId }: UsersManagerProps) {
 interface UserRowProps {
   user: AdminUser;
   isSelf: boolean;
+  onEdit: (user: AdminUser) => void;
+  onDelete: (user: AdminUser) => void;
 }
 
-function UserRow({ user, isSelf }: UserRowProps) {
+function UserRow({ user, isSelf, onEdit, onDelete }: UserRowProps) {
   const t = useTranslations("users.table");
-  const [deleteState, deleteFormAction, isDeletePending] = useActionState(
-    deleteUserAction,
-    null,
-  );
-  const [toggleState, toggleFormAction, isTogglePending] = useActionState(
-    setUserEnabledAction,
-    null,
-  );
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [isTogglePending, setIsTogglePending] = useState(false);
 
-  const error =
-    (toggleState && "error" in toggleState && toggleState.error) ||
-    (deleteState && "error" in deleteState && deleteState.error);
+  const handleToggle = async () => {
+    setIsTogglePending(true);
+    setError(null);
+
+    try {
+      const result = await setUserEnabledAction(user.id, !user.isEnabled);
+      if ("error" in result && result.error) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setIsTogglePending(false);
+    }
+  };
 
   return (
     <>
@@ -235,43 +186,44 @@ function UserRow({ user, isSelf }: UserRowProps) {
           )}
         </td>
         <td className="py-3 pr-4 text-right">
-          <div className="flex justify-end gap-2">
-            <form action={toggleFormAction}>
-              <input type="hidden" name="id" value={user.id} />
-              <input
-                type="hidden"
-                name="isEnabled"
-                value={(!user.isEnabled).toString()}
-              />
-              <Button
-                type="submit"
-                size="sm"
-                variant="outline"
-                disabled={isSelf || isTogglePending}
-                title={isSelf ? t("disableSelfTitle") : undefined}
+          {!isSelf && (
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => onEdit(user)}
+                title={t("editTitle")}
+                aria-label={t("editTitle")}
+                className="text-gray-500 hover:text-brand-500 dark:text-gray-400 dark:hover:text-brand-400"
               >
-                {isTogglePending
-                  ? user.isEnabled
-                    ? t("disabling")
-                    : t("enabling")
-                  : user.isEnabled
-                    ? t("disable")
-                    : t("enable")}
-              </Button>
-            </form>
-            <form action={deleteFormAction}>
-              <input type="hidden" name="id" value={user.id} />
-              <Button
-                type="submit"
-                size="sm"
-                variant="outline"
-                disabled={isSelf || isDeletePending}
-                title={isSelf ? t("deleteSelfTitle") : undefined}
+                <UserPen className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleToggle}
+                disabled={isTogglePending}
+                title={user.isEnabled ? t("disableTitle") : t("enableTitle")}
+                aria-label={
+                  user.isEnabled ? t("disableTitle") : t("enableTitle")
+                }
+                className="text-gray-500 hover:text-brand-500 disabled:opacity-50 dark:text-gray-400 dark:hover:text-brand-400"
               >
-                {isDeletePending ? t("deleting") : t("delete")}
-              </Button>
-            </form>
-          </div>
+                {user.isEnabled ? (
+                  <UserX className="size-5" />
+                ) : (
+                  <UserCheck className="size-5" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(user)}
+                title={t("deleteTitle")}
+                aria-label={t("deleteTitle")}
+                className="text-error-500 hover:text-error-600"
+              >
+                <Trash2 className="size-5" />
+              </button>
+            </div>
+          )}
         </td>
       </tr>
       {error && (

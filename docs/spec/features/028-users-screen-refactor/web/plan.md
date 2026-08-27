@@ -2,7 +2,7 @@
 title: Users screen refactor — web slice
 service: web
 last_updated: 2026-08-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Users screen refactor — `web` (`web/plan.md`)
