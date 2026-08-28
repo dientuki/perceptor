@@ -796,6 +796,101 @@ driver would have been simpler and wrong — the driver only returns once the en
 `message` is the fallback anyone reading them sees, which is REQ-8 of `018-ui-i18n` working as
 designed.
 
+### Download status and torrent tags (`022-download-status-tags`)
+
+```graphql
+type Download {
+  mediaSourceId: Int!
+  infoHash: String          # null for a LOCAL_FILE upload racing alongside torrents
+  kind: String!             # SourceKind, plain String! — for display, not for branching
+  label: String!            # "Transformers" | "Reacher S03E08" | "Reacher Temporada 3"
+  releaseTitle: String
+  movieId: Int
+  seasonId: Int
+  episodeId: Int
+  status: String!           # SourceStatus, plain String! like every other status field
+  torrentState: String      # raw qBittorrent state; null when the torrent is not in the client
+  progress: Float           # 0..100; null when the torrent is not in the client
+  downloadSpeed: Float      # bytes per second; null when the torrent is not in the client
+  readAt: DateTime!
+}
+
+type Query {
+  movieDownloads(movieId: Int!): [Download!]!
+  showDownloads(showId: Int!): [Download!]!
+}
+
+type Mutation {
+  downloadStart(mediaSourceId: Int!): Download!
+  downloadStop(mediaSourceId: Int!): Download!
+  downloadDelete(mediaSourceId: Int!): Boolean!
+}
+```
+
+`Movie.mediaSourceId: Float` is **removed** from the schema — a consequence of inverting the
+`Movie` ↔ `MediaSource` relation (below), not an independent decision. No consumer selected it.
+
+**`downloadDelete` is not `downloadRemove`, and the names are close enough to be dangerous.** The
+existing `downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!` is unchanged —
+`@AllowService()`, called only by the worker's `cleanup-source.ts`, always with `deleteFiles: false`.
+`downloadDelete` is the user-facing sibling: ownership-scoped, no `deleteFiles` argument, always
+deletes files, returns a boolean rather than `downloadRemove`'s `omitido: …` string.
+
+**`downloadRemove`'s behaviour grew without its signature changing.** When it removes a winner's
+torrent it now also removes that source's losing siblings — the "race" below. The worker's call
+site, arguments and return type are identical, so no typechecker on either side sees this; it is
+recorded here for exactly that reason.
+
+**The list is DB-first, joined to qBittorrent on `infoHash`.** Rows come from `media_sources`
+filtered by the caller's owned title; a tag only narrows the `torrents/info` read on the qBittorrent
+side. A tag is a title string with no ownership and no identity — deriving the list from it would
+leak one user's downloads to another and pick up torrents a human tagged by hand. A torrent missing
+from the client is still a row: `torrentState`/`progress`/`downloadSpeed` come back `null`, `status`
+and `label` still come from the database.
+
+**`infoHash != null` is the controllability test; `kind` is display-only.** `infoHash: null` means
+the row is an upload with no torrent to start, stop or delete. `SourceKind` has two torrent values
+(`TORRENT_SEARCH`, `TORRENT_FILE`), and both consumers hand-retype it with no codegen — branching on
+`kind === 'TORRENT'` would compile, render, and silently strip the buttons off every row.
+
+**`progress` is 0..100 over GraphQL, not qBittorrent's 0..1.** Converted once, server-side, in
+`DownloadsService`; `TorrentClientInfo.progress` at the adapter boundary stays 0..1, passed through
+unrescaled. A consumer that multiplies again renders 1%.
+
+**A title may now race several acquisitions at once.** `Movie.mediaSourceId Int? @unique` — a
+database-level 1:1 — is replaced by `MediaSource.movieId Int?`, making all four owner relations
+(`movieId`/`episodeId`/`seasonId`, plus the existing torrent linkage) symmetric. The seven guards
+that used to refuse a second acquisition with `…_DOWNLOAD_IN_PROGRESS` now refuse only a
+**`COMPLETED`** target; a target that is merely downloading accepts a second, third, or Nth source
+with no prompt. `force` and the three `…_ALREADY_COMPLETED` keys are unchanged —
+`027-replace-completed-media`'s authorisation to replace a *completed* title, not this feature's to
+touch. The `…_DOWNLOAD_IN_PROGRESS` keys themselves are deleted, not narrowed: `error-keys.ts`,
+`messages.en.ts` and both `services/web/messages/*.json` catalogs, plus the key arrays in
+`importMagnetModal.tsx`/`SearchTorrent.tsx`.
+
+**The race arbiter is one shared method on `DownloadsService`, entered from two places.** A torrent
+announces completion through the existing `torrentCompleted` webhook; a tus upload announces its own
+completion through `UploadsService.onUploadFinish`, which never passes through `DownloadsService`
+otherwise. Both call the same `resolveRace(mediaSourceId)`: if a sibling of the same target already
+reached `READY`/`SCANNED`, the call is a no-op; otherwise every other non-terminal sibling is stopped
+in qBittorrent and moved to `PAUSED`, and the winner is left running to keep seeding. Siblings are
+always selected by `movieId`/`episodeId`/`seasonId`, never by tag — a tag is a title string two
+different shows can share. When the winner's post-encode cleanup runs, `downloadRemove` sweeps the
+losing siblings too: removed from the client with their files, rows deleted outright. This holds
+**regardless of whether the winner itself has an `infoHash`** — an upload can win, and
+`downloadRemove`'s pre-existing `!infoHash` early return no longer sits in front of the sweep, only
+in front of the winner's own `torrentClient.remove` call.
+
+Consumer obligations:
+
+- **`web`**: retypes `Download` by hand in `src/types/downloads.ts` and `src/actions/downloads.ts`;
+  keeps `force` on the acquisition actions and `createUploadTicket` untouched (027's); branches the
+  panel's three row buttons on `infoHash != null`, never on `kind`; treats `progress`/`downloadSpeed`/
+  `torrentState` arriving `null` as a normal, renderable state, not a loading state.
+- **`worker`**: no obligation. `cleanup-source.ts` keeps calling `downloadRemove(mediaSourceId,
+  deleteFiles: false)` for the winner with an unchanged signature and receives an unchanged
+  `omitido: …` shape; it does not see the sweep happening beside its own call.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

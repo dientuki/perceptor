@@ -13,11 +13,15 @@ export type TorrentClientInfo = {
   state: SourceStatus;
   rawState: string;
   root_path: string;
+  progress: number; // 0..1, exactly as qBittorrent reports it
+  dlspeed: number; // bytes per second
+  tags: string[]; // split from qBittorrent's comma-concatenated string
 };
 
 export type TorrentClient = {
-  info: () => Promise<TorrentClientInfo[]>;
-  add: (urls: string[]) => Promise<string>;
+  info: (tag?: string) => Promise<TorrentClientInfo[]>;
+  add: (urls: string[], tags?: string[]) => Promise<string>;
+  start: (hashes: string | string[]) => Promise<void>;
   stop: (hashes: string | string[]) => Promise<void>;
   remove: (hashes: string | string[], deleteFiles?: boolean) => Promise<void>;
   setSavePath: (path: string) => Promise<void>;

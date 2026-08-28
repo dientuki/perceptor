@@ -30,20 +30,14 @@ export const MESSAGES_EN: Record<string, string> = {
   // movies, shows, seasons, episodes
   [ERROR_KEYS.MOVIE_NOT_FOUND]: 'Movie {id} does not exist',
   [ERROR_KEYS.MOVIE_NOT_IN_CATALOG]: 'We could not find that movie in the catalog',
-  [ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS]:
-    'This movie already has a download in progress. Confirm to replace it.',
   [ERROR_KEYS.MOVIE_ALREADY_COMPLETED]:
     'This movie is already downloaded. Confirm to replace the current file.',
   [ERROR_KEYS.SHOW_NOT_AVAILABLE]: 'Resource not available for this user',
   [ERROR_KEYS.SHOW_NOT_IN_CATALOG]: 'We could not find that series in the catalog',
   [ERROR_KEYS.SEASON_NOT_FOUND]: 'Season {id} does not exist',
-  [ERROR_KEYS.SEASON_DOWNLOAD_IN_PROGRESS]:
-    'This season already has a download in progress. Confirm to replace it.',
   [ERROR_KEYS.SEASON_ALREADY_COMPLETED]:
     'This season already has downloaded episodes. Confirm to replace the current files.',
   [ERROR_KEYS.EPISODE_NOT_FOUND]: 'Episode {id} does not exist',
-  [ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS]:
-    'This episode already has a download in progress. Confirm to replace it.',
   [ERROR_KEYS.EPISODE_ALREADY_COMPLETED]:
     'This episode is already downloaded. Confirm to replace the current file.',
   [ERROR_KEYS.MAGNET_ALREADY_ATTACHED]: 'That magnet is already attached to «{title}»',
@@ -84,6 +78,8 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH]: 'Completed with no download path recorded — cannot enqueue',
   [ERROR_KEYS.SOURCE_REPLACED]: 'Replaced by a new download',
   [ERROR_KEYS.PROCESS_JOB_NOT_FOUND]: 'Process job {id} does not exist',
+  [ERROR_KEYS.DOWNLOAD_NOT_A_TORRENT]: 'This download has no associated torrent',
+  [ERROR_KEYS.TORRENT_CLIENT_REJECTED]: 'The torrent client rejected the request ({status})',
 
   // uploads — GraphQL
   [ERROR_KEYS.UPLOAD_TARGET_AMBIGUOUS]: 'Provide exactly one of movieId or episodeId',

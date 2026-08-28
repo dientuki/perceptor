@@ -41,8 +41,4 @@ export class CreateMovieDto {
   @IsOptional()
   @IsString()
   filePath?: string;
-
-  @IsOptional()
-  @IsInt()
-  mediaSourceId?: number;
 }

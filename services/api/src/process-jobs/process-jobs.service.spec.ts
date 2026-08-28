@@ -22,7 +22,7 @@ describe('ProcessJobsService', () => {
     userShow: { findMany: jest.Mock };
     movie: { update: jest.Mock };
     episode: { update: jest.Mock };
-    mediaSource: { findUnique: jest.Mock };
+    mediaSource: { findUnique: jest.Mock; findMany: jest.Mock; delete: jest.Mock };
   };
   let settings: { getMap: jest.Mock };
   let mediaRoots: { resolveFromRoot: jest.Mock };
@@ -37,7 +37,7 @@ describe('ProcessJobsService', () => {
       userShow: { findMany: jest.fn() },
       movie: { update: jest.fn() },
       episode: { update: jest.fn() },
-      mediaSource: { findUnique: jest.fn() },
+      mediaSource: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]), delete: jest.fn() },
     };
     settings = { getMap: jest.fn().mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' }) };
     mediaRoots = { resolveFromRoot: jest.fn().mockResolvedValue('/library/Movies') };
@@ -369,6 +369,82 @@ describe('ProcessJobsService', () => {
       await service.downloadRemove(10);
 
       expect(torrentClient.remove).toHaveBeenCalledWith('abc123', true);
+    });
+  });
+
+  // This suite exists because REQ-15's sweep has two failure classes that
+  // both produce no error anywhere (spec.md NFR-5 (b)/(c)):
+  //
+  //  - selecting siblings by tag instead of by target id: a second title
+  //    that happens to share a tag string loses downloads the user never
+  //    touched, and the deletion *succeeds*, so there is nothing to catch it;
+  //  - an upload winning a race and sweeping nothing, because the
+  //    `!infoHash` early return fired in front of the sweep instead of only
+  //    guarding the winner's own `remove` call — the upload files
+  //    correctly, the encode succeeds, and two losing torrents keep
+  //    downloading and seeding forever with no row and no log pointing at
+  //    them.
+  describe('downloadRemove — REQ-15 loser sweep', () => {
+    it('removes every other sibling of the same movie, with files, and deletes their rows', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({ id: 10, infoHash: 'winner-hash', movieId: 7 });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 11, infoHash: 'loser-hash-1' },
+        { id: 12, infoHash: 'loser-hash-2' },
+      ]);
+
+      await service.downloadRemove(10, false);
+
+      // Selected by movieId — never by tag (REQ-14). Removing this `where`
+      // and matching by a tag string instead would let a second title
+      // sharing that tag lose downloads it never asked to touch, silently.
+      expect(prisma.mediaSource.findMany).toHaveBeenCalledWith({
+        where: { movieId: 7, id: { not: 10 } },
+      });
+
+      // The winner's own removal keeps whatever deleteFiles the caller
+      // passed (the worker always passes false); the losers are always
+      // removed WITH their files — the two must never be swapped.
+      expect(torrentClient.remove).toHaveBeenCalledWith('winner-hash', false);
+      expect(torrentClient.remove).toHaveBeenCalledWith('loser-hash-1', true);
+      expect(torrentClient.remove).toHaveBeenCalledWith('loser-hash-2', true);
+
+      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 11 } });
+      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 12 } });
+      // The winner's own row is never deleted here — only its torrent is
+      // removed; the caller (cleanup-source.ts) owns the winner's row.
+      expect(prisma.mediaSource.delete).not.toHaveBeenCalledWith({ where: { id: 10 } });
+    });
+
+    // NFR-5 (c): the sweep must run for a winner of either kind — restoring
+    // the old `!infoHash` early return in front of it (instead of only
+    // guarding the winner's own torrentClient.remove call) makes this case
+    // fail, because the sweep would never run for an upload winner.
+    it('still sweeps losing torrent siblings when the winner itself is a LOCAL_FILE upload with no infoHash', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({ id: 20, infoHash: null, movieId: 8 });
+      prisma.mediaSource.findMany.mockResolvedValue([{ id: 21, infoHash: 'loser-hash' }]);
+
+      const result = await service.downloadRemove(20, false);
+
+      expect(result).toBe('omitido: mediaSource 20 no es un torrent');
+      // The winner has no infoHash, so torrentClient.remove must be called
+      // exactly once — for the losing torrent, never for the winner itself.
+      expect(torrentClient.remove).toHaveBeenCalledTimes(1);
+      expect(torrentClient.remove).toHaveBeenCalledWith('loser-hash', true);
+      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 21 } });
+    });
+
+    it('does not delete a loser whose torrent removal the client rejected, and leaves its row intact', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({ id: 10, infoHash: 'winner-hash', movieId: 7 });
+      prisma.mediaSource.findMany.mockResolvedValue([{ id: 11, infoHash: 'unreachable-hash' }]);
+      torrentClient.remove.mockImplementation(async (hash: string) => {
+        if (hash === 'unreachable-hash') throw new Error('qBittorrent unreachable');
+      });
+
+      await service.downloadRemove(10, false);
+
+      // NFR-6: an unacknowledged delete must not delete the row either —
+      // that would leave the file on disk with nothing tracking it.
+      expect(prisma.mediaSource.delete).not.toHaveBeenCalledWith({ where: { id: 11 } });
     });
   });
 });

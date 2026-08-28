@@ -28,16 +28,17 @@
       "currentUserFailed": "Could not fetch the current user"
     },
     "movie": {
-      "already_completed": "This movie is already downloaded. Confirm to replace the current file.",
-      "download_in_progress": "This movie already has a download in progress. Confirm to replace it."
+      "already_completed": "This movie is already downloaded. Confirm to replace the current file."
     },
     "episode": {
-      "already_completed": "This episode is already downloaded. Confirm to replace the current file.",
-      "download_in_progress": "This episode already has a download in progress. Confirm to replace it."
+      "already_completed": "This episode is already downloaded. Confirm to replace the current file."
     },
     "season": {
-      "already_completed": "This season already has downloaded episodes. Confirm to replace the current files.",
-      "download_in_progress": "This season already has a download in progress. Confirm to replace it."
+      "already_completed": "This season already has downloaded episodes. Confirm to replace the current files."
+    },
+    "download": {
+      "not_a_torrent": "This download has no associated torrent",
+      "torrent_client_rejected": "The torrent client rejected the request ({status})"
     },
     "upload": {
       "ticket_expired": "The upload ticket expired, try again",
@@ -287,6 +288,33 @@
       "searchButtonTitle": "Search",
       "importFileButtonTitle": "Import file",
       "addTorrentButtonTitle": "Add torrent"
+    }
+  },
+  "downloads": {
+    "panel": {
+      "title": "Downloads",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing...",
+      "empty": "No downloads for this title yet.",
+      "targetHeader": "Target",
+      "statusHeader": "Status",
+      "progressHeader": "Progress",
+      "speedHeader": "Speed",
+      "actionsHeader": "Actions",
+      "unknown": "—",
+      "startTitle": "Resume",
+      "stopTitle": "Stop",
+      "deleteTitle": "Delete",
+      "startErrorDefault": "Could not resume the download.",
+      "stopErrorDefault": "Could not stop the download.",
+      "deleteErrorDefault": "Could not delete the download."
+    },
+    "deleteModal": {
+      "title": "Delete download",
+      "message": "Are you sure you want to delete <b>{target}</b>? The torrent and its files will be permanently removed.",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "deleting": "Deleting..."
     }
   },
   "settings": {

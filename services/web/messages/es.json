@@ -28,16 +28,17 @@
       "currentUserFailed": "Error al obtener el usuario actual"
     },
     "movie": {
-      "already_completed": "Esta película ya está descargada. Confirmá para reemplazar el archivo actual.",
-      "download_in_progress": "Esta película ya tiene una descarga en curso. Confirmá para reemplazarla."
+      "already_completed": "Esta película ya está descargada. Confirmá para reemplazar el archivo actual."
     },
     "episode": {
-      "already_completed": "Este episodio ya está descargado. Confirmá para reemplazar el archivo actual.",
-      "download_in_progress": "Este episodio ya tiene una descarga en curso. Confirmá para reemplazarlo."
+      "already_completed": "Este episodio ya está descargado. Confirmá para reemplazar el archivo actual."
     },
     "season": {
-      "already_completed": "Esta temporada ya tiene episodios descargados. Confirmá para reemplazar los archivos actuales.",
-      "download_in_progress": "Esta temporada ya tiene una descarga en curso. Confirmá para reemplazarla."
+      "already_completed": "Esta temporada ya tiene episodios descargados. Confirmá para reemplazar los archivos actuales."
+    },
+    "download": {
+      "not_a_torrent": "Esta descarga no tiene un torrent asociado",
+      "torrent_client_rejected": "El cliente de torrents rechazó la solicitud ({status})"
     },
     "upload": {
       "ticket_expired": "El ticket de subida expiró, intentá de nuevo",
@@ -287,6 +288,33 @@
       "searchButtonTitle": "Buscar",
       "importFileButtonTitle": "Importar archivo",
       "addTorrentButtonTitle": "Añadir torrent"
+    }
+  },
+  "downloads": {
+    "panel": {
+      "title": "Descargas",
+      "refresh": "Actualizar",
+      "refreshing": "Actualizando...",
+      "empty": "Todavía no hay descargas para este título.",
+      "targetHeader": "Destino",
+      "statusHeader": "Estado",
+      "progressHeader": "Progreso",
+      "speedHeader": "Velocidad",
+      "actionsHeader": "Acciones",
+      "unknown": "—",
+      "startTitle": "Reanudar",
+      "stopTitle": "Detener",
+      "deleteTitle": "Eliminar",
+      "startErrorDefault": "No se pudo reanudar la descarga.",
+      "stopErrorDefault": "No se pudo detener la descarga.",
+      "deleteErrorDefault": "No se pudo eliminar la descarga."
+    },
+    "deleteModal": {
+      "title": "Eliminar descarga",
+      "message": "¿Estás seguro de que querés eliminar <b>{target}</b>? El torrent y sus archivos se van a eliminar permanentemente.",
+      "confirm": "Eliminar",
+      "cancel": "Cancelar",
+      "deleting": "Eliminando..."
     }
   },
   "settings": {

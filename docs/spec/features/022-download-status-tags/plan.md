@@ -2,7 +2,7 @@
 title: Download Status and Torrent Tags — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-08-27
-status: Approved            # Draft | Approved | Implemented
+status: Implemented            # Draft | Approved | Implemented
 ---
 
 # PLAN: Download Status and Torrent Tags (`plan.md`)

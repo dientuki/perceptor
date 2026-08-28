@@ -145,8 +145,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   enqueue-after-commit block are load-bearing.
 - **`episodes/`** — `MoviesService`'s structural twin one level deeper: `findOneFromDb` scoped through
   `season.show.users`, plus `addTorrentToEpisode`/`addMagnetToEpisode` mirroring
-  `attachTorrentSource`'s ownership lookup, active-source conflict (`force`), demote-then-replace and
-  symmetric `infoHash` collision check. `MoviesService.attachTorrentSource`'s collision guard also
+  `attachTorrentSource`'s ownership lookup, a `COMPLETED`-only conflict (`force`), demote-then-replace
+  and symmetric `infoHash` collision check — narrowed from "any active source conflicts" by
+  `022-download-status-tags`, which lets a target hold several concurrent sources (see `downloads/`
+  below). `MoviesService.attachTorrentSource`'s collision guard also
   recognises an `infoHash` owned by an **episode**, not just another movie — without that, an
   episode-owned hash falls through and gets silently re-pointed at a film. Reuses
   `shows/entities/episode.entity.ts` rather than declaring a second `Episode`.
@@ -162,6 +164,20 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   by infoHash** and silently ignores unknown hashes by design. An episode-owned source moves its
   `Episode` to `ENCODING` just as a movie-owned one does; a source already `ERROR` (superseded by a
   `force` replacement) is left untouched.
+  Since `022-download-status-tags` this module also owns the user-facing read/control surface:
+  `movieDownloads`/`showDownloads` (DB-first, scoped through the same ownership clause
+  `movies/`/`shows/` use, written locally rather than imported — deliberate, see
+  `010`'s triplication precedent) joined to one `torrents/info?tag=` read per title, and
+  `downloadStart`/`downloadStop`/`downloadDelete`, each refusing a source with no `infoHash` (a
+  `LOCAL_FILE` upload) with `DOWNLOAD_NOT_A_TORRENT` before any client call. `DownloadsService`
+  also exposes the shared race arbiter, `resolveRace(mediaSourceId)`: called from
+  `torrentCompleted` **and** from `uploads/uploads.service.ts`'s `onUploadFinish` — a tus upload
+  competes in the same race as any torrent of its target and never passes through this module any
+  other way. Given a winner, every non-terminal sibling of the same target (`movieId`/`episodeId`/
+  `seasonId`, **never** by tag) is stopped and moved to `PAUSED`, unless a sibling already reached
+  `READY`/`SCANNED`, in which case the call is a no-op. `process-jobs/`'s `downloadRemove` sweeps
+  the losing siblings when the winner's cleanup runs, regardless of whether the winner itself has an
+  `infoHash`.
 - **`process-jobs/`** — the `ProcessJob` lifecycle: `sourceScanned` → encode queued →
   `encodeCompleted`. Resolves `outputRoot` and `downloadsRoot` for the worker; `downloadsRoot` is
   `resolveFromRoot('downloads', '.')` — the **root itself**, not `path_downloads`, because a torrent's
@@ -218,9 +234,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   and is bound to that target. The tus metadata key names are deliberately **not** unified — see root
   `CLAUDE.md` → Known debt.
   **Replacing a `COMPLETED` film or episode** (`027-replace-completed-media`): the resolver runs a
-  pre-flight conflict check *before* minting — same-shaped guard as `attachTorrentSource`'s
-  (`mediaSourceId`/active-`MediaSource` present), throwing `*_ALREADY_COMPLETED` when the target's
-  `status` is `COMPLETED` or `*_DOWNLOAD_IN_PROGRESS` otherwise. With `force: true` the ticket mints
+  pre-flight conflict check *before* minting — same-shaped guard as `attachTorrentSource`'s, throwing
+  `*_ALREADY_COMPLETED` when the target's `status` is `COMPLETED`. Since `022-download-status-tags`
+  a merely-downloading target raises nothing at all — the guard fires only for `COMPLETED`, and the
+  `*_DOWNLOAD_IN_PROGRESS` keys it used to throw otherwise no longer exist. With `force: true` the ticket mints
   and carries the flag in its signed payload; `onUploadCreate` writes a Redis marker
   (`UPLOAD_REPLACE_KEY_PREFIX`, 7-day TTL, no delete method — the TTL is the cleanup) keyed by
   `upload.id`, and `handleUploadFinish` reads that marker — **never** `upload.metadata`, which is
@@ -233,8 +250,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).
 
 **`clients/`** is not a Nest module — plain adapter classes grouped by external system:
-`clients/tmdb/`, `clients/indexer/`, `clients/torrent/` (qBittorrent client + `magnet.ts` parser),
-`clients/media-server/` (with a `registry.ts`), plus the shared `clients/types.ts`.
+`clients/tmdb/`, `clients/indexer/`, `clients/torrent/` (qBittorrent client + `magnet.ts` parser —
+since `022-download-status-tags` also `start()`, tag-aware `add()`/`info()`, and state sets brought
+to qBittorrent 5.0; deliberately **no** `setForceStart`, a member with no caller), `clients/media-server/`
+(with a `registry.ts`), plus the shared `clients/types.ts`.
 `clients/tmdb/multi.ts` is the pure mapper for `search/multi` rows (film/series discriminated by
 `media_type`, everything else dropped), used by `TmdbClient.searchMulti()`.
 

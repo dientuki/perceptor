@@ -174,13 +174,14 @@ model MediaSource {
   // al completar; para los casos locales la da el usuario al crear el pedido.
   downloadPath String? @db.VarChar(500)
 
-  // Objetivo del pedido para series. Las películas usan el 1:1 desde Movie.
+  // Objetivo del pedido. Las tres relaciones son simétricas desde 022-download-status-tags.
+  movieId   Int?
+  movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: Cascade)
   seasonId  Int?
   season    Season?  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   episodeId Int?
   episode   Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
-  movie       Movie? // Back-relation del 1:1
   sourceFiles SourceFile[]
 
   errorMessage String?  @db.Text
@@ -198,6 +199,7 @@ model MediaSource {
   hasUnmatchedFiles Boolean @default(false)
 
   @@index([status])
+  @@index([movieId])
   @@map("media_sources")
 }
 
@@ -274,9 +276,8 @@ model Movie {
   status   MediaStatus @default(MISSING)
   filePath String?     @db.VarChar(500) // Ruta al archivo final procesado
 
-  // Origen de descarga vinculado (opcional)
-  mediaSourceId Int?         @unique
-  mediaSource   MediaSource? @relation(fields: [mediaSourceId], references: [id], onDelete: SetNull)
+  // Orígenes de descarga vinculados (N:1 desde 022-download-status-tags, ver MediaSource.movieId)
+  mediaSources MediaSource[]
 
   sourceFiles SourceFile[]
   processJobs ProcessJob[]

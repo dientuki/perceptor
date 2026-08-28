@@ -43,9 +43,15 @@ describe('MoviesService', () => {
       findUnique: jest.Mock;
       findFirst: jest.Mock;
       create: jest.Mock;
+      update: jest.Mock;
     };
     userMovie: {
       upsert: jest.Mock;
+    };
+    mediaSource: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
     };
   };
   let redis: {
@@ -56,6 +62,9 @@ describe('MoviesService', () => {
     search: jest.Mock;
     details: jest.Mock;
   };
+  let qbittorrent: {
+    add: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -64,9 +73,15 @@ describe('MoviesService', () => {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
       },
       userMovie: {
         upsert: jest.fn(),
+      },
+      mediaSource: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
       },
     };
     redis = {
@@ -77,6 +92,9 @@ describe('MoviesService', () => {
       search: jest.fn(),
       details: jest.fn(),
     };
+    qbittorrent = {
+      add: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -84,7 +102,7 @@ describe('MoviesService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
         { provide: TmdbClient, useValue: tmdb },
-        { provide: QbittorrentClient, useValue: {} },
+        { provide: QbittorrentClient, useValue: qbittorrent },
       ],
     }).compile();
 
@@ -153,7 +171,7 @@ describe('MoviesService', () => {
       expect(prisma.movie.findMany).toHaveBeenCalledWith({
         where: { users: { some: { userId: 'user-1' } } },
         orderBy: { createdAt: 'desc' },
-        include: { mediaSource: true, processJobs: true },
+        include: { mediaSources: true, processJobs: true },
       });
     });
   });
@@ -251,10 +269,13 @@ describe('MoviesService', () => {
     });
   });
 
-  // This suite exists because otherwise the wrong warning reaches the user: a
-  // `COMPLETED` film swapping the "already completed" key for the "download
-  // in progress" one shows the mild "a download is already running" copy to
-  // someone about to destroy a finished file, with nothing failing anywhere.
+  // This suite exists because two different bugs are both silent: a
+  // `COMPLETED` film answering the wrong key would show the mild "a
+  // download is already running" copy to someone about to destroy a
+  // finished file with nothing failing anywhere (022-download-status-tags
+  // REQ-7 retired that key, so today the only wrong answer left is raising
+  // no error at all); and a merely-downloading film that still conflicts
+  // would silently defeat REQ-6's "several active sources at once".
   describe('addMagnetToMovie (attachTorrentSource conflict key)', () => {
     function expectI18nKey(promise: Promise<unknown>, key: string): Promise<void> {
       return promise.then(
@@ -272,7 +293,7 @@ describe('MoviesService', () => {
     it('answers error.movie.already_completed for a COMPLETED film with no force', async () => {
       prisma.movie.findFirst.mockResolvedValue({
         id: 7,
-        mediaSourceId: 99,
+        mediaSources: [{ id: 99 }],
         status: 'COMPLETED',
       });
 
@@ -282,17 +303,29 @@ describe('MoviesService', () => {
       );
     });
 
-    it('still answers error.movie.download_in_progress for a merely-busy film', async () => {
+    // REQ-7: the guard's trigger changed from "has a source" to "is
+    // COMPLETED" — a second acquisition against a merely-downloading film
+    // must succeed with no conflict at all, no confirmation and no error.
+    // Re-introducing the old "has a source" condition would make this
+    // reject again with no other test catching it.
+    it('no longer conflicts for a merely-busy film without force', async () => {
       prisma.movie.findFirst.mockResolvedValue({
         id: 7,
-        mediaSourceId: 99,
+        title: 'Transformers',
+        mediaSources: [{ id: 99 }],
         status: 'DOWNLOADING',
       });
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      qbittorrent.add.mockResolvedValue('/media/downloads/abc123');
+      prisma.mediaSource.create.mockResolvedValue({ id: 100 });
+      prisma.movie.update.mockResolvedValue({ id: 7, status: 'DOWNLOADING' });
 
-      await expectI18nKey(
+      await expect(
         service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
-        ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS,
-      );
+      ).resolves.toEqual({ id: 7, status: 'DOWNLOADING' });
+
+      expect(qbittorrent.add).toHaveBeenCalled();
+      expect(prisma.mediaSource.create).toHaveBeenCalled();
     });
   });
 });

@@ -11,6 +11,7 @@ import { ERROR_KEYS, ErrorKey } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { UploadTicketExpiredError, UploadTicketMismatchError, UploadTicketsService } from './upload-tickets.service';
 import type { UploadTicketTarget } from './upload-tickets.service';
+import { DownloadsService } from '@/downloads/downloads.service';
 
 const ILLEGAL_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
 
@@ -76,6 +77,7 @@ export class UploadsService implements OnModuleInit {
     private readonly mediaRoots: MediaRootsService,
     private readonly queue: ProcessQueueService,
     private readonly uploadTickets: UploadTicketsService,
+    private readonly downloads: DownloadsService,
   ) {}
 
   async onModuleInit() {
@@ -192,22 +194,16 @@ export class UploadsService implements OnModuleInit {
       const episode = await this.prisma.episode.findUnique({ where: { id: episodeId } });
       if (!episode) throw new UploadHttpError(404, ERROR_KEYS.EPISODE_NOT_FOUND, { id: episodeId });
 
-      // Same active-source conflict rule as EpisodesService.attachTorrentSource
-      // (010-episode-acquisition, T003): an episode is the pointed-at side of
-      // MediaSource, so "already downloading" is a query for a non-ERROR
-      // MediaSource against this episodeId, not a null-column check like a
-      // film's Movie.mediaSourceId.
-      const activeSource = await this.prisma.mediaSource.findFirst({
-        where: { episodeId, status: { not: 'ERROR' } },
-      });
       // 027-replace-completed-media: the mid-upload race guard. The ticket's
       // own decision (never upload.metadata — REQ-7) governs whether this
       // conflict is skipped; createUploadTicket already refused an
       // unconfirmed replacement before the upload started, so reaching here
-      // with `activeSource` set and no authorisation means the target became
-      // busy while the upload was in flight.
-      if (activeSource && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
-        throw new UploadHttpError(409, ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS);
+      // with the episode COMPLETED and no authorisation means the target
+      // became busy while the upload was in flight. A merely-downloading
+      // episode no longer conflicts (022-download-status-tags REQ-7/REQ-19)
+      // — it becomes one more competitor in the race.
+      if (episode.status === 'COMPLETED' && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
+        throw new UploadHttpError(409, ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
       }
 
       const destPath = await this.moveUploadedFile(upload.id, rawPath, filename);
@@ -221,6 +217,17 @@ export class UploadsService implements OnModuleInit {
           episodeId,
         },
       });
+
+      // REQ-19: this upload is one more competitor in the episode's race,
+      // subject to REQ-13's one-winner guard exactly like a completed
+      // torrent — the same shared method handleTorrentCompleted calls, so
+      // the guard and the pause of any downloading siblings can never drift
+      // between the two entry points (../plan.md § Approach).
+      const raceResult = await this.downloads.resolveRace(mediaSource.id);
+      if (raceResult.startsWith('ignorado')) {
+        console.log(`[uploads] ${upload.id}: mediaSource ${mediaSource.id} ignorado (${raceResult}), no se toca el episodio`);
+        return;
+      }
 
       await this.prisma.episode.update({
         where: { id: episodeId },
@@ -243,9 +250,11 @@ export class UploadsService implements OnModuleInit {
     if (!movie) throw new UploadHttpError(404, ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
     // 027-replace-completed-media: same mid-upload race guard as the episode
-    // branch above, governed by the ticket's own decision (REQ-7).
-    if (movie.mediaSourceId && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
-      throw new UploadHttpError(409, ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS);
+    // branch above, governed by the ticket's own decision (REQ-7). A
+    // merely-downloading film no longer conflicts (022-download-status-tags
+    // REQ-7/REQ-19) — it becomes one more competitor in the race.
+    if (movie.status === 'COMPLETED' && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
+      throw new UploadHttpError(409, ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
     }
 
     const destPath = await this.moveUploadedFile(upload.id, rawPath, filename);
@@ -256,12 +265,23 @@ export class UploadsService implements OnModuleInit {
         status: 'READY',
         downloadPath: destPath,
         releaseTitle: upload.metadata?.filename ?? null,
+        movieId,
       },
     });
 
+    // REQ-19: same shared arbiter as the episode branch above — see its
+    // comment. An upload that arrives after a torrent already reached
+    // READY/SCANNED is ignored here exactly like a losing torrent's late
+    // completion (AC-22).
+    const raceResult = await this.downloads.resolveRace(mediaSource.id);
+    if (raceResult.startsWith('ignorado')) {
+      console.log(`[uploads] ${upload.id}: mediaSource ${mediaSource.id} ignorado (${raceResult}), no se toca la película`);
+      return;
+    }
+
     await this.prisma.movie.update({
       where: { id: movieId },
-      data: { mediaSourceId: mediaSource.id, status: 'ENCODING' },
+      data: { status: 'ENCODING' },
     });
 
     await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });

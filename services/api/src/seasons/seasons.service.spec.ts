@@ -133,17 +133,26 @@ describe('SeasonsService', () => {
       });
     });
 
-    it('rejects a second acquisition without force, and creates no row', async () => {
+    // REQ-7: the guard's trigger changed from "has an active source" to "at
+    // least one COMPLETED episode" — a merely-busy season (no COMPLETED
+    // episode) must accept a second acquisition with no conflict at all
+    // (REQ-6). Re-introducing the old "has an active source" condition
+    // would make this reject again with no other test catching it.
+    it('no longer conflicts for a merely-busy season without force', async () => {
       prisma.season.findFirst.mockResolvedValue(season);
       prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, seasonId: 42, status: 'DOWNLOADING' });
       prisma.episode.count.mockResolvedValue(0); // no COMPLETED episode — merely busy
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      qbittorrent.add.mockResolvedValue('/downloads/reacher-s02-v2');
+      prisma.mediaSource.create.mockResolvedValue({ id: 101, seasonId: 42 });
+      prisma.season.findUniqueOrThrow.mockResolvedValue({ ...season, episodes: [] });
 
-      await expect(
-        service.addMagnetToSeason(42, { magnet, force: false }, 'user-1'),
-      ).rejects.toThrow('This season already has a download in progress. Confirm to replace it.');
+      await service.addMagnetToSeason(42, { magnet, force: false }, 'user-1');
 
-      expect(qbittorrent.add).not.toHaveBeenCalled();
-      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+      expect(qbittorrent.add).toHaveBeenCalled();
+      expect(prisma.mediaSource.create).toHaveBeenCalled();
+      // Untouched: force's demote-to-ERROR block stays 027's, and does not
+      // fire just because the guard above no longer conflicts.
       expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
     });
 

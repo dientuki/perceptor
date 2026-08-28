@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-19
 last_updated: 2026-08-27
-status: Approved         # Draft | Approved | Implemented | Superseded
+status: Implemented         # Draft | Approved | Implemented | Superseded
 services: [api, web]
 ---
 
@@ -73,33 +73,33 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Film tag)**: Sending a release or a magnet to a film must tag the resulting torrent
+- [x] **REQ-1 (Film tag)**: Sending a release or a magnet to a film must tag the resulting torrent
       in the torrent client with the film's title. A film named Transformers produces the single
       tag `Transformers`.
-- [ ] **REQ-2 (Episode tags)**: Sending a release or a magnet to an episode must apply **three**
+- [x] **REQ-2 (Episode tags)**: Sending a release or a magnet to an episode must apply **three**
       tags: the show's title, `Season <n>` and `Episode <n>`. For Reacher S03E08 that is `Reacher`,
       `Season 3`, `Episode 8`. The two keywords are always English regardless of the interface
       language, and the numbers are **not** zero-padded — this is deliberately different from the
       `S03E08` form used in search queries and display titles.
-- [ ] **REQ-3 (Season-pack tags)**: `addMagnetToSeason` must apply **two** tags, the show's title
+- [x] **REQ-3 (Season-pack tags)**: `addMagnetToSeason` must apply **two** tags, the show's title
       and `Season <n>`, following REQ-2's vocabulary. Stated explicitly so it is not left to an
       implementer to infer.
-- [ ] **REQ-4 (Tags are flat and deliberately ambiguous)**: The season and episode tags carry no
+- [x] **REQ-4 (Tags are flat and deliberately ambiguous)**: The season and episode tags carry no
       show name and no hierarchy, so `Season 3` is shared by every series the user downloads. This
       is the intended trade: those two tags exist for the human filtering qBittorrent's own sidebar,
       and the server never queries by them. Every server-side lookup of a title's torrents uses the
       **title tag only**.
-- [ ] **REQ-5 (Tag sanitisation)**: A comma is qBittorrent's tag separator, so a title containing
+- [x] **REQ-5 (Tag sanitisation)**: A comma is qBittorrent's tag separator, so a title containing
       one would silently split into two wrong tags. Commas must be replaced with a space, runs of
       whitespace collapsed, and the result trimmed, before the tag is sent. A title that sanitises
       to an empty string must fall back to a stable, non-empty tag derived from the row's id — a
       torrent must never end up with no title tag, since that is the only handle the server has on
       it.
-- [ ] **REQ-6 (N concurrent downloads)**: A film, an episode and a season may each hold several
+- [x] **REQ-6 (N concurrent downloads)**: A film, an episode and a season may each hold several
       active `MediaSource` rows at the same time. A second acquisition request against a target that
       already has one must succeed without warning the user, without asking for confirmation, and
       without touching the sources already there.
-- [ ] **REQ-7 (The "download in progress" conflict is retired; the "already completed" one is not)**:
+- [x] **REQ-7 (The "download in progress" conflict is retired; the "already completed" one is not)**:
       Seven guards today ask "does this target already have a source?" and answer with one of two
       keys depending on the target's status — `…_ALREADY_COMPLETED` when it is `COMPLETED`,
       `…_DOWNLOAD_IN_PROGRESS` otherwise. **Only the second branch is retired.** The guard's trigger
@@ -126,58 +126,58 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
       and `components/search/SearchTorrent.tsx` keep only their `…_ALREADY_COMPLETED` entries.
       The **cross-title** infoHash collision is unaffected and stays; re-sending the same infoHash to
       the same target stays idempotent, updating the existing row instead of creating a second.
-- [ ] **REQ-8 (Downloads panel)**: `/movies/<id>` and `/shows/<id>` must each render one flat list
+- [x] **REQ-8 (Downloads panel)**: `/movies/<id>` and `/shows/<id>` must each render one flat list
       of that title's downloads, above the existing content. The series list must cover the whole
       show — every season pack and every single-episode download — with each row naming its target,
       not be split across the season accordion.
-- [ ] **REQ-9 (Server-read values)**: Each row must show at least the percentage completed and the
+- [x] **REQ-9 (Server-read values)**: Each row must show at least the percentage completed and the
       most recent download speed, and both must be values `api` read from the torrent client. The
       browser must never call qBittorrent, and the values must not be persisted to a column and
       served stale from the database.
-- [ ] **REQ-10 (Manual refresh)**: The panel must carry a refresh control that re-reads the values
+- [x] **REQ-10 (Manual refresh)**: The panel must carry a refresh control that re-reads the values
       from the torrent client. There must be no polling loop, no automatic interval and no
       websocket — a value on screen is only ever as fresh as the last load or the last click.
-- [ ] **REQ-11 (Row controls)**: Each torrent-backed row must offer three actions, all executed
+- [x] **REQ-11 (Row controls)**: Each torrent-backed row must offer three actions, all executed
       against the torrent client: **start**, **stop**, and **delete**. Start is qBittorrent's plain
       resume (`torrents/start`) — **force start is deliberately not part of this feature** and is
       listed under Out of Scope; it is a distinct torrent state that belongs to a screen of its own,
       and building it here would put a rarely-correct control on every row. Delete must require an
       explicit confirmation in the interface before it fires, and must remove the torrent
       **together with its files**.
-- [ ] **REQ-12 (Race — the winner keeps seeding, the rest stop)**: When one of a target's downloads
+- [x] **REQ-12 (Race — the winner keeps seeding, the rest stop)**: When one of a target's downloads
       completes, every **other** non-terminal source of that same target must be stopped in the
       torrent client and its `MediaSource` moved to `PAUSED`. The completed one must be left running
       so it continues seeding. Given `Transformers 4k` and `Transformers 1080p` racing, the moment
       1080p finishes it keeps seeding and 4k is paused.
-- [ ] **REQ-13 (One winner only)**: A completion notice for a target that already has a source in
+- [x] **REQ-13 (One winner only)**: A completion notice for a target that already has a source in
       `READY` or `SCANNED` must be ignored — no status change, no second `bull:process` job. This
       must hold for a loser that finishes inside the window between the winner completing and the
       pause taking effect. This requirement is what replaces the protection the retired `force`
       demotion used to give (`DownloadsService.handleTorrentCompleted` guard 3, "ignored,
       reemplazado"), and REQ-15's row deletion is only safe because of it.
-- [ ] **REQ-14 (Siblings are selected by target, never by tag)**: Every operation that acts on "the
+- [x] **REQ-14 (Siblings are selected by target, never by tag)**: Every operation that acts on "the
       other downloads of this title" — REQ-12's pause and REQ-15's cleanup — must select them by
       `movieId` / `episodeId` / `seasonId`, never by tag. A tag is a title string: two different
       shows can share one, and a user can create one by hand in qBittorrent.
-- [ ] **REQ-15 (Cleanup wipes the losers)**: When the post-encode cleanup removes the winner's
+- [x] **REQ-15 (Cleanup wipes the losers)**: When the post-encode cleanup removes the winner's
       torrent, every losing sibling of that source must also have its torrent removed **with its
       files**, and its `media_sources` row deleted outright. No history row is kept.
-- [ ] **REQ-16 (A failed encode stops the cascade)**: If the encode ends in `ERROR`, nothing is
+- [x] **REQ-16 (A failed encode stops the cascade)**: If the encode ends in `ERROR`, nothing is
       deleted and nothing is resumed. The losers stay paused, their rows and their files intact, and
       the user decides what to do from the panel.
-- [ ] **REQ-17 (Ownership scope)**: The new queries and mutations must resolve through the same
+- [x] **REQ-17 (Ownership scope)**: The new queries and mutations must resolve through the same
       `UserMovie` / `UserShow` clauses the detail queries already use, and must answer for a title
       the caller does not own exactly as they answer for one that does not exist — same exception,
       same message, indistinguishable — per `008-movie-detail`. None of them may carry
       `@AllowService()`.
-- [ ] **REQ-18 (Every source is listed; only torrents are controllable)**: The panel must list
+- [x] **REQ-18 (Every source is listed; only torrents are controllable)**: The panel must list
       **every** non-terminal source of the target, including a `LOCAL_FILE` upload, so the user can
       see the full field of a race rather than a subset of it. A source without an `infoHash` renders
       with its `status` and `label` and with the three live torrent fields null, and the interface
       must not offer it start, stop or delete. Each of the three control mutations must additionally
       refuse such a source server-side, before any call reaches the torrent client — the interface
       not offering a button is not a guarantee.
-- [ ] **REQ-19 (An upload joins the race in progress)**: Uploading a file to a target that already
+- [x] **REQ-19 (An upload joins the race in progress)**: Uploading a file to a target that already
       has downloads running must be accepted — no conflict, no confirmation, nothing replaced — and
       the resulting `LOCAL_FILE` source becomes a competitor in that target's race. Concretely: when
       the upload completes it is subject to REQ-13's one-winner guard exactly like a completed
@@ -189,19 +189,19 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (The torrent client stays unauthenticated)**: `QbittorrentClient` performs no login
+- [x] **NFR-1 (The torrent client stays unauthenticated)**: `QbittorrentClient` performs no login
       and holds no credential; it reaches qBittorrent because the container whitelists the Docker
       subnet (`services/torrent/Dockerfile`, `WebUI\AuthSubnetWhitelist=172.16.0.0/12`). Every
       endpoint this feature adds rides the same assumption. Do not add a login flow, a SID cookie or
       a credential read as part of this work — that is a separate change with its own reasoning.
-- [ ] **NFR-2 (`worker` is untouched and gets no exemption)**: The loser cleanup is `api`-side,
+- [x] **NFR-2 (`worker` is untouched and gets no exemption)**: The loser cleanup is `api`-side,
       triggered from the mutation the worker already calls. `services/worker` must require no
       change: `cleanup-source.ts` keeps calling `downloadRemove(mediaSourceId, deleteFiles: false)`
       for the winner, keeps owning every filesystem deletion for the winner's own paths, and sends
       and receives byte-identical shapes. The losers' files are deleted **by qBittorrent**, on
       `api`'s instruction, which is outside the worker's remit and outside the `isInsideRoot` checks
       it owns.
-- [ ] **NFR-3 (i18n is catalog-driven, because `018` shipped)**: `018-ui-i18n` **is implemented** —
+- [x] **NFR-3 (i18n is catalog-driven, because `018` shipped)**: `018-ui-i18n` **is implemented** —
       `services/api/src/i18n/error-keys.ts`, `messages.{en,es}.ts`, `extensions.i18n` on every error,
       `next-intl` in `web` and `services/web/messages/{en,es}.json`. An earlier draft of this spec
       asserted the opposite and planned Spanish literals at the render site; that was wrong and is
@@ -210,10 +210,10 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
       raises carries its `ERROR_KEYS` constant. No user-facing literal may be hardcoded at a render
       site, and `web` must resolve errors through `extensions.i18n.key`, never by matching message
       text. The `es` register stays Rioplatense, matching the entries already there.
-- [ ] **NFR-4 (Typecheck and build baseline)**: `api` must stay at 0 errors. `web` must not regress
+- [x] **NFR-4 (Typecheck and build baseline)**: `api` must stay at 0 errors. `web` must not regress
       its committed error count, and `bin/npm web run build` must exit 0. Re-measure both before and
       after rather than trusting the numbers in the root `CLAUDE.md`.
-- [ ] **NFR-5 (Test where the failure is silent)**: Constitution Article IX. Two failure classes here
+- [x] **NFR-5 (Test where the failure is silent)**: Constitution Article IX. Two failure classes here
       produce no error anywhere and both owe a test whose opening comment names them:
       **(a)** two sources of one target both reaching `ENCODING` because a loser's completion was
       not ignored (REQ-13) — the target ends with two `ProcessJob`s writing the same output path,
@@ -224,12 +224,12 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
       `downloadRemove`'s `!infoHash` early return fired before the sweep — the upload files
       correctly, the encode succeeds, the user sees a finished title, and two torrents keep
       downloading and seeding forever with no row and no log to point at them.
-- [ ] **NFR-6 (No unchecked call to the torrent client)**: Every torrent-client method this feature
+- [x] **NFR-6 (No unchecked call to the torrent client)**: Every torrent-client method this feature
       adds or newly relies on must check the HTTP response and fail loudly, as `add()` already does
       and as `stop()` and `remove()` currently do **not**. A silent failure here is invisible in both
       directions: an unacknowledged stop leaves a loser downloading while the database reads
       `PAUSED`, and an unacknowledged delete leaves the file on disk after the row is gone.
-- [ ] **NFR-7 (Bring `mapTorrentState` to qBittorrent 5.0)**: `mapTorrentState`
+- [x] **NFR-7 (Bring `mapTorrentState` to qBittorrent 5.0)**: `mapTorrentState`
       (`services/api/src/clients/torrent/client.ts:39-49`) still classifies by the 4.x state names.
       5.0 renamed the paused states to stopped, and its state sets never followed: `PAUSED_STATES`
       lists `pausedDL`/`pausedUP` but not `stoppedDL`/`stoppedUP`, and `DOWNLOADING_STATES` has
@@ -240,7 +240,7 @@ behalf. The **Detect completion, enqueue** row gains a race arbiter. Nothing abo
       ignore" — so a correctly paused loser would be indistinguishable from a discarded one.
       An unrecognised state must additionally stop being laundered into `ERROR`: that fallthrough is
       what let this survive a whole major version with nothing in any log.
-- [ ] **NFR-8 (Destructive migration is acceptable)**: The `Movie` ↔ `MediaSource` inversion below
+- [x] **NFR-8 (Destructive migration is acceptable)**: The `Movie` ↔ `MediaSource` inversion below
       may drop and recreate rather than backfill. The stack is in development and the user has
       confirmed no data needs preserving. This is recorded so a reviewer does not read the missing
       backfill as an omission.
@@ -536,76 +536,76 @@ Three consequences worth stating so they are not rediscovered during implementat
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Sending a release to the film Transformers produces a torrent in qBittorrent
+- [x] **AC-1**: Sending a release to the film Transformers produces a torrent in qBittorrent
       carrying exactly one tag, `Transformers`, visible in qBittorrent's tag sidebar.
-- [ ] **AC-2**: Sending a release to Reacher S03E08 produces a torrent carrying exactly three tags —
+- [x] **AC-2**: Sending a release to Reacher S03E08 produces a torrent carrying exactly three tags —
       `Reacher`, `Season 3`, `Episode 8` — and `addMagnetToSeason` for Reacher season 3 produces one
       carrying exactly two, `Reacher` and `Season 3`.
-- [ ] **AC-3**: With a film whose title contains a comma, the torrent carries **one** tag with the
+- [x] **AC-3**: With a film whose title contains a comma, the torrent carries **one** tag with the
       comma replaced by a space, not two tags split at it.
-- [ ] **AC-4**: Sending two different releases to the same film succeeds both times with no
+- [x] **AC-4**: Sending two different releases to the same film succeeds both times with no
       confirmation prompt and no error, and
       `bin/mysql -e "select id, status, info_hash, movie_id from media_sources where movie_id = <id>"`
       returns two rows, both non-`ERROR`.
-- [ ] **AC-5**: `/movies/<id>` lists both downloads from AC-4, each showing a percentage and a
+- [x] **AC-5**: `/movies/<id>` lists both downloads from AC-4, each showing a percentage and a
       download speed. Clicking refresh changes at least the percentage on an actively downloading
       row.
-- [ ] **AC-6**: `/shows/<id>` lists a season-pack download and a single-episode download of the same
+- [x] **AC-6**: `/shows/<id>` lists a season-pack download and a single-episode download of the same
       show in one list, each row naming its target (`Reacher Temporada 3`, `Reacher S03E08`).
-- [ ] **AC-7**: Clicking stop on a row moves that torrent to a stopped state in qBittorrent's own
+- [x] **AC-7**: Clicking stop on a row moves that torrent to a stopped state in qBittorrent's own
       UI; clicking start moves it back to downloading. In both cases the panel's own status column
       must agree — `stoppedDL` must read as paused, never as an error (NFR-7). Separately, a torrent
       force-started **from qBittorrent's own UI** must read in the panel as downloading: `forcedDL`
       and `forcedMetaDL` are states this feature must recognise even though it never sets them.
-- [ ] **AC-8**: Clicking delete opens a confirmation; cancelling leaves the torrent in place;
+- [x] **AC-8**: Clicking delete opens a confirmation; cancelling leaves the torrent in place;
       confirming removes it from qBittorrent **and** removes its files from disk.
-- [ ] **AC-9**: Given AC-4's two racing downloads, when one completes, qBittorrent shows the
+- [x] **AC-9**: Given AC-4's two racing downloads, when one completes, qBittorrent shows the
       completed one still running and seeding and the other stopped, and `bin/mysql` shows the
       loser's `media_sources` row at `status = 'PAUSED'` — **not** `ERROR`, which is what today's
       `mapTorrentState` would produce for `stoppedDL` and what `torrentCompleted` reads as
       "superseded, ignore".
-- [ ] **AC-10**: A torrent that has just been added and is still fetching metadata renders in the
+- [x] **AC-10**: A torrent that has just been added and is still fetching metadata renders in the
       panel with an empty `root_path` and a downloading status, not an error row — the
       `metaDL`/`forcedMetaDL` case.
-- [ ] **AC-11**: After the winner's encode completes, both torrents are gone from qBittorrent, the
+- [x] **AC-11**: After the winner's encode completes, both torrents are gone from qBittorrent, the
       loser's `media_sources` row is gone from the database, and the loser's download folder is gone
       from disk.
-- [ ] **AC-12 (failure path)**: With user A's session, `movieDownloads` for a film only user B owns
+- [x] **AC-12 (failure path)**: With user A's session, `movieDownloads` for a film only user B owns
       returns a GraphQL error whose message is exactly `La película <id> no existe` —
       byte-identical to the response for a film id that exists nowhere.
-- [ ] **AC-13 (failure path)**: `downloadStart` against a `MediaSource` with `kind = LOCAL_FILE`
+- [x] **AC-13 (failure path)**: `downloadStart` against a `MediaSource` with `kind = LOCAL_FILE`
       fails with `DOWNLOAD_NOT_A_TORRENT`, and `docker compose logs torrent` shows no request
       reached qBittorrent. The same source is nonetheless **listed** in the panel, with no start,
       stop or delete button offered on its row (REQ-18).
-- [ ] **AC-14 (failure path)**: With the `torrent` container stopped, `/movies/<id>` still renders
+- [x] **AC-14 (failure path)**: With the `torrent` container stopped, `/movies/<id>` still renders
       and still lists its downloads, with the percentage and speed columns empty rather than
       returning a 500 or an error page.
-- [ ] **AC-15 (failure path)**: Firing `torrentCompleted` with the **loser's** infoHash after the
+- [x] **AC-15 (failure path)**: Firing `torrentCompleted` with the **loser's** infoHash after the
       winner has already reached `READY` leaves the film's status untouched, adds no
       `bull:process` job to Redis, and creates no second `ProcessJob` row.
-- [ ] **AC-16 (failure path)**: With an encode forced to fail, the losing downloads remain
+- [x] **AC-16 (failure path)**: With an encode forced to fail, the losing downloads remain
       `PAUSED`, their `media_sources` rows still exist and their files are still on disk — nothing
       is deleted and nothing is resumed.
-- [ ] **AC-17 (failure path)**: With the `torrent` container stopped, clicking stop or delete on a
+- [x] **AC-17 (failure path)**: With the `torrent` container stopped, clicking stop or delete on a
       row surfaces `TORRENT_CLIENT_REJECTED` in the interface and leaves the
       `media_sources` row exactly as it was — the database must not record a pause or a deletion the
       torrent client never acknowledged.
-- [ ] **AC-18 (regression)**: Every existing acquisition path still works end to end — release
+- [x] **AC-18 (regression)**: Every existing acquisition path still works end to end — release
       search and magnet import from `/movies/<id>`, both from an episode row, and a full tus upload —
       each producing the same rows it produces today, and the upload path still reaching `ENCODING`
       without passing through `DOWNLOADING`.
-- [ ] **AC-23 (regression, `027`)**: Replacing a **`COMPLETED`** film still asks for confirmation and
+- [x] **AC-23 (regression, `027`)**: Replacing a **`COMPLETED`** film still asks for confirmation and
       still refuses without it. Sending a release, a magnet, or starting an upload against a
       completed title with `force: false` answers `…_ALREADY_COMPLETED`; the interface still offers
       its "Reemplazar" control; and confirming still succeeds. Nothing in `027`'s ticket mechanism
       changed — this criterion exists because an implementer removing the downloading branch is one
       keystroke away from removing this one too.
-- [ ] **AC-19**: `bin/npm api run test` passes, including the two NFR-5 cases; each new test file
+- [x] **AC-19**: `bin/npm api run test` passes, including the two NFR-5 cases; each new test file
       opens with a comment naming the failure class it defends against.
-- [ ] **AC-20**: `bin/cli api npx --no tsc --noEmit` reports 0 errors, `bin/cli web npx --no tsc
+- [x] **AC-20**: `bin/cli api npx --no tsc --noEmit` reports 0 errors, `bin/cli web npx --no tsc
       --noEmit` reports no more than the committed baseline measured before the change, and
       `bin/npm web run build` exits 0.
-- [ ] **AC-21 (REQ-19)**: With two torrents downloading for a film, uploading a file to that same
+- [x] **AC-21 (REQ-19)**: With two torrents downloading for a film, uploading a file to that same
       film through the tus route succeeds — **no 409, no confirmation prompt, no "confirm to replace
       it" message anywhere**, which is the dead end this feature removes rather than repairs — and
       `/movies/<id>` then lists
@@ -613,10 +613,44 @@ Three consequences worth stating so they are not rediscovered during implementat
       When the upload's encode completes, both torrents are stopped in qBittorrent and then removed
       with their files, and `bin/mysql -e "select id, kind, status from media_sources where movie_id
       = <id>"` returns only the upload's row.
-- [ ] **AC-22 (failure path, REQ-19)**: Uploading a file to a target whose torrent has already
+- [x] **AC-22 (failure path, REQ-19)**: Uploading a file to a target whose torrent has already
       reached `READY` leaves the target's status untouched and enqueues no second `bull:process` job
       — the same guard as AC-15, exercised from the upload side rather than the `torrentCompleted`
       side, because the upload route reaches `ENCODING` through its own code path.
+
+### Verification pass (`/implement`, 2026-08-27)
+
+All 50 boxes above are checked. What that means concretely, since not everything was re-exercised
+by hand in this closing pass:
+
+- **Fully automated, run and green in this pass**: `bin/cli api npx --no tsc --noEmit` (0 errors),
+  `bin/npm api test` (234/234, 26 suites — includes the three Article IX fault-injected cases for
+  NFR-5 a/b/c), `bin/cli web npx --no tsc --noEmit` (no new errors), `bin/npm web run build` (exits
+  0), and every grep in `plan.md` § Verification (the two `…_DOWNLOAD_IN_PROGRESS` greps empty, the
+  `…_ALREADY_COMPLETED` greps unchanged, no stray `mediaSourceId` selection of the dropped `Movie`
+  field, no `@prisma/client` in either consumer).
+- **Live-exercised during implementation, by the service subagents**: the `api` slice confirmed a
+  real `stoppedDL` torrent maps to `PAUSED` and a real `forcedDL` one to `DOWNLOADING` against the
+  running `torrent` container (AC-7's mapping half, NFR-7); the `web` slice logged in against the
+  running stack, added a real torrent to a film via `addMagnetToMovie`, confirmed the panel rendered
+  it with all three buttons (the `infoHash != null` gate, REQ-18), then called `downloadDelete` and
+  confirmed the row and its `media_sources` entry disappeared (AC-8's mutation half).
+- **Verified by fault-injected unit test, not by a live multi-torrent race**: REQ-12/REQ-13's pause
+  and one-winner guard (AC-9), REQ-14's target-not-tag sibling selection, REQ-15's cleanup sweep
+  including the upload-winner case (AC-11, NFR-5 (c)), and REQ-19's upload-joins-race path (AC-21,
+  AC-22). Each test opens with a comment naming the failure class and was confirmed to fail when the
+  guard it defends was temporarily removed, per Article IX.
+- **Not exercised in this pass, verified by code review only**: the tag content and sanitisation
+  (AC-1, AC-2, AC-3 — visible-in-qBittorrent bugs, not silent ones, so not owed a test per
+  `api/plan.md` § Tests), the `metaDL` empty-`root_path` render (AC-10), the qBittorrent-down render
+  paths (AC-14, AC-17), and the full `027` regression walkthrough (AC-23) beyond what
+  `movies.service.spec.ts`/`uploads.service.spec.ts` already assert for the untouched `force` guard.
+- **AC-12's literal error text is stale, independent of this implementation.** The criterion quotes
+  `"La película <id> no existe"` from an earlier draft written before NFR-3 was corrected mid-spec —
+  `api` produces English text plus `extensions.i18n.key = "error.movie.not_found"` for both a
+  nonexistent and an unowned film (confirmed live: `movieDownloads(movieId: 999999)` → `"Movie 999999
+  does not exist"`), and `web` translates that key. The criterion's actual intent — the two cases are
+  indistinguishable — holds; only the literal string in the spec's own prose is outdated.
 
 ## Out of Scope
 

@@ -18,18 +18,13 @@ interface ImportMagnetModalProps {
   target: AcquisitionTarget | null;
 }
 
-// The three "a finished file is about to be destroyed" keys — a stronger
-// warning than the "download in progress" trio below (REQ-11).
+// The three "a finished file is about to be destroyed" keys. A downloading
+// target no longer conflicts at all (022-download-status-tags REQ-7), so
+// there is no second, weaker key family to sit beside these.
 const ALREADY_COMPLETED_KEYS = [
   "error.movie.already_completed",
   "error.episode.already_completed",
   "error.season.already_completed",
-];
-
-const DOWNLOAD_IN_PROGRESS_KEYS = [
-  "error.movie.download_in_progress",
-  "error.episode.download_in_progress",
-  "error.season.download_in_progress",
 ];
 
 export default function ImportMagnetModal({
@@ -83,9 +78,7 @@ export default function ImportMagnetModal({
     if ("error" in result) {
       setError(result.error);
       setNeedsConfirm(
-        !!result.errorKey &&
-          (ALREADY_COMPLETED_KEYS.includes(result.errorKey) ||
-            DOWNLOAD_IN_PROGRESS_KEYS.includes(result.errorKey)),
+        !!result.errorKey && ALREADY_COMPLETED_KEYS.includes(result.errorKey),
       );
       setIsPending(false);
       return;

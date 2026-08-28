@@ -14,16 +14,11 @@ export class MediaSourcesService {
     private readonly encodeQueue: EncodeQueueService,
   ) {}
 
-  // MediaSource no tiene columna movieId: el dueño del 1:1 es Movie.mediaSourceId.
-  // Se aplana acá para que tanto la query como la mutation devuelvan la misma forma.
+  // MediaSource.movieId is now a real column (022-download-status-tags), no
+  // longer derived from Movie's side of a 1:1. Kept as a private wrapper so
+  // sourceScanned() below has one read path for the row.
   private async findOneFlat(id: number) {
-    const mediaSource = await this.prisma.mediaSource.findUnique({
-      where: { id },
-      include: { movie: { select: { id: true } } },
-    });
-    if (!mediaSource) return null;
-
-    return { ...mediaSource, movieId: mediaSource.movie?.id ?? null };
+    return this.prisma.mediaSource.findUnique({ where: { id } });
   }
 
   async findOne(id: number) {

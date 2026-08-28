@@ -253,6 +253,15 @@ buttons — a series has none at that level), then one `SeasonAccordion.tsx` per
 Each episode row carries the same three buttons `Movie.tsx` uses (buscar / importar archivo / añadir
 torrent).
 
+Since `022-download-status-tags` both pages also render `src/components/downloads/DownloadsPanel.tsx`
+(rows from `getMovieDownloads`/`getShowDownloads` in `src/actions/downloads.ts`, joined into each
+page's existing `Promise.all`), with `src/components/downloads/DeleteDownloadModal.tsx` on the
+existing `Modal`/`useModal` pair. A row's three buttons (start/stop/delete — no force-start, out of
+scope) are gated on `infoHash != null`, never on `kind`: `SourceKind` has two torrent values and
+`kind` is hand-retyped with no codegen, so a row for an uploaded `LOCAL_FILE` racing alongside the
+show's torrents renders with no buttons at all rather than a wrong one. No polling — a refresh
+control re-reads via `router.refresh()`.
+
 ## The `AcquisitionTarget` union
 
 `SearchTorrentModal.tsx`, `SearchTorrent.tsx`, `importMagnetModal.tsx` and `importFileModal.tsx` all

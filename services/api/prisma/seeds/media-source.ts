@@ -13,7 +13,7 @@ export async function seedMediaSource(prisma: PrismaClient) {
     return;
   }
 
-  const mediaSource = await prisma.mediaSource.upsert({
+  await prisma.mediaSource.upsert({
     where: { id: 1 },
     update: {},
     create: {
@@ -22,11 +22,12 @@ export async function seedMediaSource(prisma: PrismaClient) {
       status: SourceStatus.DOWNLOADING,
       infoHash: 'D8AE740F029C118B43F6C7A87F4F3D6325E94249',
       downloadPath: '/media/downloads/02ba37fd5d6d8c67',
+      movieId: movie.id,
     },
   });
 
   await prisma.movie.update({
     where: { id: movie.id },
-    data: { mediaSourceId: mediaSource.id, status: MediaStatus.DOWNLOADING },
+    data: { status: MediaStatus.DOWNLOADING },
   });
 }

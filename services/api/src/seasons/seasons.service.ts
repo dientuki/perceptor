@@ -7,6 +7,20 @@ import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 
+// REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw.
+// Fallback derived from the target row's id, not the MediaSource's — see
+// EpisodesService's copy of this same helper for why it stays local.
+function sanitizeTag(title: string, fallbackId: number): string {
+  const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || `id-${fallbackId}`;
+}
+
+// REQ-3: a season pack's torrent carries two tags — the show's title and
+// `Season <n>` — following REQ-2's vocabulary (English, unpadded).
+function seasonTags(season: { seasonNumber: number; show: { id: number; title: string } }): string[] {
+  return [sanitizeTag(season.show.title, season.show.id), `Season ${season.seasonNumber}`];
+}
+
 // Structural twin of EpisodesService (episodes/episodes.service.ts), itself
 // a structural twin of MoviesService — the third deliberate copy, not a
 // shared helper, see 013-season-pack-processing's api/plan.md § Approach.
@@ -68,12 +82,16 @@ export class SeasonsService {
       where: { seasonId, status: { not: 'ERROR' } },
     });
 
-    if (activeSource && !input.force) {
+    // REQ-7: only a season with at least one COMPLETED episode refuses. A
+    // merely-downloading season no longer conflicts — REQ-6 makes a second
+    // acquisition normal. `activeSource` still drives the demote-on-force
+    // block below regardless of this check.
+    if (!input.force) {
       const hasCompletedEpisode =
         (await this.prisma.episode.count({ where: { seasonId, status: 'COMPLETED' } })) > 0;
-      throw i18nError.conflict(
-        hasCompletedEpisode ? ERROR_KEYS.SEASON_ALREADY_COMPLETED : ERROR_KEYS.SEASON_DOWNLOAD_IN_PROGRESS,
-      );
+      if (hasCompletedEpisode) {
+        throw i18nError.conflict(ERROR_KEYS.SEASON_ALREADY_COMPLETED);
+      }
     }
 
     // Symmetric with the checks MoviesService/EpisodesService.attachTorrentSource
@@ -110,7 +128,7 @@ export class SeasonsService {
     // descarga cae en su propia carpeta. Corre antes de cualquier escritura
     // en la DB: si qBittorrent rechaza el torrent no debe quedar ninguna
     // fila QUEUED colgada, ni la fila activa demovida sin reemplazo.
-    const downloadPath = await this.qbittorrent.add(input.urls);
+    const downloadPath = await this.qbittorrent.add(input.urls, seasonTags(season));
 
     // Demote *before* creating the replacement, and only after qBittorrent
     // has accepted the new torrent — so a rejected add() leaves the

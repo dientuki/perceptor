@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { cache } from "react";
+import { getShowDownloads } from "@/actions/downloads";
 import { getLanguages } from "@/actions/languages";
 import { getShowById } from "@/actions/shows";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+import DownloadsPanel from "@/components/downloads/DownloadsPanel";
 import SeasonAccordion from "@/components/shows/SeasonAccordion";
 import Show from "@/components/shows/Show";
 
@@ -64,9 +66,10 @@ export default async function ShowDetailsPage({ params }: PageProps) {
     notFound();
   }
 
-  const [show, languageOptions] = await Promise.all([
+  const [show, languageOptions, downloads] = await Promise.all([
     getShow(showId),
     getLanguages(),
+    getShowDownloads(showId),
   ]);
 
   if (!show) {
@@ -86,6 +89,9 @@ export default async function ShowDetailsPage({ params }: PageProps) {
         <div className="space-y-6">
           <Show show={show} languageOptions={languageOptions} />
         </div>
+      </div>
+      <div className="mt-6">
+        <DownloadsPanel downloads={downloads} />
       </div>
       <div className="mt-6 space-y-4">
         {seasonsNewestFirst.map((season) => (

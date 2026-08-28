@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { cache } from "react";
+import { getMovieDownloads } from "@/actions/downloads";
 import { getLanguages } from "@/actions/languages";
 import { getMovieById } from "@/actions/movies";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+import DownloadsPanel from "@/components/downloads/DownloadsPanel";
 import Movie from "@/components/movies/Movie";
 import SearchTorrent from "@/components/search/SearchTorrent";
 import type { AcquisitionTarget } from "@/types/media";
@@ -65,9 +67,10 @@ export default async function MovieDetailsPage({ params }: PageProps) {
     notFound();
   }
 
-  const [movie, languages] = await Promise.all([
+  const [movie, languages, downloads] = await Promise.all([
     getMovie(movieId),
     getLanguages(),
+    getMovieDownloads(movieId),
   ]);
 
   if (!movie) {
@@ -84,6 +87,9 @@ export default async function MovieDetailsPage({ params }: PageProps) {
           <Movie movie={movie} languageOptions={languages} />
           <SearchTorrent target={target} />
         </div>
+      </div>
+      <div className="mt-6">
+        <DownloadsPanel downloads={downloads} />
       </div>
     </div>
   );

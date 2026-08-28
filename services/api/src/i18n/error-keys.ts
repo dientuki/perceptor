@@ -29,15 +29,12 @@ export const ERROR_KEYS = {
   // movies, shows, seasons, episodes
   MOVIE_NOT_FOUND: 'error.movie.not_found',
   MOVIE_NOT_IN_CATALOG: 'error.movie.not_in_catalog',
-  MOVIE_DOWNLOAD_IN_PROGRESS: 'error.movie.download_in_progress',
   MOVIE_ALREADY_COMPLETED: 'error.movie.already_completed',
   SHOW_NOT_AVAILABLE: 'error.show.not_available',
   SHOW_NOT_IN_CATALOG: 'error.show.not_in_catalog',
   SEASON_NOT_FOUND: 'error.season.not_found',
-  SEASON_DOWNLOAD_IN_PROGRESS: 'error.season.download_in_progress',
   SEASON_ALREADY_COMPLETED: 'error.season.already_completed',
   EPISODE_NOT_FOUND: 'error.episode.not_found',
-  EPISODE_DOWNLOAD_IN_PROGRESS: 'error.episode.download_in_progress',
   EPISODE_ALREADY_COMPLETED: 'error.episode.already_completed',
   MAGNET_ALREADY_ATTACHED: 'error.magnet.already_attached',
   MEDIA_UNSUPPORTED_TYPE: 'error.media.unsupported_type',
@@ -76,6 +73,8 @@ export const ERROR_KEYS = {
   SOURCE_NO_DOWNLOAD_PATH: 'error.source.no_download_path',
   SOURCE_REPLACED: 'error.source.replaced',
   PROCESS_JOB_NOT_FOUND: 'error.processJob.not_found',
+  DOWNLOAD_NOT_A_TORRENT: 'error.download.not_a_torrent',
+  TORRENT_CLIENT_REJECTED: 'error.download.torrent_client_rejected',
 
   // uploads — GraphQL
   UPLOAD_TARGET_AMBIGUOUS: 'error.upload.target_ambiguous',

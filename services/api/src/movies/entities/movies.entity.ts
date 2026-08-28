@@ -33,9 +33,6 @@ export class Movie {
   @Field({ nullable: true })
   filePath?: string;
 
-  @Field({ nullable: true })
-  mediaSourceId?: number;
-
   @Field()
   createdAt: Date;
 

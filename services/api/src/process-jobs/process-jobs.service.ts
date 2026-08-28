@@ -285,7 +285,10 @@ export class ProcessJobsService {
   // caller that predates this argument. This pipeline (encodeCompleted's
   // removeTorrent instruction) always passes `false`: the worker owns every
   // deletion, behind isInsideRoot, so the client is never asked to delete
-  // anything itself.
+  // anything itself. Signature, `omitido:` string and return type are all
+  // unchanged (the worker calls this and is not in `services:`) — but
+  // 022-download-status-tags REQ-15 grew its behaviour: it now also sweeps
+  // every losing sibling of the same target.
   async downloadRemove(mediaSourceId: number, deleteFiles: boolean = true) {
     const mediaSource = await this.prisma.mediaSource.findUnique({ where: { id: mediaSourceId } });
     if (!mediaSource) {
@@ -293,12 +296,62 @@ export class ProcessJobsService {
     }
 
     // LOCAL_FILE/LOCAL_FOLDER no tienen infoHash: no hay nada que sacarle al
-    // cliente de torrents.
+    // cliente de torrents para ESTA fila. The sweep below must still run:
+    // under REQ-19 the winner can be an upload, and if the sweep only ran
+    // after torrentClient.remove, an upload winner would leave every
+    // losing torrent downloading and seeding forever with nothing pointing
+    // at them (spec.md NFR-5 (c)). Only the winner's own remove is skipped.
+    if (mediaSource.infoHash) {
+      await this.torrentClient.remove(mediaSource.infoHash, deleteFiles);
+    }
+
+    await this.sweepLosingSiblings(mediaSource);
+
     if (!mediaSource.infoHash) {
       return `omitido: mediaSource ${mediaSourceId} no es un torrent`;
     }
 
-    await this.torrentClient.remove(mediaSource.infoHash, deleteFiles);
     return `removido: mediaSource ${mediaSourceId}`;
+  }
+
+  // REQ-15: once the winner's own torrent (or upload) is cleaned up, every
+  // losing sibling of the same target — selected by movieId/episodeId/
+  // seasonId, never by tag (REQ-14: a tag is a title string, shared across
+  // users and titles, with no ownership and no identity) — has its torrent
+  // removed **with** files and its row deleted outright. No history kept.
+  private async sweepLosingSiblings(winner: {
+    id: number;
+    movieId: number | null;
+    episodeId: number | null;
+    seasonId: number | null;
+  }): Promise<void> {
+    const targetWhere = winner.movieId
+      ? { movieId: winner.movieId }
+      : winner.episodeId
+        ? { episodeId: winner.episodeId }
+        : winner.seasonId
+          ? { seasonId: winner.seasonId }
+          : null;
+
+    if (!targetWhere) return;
+
+    const losers = await this.prisma.mediaSource.findMany({
+      where: { ...targetWhere, id: { not: winner.id } },
+    });
+
+    for (const loser of losers) {
+      if (loser.infoHash) {
+        try {
+          await this.torrentClient.remove(loser.infoHash, true);
+        } catch (err) {
+          // NFR-6: an unacknowledged delete must not delete the row either —
+          // that would leave the loser's torrent and files on disk with
+          // nothing left tracking them.
+          console.error(`[downloadRemove] no se pudo borrar mediaSource ${loser.id} en el cliente de torrents:`, err);
+          continue;
+        }
+      }
+      await this.prisma.mediaSource.delete({ where: { id: loser.id } });
+    }
   }
 }

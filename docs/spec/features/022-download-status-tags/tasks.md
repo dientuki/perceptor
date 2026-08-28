@@ -1,7 +1,7 @@
 ---
 title: Download Status and Torrent Tags — Tasks
 last_updated: 2026-08-27
-status: Draft            # Draft | In Progress | Done
+status: Done            # Draft | In Progress | Done
 ---
 
 # TASKS: Download Status and Torrent Tags (`tasks.md`)
@@ -30,7 +30,7 @@ Strictly serial, and all `[api]`. T001 regenerates the Prisma client that T002 a
 against — `client.ts` imports `SourceStatus` from `@prisma/client`, so it is not as independent of
 the migration as it looks.
 
-- [ ] **T001** `[api]` Invert the `Movie` ↔ `MediaSource` relation in `prisma/schema.prisma`: add
+- [x] **T001** `[api]` Invert the `Movie` ↔ `MediaSource` relation in `prisma/schema.prisma`: add
       `movieId Int?` plus its `movie Movie?` relation to `MediaSource`, mirroring `episodeId` /
       `seasonId`; remove `mediaSourceId` and `mediaSource` from `Movie`. Generate the migration with
       `bin/npm api run prisma:migrate` — never hand-written SQL (Article III). No backfill
@@ -39,7 +39,7 @@ the migration as it looks.
       new migration directory, and `bin/mysql -e "describe media_sources"` lists a `movie_id`
       column while `bin/mysql -e "describe movies"` no longer lists `media_source_id`.
 
-- [ ] **T002** `[api]` Fix every reader of the relation T001 removed: `movies.service.ts` (the
+- [x] **T002** `[api]` Fix every reader of the relation T001 removed: `movies.service.ts` (the
       `include: { mediaSource: true }` at :58 and :72, and the conflict/write at :291, :295, :360),
       `movies/entities/movies.entity.ts:37`, `movies/dto/create-movie.dto.ts:47`,
       `uploads.service.ts:212` and `:232`, and `media-sources.service.ts:14-23` — where
@@ -49,7 +49,7 @@ the migration as it looks.
       *Done when:* `bin/cli api npx --no tsc --noEmit` reports 0 errors, and
       `grep -rn "mediaSourceId" services/api/src` returns no hit that refers to the dropped column.
 
-- [ ] **T003** `[api]` Extend `clients/torrent/types.ts` and `clients/torrent/client.ts` per
+- [x] **T003** `[api]` Extend `clients/torrent/types.ts` and `clients/torrent/client.ts` per
       `../spec.md` § The torrent client interface: `add(urls, tags?)` sending qBittorrent's inline
       `tags`, `info(tag?)` filtering server-side and returning `progress` / `dlspeed` / `tags`, and
       a new `start()` beside the existing `stop`/`remove`. **No `forceStart` and no `forceStarted`** —
@@ -68,7 +68,7 @@ the migration as it looks.
 
 All `[api]`. Ordered by dependency rather than by file; several are small.
 
-- [ ] **T004** `[api]` Build the tag list per acquisition path and pass it into `qbittorrent.add()`:
+- [x] **T004** `[api]` Build the tag list per acquisition path and pass it into `qbittorrent.add()`:
       the film's title for a movie, `<Show title>` + `Season <n>` + `Episode <n>` for an episode,
       `<Show title>` + `Season <n>` for a season pack — English keywords, unpadded numbers (REQ-1 to
       REQ-3). Apply REQ-5's sanitisation: commas to spaces, whitespace collapsed, trimmed, with a
@@ -78,7 +78,7 @@ All `[api]`. Ordered by dependency rather than by file; several are small.
       episode shows three and a season pack two; a film whose title contains a comma yields **one**
       tag, not two.
 
-- [ ] **T005** `[api]` Narrow the seven conflict guards so only a **`COMPLETED`** target refuses
+- [x] **T005** `[api]` Narrow the seven conflict guards so only a **`COMPLETED`** target refuses
       (REQ-7): `movies.service.ts:304`, `episodes.service.ts:92`, `seasons.service.ts:75`,
       `uploads.resolver.ts:60` and `:78`, `uploads.service.ts:209` and `:247`. Each is already a
       ternary on the target's status — change the *condition* and drop the
@@ -98,7 +98,7 @@ All `[api]`. Ordered by dependency rather than by file; several are small.
       from media_sources where movie_id = <id>"` showing two non-`ERROR` rows; and starting an upload
       against a `COMPLETED` film **still** answers `MOVIE_ALREADY_COMPLETED` without `force`.
 
-- [ ] **T006** `[api]` Add the `downloads/` read and control surface: `entities/download.entity.ts`,
+- [x] **T006** `[api]` Add the `downloads/` read and control surface: `entities/download.entity.ts`,
       the `movieDownloads` / `showDownloads` queries and the `downloadStart` / `downloadStop` /
       `downloadDelete` mutations, wired in `downloads.module.ts`. Rows come from `media_sources`
       scoped by the caller's ownership clause written locally (see `../api/plan.md` § Existing code
@@ -115,7 +115,7 @@ All `[api]`. Ordered by dependency rather than by file; several are small.
       source answers `DOWNLOAD_NOT_A_TORRENT` with no request reaching qBittorrent
       (`docker compose logs torrent`), while that same source **is** returned by `movieDownloads`.
 
-- [ ] **T007** `[api]` Add the race arbiter as **one shared method** on `DownloadsService` — not
+- [x] **T007** `[api]` Add the race arbiter as **one shared method** on `DownloadsService` — not
       inline in `handleTorrentCompleted`, because `UploadsService` calls the same logic in T008 and
       two copies would drift silently (`../plan.md` § Approach). Given a winning `mediaSourceId`: if
       any *other* source of the same target is already `READY`/`SCANNED`, report "ignored" and change
@@ -129,7 +129,7 @@ All `[api]`. Ordered by dependency rather than by file; several are small.
       firing `torrentCompleted` with the loser's hash afterwards changes nothing and enqueues no
       second `bull:process`.
 
-- [ ] **T008** `[api]` Wire the tus upload path into the same arbiter (REQ-19). In
+- [x] **T008** `[api]` Wire the tus upload path into the same arbiter (REQ-19). In
       `uploads.service.ts`'s `onUploadFinish`, call T007's method before moving the target to
       `ENCODING` and enqueuing `bull:process`; if it reports "ignored", finish the upload without
       touching the target's status and without enqueuing. Check `uploads.module.ts` for the import
@@ -140,7 +140,7 @@ All `[api]`. Ordered by dependency rather than by file; several are small.
       torrent already reached `READY` leaves the film's status untouched and enqueues no
       `bull:process` job.
 
-- [ ] **T009** `[api]` Extend `ProcessJobsService.downloadRemove` to sweep the losers: select
+- [x] **T009** `[api]` Extend `ProcessJobsService.downloadRemove` to sweep the losers: select
       siblings by target, remove them from the client **with** their files, then `deleteMany` those
       rows (REQ-15). Its signature, its `omitido: …` string and its return type are unchanged — the
       worker calls this and is not in `services:` — but its `!mediaSource.infoHash` early return
@@ -153,7 +153,7 @@ All `[api]`. Ordered by dependency rather than by file; several are small.
       holds when the winner is a `LOCAL_FILE` upload; with an encode forced to fail, the losers stay
       `PAUSED` with rows and files intact.
 
-- [ ] **T010** `[api]` Write the three Article IX suites named in `spec.md` NFR-5, each opening with
+- [x] **T010** `[api]` Write the three Article IX suites named in `spec.md` NFR-5, each opening with
       a comment stating its failure class, each case built by fault injection (verify it fails when
       the rule is removed). New `src/downloads/downloads.service.spec.ts` — a second source of one
       target must never reach `ENCODING`, the winner must not be stopped with its siblings, a paused
@@ -172,7 +172,7 @@ All `[web]`, and the whole group is blocked on Group 2. This is not caution: `we
 to a mutation that no longer accepts it is a GraphQL validation error on every acquisition, not a
 type error, so there is no safe overlap.
 
-- [ ] **T011** `[web]` Add `src/types/downloads.ts` (the hand-retyped `Download`, field names copied
+- [x] **T011** `[web]` Add `src/types/downloads.ts` (the hand-retyped `Download`, field names copied
       from `../spec.md`, not guessed from `api`'s source — note `infoHash` is **nullable**) and
       `src/actions/downloads.ts` with the two reads and three mutations, following
       `src/actions/media-server.ts`. The reads run during a render pass and use
@@ -182,7 +182,7 @@ type error, so there is no safe overlap.
       *Done when:* `bin/cli web npx --no tsc --noEmit` reports no new errors and a `movieDownloads`
       call from a page returns rows.
 
-- [ ] **T012** `[web] [P]` Retire the three `…_DOWNLOAD_IN_PROGRESS` keys: drop them from the key
+- [x] **T012** `[web] [P]` Retire the three `…_DOWNLOAD_IN_PROGRESS` keys: drop them from the key
       arrays in `components/import/importMagnetModal.tsx` (lines 30-32) and
       `components/search/SearchTorrent.tsx` (lines 31-33), and from `messages/en.json` and
       `messages/es.json`. **Leave `…_ALREADY_COMPLETED`, `needsConfirm`, the "Reemplazar" relabel
@@ -194,7 +194,7 @@ type error, so there is no safe overlap.
       magnet import still succeeds end to end; uploading a file to a film with a torrent in flight
       shows **no** message and starts uploading; and replacing a `COMPLETED` film still asks first.
 
-- [ ] **T013** `[web]` Build `components/downloads/DownloadsPanel.tsx` (rows, percent and speed
+- [x] **T013** `[web]` Build `components/downloads/DownloadsPanel.tsx` (rows, percent and speed
       columns, status pill following `SeasonAccordion.tsx:13-24`'s `statusBadgeClass`, a refresh
       control calling `router.refresh()`, **start / stop / delete** buttons — no force-start, it is
       out of scope) and `components/downloads/DeleteDownloadModal.tsx` on the existing `Modal` +
@@ -210,7 +210,7 @@ type error, so there is no safe overlap.
       whose cancel leaves the torrent in place and whose confirm removes torrent and files; a torrent
       still in `metaDL` renders as downloading with an empty `root_path`, not as an error row.
 
-- [ ] **T014** `[web]` Wire the panel into `app/(dashboard)/movies/[id]/page.tsx` and
+- [x] **T014** `[web]` Wire the panel into `app/(dashboard)/movies/[id]/page.tsx` and
       `app/(dashboard)/shows/[id]/page.tsx`, joining the existing `Promise.all` rather than adding a
       waterfall. The show's list covers the whole series — season packs and single episodes — each
       row naming its target. → T013
@@ -220,7 +220,7 @@ type error, so there is no safe overlap.
 
 ### Group 4 — verification and docs
 
-- [ ] **T015** `[docs] [P]` Add a `### …(022-download-status-tags)` subsection to
+- [x] **T015** `[docs] [P]` Add a `### …(022-download-status-tags)` subsection to
       `docs/spec/graphql-contract.md` in the house style: the SDL delta, the notes the SDL cannot
       carry (`downloadDelete` vs `downloadRemove`, `progress` 0..100 at the boundary but 0..1 in the
       adapter, `downloadRemove`'s unchanged signature with grown behaviour, nullable `infoHash` as
@@ -228,7 +228,7 @@ type error, so there is no safe overlap.
       recording `worker`'s explicit **no obligation**. → T014
       *Done when:* the section exists and its SDL matches `src/schema.gql`.
 
-- [ ] **T016** `[docs] [P]` Update the affected `CLAUDE.md` files: the root pipeline table
+- [x] **T016** `[docs] [P]` Update the affected `CLAUDE.md` files: the root pipeline table
       (**Download** stops being fire-and-forget; **Detect completion, enqueue** gains a race
       arbiter that the tus upload route also enters), the root **Known debt** entry on `movieId`
       (narrowed, not resolved — `MediaSource.movieId` is now a real column with unchanged name and
@@ -239,7 +239,7 @@ type error, so there is no safe overlap.
       *Done when:* no `CLAUDE.md` still describes `force`, the one-active-source rule or
       `Movie.mediaSourceId` as current behaviour.
 
-- [ ] **T017** `[docs]` Walk all 23 acceptance criteria in `spec.md` — including the seven failure
+- [x] **T017** `[docs]` Walk all 23 acceptance criteria in `spec.md` — including the seven failure
       paths, the AC-18 regression pass (release search, magnet import, episode acquisition and a full
       tus upload) and **AC-23**, `027`'s completed-title replacement, which must still refuse without
       confirmation and still succeed with it — tick each box, and set `status: Implemented` on

@@ -2,7 +2,7 @@
 title: Download Status and Torrent Tags — api slice
 service: api
 last_updated: 2026-08-27
-status: Approved            # Draft | Approved | Implemented
+status: Implemented            # Draft | Approved | Implemented
 ---
 
 # PLAN: Download Status and Torrent Tags — `api` (`api/plan.md`)

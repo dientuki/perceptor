@@ -53,13 +53,13 @@ export class UploadsResolver {
         throw new NotFoundException(`La película ${movieId} no existe`);
       }
 
-      // Pre-flight conflict check (REQ-6): reported here, before a single
-      // byte is uploaded, rather than at onUploadFinish after the browser
-      // spent minutes/hours on a multi-gigabyte tus upload.
-      if (movie.mediaSourceId && !force) {
-        throw i18nError.conflict(
-          movie.status === 'COMPLETED' ? ERROR_KEYS.MOVIE_ALREADY_COMPLETED : ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS,
-        );
+      // Pre-flight conflict check (027-replace-completed-media): reported
+      // here, before a single byte is uploaded, rather than at
+      // onUploadFinish after the browser spent minutes/hours on a
+      // multi-gigabyte tus upload. REQ-7: only a COMPLETED target refuses —
+      // a merely-downloading film no longer conflicts (REQ-6/REQ-19).
+      if (movie.status === 'COMPLETED' && !force) {
+        throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
       }
 
       return await this.uploadTickets.mint(principal.id, { movieId: movieId as number }, force);
@@ -70,15 +70,10 @@ export class UploadsResolver {
       throw new NotFoundException(`El episodio ${episodeId} no existe`);
     }
 
-    // Episode's twin of the film check above: an episode is the pointed-at
-    // side of MediaSource, so "already has a source" is a non-ERROR
-    // MediaSource query, not a null-column check (mirrors
-    // EpisodesService.attachTorrentSource).
-    const activeSource = await this.episodes.findActiveSource(episodeId as number);
-    if (activeSource && !force) {
-      throw i18nError.conflict(
-        episode.status === 'COMPLETED' ? ERROR_KEYS.EPISODE_ALREADY_COMPLETED : ERROR_KEYS.EPISODE_DOWNLOAD_IN_PROGRESS,
-      );
+    // Episode's twin of the film check above (REQ-7): only a COMPLETED
+    // episode refuses.
+    if (episode.status === 'COMPLETED' && !force) {
+      throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
     }
 
     return await this.uploadTickets.mint(principal.id, { episodeId: episodeId as number }, force);

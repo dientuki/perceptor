@@ -33,6 +33,22 @@ function episodeDisplayTitle(episode: {
   return `${episode.season.show.title} S${season}E${ep}`;
 }
 
+// REQ-5: a comma is qBittorrent's tag separator, so it is replaced with a
+// space before whitespace is collapsed and trimmed — never sent raw. A
+// title that sanitises to nothing (rare, but not impossible) falls back to
+// a stable, non-empty tag derived from the target row's id, never the
+// MediaSource's, so every source of the same film keeps sharing one tag
+// (REQ-4) and the same fallback is reproducible later from the film alone.
+function sanitizeTag(title: string, fallbackId: number): string {
+  const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || `id-${fallbackId}`;
+}
+
+// REQ-1: a film's torrent carries exactly one tag, the sanitised title.
+function movieTags(movie: { id: number; title: string }): string[] {
+  return [sanitizeTag(movie.title, movie.id)];
+}
+
 @Injectable()
 export class MoviesService implements MediaTypeService {
   constructor(
@@ -57,7 +73,7 @@ export class MoviesService implements MediaTypeService {
       where: { users: { some: { userId } } },
       orderBy: { createdAt: 'desc' }, // Las más recientes primero
       include: {
-        mediaSource: true,
+        mediaSources: true,
         processJobs: true,
       },
     });
@@ -71,7 +87,7 @@ export class MoviesService implements MediaTypeService {
     return this.prisma.movie.findFirst({
       where: { id, users: { some: { userId } } },
       include: {
-        mediaSource: true,
+        mediaSources: true,
         processJobs: true,
       },
     });
@@ -297,14 +313,14 @@ export class MoviesService implements MediaTypeService {
   ) {
     const movie = await this.prisma.movie.findFirst({
       where: { id: movieId, users: { some: { userId } } },
-      include: { mediaSource: true, processJobs: true },
+      include: { mediaSources: true, processJobs: true },
     });
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
-    if (movie.mediaSourceId && !input.force) {
-      throw i18nError.conflict(
-        movie.status === 'COMPLETED' ? ERROR_KEYS.MOVIE_ALREADY_COMPLETED : ERROR_KEYS.MOVIE_DOWNLOAD_IN_PROGRESS,
-      );
+    // REQ-7: only a COMPLETED target refuses. A merely-downloading film no
+    // longer conflicts at all — REQ-6 makes a second acquisition normal.
+    if (movie.status === 'COMPLETED' && !input.force) {
+      throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
     }
 
     // infoHash es @unique: si ya existe una fila con este hash, no podemos
@@ -336,9 +352,9 @@ export class MoviesService implements MediaTypeService {
     // El savepath lo decide el client al agregar el torrent, así cada descarga cae
     // en su propia carpeta y sabemos dónde están los archivos desde el arranque
     // (los torrents de un solo archivo, si no, quedan sueltos en la raíz).
-    const downloadPath = await this.qbittorrent.add(input.urls);
+    const downloadPath = await this.qbittorrent.add(input.urls, movieTags(movie));
 
-    const mediaSource = existingSource
+    existingSource
       ? await this.prisma.mediaSource.update({
           where: { id: existingSource.id },
           data: {
@@ -348,6 +364,7 @@ export class MoviesService implements MediaTypeService {
             releaseTitle: input.releaseTitle,
             downloadPath,
             errorMessage: null,
+            movieId,
           },
         })
       : await this.prisma.mediaSource.create({
@@ -361,12 +378,13 @@ export class MoviesService implements MediaTypeService {
             downloadUrl: input.urls[0] ?? null,
             releaseTitle: input.releaseTitle,
             downloadPath,
+            movieId,
           },
         });
 
     return this.prisma.movie.update({
       where: { id: movieId },
-      data: { mediaSourceId: mediaSource.id, status: 'DOWNLOADING' },
+      data: { status: 'DOWNLOADING' },
     });
   }
 

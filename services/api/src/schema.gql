@@ -39,7 +39,6 @@ type Movie {
   isLiveAction: Boolean!
   status: String!
   filePath: String
-  mediaSourceId: Float
   createdAt: DateTime!
   updatedAt: DateTime!
   preferredLanguages: [Language!]!
@@ -74,6 +73,22 @@ type TorrentResult {
   leechers: Int!
   items: [TorrentLink!]!
   infoUrl: [TorrentLink!]!
+}
+
+type Download {
+  mediaSourceId: Int!
+  infoHash: String
+  kind: String!
+  label: String!
+  releaseTitle: String
+  movieId: Int
+  seasonId: Int
+  episodeId: Int
+  status: String!
+  torrentState: String
+  progress: Float
+  downloadSpeed: Float
+  readAt: DateTime!
 }
 
 type MediaSource {
@@ -212,6 +227,8 @@ type Query {
 
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!): [TorrentResult!]!
+  movieDownloads(movieId: Int!): [Download!]!
+  showDownloads(showId: Int!): [Download!]!
   mediaSource(id: Int!): MediaSource
 
   """Datos que el worker necesita para encodear un ProcessJob"""
@@ -258,6 +275,17 @@ type Mutation {
 
   """Aviso del cliente de torrents de que una descarga terminó"""
   torrentCompleted(infoHash: String!): String!
+
+  """Reanuda un torrent en el cliente de torrents (resume, no force start)"""
+  downloadStart(mediaSourceId: Int!): Download!
+
+  """Detiene un torrent en el cliente de torrents"""
+  downloadStop(mediaSourceId: Int!): Download!
+
+  """
+  Borra un torrent del cliente de torrents junto con sus archivos, y su fila
+  """
+  downloadDelete(mediaSourceId: Int!): Boolean!
 
   """
   El worker reporta el inventario de archivos de un MediaSource ya descargado

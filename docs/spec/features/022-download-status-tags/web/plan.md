@@ -2,7 +2,7 @@
 title: Download Status and Torrent Tags — web slice
 service: web
 last_updated: 2026-08-27
-status: Approved            # Draft | Approved | Implemented
+status: Implemented            # Draft | Approved | Implemented
 ---
 
 # PLAN: Download Status and Torrent Tags — `web` (`web/plan.md`)
