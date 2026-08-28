@@ -46,7 +46,11 @@ export class ProcessJobsService {
 
     if (processJob.movie) {
       const { movie } = processJob;
-      const originalLanguageIso3 = await this.resolveIso3(movie.originalLanguage);
+      const original = await this.resolveOriginalLanguage(movie.originalLanguage);
+      const { iso3Codes: allowedLanguagesIso3, tags: allowedLanguageTags } = await this.mergeMovieAllowedLanguages(
+        movie.id,
+        original,
+      );
       return {
         ...base,
         kind: 'MOVIE',
@@ -54,20 +58,25 @@ export class ProcessJobsService {
         title: movie.title,
         year: movie.releaseDate?.getFullYear() ?? null,
         originalLanguage: movie.originalLanguage,
-        originalLanguageIso3,
+        originalLanguageIso3: original.iso3,
         isLiveAction: movie.isLiveAction,
         seasonNumber: null,
         episodeNumber: null,
         episodeTitle: null,
         outputRoot: await this.resolveOutputRoot('path_movies'),
-        allowedLanguagesIso3: await this.mergeMovieAllowedLanguages(movie.id, originalLanguageIso3),
+        allowedLanguagesIso3,
+        allowedLanguageTags,
       };
     }
 
     if (processJob.episode) {
       const { episode } = processJob;
       const { show } = episode.season;
-      const originalLanguageIso3 = await this.resolveIso3(show.originalLanguage);
+      const original = await this.resolveOriginalLanguage(show.originalLanguage);
+      const { iso3Codes: allowedLanguagesIso3, tags: allowedLanguageTags } = await this.mergeShowAllowedLanguages(
+        show.id,
+        original,
+      );
       return {
         ...base,
         kind: 'EPISODE',
@@ -75,13 +84,14 @@ export class ProcessJobsService {
         title: show.title,
         year: show.releaseDate?.getFullYear() ?? null,
         originalLanguage: show.originalLanguage,
-        originalLanguageIso3,
+        originalLanguageIso3: original.iso3,
         isLiveAction: show.isLiveAction,
         seasonNumber: episode.season.seasonNumber,
         episodeNumber: episode.episodeNumber,
         episodeTitle: episode.title,
         outputRoot: await this.resolveOutputRoot('path_shows'),
-        allowedLanguagesIso3: await this.mergeShowAllowedLanguages(show.id, originalLanguageIso3),
+        allowedLanguagesIso3,
+        allowedLanguageTags,
       };
     }
 
@@ -107,81 +117,121 @@ export class ProcessJobsService {
 
   // Movie/Show guardan el idioma como iso2 (TMDB). El driver de ffmpeg necesita
   // iso3 para comparar contra tags.language de ffprobe. Si el idioma no está
-  // sembrado en la tabla languages, cae a 'eng' en vez de romper el job — un
-  // idioma sin traducir es mejor que un encode que nunca arranca.
-  private async resolveIso3(originalLanguageIso2: string): Promise<string> {
-    const language = await this.prisma.language.findUnique({ where: { iso2: originalLanguageIso2 } });
-    return language?.iso3 ?? 'eng';
+  // sembrado en la tabla languages, cae a { tag: 'en', iso3: 'eng' } en vez de
+  // romper el job — un idioma sin traducir es mejor que un encode que nunca
+  // arranca.
+  //
+  // 030-language-regional-variants: `iso2` is no longer unique (three rows
+  // now share `es`), so this looks up by `tag` instead of `iso2` — a base
+  // row's tag IS its ISO-639-1 code by construction, and TMDB's
+  // `originalLanguage` is exactly an ISO-639-1 code. This is exact, not
+  // approximate: `findFirst` on `iso2` would compile just as well but could
+  // nondeterministically return a variant row (e.g. `es-419`) for a plain
+  // Spanish title, silently attributing a regional preference the user never
+  // expressed. See ../plan.md § Risks.
+  private async resolveOriginalLanguage(originalLanguageIso2: string): Promise<{ tag: string; iso3: string }> {
+    const language = await this.prisma.language.findUnique({ where: { tag: originalLanguageIso2 } });
+    if (!language) {
+      return { tag: 'en', iso3: 'eng' };
+    }
+    return { tag: language.tag, iso3: language.iso3 };
   }
 
-  // REQ-3/REQ-8 (029): the set of languages the encode may keep is
-  // {original} ∪ the installation's `default_languages` setting ∪ every
-  // owner's per-title preference, deduplicated, original first. A `Set`
-  // gives us both the dedup and the insertion-order guarantee for free. A
-  // title with no owners and no default falls through to just the original —
-  // no special case needed (see plan.md's risk list).
-  private async mergeMovieAllowedLanguages(movieId: number, originalLanguageIso3: string): Promise<string[]> {
+  // REQ-3/REQ-8 (029), extended by REQ-8/AC-9 (030): the set of languages an
+  // encode may keep is {original} ∪ the installation's `default_languages`
+  // setting ∪ every owner's per-title preference, deduplicated, original
+  // first — expressed as BOTH the ISO-639-2/B list the worker matches
+  // against (`allowedLanguagesIso3`) and the BCP-47 tag list that survives
+  // the collapse to iso3 (`allowedLanguageTags`). Both lists come out of the
+  // SAME walk in `collectAllowedLanguages` on purpose: two separate merges
+  // could drift (e.g. a tag added to one Set but not the other), which would
+  // silently mismatch the two fields on the wire with no error anywhere. A
+  // `Set` per list gives us dedup and insertion order for free. A title with
+  // no owners and no default falls through to just the original — no special
+  // case needed (see plan.md's risk list).
+  private async mergeMovieAllowedLanguages(
+    movieId: number,
+    original: { tag: string; iso3: string },
+  ): Promise<{ iso3Codes: string[]; tags: string[] }> {
     const owners = await this.prisma.userMovie.findMany({
       where: { movieId },
       select: {
-        languages: { select: { language: { select: { iso3: true } } } },
+        languages: { select: { language: { select: { tag: true, iso3: true } } } },
       },
     });
 
-    return this.collectAllowedLanguages(originalLanguageIso3, owners);
+    return this.collectAllowedLanguages(original, owners);
   }
 
-  private async mergeShowAllowedLanguages(showId: number, originalLanguageIso3: string): Promise<string[]> {
+  private async mergeShowAllowedLanguages(
+    showId: number,
+    original: { tag: string; iso3: string },
+  ): Promise<{ iso3Codes: string[]; tags: string[] }> {
     const owners = await this.prisma.userShow.findMany({
       where: { showId },
       select: {
-        languages: { select: { language: { select: { iso3: true } } } },
+        languages: { select: { language: { select: { tag: true, iso3: true } } } },
       },
     });
 
-    return this.collectAllowedLanguages(originalLanguageIso3, owners);
+    return this.collectAllowedLanguages(original, owners);
   }
 
-  // Reads the installation-wide `default_languages` setting (iso2, comma
-  // separated) and resolves each code to iso3 the same way `resolveIso3`
-  // does for the title's original language. An unknown code is dropped
-  // rather than thrown here — `SettingsService.updateMany` is the only place
-  // that rejects an unknown code; by the time this runs the setting was
-  // already validated at write time, and a stale/renamed row must not break
-  // every encode that follows.
-  private async resolveDefaultLanguagesIso3(): Promise<string[]> {
+  // Reads the installation-wide `default_languages` setting (BCP-47 tags,
+  // comma separated since 030-language-regional-variants) and resolves each
+  // tag to its { tag, iso3 } pair, mirroring `resolveOriginalLanguage`. An
+  // unknown tag is dropped rather than thrown here — `SettingsService.updateMany`
+  // is the only place that rejects an unknown tag; by the time this runs the
+  // setting was already validated at write time, and a stale/renamed row must
+  // not break every encode that follows.
+  //
+  // 030-language-regional-variants: looks up by `tag`, not `iso2` — `iso2`
+  // stopped being unique the moment `es-419`/`es-ES` were seeded, and
+  // `default_languages` itself now stores tags (REQ-2), so a lookup left on
+  // `iso2` would match nothing and the installation default would silently
+  // contribute no languages to any encode.
+  private async resolveDefaultLanguages(): Promise<Array<{ tag: string; iso3: string }>> {
     const config = await this.settings.getMap();
     const rawValue = config['default_languages'];
     if (!rawValue) return [];
 
-    const iso2Codes = rawValue
+    const tags = rawValue
       .split(',')
-      .map((code) => code.trim())
-      .filter((code) => code.length > 0);
-    if (iso2Codes.length === 0) return [];
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+    if (tags.length === 0) return [];
 
-    const rows = await this.prisma.language.findMany({ where: { iso2: { in: iso2Codes } } });
-    const byIso2 = new Map(rows.map((row) => [row.iso2, row.iso3]));
+    const rows = await this.prisma.language.findMany({ where: { tag: { in: tags } } });
+    const byTag = new Map(rows.map((row) => [row.tag, row.iso3]));
 
-    return iso2Codes.map((iso2) => byIso2.get(iso2)).filter((iso3): iso3 is string => iso3 !== undefined);
+    return tags
+      .map((tag) => {
+        const iso3 = byTag.get(tag);
+        return iso3 === undefined ? null : { tag, iso3 };
+      })
+      .filter((entry): entry is { tag: string; iso3: string } => entry !== null);
   }
 
   private async collectAllowedLanguages(
-    originalLanguageIso3: string,
+    original: { tag: string; iso3: string },
     owners: Array<{
-      languages: Array<{ language: { iso3: string } }>;
+      languages: Array<{ language: { tag: string; iso3: string } }>;
     }>,
-  ): Promise<string[]> {
-    const iso3Codes = new Set<string>([originalLanguageIso3]);
-    for (const defaultIso3 of await this.resolveDefaultLanguagesIso3()) {
-      iso3Codes.add(defaultIso3);
+  ): Promise<{ iso3Codes: string[]; tags: string[] }> {
+    const iso3Codes = new Set<string>([original.iso3]);
+    const tags = new Set<string>([original.tag]);
+
+    for (const defaultLanguage of await this.resolveDefaultLanguages()) {
+      iso3Codes.add(defaultLanguage.iso3);
+      tags.add(defaultLanguage.tag);
     }
     for (const owner of owners) {
       for (const titlePref of owner.languages) {
         iso3Codes.add(titlePref.language.iso3);
+        tags.add(titlePref.language.tag);
       }
     }
-    return Array.from(iso3Codes);
+    return { iso3Codes: Array.from(iso3Codes), tags: Array.from(tags) };
   }
 
   async encodeStarted(processJobId: number) {

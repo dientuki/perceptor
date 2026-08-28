@@ -64,6 +64,7 @@ const GET_MOVIE_QUERY = `
       status
       preferredLanguages {
         id
+        tag
         iso2
         name
       }

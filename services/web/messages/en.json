@@ -66,6 +66,10 @@
       "cannot_delete_self": "You cannot delete your own user",
       "cannot_delete_last_admin": "You cannot delete the last administrator",
       "unsupported_locale": "Locale \"{locale}\" is not supported"
+    },
+    "language": {
+      "unavailable": "\"{tag}\" is not a known language",
+      "duplicate": "\"{tag}\" was submitted twice"
     }
   },
   "landing": {
@@ -253,7 +257,10 @@
     },
     "languagePicker": {
       "defaultLabel": "Preferred languages",
-      "helpText": "Hold Ctrl (or Cmd) to pick more than one.",
+      "empty": "No languages available.",
+      "chosenLabel": "Chosen languages",
+      "emptyChosen": "No languages chosen.",
+      "removeLanguage": "Remove {name}",
       "saved": "Languages saved.",
       "save": "Save",
       "saving": "Saving..."

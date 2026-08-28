@@ -23,6 +23,7 @@ type LoginResponse {
 
 type Language {
   id: ID!
+  tag: String!
   iso2: String!
   iso3: String!
   name: String!
@@ -116,6 +117,7 @@ type EncodeJobDetails {
   originalLanguage: String!
   originalLanguageIso3: String!
   allowedLanguagesIso3: [String!]!
+  allowedLanguageTags: [String!]!
   isLiveAction: Boolean!
   seasonNumber: Int
   episodeNumber: Int
@@ -270,7 +272,7 @@ type Mutation {
   addMagnetToMovie(movieId: Int!, magnet: String!, force: Boolean = false): Movie!
 
   """Reemplaza la preferencia de idiomas del usuario para esta película"""
-  setMoviePreferredLanguages(movieId: Int!, iso2: [String!]!): [Language!]!
+  setMoviePreferredLanguages(movieId: Int!, tags: [String!]!): [Language!]!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
 
   """Aviso del cliente de torrents de que una descarga terminó"""
@@ -318,7 +320,7 @@ type Mutation {
   addMedia(tmdbId: Int!, type: String!): MediaRef!
 
   """Reemplaza la preferencia de idiomas del usuario para una serie puntual"""
-  setShowPreferredLanguages(showId: Int!, iso2: [String!]!): [Language!]!
+  setShowPreferredLanguages(showId: Int!, tags: [String!]!): [Language!]!
 
   """
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la temporada

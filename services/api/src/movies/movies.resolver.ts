@@ -85,7 +85,7 @@ export class MoviesResolver {
   })
   async setMoviePreferredLanguages(
     @Args('movieId', { type: () => Int }) movieId: number,
-    @Args('iso2', { type: () => [String] }) iso2: string[],
+    @Args('tags', { type: () => [String] }) tags: string[],
     @CurrentUser() principal: AuthPrincipal,
   ) {
     // The global JwtAuthGuard already requires a credential and this operation
@@ -97,6 +97,6 @@ export class MoviesResolver {
     // as movie(id), same message reused verbatim from 008-movie-detail.
     const movie = await this.moviesService.findOneFromDb(movieId, userId);
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
-    return this.languagesService.setMoviePreferredLanguagesFor(userId, movieId, iso2);
+    return this.languagesService.setMoviePreferredLanguagesFor(userId, movieId, tags);
   }
 }

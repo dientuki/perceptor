@@ -1,66 +1,42 @@
 "use client";
 
-import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
-import MultiSelect from "@/components/form/MultiSelect";
+import { useTranslations } from "next-intl";
+import { useMemo } from "react";
+import { updateDefaultLanguagesAction } from "@/actions/settings";
+import LanguagePicker from "@/components/media/LanguagePicker";
 import type { Language } from "@/types/languages";
 
 interface DownloadPanelProps {
   options: Language[];
-  defaultSelectedIso2: string[];
+  defaultSelectedTags: string[];
 }
 
-// Descarga tab (REQ-2): the installation's default download languages.
-// MultiSelect is controlled and renders no `name`d input a <form> can read,
-// so it needs the same hidden-input idiom PathPicker uses — one
-// <input type="hidden" name="default_languages"> beside it, comma-joined,
-// in the order the user picked them (AC-3). Options are built through
-// Intl.DisplayNames + localeCompare for the active locale, exactly like
-// LanguagePicker.tsx — api's `languages` query returns English names only,
-// display authority lives in `web`.
+// Descarga tab (REQ-6): the installation's default download languages, now
+// through the shared LanguagePicker rather than a MultiSelect + hidden-input
+// pair. LanguagePicker owns its own <form> and save action, so this panel
+// submits independently of SettingsForm's main form — see
+// updateDefaultLanguagesAction in src/actions/settings.ts for why.
 export default function DownloadPanel({
   options,
-  defaultSelectedIso2,
+  defaultSelectedTags,
 }: DownloadPanelProps) {
   const t = useTranslations("settings.download");
-  const activeLocale = useLocale();
-  const [selected, setSelected] = useState<string[]>(defaultSelectedIso2);
 
-  const displayNames = useMemo(
-    () => new Intl.DisplayNames([activeLocale], { type: "language" }),
-    [activeLocale],
-  );
-
-  const sortedOptions = useMemo(
+  const selected = useMemo(
     () =>
-      [...options].sort((a, b) =>
-        (displayNames.of(a.iso2) ?? a.name).localeCompare(
-          displayNames.of(b.iso2) ?? b.name,
-          activeLocale,
-        ),
-      ),
-    [options, activeLocale, displayNames],
+      defaultSelectedTags
+        .map((tag) => options.find((option) => option.tag === tag))
+        .filter((language): language is Language => language != null),
+    [options, defaultSelectedTags],
   );
-
-  const selectOptions = sortedOptions.map((option) => ({
-    value: option.iso2,
-    text: displayNames.of(option.iso2) ?? option.name,
-    selected: selected.includes(option.iso2),
-  }));
 
   return (
-    <div className="space-y-6">
-      <MultiSelect
-        label={t("defaultLanguagesLabel")}
-        options={selectOptions}
-        defaultSelected={defaultSelectedIso2}
-        onChange={setSelected}
-      />
-      <input
-        type="hidden"
-        name="default_languages"
-        value={selected.join(",")}
-      />
-    </div>
+    <LanguagePicker
+      options={options}
+      selected={selected}
+      action={updateDefaultLanguagesAction}
+      label={t("defaultLanguagesLabel")}
+      name="default_languages"
+    />
   );
 }

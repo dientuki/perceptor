@@ -383,11 +383,12 @@ already receives a `mediaType` prop for its own empty-state text and now forward
 `web` retypes this query by hand in `src/actions/shows.ts`'s `getShowById`, same as every other
 query — no codegen.
 
-### Language preferences drive the encode payload, in two different ISO vocabularies (`011-av1-transcode`, revised by `029-settings-screen-tabs`)
+### Language preferences drive the encode payload, in two different ISO vocabularies (`011-av1-transcode`, revised by `029-settings-screen-tabs`, `030-language-regional-variants`)
 
 ```graphql
 type Language {
   id: ID!
+  tag: String!
   iso2: String!
   iso3: String!
   name: String!
@@ -406,19 +407,33 @@ type Show {
 }
 
 type Mutation {
-  setMoviePreferredLanguages(movieId: Int!, iso2: [String!]!): [Language!]!
-  setShowPreferredLanguages(showId: Int!, iso2: [String!]!): [Language!]!
+  setMoviePreferredLanguages(movieId: Int!, tags: [String!]!): [Language!]!
+  setShowPreferredLanguages(showId: Int!, tags: [String!]!): [Language!]!
 }
 
 type EncodeJobDetails {
   # …every existing field, unchanged…
   allowedLanguagesIso3: [String!]!
+  allowedLanguageTags: [String!]!
 }
 ```
 
-`languages` reads the 20-row seeded `languages` table (`services/api/prisma/seeds/languages.ts`);
-`name` is a Spanish display string derived server-side from `iso2` (`src/languages/language-names.ts`),
-not stored. It is the only source web populates its language pickers from — never a hard-coded list.
+`Language.tag` is the identifier as of `030-language-regional-variants`: a unique BCP-47 tag (`en`,
+`ja`, `es-419`, `es-ES`). `iso2` stays on the type and in the table but **is no longer unique** —
+three rows now carry `es`, since `es-419` (Latin American Spanish) and `es-ES` (European Spanish) are
+ordinary rows that share it. `iso2` remains the join to TMDB's `originalLanguage` and the grouping key
+`web` renders its picker's headings from — two or more rows sharing an `iso2` form a group, one row
+stands alone, and `web` reconstructs this purely from the rows `languages` returns, never from a
+hard-coded list of which languages carry regional variants.
+
+`languages` reads the 22-row seeded `languages` table (`services/api/prisma/seeds/languages.ts`) but
+returns only the **pickable** rows: a base-language row is omitted whenever variant rows of it exist.
+Today that hides exactly `es` — a title's TMDB `originalLanguage` still resolves through it
+server-side, but a user is never offered it directly as a choice. `name` is an English display string
+derived server-side from `tag` (`src/languages/language-names.ts`), not stored, and is a fallback
+only — `web` renders the localized name through `Intl.DisplayNames`, never through `name` or a message
+catalog entry. `languages` is the only source `web` populates its language picker from — never a
+hard-coded list.
 
 Two join tables back the per-title preferences: `UserMovieLanguage` and `UserShowLanguage`, each a
 composite-key row pointing at `Language`, cascading through the *ownership* row (`UserMovie`/
@@ -432,6 +447,21 @@ are scoped exactly like `movie(id)`/`show(id)` already are: an unowned title is 
 existing `La película <id> no existe` / `Recurso no disponible para este usuario`, reused verbatim,
 never a new string. Neither mutation carries `@AllowService()`.
 
+Both mutations' list argument is `tags` as of `030-language-regional-variants` — renamed from `iso2`,
+since a stored preference is now identified by BCP-47 tag rather than ISO-639-1 code. This is the
+one breaking rename in that feature's delta, and it breaks silently: there is no codegen between
+`api` and `web`, so a stale `$iso2` variable in `web`'s hand-retyped documents
+(`services/web/src/actions/languages.ts`) fails at runtime with no compile error in either service.
+The validator behind both mutations (`validateAndResolveLanguageIds` in
+`services/api/src/languages/languages.service.ts`) checks the submitted tag against the **whole**
+`languages` table, not the filtered/pickable catalog `languages` returns — a directly-submitted `es`
+is accepted, because it is a real row meaning "Spanish, no variant preference," even though it is
+never offered as a choice. Submitting a tag with no row at all (a malformed or unseeded tag such as
+`es-AR`) is rejected with `error.language.unavailable`; a tag repeated in the same call is rejected
+with `error.language.duplicate`. Both are **write-path** errors only — they answer "is this a tag we
+have a row for," never "does this release contain the track" — nothing in either mutation inspects a
+file.
+
 **The per-user global level (`User.preferredLanguages`, `Mutation.setPreferredLanguages`,
 `UserLanguage`) is gone as of `029-settings-screen-tabs`.** It is replaced by the installation-wide
 `default_languages` setting (see "Settings become administrator-only" below) — one value administrators set from the
@@ -443,7 +473,8 @@ per-user table to a single setting. No backfill: the old `user_languages` rows w
 the table, since the project was still in development when this shipped.
 
 `EncodeJobDetails.allowedLanguagesIso3` is where the two vocabularies meet. Every stored preference
-is ISO-639-1 (`es`, `en`, `ja`) — the same alphabet `Movie.originalLanguage`/`Show.originalLanguage`
+is now a BCP-47 tag (`es`, `es-419`, `es-ES`, `en`, `ja`) — `es-419`/`es-ES` share the ISO-639-1 code
+`es` with the base row, which is the same alphabet `Movie.originalLanguage`/`Show.originalLanguage`
 already use, since that's what TMDB returns. But `ffprobe` reports `tags.language` in ISO-639-2/B
 (`spa`, `eng`, `jpn`), and that's what the worker actually compares against. `allowedLanguagesIso3`
 is `api`'s merge — `{original} ∪ ⋃(global pref of every owner) ∪ ⋃(per-title pref of every owner)`,
@@ -455,6 +486,23 @@ rule that breaks the moment someone reorders the list. The field is hand-retyped
 the worker side with no compiler across either seam — `src/jobs/encode.job.ts`'s `EncodeJobDetails`
 and `src/encode/types.ts`'s `EncodeInput` — miss one and the field silently arrives `undefined`,
 which the rule functions would read as "keep the original language only," no error anywhere.
+
+`EncodeJobDetails.allowedLanguageTags` is the same merge, expressed in tags instead of resolved to
+ISO-639-2/B — added by `030-language-regional-variants`, additive and unread by the worker this cycle.
+It exists because the collapse to `iso3` is lossy by design: `es-419` and `es-ES` both resolve to
+`spa`, so `allowedLanguagesIso3` alone cannot tell the worker which Spanish variant, if any, was
+actually asked for. `allowedLanguageTags` preserves that. It is **not** a superset that makes
+`allowedLanguagesIso3` redundant — the worker only ever matches `ffprobe`'s ISO-639-2/B output, so
+`allowedLanguagesIso3` cannot be dropped or narrowed without breaking every encode. Both fields are
+produced by the same walk in `collectAllowedLanguages`
+(`services/api/src/process-jobs/process-jobs.service.ts`), with the same dedup and the same
+original-first ordering, so the two lists cannot drift apart from separate merges. `EncodeJobDetails`
+resolves a title's `originalLanguage` (ISO-639-1) to `{ tag, iso3 }` via `resolveOriginalLanguage`, a
+single lookup **keyed by `tag`** rather than `iso2` — a base row's tag is its ISO-639-1 code by
+construction, so this is exact, unlike a lookup on the now-non-unique `iso2`, which could return a
+variant row instead of the base one and open every Spanish-original title's `allowedLanguageTags` with
+a variant nobody chose. The worker does not read `allowedLanguageTags` yet; teaching it to is
+explicitly out of scope for `030-language-regional-variants` and left to a follow-up spec.
 
 A missing original-language audio track is a hard failure (`encodeFailed`, no new GraphQL surface) —
 replacing the previous behaviour of silently copying every audio track untranscoded. A missing *extra*

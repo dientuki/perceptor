@@ -112,7 +112,11 @@ never appeared at all when rendering in `es`.
 **Language names are not a catalog entry.** `LanguagePicker.tsx` renders each option through
 `Intl.DisplayNames([activeLocale], { type: 'language' })` and sorts with `localeCompare(...,
 activeLocale)` — `api`'s `languages` query returns English names only (display authority moved
-here); do not add a language-name list to either catalog.
+here); do not add a language-name list to either catalog. This still holds for regional variant
+tags since `030-language-regional-variants`: `Intl.DisplayNames.of('es-419')`/`.of('es-ES')` render
+"Latin American Spanish"/"European Spanish" (or the `es` locale equivalents) without either string
+ever landing in `messages/en.json`/`es.json` — only the two write-path error keys
+(`errors.language.unavailable`/`errors.language.duplicate`) did.
 
 ## Auth
 
@@ -286,18 +290,41 @@ redeclare it.
 ## Language pickers: three call sites, one component
 
 `src/actions/languages.ts` follows the standard server-action shape; `getLanguages` uses
-`redirectToClearSession`, the three writes use `redirectIfUnauthenticated` (see the auth section).
-`src/components/media/LanguagePicker.tsx` is the one client component all three call sites share —
-a multi-select bound to a `useActionState` action, generic over `options`/`selected`/action.
+`redirectToClearSession`, the two per-title writes use `redirectIfUnauthenticated` (see the auth
+section). `src/components/media/LanguagePicker.tsx` is the one client component all three call sites
+share — since `030-language-regional-variants` a **dual-pane control**, not a `<select multiple>`: a
+scrolling left pane of toggle buttons (grouped by shared `iso2` into a non-selectable heading with its
+variant rows beneath, whenever more than one row shares it — the grouping is derived from the
+`options` array, never a hard-coded list of which languages carry variants) and a right pane showing
+the chosen set as removable `ui/badge/Badge.tsx` badges. One state value backs both panes, so a badge
+removal and an entry untick can never disagree. It emits exactly one
+`<input type="hidden" name={name} value={selected.join(",")}>` — a comma-separated list of BCP-47
+`tag`s, not `iso2` codes — with `name` defaulting to `"tags"` (what the per-title mutations expect)
+and Settings passing `name="default_languages"` explicitly. Entries are real
+`<button type="button" aria-pressed>`, not `role="listbox"` — a listbox's children must be `option`s,
+and toggle buttons give correct keyboard operation for free (NFR-5 of `030`).
+`src/components/form/MultiSelect.tsx`, the control this replaced in Settings, stays in the repository
+unused — deleting it was explicitly out of scope.
 
 **The per-user global preference and its own save card are gone** (`029-settings-screen-tabs`):
 `PreferredLanguagesCard.tsx` no longer exists, `setPreferredLanguagesAction` no longer exists, and
 `User.preferredLanguages` no longer exists on the schema. The installation-wide level moved *into*
-`SettingsForm` as the `default_languages` setting (Descarga tab, `DownloadPanel.tsx`) — an ordinary
-`updateSettings`/`EDITABLE_KEYS` entry now, not a per-user write, since it applies to every user who
-hasn't set a per-title preference. `Movie.tsx` and `Show.tsx` still each bind `LanguagePicker` to
-their own per-title action — that level is untouched; `Show.tsx` stays a Server Component with the
-picker as a client child.
+`SettingsForm` as the `default_languages` setting (Descarga tab, `DownloadPanel.tsx`). **It is no
+longer part of `SettingsForm`'s single shared `<form>`/Save button** (`030-language-regional-variants`):
+`LanguagePicker` renders its own `<form>`, and nesting a `<form>` inside `SettingsForm`'s main one is
+invalid HTML. `DownloadPanel` submits independently through its own dedicated action,
+`updateDefaultLanguagesAction` in `src/actions/settings.ts` — a thin wrapper around the same
+`UPDATE_SETTINGS_MUTATION` that writes only the `default_languages` entry. It does **not** reuse
+`updateSettingsAction` directly: that action's `BOOLEAN_KEYS` loop reads every boolean key
+unconditionally from the submitted `FormData`, and a language-only submission would silently write
+`"false"` for `movies_enabled`/`shows_enabled` since they're absent from the picker's narrower form.
+`SettingsForm` hides the Download tab's content and the main five-panel form as mutually exclusive
+blocks (`activeTab === "download" ? "hidden" : ""` on the main form's wrapper) rather than nesting one
+inside the other; both stay mounted, never conditionally rendered, so the "inactive panel drops its
+own fields" rule (REQ-3/AC-2 of the original settings-tabs spec) still holds for the five panels that
+do share the main form. `Movie.tsx` and `Show.tsx` still each bind `LanguagePicker` to their own
+per-title action, passing no `name` (falling through to the `"tags"` default) — that level is
+untouched; `Show.tsx` stays a Server Component with the picker as a client child.
 
 **The listing queries deliberately do not select `preferredLanguages`.** They are `api` field
 resolvers that only run when selected — `getMovieById`/`getShowById` select them, `getMovies`/

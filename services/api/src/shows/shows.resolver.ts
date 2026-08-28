@@ -56,7 +56,7 @@ export class ShowsResolver {
   })
   async setShowPreferredLanguages(
     @Args('showId', { type: () => Int }) showId: number,
-    @Args('iso2', { type: () => [String] }) iso2: string[],
+    @Args('tags', { type: () => [String] }) tags: string[],
     @CurrentUser() principal: AuthPrincipal,
   ) {
     const userId = principal.type === 'user' ? principal.id : '';
@@ -65,6 +65,6 @@ export class ShowsResolver {
     // becomes the refusal 009-show-detail already froze for this resource.
     const show = await this.showsService.findOneFromDb(showId, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
-    return this.languagesService.setShowPreferredLanguagesFor(userId, showId, iso2);
+    return this.languagesService.setShowPreferredLanguagesFor(userId, showId, tags);
   }
 }

@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-28
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -47,54 +47,54 @@ is why the base language name becomes a non-selectable group heading rather than
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Variant Rows)**: A language must be identifiable by a BCP-47 tag, so that more than
+- [x] **REQ-1 (Variant Rows)**: A language must be identifiable by a BCP-47 tag, so that more than
       one row can share an ISO-639 code. `es-419` (Latin American Spanish) and `es-ES` (European
       Spanish) must exist alongside `es`, all three resolving to the same ISO-639-2/B code `spa`.
 
-- [ ] **REQ-2 (Tag Is The Identifier)**: Every stored language preference — the `default_languages`
+- [x] **REQ-2 (Tag Is The Identifier)**: Every stored language preference — the `default_languages`
       setting, `UserMovieLanguage`, `UserShowLanguage` — and every language value crossing the
       GraphQL boundary must be identified by its BCP-47 tag rather than by its ISO-639-1 code.
 
-- [ ] **REQ-3 (Base Row Not Offered)**: A language whose row has regional variants must not be
+- [x] **REQ-3 (Base Row Not Offered)**: A language whose row has regional variants must not be
       offered as a choice. `es` must remain in the catalog — it is how a title whose TMDB
       `originalLanguage` is `"es"` resolves to `spa` — but must not appear among the options a user
       can pick.
 
-- [ ] **REQ-4 (Grouped Presentation)**: A language with more than one row must be presented as a
+- [x] **REQ-4 (Grouped Presentation)**: A language with more than one row must be presented as a
       group headed by the base language's name, with its variants as the selectable entries
       underneath. A language with a single row must be presented as a plain entry. The grouping must
       be derived from the catalog, never from a list of languages hard-coded in `web`.
 
-- [ ] **REQ-5 (Chosen Set Always Visible)**: The picker must show the currently chosen languages as
+- [x] **REQ-5 (Chosen Set Always Visible)**: The picker must show the currently chosen languages as
       a distinct, always-visible list of removable badges, not only as highlighted entries inside a
       scrolling list. Removing a badge and de-selecting the corresponding entry must be equivalent.
 
-- [ ] **REQ-6 (One Component, Both Screens)**: Settings and the film/series detail page must present
+- [x] **REQ-6 (One Component, Both Screens)**: Settings and the film/series detail page must present
       this choice through the same component. The two divergent pickers in use today —
       `services/web/src/components/media/LanguagePicker.tsx` and the `MultiSelect` usage inside
       `services/web/src/components/settings/DownloadPanel.tsx` — must both be served by it.
 
-- [ ] **REQ-7 (Names Come From The Locale)**: The name shown for a tag must be resolved for the
+- [x] **REQ-7 (Names Come From The Locale)**: The name shown for a tag must be resolved for the
       active UI locale, so that `es-419` reads "Español latinoamericano" under `es` and "Latin
       American Spanish" under `en` without either string being added to a message catalog.
 
-- [ ] **REQ-8 (Variant Reaches The Job)**: The encode job payload must carry the merged set of
+- [x] **REQ-8 (Variant Reaches The Job)**: The encode job payload must carry the merged set of
       chosen tags alongside the existing merged ISO-639-2/B list, so that the variant survives the
       collapse to `spa` and a later spec can act on it.
 
-- [ ] **REQ-9 (Nothing Preselected)**: A fresh installation must have no language chosen by default,
+- [x] **REQ-9 (Nothing Preselected)**: A fresh installation must have no language chosen by default,
       in `default_languages` and on every title.
 
-- [ ] **REQ-10 (Duplicate And Unknown Rejected)**: Submitting a tag that is not in the catalog, or
+- [x] **REQ-10 (Duplicate And Unknown Rejected)**: Submitting a tag that is not in the catalog, or
       the same tag twice, must be rejected before anything is written, leaving the previously stored
       preference intact.
 
-- [ ] **REQ-11 (Error Copy)**: `web` must render `error.language.unavailable` and
+- [x] **REQ-11 (Error Copy)**: `web` must render `error.language.unavailable` and
       `error.language.duplicate` from its own message catalogs in both locales. Today neither key
       has a catalog entry and both fall through to `api`'s English message; the picker is where a
       user meets them, so this feature is what owes them.
 
-- [ ] **REQ-12 (Preference, Not Guarantee)**: A chosen language is a request, never a promise about
+- [x] **REQ-12 (Preference, Not Guarantee)**: A chosen language is a request, never a promise about
       the resulting file. What tracks an encode actually keeps is decided by the worker's rules
       against what the release contains, and nothing in this feature reports, validates or warns
       about a preference the release cannot satisfy. In particular, a variant that no track in a
@@ -103,28 +103,28 @@ is why the base language name becomes a non-selectable group heading rather than
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (No Backfill)**: The project is still in development, so there is no data migration.
+- [x] **NFR-1 (No Backfill)**: The project is still in development, so there is no data migration.
       The seed is corrected and an existing development database is refreshed with `bin/dbreset`.
       This follows the precedent `029-settings-screen-tabs` set when it dropped `user_languages`.
 
-- [ ] **NFR-2 (Idempotent Seed)**: The language seed must tolerate being re-run against a database
+- [x] **NFR-2 (Idempotent Seed)**: The language seed must tolerate being re-run against a database
       that already holds its rows, rather than failing on a duplicate key.
 
-- [ ] **NFR-3 (Original Language Still Resolves)**: Resolving a title's TMDB `originalLanguage`
+- [x] **NFR-3 (Original Language Still Resolves)**: Resolving a title's TMDB `originalLanguage`
       (ISO-639-1) to the ISO-639-2/B code the worker needs must keep working for every language,
       including `es`. A title whose original language cannot be resolved would fail every encode of
       that title, since the original language is the one mandatory track.
 
-- [ ] **NFR-4 (Worker Untouched)**: No file under `services/worker/` changes. The new payload field
+- [x] **NFR-4 (Worker Untouched)**: No file under `services/worker/` changes. The new payload field
       is additive; the worker's existing `allowedLanguagesIso3` handling and its FFmpeg selection
       rules must behave exactly as they do today.
 
-- [ ] **NFR-5 (Keyboard And Screen Reader)**: The picker replaces a native `<select multiple>` with
+- [x] **NFR-5 (Keyboard And Screen Reader)**: The picker replaces a native `<select multiple>` with
       custom controls, so it must carry the listbox semantics and keyboard operation the native
       element provided for free — every entry reachable and togglable without a mouse, and every
       badge's remove control likewise.
 
-- [ ] **NFR-6 (Scoping Unchanged)**: The per-title mutations stay scoped exactly as they are today —
+- [x] **NFR-6 (Scoping Unchanged)**: The per-title mutations stay scoped exactly as they are today —
       a title the calling user does not own is refused with the existing message, and
       `Movie.preferredLanguages`/`Show.preferredLanguages` keep resolving to the calling user's own
       list rather than the merge across owners.
@@ -224,48 +224,48 @@ so a preference for a variant is the same kind of row a preference for a languag
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: `bin/dbreset` completes, and `bin/mysql -e 'select tag, iso2, iso3 from languages
+- [x] **AC-1**: `bin/dbreset` completes, and `bin/mysql -e 'select tag, iso2, iso3 from languages
       where iso2 = "es" order by tag'` returns exactly three rows — `es`, `es-419`, `es-ES` — all
       with `iso3 = spa`.
 
-- [ ] **AC-2**: The `languages` query returns `es-419` and `es-ES` and does **not** return `es`,
+- [x] **AC-2**: The `languages` query returns `es-419` and `es-ES` and does **not** return `es`,
       while every single-row language (`en`, `ja`, …) is still returned.
 
-- [ ] **AC-3**: On `/settings` → Descarga, Spanish appears as a non-clickable heading with
+- [x] **AC-3**: On `/settings` → Descarga, Spanish appears as a non-clickable heading with
       "Español latinoamericano" and "Español de España" as the two entries under it. Clicking one
       adds a badge to the chosen list; clicking it again, or clicking the badge's X, removes it.
 
-- [ ] **AC-4**: With the UI locale set to `en`, the same two entries read "Latin American Spanish"
+- [x] **AC-4**: With the UI locale set to `en`, the same two entries read "Latin American Spanish"
       and "European Spanish" and remain grouped together, not scattered alphabetically through the
       list.
 
-- [ ] **AC-5**: Choosing "Español latinoamericano" in Settings and saving stores it, and
+- [x] **AC-5**: Choosing "Español latinoamericano" in Settings and saving stores it, and
       ``bin/mysql -e 'select value from settings where `key` = "default_languages"'`` shows a value
       containing `es-419`. Reloading the page shows the same badge still chosen.
 
-- [ ] **AC-6**: On a film's detail page, choosing "Español de España" and saving, then reloading,
+- [x] **AC-6**: On a film's detail page, choosing "Español de España" and saving, then reloading,
       shows the choice persisted; the film's `preferredLanguages` in the GraphQL response contains a
       `Language` whose `tag` is `es-ES`.
 
-- [ ] **AC-7** *(failure path)*: Calling `setMoviePreferredLanguages(movieId: <owned>, tags: ["es-419",
+- [x] **AC-7** *(failure path)*: Calling `setMoviePreferredLanguages(movieId: <owned>, tags: ["es-419",
       "es-AR"])` is rejected with `error.language.unavailable`, and `bin/mysql` shows the film's rows
       in `user_movie_languages` unchanged from before the call — the valid first tag was not written.
 
-- [ ] **AC-8** *(failure path)*: Submitting `tags: ["es-419", "es-419"]` is rejected with
+- [x] **AC-8** *(failure path)*: Submitting `tags: ["es-419", "es-419"]` is rejected with
       `error.language.duplicate`, and the picker renders the translated Spanish message inline while
       keeping the user's selection on screen rather than clearing it.
 
-- [ ] **AC-9**: A film with `es-419` chosen produces an encode job whose `allowedLanguageTags`
+- [x] **AC-9**: A film with `es-419` chosen produces an encode job whose `allowedLanguageTags`
       contains `es-419` and whose `allowedLanguagesIso3` contains `spa` exactly once, even when both
       Spanish variants are chosen.
 
-- [ ] **AC-10**: A film whose TMDB `originalLanguage` is `"es"` still enqueues an encode job with
+- [x] **AC-10**: A film whose TMDB `originalLanguage` is `"es"` still enqueues an encode job with
       `originalLanguageIso3 = "spa"` — the hidden `es` row still resolves.
 
-- [ ] **AC-11**: `bin/npm worker run test` passes with zero changes under `services/worker/`, and
+- [x] **AC-11**: `bin/npm worker run test` passes with zero changes under `services/worker/`, and
       `git status services/worker/` is clean.
 
-- [ ] **AC-12**: The picker is fully operable from the keyboard: entries reachable and togglable
+- [x] **AC-12**: The picker is fully operable from the keyboard: entries reachable and togglable
       without a mouse, and each badge's remove control focusable and activatable.
 
 ## Out of Scope

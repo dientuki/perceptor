@@ -3,6 +3,7 @@
 
 export type Language = {
   id: string;
+  tag: string;
   iso2: string;
   iso3: string;
   name: string;

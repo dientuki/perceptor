@@ -123,17 +123,28 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `Show.seasonsSyncedAt` is set only once every season and episode is written; it stays `null` on any
   failure, and the next `register()` retries whenever it is `null`.
 - **`languages/`** — the `languages` query (reads the seeded `Language` table, deriving an English
-  `name` per `iso2` from `language-names.ts`, not stored — `web` renders the localized display name
+  `name` per `tag` from `language-names.ts`, not stored — `web` renders the localized display name
   via `Intl.DisplayNames` since `018-ui-i18n`; this map is an internal English label, not the UI
   string) plus the per-title preference writes backing
-  `setMoviePreferredLanguages`/`setShowPreferredLanguages`. Each write validates every `iso2` through
+  `setMoviePreferredLanguages`/`setShowPreferredLanguages`. **Since `030-language-regional-variants`,
+  `Language.tag` (a unique BCP-47 tag) is the identifier, not `iso2`** — `iso2` stays on the row and in
+  the table but is no longer unique, since a base language and its regional variants share it (`es`,
+  `es-419`, `es-ES` all carry `iso2: "es"`). `findAll()` omits a base row from the query's result only
+  when another row shares its `iso2` — the naive rule "hide any row whose `tag` equals its `iso2`"
+  would hide every ordinary language, since `en`'s tag *is* `en`. The validator,
   `validateAndResolveLanguageIds` (public since `029-settings-screen-tabs`, reused by `settings/`'s
-  `default_languages` validation), rejects duplicates within one argument, then replaces the whole set
-  atomically (`deleteMany` + `createMany` in a `$transaction`). Exported so `movies/` and `shows/` each
-  host their own `@ResolveField()` for `preferredLanguages` — deliberately not centralised. **The
-  per-user global level is gone** (`029-settings-screen-tabs`): `setPreferredLanguages`,
-  `User.preferredLanguages` and the `UserLanguage` table no longer exist, replaced by the
-  installation-wide `default_languages` setting (see `settings/` below and `process-jobs/`'s merge).
+  `default_languages` validation), checks a submitted tag against the table `findAll()` reads from
+  *before* filtering — a directly-submitted `es` is accepted even though the query never offers it,
+  because it is a real row meaning "Spanish, no variant preference." Each write validates every `tag`
+  through it, rejects duplicates within one argument, then replaces the whole set atomically
+  (`deleteMany` + `createMany` in a `$transaction`). Exported so `movies/` and `shows/` each host their
+  own `@ResolveField()` for `preferredLanguages` — deliberately not centralised. **The per-user global
+  level is gone** (`029-settings-screen-tabs`): `setPreferredLanguages`, `User.preferredLanguages` and
+  the `UserLanguage` table no longer exist, replaced by the installation-wide `default_languages`
+  setting (see `settings/` below and `process-jobs/`'s merge). Neither join table
+  (`UserMovieLanguage`/`UserShowLanguage`) changed shape for the tag rework — both still reference
+  `Language.id`, so a preference for a variant is the same kind of row a preference for a language
+  already was.
 - **`media-sources/`** — the `MediaSource` row representing one acquisition attempt. `sourceScanned`
   takes `matches: [ScannedMatchInput!]!`, one entry per file the worker resolved (a film or single
   episode reports exactly one, both numbers `null`). The service loads the source with its season's
@@ -192,10 +203,20 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   the worker's `cleanup-source.ts` owns every filesystem deletion.
   `getEncodeJobDetails` resolves `allowedLanguagesIso3`: the title's original language followed by the
   union of the installation-wide `default_languages` setting (since `029-settings-screen-tabs`,
-  resolved iso2 → iso3 through `SettingsService`) and every owner's per-title preference,
-  deduplicated, selecting `language.iso3` and **never `iso2`**. **This is the one place that merge
-  happens** — `Movie.preferredLanguages` and `Show.preferredLanguages` deliberately return only the
-  calling user's own list.
+  resolved tag → iso3 through `SettingsService`) and every owner's per-title preference, deduplicated,
+  selecting `language.iso3`. **This is the one place that merge happens** — `Movie.preferredLanguages`
+  and `Show.preferredLanguages` deliberately return only the calling user's own list. Since
+  `030-language-regional-variants`, `resolveOriginalLanguage(iso2)` resolves a title's TMDB
+  `originalLanguage` to `{ tag, iso3 }` via a single lookup **keyed by `tag`, not `iso2`** — a base
+  row's tag is its ISO-639-1 code by construction, so this is exact where `findFirst` on the now
+  non-unique `iso2` would not be: it could return a variant row for an ordinary Spanish-original title.
+  `collectAllowedLanguages` produces `allowedLanguagesIso3` and the parallel `allowedLanguageTags` from
+  the **same** walk over original/default/per-title preferences — one merge, not two that can drift —
+  and `resolveDefaultLanguages` (the renamed `resolveDefaultLanguagesIso3`) looks the setting's stored
+  tags up **by `tag`**; left on `iso2` it would silently match nothing, since `default_languages` now
+  stores tags. `allowedLanguageTags` is additive and not yet read by the worker — it exists so the
+  variant survives the collapse to `iso3` (`es-419`/`es-ES` both resolve to `spa`) for a follow-up spec
+  to act on.
 - **`ffprobe-logs/`** — an append-only diagnostic log: one row per `ffprobe` the worker runs, holding
   the probed path and the raw JSON as an opaque `MediumText` string this service never parses.
   `recordFfprobe` is the worker's write path and carries `@AllowService()`; `ffprobeLogs`,
@@ -275,7 +296,11 @@ Everything through `bin/npm api …` from the repo root (never bare `npm`/`npx`/
 
 Seed data runs via `prisma/seeds/index.ts`, wired as the `seed` command in `prisma.config.ts`;
 `prisma migrate dev` prompts to run it. It calls `seedLanguages`, `seedUsers`, `seedMovies`,
-`seedSettings` and `seedMediaSource` in turn. `prisma/seeds/settings.ts` seeds
+`seedSettings` and `seedMediaSource` in turn. `prisma/seeds/languages.ts` seeds every ISO-639-1
+language keyed by its now-unique `tag`, plus two regional variants for Spanish —
+`{ tag: 'es-419', iso2: 'es', iso3: 'spa' }` and `{ tag: 'es-ES', iso2: 'es', iso3: 'spa' }` — beside
+the base `es` row (`030-language-regional-variants`); idempotent via `findUnique` on `tag` before
+`create`, same as every other seeder here. `prisma/seeds/settings.ts` seeds
 `path_downloads`/`path_movies`/`path_shows` as **segments relative to the declared roots**
 (`.`/`Movies`/`Shows`), plus torrent/tracker/media-server/TMDB config keys. All create-only (checks
 `findUnique` before `create`), so re-running never clobbers a real value already set through the UI.

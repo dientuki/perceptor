@@ -115,7 +115,8 @@ model UserShow {
 
 model Language {
   id   Int    @id @default(autoincrement())
-  iso2 String @unique
+  tag  String @unique
+  iso2 String
   iso3 String
 
   userMoviePreferences UserMovieLanguage[]

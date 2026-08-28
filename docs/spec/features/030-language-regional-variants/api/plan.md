@@ -2,7 +2,7 @@
 title: Language Regional Variants — api slice
 service: api
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Language Regional Variants — `api` (`api/plan.md`)

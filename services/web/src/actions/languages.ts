@@ -13,6 +13,7 @@ const LANGUAGES_QUERY = `
   query Languages {
     languages {
       id
+      tag
       iso2
       iso3
       name
@@ -37,9 +38,10 @@ export async function getLanguages(): Promise<Language[]> {
 }
 
 const SET_MOVIE_PREFERRED_LANGUAGES_MUTATION = `
-  mutation SetMoviePreferredLanguages($movieId: Int!, $iso2: [String!]!) {
-    setMoviePreferredLanguages(movieId: $movieId, iso2: $iso2) {
+  mutation SetMoviePreferredLanguages($movieId: Int!, $tags: [String!]!) {
+    setMoviePreferredLanguages(movieId: $movieId, tags: $tags) {
       id
+      tag
       iso2
       iso3
       name
@@ -52,13 +54,16 @@ export async function setMoviePreferredLanguagesAction(
   _prevState: unknown,
   formData: FormData,
 ): Promise<{ error?: string } | { success: true }> {
-  const iso2 = formData.getAll("iso2").map(String);
+  const tags = String(formData.get("tags") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   let result: Awaited<ReturnType<typeof fetchGraphQL>>;
   try {
     result = await fetchGraphQL(SET_MOVIE_PREFERRED_LANGUAGES_MUTATION, {
       movieId: Number(movieId),
-      iso2,
+      tags,
     });
   } catch (_err) {
     const t = await getTranslations("errors");
@@ -76,9 +81,10 @@ export async function setMoviePreferredLanguagesAction(
 }
 
 const SET_SHOW_PREFERRED_LANGUAGES_MUTATION = `
-  mutation SetShowPreferredLanguages($showId: Int!, $iso2: [String!]!) {
-    setShowPreferredLanguages(showId: $showId, iso2: $iso2) {
+  mutation SetShowPreferredLanguages($showId: Int!, $tags: [String!]!) {
+    setShowPreferredLanguages(showId: $showId, tags: $tags) {
       id
+      tag
       iso2
       iso3
       name
@@ -91,13 +97,16 @@ export async function setShowPreferredLanguagesAction(
   _prevState: unknown,
   formData: FormData,
 ): Promise<{ error?: string } | { success: true }> {
-  const iso2 = formData.getAll("iso2").map(String);
+  const tags = String(formData.get("tags") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   let result: Awaited<ReturnType<typeof fetchGraphQL>>;
   try {
     result = await fetchGraphQL(SET_SHOW_PREFERRED_LANGUAGES_MUTATION, {
       showId: Number(showId),
-      iso2,
+      tags,
     });
   } catch (_err) {
     const t = await getTranslations("errors");

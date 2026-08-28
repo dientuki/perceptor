@@ -23,6 +23,7 @@ describe('SettingsService — languages kind', () => {
 
   const spanish = { id: 1, iso2: 'es', iso3: 'spa' };
   const english = { id: 2, iso2: 'en', iso3: 'eng' };
+  const spanishLatam = { id: 3, tag: 'es-419', iso2: 'es', iso3: 'spa' };
 
   beforeEach(async () => {
     upsert = jest.fn().mockResolvedValue({});
@@ -121,6 +122,25 @@ describe('SettingsService — languages kind', () => {
     ).rejects.toThrow('Language zz is not available');
 
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  // T007 (030-language-regional-variants): the branch forwards whatever
+  // string it is given to validateAndResolveLanguageIds without inspecting
+  // its shape, so a BCP-47 variant tag like `es-419` must survive the same
+  // split/trim/join untouched — the risk this defends against is the branch
+  // silently gaining an iso2-only assumption (e.g. a length check) that
+  // would reject a real tag with no error message pointing at the cause.
+  it('accepts a regional variant tag and stores it unmodified', async () => {
+    validateAndResolveLanguageIds.mockResolvedValue([spanishLatam.id]);
+
+    await service.updateMany([{ key: 'default_languages', value: 'es-419' }]);
+
+    expect(validateAndResolveLanguageIds).toHaveBeenCalledWith(['es-419']);
+    expect(upsert).toHaveBeenCalledWith({
+      where: { key: 'default_languages' },
+      update: { value: 'es-419' },
+      create: { key: 'default_languages', value: 'es-419' },
+    });
   });
 
   it('stores the normalized joined list rather than echoing the raw input', async () => {

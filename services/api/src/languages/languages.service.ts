@@ -11,8 +11,8 @@ import { languageNameFor } from './language-names';
 // site". Preference read/write for the two per-title mutations lands here
 // too — the per-user global level moved to a `Setting` (029-settings-screen-tabs).
 //
-// Every write below shares the same shape: validate the whole `iso2` list
-// (no unknown code, no duplicate) *before* touching the database, then
+// Every write below shares the same shape: validate the whole `tag` list
+// (no unknown tag, no duplicate) *before* touching the database, then
 // replace the target's rows atomically. If the validation ran after a
 // partial delete, or the delete+create pair were not transactional, a
 // rejected write could still leave the user with half their old preference
@@ -24,40 +24,56 @@ export class LanguagesService {
 
   async findAll(): Promise<Language[]> {
     const rows = await this.prisma.language.findMany();
+    // A base row (tag === iso2, e.g. `es`) is only hidden when at least one
+    // OTHER row shares its iso2 — that is the whole rule. Hiding any row
+    // whose tag equals its iso2 unconditionally would hide every ordinary
+    // language (`en`, `ja`, `fr`, …), since a single-row language's tag *is*
+    // its iso2, and would empty the picker down to just the variants.
+    const iso2Counts = new Map<string, number>();
+    for (const row of rows) {
+      iso2Counts.set(row.iso2, (iso2Counts.get(row.iso2) ?? 0) + 1);
+    }
     return rows
+      .filter((row) => !(row.tag === row.iso2 && (iso2Counts.get(row.iso2) ?? 0) > 1))
       .map((row) => ({
         id: row.id,
+        tag: row.tag,
         iso2: row.iso2,
         iso3: row.iso3,
-        name: languageNameFor(row.iso2),
+        name: languageNameFor(row.tag),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // Validates a list of iso2 codes and resolves each to its Language row,
-  // throwing on the first unknown or duplicated code — before any database
+  // Validates a list of BCP-47 tags and resolves each to its Language row,
+  // throwing on the first unknown or duplicated tag — before any database
   // write happens for the caller. Public: `SettingsService` reuses this to
   // validate `default_languages` without duplicating the check.
-  async validateAndResolveLanguageIds(iso2Codes: string[]): Promise<number[]> {
+  //
+  // This validates against the WHOLE table, not the filtered/pickable
+  // catalog `findAll()` returns above — a directly-submitted `es` tag is
+  // accepted, because it is a real row that means "Spanish, no variant
+  // preference" (030-language-regional-variants).
+  async validateAndResolveLanguageIds(tags: string[]): Promise<number[]> {
     const seen = new Set<string>();
-    for (const iso2 of iso2Codes) {
-      if (seen.has(iso2)) {
-        throw i18nError.badRequest(ERROR_KEYS.LANGUAGE_DUPLICATE, { iso2 });
+    for (const tag of tags) {
+      if (seen.has(tag)) {
+        throw i18nError.badRequest(ERROR_KEYS.LANGUAGE_DUPLICATE, { tag });
       }
-      seen.add(iso2);
+      seen.add(tag);
     }
 
-    if (iso2Codes.length === 0) return [];
+    if (tags.length === 0) return [];
 
     const rows = await this.prisma.language.findMany({
-      where: { iso2: { in: iso2Codes } },
+      where: { tag: { in: tags } },
     });
-    const byIso2 = new Map(rows.map((row) => [row.iso2, row.id]));
+    const byTag = new Map(rows.map((row) => [row.tag, row.id]));
 
-    return iso2Codes.map((iso2) => {
-      const id = byIso2.get(iso2);
+    return tags.map((tag) => {
+      const id = byTag.get(tag);
       if (id === undefined) {
-        throw i18nError.badRequest(ERROR_KEYS.LANGUAGE_UNAVAILABLE, { iso2 });
+        throw i18nError.badRequest(ERROR_KEYS.LANGUAGE_UNAVAILABLE, { tag });
       }
       return id;
     });
@@ -70,9 +86,9 @@ export class LanguagesService {
   async setMoviePreferredLanguagesFor(
     userId: string,
     movieId: number,
-    iso2Codes: string[],
+    tags: string[],
   ): Promise<Language[]> {
-    const languageIds = await this.validateAndResolveLanguageIds(iso2Codes);
+    const languageIds = await this.validateAndResolveLanguageIds(tags);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userMovieLanguage.deleteMany({ where: { userId, movieId } });
@@ -101,9 +117,9 @@ export class LanguagesService {
   async setShowPreferredLanguagesFor(
     userId: string,
     showId: number,
-    iso2Codes: string[],
+    tags: string[],
   ): Promise<Language[]> {
-    const languageIds = await this.validateAndResolveLanguageIds(iso2Codes);
+    const languageIds = await this.validateAndResolveLanguageIds(tags);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userShowLanguage.deleteMany({ where: { userId, showId } });
@@ -125,7 +141,13 @@ export class LanguagesService {
     return rows.map((row) => this.toLanguage(row.language));
   }
 
-  private toLanguage(row: { id: number; iso2: string; iso3: string }): Language {
-    return { id: row.id, iso2: row.iso2, iso3: row.iso3, name: languageNameFor(row.iso2) };
+  private toLanguage(row: { id: number; tag: string; iso2: string; iso3: string }): Language {
+    return {
+      id: row.id,
+      tag: row.tag,
+      iso2: row.iso2,
+      iso3: row.iso3,
+      name: languageNameFor(row.tag),
+    };
   }
 }

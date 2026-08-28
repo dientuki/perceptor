@@ -58,9 +58,11 @@ describe('ProcessJobsService', () => {
     service = module.get<ProcessJobsService>(ProcessJobsService);
   });
 
-  // A language row keyed by iso2, carrying both iso2 and iso3 — the shape
-  // resolveIso3()/language.findUnique returns.
-  const languageRow = (iso2: string, iso3: string) => ({ iso2, iso3 });
+  // A language row as `resolveOriginalLanguage()`/`language.findUnique`
+  // returns it — keyed by `tag` (030-language-regional-variants), `tag`
+  // defaults to `iso2` for the ordinary case where a language has no
+  // regional variant.
+  const languageRow = (iso2: string, iso3: string, tag: string = iso2) => ({ tag, iso2, iso3 });
 
   const movieProcessJob = (overrides: Partial<Record<string, unknown>> = {}) => ({
     id: 1,
@@ -110,9 +112,13 @@ describe('ProcessJobsService', () => {
   // Owner row shape returned by both userMovie.findMany and userShow.findMany
   // with the `select` used in the service — per-title (languages) preference
   // only. The global level (029) is a `default_languages` setting, not a
-  // per-owner row anymore.
-  const owner = (titleIso3s: string[]) => ({
-    languages: titleIso3s.map((iso3) => ({ language: { iso3 } })),
+  // per-owner row anymore. Since 030-language-regional-variants the select
+  // also carries `tag`, defaulting to `iso3` for the ordinary case where a
+  // preference has no regional variant (tag === iso2 !== iso3, but the tests
+  // that only care about iso3 pass an iso3-shaped tag on purpose — the tag
+  // vocabulary is exercised explicitly where it matters).
+  const owner = (titleIso3s: string[], tags: string[] = titleIso3s) => ({
+    languages: titleIso3s.map((iso3, i) => ({ language: { iso3, tag: tags[i] } })),
   });
 
   // This block exists because getEncodeJobDetails's downloadsRoot is the only
@@ -164,11 +170,11 @@ describe('ProcessJobsService', () => {
   describe('getEncodeJobDetails — REQ-3/REQ-8 language merge', () => {
     it('unions the original language, the installation default and one per-title extra', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
-      // resolveIso3 (original language) and resolveDefaultLanguagesIso3
-      // (default_languages) both call language table methods, so both must
-      // be stubbed distinctly.
+      // resolveOriginalLanguage (original language) and
+      // resolveDefaultLanguages (default_languages) both call language table
+      // methods, so both must be stubbed distinctly.
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
-      prisma.language.findMany.mockResolvedValue([{ iso2: 'es', iso3: 'spa' }]);
+      prisma.language.findMany.mockResolvedValue([{ tag: 'es', iso2: 'es', iso3: 'spa' }]);
       settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', default_languages: 'es' });
       prisma.userMovie.findMany.mockResolvedValue([owner(['eng'])]);
 
@@ -236,7 +242,7 @@ describe('ProcessJobsService', () => {
     it('unions default_languages with a per-title preference, original first, no duplicates', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
-      prisma.language.findMany.mockResolvedValue([{ iso2: 'es', iso3: 'spa' }]);
+      prisma.language.findMany.mockResolvedValue([{ tag: 'es', iso2: 'es', iso3: 'spa' }]);
       settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', default_languages: 'es' });
       prisma.userMovie.findMany.mockResolvedValue([owner(['fra'])]);
 
@@ -245,6 +251,94 @@ describe('ProcessJobsService', () => {
       expect(details.allowedLanguagesIso3[0]).toBe('jpn');
       expect(details.allowedLanguagesIso3.sort()).toEqual(['fra', 'jpn', 'spa'].sort());
       expect(new Set(details.allowedLanguagesIso3).size).toBe(details.allowedLanguagesIso3.length);
+    });
+
+    // AC-10 / T008: `resolveOriginalLanguage` looks up by `tag`, not by
+    // `findFirst` on `iso2`. Once `es-419`/`es-ES` exist, `iso2` is no
+    // longer unique — a `findFirst({ where: { iso2: 'es' } })` could
+    // nondeterministically return a variant row instead of the base `es`
+    // row. That would still resolve `originalLanguageIso3` to `spa`
+    // (harmless), but it would resolve `tag` to a variant the film's TMDB
+    // metadata never asked for — the exact bug the follow-up spec's
+    // `allowedLanguageTags` merge depends on this method getting right.
+    it('resolves a Spanish film\'s original language to the base `es` row, never a variant', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({ movie: { ...movieProcessJob().movie, originalLanguage: 'es' } }),
+      );
+      // Only the base row answers a lookup keyed by tag 'es'; a variant row
+      // has its own distinct tag ('es-419'/'es-ES') and would never be
+      // returned by this query in the first place — which is the point.
+      prisma.language.findUnique.mockResolvedValue(languageRow('es', 'spa', 'es'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(prisma.language.findUnique).toHaveBeenCalledWith({ where: { tag: 'es' } });
+      expect(details.originalLanguageIso3).toBe('spa');
+      expect(details.allowedLanguagesIso3).toEqual(['spa']);
+      expect(details.allowedLanguageTags).toEqual(['es']);
+    });
+  });
+
+  // 030-language-regional-variants, T009: `allowedLanguageTags` and
+  // `allowedLanguagesIso3` are produced from the SAME merge walk
+  // (`collectAllowedLanguages`), not two separate ones. A drift between them
+  // — e.g. a tag added to one Set but not the other, or `resolveDefaultLanguages`
+  // left querying by `iso2` instead of `tag` — ships an `allowedLanguageTags`
+  // that silently disagrees with `allowedLanguagesIso3`, or an empty one, with
+  // no error anywhere: the worker doesn't read the field yet (NFR-4), so
+  // nothing fails until the follow-up spec ships and its rules see a stale or
+  // empty tag list.
+  describe('getEncodeJobDetails — allowedLanguageTags (030-language-regional-variants)', () => {
+    it('AC-9: carries a chosen variant tag, and collapses both Spanish variants to `spa` exactly once', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([owner(['spa', 'spa'], ['es-419', 'es-ES'])]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.allowedLanguageTags).toContain('es-419');
+      expect(details.allowedLanguageTags).toContain('es-ES');
+      expect(details.allowedLanguagesIso3.filter((code) => code === 'spa')).toHaveLength(1);
+    });
+
+    it('resolves the installation default by `tag`, not `iso2` — a stale `iso2` lookup would silently drop it', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.language.findMany.mockResolvedValue([{ tag: 'es-419', iso2: 'es', iso3: 'spa' }]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        default_languages: 'es-419',
+      });
+      prisma.userMovie.findMany.mockResolvedValue([]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(prisma.language.findMany).toHaveBeenCalledWith({ where: { tag: { in: ['es-419'] } } });
+      expect(details.allowedLanguageTags).toContain('es-419');
+      expect(details.allowedLanguagesIso3).toContain('spa');
+    });
+
+    it('is original-tag-first and deduplicated, mirroring allowedLanguagesIso3\'s ordering exactly', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([owner(['eng', 'eng'], ['en', 'en'])]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.allowedLanguageTags[0]).toBe('ja');
+      expect(details.allowedLanguageTags).toEqual(['ja', 'en']);
+    });
+
+    it('is emitted on the EPISODE branch too', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userShow.findMany.mockResolvedValue([owner(['spa'], ['es-ES'])]);
+
+      const details = await service.getEncodeJobDetails(2);
+
+      expect(details.allowedLanguageTags).toEqual(['ja', 'es-ES']);
     });
   });
 

@@ -92,6 +92,7 @@ const GET_SHOW_QUERY = `
       seasonsSyncedAt
       preferredLanguages {
         id
+        tag
         iso2
         name
       }

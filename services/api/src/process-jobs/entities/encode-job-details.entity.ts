@@ -49,6 +49,17 @@ export class EncodeJobDetails {
   @Field(() => [String])
   allowedLanguagesIso3: string[];
 
+  // The same merge as `allowedLanguagesIso3`, expressed in BCP-47 tags
+  // instead of resolved ISO-639-2/B codes (030-language-regional-variants,
+  // REQ-8). Not redundant with the field above: the iso3 list is what the
+  // worker's ffmpeg rules match against `ffprobe`'s tags.language and is
+  // lossy by design (`es-419`/`es-ES` both collapse to `spa`); this list is
+  // what preserves which regional variant was actually asked for. Additive
+  // and unread by the worker this cycle (NFR-4) — a follow-up spec teaches
+  // it to act on this.
+  @Field(() => [String])
+  allowedLanguageTags: string[];
+
   @Field()
   isLiveAction: boolean;
 
