@@ -67,6 +67,18 @@ nothing forever, with no error anywhere.
 full shape of the GraphQL query. `paths/build-output-path.ts` does the same with `OutputPathInput`.
 That is the house pattern for small pure modules here, not an oversight.
 
+**A third `EncodeFn` exists that is never reachable through `ENCODE_DRIVER`.**
+`src/encode/passthrough.ts` (`032-optional-compression`) implements the same interface — `mkdir`,
+then move the input to the output (a same-filesystem `rename`, falling back to a copy + atomic
+rename on `EXDEV`), never touching ffprobe/ffmpeg/mkvmerge, returning `{ ffmpegCommand: '' }`. It is
+deliberately **not** added to `src/encode/index.ts`'s `DRIVERS` map: `jobs/encode.job.ts` calls it
+directly when `details.compressionEnabled === false`, a value resolved by the api from the
+`compression_enabled` setting at query time, not by an environment variable. This is the point —
+an operator's stored switch must always win, including over a developer's local
+`ENCODE_DRIVER=mock`. `withSourceExtension` (`paths/with-source-extension.ts`) corrects the output
+path's extension to the source's own before the move, since `buildOutputPath` always assumes the
+`.mkv` a real encode would produce.
+
 ## `src/queue/types.ts` is a deliberate copy
 
 It duplicates `services/api/src/queue/types.ts`, which is the source of truth. The worker's Docker

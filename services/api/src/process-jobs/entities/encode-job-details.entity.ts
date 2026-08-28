@@ -99,4 +99,11 @@ export class EncodeJobDetails {
   // segment.
   @Field()
   downloadsRoot: string;
+
+  // Resolved from `compression_enabled` at query time, not frozen onto the
+  // ProcessJob row when it was enqueued (032-optional-compression, REQ-6).
+  // False means: skip ffprobe/ffmpeg/mkvmerge and move the input file into
+  // place instead.
+  @Field()
+  compressionEnabled: boolean;
 }

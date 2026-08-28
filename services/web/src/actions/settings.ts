@@ -92,7 +92,11 @@ const EDITABLE_KEYS = [
 // input's *value*, not `formData.has(key)` — the hidden input is always
 // present, so presence alone can no longer distinguish checked from
 // unchecked the way a native unchecked checkbox (absent from FormData) did.
-const BOOLEAN_KEYS = ["movies_enabled", "shows_enabled"] as const;
+const BOOLEAN_KEYS = [
+  "movies_enabled",
+  "shows_enabled",
+  "compression_enabled",
+] as const;
 
 // default_languages needs the same always-explicit treatment as
 // BOOLEAN_KEYS: "" is a valid value meaning "no default languages", and the

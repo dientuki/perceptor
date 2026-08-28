@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-28
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 services: [api, web, worker]
 ---
 
@@ -43,81 +43,81 @@ being re-encoded into place. "Compression off" means "no FFmpeg", never "no fili
 
 #### web
 
-- [ ] **REQ-1 (Switch)**: The Compression tab must render the enable control as
+- [x] **REQ-1 (Switch)**: The Compression tab must render the enable control as
       `components/form/switch/Switch.tsx`, not `components/form/input/Checkbox.tsx`. It must show the
       persisted `compression_enabled` value on load and must be saved by the main Settings form's
       existing Save button, not by a form of its own.
-- [ ] **REQ-2 (Reaches FormData)**: The switch's state must always reach the server as an explicit
+- [x] **REQ-2 (Reaches FormData)**: The switch's state must always reach the server as an explicit
       `"true"` or `"false"`, never as presence/absence — the same hidden-input idiom `CheckboxField`
       already uses for `movies_enabled`/`shows_enabled`. Saving the Settings screen from any tab must
       never silently flip this key.
-- [ ] **REQ-3 (Dependents locked)**: While the switch is off, every other control in the Compression
+- [x] **REQ-3 (Dependents locked)**: While the switch is off, every other control in the Compression
       tab must be non-modifiable — visibly disabled and unable to receive keyboard or pointer input.
       Today that is the three preset radios; the rule is about the tab, so any control added there
       later is covered. Turning the switch on must re-enable them immediately, with no save and no
       reload.
-- [ ] **REQ-4 (Presets stay unpersisted)**: The preset radios remain exactly what `029` made them —
+- [x] **REQ-4 (Presets stay unpersisted)**: The preset radios remain exactly what `029` made them —
       local state, no `name`, no catalog key, no effect on any FFmpeg argument. This feature persists
       one key and one key only.
 
 #### api
 
-- [ ] **REQ-5 (Catalog key)**: `compression_enabled` must be an editable settings key of kind
+- [x] **REQ-5 (Catalog key)**: `compression_enabled` must be an editable settings key of kind
       `boolean`, rejecting any value other than `"true"`/`"false"` with the existing
       `error.setting.expected_boolean`. It must be seeded `"true"`.
-- [ ] **REQ-6 (Job payload)**: `EncodeJobDetails` must expose `compressionEnabled: Boolean!`,
+- [x] **REQ-6 (Job payload)**: `EncodeJobDetails` must expose `compressionEnabled: Boolean!`,
       resolved from the setting at the moment the worker queries the job — not frozen onto the
       `ProcessJob` row when it is enqueued. Flipping the switch must therefore affect every job that
       has not started yet, including ones already queued.
-- [ ] **REQ-7 (Missing row means compress)**: If the `compression_enabled` row is absent (an install
+- [x] **REQ-7 (Missing row means compress)**: If the `compression_enabled` row is absent (an install
       that predates the seed), `compressionEnabled` must resolve to `true`. Absence must never be
       read as "off".
 
 #### worker
 
-- [ ] **REQ-8 (On is today)**: When `compressionEnabled` is true, the encode path must behave
+- [x] **REQ-8 (On is today)**: When `compressionEnabled` is true, the encode path must behave
       exactly as it does today, ffprobe log and all. This feature adds no behaviour to the
       compressing path.
-- [ ] **REQ-9 (Off skips FFmpeg only)**: When `compressionEnabled` is false, the job must run no
+- [x] **REQ-9 (Off skips FFmpeg only)**: When `compressionEnabled` is false, the job must run no
       `ffprobe`, no `ffmpeg` and no `mkvmerge`, and must still: build the destination path from the
       media's title/year/tmdbId (and season/episode), create that folder, place the source file
       there, report `encodeStarted` and `encodeCompleted`, and execute the cleanup instructions
       `encodeCompleted` returns.
-- [ ] **REQ-10 (Filed under the library name, original container)**: The destination must be the
+- [x] **REQ-10 (Filed under the library name, original container)**: The destination must be the
       folder and base name `buildOutputPath` produces, carrying the **source file's** extension
       rather than the `.mkv` the encode path always produces. A `.mp4` source filed as `.mkv` is a
       mislabelled container, which is a silent failure in the media server, not in this pipeline.
-- [ ] **REQ-11 (Moved, not copied)**: The source file must be moved, not duplicated. The move must
+- [x] **REQ-11 (Moved, not copied)**: The source file must be moved, not duplicated. The move must
       work when source and destination are on different filesystems (downloads on one disk, library
       on another is the normal case here), and must never leave a file bearing the final name that
       is not the complete file — a partial transfer must be cleaned up, exactly as
       `ffmpeg/runner.ts`'s `.part` discipline guarantees for the encode path.
-- [ ] **REQ-12 (Containment still applies)**: The input file must be verified to sit inside the
+- [x] **REQ-12 (Containment still applies)**: The input file must be verified to sit inside the
       download root before it is moved, the same guard the encode path applies today. The relaxed
       path must not be the one that skips a safety check.
-- [ ] **REQ-13 (Completion report)**: `encodeCompleted` must be called with the real destination path
+- [x] **REQ-13 (Completion report)**: `encodeCompleted` must be called with the real destination path
       and with an empty `ffmpegCommand`, so a completed job's record distinguishes "was not
       compressed" from "was compressed by an unrecorded command". Progress must reach 100.
-- [ ] **REQ-14 (Cleanup tolerates the move)**: `removeTorrent`, `deleteInputFile` and
+- [x] **REQ-14 (Cleanup tolerates the move)**: `removeTorrent`, `deleteInputFile` and
       `deleteDownloadPath` must be honoured unchanged. `deleteInputFile` must succeed silently when
       the input is already gone — the move took it — and must never turn a completed job into a
       failed one.
-- [ ] **REQ-15 (Failure is reported)**: A failure to place the file (permissions, full disk,
+- [x] **REQ-15 (Failure is reported)**: A failure to place the file (permissions, full disk,
       unreadable source) must report `encodeFailed` with a key of its own,
       `error.encode.move_failed`, carrying the underlying reason as a param.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Default is today's behaviour)**: After this ships and the seed runs, an install that
+- [x] **NFR-1 (Default is today's behaviour)**: After this ships and the seed runs, an install that
       never opens the Settings screen must compress exactly as it does now.
-- [ ] **NFR-2 (Skew fails safe)**: If `compressionEnabled` arrives `undefined` — the field dropped
+- [x] **NFR-2 (Skew fails safe)**: If `compressionEnabled` arrives `undefined` — the field dropped
       from the query selection, or a worker running against an api that predates it — the worker must
       compress. A version skew must never silently stop compressing an entire library, since nothing
       about the resulting files says they were meant to be re-encoded.
-- [ ] **NFR-3 (Contract is additive)**: `EncodeJobDetails` gains a field; no field changes name, type
+- [x] **NFR-3 (Contract is additive)**: `EncodeJobDetails` gains a field; no field changes name, type
       or nullability, and no mutation signature changes. `docs/spec/graphql-contract.md` records the
       new field and the new settings key.
-- [ ] **NFR-4 (No new host dependency)**: This must not reintroduce a host-dependent branch of the
+- [x] **NFR-4 (No new host dependency)**: This must not reintroduce a host-dependent branch of the
       kind `024-retire-gpu-tonemap-strategy` removed. The switch is a stored setting an operator
       chooses, identical on every host; nothing is detected, and `bin/dev`/`bin/prod`/`bin/build`
       still produce the same invocation everywhere.
@@ -179,22 +179,22 @@ column: REQ-6 resolves the flag at query time, not at enqueue time.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: On Settings → Compression, the enable control renders as a sliding switch, not a
+- [x] **AC-1**: On Settings → Compression, the enable control renders as a sliding switch, not a
       checkbox. With it off, clicking any of the three preset radios changes nothing and they render
       as disabled; turning the switch on makes them clickable again without saving or reloading.
-- [ ] **AC-2**: Turn the switch off, press Save, reload `/settings`, open the Compression tab — the
+- [x] **AC-2**: Turn the switch off, press Save, reload `/settings`, open the Compression tab — the
       switch is still off. `bin/mysql -e 'select value from Setting where \`key\`="compression_enabled"'`
       prints `false`.
-- [ ] **AC-3**: With the switch off, save the Settings screen from the **General** tab without ever
+- [x] **AC-3**: With the switch off, save the Settings screen from the **General** tab without ever
       opening the Compression tab. The row still reads `false` — an untouched tab never clobbers the
       key (REQ-2).
-- [ ] **AC-4** (failure path): Call `updateSettings` as an administrator with
+- [x] **AC-4** (failure path): Call `updateSettings` as an administrator with
       `{ key: "compression_enabled", value: "maybe" }` (any GraphQL client against
       `http://api:${API_PORT}/graphql`, e.g. from `bin/bash api`). The mutation fails with
       `error.setting.expected_boolean`, and
       ``bin/mysql -e 'select value from Setting where `key`="compression_enabled"'`` still prints the
       previous value: a rejected entry writes nothing.
-- [ ] **AC-5**: With compression off, download or upload a film whose source is `Some.Film.2019.mp4`.
+- [x] **AC-5**: With compression off, download or upload a film whose source is `Some.Film.2019.mp4`.
       When the job completes, `<library>/Some Film (2019) [tmdbid=NNN]/Some Film (2019).mp4` exists,
       byte-identical in size to the source, the source path no longer exists, and the torrent is no
       longer in qBittorrent. `bin/cli worker sh -c 'ps aux'` shows no ffmpeg ran, and the ProcessJob
@@ -202,13 +202,13 @@ column: REQ-6 resolves the flag at query time, not at enqueue time.
 - [ ] **AC-6**: With compression off and a **series** source (`Show.S01E03.mkv`), the file lands at
       `<library>/Show (YYYY) [tmdbid=NNN]/Season 01/Show S01E03 <Episode Title>.mkv` — the same naming
       the compressing path produces, episode title from the api, never from the filename.
-- [ ] **AC-7** (failure path): With compression off, make the destination unwritable (`chmod 500` the
+- [x] **AC-7** (failure path): With compression off, make the destination unwritable (`chmod 500` the
       title folder) and run a job. The job ends `FAILED` with `error.encode.move_failed`, the source
       file is still where it was, and no file bearing the final name exists in the library.
 - [ ] **AC-8**: Turn compression back on and run the same job again — an ffmpeg command is recorded on
       the ProcessJob row and the output is `.mkv`, i.e. REQ-8's "on is today" holds after the switch
       has been off.
-- [ ] **AC-9**: Queue a job while compression is on, stop the worker before it starts, turn the switch
+- [x] **AC-9**: Queue a job while compression is on, stop the worker before it starts, turn the switch
       off, start the worker. The job is filed without compression (REQ-6: the flag is read at encode
       time, not at enqueue time).
 

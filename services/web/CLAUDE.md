@@ -317,7 +317,8 @@ invalid HTML. `DownloadPanel` submits independently through its own dedicated ac
 `UPDATE_SETTINGS_MUTATION` that writes only the `default_languages` entry. It does **not** reuse
 `updateSettingsAction` directly: that action's `BOOLEAN_KEYS` loop reads every boolean key
 unconditionally from the submitted `FormData`, and a language-only submission would silently write
-`"false"` for `movies_enabled`/`shows_enabled` since they're absent from the picker's narrower form.
+`"false"` for `movies_enabled`/`shows_enabled`/`compression_enabled` since they're absent from the
+picker's narrower form.
 `SettingsForm` hides the Download tab's content and the main five-panel form as mutually exclusive
 blocks (`activeTab === "download" ? "hidden" : ""` on the main form's wrapper) rather than nesting one
 inside the other; both stay mounted, never conditionally rendered, so the "inactive panel drops its

@@ -2,7 +2,7 @@
 title: Optional compression — web slice
 service: web
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Optional compression — `web` (`web/plan.md`)

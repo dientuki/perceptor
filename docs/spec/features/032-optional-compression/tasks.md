@@ -1,7 +1,7 @@
 ---
 title: Optional compression — Tasks
 last_updated: 2026-08-28
-status: Draft
+status: Done
 ---
 
 # TASKS: Optional compression (`tasks.md`)
@@ -22,7 +22,7 @@ switch is a database row (`plan.md` § Migrations, NFR-4).
 
 ### Group 1 — the settings key and the contract
 
-- [ ] **T001** `[api] [P]` Add `compression_enabled: { kind: 'boolean' }` to `SETTINGS_CATALOG`
+- [x] **T001** `[api] [P]` Add `compression_enabled: { kind: 'boolean' }` to `SETTINGS_CATALOG`
       (`services/api/src/settings/settings.catalog.ts`, beside `movies_enabled`/`shows_enabled`) and
       `{ key: 'compression_enabled', value: 'true' }` to the array in
       `services/api/prisma/seeds/settings.ts`. Write no new validation — `updateMany`'s existing
@@ -33,7 +33,7 @@ switch is a database row (`plan.md` § Migrations, NFR-4).
       `{ key: "compression_enabled", value: "maybe" }` fails with `error.setting.expected_boolean`
       while that row keeps its previous value (AC-4).
 
-- [ ] **T002** `[api] [P]` Add `compressionEnabled: boolean` as a non-null `@Field()` to
+- [x] **T002** `[api] [P]` Add `compressionEnabled: boolean` as a non-null `@Field()` to
       `services/api/src/process-jobs/entities/encode-job-details.entity.ts`, and resolve it into the
       shared `base` object of `ProcessJobsService.getEncodeJobDetails`
       (`services/api/src/process-jobs/process-jobs.service.ts`) from the already-injected
@@ -44,7 +44,7 @@ switch is a database row (`plan.md` § Migrations, NFR-4).
       `EncodeJobDetails` and nothing else — matching `spec.md` § GraphQL Contract Delta character for
       character (Article VIII's check).
 
-- [ ] **T003** `[api]` Extend `services/api/src/process-jobs/process-jobs.service.spec.ts` with a
+- [x] **T003** `[api]` Extend `services/api/src/process-jobs/process-jobs.service.spec.ts` with a
       `describe` for REQ-7, opening with the sentence naming the silent failure (a missing row read
       as "off" leaves an entire library un-transcoded with no error anywhere). Cases: no
       `compression_enabled` key → `true`; `"true"` → `true`; exactly `"false"` → `false`; a junk
@@ -52,7 +52,7 @@ switch is a database row (`plan.md` § Migrations, NFR-4).
       *Done when:* `bin/npm api run test` is green and the new cases fail if the `=== 'false'`
       comparison is inverted.
 
-- [ ] **T004** `[docs] [P]` Record the delta in `docs/spec/graphql-contract.md` (NFR-3): a new
+- [x] **T004** `[docs] [P]` Record the delta in `docs/spec/graphql-contract.md` (NFR-3): a new
       section for `032-optional-compression` carrying the `EncodeJobDetails.compressionEnabled`
       field, the new `compression_enabled` catalog key beside where `029` documents `ui_locale` and
       `default_languages`, and the worker-owned `error.encode.move_failed` key in the error-key
@@ -67,14 +67,14 @@ Both chains depend on Group 1: `web` cannot save a key the server-side catalog r
 cannot select a field the schema does not have (`fetchGraphQL` throws on `json.errors`). The `web`
 chain and the `worker` chain are independent of each other and may run at the same time.
 
-- [ ] **T005** `[web] [P]` Delete the inline comments from
+- [x] **T005** `[web] [P]` Delete the inline comments from
       `services/web/src/components/form/switch/Switch.tsx` (Article XI — the file is untracked and
       is being committed for the first time as part of this feature). Change nothing else: not the
       props, not the markup, not the colour logic, and do not convert it to a controlled component.
       *Done when:* `bin/npm web run lint` is clean and `git diff` on that file shows only removed
       comment lines.
 
-- [ ] **T006** `[web]` Wire the Compression tab: in
+- [x] **T006** `[web]` Wire the Compression tab: in
       `services/web/src/components/settings/CompressionPanel.tsx` take a `compressionEnabled: boolean`
       prop and seed the existing `enabled` state from it, replace `Checkbox` with `Switch`
       (`defaultChecked` + `onChange={setEnabled}`), add
@@ -89,7 +89,7 @@ chain and the `worker` chain are independent of each other and may run at the sa
       radios unresponsive to a click and visibly disabled, re-enabled the moment it is switched on,
       with no save and no reload (AC-1).
 
-- [ ] **T007** `[web]` Add `"compression_enabled"` to `BOOLEAN_KEYS` in
+- [x] **T007** `[web]` Add `"compression_enabled"` to `BOOLEAN_KEYS` in
       `services/web/src/actions/settings.ts` so it is sent explicitly on every save of the main form,
       whichever tab the user was on. Leave `updateDefaultLanguagesAction` untouched — it exists
       precisely so it never writes the boolean keys. → T001, T006
@@ -97,7 +97,7 @@ chain and the `worker` chain are independent of each other and may run at the sa
       reading `false` (AC-2); and a save performed from the General tab, without ever opening the
       Compression tab, leaves that row still `false` (AC-3).
 
-- [ ] **T008** `[worker] [P]` Add `ERROR_ENCODE_MOVE_FAILED = 'error.encode.move_failed'` to
+- [x] **T008** `[worker] [P]` Add `ERROR_ENCODE_MOVE_FAILED = 'error.encode.move_failed'` to
       `services/worker/src/i18n/error-keys.ts` and its rendering
       (`'Could not move the file to its destination: {detail}'`) to
       `services/worker/src/i18n/messages.en.ts`. The key string is hand-synced against the frozen
@@ -105,7 +105,7 @@ chain and the `worker` chain are independent of each other and may run at the sa
       *Done when:* `bin/npm worker test` is green — the existing `messages.en.spec.ts` parity suite
       covers the new key in both directions.
 
-- [ ] **T009** `[worker] [P]` Add the pure `services/worker/src/paths/with-source-extension.ts`
+- [x] **T009** `[worker] [P]` Add the pure `services/worker/src/paths/with-source-extension.ts`
       (`withSourceExtension(outputPath, inputPath)`) plus its spec file, opening with the sentence
       naming the silent failure: a `.mp4` filed under a `.mkv` name is a mislabelled container that
       only the media server ever complains about. Replace the **last** extension only, leave folder
@@ -114,7 +114,7 @@ chain and the `worker` chain are independent of each other and may run at the sa
       *Done when:* `bin/npm worker test` is green, including
       `The Super Mario Bros. Movie (2023).mkv` + `.mp4` source → `The Super Mario Bros. Movie (2023).mp4`.
 
-- [ ] **T010** `[worker]` Add `services/worker/src/encode/passthrough.ts` implementing `EncodeFn`
+- [x] **T010** `[worker]` Add `services/worker/src/encode/passthrough.ts` implementing `EncodeFn`
       unchanged (`onProbe` ignored — there is no probe): `mkdir` the destination folder, `rename` the
       input into place, fall back on `EXDEV` to copy → `.part` sibling → `chmod 0o664` → `rename` →
       unlink the source, `chmod 0o664` on the direct-rename path too, `await onProgress(100)` only
@@ -128,7 +128,7 @@ chain and the `worker` chain are independent of each other and may run at the sa
       `.part` behind; and a forced `EXDEV` rejection takes the copy path and unlinks the source only
       after the destination rename succeeded.
 
-- [ ] **T011** `[worker]` Wire the branch in `services/worker/src/jobs/encode.job.ts`: add
+- [x] **T011** `[worker]` Wire the branch in `services/worker/src/jobs/encode.job.ts`: add
       `compressionEnabled: boolean` to the local `EncodeJobDetails` type **and**
       `compressionEnabled` to the `processJob` query's selection set; inside the existing `try`,
       after `buildOutputPath`, branch on `details.compressionEnabled === false` (never on falsiness —
@@ -147,7 +147,7 @@ chain and the `worker` chain are independent of each other and may run at the sa
       `error.encode.move_failed`, source intact, no final-named file (AC-7); and with the switch back
       on the same job records an `ffmpegCommand` and produces `.mkv` (AC-8).
 
-- [ ] **T012** `[worker]` Extend `services/worker/src/jobs/encode.job.spec.ts` (its `vi.mock`s are
+- [x] **T012** `[worker]` Extend `services/worker/src/jobs/encode.job.spec.ts` (its `vi.mock`s are
       already in place) with a `describe` for the branch: `compressionEnabled: false` → `encode()`
       never called, the passthrough called, `encodeCompleted` carrying the swapped extension and
       `ffmpegCommand: ""`, `cleanupSource` still called with the same three instructions;
@@ -158,7 +158,7 @@ chain and the `worker` chain are independent of each other and may run at the sa
 
 ### Group 3 — verification and docs
 
-- [ ] **T013** `[docs]` Update the `CLAUDE.md` files this feature falsifies. Root: the **Transcode**
+- [x] **T013** `[docs]` Update the `CLAUDE.md` files this feature falsifies. Root: the **Transcode**
       row of the pipeline table stops being unconditional, and the Environment bullet "**The
       transcode path is unconditional.**" needs a qualifier: its point — no host detection, the same
       `docker compose` invocation everywhere — still holds (NFR-4), but "nothing ... opted out of"
@@ -169,7 +169,7 @@ chain and the `worker` chain are independent of each other and may run at the sa
       `ENCODE_DRIVER`, and therefore winning over `mock` in dev. → T007, T012
       *Done when:* no sentence in any `CLAUDE.md` still asserts that compression always happens.
 
-- [ ] **T014** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack, tick
+- [x] **T014** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack, tick
       each box, and set `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md`, `web/plan.md`
       and `worker/plan.md`. Re-measure the test counts rather than citing the root `CLAUDE.md`'s.
       → T013

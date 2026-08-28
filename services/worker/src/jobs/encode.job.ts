@@ -2,11 +2,14 @@ import type { Job } from 'bullmq';
 import { fetchGraphQL } from '../api/graphql-client';
 import { buildOutputPath } from '../paths/build-output-path';
 import { encode } from '../encode';
+import { passthrough } from '../encode/passthrough';
+import { withSourceExtension } from '../paths/with-source-extension';
+import { isInsideRoot } from '../paths/is-inside-root';
 import { cleanupSource } from './cleanup-source';
 import type { EncodeJob } from '../queue/types';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
-import { ERROR_ENCODE_UNEXPECTED } from '../i18n/error-keys';
+import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED } from '../i18n/error-keys';
 
 export type EncodeJobDetails = {
   id: number;
@@ -30,6 +33,11 @@ export type EncodeJobDetails = {
   downloadPath: string | null;
   outputRoot: string;
   downloadsRoot: string;
+  // 032-optional-compression (REQ-6, NFR-2): resolved by the api at query
+  // time, not frozen onto the ProcessJob row at enqueue time. `=== false` is
+  // the only valid test — an `undefined` from a dropped field or an older
+  // api must compress, never silently stop.
+  compressionEnabled: boolean;
 };
 
 type ProcessJobQueryResult = {
@@ -66,6 +74,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedLanguagesIso3 allowedLanguageTags isLiveAction
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
+        compressionEnabled
       }
     }`,
     { id: processJobId },
@@ -75,8 +84,12 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     throw new Error(`processJob ${processJobId} no existe`);
   }
 
+  // NFR-2: `=== false` is the only valid test, so this log names the exact
+  // branch taken rather than paraphrasing it — an `undefined` here reads as
+  // "compressing", which is the safe default and must be visible as such.
+  const compressing = details.compressionEnabled !== false;
   console.log(
-    `[encode] ${processJobId}: allowedLanguagesIso3=${JSON.stringify(details.allowedLanguagesIso3)} allowedLanguageTags=${JSON.stringify(details.allowedLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3}`,
+    `[encode] ${processJobId}: compressing=${compressing} allowedLanguagesIso3=${JSON.stringify(details.allowedLanguagesIso3)} allowedLanguageTags=${JSON.stringify(details.allowedLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3}`,
   );
 
   let encodeCompleted: EncodeCompletedResult | undefined;
@@ -127,18 +140,53 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       }
     };
 
-    const { ffmpegCommand } = await encode(
-      details.inputFilePath,
-      outputPath,
-      {
-        originalLanguageIso3: details.originalLanguageIso3,
-        allowedLanguagesIso3: details.allowedLanguagesIso3,
-        allowedLanguageTags: details.allowedLanguageTags ?? [],
-        isLiveAction: details.isLiveAction,
-      },
-      onProgress,
-      onProbe,
-    );
+    // 032-optional-compression (REQ-9..REQ-13): `=== false` only, per NFR-2 —
+    // an `undefined` compressionEnabled (dropped field, or an api that
+    // predates this feature) must compress, never silently skip FFmpeg.
+    let finalOutputPath = outputPath;
+    let ffmpegCommand: string;
+
+    if (details.compressionEnabled === false) {
+      // REQ-12: the relaxed path is not the one that skips the containment
+      // check the encode path applies today (indirectly, via cleanup-source's
+      // own guard) — check it up front here, before anything touches the file.
+      if (!isInsideRoot(details.downloadsRoot, details.inputFilePath)) {
+        const detail = `input file ${details.inputFilePath} is not inside downloadsRoot ${details.downloadsRoot}`;
+        throw new KeyedError(ERROR_ENCODE_MOVE_FAILED, renderMessage(ERROR_ENCODE_MOVE_FAILED, { detail }), {
+          detail,
+        });
+      }
+
+      finalOutputPath = withSourceExtension(outputPath, details.inputFilePath);
+
+      const passthroughResult = await passthrough(
+        details.inputFilePath,
+        finalOutputPath,
+        {
+          originalLanguageIso3: details.originalLanguageIso3,
+          allowedLanguagesIso3: details.allowedLanguagesIso3,
+          allowedLanguageTags: details.allowedLanguageTags ?? [],
+          isLiveAction: details.isLiveAction,
+        },
+        onProgress,
+        onProbe,
+      );
+      ffmpegCommand = passthroughResult.ffmpegCommand;
+    } else {
+      const encodeResult = await encode(
+        details.inputFilePath,
+        outputPath,
+        {
+          originalLanguageIso3: details.originalLanguageIso3,
+          allowedLanguagesIso3: details.allowedLanguagesIso3,
+          allowedLanguageTags: details.allowedLanguageTags ?? [],
+          isLiveAction: details.isLiveAction,
+        },
+        onProgress,
+        onProbe,
+      );
+      ffmpegCommand = encodeResult.ffmpegCommand;
+    }
 
     const result = await fetchGraphQL<EncodeCompletedMutationResult>(
       `mutation ($id: Int!, $out: String!, $cmd: String!) {
@@ -149,11 +197,11 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
           deleteDownloadPath
         }
       }`,
-      { id: processJobId, out: outputPath, cmd: ffmpegCommand },
+      { id: processJobId, out: finalOutputPath, cmd: ffmpegCommand },
     );
     encodeCompleted = result.encodeCompleted;
 
-    console.log(`[encode] ${processJobId}: ${encodeCompleted.message} -> ${outputPath}`);
+    console.log(`[encode] ${processJobId}: ${encodeCompleted.message} -> ${finalOutputPath}`);
 
     // El aviso al media server (Jellyfin, si está configurado) lo dispara el
     // api dentro de encodeCompleted — tiene las settings y las raíces, el

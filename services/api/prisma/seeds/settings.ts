@@ -45,6 +45,7 @@ export async function seedSettings(prisma: PrismaClient) {
 
     { key: 'movies_enabled', value: 'true' },
     { key: 'shows_enabled', value: 'false' },
+    { key: 'compression_enabled', value: 'true' },
 
     { key: 'ui_locale', value: '' },
     { key: 'default_languages', value: '' },

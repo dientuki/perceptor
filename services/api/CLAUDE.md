@@ -234,10 +234,15 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `@UseGuards(AdminGuard)` **per method** (the `ffprobe-logs.resolver.ts` split, not
   `UsersResolver`'s class-level form), and a third method, `@Public() defaultUiLocale`, deliberately
   sits outside that guard — `web` reads it while rendering `/login`, before it knows who is asking.
-  The catalog's two newest keys are `ui_locale` (an ordinary `kind: 'enum'` entry, options from
+  The catalog's newest keys are `ui_locale` (an ordinary `kind: 'enum'` entry, options from
   `SUPPORTED_LOCALES`) and `default_languages` (a new `kind: 'languages'`, delegating to
   `LanguagesService.validateAndResolveLanguageIds` — the installation-wide replacement for the old
-  per-user global language preference; see `languages/` and `process-jobs/`).
+  per-user global language preference; see `languages/` and `process-jobs/`), plus
+  `compression_enabled` (`kind: 'boolean'`, seeded `"true"` — `032-optional-compression`, beside
+  `movies_enabled`/`shows_enabled`). It is not read by any resolver directly: `ProcessJobsService`
+  reads it off `SettingsService.getMap()` and flattens it onto `EncodeJobDetails.compressionEnabled`
+  at query time, since the worker authenticates as a service principal and cannot call the
+  admin-only `settings` query itself.
 - **`media-roots/`** — the two declared roots and every path translation. See below.
 - **`media-server/`** — post-encode notification (Jellyfin today), opt-in from Settings.
 - **`indexer/`** — Prowlarr search surface.

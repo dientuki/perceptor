@@ -2,7 +2,7 @@
 title: Optional compression — worker slice
 service: worker
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Optional compression — `worker` (`worker/plan.md`)

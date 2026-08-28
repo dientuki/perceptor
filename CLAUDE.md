@@ -15,7 +15,7 @@ implementation detail.
 | Download | qBittorrent (`torrent`), `api` — `src/clients/torrent/client.ts`, per-torrent save path; no longer fire-and-forget — `api` reads live progress/speed back and starts, stops and deletes torrents on the user's behalf, and a title may race several sources at once | `010`, `022` |
 | Detect completion, enqueue | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer); a shared race arbiter also runs from the tus upload path, since an uploaded file competes in the same race as any torrent of its target | `022` |
 | Scan files, inventory | `worker` — enumerates every file, resolves episodes by parsing `SxxEyy`; episode names come from the api, never the filename | `013` |
-| Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K downscaled to 1080p preserving HDR (Dolby Vision/HDR10 keep their colour tags rather than flattening to SDR), Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode | `011`, `013`, `024`, `031` |
+| Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K downscaled to 1080p preserving HDR (Dolby Vision/HDR10 keep their colour tags rather than flattening to SDR), Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode. Optional per installation — an administrator can turn compression off from Settings, in which case the file is still renamed and moved to its destination, just never touched by FFmpeg | `011`, `013`, `024`, `031`, `032` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`) | — |
 | Browse library | `api` — the three resolvers; `web` — `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010` |
 
@@ -131,9 +131,13 @@ Rules that are not obvious from the variable names:
   stays manual in Prowlarr's UI (`014-dev-stack-flaresolverr`).
 - **`BUILD_TARGET`** picks the Dockerfile stage (`dev` by default, `runner` for production); every
   Dockerfile has `base` / `dev` / `builder` / `runner`.
-- **The transcode path is unconditional.** `bin/dev`/`bin/prod`/`bin/build` produce the identical
-  `docker compose` invocation on every host, with nothing detected, opted out of, or asked about at
-  install time — see spec `024` (`docs/spec/features/`) for what this replaced and why.
+- **The transcode path is unconditional at install time.** `bin/dev`/`bin/prod`/`bin/build` produce
+  the identical `docker compose` invocation on every host, with nothing detected, opted out of, or
+  asked about at install time — see spec `024` (`docs/spec/features/`) for what this replaced and
+  why. Whether a given job actually runs FFmpeg is a separate, runtime decision: an administrator
+  can flip the `compression_enabled` setting off, in which case the worker moves the file to its
+  destination without transcoding it (`032`). Host invariance still holds — no container, image or
+  compose invocation changes — only the per-job branch inside the worker does.
 - **The media server is not in `docker-compose.yaml`** — Jellyfin is assumed to run outside the stack.
   That is why `MediaServerService.notifyCreated` translates the container output path to the host path
   via `MediaRootsService.containerToHostPath()` before sending it.
@@ -198,7 +202,8 @@ a worked example, written after the fact against a feature that shipped.
 
 All three services typecheck clean (0 errors) and `bin/npm web run build` exits 0, measured
 2026-08-27 after `028-users-screen-refactor`. Test counts then: `api` 217/23 suites, `worker`
-93/12 — the worker's are now 124/13, remeasured 2026-08-28 after `031-worker-language-variants`.
+93/12 — both remeasured 2026-08-28 after `032-optional-compression`: `api` 249/26 suites, `worker`
+140/15 suites.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

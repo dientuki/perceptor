@@ -2,7 +2,7 @@
 title: Optional compression — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Optional compression (`plan.md`)

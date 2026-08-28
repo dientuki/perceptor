@@ -729,7 +729,7 @@ The full vocabulary, by owner:
 | `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
 | `api` — uploads (REST) | `error.upload.ticket_expired`, `error.upload.ticket_wrong_movie`, `error.upload.ticket_wrong_episode`, `error.upload.metadata_incomplete` |
 | `api` — DTO validation | `error.validation.setting_key_required`, `error.validation.setting_value_required`, `error.validation.user_id_required`, `error.validation.login_username_required`, `error.validation.login_password_required`, `error.validation.user_name_required`, `error.validation.username_min_length`, `error.validation.password_min_length` |
-| `worker` — encode pipeline | `error.encode.no_video_stream`, `error.encode.no_original_audio`, `error.encode.probe_failed`, `error.encode.ffmpeg_failed`, `error.encode.no_output`, `error.encode.mkvmerge_failed`, `error.encode.episode_numbers_missing`, `error.encode.unknown_driver`, `error.encode.unexpected` (catch-all for a non-`KeyedError` throw — `encodeFailed`'s `errorKey` is required, so a failure never reports with no key) |
+| `worker` — encode pipeline | `error.encode.no_video_stream`, `error.encode.no_original_audio`, `error.encode.probe_failed`, `error.encode.ffmpeg_failed`, `error.encode.no_output`, `error.encode.mkvmerge_failed`, `error.encode.episode_numbers_missing`, `error.encode.unknown_driver`, `error.encode.move_failed` (`032-optional-compression`, the passthrough path used when compression is off), `error.encode.unexpected` (catch-all for a non-`KeyedError` throw — `encodeFailed`'s `errorKey` is required, so a failure never reports with no key) |
 | `worker` — reused from `api` | `error.processJob.not_found`, `error.source.no_target`, `error.source.no_download_path` |
 
 **Locale resolution never crosses the GraphQL boundary as a header or argument.** `web` resolves
@@ -944,6 +944,66 @@ Consumer obligations:
 - **`worker`**: no obligation. `cleanup-source.ts` keeps calling `downloadRemove(mediaSourceId,
   deleteFiles: false)` for the winner with an unchanged signature and receives an unchanged
   `omitido: …` shape; it does not see the sweep happening beside its own call.
+
+### Compression becomes optional (`032-optional-compression`)
+
+```graphql
+type EncodeJobDetails {
+  """
+  Whether this job must be re-encoded by FFmpeg. Resolved from the
+  `compression_enabled` setting when this query is answered, not when the
+  ProcessJob was enqueued. False means: skip ffprobe, ffmpeg and mkvmerge, and
+  move the input file to the destination path instead. Everything else about
+  the job — output path, completion report, cleanup — is unchanged.
+  """
+  compressionEnabled: Boolean!
+}
+```
+
+No other type, field, argument or mutation changed. `Mutation.updateSettings` already accepts
+arbitrary `SettingInput` entries validated against the server-side catalog, so persisting the new
+key needed no signature change.
+
+The settings catalog gained one key, beside `movies_enabled`/`shows_enabled`: `compression_enabled`
+(`boolean`, seeded `"true"`, editable from Settings → Compression). Same
+`error.setting.expected_boolean` validation as the other two booleans — a value that is not exactly
+`"true"`/`"false"` is rejected and the row keeps its previous value.
+
+**`compressionEnabled` is resolved when the worker asks, not when the job was enqueued.** An
+administrator can flip the switch mid-download; the job that starts encoding afterward reads
+whatever the setting says at that moment. `ProcessJobsService.getEncodeJobDetails` reads it off
+`SettingsService.getMap()` alongside every other field already flattened onto `EncodeJobDetails`,
+and a missing row (a fresh install predating this feature, or the row deleted by hand) resolves to
+`true` — the exact string `"false"` is the only value that means "skip compression". `worker` must
+mirror that rule: `undefined` on the wire also means compress, never `false`. Reading either the
+missing-row case or a wire skew as falsy would compress nothing an administrator ever asked to
+leave uncompressed only by accident of a stale deploy — the failure mode this field exists to
+avoid working the other way is silent, not loud.
+
+`false` does not mean "skip this job" — it means "skip only the FFmpeg/mkvmerge step". The worker
+still moves the input file to its final destination path, under the library name, with the
+**source's own extension** (not the `.mkv` `buildOutputPath` assumes for a compressed output),
+still stops the seed and runs the same cleanup, and still reports `encodeCompleted` with a real
+output path and progress reaching 100 — only `ffmpegCommand` comes back the empty string, which is
+the contract for "this job was moved, not encoded", not a placeholder for a command that failed to
+record.
+
+Consumer obligations:
+
+- `web` sends `compression_enabled` explicitly (`"true"`/`"false"`) on every save of the main
+  settings form, the same `BOOLEAN_KEYS` idiom as `movies_enabled`/`shows_enabled`. It never reads
+  `EncodeJobDetails.compressionEnabled` — that field is worker-only.
+- `worker` retypes `compressionEnabled` into its local `EncodeJobDetails` type and adds it to the
+  `processJob` selection set. The passthrough path is a third `EncodeFn`
+  (`services/worker/src/encode/passthrough.ts`) selected directly by `encode.job.ts` on
+  `details.compressionEnabled === false` — **not** registered in `src/encode/index.ts`'s `DRIVERS`,
+  so it cannot be reached through `ENCODE_DRIVER` and an operator's stored switch always wins over a
+  developer's `mock`/`ffmpeg` choice.
+
+The error vocabulary gained one worker-owned key, added to the "encode pipeline" row below:
+`error.encode.move_failed` (`No se pudo mover el archivo al destino: {detail}`), reported through
+`encodeFailed` exactly like any other encode failure — the job ends `FAILED`, the source file is
+left in place, and no final-named file exists at the destination.
 
 ### The one non-GraphQL route
 

@@ -28,6 +28,7 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   movie_db_api_key: { kind: 'secret' },
   movies_enabled: { kind: 'boolean' },
   shows_enabled: { kind: 'boolean' },
+  compression_enabled: { kind: 'boolean' },
   // options sale del registro de clientes (clients/media-server/registry.ts),
   // no de una lista a mano: sumar un media server ahí lo vuelve válido acá
   // automáticamente.

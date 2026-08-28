@@ -8,6 +8,7 @@ import {
   ERROR_ENCODE_EPISODE_NUMBERS_MISSING,
   ERROR_ENCODE_FFMPEG_FAILED,
   ERROR_ENCODE_MKVMERGE_FAILED,
+  ERROR_ENCODE_MOVE_FAILED,
   ERROR_ENCODE_NO_ORIGINAL_AUDIO,
   ERROR_ENCODE_NO_OUTPUT,
   ERROR_ENCODE_NO_VIDEO_STREAM,
@@ -27,6 +28,7 @@ export const messagesEn: Record<string, string> = {
   [ERROR_ENCODE_FFMPEG_FAILED]: 'ffmpeg exited with code {code}: {stderr}',
   [ERROR_ENCODE_NO_OUTPUT]: 'ffmpeg exited 0 but produced no {path}',
   [ERROR_ENCODE_MKVMERGE_FAILED]: 'mkvmerge failed with code {code}: {stderr}',
+  [ERROR_ENCODE_MOVE_FAILED]: 'Could not move the file to its destination: {detail}',
   [ERROR_ENCODE_EPISODE_NUMBERS_MISSING]:
     'Episode has no season/episode number: cannot build the output path',
   [ERROR_ENCODE_UNKNOWN_DRIVER]: 'Unknown ENCODE_DRIVER: {driver}',

@@ -2,7 +2,7 @@
 title: Optional compression — api slice
 service: api
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Optional compression — `api` (`api/plan.md`)

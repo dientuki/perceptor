@@ -167,6 +167,67 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // REQ-7: reading a missing/unexpected `compression_enabled` row as "off"
+  // produces no error anywhere — every job still completes, every file still
+  // lands in the right place, and an entire library is quietly left
+  // un-transcoded, discovered only by disk usage months later.
+  describe('getEncodeJobDetails — REQ-7 compressionEnabled', () => {
+    it('resolves to true when the compression_enabled row is missing', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.compressionEnabled).toBe(true);
+    });
+
+    it('resolves to true for the exact string "true"', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', compression_enabled: 'true' });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.compressionEnabled).toBe(true);
+    });
+
+    it('resolves to false only for the exact string "false"', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', compression_enabled: 'false' });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.compressionEnabled).toBe(false);
+    });
+
+    it('resolves to true for a junk value that somehow reached the row', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', compression_enabled: 'maybe' });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.compressionEnabled).toBe(true);
+    });
+
+    it('is present on the EPISODE branch too', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userShow.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', compression_enabled: 'false' });
+
+      const details = await service.getEncodeJobDetails(2);
+
+      expect(details.compressionEnabled).toBe(false);
+    });
+  });
+
   describe('getEncodeJobDetails — REQ-3/REQ-8 language merge', () => {
     it('unions the original language, the installation default and one per-title extra', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());

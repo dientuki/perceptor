@@ -33,6 +33,12 @@ export class ProcessJobsService {
     }
 
     const mediaSource = processJob.sourceFile.mediaSource;
+    const settingsMap = await this.settings.getMap();
+    // REQ-7: anything other than the exact string "false" means compress, so
+    // a missing row (an install that predates the seed) resolves to true.
+    // Never write this as `=== 'true'` — that reads absence as "off", which
+    // is the silent-library-left-uncompressed failure REQ-7 exists to forbid.
+    const compressionEnabled = settingsMap['compression_enabled'] !== 'false';
     const base = {
       id: processJob.id,
       status: processJob.status,
@@ -42,6 +48,7 @@ export class ProcessJobsService {
       infoHash: mediaSource.infoHash,
       downloadPath: mediaSource.downloadPath,
       downloadsRoot: await this.mediaRoots.resolveFromRoot('downloads', '.'),
+      compressionEnabled,
     };
 
     if (processJob.movie) {

@@ -154,7 +154,11 @@ export default function SettingsForm({
             </div>
 
             <div className={panelClass("compression")}>
-              <CompressionPanel />
+              <CompressionPanel
+                compressionEnabled={
+                  getSettingValue("compression_enabled") === "true"
+                }
+              />
             </div>
           </div>
 

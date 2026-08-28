@@ -10,12 +10,14 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { fetchGraphQLMock, buildOutputPathMock, encodeMock, cleanupSourceMock } = vi.hoisted(() => ({
-  fetchGraphQLMock: vi.fn(),
-  buildOutputPathMock: vi.fn(),
-  encodeMock: vi.fn(),
-  cleanupSourceMock: vi.fn(),
-}));
+const { fetchGraphQLMock, buildOutputPathMock, encodeMock, cleanupSourceMock, passthroughMock } =
+  vi.hoisted(() => ({
+    fetchGraphQLMock: vi.fn(),
+    buildOutputPathMock: vi.fn(),
+    encodeMock: vi.fn(),
+    cleanupSourceMock: vi.fn(),
+    passthroughMock: vi.fn(),
+  }));
 
 vi.mock('../api/graphql-client', () => ({
   fetchGraphQL: (...args: unknown[]) => fetchGraphQLMock(...args),
@@ -25,6 +27,9 @@ vi.mock('../paths/build-output-path', () => ({
 }));
 vi.mock('../encode', () => ({
   encode: (...args: unknown[]) => encodeMock(...args),
+}));
+vi.mock('../encode/passthrough', () => ({
+  passthrough: (...args: unknown[]) => passthroughMock(...args),
 }));
 vi.mock('./cleanup-source', () => ({
   cleanupSource: (...args: unknown[]) => cleanupSourceMock(...args),
@@ -71,6 +76,7 @@ beforeEach(() => {
   buildOutputPathMock.mockReset();
   encodeMock.mockReset();
   cleanupSourceMock.mockReset();
+  passthroughMock.mockReset();
 
   buildOutputPathMock.mockReturnValue('/library/movies/A Movie (2020)/A Movie (2020).mkv');
 
@@ -336,5 +342,109 @@ describe('handleEncode — ffprobe log recording (023-ffprobe-log)', () => {
     expect(failedCall).toBeDefined();
     const [, variables] = failedCall as [string, Record<string, unknown>];
     expect(variables.key).toBe(ERROR_ENCODE_PROBE_FAILED);
+  });
+});
+
+// Defends the branch 032-optional-compression adds to handleEncode
+// (worker/plan.md § Tests): `compressionEnabled` must be tested with `=== false`,
+// never with falsiness. Rewriting the guard as `if (!details.compressionEnabled)`
+// would still pass the two straightforward cases below — it only breaks the
+// third one, where the field is missing entirely (NFR-2). That third case is
+// the whole point of this suite: a version-skewed api or a hand-edited query
+// selection that drops the field must still compress, since nothing about a
+// filed-but-uncompressed library announces itself as wrong.
+describe('handleEncode — compressionEnabled branch (032-optional-compression)', () => {
+  function mockSuccessfulGraphQL(processJob: Record<string, unknown>) {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob });
+      }
+      if (query.includes('encodeCompleted')) {
+        return Promise.resolve({
+          encodeCompleted: {
+            message: 'ok',
+            removeTorrent: true,
+            deleteInputFile: true,
+            deleteDownloadPath: false,
+          },
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  it('compressionEnabled: false -> never calls encode(), calls passthrough(), completes with the swapped extension and an empty ffmpegCommand, and still runs cleanupSource', async () => {
+    mockSuccessfulGraphQL({
+      ...PROCESS_JOB_DETAILS,
+      inputFilePath: '/downloads/A Movie.mp4',
+      compressionEnabled: false,
+    });
+    buildOutputPathMock.mockReturnValue('/library/movies/A Movie (2020)/A Movie (2020).mkv');
+    passthroughMock.mockImplementation(async (_input, output, _details, onProgress) => {
+      await onProgress(100);
+      return { ffmpegCommand: '' };
+    });
+
+    await handleEncode(makeJob());
+
+    expect(encodeMock).not.toHaveBeenCalled();
+    expect(passthroughMock).toHaveBeenCalledTimes(1);
+    const [passInput, passOutput] = passthroughMock.mock.calls[0] as [string, string];
+    expect(passInput).toBe('/downloads/A Movie.mp4');
+    // withSourceExtension swaps the .mkv buildOutputPath produced for the
+    // source's own .mp4 (REQ-10) — asserted here via the real output path,
+    // not a mocked withSourceExtension, since it's a pure function this test
+    // exercises for real.
+    expect(passOutput).toBe('/library/movies/A Movie (2020)/A Movie (2020).mp4');
+
+    const completedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeCompleted'),
+    );
+    expect(completedCall).toBeDefined();
+    const [, completedVariables] = completedCall as [string, Record<string, unknown>];
+    expect(completedVariables.out).toBe('/library/movies/A Movie (2020)/A Movie (2020).mp4');
+    expect(completedVariables.cmd).toBe('');
+
+    expect(cleanupSourceMock).toHaveBeenCalledTimes(1);
+    const cleanupArgs = cleanupSourceMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(cleanupArgs.removeTorrent).toBe(true);
+    expect(cleanupArgs.deleteInputFile).toBe(true);
+    expect(cleanupArgs.deleteDownloadPath).toBe(false);
+  });
+
+  it('compressionEnabled: true -> calls encode() and never passthrough(), unchanged from today', async () => {
+    mockSuccessfulGraphQL({ ...PROCESS_JOB_DETAILS, compressionEnabled: true });
+    buildOutputPathMock.mockReturnValue('/library/movies/A Movie (2020)/A Movie (2020).mkv');
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+
+    await handleEncode(makeJob());
+
+    expect(passthroughMock).not.toHaveBeenCalled();
+    expect(encodeMock).toHaveBeenCalledTimes(1);
+
+    const completedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeCompleted'),
+    );
+    const [, completedVariables] = completedCall as [string, Record<string, unknown>];
+    expect(completedVariables.out).toBe('/library/movies/A Movie (2020)/A Movie (2020).mkv');
+    expect(completedVariables.cmd).toBe('ffmpeg -i ...');
+  });
+
+  it('compressionEnabled absent -> compresses (NFR-2): the field arriving undefined must never be read as "off"', async () => {
+    const { compressionEnabled: _omit, ...withoutFlag } = {
+      ...PROCESS_JOB_DETAILS,
+      compressionEnabled: true,
+    };
+    mockSuccessfulGraphQL(withoutFlag);
+    buildOutputPathMock.mockReturnValue('/library/movies/A Movie (2020)/A Movie (2020).mkv');
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+
+    await handleEncode(makeJob());
+
+    // This is the assertion that fails if the branch is rewritten as
+    // `if (!details.compressionEnabled)`: `undefined` is falsy, so that form
+    // would route to the passthrough here instead.
+    expect(encodeMock).toHaveBeenCalledTimes(1);
+    expect(passthroughMock).not.toHaveBeenCalled();
   });
 });
