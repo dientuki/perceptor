@@ -32,6 +32,11 @@ You write **only** inside:
 - `services/worker/src/ffmpeg/` — the rules and their unit specs
 - `services/worker/ffmpeg/` — the case corpus
 
+Inside the first, `variants.ts` is where the regional-variant vocabulary and the narrowing
+primitives live (L1, A4, S5), along with the word-boundary title matcher and `preferring`. The
+dependency is one-directional — `params.ts` imports from `variants.ts`, never the reverse — which is
+what lets both files share those primitives without a circular import.
+
 Nothing else. Not `jobs/`, not `encode/`, not `scan/`, not `api/`. If a rule needs a field the job
 payload does not carry, **stop and report**: that is an `api` contract change (Constitution,
 Articles II and VIII), not something you work around by reading an env var or querying anything.
@@ -93,9 +98,21 @@ add the spelling and name the case that forced it.
   Compare through `normalizeIso3` on **both** sides: the `languages` table seeds ISO-639-2/B (`fre`)
   and Matroska commonly tags /T (`fra`).
 - **A2.** A track whose title marks it as commentary, description or SDH is never selected.
-- **A3.** Exactly one track per language: best codec (`truehd` > `dts` > `eac3` > `ac3`), then most
-  channels, then highest bitrate.
-- **A4.** Latin American Spanish wins — see L1.
+- **A3.** One track per language: best codec (`truehd` > `dts` > `eac3` > `ac3`), then most
+  channels, then highest bitrate. The *unit* is the language only when no regional variant was
+  requested for it; when one was and the file has a match, the unit becomes the matched variant and
+  a language can emit more than one track (A4).
+- **A4 (request-driven).** A regional variant is selected only when the user asked for it. The
+  requested tags arrive on `allowedLanguageTags` (`es-419`, `es-ES`) and `variants.ts` resolves them
+  to an `iso3` locally. Three cases, and the third is the one that surprises people:
+  - **asked for, and the file marks it** — keep only tracks marked as a *requested* variant, one per
+    variant, and this **outranks quality**: a requested Latino stereo beats an unmarked or Castilian
+    5.1;
+  - **asked for, and the file marks none of them** — keep **every** track of that language. Removing
+    a track afterwards is easy; recovering one that was never written is not;
+  - **not asked for** — no regional preference at all, quality alone decides. There is no default
+    variant. A file whose Spanish tracks are marked `Latino` and unmarked resolves on codec and
+    channels, not on the marking.
 - **A5.** No track in `originalLanguageIso3` is a hard failure:
   `error.encode.no_original_audio`, with the `iso3` as a param. Never a copy-all fallback — that
   shipped files with the wrong audio and reported success. No case in the corpus currently exercises
@@ -121,16 +138,20 @@ random and silently lose the right one.
 - **S3 (hard).** A track with no real cue payload is dropped. Measured from `NUMBER_OF_BYTES` and
   `NUMBER_OF_FRAMES`, not from `BPS` alone — `BPS` is a rounded integer and a short real track can
   round to 0 just like an empty one. No case in the corpus currently pins the byte/frame thresholds —
-  the ones that did (`1.json`, `3.json`) were retired (REQ-8 of `024`).
+  the ones that did were retired (REQ-8 of `024`).
 - **S4 (evidence).** Hearing-impaired loses to any non-hearing-impaired candidate in the same
   language, and is kept when it is the only one. Detected from `disposition.hearing_impaired`
-  **and** the title, because files tag it either way. Case `8.json` drops an English SDH track this
+  **and** the title, because files tag it either way. Case `1.json` drops an English SDH track this
   way (title-only detection).
-- **S5 (evidence).** Latin American Spanish beats Castilian — see L1. Beats, not replaces: when
-  nothing marks either one, both stay. Case `8.json`.
+- **S5 (evidence, request-driven).** The same three cases as A4, with one difference: subtitles are
+  never reduced to one. Every track matching a requested variant is kept; when nothing matches, every
+  track of the language is kept; when no variant was requested, S6 applies unchanged. Ordering
+  matters — S4 runs **before** this, so an SDH track can never be the match that discards a plain
+  one. Case `1.json` keeps the `Latino` track and drops the unmarked Spanish one, because `es-419`
+  was requested.
 - **S6.** Whatever survives S1–S5 is emitted, all of it. No case currently exercises the
-  nothing-to-choose-on path where every candidate in a language survives — the one that did
-  (`1.json`) was retired (REQ-8 of `024`).
+  nothing-to-choose-on path where every candidate in a language survives — the one that did was
+  retired (REQ-8 of `024`).
 
 ### Language identity
 
@@ -138,8 +159,15 @@ random and silently lose the right one.
   `419`, `es-419`. Castilian markers: `españa`, `spain`, `castellano`, `EU`, `es-ES`.
   The bare `LA`/`EU` spellings are real and came from a file tagging tracks `BTM DDP5.1 LA` vs
   `BTM DD 5.1 EU` — a rule matching only `latin|latino` misses that file entirely and picks the
-  Spanish track by accident of codec ranking. The case that pinned it (`1.json`) was retired
-  (REQ-8 of `024`); the spellings stay here because the vocabulary itself is still real.
+  Spanish track by accident of codec ranking. The case that pinned it was retired (REQ-8 of `024`);
+  the spellings stay here because the vocabulary itself is still real.
+
+  Since `031` this vocabulary is **what selection reads**, not a hard-coded default: it is the
+  matcher between the tag the user requested and what the release actually marked (A4, S5). It lives
+  in `src/ffmpeg/variants.ts` with the tag→`iso3` table, and detection is **unconditional** — a track
+  is labelled from its title whether or not anyone requested that variant, because the title written
+  to the output (L2) must not depend on who triggered the encode. What the request gates is
+  selection, never labelling.
 - **L2 (track title).** The title written to the output is **always** replaced, never inherited.
   The library is homogeneous: the same language reads the same in every file, whatever the release
   group typed. `Spanish (Latin America)`, `BTM`, `FORCED` and an absent title all resolve through
@@ -148,8 +176,16 @@ random and silently lose the right one.
   | Detected | Title written |
   | :-- | :-- |
   | English | `English` |
-  | Spanish, Castilian, or unmarked | `Español` |
+  | Spanish, unmarked | `Español` |
   | Spanish marked Latin American (L1) | `Latino` |
+  | Spanish marked Castilian (L1) | `Español (España)` |
+
+  Since `031` this table has **two callers, not one**: subtitle titles and audio titles both resolve
+  through it, so a language never reads one way in a subtitle and another way in an audio track. An
+  audio title is the table's answer followed by the layout — `English Surround 5.1 (Opus)`,
+  `Latino Surround 5.1 (Opus)`, `Español (España) Stereo (Opus)` — where it used to be a
+  language-less `Surround 5.1 (Opus)`. The `language` metadata stays the ISO-639-2 code from the
+  source; the name lives in the title, because `spa` is all a player reads off the former.
 
   The table is endonym-style and **incomplete on purpose** — it holds what the corpus has forced so
   far. When a case brings a language that is not here, ask the user for its title rather than
@@ -167,6 +203,7 @@ not read by anything; `title` identifies the case.
   "input": {
     "file": "/downloads/…", "output": "/media/…",
     "allowedLanguagesIso3": ["eng", "spa"],
+    "allowedLanguageTags": ["en", "es-419"],
     "originalLanguageIso3": "eng",
     "isLiveAction": true
   },

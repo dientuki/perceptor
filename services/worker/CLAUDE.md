@@ -39,7 +39,7 @@ src/scan/scan-folder.ts  enumerates a download's files, flags each isVideo — n
 src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly one pair
 src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode
 src/encode/              the driver seam (see below)
-src/ffmpeg/              buildCommand · params · metadata · runner · remux-detection · iso639
+src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639
 src/paths/build-output-path.ts   composes the final library path
 src/paths/is-inside-root.ts      pure containment check, used before any delete
 ```
@@ -96,6 +96,25 @@ never queries the database and never re-derives that list from an env var (Const
 III); a missing edit to either `EncodeJobDetails` (`src/jobs/encode.job.ts`) or `EncodeInput`
 (`src/encode/types.ts`) means the field silently arrives `undefined`, which reads as "keep the
 original language only" with no error anywhere.
+
+`031-worker-language-variants` added a **third** field down that same path,
+`allowedLanguageTags` — the same merge expressed in BCP-47 (`en`, `es-419`, `es-ES`) rather than
+collapsed to ISO-639-2/B. The collapse is lossy on purpose: both Spanish variants resolve to `spa`,
+so the tags are the only thing that says *which* Spanish the user asked for. The two lists are not
+interchangeable and neither replaces the other — `allowedLanguagesIso3` is still the only list
+compared against `ffprobe`'s `tags.language`, and narrowing or dropping it breaks every encode in
+every language. `details.allowedLanguageTags ?? []` in `handleEncode` is the **only** defensive
+normalization in that path; both rule functions take the parameter as required, so a call site that
+forgets it fails to compile rather than silently reverting to no regional preference. The existing
+`[encode] <id>:` log line prints both lists, which is how a live encode shows whether the seam is
+actually carrying them.
+
+What the tags changed, in one sentence: a regional variant is now selected **only when the user
+asked for it**. The unconditional Latin American title heuristic is gone — with no requested variant,
+quality alone decides; with one requested and matched, it outranks quality; with one requested and
+nothing in the file marked, every track of that language is kept for the user to prune by hand. The
+rules themselves live behind the `ffmpeg` agent's door — see below and `.claude/agents/ffmpeg.md`
+§ Rules A4, S5, L1, L2.
 
 Every language comparison in `params.ts` goes through `src/ffmpeg/iso639.ts`'s `normalizeIso3`
 first, on both sides. The seeded `languages` table stores ISO-639-2/**B** (`fre`, `ger`, `chi`,
@@ -233,7 +252,7 @@ leaves a half-written file at the destination.
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate, against `tsconfig.json` (covers `src/**/*`, including `*.spec.ts`) |
 | `bin/npm worker run build` | `tsc -p tsconfig.build.json` — the `runner` image's `builder` stage runs this; `tsconfig.build.json` extends `tsconfig.json` but excludes `**/*.spec.ts`, so `dist/` ships no test code (`015-reproducible-image-builds`) |
-| `bin/npm worker test` | `vitest run` — 12 suites, 93 tests, green as of spec `024`, which deleted a startup-probe module's spec outright and reset the case corpus to one file (`ffmpeg/cases.spec.ts` now runs 1 case, not 8); `023-ffprobe-log` added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
+| `bin/npm worker test` | `vitest run` — 13 suites, 124 tests, green as of spec `031`, which added `src/ffmpeg/variants.spec.ts` and took `src/ffmpeg/params.spec.ts` from 15 cases to 28 for the regional-variant rules (spec `024` before it deleted a startup-probe module's spec outright and reset the case corpus to one file — `ffmpeg/cases.spec.ts` still runs 1 case, and that case is now authored by the user and read as the requirement); `023-ffprobe-log` added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 
 ## Known debt

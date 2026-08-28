@@ -1,6 +1,7 @@
 // src/core/ffmpeg/params.ts
 
 import { normalizeIso3 } from './iso639';
+import { detectVariant, narrowToVariants, preferring, requestedVariants, titleWords, variantTitle } from './variants';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import {
@@ -166,31 +167,6 @@ export function getVideoParams(
   ];
 }
 
-const LATIN_AMERICAN_MARKERS = ['latino', 'latin america', 'latinoamerica', 'latin', 'la', '419'];
-function titleWords(stream: any): string[] {
-  return (stream.tags?.title || '')
-    .toLowerCase()
-    .split(/[^a-z0-9À-ſ-]+/)
-    .filter((word: string) => word.length > 0);
-}
-
-function titleMarks(stream: any, markers: string[]): boolean {
-  const words = titleWords(stream);
-  const joined = words.join(' ');
-  return markers.some((marker) =>
-    marker.includes(' ') ? joined.includes(marker) : words.includes(marker),
-  );
-}
-
-function isLatinAmericanSpanish(stream: any): boolean {
-  return titleMarks(stream, LATIN_AMERICAN_MARKERS);
-}
-
-function preferring(streams: any[], isWorse: (stream: any) => boolean): any[] {
-  const better = streams.filter((stream) => !isWorse(stream));
-  return better.length > 0 ? better : streams;
-}
-
 // src/core/ffmpeg/params.ts
 //
 // REQ-4/REQ-6/REQ-7: the caller (buildFfmpegCommand) resolves the allow-list
@@ -202,6 +178,7 @@ export function getAudioParams(
   audioStreams: any[],
   allowedLanguagesIso3: string[],
   originalLanguageIso3: string,
+  allowedLanguageTags: string[],
 ) {
   // Both sides of every comparison go through normalizeIso3: ffprobe may tag
   // a track with the ISO-639-2/T form (e.g. "fra") while the allow-list
@@ -236,10 +213,38 @@ export function getAudioParams(
     );
   }
 
-  // 3. Selección de UN solo mejor stream por idioma
+  // 3. Selección: un mejor stream por variante pedida (REQ-9), o el mejor
+  // de todo el idioma cuando no se pidió ninguna variante regional.
   const selectedStreams: any[] = [];
+  const selectBest = (streams: any[]): any =>
+    [...streams].sort((a, b) => {
+      const codecA = (a.codec_name || "").toLowerCase();
+      const codecB = (b.codec_name || "").toLowerCase();
+
+      const rankA = priority.indexOf(codecA) === -1 ? 99 : priority.indexOf(codecA);
+      const rankB = priority.indexOf(codecB) === -1 ? 99 : priority.indexOf(codecB);
+
+      // 1. Mejor Codec (Fuente)
+      if (rankA !== rankB) return rankA - rankB;
+
+      // 2. Más Canales (Preferimos 7.1 > 5.1 > 2.0)
+      const chanA = Number(a.channels || 0);
+      const chanB = Number(b.channels || 0);
+      if (chanA !== chanB) return chanB - chanA;
+
+      // 3. Más Bitrate
+      const bitA = Number(a.bit_rate || 0);
+      const bitB = Number(b.bit_rate || 0);
+      return bitB - bitA;
+    })[0];
+  const addSelected = (s: any) => {
+    if (!selectedStreams.some((selected) => selected.index === s.index)) {
+      selectedStreams.push(s);
+    }
+  };
+
   allowedLangs.forEach(langCode => {
-    let langStreams = candidates.filter(s => normalizeIso3(s.tags?.language || "") === langCode);
+    const langStreams = candidates.filter(s => normalizeIso3(s.tags?.language || "") === langCode);
 
     // REQ-7: a requested language with no track present is not a failure —
     // log it and move on. Only the original language (checked above) is
@@ -248,37 +253,30 @@ export function getAudioParams(
       console.warn(`[ffmpeg] idioma permitido "${langCode}" no tiene pista de audio en el archivo; se continúa sin él.`);
     }
 
-    if (langStreams.length > 0) {
-      if (langCode === 'spa') {
-        langStreams = preferring(langStreams, (s) => !isLatinAmericanSpanish(s));
-      }
+    if (langStreams.length === 0) return;
 
-      langStreams.sort((a, b) => {
-        const codecA = (a.codec_name || "").toLowerCase();
-        const codecB = (b.codec_name || "").toLowerCase();
+    const requestedForLang = requestedVariants(langCode, allowedLanguageTags);
 
-        const rankA = priority.indexOf(codecA) === -1 ? 99 : priority.indexOf(codecA);
-        const rankB = priority.indexOf(codecB) === -1 ? 99 : priority.indexOf(codecB);
-
-        // 1. Mejor Codec (Fuente)
-        if (rankA !== rankB) return rankA - rankB;
-
-        // 2. Más Canales (Preferimos 7.1 > 5.1 > 2.0)
-        const chanA = Number(a.channels || 0);
-        const chanB = Number(b.channels || 0);
-        if (chanA !== chanB) return chanB - chanA;
-
-        // 3. Más Bitrate
-        const bitA = Number(a.bit_rate || 0);
-        const bitB = Number(b.bit_rate || 0);
-        return bitB - bitA;
-      });
-
-      const best = langStreams[0];
-      if (!selectedStreams.some(s => s.index === best.index)) {
-        selectedStreams.push(best);
-      }
+    // REQ-6: no requested variant for this language — quality decides alone,
+    // exactly as before this feature.
+    if (requestedForLang.length === 0) {
+      addSelected(selectBest(langStreams));
+      return;
     }
+
+    const narrowed = narrowToVariants(langStreams, requestedForLang);
+
+    // REQ-5: nothing in the file matched a requested variant — every
+    // surviving stream of the language is kept rather than reduced to one.
+    if (!narrowed.matched) {
+      narrowed.streams.forEach(addSelected);
+      return;
+    }
+
+    // REQ-9: one best stream per matched requested variant.
+    narrowed.groups.forEach((group) => {
+      addSelected(selectBest(group.streams));
+    });
   });
 
   // 4. Generar parámetros finales
@@ -287,16 +285,13 @@ export function getAudioParams(
   selectedStreams.forEach((s, index) => {
     const lang = (s.tags?.language || "und").toLowerCase();
     const channels = Number(s.channels || 0);
-    //const title = s.tags?.title || "Audio";
-    
-    //console.log(`[Stream #${s.index}] ${lang.toUpperCase()} - ${title} (${s.codec_name}) -> OPUS 320k`);
+    // REQ-12: the same resolver the subtitle titles use, prefixed onto the
+    // channel-layout label below — see trackLanguageTitle.
+    const languageTitle = trackLanguageTitle(s);
 
     params.push("-map", `0:${s.index}`);
     params.push(`-c:a:${index}`, "libopus");
     params.push(`-vbr:a:${index}`, "on");
-
-    let bitrate = "128k";
-    let title = "Stereo";    
 
     if (channels >= 8) {
         // Surround 7.1
@@ -304,19 +299,19 @@ export function getAudioParams(
         //params.push(`-filter:a:${index}`, "channelmap=map=0|1|2|3|4|5|6|7:channel_layout=7.1");
         params.push(`-filter:a:${index}`, "channelmap=channel_layout=7.1");
         params.push(`-mapping_family:a:${index}`, "1");
-        params.push(`-metadata:s:a:${index}`, `title=Surround 7.1 (Opus)`);
+        params.push(`-metadata:s:a:${index}`, `title=${languageTitle} Surround 7.1 (Opus)`);
         
     } else if (channels >= 6) {
         params.push(`-b:a:${index}`, "320k");
         //params.push(`-filter:a:${index}`, "aformat=channel_layouts=5.1");
         params.push(`-filter:a:${index}`, "channelmap=channel_layout=5.1");
         params.push(`-mapping_family:a:${index}`, "1");
-        params.push(`-metadata:s:a:${index}`, `title=Surround 5.1 (Opus)`);
+        params.push(`-metadata:s:a:${index}`, `title=${languageTitle} Surround 5.1 (Opus)`);
         
     } else {
         // Stereo o inferior
         params.push(`-b:a:${index}`, "128k");
-        params.push(`-metadata:s:a:${index}`, `title=Stereo (Opus)`);
+        params.push(`-metadata:s:a:${index}`, `title=${languageTitle} Stereo (Opus)`);
     }
 
     // 3. Lenguaje
@@ -336,8 +331,13 @@ const MIN_SUBTITLE_CUES = 100;
 const HEARING_IMPAIRED_MARKERS = ['sdh', 'cc'];
 const HEARING_IMPAIRED_PHRASES = ['hearing impaired', 'hearing-impaired'];
 
+// REQ-12/REQ-18: L2 in .claude/agents/ffmpeg.md — endonym-style and
+// incomplete on purpose. A language not covered here falls back to its
+// ISO-639-2 code (see trackLanguageTitle below); filling it in is a
+// question for the user, never a guess.
 const languageTitles: Record<string, string> = {
   eng: 'English',
+  spa: 'Español',
 };
 
 function isTextSubtitle(stream: any): boolean {
@@ -367,13 +367,25 @@ function isHearingImpaired(stream: any): boolean {
   );
 }
 
-function subtitleTitle(stream: any): string {
+// REQ-12: one resolver, two callers — getAudioParams prefixes its layout
+// with this, getSubtitleParams uses it as the whole title. Detection is
+// unconditional (REQ-3): the same track reads the same way regardless of
+// who triggered the encode, never gated on what was requested.
+function trackLanguageTitle(stream: any): string {
   const lang = normalizeIso3(stream.tags?.language || 'und');
-  if (lang === 'spa') return isLatinAmericanSpanish(stream) ? 'Latino' : 'Español';
+  const variant = detectVariant(stream);
+  if (variant) {
+    const title = variantTitle(variant);
+    if (title) return title;
+  }
   return languageTitles[lang] ?? lang;
 }
 
-export function getSubtitleParams(subtitleStreams: any[], allowedLanguagesIso3: string[]) {
+export function getSubtitleParams(
+  subtitleStreams: any[],
+  allowedLanguagesIso3: string[],
+  allowedLanguageTags: string[],
+) {
   // Same list the caller resolved for getAudioParams (REQ-8 shares the one
   // allow-list with REQ-4 — see the assumption at the top of spec.md). Both
   // sides normalized for the same /B-vs-/T reason as the audio track match.
@@ -395,9 +407,20 @@ export function getSubtitleParams(subtitleStreams: any[], allowedLanguagesIso3: 
     );
     if (langStreams.length === 0) return;
 
+    // REQ-17: SDH runs first, so a hearing-impaired track can never become
+    // the variant match that discards a plain one, and stays when it is the
+    // only candidate.
     langStreams = preferring(langStreams, isHearingImpaired);
-    if (langCode === 'spa') {
-      langStreams = preferring(langStreams, (s) => !isLatinAmericanSpanish(s));
+
+    // REQ-4/REQ-5/REQ-6/REQ-15: unlike audio, subtitles are never reduced to
+    // one — every stream a matched variant survives with is kept, and so is
+    // every stream when nothing matches or no variant was requested at all.
+    const requestedForLang = requestedVariants(langCode, allowedLanguageTags);
+    if (requestedForLang.length > 0) {
+      const narrowed = narrowToVariants(langStreams, requestedForLang);
+      langStreams = narrowed.matched
+        ? narrowed.groups.flatMap((group) => group.streams)
+        : narrowed.streams;
     }
 
     selected.push(...langStreams);
@@ -413,7 +436,7 @@ export function getSubtitleParams(subtitleStreams: any[], allowedLanguagesIso3: 
   selected.forEach((s, index) => {
     params.push('-map', `0:${s.index}`);
     params.push(`-c:s:${index}`, 'srt');
-    params.push(`-metadata:s:s:${index}`, `title=${subtitleTitle(s)}`);
+    params.push(`-metadata:s:s:${index}`, `title=${trackLanguageTitle(s)}`);
   });
 
   return params;

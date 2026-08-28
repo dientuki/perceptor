@@ -13,6 +13,7 @@ function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
   return {
     originalLanguageIso3: 'eng',
     allowedLanguagesIso3: ['eng'],
+    allowedLanguageTags: ['en'],
     isLiveAction: true,
     ...overrides,
   };
@@ -144,6 +145,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       details({
         originalLanguageIso3: 'eng',
         allowedLanguagesIso3: ['eng', 'spa'],
+        allowedLanguageTags: ['en', 'es-419'],
       }),
     );
 
@@ -153,5 +155,23 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
     expect(args).toContain('0:2');
     expect(args.filter((a) => a === '-metadata:s:a:0').length).toBeGreaterThan(0);
     expect(args.filter((a) => a === '-metadata:s:a:1').length).toBeGreaterThan(0);
+  });
+
+  it('reaches getAudioParams/getSubtitleParams without throwing when allowedLanguageTags is present — no rule reads it yet', () => {
+    const metadata = {
+      streams: [
+        videoStream({ bit_rate: '8000000' }),
+        audioStream({ codec_name: 'ac3', tags: { language: 'eng' } }),
+      ],
+    };
+
+    expect(() =>
+      buildFfmpegCommand(
+        'Some.Movie.WEB-DL.mkv',
+        '/out/Some.Movie.WEB-DL.mkv',
+        metadata,
+        details({ allowedLanguageTags: ['en', 'es-419'] }),
+      ),
+    ).not.toThrow();
   });
 });

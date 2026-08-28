@@ -1,11 +1,15 @@
 {
-  "title": "Sub latino, Latin American in title beats unmarked Spanish; SDH English dropped",
+  "title": "Requested es-419 beats unmarked Spanish; SDH English dropped; every audio title names its language",
   "input": {
     "file": "/downloads/Widows Bay S01E01.mkv",
     "output": "/media/Shows/Widows Bay/Season 01/Widows Bay - S01E01.mkv",
     "allowedLanguagesIso3": [
       "eng",
       "spa"
+    ],
+    "allowedLanguageTags": [
+      "en",
+      "es-419"
     ],
     "originalLanguageIso3": "eng",
     "isLiveAction": true
@@ -705,7 +709,7 @@
     "-b:a:0", "320k",
     "-filter:a:0", "channelmap=channel_layout=5.1",
     "-mapping_family:a:0", "1",
-    "-metadata:s:a:0", "title=Surround 5.1 (Opus)",
+    "-metadata:s:a:0", "title=English Surround 5.1 (Opus)",
     "-metadata:s:a:0", "language=eng",
     "-map", "0:2",
     "-c:s:0", "srt",

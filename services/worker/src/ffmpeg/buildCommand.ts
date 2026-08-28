@@ -50,8 +50,13 @@ export function buildFfmpegCommand(
     "-loglevel",
     "error",
     ...getVideoParams(vStream, details.isLiveAction, quality),
-    ...getAudioParams(aStreams, details.allowedLanguagesIso3, details.originalLanguageIso3),
-    ...getSubtitleParams(sStreams, details.allowedLanguagesIso3),
+    ...getAudioParams(
+      aStreams,
+      details.allowedLanguagesIso3,
+      details.originalLanguageIso3,
+      details.allowedLanguageTags,
+    ),
+    ...getSubtitleParams(sStreams, details.allowedLanguagesIso3, details.allowedLanguageTags),
     "-map_metadata:g",
     "-1",
   ];

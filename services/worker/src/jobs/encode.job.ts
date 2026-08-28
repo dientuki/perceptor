@@ -19,6 +19,7 @@ export type EncodeJobDetails = {
   originalLanguage: string;
   originalLanguageIso3: string;
   allowedLanguagesIso3: string[];
+  allowedLanguageTags: string[];
   isLiveAction: boolean;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -62,7 +63,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedLanguagesIso3 isLiveAction
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedLanguagesIso3 allowedLanguageTags isLiveAction
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
       }
@@ -75,7 +76,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   }
 
   console.log(
-    `[encode] ${processJobId}: allowedLanguagesIso3=${JSON.stringify(details.allowedLanguagesIso3)} originalLanguageIso3=${details.originalLanguageIso3}`,
+    `[encode] ${processJobId}: allowedLanguagesIso3=${JSON.stringify(details.allowedLanguagesIso3)} allowedLanguageTags=${JSON.stringify(details.allowedLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3}`,
   );
 
   let encodeCompleted: EncodeCompletedResult | undefined;
@@ -132,6 +133,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       {
         originalLanguageIso3: details.originalLanguageIso3,
         allowedLanguagesIso3: details.allowedLanguagesIso3,
+        allowedLanguageTags: details.allowedLanguageTags ?? [],
         isLiveAction: details.isLiveAction,
       },
       onProgress,

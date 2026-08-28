@@ -6,6 +6,7 @@
 export type EncodeInput = {
   originalLanguageIso3: string;
   allowedLanguagesIso3: string[];
+  allowedLanguageTags: string[];
   isLiveAction: boolean;
 };
 

@@ -49,6 +49,7 @@ const PROCESS_JOB_DETAILS = {
   originalLanguage: 'en',
   originalLanguageIso3: 'eng',
   allowedLanguagesIso3: ['eng'],
+  allowedLanguageTags: ['en'],
   isLiveAction: true,
   seasonNumber: null,
   episodeNumber: null,
@@ -149,6 +150,56 @@ describe('handleEncode — encodeFailed reporting (018-ui-i18n REQ-11)', () => {
 
     expect(variables.key).toBe(ERROR_ENCODE_UNEXPECTED);
     expect(JSON.parse(variables.params as string)).toEqual({ detail: 'plain string rejection' });
+  });
+});
+
+// Defends the payload seam of 031-worker-language-variants (worker/plan.md
+// § Steps 1-3): `allowedLanguageTags` is a third hand-retyped field with no
+// compiler across the GraphQL boundary, and the top row of `../plan.md`
+// § Risks is exactly this field arriving `undefined` and the regional
+// preference silently doing nothing forever. These two cases pin that the
+// field reaches the driver, and that its absence degrades to `[]` (NFR-2)
+// rather than throwing or dropping the encode.
+describe('handleEncode — allowedLanguageTags payload seam (031-worker-language-variants)', () => {
+  function mockSuccessfulGraphQL(processJob: Record<string, unknown>) {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob });
+      }
+      if (query.includes('encodeCompleted')) {
+        return Promise.resolve({
+          encodeCompleted: {
+            message: 'ok',
+            removeTorrent: false,
+            deleteInputFile: false,
+            deleteDownloadPath: false,
+          },
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  it('passes allowedLanguageTags through to the encode() call unchanged', async () => {
+    mockSuccessfulGraphQL({ ...PROCESS_JOB_DETAILS, allowedLanguageTags: ['en', 'es-419'] });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+
+    await handleEncode(makeJob());
+
+    expect(encodeMock).toHaveBeenCalledTimes(1);
+    const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(details.allowedLanguageTags).toEqual(['en', 'es-419']);
+  });
+
+  it('degrades a processJob with no allowedLanguageTags to [] rather than throwing (NFR-2)', async () => {
+    const { allowedLanguageTags: _omit, ...withoutTags } = PROCESS_JOB_DETAILS;
+    mockSuccessfulGraphQL(withoutTags);
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+
+    await expect(handleEncode(makeJob())).resolves.toBeUndefined();
+
+    const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(details.allowedLanguageTags).toEqual([]);
   });
 });
 

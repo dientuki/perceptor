@@ -22,6 +22,7 @@ type CaseInput = {
   file: string;
   output: string;
   allowedLanguagesIso3: string[];
+  allowedLanguageTags?: string[];
   originalLanguageIso3: string;
   isLiveAction: boolean;
 };
@@ -60,6 +61,7 @@ function validate(fileName: string, raw: unknown): Case {
     file,
     output,
     allowedLanguagesIso3,
+    allowedLanguageTags,
     originalLanguageIso3,
     isLiveAction,
   } = input as Record<string, unknown>;
@@ -71,6 +73,13 @@ function validate(fileName: string, raw: unknown): Case {
     allowedLanguagesIso3.some((lang) => typeof lang !== 'string')
   ) {
     fail(fileName, 'input.allowedLanguagesIso3 must be an array of strings');
+  }
+  if (
+    allowedLanguageTags !== undefined &&
+    (!Array.isArray(allowedLanguageTags) ||
+      allowedLanguageTags.some((tag) => typeof tag !== 'string'))
+  ) {
+    fail(fileName, 'input.allowedLanguageTags must be an array of strings when present');
   }
   if (typeof originalLanguageIso3 !== 'string') {
     fail(fileName, 'input.originalLanguageIso3 must be a string');
@@ -158,6 +167,7 @@ describe('ffmpeg cases', () => {
     const { input } = parsed;
     const details = {
       allowedLanguagesIso3: input.allowedLanguagesIso3,
+      allowedLanguageTags: input.allowedLanguageTags ?? [],
       originalLanguageIso3: input.originalLanguageIso3,
       isLiveAction: input.isLiveAction,
     };

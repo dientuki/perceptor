@@ -6,8 +6,9 @@
 // one of the ways that used to happen silently: a language dropped because
 // nobody normalized ISO-639-2/B vs /T, a commentary track kept because the
 // blacklist wasn't applied before ranking, a missing original-language track
-// papered over with a copy-all fallback, or an image subtitle emitted as
-// text.
+// papered over with a copy-all fallback, an image subtitle emitted as text,
+// or (031-worker-language-variants) a regional Spanish preference applied
+// when nobody asked for it, or ignored when somebody did.
 
 import { describe, expect, it } from 'vitest';
 import { getAudioParams, getSubtitleParams, getVideoParams } from './params';
@@ -58,7 +59,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 3, tags: { language: 'eng' } }),
     ];
 
-    const params = getAudioParams(streams, ['jpn', 'spa', 'eng'], 'jpn');
+    const params = getAudioParams(streams, ['jpn', 'spa', 'eng'], 'jpn', []);
 
     expect(mapArgCount(params)).toBe(3);
   });
@@ -69,7 +70,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, tags: { language: 'eng' } }),
     ];
 
-    const params = getAudioParams(streams, ['jpn', 'spa', 'eng'], 'jpn');
+    const params = getAudioParams(streams, ['jpn', 'spa', 'eng'], 'jpn', []);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params).toContain('0:1');
@@ -82,7 +83,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, tags: { language: 'eng', title: 'Original' } }),
     ];
 
-    const params = getAudioParams(streams, ['eng'], 'eng');
+    const params = getAudioParams(streams, ['eng'], 'eng', []);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:2');
@@ -95,34 +96,137 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, codec_name: 'truehd', channels: 6, tags: { language: 'eng' } }),
     ];
 
-    const params = getAudioParams(streams, ['eng'], 'eng');
+    const params = getAudioParams(streams, ['eng'], 'eng', []);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:2');
   });
 
-  it('picks the Latino-titled Spanish track over another Spanish track', () => {
+  // REQ-6: with no requested variant, the Latino title carries no weight at
+  // all — quality decides alone, exactly as any other language. Rewritten
+  // from the pre-031 case that asserted the opposite (an unconditional
+  // Latino preference); the es-419-requested half below is what replaces it.
+  it('picks the higher-channel Spanish track over the Latino-titled one when no variant was requested (REQ-6, AC-7 rules half)', () => {
     const streams = [
-      audioStream({ index: 1, tags: { language: 'spa', title: 'Spanish (Spain)' } }),
-      audioStream({ index: 2, tags: { language: 'spa', title: 'Latino' } }),
+      audioStream({ index: 1, channels: 2, tags: { language: 'spa', title: 'Latino' } }),
+      audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'Spanish (Spain)' } }),
     ];
 
-    const params = getAudioParams(streams, ['spa'], 'spa');
+    const params = getAudioParams(streams, ['spa'], 'spa', []);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:2');
   });
 
-  it('throws naming the original iso3 when no track in the original language survives filtering', () => {
-    const streams = [audioStream({ index: 1, tags: { language: 'eng' } })];
+  // AC-5: the bare "es" tag is how a Spanish-original title reaches the
+  // worker with no variant chosen — TMDB's originalLanguage is "es", not a
+  // region-tagged es-419/es-ES. requestedVariants must read it as "no
+  // request", not as an unresolvable regional tag; only a tag carrying a
+  // region subtag ("-") is ever a variant request (REQ-2, REQ-6).
+  it('picks the 5.1 track over the Latino-titled one when only the bare "es" tag is present (AC-5)', () => {
+    const streams = [
+      audioStream({ index: 1, channels: 2, tags: { language: 'spa', title: 'Latino' } }),
+      audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'BTM' } }),
+    ];
 
-    expect(() => getAudioParams(streams, ['jpn', 'eng'], 'jpn')).toThrow(/jpn/);
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:2');
+    expect(params).not.toContain('0:1');
+  });
+
+  it('picks the Latino-titled Spanish track when es-419 is requested and it matches (AC-1)', () => {
+    const streams = [
+      audioStream({ index: 1, channels: 2, tags: { language: 'spa', title: 'Latino' } }),
+      audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'BTM' } }),
+    ];
+
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:1');
+    expect(params).not.toContain('0:2');
+  });
+
+  it('maps only the Latin American track when es-419 is requested against a Castellano-marked alternative (AC-2)', () => {
+    const streams = [
+      audioStream({ index: 1, channels: 2, tags: { language: 'spa', title: 'Latino' } }),
+      audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'Castellano' } }),
+    ];
+
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:1');
+    expect(params).not.toContain('0:2');
+  });
+
+  it('keeps every Spanish track when the requested es-ES variant matches nothing (REQ-5, AC-4)', () => {
+    const streams = [
+      audioStream({ index: 1, channels: 6, tags: { language: 'spa', title: 'BTM' } }),
+      audioStream({ index: 2, channels: 2, tags: { language: 'spa', title: 'Latino' } }),
+    ];
+
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-ES']);
+
+    expect(mapArgCount(params)).toBe(2);
+    expect(params).toContain('0:1');
+    expect(params).toContain('0:2');
+  });
+
+  it('maps one track per matched variant when both es-419 and es-ES are requested and present, each titled for its variant (AC-3)', () => {
+    const streams = [
+      audioStream({ index: 1, channels: 2, tags: { language: 'spa', title: 'Latino' } }),
+      audioStream({ index: 2, channels: 2, tags: { language: 'spa', title: 'Castellano' } }),
+    ];
+
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419', 'es-ES']);
+
+    expect(mapArgCount(params)).toBe(2);
+    expect(params).toContain('0:1');
+    expect(params).toContain('0:2');
+    expect(params).toContain('title=Latino Stereo (Opus)');
+    expect(params).toContain('title=Español (España) Stereo (Opus)');
+  });
+
+  // AC-3b: REQ-12 is not a Spanish rule and not a variant rule — a language
+  // the table does not cover falls back to its ISO-639-2 code, never to a
+  // language-less title. Filling the table for jpn is a guess this feature
+  // does not make (.claude/agents/ffmpeg.md § L2).
+  it('falls back to the ISO-639-2 code for a language the title table does not cover (AC-3b)', () => {
+    const streams = [audioStream({ index: 1, channels: 2, tags: { language: 'jpn' } })];
+
+    const params = getAudioParams(streams, ['jpn'], 'jpn', []);
+
+    expect(params).toContain('title=jpn Stereo (Opus)');
+  });
+
+  it('never lets a Latin-American-marked commentary track win a variant match (REQ-11 before REQ-4, AC-8)', () => {
+    const streams = [
+      audioStream({ index: 1, channels: 2, tags: { language: 'spa', title: 'Latino Commentary' } }),
+      audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'BTM' } }),
+    ];
+
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:2');
+    expect(params).not.toContain('0:1');
+  });
+
+  it('throws naming the original iso3 when no track in the original language survives filtering, variant narrowing notwithstanding (AC-6)', () => {
+    const streams = [
+      audioStream({ index: 1, tags: { language: 'spa', title: 'Latino' } }),
+    ];
+
+    expect(() => getAudioParams(streams, ['jpn', 'spa'], 'jpn', ['es-419'])).toThrow(/jpn/);
   });
 
   it('matches an allowed "fre" against a track tagged "fra" (ISO-639-2/T)', () => {
     const streams = [audioStream({ index: 1, tags: { language: 'fra' } })];
 
-    const params = getAudioParams(streams, ['fre'], 'fre');
+    const params = getAudioParams(streams, ['fre'], 'fre', []);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:1');
@@ -131,7 +235,7 @@ describe('getAudioParams', () => {
   it('matches an allowed "fra" against a track tagged "fre" (the reverse pairing)', () => {
     const streams = [audioStream({ index: 1, tags: { language: 'fre' } })];
 
-    const params = getAudioParams(streams, ['fra'], 'fra');
+    const params = getAudioParams(streams, ['fra'], 'fra', []);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:1');
@@ -144,7 +248,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, codec_name: 'hdmv_pgs_subtitle', tags: { language: 'eng' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng']);
+    const params = getSubtitleParams(streams, ['eng'], []);
 
     expect(params).toEqual([]);
   });
@@ -154,7 +258,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, tags: { language: 'eng', BPS: '1' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng']);
+    const params = getSubtitleParams(streams, ['eng'], []);
 
     expect(params).toEqual([]);
   });
@@ -164,7 +268,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, tags: { language: 'eng', title: 'FORCED' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng']);
+    const params = getSubtitleParams(streams, ['eng'], []);
 
     expect(params).toContain('title=English');
   });
@@ -180,7 +284,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'eng', title: 'English' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng']);
+    const params = getSubtitleParams(streams, ['eng'], []);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:5');
@@ -191,7 +295,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, tags: { language: 'eng', title: 'SDH' }, disposition: { hearing_impaired: 1 } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng']);
+    const params = getSubtitleParams(streams, ['eng'], []);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:4');
@@ -203,22 +307,102 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'BTM' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa']);
+    const params = getSubtitleParams(streams, ['spa'], []);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params.filter((arg) => arg === 'title=Español')).toHaveLength(2);
   });
 
-  it('does not read "la" out of the middle of a word when looking for a Latin American marker', () => {
+  // REQ-6/REQ-15: with no requested variant, nothing narrows a subtitle
+  // language at all — both streams survive, undetected or not. Rewritten
+  // from the pre-031 case that asserted an unconditional Latino preference;
+  // the es-419-requested half below is what replaces it and keeps the
+  // word-boundary assertion (the "LA" spelling that a substring match would
+  // have missed).
+  it('keeps every Spanish subtitle when no variant was requested, regardless of a Latin American marker (REQ-6)', () => {
     const streams = [
       subtitleStream({ index: 4, tags: { language: 'spa', title: 'Balaclava' } }),
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'Español LA' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa']);
+    const params = getSubtitleParams(streams, ['spa'], []);
+
+    expect(mapArgCount(params)).toBe(2);
+    expect(params).toContain('0:4');
+    expect(params).toContain('0:5');
+  });
+
+  it('does not read "la" out of the middle of a word when es-419 is requested', () => {
+    const streams = [
+      subtitleStream({ index: 4, tags: { language: 'spa', title: 'Balaclava' } }),
+      subtitleStream({ index: 5, tags: { language: 'spa', title: 'Español LA' } }),
+    ];
+
+    const params = getSubtitleParams(streams, ['spa'], ['es-419']);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:5');
     expect(params).toContain('title=Latino');
+  });
+
+  it('maps only the Castellano SRT when es-ES is requested against a Latino alternative, titled Español (España) (AC-9)', () => {
+    const streams = [
+      subtitleStream({ index: 4, tags: { language: 'spa', title: 'Castellano' } }),
+      subtitleStream({ index: 5, tags: { language: 'spa', title: 'Latino' } }),
+    ];
+
+    const params = getSubtitleParams(streams, ['spa'], ['es-ES']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:4');
+    expect(params).not.toContain('0:5');
+    expect(params).toContain('title=Español (España)');
+  });
+
+  it('drops the SDH Latino track before variant narrowing, keeping the plain one (REQ-17, AC-10)', () => {
+    const streams = [
+      subtitleStream({ index: 4, tags: { language: 'spa', title: 'Latino SDH' } }),
+      subtitleStream({ index: 5, tags: { language: 'spa', title: 'Latino' } }),
+    ];
+
+    const params = getSubtitleParams(streams, ['spa'], ['es-419']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:5');
+    expect(params).not.toContain('0:4');
+  });
+
+  it('keeps a Latino SDH track when it is the only Spanish subtitle in the file (REQ-17, AC-11)', () => {
+    const streams = [
+      subtitleStream({
+        index: 4,
+        tags: { language: 'spa', title: 'Latino SDH' },
+        disposition: { hearing_impaired: 1 },
+      }),
+    ];
+
+    const params = getSubtitleParams(streams, ['spa'], ['es-419']);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:4');
+  });
+
+  it('never lets variant narrowing drop the original-language subtitle (REQ-14, AC-12)', () => {
+    const streams = [
+      subtitleStream({ index: 4, tags: { language: 'eng', title: 'English' } }),
+      subtitleStream({ index: 5, tags: { language: 'spa', title: 'BTM' } }),
+    ];
+
+    const params = getSubtitleParams(streams, ['eng', 'spa'], ['es-ES']);
+
+    expect(mapArgCount(params)).toBe(2);
+    expect(params).toContain('0:4');
+    expect(params).toContain('0:5');
+  });
+
+  it('builds a valid, empty subtitle argument list when the file has no subtitle stream at all (REQ-13, AC-13)', () => {
+    const params = getSubtitleParams([], ['eng'], []);
+
+    expect(params).toEqual([]);
   });
 });

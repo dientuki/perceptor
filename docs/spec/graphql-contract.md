@@ -488,7 +488,8 @@ and `src/encode/types.ts`'s `EncodeInput` — miss one and the field silently ar
 which the rule functions would read as "keep the original language only," no error anywhere.
 
 `EncodeJobDetails.allowedLanguageTags` is the same merge, expressed in tags instead of resolved to
-ISO-639-2/B — added by `030-language-regional-variants`, additive and unread by the worker this cycle.
+ISO-639-2/B — added by `030-language-regional-variants` and consumed by the worker since
+`031-worker-language-variants`.
 It exists because the collapse to `iso3` is lossy by design: `es-419` and `es-ES` both resolve to
 `spa`, so `allowedLanguagesIso3` alone cannot tell the worker which Spanish variant, if any, was
 actually asked for. `allowedLanguageTags` preserves that. It is **not** a superset that makes
@@ -501,8 +502,13 @@ resolves a title's `originalLanguage` (ISO-639-1) to `{ tag, iso3 }` via `resolv
 single lookup **keyed by `tag`** rather than `iso2` — a base row's tag is its ISO-639-1 code by
 construction, so this is exact, unlike a lookup on the now-non-unique `iso2`, which could return a
 variant row instead of the base one and open every Spanish-original title's `allowedLanguageTags` with
-a variant nobody chose. The worker does not read `allowedLanguageTags` yet; teaching it to is
-explicitly out of scope for `030-language-regional-variants` and left to a follow-up spec.
+a variant nobody chose. `031-worker-language-variants` is the follow-up `030` left this to: the
+worker now reads the tags and uses them to choose *which* Spanish track to keep. It resolves
+`es-419`/`es-ES` → `spa` from a worker-local table (`services/worker/src/ffmpeg/variants.ts`), in the
+same spirit as `iso639.ts`, because the payload carries two flat lists and not the tag→`iso3`
+association — only `api` holds the `languages` table that links them. Moving `{ tag, iso3 }` pairs
+onto the wire would remove that duplication and is the right move the day a third language grows
+variants; it stayed out of scope for two table rows.
 
 A missing original-language audio track is a hard failure (`encodeFailed`, no new GraphQL surface) —
 replacing the previous behaviour of silently copying every audio track untranscoded. A missing *extra*
