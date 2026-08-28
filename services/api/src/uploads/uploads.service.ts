@@ -208,6 +208,16 @@ export class UploadsService implements OnModuleInit {
 
       const destPath = await this.moveUploadedFile(upload.id, rawPath, filename);
 
+      // 027-replace-completed-media: an authorised replacement demotes the
+      // source it supersedes *before* the replacement row exists — the same
+      // demote-on-force EpisodesService.attachTorrentSource does for a
+      // forced torrent. Without it the superseded READY/SCANNED row is still
+      // a live sibling, and resolveRace below reads it as "this target
+      // already has a winner" and drops the upload the user just confirmed
+      // (AC-7). Only the finished rows are demoted: a still-downloading
+      // sibling is a legitimate competitor that resolveRace pauses itself.
+      await this.demoteSupersededSources({ episodeId }, upload.id);
+
       const mediaSource = await this.prisma.mediaSource.create({
         data: {
           kind: 'LOCAL_FILE',
@@ -259,6 +269,9 @@ export class UploadsService implements OnModuleInit {
 
     const destPath = await this.moveUploadedFile(upload.id, rawPath, filename);
 
+    // Same demotion as the episode branch above — see its comment.
+    await this.demoteSupersededSources({ movieId }, upload.id);
+
     const mediaSource = await this.prisma.mediaSource.create({
       data: {
         kind: 'LOCAL_FILE',
@@ -287,6 +300,34 @@ export class UploadsService implements OnModuleInit {
     await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
 
     console.log(`[uploads] ${upload.id}: completado -> mediaSource ${mediaSource.id}, encolado`);
+  }
+
+  // Shared by both branches of handleUploadFinish. Runs only for an upload
+  // whose ticket authorised a replacement (REQ-7: the ticket's own decision,
+  // never tus metadata), and demotes exactly the finished sources of the
+  // target — READY/SCANNED, the two statuses DownloadsService.resolveRace
+  // treats as an existing winner. A DOWNLOADING/QUEUED/PAUSED sibling is
+  // deliberately left alone: it is a racer, and resolveRace stops and pauses
+  // it as one.
+  private async demoteSupersededSources(
+    target: { movieId: number } | { episodeId: number },
+    uploadId: string,
+  ): Promise<void> {
+    if (!(await this.uploadTickets.isReplaceAuthorised(uploadId))) return;
+
+    const { count } = await this.prisma.mediaSource.updateMany({
+      where: { ...target, status: { in: ['READY', 'SCANNED'] } },
+      data: {
+        status: 'ERROR',
+        errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+        errorKey: ERROR_KEYS.SOURCE_REPLACED,
+        errorParams: null,
+      },
+    });
+
+    if (count > 0) {
+      console.log(`[uploads] ${uploadId}: ${count} source(s) anterior(es) marcada(s) ERROR por reemplazo`);
+    }
   }
 
   // Shared by both branches of handleUploadFinish: re-reads path_downloads

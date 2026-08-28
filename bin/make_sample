@@ -22,25 +22,22 @@ fi
 
 echo "Input:      $INPUT"
 echo "Output:     $OUTPUT"
-echo "Inicio:     ~5 minutos"
+echo "Inicio:     ~50 minutos"
 echo "Duración:   60 segundos"
-echo "Resolución: máximo 1024x768"
+echo "Resolución: Copy"
 echo
 
 if ffmpeg \
     -hide_banner -threads 0 -loglevel error \
     -stats \
     -y \
-    -ss 300 \
+    -ss 3000 \
     -i "$INPUT" \
     -t 60 \
     -map 0 \
     -map_metadata 0 \
     -map_chapters 0 \
-    -vf "scale=1024:768:force_original_aspect_ratio=decrease" \
-    -c:v libx264 \
-    -preset veryfast \
-    -crf 18 \
+    -c:v copy \
     -c:a copy \
     -c:s copy \
     -c:d copy \
