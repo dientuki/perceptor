@@ -12,6 +12,7 @@ interface MediaCardProps {
   showLink: boolean; // Nueva propiedad para controlar si se muestra el enlace
   mediaType?: (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
   showTypeBadge?: boolean; // Opt-in: a mixed grid needs it, a single-type grid doesn't
+  showMeta?: boolean; // Opt-in: hide title/overview/year when the card renders its own caption
 }
 
 export function MediaCard({
@@ -20,6 +21,7 @@ export function MediaCard({
   showLink,
   mediaType,
   showTypeBadge = false,
+  showMeta = true,
 }: MediaCardProps) {
   const t = useTranslations("media.card");
   // Read from the item's own type, never the `mediaType` prop — on a mixed
@@ -75,23 +77,25 @@ export function MediaCard({
       {renderAction && renderAction(item)}
 
       {/* Info */}
-      <div className="mt-3 px-1">
-        <h3
-          className="line-clamp-2 font-semibold text-black dark:text-white"
-          title={item.title}
-        >
-          {item.title}
-        </h3>
-        {item.overview && (
-          <p
-            className="line-clamp-3 text-xs text-gray-500 dark:text-gray-400"
-            title={item.overview}
+      {showMeta && (
+        <div className="mt-3 px-1">
+          <h3
+            className="line-clamp-2 font-semibold text-black dark:text-white"
+            title={item.title}
           >
-            {item.overview}
-          </p>
-        )}
-        <p className="text-xs text-gray-500 dark:text-gray-400">{year}</p>
-      </div>
+            {item.title}
+          </h3>
+          {item.overview && (
+            <p
+              className="line-clamp-3 text-xs text-gray-500 dark:text-gray-400"
+              title={item.overview}
+            >
+              {item.overview}
+            </p>
+          )}
+          <p className="text-xs text-gray-500 dark:text-gray-400">{year}</p>
+        </div>
+      )}
     </div>
   );
 }

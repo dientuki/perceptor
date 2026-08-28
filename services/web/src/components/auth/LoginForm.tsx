@@ -14,7 +14,7 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || "/dashboard";
+  const redirectTo = searchParams.get("redirect") || "/";
 
   // Enlazamos el argumento a la acción
   const loginWithRedirect = loginAction.bind(null, redirectTo);

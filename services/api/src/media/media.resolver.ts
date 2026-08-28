@@ -1,6 +1,7 @@
 import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { MediaDispatchService } from './media-dispatch.service';
 import { MediaSearchService } from './media-search.service';
+import { PopularMediaService } from './popular-media.service';
 import { MediaSearchResult } from './entities/media-search-result.entity';
 import { MediaRef } from './entities/media-ref.entity';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
@@ -11,6 +12,7 @@ export class MediaResolver {
   constructor(
     private readonly mediaDispatch: MediaDispatchService,
     private readonly mediaSearch: MediaSearchService,
+    private readonly popularMediaService: PopularMediaService,
   ) {}
 
   // The global JwtAuthGuard already requires a credential; neither operation
@@ -35,6 +37,17 @@ export class MediaResolver {
   ) {
     const userId = principal.type === 'user' ? principal.id : '';
     return this.mediaSearch.searchAll(query, userId);
+  }
+
+  // Deliberately no @AllowService() and no @Public(): this query requires a
+  // real user session, never the worker/qBittorrent service token (NFR-2).
+  @Query(() => [MediaSearchResult], { name: 'popularMedia' })
+  async popularMedia(
+    @Args('type') type: string,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.popularMediaService.list(type, userId);
   }
 
   @Mutation(() => MediaRef, { name: 'addMedia' })

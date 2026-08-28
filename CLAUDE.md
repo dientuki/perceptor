@@ -17,7 +17,7 @@ implementation detail.
 | Scan files, inventory | `worker` — enumerates every file, resolves episodes by parsing `SxxEyy`; episode names come from the api, never the filename | `013` |
 | Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K downscaled to 1080p preserving HDR (Dolby Vision/HDR10 keep their colour tags rather than flattening to SDR), Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode. Optional per installation — an administrator can turn compression off from Settings, in which case the file is still renamed and moved to its destination, just never touched by FFmpeg | `011`, `013`, `024`, `031`, `032` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`) | — |
-| Browse library | `api` — the three resolvers; `web` — `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010` |
+| Browse library | `api` — the three resolvers; `web` — `/`, the billboard, plus `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010`, `033` |
 
 Two gaps worth knowing: acquiring a **season pack** is api-only (`addMagnetToSeason`), with no web
 UI; and every listing/detail route is scoped to the calling user — a title another user owns answers
@@ -202,8 +202,9 @@ a worked example, written after the fact against a feature that shipped.
 
 All three services typecheck clean (0 errors) and `bin/npm web run build` exits 0, measured
 2026-08-27 after `028-users-screen-refactor`. Test counts then: `api` 217/23 suites, `worker`
-93/12 — both remeasured 2026-08-28 after `032-optional-compression`: `api` 249/26 suites, `worker`
-140/15 suites.
+93/12 — remeasured 2026-08-28 after `032-optional-compression`: `api` 249/26 suites, `worker`
+140/15 suites — and again 2026-08-28 after `033-billboard-and-navigation`: `api` 256/28 suites
+(`worker` untouched by that feature).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

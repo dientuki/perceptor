@@ -40,7 +40,7 @@ export async function loginAction(
   const password = formData.get("password");
   const rememberMe = formData.get("rememberMe") === "on";
   const destination =
-    redirectTo && redirectTo.startsWith("/") ? redirectTo : "/dashboard";
+    redirectTo && redirectTo.startsWith("/") ? redirectTo : "/";
 
   try {
     const { data, errors } = await fetchGraphQL(LOGIN_MUTATION, {

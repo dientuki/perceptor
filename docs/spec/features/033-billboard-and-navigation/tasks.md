@@ -1,7 +1,7 @@
 ---
 title: Billboard and Navigation — Tasks
 last_updated: 2026-08-28
-status: Draft
+status: Done
 ---
 
 # TASKS: Billboard and Navigation (`tasks.md`)
@@ -26,7 +26,7 @@ cannot diverge. Group 3 is the only part that needs `api` live.
 
 ### Group 1 — the contract (`api`)
 
-- [ ] **T001** `[api] [P]` Add `MEDIA_CATALOG_UNAVAILABLE: 'error.media.catalog_unavailable'` to
+- [x] **T001** `[api] [P]` Add `MEDIA_CATALOG_UNAVAILABLE: 'error.media.catalog_unavailable'` to
       `services/api/src/i18n/error-keys.ts`, in the "movies, shows, seasons, episodes" block beside
       `MEDIA_UNSUPPORTED_TYPE`, and its template to `services/api/src/i18n/messages.en.ts`:
       `Could not reach the catalog. Check the TMDB API key.` The key string is frozen in
@@ -34,7 +34,7 @@ cannot diverge. Group 3 is the only part that needs `api` live.
       *Done when:* `bin/npm api test` is green, including the existing `messages.en.spec.ts` parity
       suite, which fails if a key has no template.
 
-- [ ] **T002** `[api] [P]` Add the TMDB popular reach. New
+- [x] **T002** `[api] [P]` Add the TMDB popular reach. New
       `services/api/src/clients/tmdb/popular.ts`: pure `mapPopularMovies(rows: TmdbMovie[])` /
       `mapPopularShows(rows: TmdbShow[])` returning the catalog-only `MediaSearchResult` from
       `@/clients/types`, mapping exactly as `MoviesService.search`/`ShowsService.search` already do
@@ -50,7 +50,7 @@ cannot diverge. Group 3 is the only part that needs `api` live.
       *Done when:* `bin/cli api npx --no tsc --noEmit` is clean and `bin/npm api test` is green with
       no change to any existing search test — `search`, `searchMulti` and `details` are untouched.
 
-- [ ] **T003** `[api]` Add `services/api/src/media/popular-media.service.ts`, modelled on
+- [x] **T003** `[api]` Add `services/api/src/media/popular-media.service.ts`, modelled on
       `media-search.service.ts`. `list(type, userId)` runs, in this order and only this order:
       `mediaDispatch.resolve(type)` (throws for an unsupported type before anything else);
       `resolveCatalogLocale(userId)` — the caller's `User.uiLocale`, else the `ui_locale` setting via
@@ -74,7 +74,7 @@ cannot diverge. Group 3 is the only part that needs `api` live.
       produces `tmdb:popular:movie:es` while `en` produces `tmdb:popular:movie:en`, each with its own
       TTL (AC-12).
 
-- [ ] **T004** `[api]` Add `services/api/src/media/popular-media.service.spec.ts`, opening with the
+- [x] **T004** `[api]` Add `services/api/src/media/popular-media.service.spec.ts`, opening with the
       paragraph naming the three silent failures it defends against. Fault-inject each case — it
       must be verified to fail when the rule is removed. (1) **Ownership never reaches the shared
       list cache**: the string handed to Redis parses to rows carrying neither `mediaId` nor
@@ -87,7 +87,7 @@ cannot diverge. Group 3 is the only part that needs `api` live.
       *Done when:* `bin/npm api test` is green with the new suite counted, and each case has been
       observed to fail under its injection (AC-9, AC-11, AC-12).
 
-- [ ] **T005** `[docs] [P]` Record the delta in `docs/spec/graphql-contract.md`: a new section for
+- [x] **T005** `[docs] [P]` Record the delta in `docs/spec/graphql-contract.md`: a new section for
       `033-billboard-and-navigation` carrying `popularMedia(type:)`, why it reuses
       `MediaSearchResult` rather than a leaner type, that it has **no `language` argument** because
       `api` resolves the locale itself and a client-supplied one would unbound the cache-key space,
@@ -101,7 +101,7 @@ cannot diverge. Group 3 is the only part that needs `api` live.
 
 Runs in parallel with Group 1 — nothing here selects a new GraphQL field. Sequential within itself.
 
-- [ ] **T006** `[web] [P]` Update both message catalogs, same keys in each: `nav.billboard`
+- [x] **T006** `[web] [P]` Update both message catalogs, same keys in each: `nav.billboard`
       (`Browse` / `Cartelera`), `nav.movies` (`My movies` / `Mis películas`), `nav.shows`
       (`My series` / `Mis series`), `nav.downloads` (`Downloads` / `Descargas`); remove
       `nav.dashboard`, `nav.queue` and the whole `pages.dashboard` block; add `pages.billboard`
@@ -112,7 +112,7 @@ Runs in parallel with Group 1 — nothing here selects a new GraphQL field. Sequ
       *Done when:* `bin/cli web node scripts/check-messages.mjs` exits 0, and
       `grep -rn '"dashboard"\|"queue"' services/web/messages/` returns nothing.
 
-- [ ] **T007** `[web]` Rewrite the entry list in `services/web/src/layout/AppSidebar.tsx`: Cartelera
+- [x] **T007** `[web]` Rewrite the entry list in `services/web/src/layout/AppSidebar.tsx`: Cartelera
       `/` (`Popcorn`), Mis películas `/movies` (`Film`), Mis series `/shows` (`TvMinimal`),
       Calendario `/calendar` (`Calendar`), Descargas `/downloads` (`Download` — `LayoutList` is
       currently on two entries at once), then the admin-only Settings and Users as today. Relabel
@@ -123,7 +123,7 @@ Runs in parallel with Group 1 — nothing here selects a new GraphQL field. Sequ
       one navigates to a page that renders; signed in as a regular user Settings and Users are absent
       and the other five still resolve (AC-1).
 
-- [ ] **T008** `[web]` Move the routes. Create `services/web/src/app/(dashboard)/page.tsx` — for now
+- [x] **T008** `[web]` Move the routes. Create `services/web/src/app/(dashboard)/page.tsx` — for now
       the page furniture only (`generateMetadata` + `PageBreadcrumb` from `pages.billboard`, no
       carousels; T013 fills it) — and delete `src/app/(dashboard)/dashboard/`. Move
       `src/app/page.tsx` to `src/app/perceptor/page.tsx` with **no content change**; it stays outside
@@ -135,7 +135,7 @@ Runs in parallel with Group 1 — nothing here selects a new GraphQL field. Sequ
       answers 404, `/perceptor` renders the landing hero, and `/calendar` and `/downloads` answer 200
       with an empty content area for a regular user (AC-13).
 
-- [ ] **T009** `[web]` Retarget the three redirect destinations. `services/web/src/proxy.ts`:
+- [x] **T009** `[web]` Retarget the three redirect destinations. `services/web/src/proxy.ts`:
       `PUBLIC_ROUTES` becomes `["/perceptor", "/terms", "/privacy"]` and the authenticated bounce off
       `/login` targets `/`. `services/web/src/actions/auth.ts`'s post-login fallback and
       `services/web/src/components/auth/LoginForm.tsx`'s `redirect` fallback both become `/`. All
@@ -150,14 +150,14 @@ Runs in parallel with Group 1 — nothing here selects a new GraphQL field. Sequ
 
 T012 and T013 consume the contract, so they wait on T003. T010 and T011 are pure UI and do not.
 
-- [ ] **T010** `[web] [P]` Add an opt-in `showMeta = true` prop to
+- [x] **T010** `[web] [P]` Add an opt-in `showMeta = true` prop to
       `services/web/src/components/media/MediaCard.tsx`: when false the `{/* Info */}` block —
       title, overview, year — does not render. Change nothing else, and thread nothing through
       `MediaList.tsx`; no existing call site passes the flag.
       *Done when:* `bin/cli web npx --no tsc --noEmit` is clean and `/search`, `/movies`, `/shows`,
       `/movies/add` and `/shows/add` look exactly as they did.
 
-- [ ] **T011** `[web] [P]` Add `services/web/src/components/media/MediaCarousel.tsx`, a client
+- [x] **T011** `[web] [P]` Add `services/web/src/components/media/MediaCarousel.tsx`, a client
       component taking a heading and children. The strip is one element with `flex`,
       `overflow-x-auto`, `overscroll-x-contain`, `snap-x snap-mandatory`, `scroll-smooth` and the
       existing `no-scrollbar` utility from `globals.css`; each child is `snap-start` at a fixed
@@ -175,7 +175,7 @@ T012 and T013 consume the contract, so they wait on T003. T010 and T011 are pure
       (AC-6); and `git diff services/web/package.json services/web/package-lock.json` shows no added
       dependency (AC-7).
 
-- [ ] **T012** `[web]` Add `getPopularMedia(type: MediaType)` to
+- [x] **T012** `[web]` Add `getPopularMedia(type: MediaType)` to
       `services/web/src/actions/media.ts`, selecting the same field set the two search documents
       select. It is awaited during a Server Component render pass, so the auth branch is
       `redirectToClearSession`, **not** `redirectIfUnauthenticated` — `searchAllMedia` in the same
@@ -185,7 +185,7 @@ T012 and T013 consume the contract, so they wait on T003. T010 and T011 are pure
       *Done when:* `bin/cli web npx --no tsc --noEmit` is clean and the action returns 20 items for
       each type against the running `api`.
 
-- [ ] **T013** `[web]` Render the billboard. Add
+- [x] **T013** `[web]` Render the billboard. Add
       `services/web/src/components/billboard/PopularCarousel.tsx` — the client half of one strip:
       `items`, a heading and an optional `initialError`, owning `addingId`/`addedMediaIds` exactly as
       `MultiSearchResults.tsx` does, computing `owned` as
@@ -209,7 +209,7 @@ T012 and T013 consume the contract, so they wait on T003. T010 and T011 are pure
 
 ### Group 4 — verification and docs
 
-- [ ] **T014** `[docs]` Update the `CLAUDE.md` files this feature falsifies. `services/api/CLAUDE.md`:
+- [x] **T014** `[docs]` Update the `CLAUDE.md` files this feature falsifies. `services/api/CLAUDE.md`:
       the `media/` module map entry gains `popularMedia` and its list cache, and the sentence in
       § "Errors carry a translation key" asserting that **`api` never reads `uiLocale` itself** is now
       false — it reads it to pick TMDB's `language`, still never to translate. `services/web/CLAUDE.md`:
@@ -221,7 +221,7 @@ T012 and T013 consume the contract, so they wait on T003. T010 and T011 are pure
       *Done when:* no sentence in any `CLAUDE.md` still says `api` never reads `uiLocale`, still calls
       `/dashboard` a route, or still describes `/` as the public landing.
 
-- [ ] **T015** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack, tick
+- [x] **T015** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack, tick
       each box, and set `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md` and
       `web/plan.md`. Re-measure the `api` test count rather than citing the root `CLAUDE.md`'s.
       → T014

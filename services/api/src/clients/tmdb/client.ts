@@ -1,13 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import {
   TmdbSearchResponse,
+  TmdbMovie,
   TmdbMovieDetails,
+  TmdbShow,
   TmdbShowDetails,
   TmdbSeasonDetails,
   TmdbMultiSearchResult,
 } from './types';
 import { mapMultiSearchResults } from './multi';
-import { MovieDBClient, MediaDetail, ShowDetail, MovieDetail, EpisodeDetail } from '@/clients/types';
+import { mapPopularMovies, mapPopularShows } from './popular';
+import { MovieDBClient, MediaDetail, MediaSearchResult, ShowDetail, MovieDetail, EpisodeDetail } from '@/clients/types';
 import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { HTTP_METHOD } from '@/types/http';
 import { SettingsService } from '@/settings/settings.service';
@@ -79,11 +82,12 @@ const mappers = {
 export class TmdbClient implements MovieDBClient {
   constructor(private readonly settings: SettingsService) {}
 
-  private async fetchPage<T>(endpoint: string, query: string, page: number = 1): Promise<T[]> {
+  private async fetchResults<T>(endpoint: string, params: Record<string, string>): Promise<T[]> {
     const config = await this.settings.getMap();
     const urlPath = new URL(`${config.movie_db_api_version}/${endpoint}`, config.movie_db_host);
-    urlPath.searchParams.set("query", query);
-    urlPath.searchParams.set("page", page.toString());
+    for (const [key, value] of Object.entries(params)) {
+      urlPath.searchParams.set(key, value);
+    }
 
     const res = await fetch(urlPath.toString(), this.options(config.movie_db_api_key));
 
@@ -93,6 +97,10 @@ export class TmdbClient implements MovieDBClient {
 
     const data = (await res.json()) as TmdbSearchResponse<T>;
     return data.results || [];
+  }
+
+  private async fetchPage<T>(endpoint: string, query: string, page: number = 1): Promise<T[]> {
+    return this.fetchResults<T>(endpoint, { query, page: page.toString() });
   }
 
   private async fetchOne<T>(endpoint: string): Promise<T> {
@@ -126,6 +134,20 @@ export class TmdbClient implements MovieDBClient {
   async searchMulti(query: string, page: number = 1) {
     const rows = await this.fetchPage<TmdbMultiSearchResult>('search/multi', query, page);
     return mapMultiSearchResults(rows);
+  }
+
+  // https://developer.themoviedb.org/reference/movie-popular-list
+  // https://developer.themoviedb.org/reference/tv-series-popular-list
+  async popular(type: MediaType, language: string): Promise<MediaSearchResult[]> {
+    const endpoint = `${TMDB_ENDPOINT[type]}/popular`;
+
+    if (type === MEDIA_TYPE.MOVIE) {
+      const rows = await this.fetchResults<TmdbMovie>(endpoint, { language, page: '1' });
+      return mapPopularMovies(rows);
+    }
+
+    const rows = await this.fetchResults<TmdbShow>(endpoint, { language, page: '1' });
+    return mapPopularShows(rows);
   }
 
   async details(thing: MediaType, id: number): Promise<MediaDetail> {

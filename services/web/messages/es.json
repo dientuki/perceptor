@@ -30,6 +30,10 @@
     "movie": {
       "already_completed": "Esta película ya está descargada. Confirmá para reemplazar el archivo actual."
     },
+    "media": {
+      "catalog_unavailable": "No se pudo consultar el catálogo. Revisá la API key de TMDB.",
+      "unsupported_type": "Tipo de medio no soportado: {type}"
+    },
     "episode": {
       "already_completed": "Este episodio ya está descargado. Confirmá para reemplazar el archivo actual."
     },
@@ -85,11 +89,11 @@
     "illustrationAlt": "Robot transformable estilo retro, decoración"
   },
   "nav": {
-    "dashboard": "Panel",
-    "movies": "Películas",
-    "shows": "Series",
+    "billboard": "Cartelera",
+    "movies": "Mis películas",
+    "shows": "Mis series",
     "calendar": "Calendario",
-    "queue": "Cola",
+    "downloads": "Descargas",
     "settings": "Configuración",
     "users": "Usuarios"
   },
@@ -116,8 +120,10 @@
     "toggleSidebar": "Alternar barra lateral"
   },
   "pages": {
-    "dashboard": {
-      "placeholder": "Panel"
+    "billboard": {
+      "title": "Cartelera",
+      "metadataTitle": "Cartelera | Perceptor",
+      "metadataDescription": "Películas y series populares"
     },
     "movies": {
       "title": "Películas",
@@ -243,6 +249,10 @@
       "noFilterMatch": "Ningún resultado coincide con el filtro.",
       "noResultsYet": "Todavía no hay resultados. Probá buscar un release específico."
     }
+  },
+  "billboard": {
+    "moviesHeading": "Películas populares",
+    "showsHeading": "Series populares"
   },
   "media": {
     "card": {

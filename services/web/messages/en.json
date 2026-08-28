@@ -30,6 +30,10 @@
     "movie": {
       "already_completed": "This movie is already downloaded. Confirm to replace the current file."
     },
+    "media": {
+      "catalog_unavailable": "Could not query the catalog. Check the TMDB API key.",
+      "unsupported_type": "Unsupported media type: {type}"
+    },
     "episode": {
       "already_completed": "This episode is already downloaded. Confirm to replace the current file."
     },
@@ -85,11 +89,11 @@
     "illustrationAlt": "Retro-styled transformable robot, decorative"
   },
   "nav": {
-    "dashboard": "Dashboard",
-    "movies": "Movies",
-    "shows": "Series",
+    "billboard": "Browse",
+    "movies": "My movies",
+    "shows": "My series",
     "calendar": "Calendar",
-    "queue": "Queue",
+    "downloads": "Downloads",
     "settings": "Settings",
     "users": "Users"
   },
@@ -116,8 +120,10 @@
     "toggleSidebar": "Toggle Sidebar"
   },
   "pages": {
-    "dashboard": {
-      "placeholder": "Dashboard"
+    "billboard": {
+      "title": "Browse",
+      "metadataTitle": "Browse | Perceptor",
+      "metadataDescription": "Popular movies and series"
     },
     "movies": {
       "title": "Movies",
@@ -243,6 +249,10 @@
       "noFilterMatch": "No results match your filter.",
       "noResultsYet": "No results yet. Try searching for a specific release."
     }
+  },
+  "billboard": {
+    "moviesHeading": "Popular movies",
+    "showsHeading": "Popular series"
   },
   "media": {
     "card": {

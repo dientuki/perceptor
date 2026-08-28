@@ -135,6 +135,10 @@ Route gating is in `src/proxy.ts`: a cheap **presence check** on the cookie, red
 unauthenticated requests away from protected routes and authenticated ones away from `/login`
 (`AUTH_ROUTES`/`PUBLIC_ROUTES` define the exceptions). The real enforcement point is `api`'s global
 guard — `src/app/(dashboard)/layout.tsx` calls `getCurrentUser()` (the `me` query) server-side.
+Since `033-billboard-and-navigation`, `PUBLIC_ROUTES` is `["/perceptor", "/terms", "/privacy"]` —
+the original landing hero moved from `/` to `/perceptor`, out of every route group, so it stays
+reachable without a session; `/` is now the billboard, inside `(dashboard)`, behind the same guard
+as every other authenticated screen. An authenticated request to `/login` bounces to `/`.
 
 ### `redirectIfUnauthenticated` vs `redirectToClearSession` — not interchangeable
 
@@ -149,9 +153,19 @@ difference is **cookie mutation, which is legal only from a Server Action or a R
   `getMediaServerOptions`, `getMovieById`, `getShowById`, `getMovies`, `getShows`, `getLanguages`.
 
 Getting this wrong is not a style bug. Cookie mutation *throws* during a render pass; and without the
-real deletion, `proxy.ts`'s presence-only check bounces `/login` straight back to `/dashboard` on the
+real deletion, `proxy.ts`'s presence-only check bounces `/login` straight back to `/` on the
 stale cookie — a loop, not a fix. **Pick based on where the call actually happens, not by copying the
 nearest example**, and re-derive it if you move a fetch between server and client.
+
+**`Promise.allSettled` needs `unstable_rethrow` on every rejection before you look at it.**
+`(dashboard)/page.tsx` (`033-billboard-and-navigation`) fetches both billboard carousels with
+`Promise.allSettled([getPopularMedia("movie"), getPopularMedia("show")])`, since one list's TMDB
+outage must not blank the other. `redirectToClearSession` (above) throws Next's internal redirect
+signal to work — and `allSettled` swallows *any* rejection into a settled `"rejected"` result,
+redirect included, which would strand a stale session on a permanent "catalog unavailable" screen
+instead of bouncing it to `/login`. Call `unstable_rethrow(result.reason)` (`next/navigation`) on
+every rejected settlement first; only a rejection that survives that call is a real catalog
+failure, safe to render as `initialError` in that carousel's strip.
 
 ## Admin user management
 
@@ -231,6 +245,27 @@ film, `bg-purple-500` for a series; text from the message catalog) only when ask
 threaded through `MediaList.tsx` and **defaults off**, so `/movies`, `/shows`, `/movies/add` and
 `/shows/add` are unaffected. The badge reads `item.type`, never the `mediaType` prop, since on a
 mixed grid that prop is one value for cards of two kinds.
+
+`MediaCard.tsx` also carries a `showMeta` prop since `033-billboard-and-navigation`, default `true`;
+`false` hides the whole title/overview/year block. Nothing threads it through `MediaList.tsx` and no
+existing call site passes it — only the billboard's carousel cards (poster, badge and action only, no
+text) set it `false`.
+
+## The billboard (`/`, `033-billboard-and-navigation`)
+
+`/` is the app's home screen once signed in — `src/app/(dashboard)/page.tsx`, two carousels fetched
+via `getPopularMedia(type)` (`src/actions/media.ts`, backing `popularMedia` — `redirectToClearSession`
+since it runs during the page's render pass, per the auth section above). `src/components/media/
+MediaCarousel.tsx` is a dependency-free, natively-scrolling strip (`overflow-x-auto` + CSS scroll-snap
++ the shared `no-scrollbar` utility) with two arrow buttons that page by whole cards, measured off the
+first child, never hardcoded — **do not add a carousel library**; this component and the
+`Promise.allSettled`/`unstable_rethrow` pairing above are the two things a future carousel screen
+should reuse rather than reinvent. `src/components/billboard/PopularCarousel.tsx` is the client half
+per strip: owns `addingId`/`addedMediaIds` exactly as `MultiSearchResults.tsx` does, computes `owned`
+the same way (`inLibrary` or added this session, never `mediaId` alone), and renders `MediaCard
+showMeta={false} showTypeBadge showLink={false}` per item with the shared `MediaResultAction`. A
+failed list renders its translated `errors.media.catalog_unavailable` message in the strip's place
+without affecting the other carousel.
 
 `SearchInput.tsx`'s submit button is the shared `Button` (`src/components/ui/button/Button.tsx`,
 `bg-brand-500`), not a hand-rolled element — a `bg-primary` class silently compiles to nothing, since

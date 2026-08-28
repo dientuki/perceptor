@@ -2,7 +2,7 @@
 title: Billboard and Navigation — api slice
 service: api
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Billboard and Navigation — `api` (`api/plan.md`)

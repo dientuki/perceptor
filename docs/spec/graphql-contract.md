@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.7.0
+spec_version: 1.8.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-27
+last_updated: 2026-08-28
 status: Approved
 target_service: api, web, worker
 ---
@@ -720,7 +720,7 @@ The full vocabulary, by owner:
 | :-- | :-- |
 | `api` — auth | `error.auth.unauthenticated`, `error.auth.session_expired`, `error.auth.invalid_credentials`, `error.auth.account_disabled`, `error.auth.admin_required` |
 | `api` — users | `error.user.username_taken`, `error.user.not_found`, `error.user.cannot_disable_self`, `error.user.cannot_disable_last_admin`, `error.user.cannot_delete_self`, `error.user.cannot_delete_last_admin`, `error.user.unsupported_locale` |
-| `api` — movies/shows/seasons/episodes | `error.movie.not_found`, `error.movie.not_in_catalog`, `error.movie.download_in_progress`, `error.show.not_available`, `error.show.not_in_catalog`, `error.season.not_found`, `error.season.download_in_progress`, `error.episode.not_found`, `error.episode.download_in_progress`, `error.magnet.already_attached`, `error.media.unsupported_type` |
+| `api` — movies/shows/seasons/episodes | `error.movie.not_found`, `error.movie.not_in_catalog`, `error.movie.download_in_progress`, `error.show.not_available`, `error.show.not_in_catalog`, `error.season.not_found`, `error.season.download_in_progress`, `error.episode.not_found`, `error.episode.download_in_progress`, `error.magnet.already_attached`, `error.media.unsupported_type`, `error.media.catalog_unavailable` (`033-billboard-and-navigation`) |
 | `api` — magnet parsing | `error.magnet.not_a_magnet`, `error.magnet.invalid_infohash`, `error.magnet.v2_unsupported` |
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
 | `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.indexer.unavailable`, `error.indexer.no_infohash` |
@@ -1004,6 +1004,71 @@ The error vocabulary gained one worker-owned key, added to the "encode pipeline"
 `error.encode.move_failed` (`No se pudo mover el archivo al destino: {detail}`), reported through
 `encodeFailed` exactly like any other encode failure — the job ends `FAILED`, the source file is
 left in place, and no final-named file exists at the destination.
+
+### The billboard's popular lists (`033-billboard-and-navigation`)
+
+```graphql
+type Query {
+  """
+  Page 1 of TMDB's popular list for `type` ("movie" | "show"), 20 items, in the
+  order TMDB returns them. Cached for 24h per type and UI language; `mediaId`
+  and `inLibrary` are computed per caller, after the cache write.
+  """
+  popularMedia(type: String!): [MediaSearchResult!]!
+}
+```
+
+`popularMedia` returns `MediaSearchResult` — the same type `searchMedia`/`searchAllMedia` already
+return — rather than a leaner, purpose-built type. The billboard card renders only a poster, a type
+badge and the existing add/go action, but reusing the search result type means `web` retypes
+nothing new and the carousel card reuses `MediaResultAction` unchanged; a narrower type would still
+carry `mediaId`/`inLibrary` (the fields the action needs) plus whatever else it took to describe a
+poster, at which point it is the same shape by another name. Fields the card does not render
+(`title`, `releaseDate`, `overview`, `status`) are still populated — the card choosing not to show
+them is a `web` decision, not a contract one.
+
+**`popularMedia` takes no `language` argument.** Unlike `searchMedia`, which searches whatever the
+caller typed, the popular list is resolved entirely server-side: `api` reads the calling user's
+effective UI language (`User.uiLocale` → `defaultUiLocale` → `en`, the same order `018-ui-i18n`/
+`029-settings-screen-tabs` already established) and requests TMDB in that language itself. A
+client-supplied language argument was considered and rejected — it would let any caller mint an
+arbitrary cache key (`tmdb:popular:<type>:<anything>`), unbounding the cache-key space the 24-hour
+TTL is meant to keep small (REQ-12). The set of languages actually cached stays exactly the set of
+`uiLocale`/`defaultUiLocale` values in use on the installation.
+
+**The result is cached in Redis for a day, keyed `tmdb:popular:<type>:<lang>`** — `<type>` is
+`movie`/`show`, `<lang>` is the resolved UI language, so `es` and `en` (or any other supported
+locale) each keep their own entry and their own TTL, alongside the existing per-title
+`tmdb:movie:<tmdbId>`/`tmdb:<type>:<tmdbId>` caches `006-media-search` established. The same
+catalog-only invariant applies: what is written to Redis carries no `mediaId` and no `inLibrary` —
+those are computed per caller **after** the cache write, exactly the cache-before-enrich ordering
+`005-movie-search`/`006-media-search` already owe on `searchMedia`. Enriching before the write would
+leak one user's library into what every other user (and every other day's visitors, for the rest of
+the TTL) sees for that language. A cache miss, an expired entry, or an unreachable Redis falls
+through to a live TMDB call rather than failing the screen — a Redis failure here is invisible to
+the caller, logged, and never turns into a GraphQL error.
+
+`popularMedia` requires an ordinary user credential like `searchMedia`; it is not exempted for the
+`SERVICE_TOKEN` principal, and adds no anonymous surface — `defaultUiLocale` stays the only
+`@Public()` field.
+
+One key is added to the error vocabulary, in the "movies/shows/seasons/episodes" row below:
+`error.media.catalog_unavailable`, thrown as a `ServiceUnavailableException` when TMDB is
+unreachable, rejects the configured key, or answers something that is not the JSON popular-list
+shape. `error.media.unsupported_type` — already in the vocabulary from `006-media-search` — covers
+the same refusal `popularMedia` gives a `type` outside `"movie"`/`"show"`, thrown before any TMDB or
+Redis call is made. `web` fetches the two lists independently, so a failing list renders the
+translated `error.media.catalog_unavailable` copy inside that carousel's strip while the other
+carousel renders normally; an `UnauthorizedException` goes through `redirectToClearSession`, not
+`redirectIfUnauthenticated` — the billboard's fetch runs during a Server Component render pass,
+where mutating cookies is illegal, so it hands off to the Route Handler instead, exactly as
+`searchAllMedia` already does in `src/actions/media.ts`.
+
+Consumer obligations: `web` adds a `popularMedia` server action alongside `searchMedia`'s, retyping
+the same `MediaSearchResult` shape it already has in `src/actions/media.ts`, using
+`redirectToClearSession` for the same render-pass reason, and renders each list's own error
+independently rather than failing the whole billboard on one carousel. `worker` has no obligation;
+it never queries `popularMedia`.
 
 ### The one non-GraphQL route
 

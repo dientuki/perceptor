@@ -38,6 +38,7 @@ export const ERROR_KEYS = {
   EPISODE_ALREADY_COMPLETED: 'error.episode.already_completed',
   MAGNET_ALREADY_ATTACHED: 'error.magnet.already_attached',
   MEDIA_UNSUPPORTED_TYPE: 'error.media.unsupported_type',
+  MEDIA_CATALOG_UNAVAILABLE: 'error.media.catalog_unavailable',
 
   // magnet parsing (services/api/src/clients/torrent/magnet.ts)
   MAGNET_NOT_A_MAGNET: 'error.magnet.not_a_magnet',

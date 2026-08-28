@@ -6,7 +6,7 @@ import { CONFIG } from "@/lib/config";
 const AUTH_ROUTES = ["/login"];
 
 // Rutas explícitamente públicas (ejemplo: landing, términos, etc.)
-const PUBLIC_ROUTES = ["/", "/terms", "/privacy"];
+const PUBLIC_ROUTES = ["/perceptor", "/terms", "/privacy"];
 
 export function proxy(request: NextRequest) {
   const token = request.cookies.get(CONFIG.authCookie)?.value;
@@ -27,7 +27,7 @@ export function proxy(request: NextRequest) {
 
   // 2. Con token intentando entrar a Login, Register, Forgot Password, etc. -> Redirigir a la app
   if (isAuthRoute && token) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();

@@ -46,7 +46,10 @@ unchanged (no invented key). `main.ts`'s `exceptionFactory` (above) also underst
 This service **only ever produces English** — translating a key into another language is `web`'s
 job (`docs/spec/graphql-contract.md` § "UI internationalization" has the full vocabulary and the
 error envelope shape). `User.uiLocale`, `Query.supportedLocales` and `Mutation.setUiLocale` exist
-so `web` can resolve and persist the active locale; `api` never reads `uiLocale` itself.
+so `web` can resolve and persist the active locale. **Since `033-billboard-and-navigation`, `api`
+does read `uiLocale` itself** — `PopularMediaService` resolves it (falling back to the `ui_locale`
+setting, then `en`) to pick TMDB's `language` for the popular lists, never to translate anything;
+every error this service throws is still English-only.
 
 ## Prisma 7 via driver adapter
 
@@ -98,7 +101,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   original ordered rows keyed by `${type}:${id}` — never the bare id, which collides across types.
   Cache keys, endpoints, error strings and Prisma models stay private to each per-type
   implementation by design. A third media type costs one new service plus one lookup entry, not an
-  edit to the dispatch.
+  edit to the dispatch. Since `033-billboard-and-navigation`, `popular-media.service.ts` is a third
+  fan-out beside `media-search.service.ts`: `PopularMediaService.list(type, userId)` backs the
+  `popularMedia` query behind the billboard's two carousels, resolving the caller's UI language
+  first, then reading/writing a day-long `tmdb:popular:<type>:<lang>` list cache (via
+  `TmdbClient.popular()`) before running the same `cacheAndEnrich` ownership step every other entry
+  point uses — the cache write happens strictly before enrichment, same ordering trap as
+  `movies/`'s below. A TMDB failure here surfaces as `error.media.catalog_unavailable`
+  (`ServiceUnavailableException`), a new key in `error-keys.ts`.
 - **`movies/`** — CRUD over `Movie`, plus `search`/`register` (implementing `MediaTypeService`) and
   `addTorrentToMovie`/`addMagnetToMovie`, the two entry points into the download pipeline. `Movie` is
   a **shared catalog row** (`tmdbId @unique`, never duplicated) joined to `User` through `UserMovie`.

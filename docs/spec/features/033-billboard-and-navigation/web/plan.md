@@ -2,7 +2,7 @@
 title: Billboard and Navigation — web slice
 service: web
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Billboard and Navigation — `web` (`web/plan.md`)

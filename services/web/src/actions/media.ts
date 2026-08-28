@@ -83,6 +83,42 @@ export async function searchAllMedia(
   return data?.searchAllMedia ?? [];
 }
 
+const POPULAR_MEDIA_QUERY = `
+  query PopularMedia($type: String!) {
+    popularMedia(type: $type) {
+      id
+      title
+      releaseDate
+      posterUrl
+      originalLanguage
+      overview
+      type
+      mediaId
+      inLibrary
+    }
+  }
+`;
+
+// Awaited during the billboard's Server Component render pass — cookie
+// mutation is illegal there, so an auth failure hands off to the Route
+// Handler via redirectToClearSession instead of redirectIfUnauthenticated
+// (which mutates cookies and is only legal from a Server Action / Route
+// Handler context).
+export async function getPopularMedia(
+  type: MediaType,
+): Promise<MediaSearchResult[]> {
+  const { data, errors } = await fetchGraphQL<{
+    popularMedia: MediaSearchResult[];
+  }>(POPULAR_MEDIA_QUERY, { type });
+
+  if (errors && errors.length > 0) {
+    redirectToClearSession(errors);
+    throw new Error(await translateGraphQLError(errors[0]));
+  }
+
+  return data?.popularMedia ?? [];
+}
+
 const ADD_MEDIA_MUTATION = `
   mutation AddMedia($tmdbId: Int!, $type: String!) {
     addMedia(tmdbId: $tmdbId, type: $type) {

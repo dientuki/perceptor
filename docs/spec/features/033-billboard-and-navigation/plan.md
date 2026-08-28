@@ -2,7 +2,7 @@
 title: Billboard and Navigation — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Billboard and Navigation (`plan.md`)

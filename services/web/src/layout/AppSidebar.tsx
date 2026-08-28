@@ -2,11 +2,12 @@
 
 import {
   Calendar,
+  CloudDownload,
   Film,
-  LayoutList,
   Popcorn,
+  Settings,
+  Settings2,
   TvMinimal,
-  Users,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -36,7 +37,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
   const baseNavItems: NavItem[] = [
     {
       icon: <Popcorn />,
-      name: t("dashboard"),
+      name: t("billboard"),
       path: "/",
     },
     {
@@ -55,9 +56,9 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
       path: "/calendar",
     },
     {
-      icon: <LayoutList />,
-      name: t("queue"),
-      path: "/quenue",
+      icon: <CloudDownload />,
+      name: t("downloads"),
+      path: "/downloads",
     },
   ];
 
@@ -69,8 +70,8 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
     ? [
         ...baseNavItems,
         //icon: <UserCircleIcon />,
-        { icon: <LayoutList />, name: t("settings"), path: "/settings" },
-        { icon: <Users />, name: t("users"), path: "/users" },
+        { icon: <Settings />, name: t("settings"), path: "/settings" },
+        { icon: <Settings2 />, name: t("users"), path: "/users" },
       ]
     : baseNavItems;
 

@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-08-28
 last_updated: 2026-08-28
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -184,50 +184,50 @@ with a TTL, which is a cache and not a schema.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Signed in, the sidebar lists Cartelera, Mis películas, Mis series, Calendario and
+- [x] **AC-1**: Signed in, the sidebar lists Cartelera, Mis películas, Mis series, Calendario and
       Descargas in that order; each one navigates to a page that renders (no 404). Signed in as an
       administrator, Settings and Users follow them; signed in as a regular user, they are absent.
-- [ ] **AC-2**: Signing in with no `redirectTo` lands on `/`, which shows two carousels. Requesting
+- [x] **AC-2**: Signing in with no `redirectTo` lands on `/`, which shows two carousels. Requesting
       `/dashboard` afterwards answers 404. Clicking the sidebar logo stays on `/`.
-- [ ] **AC-3 (failure path)**: With the browser holding no session cookie, requesting `/` ends at
+- [x] **AC-3 (failure path)**: With the browser holding no session cookie, requesting `/` ends at
       `/login`. Requesting `/perceptor` in the same state renders the landing hero with its
       "Ingresar" button and no sidebar.
-- [ ] **AC-4**: The films carousel holds 20 cards; each shows a poster and a badge, and neither the
+- [x] **AC-4**: The films carousel holds 20 cards; each shows a poster and a badge, and neither the
       title nor the year appears anywhere on the card. A card for a title the user does not own
       offers add; pressing it registers the title and the same card offers go without a reload;
       reloading `/` shows go for that card.
-- [ ] **AC-5**: With a pointing device alone — trackpad swipe, touch drag or shift+wheel, arrows
+- [x] **AC-5**: With a pointing device alone — trackpad swipe, touch drag or shift+wheel, arrows
       untouched — the films carousel reaches its twentieth card, the page itself never scrolls
       sideways, and no scrollbar is drawn under the strip. Pressing the next arrow once advances by
       whole cards and leaves none clipped at either edge.
-- [ ] **AC-6**: At the strip's left end the previous arrow is present but inert; dragging to the
+- [x] **AC-6**: At the strip's left end the previous arrow is present but inert; dragging to the
       right end without touching the arrows leaves the next arrow inert and the previous one live.
-- [ ] **AC-7**: `git diff services/web/package.json services/web/package-lock.json` for this feature
+- [x] **AC-7**: `git diff services/web/package.json services/web/package-lock.json` for this feature
       shows no added dependency.
-- [ ] **AC-8**: Loading `/` once, then
+- [x] **AC-8**: Loading `/` once, then
       `bin/cli redis redis-cli --scan --pattern 'tmdb:popular:*'` lists one key per list, and
       `bin/cli redis redis-cli ttl <key>` returns a value at or just under `86400`. Reloading `/`
       several times leaves the TTL counting down from that first load — it is not refreshed, and
       `api`'s log shows no further TMDB request.
-- [ ] **AC-9**: `bin/cli redis redis-cli get tmdb:popular:movie:<lang>` returns a payload with no
+- [x] **AC-9**: `bin/cli redis redis-cli get tmdb:popular:movie:<lang>` returns a payload with no
       `inLibrary` and no `mediaId` field, while the GraphQL response for the same load has
       `inLibrary` set per the calling user. Signing in as a second user who owns none of those
       titles shows every card as add, with the same TTL still counting down.
-- [ ] **AC-10 (failure path)**: With `movie_db_api_key` set to an invalid value and the popular cache
+- [x] **AC-10 (failure path)**: With `movie_db_api_key` set to an invalid value and the popular cache
       flushed (`bin/cli redis redis-cli --scan --pattern 'tmdb:popular:*' | xargs -r bin/cli redis
       redis-cli del`), `/` still renders with its sidebar and header, and each carousel strip shows
       the translated `error.media.catalog_unavailable` copy instead of cards. Restoring the key and
       reloading fills both carousels.
-- [ ] **AC-11 (failure path)**: A `popularMedia(type: "person")` call is refused with
+- [x] **AC-11 (failure path)**: A `popularMedia(type: "person")` call is refused with
       `error.media.unsupported_type`, and `bin/cli redis redis-cli --scan --pattern
       'tmdb:popular:person*'` lists nothing — the type was rejected before anything was fetched or
       written.
-- [ ] **AC-12**: With the user's `uiLocale` set to `es`, `/` produces `tmdb:popular:movie:es`;
+- [x] **AC-12**: With the user's `uiLocale` set to `es`, `/` produces `tmdb:popular:movie:es`;
       switching that user to `en` and reloading produces `tmdb:popular:movie:en` alongside it, and
       both keys keep their own TTL.
-- [ ] **AC-13**: `/calendar` and `/downloads` answer 200 for a regular user and render an empty
+- [x] **AC-13**: `/calendar` and `/downloads` answer 200 for a regular user and render an empty
       content area — no heading, no breadcrumb, no placeholder text — inside the normal shell.
-- [ ] **AC-14**: `bin/npm web run build` exits 0, `bin/npm api run test` is green, and
+- [x] **AC-14**: `bin/npm web run build` exits 0, `bin/npm api run test` is green, and
       `grep -rn 'quenue\|"/dashboard"' services/web/src` returns nothing — the route-group directory
       `(dashboard)/` keeps its name, only the URL is gone.
 

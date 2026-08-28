@@ -42,6 +42,7 @@ export const MESSAGES_EN: Record<string, string> = {
     'This episode is already downloaded. Confirm to replace the current file.',
   [ERROR_KEYS.MAGNET_ALREADY_ATTACHED]: 'That magnet is already attached to «{title}»',
   [ERROR_KEYS.MEDIA_UNSUPPORTED_TYPE]: 'Unsupported media type: {type}',
+  [ERROR_KEYS.MEDIA_CATALOG_UNAVAILABLE]: 'Could not reach the catalog. Check the TMDB API key.',
 
   // magnet parsing
   [ERROR_KEYS.MAGNET_NOT_A_MAGNET]: 'That does not look like a magnet link',
