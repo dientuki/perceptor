@@ -6,7 +6,7 @@ import {
   Film,
   Popcorn,
   Settings,
-  Settings2,
+  Users,
   TvMinimal,
 } from "lucide-react";
 import Image from "next/image";
@@ -71,7 +71,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
         ...baseNavItems,
         //icon: <UserCircleIcon />,
         { icon: <Settings />, name: t("settings"), path: "/settings" },
-        { icon: <Settings2 />, name: t("users"), path: "/users" },
+        { icon: <Users />, name: t("users"), path: "/users" },
       ]
     : baseNavItems;
 
