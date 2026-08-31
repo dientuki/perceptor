@@ -723,7 +723,7 @@ The full vocabulary, by owner:
 | `api` — movies/shows/seasons/episodes | `error.movie.not_found`, `error.movie.not_in_catalog`, `error.movie.download_in_progress`, `error.show.not_available`, `error.show.not_in_catalog`, `error.season.not_found`, `error.season.download_in_progress`, `error.episode.not_found`, `error.episode.download_in_progress`, `error.magnet.already_attached`, `error.media.unsupported_type`, `error.media.catalog_unavailable` (`033-billboard-and-navigation`) |
 | `api` — magnet parsing | `error.magnet.not_a_magnet`, `error.magnet.invalid_infohash`, `error.magnet.v2_unsupported` |
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
-| `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.indexer.unavailable`, `error.indexer.no_infohash` |
+| `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash` |
 | `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.processJob.not_found` |
 | `api` — ffprobe-logs | `error.ffprobeLog.not_found`, `error.ffprobeLog.empty_payload` |
 | `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
@@ -1069,6 +1069,43 @@ the same `MediaSearchResult` shape it already has in `src/actions/media.ts`, usi
 `redirectToClearSession` for the same render-pass reason, and renders each list's own error
 independently rather than failing the whole billboard on one carousel. `worker` has no obligation;
 it never queries `popularMedia`.
+
+### The media-server index is admin-only and rebuilt out of band (`034-jellyfin-library-reconciliation`)
+
+```graphql
+type MediaServerIndexStatus {
+  """never | syncing | ready | failed — `never` also covers a media server set to `none`."""
+  state: String!
+  itemCount: Int!
+  syncedAt: DateTime
+}
+
+type Query {
+  mediaServerIndexStatus: MediaServerIndexStatus!
+}
+
+type Mutation {
+  resyncMediaServerIndex: MediaServerIndexStatus!
+}
+```
+
+Both operations carry their own `@UseGuards(AdminGuard)`, the `ffprobe-logs.resolver.ts` per-method
+precedent — the existing `mediaServerClients` query stays unguarded, so the guard is not lifted to
+class level. `state` is a plain `String!`, not a GraphQL enum, for the same reason `Movie.status`
+and `Show.status` already cross as strings: a value the client doesn't recognize yet must not fail
+to parse.
+
+`resyncMediaServerIndex` returns **immediately** — it starts the rebuild detached and answers with
+`readState()` as it stands at that moment, not after the rebuild finishes. A rebuild already in
+flight is not an error: calling it again while `state` is `syncing` simply returns the in-progress
+status a second time. Calling it while the configured client is `none` or has no host throws
+`error.mediaServer.not_configured`.
+
+**`addMedia` is unchanged**, and `Movie`, `Show` and `Episode` gain no field. The reconciliation
+this index exists to support is invisible on the wire — a newly registered title's status reflects
+what the media server already holds, but there is no new field a consumer reads to find that out;
+it is the same `status` column `addMedia`'s caller already re-fetches. Nothing in `web` or `worker`
+observes `MediaServerIndexStatus` except the Settings screen's own read/resync round trip.
 
 ### The one non-GraphQL route
 

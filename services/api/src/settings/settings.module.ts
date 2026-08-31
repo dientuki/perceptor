@@ -6,10 +6,19 @@ import { ProwlarrClient } from '@/clients/indexer/client';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { MediaRootsModule } from '@/media-roots/media-roots.module';
 import { LanguagesModule } from '@/languages/languages.module';
+import { MediaServerIndexModule } from '@/media-server-index/media-server-index.module';
 
 @Module({
-  imports: [MediaRootsModule, LanguagesModule],
-  providers: [SettingsResolver, SettingsService, TmdbClient, ProwlarrClient, QbittorrentClient],
+  // MediaServerIndexModule — the leaf, never MediaServerModule, which
+  // already imports SettingsModule and would make the pair circular.
+  imports: [MediaRootsModule, LanguagesModule, MediaServerIndexModule],
+  providers: [
+    SettingsResolver,
+    SettingsService,
+    TmdbClient,
+    ProwlarrClient,
+    QbittorrentClient,
+  ],
   exports: [SettingsService, TmdbClient, ProwlarrClient, QbittorrentClient],
 })
 export class SettingsModule {}

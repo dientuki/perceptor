@@ -4,7 +4,10 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
 import { getLanguages } from "@/actions/languages";
 import { getMediaRoots } from "@/actions/media-roots";
-import { getMediaServerOptions } from "@/actions/media-server";
+import {
+  getMediaServerIndexStatus,
+  getMediaServerOptions,
+} from "@/actions/media-server";
 import { getSettings } from "@/actions/settings";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import SettingsForm from "@/components/settings/SettingsForm";
@@ -31,11 +34,12 @@ export default async function SettingsPage() {
     notFound();
   }
 
-  const [settings, mediaRoots, mediaServerOptions, languages] =
+  const [settings, mediaRoots, mediaServerOptions, mediaServerIndexStatus, languages] =
     await Promise.all([
       getSettings(),
       getMediaRoots(),
       getMediaServerOptions(),
+      getMediaServerIndexStatus(),
       getLanguages(),
     ]);
 
@@ -49,6 +53,7 @@ export default async function SettingsPage() {
               settings={settings}
               mediaRoots={mediaRoots}
               mediaServerOptions={mediaServerOptions}
+              mediaServerIndexStatus={mediaServerIndexStatus}
               languages={languages}
             />
           </div>

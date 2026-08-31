@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-31
 last_updated: 2026-08-31
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -260,48 +260,48 @@ Out of Scope.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a Jellyfin with a library of identified films, when an administrator sets
+- [x] **AC-1**: Given a Jellyfin with a library of identified films, when an administrator sets
       `media_server_client` to `jellyfin` with a valid host and key and saves, then
       `bin/mysql -e 'select count(*) from media_server_items'` returns a non-zero count within the
       rebuild's timeout, and the Media Server tab shows the entry count and a timestamp.
-- [ ] **AC-2**: Given that index, when the user adds "Rambo" and Jellyfin holds it, then the film's
+- [x] **AC-2**: Given that index, when the user adds "Rambo" and Jellyfin holds it, then the film's
       card and detail page show `COMPLETED`, and
       `bin/mysql -e "select status, filePath from movies where title='Rambo'"` returns `COMPLETED`
       with `filePath` `NULL`.
-- [ ] **AC-3**: Given Jellyfin does not hold "Rocky", when the user adds it, then it shows `MISSING`
+- [x] **AC-3**: Given Jellyfin does not hold "Rocky", when the user adds it, then it shows `MISSING`
       and `bin/mysql -e "select status from movies where title='Rocky'"` returns `MISSING`.
-- [ ] **AC-4**: Given Jellyfin holds the series "Dexter" with only S01E01 as a real file, when the
+- [x] **AC-4**: Given Jellyfin holds the series "Dexter" with only S01E01 as a real file, when the
       user adds "Dexter" and the season hydration finishes, then the detail page shows S01E01 as
       `COMPLETED` and every other episode as `MISSING`;
       `bin/mysql -e "select count(*) from episodes e join seasons s on s.id=e.seasonId join shows sh on sh.id=s.showId where sh.title='Dexter' and e.status='COMPLETED'"`
       returns `1`.
-- [ ] **AC-5**: Given files added to Jellyfin after the index was built, when the administrator presses
+- [x] **AC-5**: Given files added to Jellyfin after the index was built, when the administrator presses
       Re-sync in the Media Server tab and then adds one of those titles, then the title reconciles to
       `COMPLETED` (REQ-3, REQ-18).
-- [ ] **AC-6**: Given `mediaType` is half the index key, when the library contains both a film and a
+- [x] **AC-6**: Given `mediaType` is half the index key, when the library contains both a film and a
       series whose TMDB ids are equal, then `bin/mysql -e 'select mediaType, tmdbId, externalId from media_server_items where tmdbId = <that id>'`
       returns two rows with different `externalId`s, and adding either title reconciles against its own
       one (REQ-1).
-- [ ] **AC-7** (failure path): Given `media_server_host` points at a host that refuses connections,
+- [x] **AC-7** (failure path): Given `media_server_host` points at a host that refuses connections,
       when the user adds any title, then `addMedia` returns normally within a few seconds, the title
       is registered and linked to the user, its status is `MISSING`, and the `api` log
       (`docker compose logs api`) contains one warning naming the title and the failure. No GraphQL
       error reaches the browser.
-- [ ] **AC-8** (failure path): Given a populated index, when a rebuild is triggered and the media
+- [x] **AC-8** (failure path): Given a populated index, when a rebuild is triggered and the media
       server dies partway through the enumeration, then `bin/mysql -e 'select count(*) from media_server_items'`
       returns the **same** count as before the attempt, the Media Server tab shows `failed` with the
       previous successful timestamp, and reconciliation keeps working against the old index (REQ-4,
       REQ-5).
-- [ ] **AC-9** (failure path): Given a film whose status is `DOWNLOADING` because a torrent is in
+- [x] **AC-9** (failure path): Given a film whose status is `DOWNLOADING` because a torrent is in
       flight, and Jellyfin also holds that film, when a second user adds the same film, then the
       film's status is still `DOWNLOADING` — the in-flight download is not overwritten (REQ-15).
-- [ ] **AC-10** (failure path): Given `media_server_client` is `none`, when an administrator presses
+- [x] **AC-10** (failure path): Given `media_server_client` is `none`, when an administrator presses
       Re-sync, then the mutation fails with `error.mediaServer.not_configured` and the tab shows the
       translated message in both `en` and `es`. Adding a title in that state makes no outbound HTTP
       request and logs no media-server warning at all (REQ-20).
-- [ ] **AC-11**: Given Jellyfin has "Dexter" S01E02 as a virtual item with no file — which an API-key
+- [x] **AC-11**: Given Jellyfin has "Dexter" S01E02 as a virtual item with no file — which an API-key
       request returns unconditionally (REQ-14) — when the user adds "Dexter", then S01E02 is `MISSING`.
-- [ ] **AC-12**: `bin/npm api run test` passes, including new specs covering TMDB-id matching with the
+- [x] **AC-12**: `bin/npm api run test` passes, including new specs covering TMDB-id matching with the
       media-type key, the season/episode pairing, placeholder rejection and the never-downgrade guard
       (NFR-8). `bin/npm web run build` exits 0.
 

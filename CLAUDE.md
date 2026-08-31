@@ -10,13 +10,13 @@ implementation detail.
 | Stage | Where | Specs |
 | :-- | :-- | :-- |
 | Search catalog (TMDB) | `api` — `src/media/`, `src/movies/`, `src/shows/`, `src/clients/tmdb/`; `web` — the header search box and `/search` | `005`, `006`, `026` |
-| Register title in DB | `api` — `media`/`movies`/`shows` + Prisma; a new series fetches its seasons/episodes in the background | `006` |
+| Register title in DB | `api` — `media`/`movies`/`shows` + Prisma; a new series fetches its seasons/episodes in the background; a registration also reconciles the title against the configured media server, promoting `MISSING` to `COMPLETED` (per episode for a series) when that server already holds it | `006`, `034` |
 | Find release | Prowlarr (`indexer`) + `flaresolverr`, `api` — `src/clients/indexer/client.ts`; manual fallback is pasting a magnet (`src/clients/torrent/magnet.ts`) | `010`, `014` |
 | Download | qBittorrent (`torrent`), `api` — `src/clients/torrent/client.ts`, per-torrent save path; no longer fire-and-forget — `api` reads live progress/speed back and starts, stops and deletes torrents on the user's behalf, and a title may race several sources at once | `010`, `022` |
 | Detect completion, enqueue | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer); a shared race arbiter also runs from the tus upload path, since an uploaded file competes in the same race as any torrent of its target | `022` |
 | Scan files, inventory | `worker` — enumerates every file, resolves episodes by parsing `SxxEyy`; episode names come from the api, never the filename | `013` |
 | Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K downscaled to 1080p preserving HDR (Dolby Vision/HDR10 keep their colour tags rather than flattening to SDR), Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode. Optional per installation — an administrator can turn compression off from Settings, in which case the file is still renamed and moved to its destination, just never touched by FFmpeg | `011`, `013`, `024`, `031`, `032` |
-| Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`) | — |
+| Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`); no longer write-only — a local index (`src/media-server-index/`) lets a client with no native provider-id lookup answer "does this title exist" too, rebuilt on demand from Settings or a "Re-sincronizar" button in `web` | `034` |
 | Browse library | `api` — the three resolvers; `web` — `/`, the billboard, plus `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010`, `033` |
 
 Two gaps worth knowing: acquiring a **season pack** is api-only (`addMagnetToSeason`), with no web
@@ -204,7 +204,9 @@ All three services typecheck clean (0 errors) and `bin/npm web run build` exits 
 2026-08-27 after `028-users-screen-refactor`. Test counts then: `api` 217/23 suites, `worker`
 93/12 — remeasured 2026-08-28 after `032-optional-compression`: `api` 249/26 suites, `worker`
 140/15 suites — and again 2026-08-28 after `033-billboard-and-navigation`: `api` 256/28 suites
-(`worker` untouched by that feature).
+(`worker` untouched by that feature) — and again 2026-08-31 after
+`034-jellyfin-library-reconciliation`: `api` 285/31 suites (`worker` untouched; `web` has no test
+suite — see `services/web/CLAUDE.md`).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

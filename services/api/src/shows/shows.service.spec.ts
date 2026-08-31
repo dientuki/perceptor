@@ -3,6 +3,7 @@ import { ShowsService } from './shows.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
+import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { MEDIA_TYPE } from '@/types/media';
 
 // This suite exists because ShowsService's riskiest paths all fail with a
@@ -67,6 +68,9 @@ describe('ShowsService', () => {
     details: jest.Mock;
     seasonDetails: jest.Mock;
   };
+  let mediaServerReconcile: {
+    reconcileShow: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -92,6 +96,9 @@ describe('ShowsService', () => {
       details: jest.fn(),
       seasonDetails: jest.fn(),
     };
+    mediaServerReconcile = {
+      reconcileShow: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -99,6 +106,10 @@ describe('ShowsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
         { provide: TmdbClient, useValue: tmdb },
+        {
+          provide: MediaServerReconcileService,
+          useValue: mediaServerReconcile,
+        },
       ],
     }).compile();
 
@@ -159,7 +170,10 @@ describe('ShowsService', () => {
       // assertion while being entirely unscoped — hence full equality.
       expect(prisma.show.findFirst).toHaveBeenCalledTimes(1);
       const [args] = prisma.show.findFirst.mock.calls[0];
-      expect(args.where).toEqual({ id: 7, users: { some: { userId: 'user-1' } } });
+      expect(args.where).toEqual({
+        id: 7,
+        users: { some: { userId: 'user-1' } },
+      });
     });
 
     it('returns null for a series the caller is not linked to', async () => {
@@ -174,11 +188,17 @@ describe('ShowsService', () => {
       // shape above and both come back null.
       prisma.show.findFirst.mockResolvedValue(null);
 
-      await expect(service.findOneFromDb(999999999, 'user-1')).resolves.toBeNull();
+      await expect(
+        service.findOneFromDb(999999999, 'user-1'),
+      ).resolves.toBeNull();
     });
 
     it('orders seasons and episodes server-side, ascending', async () => {
-      prisma.show.findFirst.mockResolvedValue({ id: 7, title: 'Mine', seasons: [] });
+      prisma.show.findFirst.mockResolvedValue({
+        id: 7,
+        title: 'Mine',
+        seasons: [],
+      });
 
       await service.findOneFromDb(7, 'user-1');
 
@@ -188,7 +208,9 @@ describe('ShowsService', () => {
       // catch a dropped or misplaced `orderBy`.
       const [args] = prisma.show.findFirst.mock.calls[0];
       expect(args.include.seasons.orderBy).toEqual({ seasonNumber: 'asc' });
-      expect(args.include.seasons.include.episodes.orderBy).toEqual({ episodeNumber: 'asc' });
+      expect(args.include.seasons.include.episodes.orderBy).toEqual({
+        episodeNumber: 'asc',
+      });
     });
   });
 
@@ -280,7 +302,12 @@ describe('ShowsService', () => {
 
   describe('register', () => {
     it('links the caller to an already-registered series, creates no second row, and tolerates a repeat', async () => {
-      const existing = { id: 5, tmdbId: 42, title: 'Breaking Bad', seasonsSyncedAt: new Date() };
+      const existing = {
+        id: 5,
+        tmdbId: 42,
+        title: 'Breaking Bad',
+        seasonsSyncedAt: new Date(),
+      };
       prisma.show.findUnique.mockResolvedValue(existing);
       prisma.userShow.upsert.mockResolvedValue({ userId: 'user-1', showId: 5 });
 
@@ -312,7 +339,7 @@ describe('ShowsService', () => {
     // through native promises with no real I/O, so a `setImmediate` flush
     // (which only runs once the microtask queue is fully drained) is enough
     // to let the whole chained try/catch/finally settle.
-    const flushPromises = () => new Promise(resolve => setImmediate(resolve));
+    const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
     it('never marks seasonsSyncedAt when a season fetch fails partway through, and always releases the claim', async () => {
       prisma.show.findUnique.mockResolvedValue(null); // not registered yet
@@ -335,28 +362,66 @@ describe('ShowsService', () => {
         numberOfSeasons: 2,
         numberOfEpisodes: 20,
         seasons: [
-          { id: 1, name: 'Season 1', seasonNumber: 1, episodeCount: 7, releaseDate: '2008-01-20', overview: '', posterPath: '' },
-          { id: 2, name: 'Season 2', seasonNumber: 2, episodeCount: 13, releaseDate: '2009-03-08', overview: '', posterPath: '' },
+          {
+            id: 1,
+            name: 'Season 1',
+            seasonNumber: 1,
+            episodeCount: 7,
+            releaseDate: '2008-01-20',
+            overview: '',
+            posterPath: '',
+          },
+          {
+            id: 2,
+            name: 'Season 2',
+            seasonNumber: 2,
+            episodeCount: 13,
+            releaseDate: '2009-03-08',
+            overview: '',
+            posterPath: '',
+          },
         ],
       };
       tmdb.details.mockResolvedValue(detail);
-      prisma.show.create.mockResolvedValue({ id: 9, tmdbId: 42, title: 'Breaking Bad' });
+      prisma.show.create.mockResolvedValue({
+        id: 9,
+        tmdbId: 42,
+        title: 'Breaking Bad',
+      });
       prisma.userShow.upsert.mockResolvedValue({ userId: 'user-1', showId: 9 });
-      prisma.season.upsert.mockImplementation(({ create }: { create: { seasonNumber: number } }) =>
-        Promise.resolve({ id: create.seasonNumber, showId: 9, seasonNumber: create.seasonNumber }),
+      prisma.season.upsert.mockImplementation(
+        ({ create }: { create: { seasonNumber: number } }) =>
+          Promise.resolve({
+            id: create.seasonNumber,
+            showId: 9,
+            seasonNumber: create.seasonNumber,
+          }),
       );
       prisma.episode.upsert.mockResolvedValue({});
 
       // Season 1 hydrates cleanly; season 2's episode fetch fails — the
       // exact partial-fetch shape REQ-14 exists for.
-      tmdb.seasonDetails.mockImplementation((_tmdbId: number, seasonNumber: number) => {
-        if (seasonNumber === 2) return Promise.reject(new Error('TMDB rate limited'));
-        return Promise.resolve([
-          { id: 1, title: 'Pilot', overview: '...', releaseDate: '2008-01-20', episodeNumber: 1, stillPath: null, voteAverage: 8.9 },
-        ]);
-      });
+      tmdb.seasonDetails.mockImplementation(
+        (_tmdbId: number, seasonNumber: number) => {
+          if (seasonNumber === 2)
+            return Promise.reject(new Error('TMDB rate limited'));
+          return Promise.resolve([
+            {
+              id: 1,
+              title: 'Pilot',
+              overview: '...',
+              releaseDate: '2008-01-20',
+              episodeNumber: 1,
+              stillPath: null,
+              voteAverage: 8.9,
+            },
+          ]);
+        },
+      );
 
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleErrorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
 
       await service.register(42, 'user-1');
       // hydrate() is fired but never awaited by register(); give its

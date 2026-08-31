@@ -74,6 +74,9 @@
     "language": {
       "unavailable": "\"{tag}\" is not a known language",
       "duplicate": "\"{tag}\" was submitted twice"
+    },
+    "mediaServer": {
+      "not_configured": "Configure a media server before syncing the library."
     }
   },
   "landing": {
@@ -364,7 +367,21 @@
       "hostPlaceholder": "host.docker.internal",
       "hostHint": "Empty by default on purpose: 'localhost' here would be this same server, not your media server. If it runs on your PC, use host.docker.internal; if it runs in another container of this stack, use that service's name.",
       "portLabel": "Port",
-      "apiKeyLabel": "API key"
+      "apiKeyLabel": "API key",
+      "index": {
+        "statusLabel": "Library index",
+        "state": {
+          "never": "Never synced",
+          "syncing": "Syncing…",
+          "ready": "Up to date",
+          "failed": "Last sync failed"
+        },
+        "itemCount": "{count} items",
+        "syncedAt": "Last synced {date}",
+        "resyncButton": "Re-sync",
+        "resyncing": "Syncing…",
+        "resyncErrorDefault": "Could not start the sync."
+      }
     },
     "pathPicker": {
       "placeholder": "(root folder)",

@@ -74,6 +74,9 @@
     "language": {
       "unavailable": "El idioma «{tag}» no existe",
       "duplicate": "El idioma «{tag}» está repetido"
+    },
+    "mediaServer": {
+      "not_configured": "Configurá un media server antes de sincronizar la biblioteca"
     }
   },
   "landing": {
@@ -364,7 +367,21 @@
       "hostPlaceholder": "host.docker.internal",
       "hostHint": "Vacío por defecto a propósito: 'localhost' acá sería este mismo servidor, no tu media server. Si corre en tu PC, usá host.docker.internal; si corre en otro container de este stack, el nombre de ese servicio.",
       "portLabel": "Puerto",
-      "apiKeyLabel": "API key"
+      "apiKeyLabel": "API key",
+      "index": {
+        "statusLabel": "Índice de la biblioteca",
+        "state": {
+          "never": "Nunca sincronizado",
+          "syncing": "Sincronizando…",
+          "ready": "Actualizado",
+          "failed": "Falló la última sincronización"
+        },
+        "itemCount": "{count} elementos",
+        "syncedAt": "Última sincronización {date}",
+        "resyncButton": "Re-sincronizar",
+        "resyncing": "Sincronizando…",
+        "resyncErrorDefault": "No se pudo iniciar la sincronización."
+      }
     },
     "pathPicker": {
       "placeholder": "(carpeta raíz)",

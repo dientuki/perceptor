@@ -118,7 +118,7 @@ export function getVideoParams(
           "-preset", "4",
           "-pix_fmt", "yuv420p10le",
           "-svtav1-params", svtav1,
-          "-metadata:s:v:0", `title=AV1 1080p (Downscaled from 4K ${from})`,
+          "-metadata:s:v:0", `title=AV1 (Downscaled from 4K ${from})`,
           "-color_range", "tv",
           "-colorspace", "bt2020nc",
           "-color_primaries", "bt2020",
@@ -138,7 +138,7 @@ export function getVideoParams(
       "-color_primaries", "bt709",
       "-color_trc", "bt709",
       "-svtav1-params", svtav1,
-      "-metadata:s:v:0", 'title=AV1 1080p (Downscaled from 4K SDR)'
+      "-metadata:s:v:0", 'title=AV1 (Downscaled from 4K SDR)'
     ];
   }
 
@@ -155,7 +155,7 @@ export function getVideoParams(
       "-color_primaries", "bt709",
       "-color_trc", "bt709",
       "-svtav1-params", `${svtav1}:tune=0`,
-      "-metadata:s:v:0", "title=AV1 1080p (SDR from VC-1)"
+      "-metadata:s:v:0", "title=AV1 (SDR from VC-1)"
     ];
   }
 

@@ -10,6 +10,7 @@ import { TmdbShow } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
+import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs) — same value as
 // MoviesService, kept as its own constant here on purpose (see class doc
@@ -32,6 +33,7 @@ export class ShowsService implements MediaTypeService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly tmdb: TmdbClient,
+    private readonly mediaServerReconcile: MediaServerReconcileService,
   ) {}
 
   // The library belongs to the user: only returns series this userId has
@@ -86,6 +88,14 @@ export class ShowsService implements MediaTypeService {
       // register() for the same show is what gives it another chance.
       if (existing.seasonsSyncedAt === null) {
         void this.hydrate(existing.id, tmdbId);
+      } else {
+        // hydrate() already reconciles at its own tail (034), but that only
+        // runs the first time a show is hydrated. Without this, re-adding an
+        // already-hydrated series would skip reconciliation entirely and
+        // REQ-18's documented retry ("re-add to force another check") would
+        // silently do nothing. Detached: register() must not wait on a
+        // media-server round trip to answer the caller.
+        void this.mediaServerReconcile.reconcileShow(existing.id, tmdbId);
       }
 
       return { id: existing.id, type: MEDIA_TYPE.SHOW };
@@ -101,7 +111,9 @@ export class ShowsService implements MediaTypeService {
         title: cached.title,
         overview: cached.overview,
         posterUrl: cached.posterUrl ?? undefined,
-        releaseDate: cached.releaseDate ? new Date(cached.releaseDate) : undefined,
+        releaseDate: cached.releaseDate
+          ? new Date(cached.releaseDate)
+          : undefined,
         originalLanguage: cached.originalLanguage,
       },
     });
@@ -134,11 +146,20 @@ export class ShowsService implements MediaTypeService {
     // single-request test and still let two concurrent registrations both
     // fetch — see uploads/upload-tickets.service.ts:verifyAndSpend for the
     // same pattern and the same reasoning.
-    const claimed = await this.redis.set(claimKey, '1', 'EX', HYDRATE_CLAIM_TTL_SECONDS, 'NX');
+    const claimed = await this.redis.set(
+      claimKey,
+      '1',
+      'EX',
+      HYDRATE_CLAIM_TTL_SECONDS,
+      'NX',
+    );
     if (claimed !== 'OK') return;
 
     try {
-      const detail = (await this.tmdb.details(MEDIA_TYPE.SHOW, tmdbId)) as ShowDetail;
+      const detail = (await this.tmdb.details(
+        MEDIA_TYPE.SHOW,
+        tmdbId,
+      )) as ShowDetail;
 
       // Sequential on purpose (NFR-6): a Promise.all over N seasons bursts
       // requests at TMDB's rate limit and can leave the series
@@ -146,35 +167,51 @@ export class ShowsService implements MediaTypeService {
       // filtered — REQ-12.
       for (const season of detail.seasons) {
         const seasonRow = await this.prisma.season.upsert({
-          where: { showId_seasonNumber: { showId, seasonNumber: season.seasonNumber } },
+          where: {
+            showId_seasonNumber: { showId, seasonNumber: season.seasonNumber },
+          },
           update: {
-            releaseDate: season.releaseDate ? new Date(season.releaseDate) : undefined,
+            releaseDate: season.releaseDate
+              ? new Date(season.releaseDate)
+              : undefined,
           },
           create: {
             showId,
             seasonNumber: season.seasonNumber,
-            releaseDate: season.releaseDate ? new Date(season.releaseDate) : undefined,
+            releaseDate: season.releaseDate
+              ? new Date(season.releaseDate)
+              : undefined,
           },
         });
 
-        const episodes = await this.tmdb.seasonDetails(tmdbId, season.seasonNumber);
+        const episodes = await this.tmdb.seasonDetails(
+          tmdbId,
+          season.seasonNumber,
+        );
 
         for (const episode of episodes) {
           await this.prisma.episode.upsert({
             where: {
-              seasonId_episodeNumber: { seasonId: seasonRow.id, episodeNumber: episode.episodeNumber },
+              seasonId_episodeNumber: {
+                seasonId: seasonRow.id,
+                episodeNumber: episode.episodeNumber,
+              },
             },
             update: {
               title: episode.title,
               overview: episode.overview,
-              releaseDate: episode.releaseDate ? new Date(episode.releaseDate) : undefined,
+              releaseDate: episode.releaseDate
+                ? new Date(episode.releaseDate)
+                : undefined,
             },
             create: {
               seasonId: seasonRow.id,
               episodeNumber: episode.episodeNumber,
               title: episode.title,
               overview: episode.overview,
-              releaseDate: episode.releaseDate ? new Date(episode.releaseDate) : undefined,
+              releaseDate: episode.releaseDate
+                ? new Date(episode.releaseDate)
+                : undefined,
             },
           });
         }
@@ -187,8 +224,16 @@ export class ShowsService implements MediaTypeService {
         where: { id: showId },
         data: { seasonsSyncedAt: new Date() },
       });
+
+      // After, never before: a reconcile failure here must not make the
+      // next register() re-fetch the whole catalog from TMDB (REQ-19) —
+      // seasonsSyncedAt is already committed by the time this runs.
+      await this.mediaServerReconcile.reconcileShow(showId, tmdbId);
     } catch (err) {
-      console.error(`Error hydrating seasons/episodes for show tmdbId=${tmdbId}:`, err);
+      console.error(
+        `Error hydrating seasons/episodes for show tmdbId=${tmdbId}:`,
+        err,
+      );
     } finally {
       // Deletes the claim regardless of outcome, so a failure does not wedge
       // every future retry until HYDRATE_CLAIM_TTL_SECONDS expires.
@@ -243,14 +288,17 @@ export class ShowsService implements MediaTypeService {
     };
   }
 
-  async search(query: string, userId: string): Promise<MediaSearchResultEntity[]> {
+  async search(
+    query: string,
+    userId: string,
+  ): Promise<MediaSearchResultEntity[]> {
     if (!query.trim()) return [];
 
     // 1. Consultar TMDB.
     const items = await this.tmdb.search<TmdbShow>('tv', query);
 
     // 2. Traducir la respuesta cruda de TMDB a nuestro formato
-    const results: MediaSearchResult[] = items.map(item => ({
+    const results: MediaSearchResult[] = items.map((item) => ({
       id: item.id,
       title: item.name,
       releaseDate: item.first_air_date || null,
@@ -299,7 +347,7 @@ export class ShowsService implements MediaTypeService {
     if (!results.length) return [];
 
     const shows = await this.prisma.show.findMany({
-      where: { tmdbId: { in: results.map(r => r.id) } },
+      where: { tmdbId: { in: results.map((r) => r.id) } },
       select: {
         id: true,
         tmdbId: true,
@@ -307,9 +355,9 @@ export class ShowsService implements MediaTypeService {
       },
     });
 
-    const byTmdbId = new Map(shows.map(s => [s.tmdbId, s]));
+    const byTmdbId = new Map(shows.map((s) => [s.tmdbId, s]));
 
-    return results.map(result => {
+    return results.map((result) => {
       const registered = byTmdbId.get(result.id);
       return {
         ...result,
@@ -329,14 +377,22 @@ export class ShowsService implements MediaTypeService {
       const pipeline = this.redis.pipeline();
 
       for (const show of results) {
-        pipeline.set(this.cacheKey(show.id), JSON.stringify(show), 'EX', TMDB_CACHE_TTL_SECONDS);
+        pipeline.set(
+          this.cacheKey(show.id),
+          JSON.stringify(show),
+          'EX',
+          TMDB_CACHE_TTL_SECONDS,
+        );
       }
 
       const execResults = await pipeline.exec();
 
       const failed = (execResults ?? []).filter(([err]) => err);
       if (failed.length) {
-        console.error(`Error guardando ${failed.length} serie(s) de TMDB en Redis:`, failed.map(([err]) => err?.message));
+        console.error(
+          `Error guardando ${failed.length} serie(s) de TMDB en Redis:`,
+          failed.map(([err]) => err?.message),
+        );
       }
     } catch (err) {
       console.error('Error guardando resultados de TMDB en Redis:', err);

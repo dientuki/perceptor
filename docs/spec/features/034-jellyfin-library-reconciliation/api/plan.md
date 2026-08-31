@@ -2,7 +2,7 @@
 title: Reconcile a newly registered title against the media server — api slice
 service: api
 last_updated: 2026-08-31
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Reconcile a newly registered title against the media server — `api` (`api/plan.md`)

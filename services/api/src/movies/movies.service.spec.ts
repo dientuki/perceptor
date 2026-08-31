@@ -5,12 +5,14 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { QbittorrentClient } from '@/clients/torrent/client';
+import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { MEDIA_TYPE } from '@/types/media';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // A magnet with a valid infoHash, reused across the attachTorrentSource
 // cases below — parseMagnet() is the real implementation, not mocked.
-const MAGNET = 'magnet:?xt=urn:btih:5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c&dn=Test';
+const MAGNET =
+  'magnet:?xt=urn:btih:5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c&dn=Test';
 
 // This suite exists because 005-movie-search's four riskiest paths all fail
 // with a perfectly successful response and nothing to notice:
@@ -65,6 +67,9 @@ describe('MoviesService', () => {
   let qbittorrent: {
     add: jest.Mock;
   };
+  let mediaServerReconcile: {
+    reconcileMovie: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -95,6 +100,9 @@ describe('MoviesService', () => {
     qbittorrent = {
       add: jest.fn(),
     };
+    mediaServerReconcile = {
+      reconcileMovie: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -103,6 +111,10 @@ describe('MoviesService', () => {
         { provide: RedisService, useValue: redis },
         { provide: TmdbClient, useValue: tmdb },
         { provide: QbittorrentClient, useValue: qbittorrent },
+        {
+          provide: MediaServerReconcileService,
+          useValue: mediaServerReconcile,
+        },
       ],
     }).compile();
 
@@ -110,7 +122,7 @@ describe('MoviesService', () => {
   });
 
   describe('search', () => {
-    it('hands Redis a catalog-only object, never this caller\'s ownership', async () => {
+    it("hands Redis a catalog-only object, never this caller's ownership", async () => {
       tmdb.search.mockResolvedValue([
         {
           id: 42,
@@ -191,7 +203,10 @@ describe('MoviesService', () => {
       // assertion while being entirely unscoped — hence full equality.
       expect(prisma.movie.findFirst).toHaveBeenCalledTimes(1);
       const [args] = prisma.movie.findFirst.mock.calls[0];
-      expect(args.where).toEqual({ id: 7, users: { some: { userId: 'user-1' } } });
+      expect(args.where).toEqual({
+        id: 7,
+        users: { some: { userId: 'user-1' } },
+      });
     });
 
     it('returns null for a film the caller is not linked to', async () => {
@@ -206,7 +221,9 @@ describe('MoviesService', () => {
       // shape above and both come back null.
       prisma.movie.findFirst.mockResolvedValue(null);
 
-      await expect(service.findOneFromDb(999999999, 'user-1')).resolves.toBeNull();
+      await expect(
+        service.findOneFromDb(999999999, 'user-1'),
+      ).resolves.toBeNull();
     });
   });
 
@@ -214,7 +231,10 @@ describe('MoviesService', () => {
     it('links the caller to an already-registered film, creates no second row, and tolerates a repeat', async () => {
       const existing = { id: 5, tmdbId: 42, title: 'Dune' };
       prisma.movie.findUnique.mockResolvedValue(existing);
-      prisma.userMovie.upsert.mockResolvedValue({ userId: 'user-1', movieId: 5 });
+      prisma.userMovie.upsert.mockResolvedValue({
+        userId: 'user-1',
+        movieId: 5,
+      });
 
       const first = await service.register(42, 'user-1');
       const second = await service.register(42, 'user-1');
@@ -254,8 +274,15 @@ describe('MoviesService', () => {
         runtime: 155,
         status: 'Released',
       });
-      prisma.movie.create.mockResolvedValue({ id: 9, tmdbId: 42, title: 'Dune' });
-      prisma.userMovie.upsert.mockResolvedValue({ userId: 'user-1', movieId: 9 });
+      prisma.movie.create.mockResolvedValue({
+        id: 9,
+        tmdbId: 42,
+        title: 'Dune',
+      });
+      prisma.userMovie.upsert.mockResolvedValue({
+        userId: 'user-1',
+        movieId: 9,
+      });
 
       await service.register(42, 'user-1');
 
@@ -265,7 +292,9 @@ describe('MoviesService', () => {
       // a divergence here yields a registered film with a broken or
       // mismatched poster and no exception anywhere.
       expect(createData.posterUrl).toBe(posterUrl('/dune.jpg'));
-      expect(createData.posterUrl).toBe('https://image.tmdb.org/t/p/w300/dune.jpg');
+      expect(createData.posterUrl).toBe(
+        'https://image.tmdb.org/t/p/w300/dune.jpg',
+      );
     });
   });
 
@@ -277,14 +306,19 @@ describe('MoviesService', () => {
   // no error at all); and a merely-downloading film that still conflicts
   // would silently defeat REQ-6's "several active sources at once".
   describe('addMagnetToMovie (attachTorrentSource conflict key)', () => {
-    function expectI18nKey(promise: Promise<unknown>, key: string): Promise<void> {
+    function expectI18nKey(
+      promise: Promise<unknown>,
+      key: string,
+    ): Promise<void> {
       return promise.then(
         () => {
           throw new Error('expected the call to reject');
         },
-        error => {
+        (error) => {
           expect(error).toBeInstanceOf(HttpException);
-          const response = (error as HttpException).getResponse() as { i18n?: { key: string } };
+          const response = (error as HttpException).getResponse() as {
+            i18n?: { key: string };
+          };
           expect(response.i18n?.key).toBe(key);
         },
       );

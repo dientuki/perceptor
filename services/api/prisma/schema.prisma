@@ -363,3 +363,19 @@ model FfprobeLog {
   @@index([file])
   @@map("ffprobe_logs")
 }
+
+// Derived index mapping a TMDB id to a media server's own item id. No relation to
+// Movie/Show: this is a lookup table keyed by tmdbId, rebuilt wholesale on demand, and a
+// foreign key would cascade-delete index rows for titles nobody has registered yet.
+model MediaServerItem {
+  id Int @id @default(autoincrement())
+
+  mediaType  String @db.VarChar(10) // 'movie' | 'show' — see src/types/media.ts MEDIA_TYPE
+  tmdbId     Int
+  externalId String @db.VarChar(100)
+
+  createdAt DateTime @default(now())
+
+  @@unique([mediaType, tmdbId])
+  @@map("media_server_items")
+}

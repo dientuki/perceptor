@@ -63,6 +63,7 @@ export const ERROR_KEYS = {
   LANGUAGE_DUPLICATE: 'error.language.duplicate',
   LANGUAGE_UNAVAILABLE: 'error.language.unavailable',
   MEDIA_SERVER_UNKNOWN: 'error.mediaServer.unknown',
+  MEDIA_SERVER_NOT_CONFIGURED: 'error.mediaServer.not_configured',
   INDEXER_UNAVAILABLE: 'error.indexer.unavailable',
   INDEXER_NO_INFOHASH: 'error.indexer.no_infohash',
 
@@ -99,8 +100,10 @@ export const ERROR_KEYS = {
   VALIDATION_SETTING_KEY_REQUIRED: 'error.validation.setting_key_required',
   VALIDATION_SETTING_VALUE_REQUIRED: 'error.validation.setting_value_required',
   VALIDATION_USER_ID_REQUIRED: 'error.validation.user_id_required',
-  VALIDATION_LOGIN_USERNAME_REQUIRED: 'error.validation.login_username_required',
-  VALIDATION_LOGIN_PASSWORD_REQUIRED: 'error.validation.login_password_required',
+  VALIDATION_LOGIN_USERNAME_REQUIRED:
+    'error.validation.login_username_required',
+  VALIDATION_LOGIN_PASSWORD_REQUIRED:
+    'error.validation.login_password_required',
   VALIDATION_USER_NAME_REQUIRED: 'error.validation.user_name_required',
   VALIDATION_USERNAME_MIN_LENGTH: 'error.validation.username_min_length',
   VALIDATION_PASSWORD_MIN_LENGTH: 'error.validation.password_min_length',

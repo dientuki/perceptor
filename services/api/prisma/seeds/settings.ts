@@ -49,6 +49,14 @@ export async function seedSettings(prisma: PrismaClient) {
 
     { key: 'ui_locale', value: '' },
     { key: 'default_languages', value: '' },
+
+    // State the system writes about the media-server index rebuild (034), not
+    // configuration a person sets — deliberately absent from
+    // settings.catalog.ts so updateSettings keeps rejecting them, same as
+    // torrent_port.
+    { key: 'media_server_index_state', value: 'never' },
+    { key: 'media_server_index_synced_at', value: '' },
+    { key: 'media_server_index_count', value: '0' },
   ];
 
   // Create-only: unlike an upsert, this never overwrites a real value already

@@ -362,6 +362,17 @@ do share the main form. `Movie.tsx` and `Show.tsx` still each bind `LanguagePick
 per-title action, passing no `name` (falling through to the `"tags"` default) — that level is
 untouched; `Show.tsx` stays a Server Component with the picker as a client child.
 
+**The Media Server tab's "Re-sync" control is the same kind of exception** (`034-jellyfin-library-reconciliation`),
+by a different mechanism: `MediaServerFields.tsx`'s `MediaServerIndexPanel` is not a nested `<form>`
+(still invalid HTML) but a plain `useTransition` + `@/components/ui/button/Button` click handler
+calling `resyncMediaServerIndexAction()` directly — `Button` already defaults to `type="button"`, so
+nothing here can accidentally submit `SettingsForm`'s main form the way a raw `<button>` would
+(it defaults to `type="submit"`). `getMediaServerIndexStatus()`/`resyncMediaServerIndexAction()` live
+in `src/actions/media-server.ts`, beside the existing `getMediaServerOptions()`. The syncedAt
+timestamp is rendered only after mount (`useEffect`-gated) — `toLocaleString()` depends on the
+runtime's timezone, and formatting it during SSR produces a hydration mismatch between the container
+and the viewer's own timezone.
+
 **The listing queries deliberately do not select `preferredLanguages`.** They are `api` field
 resolvers that only run when selected — `getMovieById`/`getShowById` select them, `getMovies`/
 `getShows` must not, or 200 rows become 200 preference queries.

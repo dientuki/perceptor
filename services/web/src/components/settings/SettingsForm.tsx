@@ -21,13 +21,17 @@ import Button from "@/components/ui/button/Button";
 import TabNav, { type TabNavItem } from "@/components/ui/tabs/TabNav";
 import type { Language } from "@/types/languages";
 import type { MediaRoot } from "@/types/media-roots";
-import type { MediaServerOption } from "@/types/media-server";
+import type {
+  MediaServerIndexStatus,
+  MediaServerOption,
+} from "@/types/media-server";
 import type { Setting } from "@/types/settings";
 
 interface SettingsFormProps {
   settings: Setting[];
   mediaRoots: MediaRoot[];
   mediaServerOptions: MediaServerOption[];
+  mediaServerIndexStatus: MediaServerIndexStatus;
   languages: Language[];
 }
 
@@ -55,6 +59,7 @@ export default function SettingsForm({
   settings,
   mediaRoots,
   mediaServerOptions,
+  mediaServerIndexStatus,
   languages,
 }: SettingsFormProps) {
   const t = useTranslations("settings.form");
@@ -142,6 +147,7 @@ export default function SettingsForm({
                 host={getSettingValue("media_server_host")}
                 port={getSettingValue("media_server_port")}
                 apiKey={getSettingValue("media_server_api_key")}
+                indexStatus={mediaServerIndexStatus}
               />
             </div>
 

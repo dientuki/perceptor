@@ -1,5 +1,11 @@
 import { createJellyfinClient } from './jellyfin';
-import { MediaServerClient, MediaServerConfig, MediaServerFactory, MEDIA_SERVER_NONE } from './types';
+import {
+  MediaServerClient,
+  MediaServerConfig,
+  MediaServerFactory,
+  MediaServerIndexPort,
+  MEDIA_SERVER_NONE,
+} from './types';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 
@@ -21,16 +27,20 @@ export const MEDIA_SERVER_OPTIONS: { id: string; label: string }[] = [
   ...Object.entries(MEDIA_SERVERS).map(([id, { label }]) => ({ id, label })),
 ];
 
-export const MEDIA_SERVER_IDS: string[] = MEDIA_SERVER_OPTIONS.map((option) => option.id);
+export const MEDIA_SERVER_IDS: string[] = MEDIA_SERVER_OPTIONS.map(
+  (option) => option.id,
+);
 
 // Lookup, no cadena de ifs. `none` devuelve null en vez de tirar: es una
 // opción válida del combo, no un error de configuración.
 export function createMediaServerClient(
   id: string,
   config: MediaServerConfig,
+  index: MediaServerIndexPort,
 ): MediaServerClient | null {
   if (id === MEDIA_SERVER_NONE) return null;
   const entry = MEDIA_SERVERS[id as keyof typeof MEDIA_SERVERS];
-  if (!entry) throw i18nError.badRequest(ERROR_KEYS.MEDIA_SERVER_UNKNOWN, { id });
-  return entry.create(config);
+  if (!entry)
+    throw i18nError.badRequest(ERROR_KEYS.MEDIA_SERVER_UNKNOWN, { id });
+  return entry.create(config, index);
 }

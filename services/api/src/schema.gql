@@ -62,6 +62,17 @@ type MediaRoot {
   available: Boolean!
 }
 
+type MediaServerOption {
+  id: ID!
+  label: String!
+}
+
+type MediaServerIndexStatus {
+  state: String!
+  itemCount: Int!
+  syncedAt: DateTime
+}
+
 type TorrentLink {
   downloadUrl: String
 }
@@ -136,11 +147,6 @@ type EncodeCompletedResult {
   removeTorrent: Boolean!
   deleteInputFile: Boolean!
   deleteDownloadPath: Boolean!
-}
-
-type MediaServerOption {
-  id: ID!
-  label: String!
 }
 
 type UploadTicket {
@@ -228,6 +234,12 @@ type Query {
   """
   languages: [Language!]!
 
+  """
+  Media servers soportados, derivados del registro de clientes — la UI arma el combo con esto en vez de hardcodear las opciones.
+  """
+  mediaServerClients: [MediaServerOption!]!
+  mediaServerIndexStatus: MediaServerIndexStatus!
+
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!): [TorrentResult!]!
   movieDownloads(movieId: Int!): [Download!]!
@@ -236,11 +248,6 @@ type Query {
 
   """Datos que el worker necesita para encodear un ProcessJob"""
   processJob(id: Int!): EncodeJobDetails!
-
-  """
-  Media servers soportados, derivados del registro de clientes — la UI arma el combo con esto en vez de hardcodear las opciones.
-  """
-  mediaServerClients: [MediaServerOption!]!
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
   searchAllMedia(query: String!): [MediaSearchResult!]!
   popularMedia(type: String!): [MediaSearchResult!]!
@@ -276,6 +283,7 @@ type Mutation {
   """Reemplaza la preferencia de idiomas del usuario para esta película"""
   setMoviePreferredLanguages(movieId: Int!, tags: [String!]!): [Language!]!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
+  resyncMediaServerIndex: MediaServerIndexStatus!
 
   """Aviso del cliente de torrents de que una descarga terminó"""
   torrentCompleted(infoHash: String!): String!

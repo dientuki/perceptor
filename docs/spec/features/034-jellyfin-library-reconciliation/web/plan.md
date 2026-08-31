@@ -2,7 +2,7 @@
 title: Reconcile a newly registered title against the media server — web slice
 service: web
 last_updated: 2026-08-31
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Reconcile a newly registered title against the media server — `web` (`web/plan.md`)

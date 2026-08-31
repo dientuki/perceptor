@@ -252,9 +252,44 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `movies_enabled`/`shows_enabled`). It is not read by any resolver directly: `ProcessJobsService`
   reads it off `SettingsService.getMap()` and flattens it onto `EncodeJobDetails.compressionEnabled`
   at query time, since the worker authenticates as a service principal and cannot call the
-  admin-only `settings` query itself.
+  admin-only `settings` query itself. Three more rows — `media_server_index_state`,
+  `media_server_index_synced_at`, `media_server_index_count` (`034-jellyfin-library-reconciliation`)
+  — are seeded but **absent from `settings.catalog.ts`**, the same non-editable treatment as
+  `torrent_port`: they are state the system writes about the media-server index rebuild, not
+  configuration a person sets, so `updateSettings` rejects a write to any of them with
+  `error.setting.not_editable`. `MediaServerIndexService` reads and writes them through
+  `prisma.setting` directly, never through `SettingsService`.
 - **`media-roots/`** — the two declared roots and every path translation. See below.
-- **`media-server/`** — post-encode notification (Jellyfin today), opt-in from Settings.
+- **`media-server/`** — post-encode notification (Jellyfin today), opt-in from Settings, **plus**
+  (`034-jellyfin-library-reconciliation`) reflecting what that server already holds back onto a newly
+  registered title. `MediaServerReconcileService.reconcileMovie`/`reconcileShow` resolve a title's
+  `tmdbId` against the configured client's `findByTmdbId` and promote `MISSING` → `COMPLETED` via an
+  `updateMany` guarded by `status: 'MISSING'` in its own `where` clause — never a read-then-write,
+  since that guard is what makes the promotion atomic against a concurrent `torrentCompleted` and is
+  what stops a download in progress from ever being clobbered. Called from `MoviesService.register()`
+  (awaited) and from `ShowsService.hydrate()`'s tail plus `ShowsService.register()`'s existing-show
+  branch (both detached). `MediaServerResolver` gained `mediaServerIndexStatus`/
+  `resyncMediaServerIndex`, each with its own `@UseGuards(AdminGuard)` — the existing
+  `mediaServerClients` query stays unguarded.
+- **`media-server-index/`** — a leaf module (imports only `RedisModule`; `PrismaService` comes from
+  the global `PrismaModule`) holding the local index a client with no native provider-id filter
+  (Jellyfin) needs: a `MediaServerItem` row per `(mediaType, tmdbId)` mapping to that server's own
+  item id. Deliberately its own module rather than living inside `media-server/`: `SettingsResolver`
+  has to trigger a rebuild and `MediaServerModule` already imports `SettingsModule`, so folding the
+  index into `media-server/` would make `SettingsModule ⇄ MediaServerModule` circular.
+  `MediaServerIndexService.rebuild()` claims a Redis `SET … NX` lock, enumerates the client's whole
+  library via its optional `listLibrary()`, and replaces the table wholesale inside one
+  `$transaction` (an explicit `timeout` — the 5s default does not survive a real library) —
+  deduplicated by `(mediaType, tmdbId)` first, since a real library is not guaranteed unique there
+  (two items, e.g. two versions of one film, can share a TMDB id) and an unmodified `createMany`
+  would trip the composite unique constraint and fail the whole rebuild. `readState()` **derives**
+  `state` rather than trusting the stored value: `syncing` reads back as `failed` when the Redis claim
+  is no longer held, so a process that dies mid-rebuild does not wedge the UI on "syncing" forever.
+  `clients/media-server/types.ts`'s `MediaServerClient` widened to add `findByTmdbId`,
+  `listPresentEpisodes` (both required) and `listLibrary` (**optional** — a client that resolves
+  provider ids natively, e.g. Emby, never implements it, and a rebuild is a no-op for it); every
+  factory now takes a second argument, `MediaServerIndexPort`, the one-method port a client reaches
+  for when it cannot resolve a TMDB id against the server itself.
 - **`indexer/`** — Prowlarr search surface.
 - **`uploads/`** — the project's only REST route (tus); see the root `CLAUDE.md` for why.
   Authenticated **by ticket, not by `JwtAuthGuard`** (which skips non-GraphQL contexts): a signed-in
@@ -342,7 +377,8 @@ rather than trusting this list:
 its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — a web-side type, not a database one.
 A movie/show discriminator in `api` would have to be added to `schema.prisma` and migrated first.
 
-There are 15 models and 17 migrations (counted 2026-08-17) — verify with
+There are 16 models and 24 migrations (counted 2026-08-31, after
+`034-jellyfin-library-reconciliation`) — verify with
 `grep -c "^model " prisma/schema.prisma` rather than trusting the number. Worth knowing: the three
 `*Language` join tables reference `UserMovie`/`UserShow` through their composite FK rather than
 `User`+`Movie`/`Show` separately, so a language preference disappears automatically when the title

@@ -15,6 +15,7 @@ import { parseMagnet } from '@/clients/torrent/magnet';
 import { SourceKind } from '@prisma/client';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
+import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
@@ -56,6 +57,7 @@ export class MoviesService implements MediaTypeService {
     private readonly redis: RedisService,
     private readonly tmdb: TmdbClient,
     private readonly qbittorrent: QbittorrentClient,
+    private readonly mediaServerReconcile: MediaServerReconcileService,
   ) {}
 
   async create(createMovieDto: CreateMovieDto) {
@@ -127,6 +129,11 @@ export class MoviesService implements MediaTypeService {
     const existing = await this.prisma.movie.findUnique({ where: { tmdbId } });
     if (existing) {
       await this.linkUserToMovie(userId, existing.id);
+      // Awaited (NFR-3): one indexed DB read and no HTTP unless a media
+      // server is actually configured, so the caller sees the right status
+      // immediately instead of a MISSING that corrects itself later with no
+      // visible signal.
+      await this.mediaServerReconcile.reconcileMovie(existing.id, tmdbId);
       return { id: existing.id, type: MEDIA_TYPE.MOVIE };
     }
 
@@ -139,11 +146,14 @@ export class MoviesService implements MediaTypeService {
       title: cached.title,
       overview: cached.overview,
       posterUrl: cached.posterUrl ?? undefined,
-      releaseDate: cached.releaseDate ? new Date(cached.releaseDate) : undefined,
+      releaseDate: cached.releaseDate
+        ? new Date(cached.releaseDate)
+        : undefined,
       originalLanguage: cached.originalLanguage,
     });
 
     await this.linkUserToMovie(userId, movie.id);
+    await this.mediaServerReconcile.reconcileMovie(movie.id, tmdbId);
     return { id: movie.id, type: MEDIA_TYPE.MOVIE };
   }
 
@@ -151,7 +161,10 @@ export class MoviesService implements MediaTypeService {
   // película no debe explotar con un P2002 sobre la primary key compuesta — el
   // botón que dispara esto en el UI puede volver a llamarse antes de que
   // desaparezca (REQ-8/T004).
-  private async linkUserToMovie(userId: string, movieId: number): Promise<void> {
+  private async linkUserToMovie(
+    userId: string,
+    movieId: number,
+  ): Promise<void> {
     await this.prisma.userMovie.upsert({
       where: { userId_movieId: { userId, movieId } },
       update: {},
@@ -179,7 +192,10 @@ export class MoviesService implements MediaTypeService {
   private async fetchMovieFromTMDB(tmdbId: number): Promise<MediaSearchResult> {
     let detail: MovieDetail;
     try {
-      detail = (await this.tmdb.details(MEDIA_TYPE.MOVIE, tmdbId)) as MovieDetail;
+      detail = (await this.tmdb.details(
+        MEDIA_TYPE.MOVIE,
+        tmdbId,
+      )) as MovieDetail;
     } catch {
       throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_IN_CATALOG);
     }
@@ -195,14 +211,17 @@ export class MoviesService implements MediaTypeService {
     };
   }
 
-  async search(query: string, userId: string): Promise<MediaSearchResultEntity[]> {
+  async search(
+    query: string,
+    userId: string,
+  ): Promise<MediaSearchResultEntity[]> {
     if (!query.trim()) return [];
 
     // 1. Consultar TMDB.
     const items = await this.tmdb.search<TmdbMovie>('movie', query);
 
     // 2. Traducir la respuesta cruda de TMDB a nuestro formato
-    const results: MediaSearchResult[] = items.map(item => ({
+    const results: MediaSearchResult[] = items.map((item) => ({
       id: item.id,
       title: item.title,
       releaseDate: item.release_date || null,
@@ -251,7 +270,7 @@ export class MoviesService implements MediaTypeService {
     if (!results.length) return [];
 
     const movies = await this.prisma.movie.findMany({
-      where: { tmdbId: { in: results.map(r => r.id) } },
+      where: { tmdbId: { in: results.map((r) => r.id) } },
       select: {
         id: true,
         tmdbId: true,
@@ -259,9 +278,9 @@ export class MoviesService implements MediaTypeService {
       },
     });
 
-    const byTmdbId = new Map(movies.map(m => [m.tmdbId, m]));
+    const byTmdbId = new Map(movies.map((m) => [m.tmdbId, m]));
 
-    return results.map(result => {
+    return results.map((result) => {
       const registered = byTmdbId.get(result.id);
       return {
         ...result,
@@ -273,16 +292,29 @@ export class MoviesService implements MediaTypeService {
 
   async addTorrentToMovie(
     movieId: number,
-    input: { infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
+    input: {
+      infoHash: string;
+      urls: string[];
+      releaseTitle: string | null;
+      force: boolean;
+    },
     userId: string,
   ) {
-    return this.attachTorrentSource(movieId, { kind: 'TORRENT_SEARCH', ...input }, userId);
+    return this.attachTorrentSource(
+      movieId,
+      { kind: 'TORRENT_SEARCH', ...input },
+      userId,
+    );
   }
 
   // Magnet pegado a mano por el usuario, en vez de un release elegido del
   // indexer. El infoHash sale del propio magnet (parseMagnet no pega a la
   // red) — a partir de acá el flujo es idéntico a addTorrentToMovie.
-  async addMagnetToMovie(movieId: number, input: { magnet: string; force: boolean }, userId: string) {
+  async addMagnetToMovie(
+    movieId: number,
+    input: { magnet: string; force: boolean },
+    userId: string,
+  ) {
     // parseMagnet already throws a keyed BadRequestException (018 T010) — no
     // re-wrap needed, just let it propagate so `extensions.i18n` survives.
     const parsed = parseMagnet(input.magnet);
@@ -308,14 +340,21 @@ export class MoviesService implements MediaTypeService {
   // exists.
   private async attachTorrentSource(
     movieId: number,
-    input: { kind: SourceKind; infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
+    input: {
+      kind: SourceKind;
+      infoHash: string;
+      urls: string[];
+      releaseTitle: string | null;
+      force: boolean;
+    },
     userId: string,
   ) {
     const movie = await this.prisma.movie.findFirst({
       where: { id: movieId, users: { some: { userId } } },
       include: { mediaSources: true, processJobs: true },
     });
-    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
+    if (!movie)
+      throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
     // REQ-7: only a COMPLETED target refuses. A merely-downloading film no
     // longer conflicts at all — REQ-6 makes a second acquisition normal.
@@ -334,10 +373,17 @@ export class MoviesService implements MediaTypeService {
     // check on the episode side).
     const existingSource = await this.prisma.mediaSource.findUnique({
       where: { infoHash: input.infoHash },
-      include: { movie: true, episode: { include: { season: { include: { show: true } } } } },
+      include: {
+        movie: true,
+        episode: { include: { season: { include: { show: true } } } },
+      },
     });
 
-    if (existingSource && existingSource.movie && existingSource.movie.id !== movieId) {
+    if (
+      existingSource &&
+      existingSource.movie &&
+      existingSource.movie.id !== movieId
+    ) {
       throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
         title: existingSource.movie.title,
       });
@@ -352,7 +398,10 @@ export class MoviesService implements MediaTypeService {
     // El savepath lo decide el client al agregar el torrent, así cada descarga cae
     // en su propia carpeta y sabemos dónde están los archivos desde el arranque
     // (los torrents de un solo archivo, si no, quedan sueltos en la raíz).
-    const downloadPath = await this.qbittorrent.add(input.urls, movieTags(movie));
+    const downloadPath = await this.qbittorrent.add(
+      input.urls,
+      movieTags(movie),
+    );
 
     existingSource
       ? await this.prisma.mediaSource.update({
@@ -398,14 +447,22 @@ export class MoviesService implements MediaTypeService {
       const pipeline = this.redis.pipeline();
 
       for (const movie of results) {
-        pipeline.set(this.cacheKey(movie.id), JSON.stringify(movie), 'EX', TMDB_CACHE_TTL_SECONDS);
+        pipeline.set(
+          this.cacheKey(movie.id),
+          JSON.stringify(movie),
+          'EX',
+          TMDB_CACHE_TTL_SECONDS,
+        );
       }
 
       const execResults = await pipeline.exec();
 
       const failed = (execResults ?? []).filter(([err]) => err);
       if (failed.length) {
-        console.error(`Error guardando ${failed.length} película(s) de TMDB en Redis:`, failed.map(([err]) => err?.message));
+        console.error(
+          `Error guardando ${failed.length} película(s) de TMDB en Redis:`,
+          failed.map(([err]) => err?.message),
+        );
       }
     } catch (err) {
       console.error('Error guardando resultados de TMDB en Redis:', err);

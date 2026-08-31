@@ -2,7 +2,7 @@
 title: Reconcile a newly registered title against the media server — Implementation Plan
 spec_version: 0.2.0
 last_updated: 2026-08-31
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Reconcile a newly registered title against the media server (`plan.md`)

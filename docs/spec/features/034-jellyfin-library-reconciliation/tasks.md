@@ -1,7 +1,7 @@
 ---
 title: Reconcile a newly registered title against the media server — Tasks
 last_updated: 2026-08-31
-status: In Progress
+status: Done
 ---
 
 # TASKS: Reconcile a newly registered title against the media server (`tasks.md`)
@@ -27,7 +27,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
 
 ### Group 1 — schema, vocabulary and the client interface (`api`)
 
-- [ ] **T001** `[api] [P]` Add `model MediaServerItem` to `services/api/prisma/schema.prisma` exactly
+- [x] **T001** `[api] [P]` Add `model MediaServerItem` to `services/api/prisma/schema.prisma` exactly
       as `spec.md` § Data Model Changes freezes it: `id Int @id @default(autoincrement())`,
       `mediaType String @db.VarChar(10)`, `tmdbId Int`, `externalId String @db.VarChar(100)`,
       `createdAt DateTime @default(now())`, `@@unique([mediaType, tmdbId])`, `@@map("media_server_items")`.
@@ -37,7 +37,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       *Done when:* `git status services/api/prisma/` shows a modified `schema.prisma` **and** a new
       migration directory, and `bin/mysql -e 'describe media_server_items'` lists the five columns.
 
-- [ ] **T002** `[api] [P]` Add `MEDIA_SERVER_NOT_CONFIGURED: 'error.mediaServer.not_configured'` to
+- [x] **T002** `[api] [P]` Add `MEDIA_SERVER_NOT_CONFIGURED: 'error.mediaServer.not_configured'` to
       `services/api/src/i18n/error-keys.ts`, in the "settings, languages, media-server, indexer" block
       beside the existing `MEDIA_SERVER_UNKNOWN`, and its English template to
       `services/api/src/i18n/messages.en.ts`:
@@ -47,7 +47,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       *Done when:* `bin/npm api test` is green, including the `messages.en` parity suite that fails
       when a key has no template.
 
-- [ ] **T003** `[api] [P]` Add three create-only rows to `services/api/prisma/seeds/settings.ts`:
+- [x] **T003** `[api] [P]` Add three create-only rows to `services/api/prisma/seeds/settings.ts`:
       `media_server_index_state` = `"never"`, `media_server_index_synced_at` = `""`,
       `media_server_index_count` = `"0"`. Follow the `findUnique`-before-`create` shape every other
       seeder there uses, so re-running never clobbers live state. **Do not add them to
@@ -57,7 +57,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       returns the three rows after a seed run, and `updateSettings` with
       `{key: "media_server_index_state", value: "ready"}` fails with `error.setting.not_editable`.
 
-- [ ] **T004** `[api] [P]` Widen the media-server client contract in
+- [x] **T004** `[api] [P]` Widen the media-server client contract in
       `services/api/src/clients/media-server/types.ts`, per `api/plan.md` step 4: add
       `MediaServerLibraryEntry`, `MediaServerEpisodeRef` and the one-method port
       `MediaServerIndexPort`; add `findByTmdbId(mediaType, tmdbId)` and
@@ -72,7 +72,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       *Done when:* `bin/cli api npx --no tsc --noEmit` reports 0 errors and `bin/npm api test` is
       green, with `refreshLibrary`/`createdMedia` behaviour unchanged.
 
-- [ ] **T005** `[docs] [P]` Record the delta in `docs/spec/graphql-contract.md`: a new section,
+- [x] **T005** `[docs] [P]` Record the delta in `docs/spec/graphql-contract.md`: a new section,
       `### The media-server index is admin-only and rebuilt out of band (034-jellyfin-library-reconciliation)`,
       carrying the `MediaServerIndexStatus` SDL, both operations, the `state` vocabulary
       (`never` | `syncing` | `ready` | `failed`), the fact that `resyncMediaServerIndex` returns
@@ -85,7 +85,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
 
 ### Group 2 — the Jellyfin reach and the index (`api`)
 
-- [ ] **T006** `[api] [P]` Implement the three new methods in
+- [x] **T006** `[api] [P]` Implement the three new methods in
       `services/api/src/clients/media-server/jellyfin.ts`, per `api/plan.md` step 5, keeping the pure
       payload mappers as exported functions so T007 can drive them without HTTP. `findByTmdbId`
       delegates to the injected port and nothing else — Jellyfin has no provider-id filter, and the
@@ -103,7 +103,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       *Done when:* `bin/cli api npx --no tsc --noEmit` is clean and `JellyfinClient` satisfies
       `MediaServerClient` including the optional member.
 
-- [ ] **T007** `[api]` Add `services/api/src/clients/media-server/jellyfin.spec.ts`, opening with a
+- [x] **T007** `[api]` Add `services/api/src/clients/media-server/jellyfin.spec.ts`, opening with a
       paragraph naming the failure it defends against: these mappers are hand-typed against an
       external API with no schema check, and a wrong field name yields an **empty list, not an
       error** — the index then builds "successfully" with zero entries and every title reads
@@ -116,7 +116,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       *Done when:* `bin/npm api test` is green with the new suite, and deleting the `Virtual` filter
       from `jellyfin.ts` makes exactly one case fail.
 
-- [ ] **T008** `[api] [P]` Add `services/api/src/media-server-index/` — `media-server-index.module.ts`
+- [x] **T008** `[api] [P]` Add `services/api/src/media-server-index/` — `media-server-index.module.ts`
       importing **only** `PrismaModule` and `RedisModule`, and `media-server-index.service.ts` per
       `api/plan.md` step 6. The module's isolation is load-bearing, not tidiness: `SettingsResolver`
       must trigger a rebuild and `MediaServerModule` already imports `SettingsModule`, so an index
@@ -136,7 +136,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       `grep -rn "SettingsModule\|SettingsService" services/api/src/media-server-index/` returns
       nothing.
 
-- [ ] **T009** `[api]` Add `services/api/src/media-server-index/media-server-index.service.spec.ts`,
+- [x] **T009** `[api]` Add `services/api/src/media-server-index/media-server-index.service.spec.ts`,
       opening with the failure it defends against: a collapsed key silently marks the wrong title
       `COMPLETED`, and a half-applied rebuild is indistinguishable from a complete one. Cases: a film
       and a series with the **same** `tmdbId` coexist and `lookup` returns each one's own `externalId`
@@ -149,7 +149,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
 
 ### Group 3 — reconciliation and the GraphQL surface (`api`)
 
-- [ ] **T010** `[api]` Add `services/api/src/media-server/media-server-reconcile.service.ts` per
+- [x] **T010** `[api]` Add `services/api/src/media-server/media-server-reconcile.service.ts` per
       `api/plan.md` step 7, and wire it: `MediaServerModule` imports `MediaServerIndexModule` and
       exports the new service, and `MediaServerService.notifyCreated` now builds its client with the
       real port. A private `client()` helper resolves settings → client and returns `null` for `none`
@@ -166,7 +166,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       `grep -n "findUnique\|findFirst" media-server-reconcile.service.ts` shows no read-then-write
       around a status promotion.
 
-- [ ] **T011** `[api] [P]` Add
+- [x] **T011** `[api] [P]` Add
       `services/api/src/media-server/media-server-reconcile.service.spec.ts`, opening with the failure
       it defends against: a wrong promotion marks a film `COMPLETED` that nobody has, and the user
       finds out only when they try to play it — nothing in any log says anything went wrong. Cases: a
@@ -178,7 +178,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       *Done when:* `bin/npm api test` is green with the new suite, and dropping `status: 'MISSING'`
       from the `updateMany` `where` makes the `DOWNLOADING` case fail.
 
-- [ ] **T012** `[api] [P]` Wire the three trigger points per `api/plan.md` step 8.
+- [x] **T012** `[api] [P]` Wire the three trigger points per `api/plan.md` step 8.
       `MoviesService.register()` **awaits** `reconcileMovie` before returning, on both the
       existing-row and new-row branches — it costs one indexed DB read and no HTTP (NFR-3), so the
       user sees the right status immediately. `ShowsService.hydrate()` calls `reconcileShow` at the
@@ -193,7 +193,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       `shows.service.spec.ts` case changed, and the app boots — a module cycle fails at boot, not at
       typecheck.
 
-- [ ] **T013** `[api]` Add `services/api/src/media-server/entities/media-server-index-status.entity.ts`
+- [x] **T013** `[api]` Add `services/api/src/media-server/entities/media-server-index-status.entity.ts`
       (`@ObjectType` with `state: String!`, `itemCount: Int!`, nullable `syncedAt: DateTime`) and the
       two operations to `media-server.resolver.ts`, each carrying its **own**
       `@UseGuards(AdminGuard)` — per method, the `ffprobe-logs.resolver.ts` precedent, never at class
@@ -208,7 +208,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
       `mediaServerIndexStatus` and `resyncMediaServerIndex` and nothing else, and the query answers a
       non-admin with `error.auth.admin_required`.
 
-- [ ] **T014** `[api]` Fire a rebuild from `SettingsResolver.updateSettings` per `api/plan.md`
+- [x] **T014** `[api]` Fire a rebuild from `SettingsResolver.updateSettings` per `api/plan.md`
       step 10: capture `getMap()` **before** `updateMany`, then after the write compare
       `media_server_client`, `media_server_host`, `media_server_port` and `media_server_api_key`,
       considering **only keys present in `entries`** and only when the submitted value differs from
@@ -227,7 +227,7 @@ there is no codegen and a consumer written against an unbuilt schema diverges si
 Everything here depends on Group 3: `web` retypes the schema by hand and there is no codegen, so a
 consumer written before T013 exists diverges with no compile error anywhere.
 
-- [ ] **T015** `[web] [P]` Add the new copy to **both** `services/web/messages/en.json` and
+- [x] **T015** `[web] [P]` Add the new copy to **both** `services/web/messages/en.json` and
       `messages/es.json`, same keys in each: `errors.mediaServer.not_configured` (the `es` string in
       the existing Rioplatense register — `Configurá un media server antes de sincronizar la
       biblioteca`), plus the panel's own keys under `settings.mediaServer` for the status line, the
@@ -236,7 +236,7 @@ consumer written before T013 exists diverges with no compile error anywhere.
       silently shows English. → T002
       *Done when:* `bin/cli web node scripts/check-messages.mjs` exits 0.
 
-- [ ] **T016** `[web]` Add `MediaServerIndexStatus` to `services/web/src/types/media-server.ts`
+- [x] **T016** `[web]` Add `MediaServerIndexStatus` to `services/web/src/types/media-server.ts`
       (`state: string` — **not** a union of the four literals; there is no codegen, and narrowing here
       means a fifth state added later fails to compile against a value the api legitimately sends),
       then `getMediaServerIndexStatus()` and `resyncMediaServerIndexAction()` in
@@ -247,7 +247,7 @@ consumer written before T013 exists diverges with no compile error anywhere.
       *Done when:* `bin/npm web run build` exits 0 and the query document names exactly `state`,
       `itemCount` and `syncedAt`.
 
-- [ ] **T017** `[web]` Render it. Fetch the status in `settings/page.tsx`'s existing `Promise.all`,
+- [x] **T017** `[web]` Render it. Fetch the status in `settings/page.tsx`'s existing `Promise.all`,
       thread it through `SettingsForm` into `MediaServerFields` as `indexStatus`, and in
       `MediaServerFields.tsx` render the status line and a Re-sync button below the three connection
       fields, **inside** the existing `selected !== NONE` block. Use
@@ -263,7 +263,7 @@ consumer written before T013 exists diverges with no compile error anywhere.
 
 ### Group 5 — verification and docs
 
-- [ ] **T018** `[docs]` Update the `CLAUDE.md` files this feature falsifies. Root `CLAUDE.md`: the
+- [x] **T018** `[docs]` Update the `CLAUDE.md` files this feature falsifies. Root `CLAUDE.md`: the
       **Register title in DB** row of the pipeline table gains the media-server reconciliation with
       spec `034`; the **Notify media server** row is no longer write-only, since `api` now reads the
       library too. `services/api/CLAUDE.md`: the `media-server/` module-map entry (today one line,
@@ -278,7 +278,7 @@ consumer written before T013 exists diverges with no compile error anywhere.
       *Done when:* no `CLAUDE.md` still describes `clients/media-server/` as write-only or
       `media-server/` as notification-only, and the root pipeline table cites `034`.
 
-- [ ] **T019** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack —
+- [x] **T019** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack —
       including the three failure paths, which need a real dead host (AC-7), a media server killed
       mid-rebuild (AC-8) and a `none` client (AC-10) — tick each box, and set `status: Implemented` on
       `spec.md`, `plan.md`, `api/plan.md` and `web/plan.md`. Re-measure the `api` test count rather
