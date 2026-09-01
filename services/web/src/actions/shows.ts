@@ -133,7 +133,7 @@ export async function getShowById(id: number): Promise<Show | null> {
 }
 
 const ADD_TORRENT_TO_EPISODE_MUTATION = `
-  mutation AddTorrentToEpisode($episodeId: Int!, $infoHash: String!, $urls: [String!]!, $releaseTitle: String, $force: Boolean) {
+  mutation AddTorrentToEpisode($episodeId: Int!, $infoHash: String, $urls: [String!]!, $releaseTitle: String, $force: Boolean) {
     addTorrentToEpisode(episodeId: $episodeId, infoHash: $infoHash, urls: $urls, releaseTitle: $releaseTitle, force: $force) {
       id
       status
@@ -143,7 +143,7 @@ const ADD_TORRENT_TO_EPISODE_MUTATION = `
 
 export async function addTorrentToEpisodeAction(
   episodeId: number,
-  infoHash: string,
+  infoHash: string | null,
   urls: string[],
   releaseTitle: string | null,
   force = false,

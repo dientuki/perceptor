@@ -12,6 +12,7 @@ import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
+import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { SourceKind } from '@prisma/client';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
@@ -293,16 +294,21 @@ export class MoviesService implements MediaTypeService {
   async addTorrentToMovie(
     movieId: number,
     input: {
-      infoHash: string;
+      infoHash: string | null;
       urls: string[];
       releaseTitle: string | null;
       force: boolean;
     },
     userId: string,
   ) {
+    // The indexer no longer guarantees an infoHash at search time
+    // (037-indexer-result-loss) — resolve it here, once, for the one
+    // release the user chose, before anything reaches attachTorrentSource.
+    const infoHash = input.infoHash ?? (await resolveInfoHash(input.urls));
+
     return this.attachTorrentSource(
       movieId,
-      { kind: 'TORRENT_SEARCH', ...input },
+      { kind: 'TORRENT_SEARCH', ...input, infoHash },
       userId,
     );
   }

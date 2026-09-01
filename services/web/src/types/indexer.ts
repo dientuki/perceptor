@@ -6,7 +6,8 @@ export type TorrentLink = {
 };
 
 export type TorrentResult = {
-  infoHash: string;
+  id: string;
+  infoHash: string | null;
   title: string | null;
   size: number | null;
   seeders: number;

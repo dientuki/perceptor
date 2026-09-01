@@ -11,7 +11,7 @@ implementation detail.
 | :-- | :-- | :-- |
 | Search catalog (TMDB) | `api` — `src/media/`, `src/movies/`, `src/shows/`, `src/clients/tmdb/`; `web` — the header search box and `/search` | `005`, `006`, `026` |
 | Register title in DB | `api` — `media`/`movies`/`shows` + Prisma; a new series fetches its seasons/episodes in the background; a registration also reconciles the title against the configured media server, promoting `MISSING` to `COMPLETED` (per episode for a series) when that server already holds it | `006`, `034` |
-| Find release | Prowlarr (`indexer`) + `flaresolverr`, `api` — `src/clients/indexer/client.ts`; manual fallback is pasting a magnet (`src/clients/torrent/magnet.ts`); `web` — a "Best candidates" toggle in the movie detail page's torrent modal re-ranks the already-fetched list client-side (`src/lib/torrent-ranking.ts`), hiding everything below the best resolution tier — a harness for eventually picking automatically, not a fetch of new results | `010`, `014`, `036` |
+| Find release | Prowlarr (`indexer`) + `flaresolverr`, `api` — `src/clients/indexer/client.ts`; every Prowlarr row survives the search, grouped by `infoHash` (or a derived key when the indexer supplied none) rather than dropped for missing metadata — `infoHash` is resolved lazily, only for the release the user actually adds (`src/clients/indexer/resolve-info-hash.ts`); manual fallback is pasting a magnet (`src/clients/torrent/magnet.ts`); `web` — a "Best candidates" toggle in the movie detail page's torrent modal re-ranks the already-fetched list client-side (`src/lib/torrent-ranking.ts`), hiding everything below the best resolution tier — a harness for eventually picking automatically, not a fetch of new results | `010`, `014`, `036`, `037` |
 | Download | qBittorrent (`torrent`), `api` — `src/clients/torrent/client.ts`, per-torrent save path; no longer fire-and-forget — `api` reads live progress/speed back and starts, stops and deletes torrents on the user's behalf, and a title may race several sources at once | `010`, `022` |
 | Detect completion, enqueue | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer); a shared race arbiter also runs from the tus upload path, since an uploaded file competes in the same race as any torrent of its target | `022` |
 | Scan files, inventory | `worker` — enumerates every file, resolves episodes by parsing `SxxEyy`; episode names come from the api, never the filename | `013` |
@@ -206,7 +206,8 @@ All three services typecheck clean (0 errors) and `bin/npm web run build` exits 
 140/15 suites — and again 2026-08-28 after `033-billboard-and-navigation`: `api` 256/28 suites
 (`worker` untouched by that feature) — and again 2026-08-31 after
 `034-jellyfin-library-reconciliation`: `api` 285/31 suites (`worker` untouched; `web` has no test
-suite — see `services/web/CLAUDE.md`).
+suite — see `services/web/CLAUDE.md`) — and again 2026-09-01 after `037-indexer-result-loss`:
+`api` 294/32 suites (`worker` untouched by that feature).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

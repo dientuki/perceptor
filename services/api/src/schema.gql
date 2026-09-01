@@ -78,7 +78,8 @@ type TorrentLink {
 }
 
 type TorrentResult {
-  infoHash: String!
+  id: String!
+  infoHash: String
   title: String
   size: Float
   seeders: Int!
@@ -273,7 +274,7 @@ type Mutation {
   updateProfile(updateProfileInput: UpdateProfileInput!): User!
 
   """Envía un release elegido a qBittorrent y lo asocia a la película"""
-  addTorrentToMovie(movieId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
+  addTorrentToMovie(movieId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
 
   """
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la película
@@ -321,7 +322,7 @@ type Mutation {
   createUploadTicket(movieId: Int, episodeId: Int, force: Boolean = false): UploadTicket!
 
   """Envía un release elegido a qBittorrent y lo asocia al episodio"""
-  addTorrentToEpisode(episodeId: Int!, infoHash: String!, urls: [String!]!, releaseTitle: String, force: Boolean = false): Episode!
+  addTorrentToEpisode(episodeId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Episode!
 
   """
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia al episodio

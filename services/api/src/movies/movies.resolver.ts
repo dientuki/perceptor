@@ -49,7 +49,7 @@ export class MoviesResolver {
   })
   async addTorrentToMovie(
     @Args('movieId', { type: () => Int }) movieId: number,
-    @Args('infoHash') infoHash: string,
+    @Args('infoHash', { type: () => String, nullable: true }) infoHash: string | null,
     @Args('urls', { type: () => [String] }) urls: string[],
     @Args('releaseTitle', { type: () => String, nullable: true }) releaseTitle: string | null,
     @Args('force', { type: () => Boolean, nullable: true, defaultValue: false }) force: boolean,

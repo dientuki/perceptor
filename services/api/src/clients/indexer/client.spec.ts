@@ -2,12 +2,11 @@ import { ProwlarrClient } from './client';
 import { SettingsService } from '@/settings/settings.service';
 
 // resolveInfoHash's third path (parsing a fetched .torrent buffer via the ESM-only
-// `parse-torrent` package) isn't exercised here: Jest's default config runs code in a VM sandbox
-// that rejects a real dynamic `import()` of an ESM package with
+// `parse-torrent` package) isn't exercised here or in `resolve-info-hash.spec.ts`: Jest's default
+// config runs code in a VM sandbox that rejects a real dynamic `import()` of an ESM package with
 // `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG` unless `--experimental-vm-modules` is set, which
 // this project's Jest config does not do — a pre-existing constraint, not something this fix
-// changes. The magnet-redirect path below exercises the same "resolve instead of drop" logic
-// with a real infoHash parsed from a real magnet URI, which is enough to prove the fix.
+// changes.
 
 // This test exists because otherwise a failed indexer response (a 401 from a
 // wrong tracker_api_key, a 5xx outage, a dead host) is parsed as if it were a
@@ -82,10 +81,15 @@ describe('ProwlarrClient.getData (via search)', () => {
 
 // This suite exists because an indexer like LimeTorrents populates neither `infoHash` nor
 // `magnetUrl`, and its `guid` is a plain result-page URL with no embeddable hash. `filterData`
-// used to have exactly one path for that shape — drop it — which made every LimeTorrents release
-// vanish from every search, silently, with no error anywhere. The fix resolves the real infoHash
-// from the item's own `downloadUrl` instead of discarding it; these tests fail if that path is
-// ever removed or short-circuited again.
+// used to try to resolve that shape by fetching every such release's own `downloadUrl` during the
+// search itself — fired all at once, through one Prowlarr instance, each capped at an 8s
+// `AbortController`. Whatever did not settle in time was silently dropped, which made whole
+// indexers vanish from every search with no error anywhere, and pinned every search at an ~8.1s
+// floor to throw away most of what it fetched (`037-indexer-result-loss`). The fix stops
+// resolving anything during a search: a release with no infoHash is still returned, grouped by a
+// derived key, with `infoHash: null` — resolution happens lazily, once, when the release is
+// added. These tests fail if a hash-less release is ever dropped or if a search issues a fetch
+// beyond the single Prowlarr call again.
 describe('ProwlarrClient.search — releases with no infoHash and no hash-bearing guid', () => {
   const settings = {
     getMap: jest.fn().mockResolvedValue({
@@ -117,8 +121,7 @@ describe('ProwlarrClient.search — releases with no infoHash and no hash-bearin
     fetchSpy.mockRestore();
   });
 
-  it('keeps the release, resolving its infoHash from its own downloadUrl', async () => {
-    const REAL_HASH = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
+  it('keeps the release with infoHash: null and no fetch beyond the Prowlarr call, even when its downloadUrl would never resolve', async () => {
     fetchSpy.mockImplementation((url: unknown) => {
       if (String(url).includes('/api/v1/search')) {
         return Promise.resolve({
@@ -127,32 +130,55 @@ describe('ProwlarrClient.search — releases with no infoHash and no hash-bearin
           json: async () => [limeTorrentsItem],
         } as Response);
       }
-      // Prowlarr's downloadUrl for LimeTorrents redirects to a magnet — resolveInfoHash's second
-      // recovery path (before it would fall through to parsing a .torrent buffer).
-      return Promise.resolve({
-        ok: false,
-        status: 302,
-        headers: new Headers({
-          location: `magnet:?xt=urn:btih:${REAL_HASH}&dn=${encodeURIComponent(limeTorrentsItem.title)}`,
-        }),
-      } as Response);
+      throw new Error(
+        `unexpected fetch during search: ${String(url)} — a search must issue no request beyond Prowlarr's own`,
+      );
+    });
+
+    const result = await client.search('venom');
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      title: limeTorrentsItem.title,
+      seeders: 55,
+      leechers: 15,
+      infoHash: null,
+    });
+    expect(result[0].id).toEqual(expect.any(String));
+    expect(result[0].id.length).toBeGreaterThan(0);
+  });
+
+  it('collapses two hash-less releases from different indexers into one row with summed seeders, when title and size match', async () => {
+    const duplicateFromAnotherIndexer = {
+      ...limeTorrentsItem,
+      guid: 'https://another-indexer.example/venom-19908172.html',
+      downloadUrl: 'https://another-indexer.example/download/19908172/venom.torrent',
+      seeders: 20,
+      leechers: 5,
+    };
+    fetchSpy.mockImplementation((url: unknown) => {
+      if (String(url).includes('/api/v1/search')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => [limeTorrentsItem, duplicateFromAnotherIndexer],
+        } as Response);
+      }
+      throw new Error(`unexpected fetch during search: ${String(url)}`);
     });
 
     const result = await client.search('venom');
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
-      title: limeTorrentsItem.title,
-      seeders: 55,
-      leechers: 15,
-      // A real infoHash parsed from the magnet URI, not a placeholder — a fake one would silently
-      // break completion matching, which happens exclusively by infoHash (services/api/CLAUDE.md's
-      // downloads/ section).
-      infoHash: REAL_HASH.toUpperCase(),
+      infoHash: null,
+      seeders: 75,
+      leechers: 20,
     });
   });
 
-  it('drops just that release, not the whole search, when its downloadUrl never resolves', async () => {
+  it('keeps a release with a real infoHash and a hash-less release both, unrelated to each other', async () => {
     const otherItem = {
       title: 'Venom Let There Be Carnage 2021 1080p WEB-DL',
       size: 4_000_000_000,
@@ -168,13 +194,16 @@ describe('ProwlarrClient.search — releases with no infoHash and no hash-bearin
           json: async () => [limeTorrentsItem, otherItem],
         } as Response);
       }
-      // The LimeTorrents download link is dead.
-      return Promise.reject(new Error('ECONNRESET'));
+      throw new Error(`unexpected fetch during search: ${String(url)}`);
     });
 
     const result = await client.search('venom');
 
-    expect(result).toHaveLength(1);
-    expect(result[0].title).toBe(otherItem.title);
+    expect(result).toHaveLength(2);
+    const titles = result.map((r) => r.title);
+    expect(titles).toContain(limeTorrentsItem.title);
+    expect(titles).toContain(otherItem.title);
+    const otherResult = result.find((r) => r.title === otherItem.title);
+    expect(otherResult?.infoHash).toBe('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
   });
 });

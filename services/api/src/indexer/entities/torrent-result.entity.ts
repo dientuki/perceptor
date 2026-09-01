@@ -8,7 +8,10 @@ export class TorrentLink {
 
 @ObjectType()
 export class TorrentResult {
-  @Field() infoHash: string;
+  @Field() id: string;
+
+  @Field(() => String, { nullable: true })
+  infoHash: string | null;
 
   @Field(() => String, { nullable: true })
   title: string | null;

@@ -290,7 +290,11 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   provider ids natively, e.g. Emby, never implements it, and a rebuild is a no-op for it); every
   factory now takes a second argument, `MediaServerIndexPort`, the one-method port a client reaches
   for when it cannot resolve a TMDB id against the server itself.
-- **`indexer/`** — Prowlarr search surface.
+- **`indexer/`** — Prowlarr search surface. `entities/torrent-result.entity.ts`'s `TorrentResult`
+  carries a non-null `id` (display/grouping identity, never sent back) and a nullable `infoHash` —
+  a search groups every Prowlarr row instead of dropping the ones missing a hash
+  (`037-indexer-result-loss`); see `clients/indexer/` below for where the grouping and the
+  now-lazy resolution actually happen.
 - **`uploads/`** — the project's only REST route (tus); see the root `CLAUDE.md` for why.
   Authenticated **by ticket, not by `JwtAuthGuard`** (which skips non-GraphQL contexts): a signed-in
   user mints one via `createUploadTicket`, the browser sends it as `Authorization: Bearer <ticket>` on
@@ -321,7 +325,17 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).
 
 **`clients/`** is not a Nest module — plain adapter classes grouped by external system:
-`clients/tmdb/`, `clients/indexer/`, `clients/torrent/` (qBittorrent client + `magnet.ts` parser —
+`clients/tmdb/`, `clients/indexer/` (`client.ts`'s `filterData` groups every raw Prowlarr row by
+uppercased `infoHash`, else a 40-hex hash pulled from `guid`, else a key derived from the
+normalized title and size — it issues no HTTP request beyond the one to Prowlarr; the old
+eager-resolve-with-8s-timeout-then-drop behaviour and its dead scoring path (`filterIAData` and the
+module that scored results by source/audio) are gone. `resolve-info-hash.ts` holds the extracted
+`resolveInfoHash(urls, timeoutMs?)` —
+same three-step ladder, same 8s per-URL abort — called only from the add path
+(`movies`/`episodes`' `attachTorrentSource` callers) when the row the user picked has no hash yet;
+it throws `error.indexer.no_infohash` rather than ever returning a falsy string, since
+`attachTorrentSource`'s own `infoHash` parameter stays non-null by design), `clients/torrent/`
+(qBittorrent client + `magnet.ts` parser —
 since `022-download-status-tags` also `start()`, tag-aware `add()`/`info()`, and state sets brought
 to qBittorrent 5.0; deliberately **no** `setForceStart`, a member with no caller), `clients/media-server/`
 (with a `registry.ts`), plus the shared `clients/types.ts`.

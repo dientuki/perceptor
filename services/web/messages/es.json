@@ -40,6 +40,10 @@
     "season": {
       "already_completed": "Esta temporada ya tiene episodios descargados. Confirmá para reemplazar los archivos actuales."
     },
+    "indexer": {
+      "unavailable": "No se pudo conectar con el indexer",
+      "no_infohash": "No se pudo determinar el infoHash de este release"
+    },
     "download": {
       "not_a_torrent": "Esta descarga no tiene un torrent asociado",
       "torrent_client_rejected": "El cliente de torrents rechazó la solicitud ({status})"

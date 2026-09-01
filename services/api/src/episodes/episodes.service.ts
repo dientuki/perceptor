@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
+import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { SourceKind } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
@@ -66,10 +67,13 @@ export class EpisodesService {
 
   async addTorrentToEpisode(
     episodeId: number,
-    input: { infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
+    input: { infoHash: string | null; urls: string[]; releaseTitle: string | null; force: boolean },
     userId: string,
   ) {
-    return this.attachTorrentSource(episodeId, { kind: 'TORRENT_SEARCH', ...input }, userId);
+    // REQ-4: the search response may not carry an infoHash — resolve it here, once, before
+    // anything reaches qBittorrent, so a failure never leaves a half-applied download behind.
+    const infoHash = input.infoHash ?? (await resolveInfoHash(input.urls));
+    return this.attachTorrentSource(episodeId, { kind: 'TORRENT_SEARCH', ...input, infoHash }, userId);
   }
 
   // Magnet pegado a mano por el usuario — mismo flujo que

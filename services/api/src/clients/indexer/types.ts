@@ -7,7 +7,8 @@ export type IndexerClientType =
   (typeof INDEXER_CLIENTS)[keyof typeof INDEXER_CLIENTS];
 
 export interface TorrentResult {
-  infoHash: string;
+  id: string;
+  infoHash: string | null;
   title: string | null;
   size: number | null;
   seeders: number;
@@ -23,9 +24,4 @@ export interface TorrentResult {
 export type IndexerClient = {
   search: (query: string) => Promise<TorrentResult[]>;
   //searchIA: (query: string) => Promise<TorrentResult[]>;
-};
-
-export type TorrentInfo = {
-  downloadUrl: string;
-  infoHash: string;
 };

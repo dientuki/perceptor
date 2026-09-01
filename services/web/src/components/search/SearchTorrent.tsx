@@ -47,7 +47,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   const [filter, setFilter] = useState("");
   const [showBest, setShowBest] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [addingHash, setAddingHash] = useState<string | null>(null);
+  const [addingId, setAddingId] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState<TorrentResult | null>(null);
@@ -144,7 +144,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   };
 
   const handleAddTorrent = async (res: TorrentResult) => {
-    setAddingHash(res.infoHash);
+    setAddingId(res.id);
     setAddError(null);
     setNeedsConfirm(null);
 
@@ -157,11 +157,11 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     } else {
       router.refresh();
     }
-    setAddingHash(null);
+    setAddingId(null);
   };
 
   const handleConfirmReplace = async (res: TorrentResult) => {
-    setAddingHash(res.infoHash);
+    setAddingId(res.id);
     setAddError(null);
 
     const result = await submitTorrent(res, true);
@@ -171,7 +171,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
       setNeedsConfirm(null);
       router.refresh();
     }
-    setAddingHash(null);
+    setAddingId(null);
   };
 
   return (
@@ -240,10 +240,10 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                 size="sm"
                 variant="outline"
                 onClick={() => handleConfirmReplace(needsConfirm)}
-                disabled={addingHash === needsConfirm.infoHash}
+                disabled={addingId === needsConfirm.id}
                 type="button"
               >
-                {addingHash === needsConfirm.infoHash ? (
+                {addingId === needsConfirm.id ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   t("replace")
@@ -287,7 +287,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
             {filteredResults.length > 0 ? (
               filteredResults.map((res) => (
                 <tr
-                  key={res.infoHash}
+                  key={res.id}
                   className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center hover:bg-gray-50 dark:hover:bg-white/[0.01]"
                 >
                   <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
@@ -349,9 +349,9 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                       variant="outline"
                       size="sm"
                       onClick={() => handleAddTorrent(res)}
-                      disabled={addingHash === res.infoHash}
+                      disabled={addingId === res.id}
                     >
-                      {addingHash === res.infoHash ? (
+                      {addingId === res.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Download className="h-4 w-4" />

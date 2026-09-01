@@ -9,6 +9,7 @@ import type { AcquisitionResult } from '@/types/media';
 const SEARCH_TORRENTS_QUERY = `
   query SearchTorrents($query: String!) {
     searchTorrents(query: $query) {
+      id
       infoHash
       title
       size
@@ -37,7 +38,7 @@ export async function searchTorrentsAction(query: string): Promise<TorrentResult
 }
 
 const ADD_TORRENT_MUTATION = `
-  mutation AddTorrentToMovie($movieId: Int!, $infoHash: String!, $urls: [String!]!, $releaseTitle: String, $force: Boolean) {
+  mutation AddTorrentToMovie($movieId: Int!, $infoHash: String, $urls: [String!]!, $releaseTitle: String, $force: Boolean) {
     addTorrentToMovie(movieId: $movieId, infoHash: $infoHash, urls: $urls, releaseTitle: $releaseTitle, force: $force) {
       id
       status
@@ -47,7 +48,7 @@ const ADD_TORRENT_MUTATION = `
 
 export async function addTorrentToMovieAction(
   movieId: number,
-  infoHash: string,
+  infoHash: string | null,
   urls: string[],
   releaseTitle: string | null,
   force = false,

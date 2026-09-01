@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.8.0
+spec_version: 1.9.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-08-28
+last_updated: 2026-09-01
 status: Approved
 target_service: api, web, worker
 ---
@@ -1106,6 +1106,59 @@ this index exists to support is invisible on the wire — a newly registered tit
 what the media server already holds, but there is no new field a consumer reads to find that out;
 it is the same `status` column `addMedia`'s caller already re-fetches. Nothing in `web` or `worker`
 observes `MediaServerIndexStatus` except the Settings screen's own read/resync round trip.
+
+### `TorrentResult` survives a missing infoHash instead of dropping the row (`037-indexer-result-loss`)
+
+```graphql
+type TorrentResult {
+  id: String!
+  infoHash: String
+  title: String
+  size: Float
+  seeders: Int!
+  leechers: Int!
+  items: [TorrentLink!]!
+  infoUrl: [TorrentLink!]!
+}
+
+type Mutation {
+  addTorrentToMovie(movieId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean): Movie!
+  addTorrentToEpisode(episodeId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean): Episode!
+}
+```
+
+Before this feature, `searchTorrents`' `filterData` resolved every hash-less release's `infoHash` at
+search time, firing one HTTP fetch per row with an 8s abort each; whatever did not settle in time
+was silently dropped from the response — measured at 227 of 780 raw Prowlarr rows on one real
+query. `TorrentResult.infoHash` is now nullable and every row survives: grouped by uppercased
+`infoHash` when the indexer supplied one, else by a 40-hex hash pulled from `guid`, else by a key
+derived from the normalized title and size. No HTTP call happens during a search any more.
+
+**`TorrentResult.id` is display identity only — never sent back to the API.** It is the grouping
+key above, stable within one search response and unique across it, but **not** stable across two
+searches (a hash-less key is derived from title+size, not a persistent identifier). It exists so
+`web` has a React key and an in-flight marker that survives a null `infoHash` without re-deriving
+the same normalization independently — two implementations of "normalize this title" with no
+codegen between them is exactly the drift this document exists to prevent.
+
+**`infoHash` resolution moved from the search path to the add path.** `addTorrentToMovie`/
+`addTorrentToEpisode` now accept a nullable `infoHash`; when the caller (`web`) sends `null` — the
+row it clicked never had one — `api` resolves it lazily, once, only for the release the user
+actually chose, via the same three-step ladder `filterData` used to run eagerly on all 250+
+hash-less rows. If resolution fails, the mutation throws `error.indexer.no_infohash` rather than
+writing an empty-string hash: `attachTorrentSource`'s own `infoHash: string` parameter stayed
+non-null on purpose, so an unresolvable release surfaces as a visible error instead of a
+`MediaSource` row whose hash qBittorrent will never report, stuck in `DOWNLOADING` forever with no
+error anywhere.
+
+`error.indexer.no_infohash` already existed in `api`'s key list (see the vocabulary table above);
+this feature is the first to give it a `web` translation, since a Spanish user previously saw the
+raw English fallback for it.
+
+Consumer obligations: `web` selects `id` alongside `infoHash` in `searchTorrents`, sends `infoHash`
+as `string | null` on both add mutations with **no `?? ''` coercion**, and keys/tracks
+in-flight-add state off `id` instead of `infoHash`. `worker` has no obligation; it never queries
+`searchTorrents` or either add mutation.
 
 ### The one non-GraphQL route
 

@@ -40,6 +40,10 @@
     "season": {
       "already_completed": "This season already has downloaded episodes. Confirm to replace the current files."
     },
+    "indexer": {
+      "unavailable": "Could not reach the indexer",
+      "no_infohash": "Could not resolve an infoHash"
+    },
     "download": {
       "not_a_torrent": "This download has no associated torrent",
       "torrent_client_rejected": "The torrent client rejected the request ({status})"
