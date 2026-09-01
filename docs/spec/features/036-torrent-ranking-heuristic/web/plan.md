@@ -2,7 +2,7 @@
 title: Torrent Ranking Heuristic — web slice
 service: web
 last_updated: 2026-09-01
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Torrent Ranking Heuristic — `web` (`web/plan.md`)

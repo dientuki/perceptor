@@ -250,7 +250,10 @@
       "cancel": "Cancelar",
       "searchingTrackers": "Buscando en trackers...",
       "noFilterMatch": "Ningún resultado coincide con el filtro.",
-      "noResultsYet": "Todavía no hay resultados. Probá buscar un release específico."
+      "noResultsYet": "Todavía no hay resultados. Probá buscar un release específico.",
+      "rankButton": "Mejores candidatos",
+      "rankButtonReset": "Todos los resultados",
+      "rankEmpty": "La heurística descartó todos los releases. Volvé a todos los resultados para verlos."
     }
   },
   "billboard": {

@@ -1,10 +1,10 @@
 ---
 title: Torrent Ranking Heuristic
-spec_version: 0.3.0
+spec_version: 0.4.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-31
 last_updated: 2026-09-01
-status: Approved
+status: Implemented
 services: [web]
 ---
 
@@ -41,6 +41,31 @@ ranks within it.
 lose generation quality with nothing to gain, and it is evidence the release is a re-encode of
 something else probably also in the list. Those are vetoed outright.
 
+### Why Not A Score
+
+The first implementation (`spec_version` 0.1.0–0.3.0) ranked candidates by a weighted sum: source
+worth up to 30 points, codec 20, dynamic range 15, and so on. Run against real indexer results it
+kept producing orderings the user rejected, and tuning the weights did not fix it, because the
+problem was the model rather than the numbers.
+
+**A weighted sum cannot express dominance.** The question being asked is "what is the best source
+to recompress", and its answer is hierarchical: a UHD BluRay is a better source than a WEB-DL, full
+stop — not "better by 7 points, unless the WEB-DL is much larger and better seeded, in which case
+worse". But any additive model permits exactly that trade. Every weight is simultaneously a
+statement about how much of criterion B is worth one unit of criterion A, and for these criteria
+that exchange rate does not exist: no quantity of seeders makes a WEB-DL into a disc source.
+Lowering a weight only narrows the window in which the wrong trade happens; it never closes it.
+
+So the model is a **lexicographic comparator**. The criteria are ranked, not weighted, and each is
+consulted only to break a tie in the one above it. This makes the guarantee structural — the same
+way resolution was already structural under REQ-3, extended to every criterion — and it makes the
+ordering explainable: any two rows differ because of exactly one criterion, the first one on which
+they disagree.
+
+The cost is that a criterion can no longer express *degree*: a release that is marginally better on
+source wins as decisively as one that is far better. That is accepted, and for the top of the list —
+the only part that matters once the automatic picker exists — it is the desired behaviour.
+
 A button beside "Buscar" toggles this view on and off. It searches nothing — it works on exactly
 the list the last "Buscar" produced, without a network call. Everything it computes is derived and
 in-memory: not persisted, never across the GraphQL boundary. Toggling off restores the full,
@@ -56,34 +81,48 @@ behaviour it has; `web` gains a view over its results.
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Reusable Unit)**: The heuristic must be a reusable unit of `web` that takes the list
+- [x] **REQ-1 (Reusable Unit)**: The heuristic must be a reusable unit of `web` that takes the list
       of results already held in memory and returns the selected candidates in ranked order, each
-      paired with the ranking that placed it (`resolutionTier`, `qualityScore`). It must be
-      callable from any component — the eventual automatic picker is the second caller — and not
-      embedded in the search modal's markup.
+      paired with the parsed interpretation that placed it (`ranking`). It must be callable from
+      any component — the eventual automatic picker is the second caller — and not embedded in the
+      search modal's markup.
 
-- [ ] **REQ-2 (Inputs Only)**: Every judgement must derive exclusively from fields the results
+- [x] **REQ-2 (Inputs Only)**: Every judgement must derive exclusively from fields the results
       already carry — `title`, `size`, `seeders`, `leechers`. No new request, no new field, no
       re-search.
 
-- [ ] **REQ-3 (Selection, Then Ranking)**: The unit runs three passes over the list, in order:
-      1. **Veto** — discard every release matching REQ-4.
+- [x] **REQ-3 (Selection, Then Ordering)**: The unit runs three passes over the list, in order:
+      1. **Veto** — discard every release matching REQ-4 or REQ-4a.
       2. **Tier** — find the highest resolution tier (REQ-5) present among the survivors, and
          discard every release below it.
-      3. **Rank** — order what remains by quality score (REQ-12), descending, stable.
+      3. **Order** — sort what remains through the lexicographic comparator of REQ-11.
 
       Passes 1 and 2 **remove** candidates; they do not demote them. If the list holds one 2160p
-      release and forty 1080p ones, the result is that single release. Quality score is only ever
-      compared between releases of the same resolution tier, so it can never promote a release into
-      a tier it does not belong to.
+      release and forty 1080p ones, the result is that single release.
 
-- [ ] **REQ-4 (Codec Veto)**: A release whose name identifies it as `av1` or `vp9` is discarded in
+      **The ordering is lexicographic, not a weighted score.** *(Redefined in `spec_version`
+      0.4.0 — see § Why Not A Score.)* Each criterion is consulted only when every criterion above
+      it tied; nothing below can ever compensate for a loss above. This is a stronger and different
+      guarantee from a weighted sum, and it is the point of the model: a UHD BluRay Remux cannot be
+      overtaken by a WEB-DL because the WEB-DL is bigger or better seeded, at any margin.
+
+- [x] **REQ-4 (Codec Veto)**: A release whose name identifies it as `av1` or `vp9` is discarded in
       pass 1, whatever its resolution — a vetoed 2160p release does not set the tier for pass 2.
 
-- [ ] **REQ-5 (Resolution Tier)**: Read from the release name, case-insensitive, highest match
-      wins: `2160`/`4k` → tier 4, `1080` → tier 3, `720` → tier 2, `480`/`360` → tier 1, nothing
-      recognised → tier 0. Tier 0 is the lowest — an untagged release is treated as an unknown, not
-      as a possible 2160.
+- [x] **REQ-4a (Dead-Swarm Veto)**: A release with **zero seeders and fewer than five leechers** is
+      discarded in pass 1 alongside REQ-4. Nothing will ever finish downloading from it, so it is
+      not a candidate however good its name reads.
+
+      The leecher threshold is what keeps this from being a plain "zero seeders" rule: a swarm with
+      no seeder but real leecher interest tends to revive, and discarding it would hand the pick to
+      a worse source that merely happens to be alive at this moment. Like REQ-4 it runs before the
+      tier pass, so a dead 2160p release cannot set the tier and evict every live 1080p one.
+
+- [x] **REQ-5 (Criterion 1 — Resolution)**: Read from the release name, case-insensitive, highest
+      match wins: `2160`/`4k` → 5, `1080` → 4, `720` → 3, `480` → 2, `360` → 1, nothing recognised
+      → 0. Tier 0 is the lowest — an untagged release is treated as an unknown, not as a possible
+      2160. This is the only criterion that also **removes** candidates (REQ-3 pass 2); every
+      other one merely orders.
 
       **The number is matched bare.** Release names carry the height with or without a scan suffix
       — `1080`, `1080p` and `1080i` are all common, and the suffix is dropped often enough that
@@ -95,90 +134,165 @@ behaviour it has; `web` gains a view over its results.
       its own token and never as a fragment of a longer one: `10800`, `21600`, `x264` and a year or
       runtime embedded in a larger number must not be read as a resolution.
 
-- [ ] **REQ-6 (Source, 0–30)**: `remux` → 30, `bluray`/`blu-ray`/`bdrip` → 25, `web-dl`/`webdl` →
-      18, `webrip` → 12, `hdrip` → 8, nothing recognised → 0. Highest match wins.
-
-- [ ] **REQ-7 (Codec, 0–20)**: `hevc`/`x265`/`h265` → 20, `avc`/`x264`/`h264` → 12, anything older
-      or unrecognised (`xvid`, `divx`, `mpeg2`, `vc-1`) → 0. `av1` and `vp9` never reach this
-      category — REQ-4 removed them.
-
-- [ ] **REQ-8 (Dynamic range, 0–15)**: `hdr10` (including `hdr10+`) → 15, a bare `hdr` → 10,
-      `dv`/`dovi`/`dolby vision` → 6, nothing recognised → 0. Highest match wins — a `HDR10+DV`
-      release scores 15, not 21.
-
-- [ ] **REQ-9 (Preferred group, 0 or 12)**: A release whose **name ends in** a preferred group tag,
-      compared case-insensitively, scores 12; every other release scores 0. The preferred list is a
+- [x] **REQ-6 (Criterion 2 — Preferred Group)**: A release whose **name ends in** a preferred group
+      tag, compared case-insensitively, ranks above one that does not. The preferred list is a
       hardcoded constant in `web` for now: `ntb`, `btm`, `flux`. Matching is on the trailing group
       segment, so a title merely containing `flux` mid-string does not match.
 
-- [ ] **REQ-10 (Size, 0–15, relative to the candidate set)**: Size is scored against the largest
-      **surviving candidate** — the largest release in the post-REQ-3 set scores 15 and the others
-      scale proportionally. A null size scores 0. Because the candidates all share a resolution
-      tier by then, this compares like with like: a 2160p release is never measured against a 720p
-      one.
+      **It sits above source deliberately.** The group is a reputation signal standing in for
+      qualities the release name cannot express — consistent encoding decisions, correct audio and
+      subtitle tracks, no botched HDR pass. The user trusts it more than the source label, so a
+      2160p release from a preferred group outranks a 2160p UHD BluRay Remux from an unknown one.
 
-- [ ] **REQ-11 (Popularity, 0–10, relative to the candidate set)**: Popularity weighs a seeder as
-      two leechers: `seeders * 2 + leechers`, scaled against the largest such figure among the
-      surviving candidates.
+- [x] **REQ-7 (Criterion 3 — Source)**: Highest match wins: UHD BluRay Remux → 8, BluRay Remux → 7,
+      UHD BluRay → 6, BluRay/BDRip → 5, WEB-DL → 4, WEBRip → 3, HDRip → 2, nothing recognised
+      → 0. Nothing is discarded for its source; an unrecognised one simply ranks last.
 
-- [ ] **REQ-12 (Quality Score)**: The sum of REQ-6 … REQ-11, ranging 0–102. Resolution contributes
-      no points to it — resolution already decided who is in the set.
+      **Remux-ness is the primary split, ahead of the `UHD` tag.** A remux is an already-usable
+      video file pulled straight off the disc; a non-remux BluRay/UHD BluRay release is frequently
+      a raw ISO image, which contributes nothing to the pipeline until someone extracts it — so a
+      plain `BluRay Remux` outranks a tagless `UHD BluRay`, even though `UHD` alone reads as the
+      fancier label. `UHD` only breaks the tie *within* each of those two groups. A bare `REMUX`
+      with no disc token is treated as a BluRay Remux, which is what it always is in practice.
+      `BDRip` is a BluRay encode and ranks with `BluRay`.
 
-- [ ] **REQ-13 (Toggle Button)**: A button sits beside "Buscar" in the search modal. Pressing it
+      **`BDRemux` is one word and must be matched as such.** Requiring a word boundary before
+      `remux` made every `UHD BDRemux` release — a common spelling, and the whole of one tracker's
+      catalogue — parse as *unrecognised*, the worst source rank instead of the best. Found against
+      real results; it is the reason `remux` is matched without a leading boundary.
+
+      **A streaming-service tag identifies a WEB-DL on its own.** Many releases carry `AMZN`,
+      `DSNP` or `ATVP` and never the literal `WEB-DL`. The recognised list is a constant in `web`
+      that grows as real release names appear; every entry ranks identically, since *which*
+      service it is is not (yet) a criterion. No entry may be ambiguous with a non-service token —
+      `ma` would collide with DTS-HD MA and `max` with an ordinary title word, so neither is
+      listed.
+
+- [x] **REQ-8 (Criterion 4 — Codec)**: `hevc`/`x265`/`h265` → 3, `avc`/`x264`/`h264` → 2, anything
+      older or unrecognised (`xvid`, `divx`, `mpeg2`, `vc-1`) → 0. `av1` and `vp9` never reach this
+      criterion — REQ-4 removed them. The separator inside `h265`/`h264` is optional: `H 265` and
+      `H.265` are as common as `H265` in real release names.
+
+      **Not compared between two disc sources** (REQ-11). A UHD BluRay is HEVC whether or not the
+      release name says so, so a title that omits the codec is missing *information*, not quality;
+      comparing on it would rank a verbose title above an identical terse one for being verbose.
+      This cannot let an AV1 or VP9 rip through — REQ-4 vetoes those in pass 1, before any source
+      is looked at.
+
+- [x] **REQ-9 (Criterion 5 — Dynamic Range)**: `hdr10` (including `hdr10+`) → 3, a bare `hdr` → 3,
+      `dv`/`dovi`/`dolby vision` → 2, nothing recognised (SDR) → 0. Highest match wins, never
+      combined — a `DV HDR10+` release ranks as HDR10, not as both.
+
+      **`HDR` and `HDR10` rank equally.** HDR10 is the baseline every UHD disc and stream carries,
+      so a release tagged plain `HDR` is HDR10 in practice and the shorter spelling should not cost
+      it a place. `10bit`/`10-bit` beside a bare `hdr` reads as HDR10 for the same reason. The two
+      keep distinct **labels** so the parse stays visible under REQ-14; only their rank is shared.
+
+- [x] **REQ-10 (Criterion 6 — Audio)**: `truehd`, or `dts-hd` + `ma` (a lossless core) **and**
+      `atmos` → 4; a lossless core alone → 3; `atmos` alone, or `ddp`/`eac3` (lossy but
+      object-audio-capable) → 2; `dts`/`dd`/`ac3`/`aac` (plain lossy) → 1; nothing recognised → 0.
+      Highest match wins. The `DDPA` spelling means DDP carrying Atmos and counts as `atmos`.
+
+      **Not compared between two disc sources** (REQ-11), for the same reason as REQ-8: a BluRay or
+      remux carries the disc's lossless track whether or not the name mentions it. Audio still
+      decides between two web sources, where the release name is the only evidence there is.
+
+- [x] **REQ-11 (The Comparator)**: Candidates are ordered by comparing, in this exact sequence and
+      stopping at the first difference:
+
+      | # | Criterion | Direction |
+      | :-- | :-- | :-- |
+      | 1 | Resolution (REQ-5) | higher first |
+      | 2 | Preferred group (REQ-6) | preferred first |
+      | 3 | Source (REQ-7) | higher first |
+      | 4 | Codec (REQ-8) | higher first — **skipped if both are disc sources** |
+      | 5 | Dynamic range (REQ-9) | higher first |
+      | 6 | Audio (REQ-10) | higher first — **skipped if both are disc sources** |
+      | 7 | Size | **larger** first; a null size sorts as 0 |
+      | 8 | Seeders | **more** first |
+      | 9 | Leechers | **fewer** first |
+
+      A "disc source" is BluRay, BDRip, BluRay Remux or either UHD variant — REQ-7 rank 5 and
+      above. Criteria 4 and 6 are only ever reached when the two candidates already tie on source,
+      so testing one of them for disc-ness tests both.
+
+      Criterion 1 can never actually differ among the candidates — pass 2 already removed every
+      release below the top tier — but it is kept in the chain so the comparator is correct in
+      isolation and remains reusable by a caller that does not filter first.
+
+      The sort must be **stable**, so candidates tying on all nine keep the order the API returned
+      them in rather than being shuffled (NFR-4).
+
+- [x] **REQ-13 (Toggle Button)**: A button sits beside "Buscar" in the search modal. Pressing it
       switches the table to the candidate view; pressing it again restores the full result list in
       the exact order the API returned. Its label must make the current state readable — which view
       is active, and which one the press will apply.
 
-- [ ] **REQ-14 (Visible Reasoning)**: While the candidate view is active, each row must show its
-      quality score. The purpose of this feature is to judge the algorithm, and an ordering whose
-      reasoning is invisible cannot be judged — a wrong pick and a right one look identical without
-      it. The score is not shown in the normal view, where it would be noise.
+- [x] **REQ-14 (Visible Reasoning)**: While the candidate view is active, each row must show **how
+      the heuristic parsed it** — its resolution, preferred group if any, source, codec, dynamic
+      range and audio, as read by REQ-5 … REQ-10. The purpose of this feature is to judge the
+      algorithm, and an ordering whose reasoning is invisible cannot be judged.
 
-- [ ] **REQ-15 (No Acquisition)**: The button only changes what is displayed. It never selects a
+      Under a weighted score this was a single number. A lexicographic comparator has no such
+      number, and one would not have helped: what decides a placement is *which criterion broke
+      the tie*, which the parsed values show directly and a total never could. It also surfaces
+      **misparsing**, the failure mode that actually occurred — a release read as 4K because
+      `DS4K` matched, or as SDR because its HDR tag was spelled unusually, is visible at a glance
+      against its own title on the same row.
+
+      These labels are format identifiers (`HEVC`, `HDR10`, `UHD BluRay Remux`), not prose: they
+      are the same in every locale and are deliberately **not** catalog keys (REQ-21). Where a
+      criterion recognises nothing the label is `—`, which is language-neutral.
+
+      Nothing is shown in the normal view, where it would be noise.
+
+- [x] **REQ-15 (No Acquisition)**: The button only changes what is displayed. It never selects a
       row, marks one as chosen, or triggers `addTorrentToMovie` / `addTorrentToEpisode`.
       Downloading stays a per-row action the user takes. Automating that is the *next* feature, and
       it must not arrive by accident in this one.
 
-- [ ] **REQ-16 (Nothing Is Lost)**: Every release removed by REQ-3 must return, in its original
+- [x] **REQ-16 (Nothing Is Lost)**: Every release removed by REQ-3 must return, in its original
       position, when the button is toggled off. The full API result list is retained untouched for
       as long as it is on screen; the candidate view is derived from it and never replaces it.
 
-- [ ] **REQ-17 (Empty Candidate Set)**: If every release in the list is vetoed, the candidate view
+- [x] **REQ-17 (Empty Candidate Set)**: If every release in the list is vetoed, the candidate view
       is empty. The table must say so in its own words — that the heuristic rejected everything and
       the original list is one press away — and must not reuse the "no results" or "no filter
       match" copy, which would read as "the search found nothing" and send the user to search
       again.
 
-- [ ] **REQ-18 (No Results, No View)**: The button is unavailable — disabled, not hidden — while
+- [x] **REQ-18 (No Results, No View)**: The button is unavailable — disabled, not hidden — while
       the result list is empty or a search is in flight.
 
-- [ ] **REQ-19 (Composes With The Filter)**: The existing title filter applies to whichever list is
+- [x] **REQ-19 (Composes With The Filter)**: The existing title filter applies to whichever list is
       displayed. Filtering the candidate view narrows the candidates and keeps them in rank order;
       clearing it restores the full candidate view. Typing in the filter never toggles the view.
 
-- [ ] **REQ-20 (New Search Resets)**: A new "Buscar" replaces the list and returns the table to the
+- [x] **REQ-20 (New Search Resets)**: A new "Buscar" replaces the list and returns the table to the
       normal view, since the previous candidate set described a list that no longer exists.
 
-- [ ] **REQ-21 (Copy Is Catalog-Driven)**: Every string this feature adds — both button labels and
+- [x] **REQ-21 (Copy Is Catalog-Driven)**: Every string this feature adds — both button labels and
       the empty-candidate message — is a new key under `search.torrent` in
       `services/web/messages/{en,es}.json`. No hardcoded string in the component (`018-ui-i18n`).
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Nothing Persisted)**: Scores, tiers and the toggle state exist only for the lifetime
+- [x] **NFR-1 (Nothing Persisted)**: Scores, tiers and the toggle state exist only for the lifetime
       of the open modal. Nothing is written to a database, a setting, a cookie or local storage,
       and nothing appears in any GraphQL request or response.
 
-- [ ] **NFR-2 (No Network)**: Toggling issues no request of any kind. A user who toggles ten times
+- [x] **NFR-2 (No Network)**: Toggling issues no request of any kind. A user who toggles ten times
       causes zero traffic.
 
-- [ ] **NFR-3 (Total Result Under Missing Data)**: Every field read is nullable in the contract. A
+- [x] **NFR-3 (Total Result Under Missing Data)**: Every field read is nullable in the contract. A
       null `title`, a null `size` or a zero swarm must yield a result, never an exception: an
       unparseable release lands in tier 0 with whatever its recognised parts are worth.
 
-- [ ] **NFR-4 (Degenerate Lists)**: A single-result list, a list where every size is null, a list
-      where every release is vetoed, and a list where every candidate scores identically must all
-      resolve without dividing by zero and without reordering rows arbitrarily.
+- [x] **NFR-4 (Degenerate Lists)**: A single-result list, a list where every size is null, a list
+      where every release is vetoed, and a list where every candidate ties on all nine comparator
+      keys must all resolve without throwing and without reordering rows arbitrarily — the last
+      case is what makes the stable sort of REQ-11 a requirement rather than an implementation
+      detail.
 
 ## GraphQL Contract Delta
 
@@ -194,46 +308,61 @@ about it is sent back to `api`. No query, mutation, type, field or error conditi
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a search for a film that returns a mixed list, when "Buscar" completes, the
-      table is in the API's original size-descending order, no score is shown, and the button is
-      enabled.
+- [x] **AC-1**: Given a search for a film that returns a mixed list, when "Buscar" completes, the
+      table is in the API's original size-descending order, no parsed-attribute labels are shown,
+      and the button is enabled.
 
-- [ ] **AC-2** (selection): Given a list containing exactly one 2160p release — a WEB-DL x264 with
+- [x] **AC-2** (selection): Given a list containing exactly one 2160p release — a WEB-DL x264 with
       few seeders — alongside many 1080p Blu-ray remux HEVC releases from preferred groups, when
       the button is pressed, the table shows **that one release and nothing else**. No new request
       appears in the browser network panel.
 
-- [ ] **AC-3** (ranking within the set): Given a list whose highest tier is 1080p, when the button
-      is pressed, every row is 1080p, a remux/HEVC/HDR10/preferred-group release is row 1, and each
-      row shows a score that descends down the table.
+- [x] **AC-3** (ordering within the set): Given a list whose highest tier is 1080p, when the button
+      is pressed, every row is 1080p, a preferred-group release is row 1 whatever its source, and
+      each row shows its parsed resolution/group/source/codec/range/audio.
 
-- [ ] **AC-4** (veto): Given a list whose only 2160p release is AV1, when the button is pressed,
+- [x] **AC-3a** (lexicographic dominance): Given two 2160p releases from unknown groups — one a
+      BluRay Remux of 1 byte with 1 seeder, one a WEB-DL of 999 GB with 99 999 seeders — when the
+      button is pressed, the **remux is row 1**. No margin on size or seeders promotes a lower
+      source past a higher one.
+
+- [x] **AC-4** (veto): Given a list whose only 2160p release is AV1, when the button is pressed,
       that release is absent and the candidate set is drawn from the next tier down — the AV1
       release does not set the tier and then leave the set empty.
 
-- [ ] **AC-5** (nothing is lost): Given the candidate view is active, when the button is pressed
+- [x] **AC-4a** (dead-swarm veto): Given a list containing the best-ranked release at 0 seeders and
+      2 leechers, when the button is pressed, that release is absent and the next-best one leads.
+      Given the same release at 0 seeders and 9 leechers, it is present and leads — the threshold,
+      not the mere absence of seeders, is what removes it.
+
+- [x] **AC-4b** (disc sources ignore codec and audio): Given two 2160p UHD BluRay Remux releases
+      identical but for one naming `HEVC TrueHD Atmos` and the other naming neither, when the
+      button is pressed the **larger** of the two leads — the terse title is not punished for
+      being terse. Given the same pair as WEB-DLs, the one naming HEVC and Atmos leads instead.
+
+- [x] **AC-5** (nothing is lost): Given the candidate view is active, when the button is pressed
       again, the table is byte-identical to AC-1 — every hidden release back, in its original
-      position, with no score column.
+      position, with no parsed-attribute labels.
 
 - [ ] **AC-6** (failure path): Given a result list in which **every** release is AV1 or VP9, when
       the button is pressed, the table shows the empty-candidate message from REQ-17 — not the
       "no results" copy — no error reaches the console, and pressing again restores all of them.
 
-- [ ] **AC-7** (failure path): Given a result list in which every `title` is null and every `size`
+- [x] **AC-7** (failure path): Given a result list in which every `title` is null and every `size`
       is null, when the button is pressed, the table renders with no console error, every release
       still present (all tier 0, none vetoed), in their original relative order.
 
-- [ ] **AC-8** (failure path): Given a search that returns zero results or is still running, the
+- [x] **AC-8** (failure path): Given a search that returns zero results or is still running, the
       button is visibly disabled and pressing it does nothing.
 
-- [ ] **AC-9**: Given the candidate view is active, when the user types `x265` into the filter,
-      only matching candidates remain and they stay in rank order; clearing the filter restores the
-      full candidate view.
+- [x] **AC-9**: Given the candidate view is active, when the user types `x265` into the filter,
+      only matching candidates remain and they stay in comparator order; clearing the filter
+      restores the full candidate view.
 
-- [ ] **AC-10**: Given the candidate view is active, when the user runs a second "Buscar", the new
+- [x] **AC-10**: Given the candidate view is active, when the user runs a second "Buscar", the new
       list renders in the API's original order with the toggle back in its default state.
 
-- [ ] **AC-11**: `bin/npm web run build` exits 0 and `grep -rn "Ordenar" services/web/src` returns
+- [x] **AC-11**: `bin/npm web run build` exits 0 and `grep -rn "Ordenar" services/web/src` returns
       nothing — the copy lives in `messages/es.json`.
 
 ## Out of Scope
@@ -252,9 +381,15 @@ about it is sent back to `api`. No query, mutation, type, field or error conditi
   worker already makes (`024`, `031`); constraining the *source* by it would discard the headroom
   that makes a 2160p source worth having.
 
-- **Making the weights configurable.** Every number above and the preferred-group list are
-  constants in `web`. Watching them against real searches is exactly what this feature is for;
-  moving them into Settings is worth doing once they have earned it.
+- **Making the criteria configurable.** The order of the chain, the ranks inside each criterion,
+  the preferred-group list and the streaming-service list are all constants in `web`. Watching
+  them against real searches is exactly what this feature is for; moving them into Settings is
+  worth doing once they have earned it.
+
+- **Ranking the streaming services against each other.** REQ-7 recognises `AMZN`/`DSNP`/`ATVP` and
+  friends only to identify a WEB-DL; it does not prefer one service over another. Whether an AMZN
+  WEB-DL beats a DSNP one is a real question with a real answer, and it becomes a sub-criterion
+  under source when there is a table to encode.
 
 - **Series and season packs.** The button ships on the movie detail page's modal because that is
   where it will be exercised. The modal is shared with the episode path, so it appears there too;
@@ -267,7 +402,7 @@ about it is sent back to `api`. No query, mutation, type, field or error conditi
   When the automatic pick moves this logic to `api`, that is the code it should replace.
 
 - **Handling bad rips (`CAM`, `TS`, `TELESYNC`, `SCREENER`) and specific groups (`YTS`, `RARBG`).**
-  Only the AV1/VP9 veto removes; nothing else subtracts. An unrecognised source scores 0 in REQ-6,
+  Only the AV1/VP9 veto removes; nothing else does. An unrecognised source ranks last under REQ-7,
   which is a weak defence — and note a `CAM` tagged `1080p` not only survives but can *define* the
   tier, evicting every legitimate 720p release from the candidate set. REQ-3 makes this sharper
   than it was under a pure ordering, and it is the first thing to watch for in the manual pass.
@@ -277,6 +412,6 @@ about it is sent back to `api`. No query, mutation, type, field or error conditi
   and not something to fold into this button. Until it ships, the human reading the candidate view
   is the filter.
 
-- **Audio.** Neither channel layout nor codec (`TrueHD`, `Atmos`, `DTS-HD`, `DDP`) contributes,
-  though the dead `api` heuristic scores it. It was not part of the requested model; adding it
-  later is a new weight in an existing category, not a restructure.
+- **Channel layout.** REQ-10 reads the audio *codec* (`TrueHD`, `Atmos`, `DTS-HD MA`, `DDP`) but
+  not the channel count — `7.1`, `5.1` and `2.0` rank identically. Adding it is another rung on an
+  existing criterion, not a restructure.

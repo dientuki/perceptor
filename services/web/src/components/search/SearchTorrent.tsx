@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Loader2, Search } from "lucide-react";
+import { Download, Loader2, Search, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -11,6 +11,8 @@ import {
 import { addTorrentToEpisodeAction } from "@/actions/shows";
 import ReplaceWarning from "@/components/import/ReplaceWarning";
 import Button from "@/components/ui/button/Button";
+import type { RankedTorrentResult } from "@/lib/torrent-ranking";
+import { rankTorrentResults } from "@/lib/torrent-ranking";
 import type { TorrentResult } from "@/types/indexer";
 import type { AcquisitionResult, AcquisitionTarget } from "@/types/media";
 
@@ -43,6 +45,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TorrentResult[]>([]);
   const [filter, setFilter] = useState("");
+  const [showBest, setShowBest] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [addingHash, setAddingHash] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
@@ -68,7 +71,13 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     }
   }, [target]);
 
-  const filteredResults = results.filter((res) =>
+  // The candidate view derives from `results` without ever mutating it — REQ-16/AC-5 depend on
+  // `results` surviving in the API's original order for as long as the modal is open.
+  const candidateResults: (TorrentResult | RankedTorrentResult)[] = showBest
+    ? rankTorrentResults(results)
+    : results;
+
+  const filteredResults = candidateResults.filter((res) =>
     (res.title || "").toLowerCase().includes(filter.toLowerCase()),
   );
 
@@ -79,6 +88,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     setIsLoading(true);
     setSearchError(null);
     setResults([]);
+    setShowBest(false);
     try {
       const data = await searchTorrentsAction(query);
       setResults(data);
@@ -184,6 +194,16 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
             t("searchButton")
           )}
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="md"
+          startIcon={<Sparkles className="h-4 w-4" />}
+          disabled={isLoading || results.length === 0}
+          onClick={() => setShowBest((prev) => !prev)}
+        >
+          {t(showBest ? "rankButtonReset" : "rankButton")}
+        </Button>
       </form>
 
       {isCompleted && (
@@ -271,9 +291,35 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                   className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center hover:bg-gray-50 dark:hover:bg-white/[0.01]"
                 >
                   <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                    <span className="font-medium line-clamp-1">
+                    <span className="font-medium line-clamp-2">
                       {res.title || t("unknownRelease")}
                     </span>
+                    {showBest && "ranking" in res && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {(
+                          [
+                            ["resolution", res.ranking.resolutionLabel],
+                            ["group", res.ranking.groupLabel],
+                            ["source", res.ranking.sourceLabel],
+                            ["codec", res.ranking.codecLabel],
+                            ["range", res.ranking.dynamicRangeLabel],
+                            ["audio", res.ranking.audioLabel],
+                          ] as [string, string | null][]
+                        )
+                          .filter(
+                            (entry): entry is [string, string] =>
+                              entry[1] !== null,
+                          )
+                          .map(([criterion, label]) => (
+                            <span
+                              key={criterion}
+                              className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400"
+                            >
+                              {label}
+                            </span>
+                          ))}
+                      </div>
+                    )}
                     <div className="mt-1 flex flex-col gap-0.5 overflow-hidden">
                       {res.infoUrl.map(
                         (indexerItem, idx) =>
@@ -319,9 +365,13 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                 <td className="flex-1 px-4 py-10 text-center text-gray-500 dark:text-gray-400">
                   {isLoading
                     ? t("searchingTrackers")
-                    : results.length > 0
-                      ? t("noFilterMatch")
-                      : t("noResultsYet")}
+                    : showBest &&
+                        candidateResults.length === 0 &&
+                        results.length > 0
+                      ? t("rankEmpty")
+                      : results.length > 0
+                        ? t("noFilterMatch")
+                        : t("noResultsYet")}
                 </td>
               </tr>
             )}

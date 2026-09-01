@@ -250,7 +250,10 @@
       "cancel": "Cancel",
       "searchingTrackers": "Searching trackers...",
       "noFilterMatch": "No results match your filter.",
-      "noResultsYet": "No results yet. Try searching for a specific release."
+      "noResultsYet": "No results yet. Try searching for a specific release.",
+      "rankButton": "Best candidates",
+      "rankButtonReset": "All results",
+      "rankEmpty": "Every release was rejected by the heuristic. Switch back to all results to see them."
     }
   },
   "billboard": {

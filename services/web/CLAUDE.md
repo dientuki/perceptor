@@ -322,6 +322,51 @@ any new acquisition entry point rather than reintroducing a bare id/type pair.
 `Episode` is a single type, re-exported from `src/actions/shows.ts`. Import it from there, never
 redeclare it.
 
+## Torrent ranking heuristic (`036-torrent-ranking-heuristic`)
+
+`src/lib/torrent-ranking.ts` exports one pure function, `rankTorrentResults(results: TorrentResult[])
+: RankedTorrentResult[]`, called from `SearchTorrent.tsx`'s "Best candidates" toggle. It never
+persists anything and never crosses the GraphQL boundary — it re-ranks the exact list the search
+button already fetched, client-side only. Three passes: veto (`av1`/`vp9`, boundary-anchored, **plus dead
+swarms** — zero seeders and under five leechers, since nothing will ever finish downloading from
+one), tier (keep only the highest surviving resolution tier — bare digits like `1080` match
+alongside `1080p`/`1080i`, `10800` must not), then order.
+
+**It is a lexicographic comparator, not a weighted score** — this is the one thing to understand
+before touching it. Criteria are ranked, not weighted, and each is consulted only to break a tie in
+the one above it: **resolución → grupo preferido → fuente → codec → rango dinámico → audio → tamaño
+(desc) → seeders (desc) → leechers (asc)**. Nothing lower can compensate for a loss higher up, so a
+UHD BluRay Remux can never be overtaken by a WEB-DL on size or seeder count at any margin. The
+original 0–102 weighted sum was replaced precisely because an additive model cannot express that —
+every weight is an exchange rate between criteria, and for these criteria no exchange rate exists.
+Do not reintroduce a score, and do not "simplify" the comparator chain into a sum.
+
+Several placements are deliberate and easy to get backwards. **The preferred group ranks above
+source** — it is a reputation signal standing in for what the release name cannot say, so a
+preferred-group WEB-DL beats an unknown-group UHD BluRay Remux. **Resolution both filters and leads
+the chain**: it can never actually differ among candidates, since the tier pass already removed the
+rest, but it stays in the comparator so the function is correct for a caller that does not filter.
+**`HDR` and `HDR10` rank equally** (HDR10 is the baseline every UHD source carries, so the short
+spelling must not cost a place) while keeping distinct labels. And **codec and audio are skipped
+between two disc sources** — a UHD BluRay is HEVC with the disc's lossless track whether the name
+says so or not, so comparing on them would reward a verbose title over an identical terse one; both
+still decide between two web sources. That skip cannot leak an AV1 rip: the veto runs in pass 1,
+before any source is inspected.
+
+**Match `remux` without a leading word boundary.** `BDRemux` is one token, and requiring `\bremux`
+made every `UHD BDRemux` release parse as *unrecognised* — the worst source rank instead of the
+best. That was a real bug found against live results, not a hypothetical.
+
+Each candidate carries a `ranking` object with both the numeric rank and a human-readable label per
+criterion; `SearchTorrent.tsx` renders the labels as badges under the title so a misparse is visible
+against the release name on the same row (a real `DS4K` tag once read as 4K). Those labels are
+format identifiers — `HEVC`, `HDR10`, `UHD BluRay Remux` — the same in every locale, and
+deliberately not catalog keys; unrecognised reads render `—`. `PREFERRED_GROUPS` and
+`STREAMING_SERVICES` are constants that grow as real release names appear — no entry in the latter
+may be ambiguous with a non-service token (`ma` collides with DTS-HD MA, `max` with a title word).
+Written to be reusable outside this modal — an eventual automatic picker (no user toggle) is meant
+to call the same function.
+
 ## Language pickers: three call sites, one component
 
 `src/actions/languages.ts` follows the standard server-action shape; `getLanguages` uses
