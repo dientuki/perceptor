@@ -337,7 +337,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   carries a non-null `id` (display/grouping identity, never sent back) and a nullable `infoHash` —
   a search groups every Prowlarr row instead of dropping the ones missing a hash
   (`037-indexer-result-loss`); see `clients/indexer/` below for where the grouping and the
-  now-lazy resolution actually happen.
+  now-lazy resolution actually happen. The read-through Redis cache (10-minute TTL, normalized
+  query as key) lives in `IndexerService.search()`, not `ProwlarrClient` — `client.ts` stays a
+  pure adapter, mirroring how `TmdbClient` sits below `PopularMediaService`'s own cache
+  (`040-indexer-search-cache`).
 - **`uploads/`** — the project's only REST route (tus); see the root `CLAUDE.md` for why.
   Authenticated **by ticket, not by `JwtAuthGuard`** (which skips non-GraphQL contexts): a signed-in
   user mints one via `createUploadTicket`, the browser sends it as `Authorization: Bearer <ticket>` on
