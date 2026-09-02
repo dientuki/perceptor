@@ -113,6 +113,7 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.UPLOAD_TICKET_WRONG_EPISODE]:
     'The upload ticket does not belong to this episode',
   [ERROR_KEYS.UPLOAD_METADATA_INCOMPLETE]: 'Upload metadata is incomplete',
+  [ERROR_KEYS.UPLOAD_SUPERSEDED]: 'Superseded by a newer upload',
 
   // ffprobe-logs
   [ERROR_KEYS.FFPROBE_LOG_NOT_FOUND]: 'ffprobe log {id} does not exist',

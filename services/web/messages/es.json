@@ -53,6 +53,7 @@
       "ticket_wrong_movie": "El ticket de subida no corresponde a esta película",
       "ticket_wrong_episode": "El ticket de subida no corresponde a este episodio",
       "metadata_incomplete": "Los metadatos de la subida están incompletos",
+      "superseded": "Otra subida más nueva reemplazó a esta",
       "ticketMissing": "El API no devolvió el permiso de subida",
       "endpointNotConfigured": "La variable de entorno PUBLIC_UPLOAD_URL no está configurada"
     },

@@ -53,6 +53,7 @@
       "ticket_wrong_movie": "The upload ticket does not belong to this movie",
       "ticket_wrong_episode": "The upload ticket does not belong to this episode",
       "metadata_incomplete": "Upload metadata is incomplete",
+      "superseded": "Superseded by a newer upload",
       "ticketMissing": "The API did not return the upload permission",
       "endpointNotConfigured": "The PUBLIC_UPLOAD_URL environment variable is not set"
     },

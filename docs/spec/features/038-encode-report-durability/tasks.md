@@ -1,7 +1,7 @@
 ---
 title: Encode Report Durability — Tasks
 last_updated: 2026-09-01
-status: Draft
+status: In Progress
 ---
 
 # TASKS: Encode Report Durability (`tasks.md`)
@@ -30,7 +30,7 @@ This group is what the worker's retry depends on. Nothing in Group 4 may start b
 a retry against an api that is not repeat-safe double-notifies the media server on every lost
 response.
 
-- [ ] **T001** `[api]` Add `UPLOAD_SUPERSEDED: 'error.upload.superseded'` to
+- [x] **T001** `[api]` Add `UPLOAD_SUPERSEDED: 'error.upload.superseded'` to
       `services/api/src/i18n/error-keys.ts` and its English rendering
       (`'Superseded by a newer upload'`) to `services/api/src/i18n/messages.en.ts`. Place it with
       the existing `error.upload.*` REST family, not with the GraphQL upload key. No `params` — the
@@ -39,7 +39,7 @@ response.
       `bin/cli api grep -n "upload.superseded" src/i18n/error-keys.ts src/i18n/messages.en.ts`
       returns both files.
 
-- [ ] **T002** `[api]` Make `encodeCompleted` repeat-safe and source-aware in
+- [x] **T002** `[api]` Make `encodeCompleted` repeat-safe and source-aware in
       `services/api/src/process-jobs/process-jobs.service.ts`. Read the job before writing; widen
       its `include` so the source's `status` is available alongside `sourceFile.mediaSourceId`.
       When the job is already `COMPLETED` with the same `outputFilePath`, skip `notifyCreated` and
@@ -52,7 +52,7 @@ response.
       `bin/cli api grep -n "notifyCreated" src/process-jobs/process-jobs.service.ts` shows the call
       inside a conditional rather than unconditional.
 
-- [ ] **T003** `[api]` Apply the same demoted-source guard to `encodeFailed` in the same file: read
+- [x] **T003** `[api]` Apply the same demoted-source guard to `encodeFailed` in the same file: read
       the job's source status, and when it is `ERROR`, record the failure on the `ProcessJob` row
       only — never propagating `ERROR` to the `movie`/`episode`. A demoted source's failure must not
       fail the title the winner is still encoding (REQ-8). Confirm a second identical delivery
@@ -64,7 +64,7 @@ response.
 
 Independent of Group 1 in code; both are `api` and run in whichever order the agent takes them.
 
-- [ ] **T004** `[api]` In `services/api/src/uploads/uploads.service.ts`, delete the opening
+- [x] **T004** `[api]` In `services/api/src/uploads/uploads.service.ts`, delete the opening
       `if (!(await this.uploadTickets.isReplaceAuthorised(uploadId))) return;` from
       `demoteSupersededSources` so every completed upload demotes its target's `READY`/`SCANNED`
       sources (REQ-6). In the same method, and in the same `$transaction` as the demotion, move that
@@ -78,7 +78,7 @@ Independent of Group 1 in code; both are `api` and run in whichever order the ag
       `bin/cli api grep -n "isReplaceAuthorised" src/uploads/uploads.service.ts` shows it only in
       the two `*_ALREADY_COMPLETED` guards, no longer in `demoteSupersededSources`.
 
-- [ ] **T005** `[api]` In both branches of `handleUploadFinish`, replace the
+- [x] **T005** `[api]` In both branches of `handleUploadFinish`, replace the
       `if (raceResult.startsWith('ignorado')) { console.log(...); return; }` early return with
       `throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED)` (REQ-7). After T004 this branch
       is reachable only when a concurrent upload demoted this row between its `create` and its race
@@ -93,7 +93,7 @@ incident this feature exists for. Use the house fault-injection technique
 (`services/api/CLAUDE.md` § Tests): each case must be verified to go red when its rule is removed.
 Open each new block with the one-paragraph header Article XI permits.
 
-- [ ] **T006** `[api] [P]` Extend
+- [x] **T006** `[api] [P]` Extend
       `services/api/src/process-jobs/process-jobs.service.spec.ts`: a second `encodeCompleted` for
       the same job does not call `notifyCreated` and leaves the stored row identical (AC-8); a job
       whose `MediaSource` is `ERROR` leaves `episode.status` and `filePath` untouched on
@@ -101,7 +101,7 @@ Open each new block with the one-paragraph header Article XI permits.
       the last two cases must fail. → T002, T003
       *Done when:* `bin/npm api test` is green and the new cases fail when the guard is removed.
 
-- [ ] **T007** `[api] [P]` Extend `services/api/src/uploads/uploads.service.spec.ts`: an upload
+- [x] **T007** `[api] [P]` Extend `services/api/src/uploads/uploads.service.spec.ts`: an upload
       against a target holding a `SCANNED` sibling demotes it, moves the title to `ENCODING` and
       enqueues `bull:process` (AC-5, AC-6); the demotion leaves none of that source's `ProcessJob`
       rows in `WAITING`/`QUEUED`/`ENCODING` (AC-9); a row demoted out from under its own
@@ -116,7 +116,7 @@ Open each new block with the one-paragraph header Article XI permits.
 Everything here depends on Group 1: the contract's new obligation must be honoured by `api` before
 the worker starts exercising it. The `worker` chain and the `web` task share no file.
 
-- [ ] **T008** `[worker] [P]` In `services/worker/src/api/graphql-client.ts`, export
+- [x] **T008** `[worker] [P]` In `services/worker/src/api/graphql-client.ts`, export
       `class ApiUnreachableError extends Error` and throw it **only** where the `await fetch(...)`
       call itself rejects, carrying the original as `cause`. Everything below stays exactly as it
       is and stays terminal: the non-2xx `Error`, the invalid-JSON `Error`, the unkeyed
@@ -126,7 +126,7 @@ the worker starts exercising it. The `worker` chain and the `web` task share no 
       *Done when:* `bin/cli worker npx --no tsc --noEmit` exits 0 and the class is exported from
       exactly one file.
 
-- [ ] **T009** `[worker]` Add `services/worker/src/api/deliver-report.ts` exporting
+- [x] **T009** `[worker]` Add `services/worker/src/api/deliver-report.ts` exporting
       `deliverReport<T>(label: string, send: () => Promise<T>): Promise<T>`: call `send()`; on
       `ApiUnreachableError` log one line naming `label` and the next delay (NFR-1), wait, retry —
       unbounded, never giving up (NFR-2). Rethrow every other error immediately (REQ-3). Backoff
@@ -135,7 +135,7 @@ the worker starts exercising it. The `worker` chain and the `web` task share no 
       *Done when:* `bin/cli worker npx --no tsc --noEmit` exits 0 and the module exports exactly one
       function.
 
-- [ ] **T010** `[worker]` In `services/worker/src/jobs/encode.job.ts`, move the `encodeCompleted`
+- [x] **T010** `[worker]` In `services/worker/src/jobs/encode.job.ts`, move the `encodeCompleted`
       `fetchGraphQL` call **out** of the `try` block — the `try` now ends once the encode or
       passthrough has returned and `ffmpegCommand`/`finalOutputPath` are set. Route the relocated
       call through `deliverReport`, and route the `catch`'s `encodeFailed` call through it too,
@@ -147,7 +147,7 @@ the worker starts exercising it. The `worker` chain and the `web` task share no 
       *Done when:* `bin/cli worker npx --no tsc --noEmit` exits 0, and the `encodeCompleted` call is
       lexically outside the `try` that contains the `encodeFailed` call.
 
-- [ ] **T011** `[worker]` Cover the retry primitive: extend
+- [x] **T011** `[worker]` Cover the retry primitive: extend
       `services/worker/src/api/graphql-client.spec.ts` so a rejecting `fetch` produces
       `ApiUnreachableError` while an HTTP 500, an unkeyed GraphQL error and a keyed one produce
       errors that are **not** that class; add `services/worker/src/api/deliver-report.spec.ts`
@@ -156,7 +156,7 @@ the worker starts exercising it. The `worker` chain and the `web` task share no 
       attempts rather than spinning. → T009
       *Done when:* `bin/npm worker test` is green with both files running.
 
-- [ ] **T012** `[worker]` Add the incident case to
+- [x] **T012** `[worker]` Add the incident case to
       `services/worker/src/jobs/encode.job.spec.ts`: given an encode that succeeds and an
       `encodeCompleted` that throws `ApiUnreachableError` once and then succeeds, assert
       `encodeFailed` is **never** called and cleanup still runs on the verdict that eventually
@@ -165,7 +165,7 @@ the worker starts exercising it. The `worker` chain and the `web` task share no 
       `try` and the first case must go red. → T010
       *Done when:* `bin/npm worker test` is green and the case fails when the call is moved back.
 
-- [ ] **T013** `[web] [P]` Add `superseded` to the `errors.upload` object in
+- [x] **T013** `[web] [P]` Add `superseded` to the `errors.upload` object in
       `services/web/messages/es.json` (`"Otra subida más nueva reemplazó a esta"`) and in
       `services/web/messages/en.json` (`"Superseded by a newer upload"`). Two lines, nothing else —
       no component, action, type or route changes. The string carries no interpolation placeholder.
@@ -175,7 +175,7 @@ the worker starts exercising it. The `worker` chain and the `web` task share no 
 
 ### Group 5 — verification and docs
 
-- [ ] **T014** `[docs]` Update the `CLAUDE.md` files this feature makes stale: the root pipeline
+- [x] **T014** `[docs]` Update the `CLAUDE.md` files this feature makes stale: the root pipeline
       table's "Detect completion, enqueue" row (the arbiter no longer treats a finished sibling as
       a standing winner for uploads); `services/api/CLAUDE.md`'s `uploads/` section (which states
       `demoteSupersededSources` "runs only for an upload whose ticket authorised a replacement" —

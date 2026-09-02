@@ -260,6 +260,28 @@ export class ProcessJobsService {
   }
 
   async encodeCompleted(processJobId: number, outputFilePath: string, ffmpegCommand: string) {
+    // REQ-5/REQ-8: read the job's current state (and its source's status)
+    // before writing anything, so a repeat delivery and a delivery for a
+    // demoted source can both be recognised before they mutate the movie/
+    // episode a second time or notify the media server twice.
+    const existing = await this.prisma.processJob.findUnique({
+      where: { id: processJobId },
+      include: { sourceFile: { select: { mediaSourceId: true, mediaSource: { select: { status: true } } } } },
+    });
+
+    if (!existing) {
+      throw i18nError.notFound(ERROR_KEYS.PROCESS_JOB_NOT_FOUND, { id: processJobId });
+    }
+
+    // A retry whose predecessor already landed: same row, same output path.
+    // Nothing left to propagate or to notify a second time.
+    const alreadyDeliveredSame =
+      existing.status === 'COMPLETED' && existing.outputFilePath === outputFilePath;
+    // REQ-8: this source lost its race to a newer upload after this job was
+    // enqueued — the title now belongs to the winner and must not be moved
+    // by a late report from the loser.
+    const sourceDemoted = existing.sourceFile.mediaSource.status === 'ERROR';
+
     const processJob = await this.prisma.processJob.update({
       where: { id: processJobId },
       data: { status: 'COMPLETED', progress: 100, outputFilePath, ffmpegCommand, errorMessage: null },
@@ -268,21 +290,26 @@ export class ProcessJobsService {
 
     // Propaga a la media consolidada, igual que downloads.service hace con
     // ENCODING al arrancar: la UI mira Movie/Episode.status, no ProcessJob.
-    if (processJob.movieId) {
-      await this.prisma.movie.update({
-        where: { id: processJob.movieId },
-        data: { status: 'COMPLETED', filePath: outputFilePath },
-      });
-    } else if (processJob.episodeId) {
-      await this.prisma.episode.update({
-        where: { id: processJob.episodeId },
-        data: { status: 'COMPLETED', filePath: outputFilePath },
-      });
+    if (!alreadyDeliveredSame && !sourceDemoted) {
+      if (processJob.movieId) {
+        await this.prisma.movie.update({
+          where: { id: processJob.movieId },
+          data: { status: 'COMPLETED', filePath: outputFilePath },
+        });
+      } else if (processJob.episodeId) {
+        await this.prisma.episode.update({
+          where: { id: processJob.episodeId },
+          data: { status: 'COMPLETED', filePath: outputFilePath },
+        });
+      }
     }
 
     // El archivo ya está en la biblioteca y la DB ya lo refleja: recién ahora se
     // avisa. notifyCreated se traga sus propios errores a propósito (ver ahí).
-    await this.mediaServer.notifyCreated(outputFilePath);
+    // REQ-5: only the first delivery notifies the media server.
+    if (!alreadyDeliveredSame) {
+      await this.mediaServer.notifyCreated(outputFilePath);
+    }
 
     // The three cleanup instructions (013-season-pack-processing). Computed
     // here, never worker-side, because they depend on rows the worker cannot
@@ -324,15 +351,31 @@ export class ProcessJobsService {
     errorParams: string | undefined,
     errorMessage: string,
   ) {
+    // REQ-8: same demoted-source guard as encodeCompleted — a failure
+    // reported for a source the user's newer upload already replaced must
+    // not fail the title the winner is still encoding.
+    const existing = await this.prisma.processJob.findUnique({
+      where: { id: processJobId },
+      include: { sourceFile: { select: { mediaSource: { select: { status: true } } } } },
+    });
+
+    if (!existing) {
+      throw i18nError.notFound(ERROR_KEYS.PROCESS_JOB_NOT_FOUND, { id: processJobId });
+    }
+
+    const sourceDemoted = existing.sourceFile.mediaSource.status === 'ERROR';
+
     const processJob = await this.prisma.processJob.update({
       where: { id: processJobId },
       data: { status: 'ERROR', errorKey, errorParams: errorParams ?? null, errorMessage },
     });
 
-    if (processJob.movieId) {
-      await this.prisma.movie.update({ where: { id: processJob.movieId }, data: { status: 'ERROR' } });
-    } else if (processJob.episodeId) {
-      await this.prisma.episode.update({ where: { id: processJob.episodeId }, data: { status: 'ERROR' } });
+    if (!sourceDemoted) {
+      if (processJob.movieId) {
+        await this.prisma.movie.update({ where: { id: processJob.movieId }, data: { status: 'ERROR' } });
+      } else if (processJob.episodeId) {
+        await this.prisma.episode.update({ where: { id: processJob.episodeId }, data: { status: 'ERROR' } });
+      }
     }
 
     return true;

@@ -234,9 +234,15 @@ export class UploadsService implements OnModuleInit {
       // the guard and the pause of any downloading siblings can never drift
       // between the two entry points (../plan.md § Approach).
       const raceResult = await this.downloads.resolveRace(mediaSource.id);
-      if (raceResult.startsWith('ignorado')) {
-        console.log(`[uploads] ${upload.id}: mediaSource ${mediaSource.id} ignorado (${raceResult}), no se toca el episodio`);
-        return;
+      // resolveRace (read-only in this slice) answers with exactly one of two
+      // prefixes; "not a winner" is checked as the absence of "ganador"
+      // rather than by name-matching its other outcome.
+      if (!raceResult.startsWith('ganador')) {
+        // REQ-7: reachable only when a concurrent upload demoted this row
+        // between its create and this race resolution — the loser of an
+        // upload-versus-upload race, which is genuinely a 409, not a silent
+        // no-op the caller never hears about.
+        throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED);
       }
 
       await this.prisma.episode.update({
@@ -287,9 +293,9 @@ export class UploadsService implements OnModuleInit {
     // READY/SCANNED is ignored here exactly like a losing torrent's late
     // completion (AC-22).
     const raceResult = await this.downloads.resolveRace(mediaSource.id);
-    if (raceResult.startsWith('ignorado')) {
-      console.log(`[uploads] ${upload.id}: mediaSource ${mediaSource.id} ignorado (${raceResult}), no se toca la película`);
-      return;
+    if (!raceResult.startsWith('ganador')) {
+      // REQ-7: same reasoning as the episode branch above.
+      throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED);
     }
 
     await this.prisma.movie.update({
@@ -302,32 +308,59 @@ export class UploadsService implements OnModuleInit {
     console.log(`[uploads] ${upload.id}: completado -> mediaSource ${mediaSource.id}, encolado`);
   }
 
-  // Shared by both branches of handleUploadFinish. Runs only for an upload
-  // whose ticket authorised a replacement (REQ-7: the ticket's own decision,
-  // never tus metadata), and demotes exactly the finished sources of the
-  // target — READY/SCANNED, the two statuses DownloadsService.resolveRace
-  // treats as an existing winner. A DOWNLOADING/QUEUED/PAUSED sibling is
-  // deliberately left alone: it is a racer, and resolveRace stops and pauses
-  // it as one.
+  // Shared by both branches of handleUploadFinish. REQ-6: a completed upload
+  // is a deliberate statement of intent, not a coincidence of timing, so it
+  // always demotes its target's finished sources — READY/SCANNED, the two
+  // statuses DownloadsService.resolveRace treats as an existing winner —
+  // whether or not the ticket carried `force`. A DOWNLOADING/QUEUED/PAUSED
+  // sibling is deliberately left alone: it is a racer, and resolveRace stops
+  // and pauses it as one.
   private async demoteSupersededSources(
     target: { movieId: number } | { episodeId: number },
     uploadId: string,
   ): Promise<void> {
-    if (!(await this.uploadTickets.isReplaceAuthorised(uploadId))) return;
+    await this.prisma.$transaction(async (tx) => {
+      const demoted = await tx.mediaSource.findMany({
+        where: { ...target, status: { in: ['READY', 'SCANNED'] } },
+        select: { id: true },
+      });
 
-    const { count } = await this.prisma.mediaSource.updateMany({
-      where: { ...target, status: { in: ['READY', 'SCANNED'] } },
-      data: {
-        status: 'ERROR',
-        errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
-        errorKey: ERROR_KEYS.SOURCE_REPLACED,
-        errorParams: null,
-      },
+      if (demoted.length === 0) return;
+
+      const demotedIds = demoted.map((source) => source.id);
+
+      await tx.mediaSource.updateMany({
+        where: { id: { in: demotedIds } },
+        data: {
+          status: 'ERROR',
+          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+          errorKey: ERROR_KEYS.SOURCE_REPLACED,
+          errorParams: null,
+        },
+      });
+
+      // REQ-9: a demotion must leave no ProcessJob of that source in a
+      // non-terminal state — otherwise the row is wedged exactly like the
+      // incident this feature exists to prevent, just with nothing left
+      // that will ever report on it. ProcessJob reaches its source through
+      // sourceFile.mediaSourceId, not a direct column.
+      const { count: jobsClosed } = await tx.processJob.updateMany({
+        where: {
+          sourceFile: { mediaSourceId: { in: demotedIds } },
+          status: { in: ['WAITING', 'QUEUED', 'ENCODING'] },
+        },
+        data: {
+          status: 'ERROR',
+          errorKey: ERROR_KEYS.SOURCE_REPLACED,
+          errorParams: null,
+          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+        },
+      });
+
+      console.log(
+        `[uploads] ${uploadId}: ${demotedIds.length} source(s) anterior(es) marcada(s) ERROR por reemplazo, ${jobsClosed} processJob(s) cerrado(s)`,
+      );
     });
-
-    if (count > 0) {
-      console.log(`[uploads] ${uploadId}: ${count} source(s) anterior(es) marcada(s) ERROR por reemplazo`);
-    }
   }
 
   // Shared by both branches of handleUploadFinish: re-reads path_downloads

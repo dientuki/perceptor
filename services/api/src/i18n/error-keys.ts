@@ -86,6 +86,7 @@ export const ERROR_KEYS = {
   UPLOAD_TICKET_WRONG_MOVIE: 'error.upload.ticket_wrong_movie',
   UPLOAD_TICKET_WRONG_EPISODE: 'error.upload.ticket_wrong_episode',
   UPLOAD_METADATA_INCOMPLETE: 'error.upload.metadata_incomplete',
+  UPLOAD_SUPERSEDED: 'error.upload.superseded',
 
   // ffprobe-logs
   FFPROBE_LOG_NOT_FOUND: 'error.ffprobeLog.not_found',

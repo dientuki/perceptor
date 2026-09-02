@@ -8,7 +8,7 @@
 // JSON string (or undefined), and that a failure never reports without a key
 // — including one raised from a plain, non-KeyedError throw.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { fetchGraphQLMock, buildOutputPathMock, encodeMock, cleanupSourceMock, passthroughMock } =
   vi.hoisted(() => ({
@@ -19,9 +19,15 @@ const { fetchGraphQLMock, buildOutputPathMock, encodeMock, cleanupSourceMock, pa
     passthroughMock: vi.fn(),
   }));
 
-vi.mock('../api/graphql-client', () => ({
-  fetchGraphQL: (...args: unknown[]) => fetchGraphQLMock(...args),
-}));
+vi.mock('../api/graphql-client', async () => {
+  const actual = await vi.importActual<typeof import('../api/graphql-client')>(
+    '../api/graphql-client',
+  );
+  return {
+    ...actual,
+    fetchGraphQL: (...args: unknown[]) => fetchGraphQLMock(...args),
+  };
+});
 vi.mock('../paths/build-output-path', () => ({
   buildOutputPath: (...args: unknown[]) => buildOutputPathMock(...args),
 }));
@@ -37,6 +43,7 @@ vi.mock('./cleanup-source', () => ({
 
 import { handleEncode } from './encode.job';
 import { KeyedError } from '../i18n/keyed-error';
+import { ApiUnreachableError } from '../api/graphql-client';
 import {
   ERROR_ENCODE_FFMPEG_FAILED,
   ERROR_ENCODE_PROBE_FAILED,
@@ -446,5 +453,132 @@ describe('handleEncode — compressionEnabled branch (032-optional-compression)'
     // would route to the passthrough here instead.
     expect(encodeMock).toHaveBeenCalledTimes(1);
     expect(passthroughMock).not.toHaveBeenCalled();
+  });
+});
+
+// Defends REQ-1 of 038-encode-report-durability directly, the incident case
+// stated in worker/plan.md § Tests: an encode that succeeded must never be
+// reported as encodeFailed just because delivering encodeCompleted hit a
+// transport failure. The fault-injection case at the end proves this suite
+// actually exercises the fix (moving the call back inside the try goes red).
+describe('handleEncode — encodeCompleted delivered through deliverReport (038-encode-report-durability)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function mockGraphQL({
+    encodeCompletedImpl,
+  }: {
+    encodeCompletedImpl: () => Promise<{ encodeCompleted: Record<string, unknown> }>;
+  }) {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob: PROCESS_JOB_DETAILS });
+      }
+      if (query.includes('encodeCompleted')) {
+        return encodeCompletedImpl();
+      }
+      if (query.includes('encodeFailed')) {
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  it('never calls encodeFailed and still runs cleanup on the verdict that eventually arrived, when encodeCompleted is unreachable once then succeeds', async () => {
+    let attempts = 0;
+    mockGraphQL({
+      encodeCompletedImpl: () => {
+        attempts += 1;
+        if (attempts === 1) {
+          return Promise.reject(new ApiUnreachableError(new Error('ECONNREFUSED')));
+        }
+        return Promise.resolve({
+          encodeCompleted: {
+            message: 'ok',
+            removeTorrent: true,
+            deleteInputFile: true,
+            deleteDownloadPath: false,
+          },
+        });
+      },
+    });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+
+    const promise = handleEncode(makeJob());
+    // Let the first (failing) attempt run, then advance past the retry delay.
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expect(promise).resolves.toBeUndefined();
+
+    expect(attempts).toBe(2);
+
+    const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeFailed'),
+    );
+    expect(failedCall).toBeUndefined();
+
+    expect(cleanupSourceMock).toHaveBeenCalledTimes(1);
+    const cleanupArgs = cleanupSourceMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(cleanupArgs.removeTorrent).toBe(true);
+    expect(cleanupArgs.deleteInputFile).toBe(true);
+    expect(cleanupArgs.deleteDownloadPath).toBe(false);
+  });
+
+  // Structurally the sharpest of this describe block: a rejection here is
+  // *terminal* (REQ-3), not a transport failure, so deliverReport doesn't
+  // retry it either — it propagates straight out of handleEncode. What this
+  // pins is that it must propagate WITHOUT being caught by the encode's own
+  // catch and reported as encodeFailed, since the encode already succeeded.
+  // This is the case that actually discriminates on the encodeCompleted
+  // call's position: with it outside the try (the fix), the rejection never
+  // reaches the catch at all. Moving it back inside the try makes the catch
+  // see it and call encodeFailed — red, as verified below.
+  it('never calls encodeFailed when encodeCompleted itself terminally rejects after a successful encode (REQ-1)', async () => {
+    const terminalRejection = new Error('encodeCompleted rejected: processJob already reported');
+    mockGraphQL({
+      encodeCompletedImpl: () => Promise.reject(terminalRejection),
+    });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+
+    await expect(handleEncode(makeJob())).rejects.toBe(terminalRejection);
+
+    const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeFailed'),
+    );
+    expect(failedCall).toBeUndefined();
+  });
+
+  it('still reports encodeFailed with its key intact for a genuinely failed encode', async () => {
+    mockGraphQL({
+      encodeCompletedImpl: () =>
+        Promise.resolve({
+          encodeCompleted: {
+            message: 'ok',
+            removeTorrent: false,
+            deleteInputFile: false,
+            deleteDownloadPath: false,
+          },
+        }),
+    });
+    const thrown = new KeyedError(ERROR_ENCODE_FFMPEG_FAILED, 'ffmpeg exited with code 1', {
+      code: 1,
+    });
+    encodeMock.mockRejectedValue(thrown);
+
+    await expect(handleEncode(makeJob())).rejects.toBe(thrown);
+
+    const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeFailed'),
+    );
+    expect(failedCall).toBeDefined();
+    const [, variables] = failedCall as [string, Record<string, unknown>];
+    expect(variables.key).toBe(ERROR_ENCODE_FFMPEG_FAILED);
+
+    expect(cleanupSourceMock).not.toHaveBeenCalled();
   });
 });

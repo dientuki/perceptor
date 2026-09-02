@@ -13,6 +13,21 @@
 
 import { KeyedError } from '../i18n/keyed-error';
 
+// 038-encode-report-durability (REQ-1..REQ-4): the one distinguishable "no
+// response was received" failure. Only this class is retried by
+// deliverReport (src/api/deliver-report.ts) — everything else fetchGraphQL
+// can throw (a non-2xx status, invalid JSON, an unkeyed GraphQL error, a
+// KeyedError) is a response api actually gave us, and stays terminal.
+export class ApiUnreachableError extends Error {
+  constructor(cause: unknown) {
+    super(
+      `could not reach api: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.name = 'ApiUnreachableError';
+    this.cause = cause;
+  }
+}
+
 interface GraphQLErrorEntry {
   message?: string;
   extensions?: {
@@ -33,14 +48,19 @@ export async function fetchGraphQL<T = unknown>(
   const token = process.env.SERVICE_TOKEN;
   if (!token) throw new Error('SERVICE_TOKEN no está definida');
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+  } catch (err) {
+    throw new ApiUnreachableError(err);
+  }
 
   // Independent second net alongside the json.errors check below: Apollo
   // answers auth failures with HTTP 200 and a GraphQL error, but a non-2xx

@@ -211,6 +211,16 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   others ended as — full verdict table in `docs/spec/graphql-contract.md` § 013. `downloadRemove`
   takes `deleteFiles: Boolean = true`; the cleanup pipeline is the one caller passing `false`, since
   the worker's `cleanup-source.ts` owns every filesystem deletion.
+  **Both `encodeCompleted` and `encodeFailed` are safe to receive more than once for the same job**
+  (`038-encode-report-durability`, REQ-5) — the worker retries a report it could not deliver (`api`
+  unreachable), so a second delivery must not double-notify the media server or re-derive a
+  different verdict. Each reads the job (and its source's `status`) before writing: a repeat of an
+  already-`COMPLETED` job with the same `outputFilePath` skips `notifyCreated` and the title update
+  but still recomputes and returns the cleanup verdict, since the worker's first delivery may never
+  have arrived. A job whose source has since been demoted to `ERROR` (REQ-8, see `uploads/` above)
+  writes the `ProcessJob` row as normal but skips the `movie`/`episode` update entirely on **both**
+  mutations — a demoted source's late outcome, success or failure, must not move the title the
+  winner is still encoding.
   `getEncodeJobDetails` resolves `allowedLanguagesIso3`: the title's original language followed by the
   union of the installation-wide `default_languages` setting (since `029-settings-screen-tabs`,
   resolved tag → iso3 through `SettingsService`) and every owner's per-title preference, deduplicated,
@@ -320,6 +330,15 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   existing `409`. Nothing here deletes a library file: the replacement encode's own atomic `rename`
   overwrites the old output in place, so no code in this module or in `process-jobs/` touches disk for
   the old file.
+  **A completed upload always demotes its target's `READY`/`SCANNED` siblings** (`038-encode-report
+  -durability`, REQ-6) — `demoteSupersededSources` no longer gates that on `isReplaceAuthorised`
+  (which stays exactly what it was for the `COMPLETED` + `force` guard above; the two are unrelated
+  checks that happened to share a method). The demotion also moves the demoted source's non-terminal
+  `ProcessJob` rows to `ERROR` in the same transaction, so a superseded source cannot leave a job
+  wedged in `ENCODING` with nothing consuming it (REQ-9). `handleUploadFinish` no longer swallows the
+  losing side of an upload-versus-upload race: what used to be a `console.log` and a silent early
+  return is now `throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED)` — the browser sees a
+  real error instead of a completed-looking upload that never starts encoding.
 
 **Infrastructure**: `prisma/` (`PrismaModule` + `PrismaService`, effectively global), `redis/`,
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).

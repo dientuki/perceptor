@@ -422,9 +422,21 @@ describe('ProcessJobsService', () => {
       ...overrides,
     });
 
+    // The `findUnique` read `encodeCompleted` does before writing anything
+    // (REQ-5/REQ-8): a fresh job, still ENCODING, whose source has not been
+    // demoted. Every cleanup-verdict case below is about the verdict
+    // computed *after* that read, not about the read itself, so they all
+    // share this default.
+    const freshExisting = {
+      status: 'ENCODING',
+      outputFilePath: null,
+      sourceFile: { mediaSourceId: 10, mediaSource: { status: 'READY' } },
+    };
+
     beforeEach(() => {
       prisma.movie.update.mockResolvedValue({});
       prisma.episode.update.mockResolvedValue({});
+      prisma.processJob.findUnique.mockResolvedValue(freshExisting);
     });
 
     it('single-job source: (removeTorrent: true, deleteInputFile: false, deleteDownloadPath: true)', async () => {
@@ -501,6 +513,101 @@ describe('ProcessJobsService', () => {
       expect(result.removeTorrent).toBe(true);
       expect(result.deleteInputFile).toBe(true);
       expect(result.deleteDownloadPath).toBe(false);
+    });
+  });
+
+  // 038-encode-report-durability, REQ-5/REQ-8/T006: the worker retries a
+  // report it could not deliver, so both mutations must tolerate a second
+  // delivery for the same job, and a demoted source's report must not move
+  // the title a newer upload has already taken over. Neither failure throws
+  // — a second delivery would just notify the media server twice, and a
+  // demoted source's report would silently drag the winner's title back to
+  // ENCODING/COMPLETED/ERROR with no error anywhere.
+  describe('encodeCompleted / encodeFailed — repeat delivery and demoted-source guard (REQ-5/REQ-8)', () => {
+    beforeEach(() => {
+      prisma.movie.update.mockResolvedValue({});
+      prisma.episode.update.mockResolvedValue({});
+      prisma.processJob.findMany.mockResolvedValue([{ id: 1, status: 'COMPLETED' }]);
+      prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
+    });
+
+    // AC-8: a retry whose predecessor already landed must not notify the
+    // media server a second time, and must leave the stored row exactly as
+    // it already was. Remove the `!alreadyDeliveredSame` guard on the
+    // `notifyCreated` call (or on the movie/episode update) and this case
+    // goes red — verified by hand below, guard left in place.
+    it('a second encodeCompleted for the same job does not notify the media server again and leaves the row unchanged', async () => {
+      const existing = {
+        status: 'COMPLETED',
+        outputFilePath: '/library/movie.mkv',
+        sourceFile: { mediaSourceId: 10, mediaSource: { status: 'READY' } },
+      };
+      prisma.processJob.findUnique.mockResolvedValue(existing);
+      prisma.processJob.update.mockResolvedValue({
+        id: 1,
+        movieId: 42,
+        episodeId: null,
+        sourceFile: { mediaSourceId: 10 },
+      });
+
+      const result = await service.encodeCompleted(1, '/library/movie.mkv', 'ffmpeg …');
+
+      expect(mediaServer.notifyCreated).not.toHaveBeenCalled();
+      expect(prisma.movie.update).not.toHaveBeenCalled();
+      expect(prisma.episode.update).not.toHaveBeenCalled();
+      // The cleanup verdict is still recomputed and returned on the retry —
+      // the first verdict may never have reached the worker.
+      expect(result.removeTorrent).toBe(true);
+    });
+
+    // AC-7: the source lost its race to a newer upload after this job was
+    // enqueued. Remove the `sourceDemoted` check in front of the movie/
+    // episode update and this case goes red, because the encode that
+    // finished *after* losing the race would drag the title's status/
+    // filePath back to what the loser produced.
+    it('encodeCompleted for a job whose MediaSource is ERROR leaves episode.status and filePath untouched', async () => {
+      const existing = {
+        status: 'ENCODING',
+        outputFilePath: null,
+        sourceFile: { mediaSourceId: 10, mediaSource: { status: 'ERROR' } },
+      };
+      prisma.processJob.findUnique.mockResolvedValue(existing);
+      prisma.processJob.update.mockResolvedValue({
+        id: 1,
+        movieId: null,
+        episodeId: 5,
+        sourceFile: { mediaSourceId: 10 },
+      });
+
+      const result = await service.encodeCompleted(1, '/library/episode.mkv', 'ffmpeg …');
+
+      expect(prisma.episode.update).not.toHaveBeenCalled();
+      expect(prisma.movie.update).not.toHaveBeenCalled();
+      // The job row itself still reports COMPLETED — only the title is left
+      // alone. The worker must not be able to tell a demoted source's report
+      // apart from an ordinary one by this return shape.
+      expect(prisma.processJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }),
+      );
+      expect(result.message).toContain('completado');
+    });
+
+    // Same guard, the failure path: a demoted source's genuinely failed
+    // encode must not fail the title the winner is still encoding.
+    it('encodeFailed for a job whose MediaSource is ERROR leaves episode.status untouched', async () => {
+      const existing = {
+        sourceFile: { mediaSource: { status: 'ERROR' } },
+      };
+      prisma.processJob.findUnique.mockResolvedValue(existing);
+      prisma.processJob.update.mockResolvedValue({ id: 1, movieId: null, episodeId: 5 });
+
+      await service.encodeFailed(1, 'error.encode.corrupt_input', undefined, 'ffmpeg exited 1');
+
+      expect(prisma.episode.update).not.toHaveBeenCalled();
+      expect(prisma.movie.update).not.toHaveBeenCalled();
+      expect(prisma.processJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'ERROR' }) }),
+      );
     });
   });
 

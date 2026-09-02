@@ -231,9 +231,24 @@ this service's central failure mode. Since `018-ui-i18n`, if the incoming error 
 `extensions.i18n.key`, it is re-thrown as a `KeyedError` so an `api` key round-trips as a key
 instead of unreadable stringified JSON; the three boot-time infrastructure errors in this same file
 (`INTERNAL_GRAPHQL_URL`/`SERVICE_TOKEN` unset, a non-2xx HTTP status) stay plain, unkeyed `Error`s
-on purpose — no user ever sees them.
+on purpose — no user ever sees them. A rejecting `fetch` itself — `api` unreachable, not `api`
+answering — is its own class, `ApiUnreachableError` (`038-encode-report-durability`), thrown only at
+that one site; every other failure below it stays terminal.
 
-**Two documented exceptions.** First, `cleanup-source.ts` catches and logs every error it can produce —
+**`jobs/encode.job.ts` no longer swallows a lost `encodeCompleted`/`encodeFailed`
+report** (`038-encode-report-durability`, the incident this feature exists for: an encode that
+succeeded got reported as failed, then that failure report itself was lost to
+`.catch(console.error)`, because both mutation calls sat inside the encode's own `try/catch` and the
+`encodeFailed` call swallowed its own transport error). The fix is structural, not a retry bolted on
+top: the `encodeCompleted` call now sits **outside** the `try` that wraps the encode itself, so a
+transport failure delivering the good news can never be read by the `catch` as an encode failure.
+Both outcome calls go through `src/api/deliver-report.ts`'s `deliverReport()`, which retries
+forever — with growing, capped backoff — only on `ApiUnreachableError`, and rethrows any other error
+(a real rejection from `api`) immediately. The encode queue's `concurrency: 1` is what makes
+blocking on that retry acceptable rather than a new failure mode: one wedged report holds its own
+job, never anyone else's.
+
+**Two further documented exceptions.** First, `cleanup-source.ts` catches and logs every error it can produce —
 a throwing `fetchGraphQL` (torrent client unreachable) or a throwing `rm`/`rmdir` — instead of
 letting it propagate. This is deliberate, not an oversight: cleanup runs after the encode has
 already succeeded and the `ProcessJob` already reports `COMPLETED`; letting a cleanup failure

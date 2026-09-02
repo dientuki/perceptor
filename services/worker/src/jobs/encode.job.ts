@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq';
 import { fetchGraphQL } from '../api/graphql-client';
+import { deliverReport } from '../api/deliver-report';
 import { buildOutputPath } from '../paths/build-output-path';
 import { encode } from '../encode';
 import { passthrough } from '../encode/passthrough';
@@ -93,6 +94,8 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   );
 
   let encodeCompleted: EncodeCompletedResult | undefined;
+  let finalOutputPathForReport: string;
+  let ffmpegCommandForReport: string;
 
   try {
     const outputPath = buildOutputPath(details);
@@ -188,24 +191,13 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       ffmpegCommand = encodeResult.ffmpegCommand;
     }
 
-    const result = await fetchGraphQL<EncodeCompletedMutationResult>(
-      `mutation ($id: Int!, $out: String!, $cmd: String!) {
-        encodeCompleted(processJobId: $id, outputFilePath: $out, ffmpegCommand: $cmd) {
-          message
-          removeTorrent
-          deleteInputFile
-          deleteDownloadPath
-        }
-      }`,
-      { id: processJobId, out: finalOutputPath, cmd: ffmpegCommand },
-    );
-    encodeCompleted = result.encodeCompleted;
-
-    console.log(`[encode] ${processJobId}: ${encodeCompleted.message} -> ${finalOutputPath}`);
-
-    // El aviso al media server (Jellyfin, si está configurado) lo dispara el
-    // api dentro de encodeCompleted — tiene las settings y las raíces, el
-    // worker no necesita enterarse.
+    // 038-encode-report-durability (REQ-1): the try ends here, once the
+    // encode/passthrough has actually produced the output file. Reporting
+    // that outcome to api is a separate concern from producing it — a
+    // transport failure below must never be read by the catch as "the
+    // encode itself failed".
+    finalOutputPathForReport = finalOutputPath;
+    ffmpegCommandForReport = ffmpegCommand;
   } catch (error) {
     // encodeFailed's errorKey is required (REQ-11, docs/spec/graphql-contract.md):
     // there is no path where this reports a failure with no key. A KeyedError
@@ -220,20 +212,54 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       : { detail: error instanceof Error ? error.message : String(error) };
     const errorMessage = renderMessage(errorKey, errorParams);
 
-    await fetchGraphQL(
-      `mutation ($id: Int!, $key: String!, $params: String, $msg: String!) {
-        encodeFailed(processJobId: $id, errorKey: $key, errorParams: $params, errorMessage: $msg)
-      }`,
-      {
-        id: processJobId,
-        key: errorKey,
-        params: errorParams ? JSON.stringify(errorParams) : undefined,
-        msg: errorMessage,
-      },
-    ).catch((err) => console.error(`[encode] no se pudo reportar el fallo de ${processJobId}:`, err));
+    // 038-encode-report-durability (REQ-1, REQ-2): held until api
+    // acknowledges it, retried only while unreachable (deliverReport). No
+    // longer .catch(console.error)'d — swallowing this call is exactly the
+    // bug that lost the incident's report; the throw below still carries
+    // the original encode error regardless of how the report went.
+    await deliverReport(`encodeFailed(${processJobId})`, () =>
+      fetchGraphQL(
+        `mutation ($id: Int!, $key: String!, $params: String, $msg: String!) {
+          encodeFailed(processJobId: $id, errorKey: $key, errorParams: $params, errorMessage: $msg)
+        }`,
+        {
+          id: processJobId,
+          key: errorKey,
+          params: errorParams ? JSON.stringify(errorParams) : undefined,
+          msg: errorMessage,
+        },
+      ),
+    );
 
     throw error;
   }
+
+  // 038-encode-report-durability (REQ-1, REQ-2): outside the try/catch above
+  // on purpose — the encode has already produced its output file at this
+  // point, so a transport failure delivering the report must never be read
+  // as an encode failure. deliverReport holds this call until api
+  // acknowledges it; the encode queue's concurrency: 1 (src/index.ts) is
+  // what makes that blocking acceptable (REQ-4).
+  const result = await deliverReport(`encodeCompleted(${processJobId})`, () =>
+    fetchGraphQL<EncodeCompletedMutationResult>(
+      `mutation ($id: Int!, $out: String!, $cmd: String!) {
+        encodeCompleted(processJobId: $id, outputFilePath: $out, ffmpegCommand: $cmd) {
+          message
+          removeTorrent
+          deleteInputFile
+          deleteDownloadPath
+        }
+      }`,
+      { id: processJobId, out: finalOutputPathForReport, cmd: ffmpegCommandForReport },
+    ),
+  );
+  encodeCompleted = result.encodeCompleted;
+
+  console.log(`[encode] ${processJobId}: ${encodeCompleted.message} -> ${finalOutputPathForReport}`);
+
+  // El aviso al media server (Jellyfin, si está configurado) lo dispara el
+  // api dentro de encodeCompleted — tiene las settings y las raíces, el
+  // worker no necesita enterarse.
 
   // Cleanup runs after the encode's try/catch has already closed: the job is
   // already reported completed at this point, and nothing here may flip it

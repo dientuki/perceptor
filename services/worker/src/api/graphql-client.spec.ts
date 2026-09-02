@@ -10,7 +10,7 @@
 //      legible error naming the HTTP status.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchGraphQL } from './graphql-client';
+import { ApiUnreachableError, fetchGraphQL } from './graphql-client';
 import { KeyedError } from '../i18n/keyed-error';
 
 const ORIGINAL_ENV = { ...process.env };
@@ -149,5 +149,93 @@ describe('fetchGraphQL', () => {
     const call = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     const headers = call[1].headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer service-token');
+  });
+
+  // 038-encode-report-durability: the one distinguishable "no response was
+  // received" failure. deliverReport (src/api/deliver-report.ts) retries
+  // ONLY this class — if a rejecting fetch stopped producing it, or if any
+  // response api actually gave us (a 5xx, an unkeyed error, a keyed one)
+  // started producing it, deliverReport would either retry a poison job
+  // forever or give up on a real transient outage.
+  describe('ApiUnreachableError (038-encode-report-durability)', () => {
+    it('throws ApiUnreachableError, carrying the original as cause, when fetch itself rejects', async () => {
+      setEnv('http://api:4000/graphql', 'service-token');
+      const networkError = new Error('ECONNREFUSED');
+      (fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(networkError);
+
+      let caught: unknown;
+      try {
+        await fetchGraphQL('{ me { id } }');
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(ApiUnreachableError);
+      expect((caught as ApiUnreachableError).cause).toBe(networkError);
+    });
+
+    it('does not classify an HTTP 500 as ApiUnreachableError — api answered, it just answered badly', async () => {
+      setEnv('http://api:4000/graphql', 'service-token');
+      (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => 'Internal Server Error',
+      });
+
+      let caught: unknown;
+      try {
+        await fetchGraphQL('{ me { id } }');
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(ApiUnreachableError);
+    });
+
+    it('does not classify an unkeyed GraphQL error as ApiUnreachableError', async () => {
+      setEnv('http://api:4000/graphql', 'service-token');
+      (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ errors: [{ message: 'Unexpected server error' }] }),
+      });
+
+      let caught: unknown;
+      try {
+        await fetchGraphQL('{ me { id } }');
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(ApiUnreachableError);
+    });
+
+    it('does not classify a keyed GraphQL error as ApiUnreachableError', async () => {
+      setEnv('http://api:4000/graphql', 'service-token');
+      (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          errors: [
+            {
+              message: 'Movie 42 does not exist',
+              extensions: { i18n: { key: 'error.movie.not_found' } },
+            },
+          ],
+        }),
+      });
+
+      let caught: unknown;
+      try {
+        await fetchGraphQL('{ me { id } }');
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(KeyedError);
+      expect(caught).not.toBeInstanceOf(ApiUnreachableError);
+    });
   });
 });
