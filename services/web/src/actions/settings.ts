@@ -98,12 +98,6 @@ const BOOLEAN_KEYS = [
   "compression_enabled",
 ] as const;
 
-// default_languages needs the same always-explicit treatment as
-// BOOLEAN_KEYS: "" is a valid value meaning "no default languages", and the
-// EDITABLE_KEYS filter (which drops blank values) would silently turn that
-// into "leave the previous value" instead of clearing the row.
-const ALWAYS_SENT_STRING_KEYS = ["default_languages"] as const;
-
 export async function updateSettingsAction(
   prevState: any,
   formData: FormData,
@@ -122,55 +116,11 @@ export async function updateSettingsAction(
     });
   }
 
-  for (const key of ALWAYS_SENT_STRING_KEYS) {
-    const value = formData.get(key);
-    entries.push({ key, value: typeof value === "string" ? value : "" });
-  }
-
   const t = await getTranslations("errors");
 
   if (entries.length === 0) {
     return { error: t("validation.missingSettingsValues") };
   }
-
-  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
-  try {
-    result = await fetchGraphQL(UPDATE_SETTINGS_MUTATION, { entries });
-  } catch (_err) {
-    return { error: t("network.connectionFailed") };
-  }
-
-  const { errors } = result;
-
-  if (errors && errors.length > 0) {
-    await redirectIfUnauthenticated(errors);
-    return { error: await translateGraphQLError(errors[0]) };
-  }
-
-  return { success: true };
-}
-
-// The installation default languages have their own save flow — LanguagePicker
-// (030-language-regional-variants) is a self-contained <form>, and nesting it
-// inside SettingsForm's own <form> is invalid HTML, so DownloadPanel's picker
-// submits independently through this dedicated action rather than through
-// updateSettingsAction. Reusing updateSettingsAction directly would be unsafe
-// here: its BOOLEAN_KEYS loop reads formData unconditionally and would write
-// "false" for movies_enabled/shows_enabled whenever they are absent from this
-// narrower form, silently clobbering the real values on every language save.
-export async function updateDefaultLanguagesAction(
-  _prevState: unknown,
-  formData: FormData,
-): Promise<{ error?: string } | { success: true }> {
-  const value = formData.get("default_languages");
-  const entries = [
-    {
-      key: "default_languages",
-      value: typeof value === "string" ? value : "",
-    },
-  ];
-
-  const t = await getTranslations("errors");
 
   let result: Awaited<ReturnType<typeof fetchGraphQL>>;
   try {

@@ -214,4 +214,14 @@ export class UsersService {
       data: { uiLocale: locale },
     });
   }
+
+  // Same shape as setUiLocale: a single-field self-service write, no
+  // validation to perform beyond the boolean's own type, so no early throw
+  // is needed before the update.
+  async setAllowCinemaReleases(userId: string, allowed: boolean): Promise<User> {
+    return await this.prisma.user.update({
+      where: { id: userId },
+      data: { allowCinemaReleases: allowed },
+    });
+  }
 }

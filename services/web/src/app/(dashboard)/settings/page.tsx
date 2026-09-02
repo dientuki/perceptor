@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
-import { getLanguages } from "@/actions/languages";
 import { getMediaRoots } from "@/actions/media-roots";
 import {
   getMediaServerIndexStatus,
@@ -34,13 +33,12 @@ export default async function SettingsPage() {
     notFound();
   }
 
-  const [settings, mediaRoots, mediaServerOptions, mediaServerIndexStatus, languages] =
+  const [settings, mediaRoots, mediaServerOptions, mediaServerIndexStatus] =
     await Promise.all([
       getSettings(),
       getMediaRoots(),
       getMediaServerOptions(),
       getMediaServerIndexStatus(),
-      getLanguages(),
     ]);
 
   return (
@@ -54,7 +52,6 @@ export default async function SettingsPage() {
               mediaRoots={mediaRoots}
               mediaServerOptions={mediaServerOptions}
               mediaServerIndexStatus={mediaServerIndexStatus}
-              languages={languages}
             />
           </div>
         </div>

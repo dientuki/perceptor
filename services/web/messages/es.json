@@ -80,6 +80,11 @@
       "unavailable": "El idioma «{tag}» no existe",
       "duplicate": "El idioma «{tag}» está repetido"
     },
+    "torrent_group": {
+      "not_found": "El grupo de torrents {id} no existe",
+      "duplicated": "El grupo de torrents {id} está repetido",
+      "wrong_scope": "El grupo de torrents {id} no pertenece a {scope}"
+    },
     "mediaServer": {
       "not_configured": "Configurá un media server antes de sincronizar la biblioteca"
     }
@@ -107,7 +112,7 @@
   },
   "userMenu": {
     "editProfile": "Editar perfil",
-    "settings": "Ajustes",
+    "preferences": "Preferencias",
     "signOut": "Cerrar sesión",
     "themeLight": "Modo claro",
     "themeDark": "Modo oscuro"
@@ -158,6 +163,11 @@
     },
     "showDetail": {
       "metadataDescription": "Página de detalle de la serie"
+    },
+    "preferences": {
+      "title": "Preferencias",
+      "metadataTitle": "Preferencias | Perceptor",
+      "metadataDescription": "Tus preferencias personales de idiomas y grupos de torrents"
     },
     "settings": {
       "title": "Configuración",
@@ -411,6 +421,31 @@
       "saved": "Configuración guardada.",
       "saving": "Guardando...",
       "save": "Guardar"
+    }
+  },
+  "preferences": {
+    "tabs": {
+      "general": "General",
+      "downloadLanguages": "Idiomas de descarga",
+      "movies": "Películas",
+      "shows": "Series"
+    },
+    "form": {
+      "uiLocaleLabel": "Idioma de Perceptor",
+      "audioLanguagesLabel": "Idiomas de audio",
+      "subtitleLanguagesLabel": "Idiomas de subtítulos",
+      "cinemaLabel": "Permitir películas de cine",
+      "movieGroupsLabel": "Grupos preferidos para películas",
+      "showGroupsLabel": "Grupos preferidos para series",
+      "noneLoaded": "Todavía no se cargó ningún grupo de torrents.",
+      "saved": "Preferencias guardadas.",
+      "save": "Guardar",
+      "saving": "Guardando..."
+    },
+    "torrentGroups": {
+      "chosenLabel": "Grupos elegidos",
+      "emptyChosen": "No elegiste ningún grupo.",
+      "removeGroup": "Quitar {name}"
     }
   },
   "users": {

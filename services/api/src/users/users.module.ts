@@ -10,5 +10,6 @@ import { AuthModule } from '../auth/auth.module';
   // not import UsersModule, so this stays acyclic.
   imports: [AuthModule],
   providers: [UsersResolver, ProfileResolver, UsersService],
+  exports: [UsersService],
 })
 export class UsersModule {}

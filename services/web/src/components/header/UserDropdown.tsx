@@ -1,5 +1,11 @@
 "use client";
-import { LogOut, Moon, Settings2, Sun, UserPen } from "lucide-react";
+import {
+  LogOut,
+  Moon,
+  SlidersHorizontal,
+  Sun,
+  UserPen,
+} from "lucide-react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import type React from "react";
@@ -76,11 +82,11 @@ export default function UserDropdown({ user }: UserDropdownProps) {
             <DropdownItem
               onItemClick={closeDropdown}
               tag="a"
-              href="/settings"
+              href="/preferences"
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
-              <Settings2 size={18} />
-              {t("settings")}
+              <SlidersHorizontal size={18} />
+              {t("preferences")}
             </DropdownItem>
           </li>
           <li>

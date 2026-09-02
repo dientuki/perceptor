@@ -269,6 +269,20 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   configuration a person sets, so `updateSettings` rejects a write to any of them with
   `error.setting.not_editable`. `MediaServerIndexService` reads and writes them through
   `prisma.setting` directly, never through `SettingsService`.
+- **`preferences/`** (`021-user-preferences`) — the caller's own settings, distinct from
+  `settings/`'s installation-wide config: `Query.preferences`, `Query.torrentGroups(scope)`,
+  `Mutation.setAllowCinemaReleases`/`setPreferredTrackLanguages`/`setPreferredTorrentGroups`, all
+  self-only (no operation takes a user id; every one carries the same explicit
+  `principal.type !== 'user'` guard `auth.resolver.ts` uses, never `@AllowService()`).
+  `PreferencesService.setAllowCinemaReleases` delegates the write to `UsersService`, then re-reads;
+  `setPreferredTorrentGroupsFor` is the one write this module owns directly — it resolves every id
+  against `torrent_groups` before any write (`TORRENT_GROUP_NOT_FOUND`/`_DUPLICATED`/`_WRONG_SCOPE`,
+  each leaving the stored set untouched), then replaces inside a `$transaction` whose `deleteMany` is
+  narrowed to the caller **and** the scope via a join to `TorrentGroup.scope` — `user_torrent_groups`
+  itself carries no scope column, so a naive `{ userId }` delete would wipe both scopes at once. The
+  language half is not here: `setPreferredTrackLanguagesFor`/`findPreferredTrackLanguagesFor` live on
+  `LanguagesService`, beside the per-title pairs, narrowed to `{ userId, kind }` for the same reason.
+  Imports `LanguagesModule` and `UsersModule` (which now `exports: [UsersService]` for this).
 - **`media-roots/`** — the two declared roots and every path translation. See below.
 - **`media-server/`** — post-encode notification (Jellyfin today), opt-in from Settings, **plus**
   (`034-jellyfin-library-reconciliation`) reflecting what that server already holds back onto a newly
@@ -396,7 +410,7 @@ escape suite it defends against.
 
 ## Schema/enum reality check
 
-`prisma/schema.prisma` defines exactly four enums — verify with `grep -n '^enum' prisma/schema.prisma`
+`prisma/schema.prisma` defines exactly six enums — verify with `grep -n '^enum' prisma/schema.prisma`
 rather than trusting this list:
 
 | Enum | Values |
@@ -405,17 +419,24 @@ rather than trusting this list:
 | `SourceStatus` | `PENDING`, `QUEUED`, `DOWNLOADING`, `PAUSED`, `READY`, `SCANNED`, `ERROR` |
 | `EncodeStatus` | `WAITING`, `QUEUED`, `ENCODING`, `COMPLETED`, `ERROR` |
 | `MediaStatus` | `MISSING`, `DOWNLOADING`, `ENCODING`, `COMPLETED`, `ERROR` |
+| `LanguageTrackKind` | `AUDIO`, `SUBTITLE` (`021-user-preferences`) |
+| `TorrentGroupScope` | `MOVIE`, `SHOW` (`021-user-preferences`) |
 
 **There is no `MEDIA_TYPE` or `MediaType` enum**, here or anywhere in Prisma. `services/web` declares
 its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — a web-side type, not a database one.
 A movie/show discriminator in `api` would have to be added to `schema.prisma` and migrated first.
 
-There are 16 models and 24 migrations (counted 2026-08-31, after
-`034-jellyfin-library-reconciliation`) — verify with
+There are 19 models and 24 migrations (counted 2026-09-02, after
+`021-user-preferences`) — verify with
 `grep -c "^model " prisma/schema.prisma` rather than trusting the number. Worth knowing: the three
 `*Language` join tables reference `UserMovie`/`UserShow` through their composite FK rather than
 `User`+`Movie`/`Show` separately, so a language preference disappears automatically when the title
-leaves the library.
+leaves the library. The three newest models — `UserLanguagePreference`, `TorrentGroup`,
+`UserTorrentGroup` (`021-user-preferences`) — are the per-user counterpart: `UserLanguagePreference`
+is keyed `@@id([userId, languageId, kind])`, split by `LanguageTrackKind` rather than per-title, and
+`UserTorrentGroup` carries no `scope` column of its own — a write scoped to one `TorrentGroupScope`
+has to narrow its `deleteMany` through a join to `TorrentGroup.scope`, or it silently wipes both
+scopes at once.
 
 ## Tests
 
@@ -442,8 +463,8 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-08-26 (`027-replace-completed-media`): `bin/cli api npx --no tsc --noEmit` reports
-**0 errors**, `bin/npm api test` is green at **215** tests across **23** suites. **Re-run both
+As of 2026-09-02 (`021-user-preferences`): `bin/cli api npx --no tsc --noEmit` reports
+**0 errors**, `bin/npm api test` is green at **308** tests across **33** suites. **Re-run both
 rather than trusting these numbers** — they exist so an agent can prove a change added nothing, not
 as a fact to cite.
 

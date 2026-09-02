@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
+import { LanguageTrackKind } from '@prisma/client';
 import { Language } from './entities/language.entity';
 import { languageNameFor } from './language-names';
 
@@ -136,6 +137,40 @@ export class LanguagesService {
   async findShowPreferredLanguagesFor(userId: string, showId: number): Promise<Language[]> {
     const rows = await this.prisma.userShowLanguage.findMany({
       where: { userId, showId },
+      include: { language: true },
+    });
+    return rows.map((row) => this.toLanguage(row.language));
+  }
+
+  // The caller's own preference, split by kind rather than per-title
+  // (021-user-preferences). Replaces the whole set for this (userId, kind)
+  // pair; [] clears it. The delete is narrowed to `{ userId, kind }` — never
+  // `{ userId }` — so writing AUDIO can never wipe the sibling SUBTITLE rows.
+  async setPreferredTrackLanguagesFor(
+    userId: string,
+    kind: LanguageTrackKind,
+    tags: string[],
+  ): Promise<Language[]> {
+    const languageIds = await this.validateAndResolveLanguageIds(tags);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userLanguagePreference.deleteMany({ where: { userId, kind } });
+      if (languageIds.length > 0) {
+        await tx.userLanguagePreference.createMany({
+          data: languageIds.map((languageId) => ({ userId, kind, languageId })),
+        });
+      }
+    });
+
+    return this.findPreferredTrackLanguagesFor(userId, kind);
+  }
+
+  async findPreferredTrackLanguagesFor(
+    userId: string,
+    kind: LanguageTrackKind,
+  ): Promise<Language[]> {
+    const rows = await this.prisma.userLanguagePreference.findMany({
+      where: { userId, kind },
       include: { language: true },
     });
     return rows.map((row) => this.toLanguage(row.language));

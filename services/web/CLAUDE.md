@@ -367,11 +367,11 @@ may be ambiguous with a non-service token (`ma` collides with DTS-HD MA, `max` w
 Written to be reusable outside this modal — an eventual automatic picker (no user toggle) is meant
 to call the same function.
 
-## Language pickers: three call sites, one component
+## Language pickers: four call sites, one component
 
 `src/actions/languages.ts` follows the standard server-action shape; `getLanguages` uses
 `redirectToClearSession`, the two per-title writes use `redirectIfUnauthenticated` (see the auth
-section). `src/components/media/LanguagePicker.tsx` is the one client component all three call sites
+section). `src/components/media/LanguagePicker.tsx` is the one client component all four call sites
 share — since `030-language-regional-variants` a **dual-pane control**, not a `<select multiple>`: a
 scrolling left pane of toggle buttons (grouped by shared `iso2` into a non-selectable heading with its
 variant rows beneath, whenever more than one row shares it — the grouping is derived from the
@@ -386,26 +386,24 @@ and toggle buttons give correct keyboard operation for free (NFR-5 of `030`).
 `src/components/form/MultiSelect.tsx`, the control this replaced in Settings, stays in the repository
 unused — deleting it was explicitly out of scope.
 
-**The per-user global preference and its own save card are gone** (`029-settings-screen-tabs`):
-`PreferredLanguagesCard.tsx` no longer exists, `setPreferredLanguagesAction` no longer exists, and
-`User.preferredLanguages` no longer exists on the schema. The installation-wide level moved *into*
-`SettingsForm` as the `default_languages` setting (Descarga tab, `DownloadPanel.tsx`). **It is no
-longer part of `SettingsForm`'s single shared `<form>`/Save button** (`030-language-regional-variants`):
-`LanguagePicker` renders its own `<form>`, and nesting a `<form>` inside `SettingsForm`'s main one is
-invalid HTML. `DownloadPanel` submits independently through its own dedicated action,
-`updateDefaultLanguagesAction` in `src/actions/settings.ts` — a thin wrapper around the same
-`UPDATE_SETTINGS_MUTATION` that writes only the `default_languages` entry. It does **not** reuse
-`updateSettingsAction` directly: that action's `BOOLEAN_KEYS` loop reads every boolean key
-unconditionally from the submitted `FormData`, and a language-only submission would silently write
-`"false"` for `movies_enabled`/`shows_enabled`/`compression_enabled` since they're absent from the
-picker's narrower form.
-`SettingsForm` hides the Download tab's content and the main five-panel form as mutually exclusive
-blocks (`activeTab === "download" ? "hidden" : ""` on the main form's wrapper) rather than nesting one
-inside the other; both stay mounted, never conditionally rendered, so the "inactive panel drops its
-own fields" rule (REQ-3/AC-2 of the original settings-tabs spec) still holds for the five panels that
-do share the main form. `Movie.tsx` and `Show.tsx` still each bind `LanguagePicker` to their own
-per-title action, passing no `name` (falling through to the `"tags"` default) — that level is
-untouched; `Show.tsx` stays a Server Component with the picker as a client child.
+**A per-user global preference exists again, split by track kind** (`021-user-preferences`), but it
+is not the same feature `029-settings-screen-tabs` removed: `PreferredLanguagesCard.tsx` and
+`setPreferredLanguagesAction` stay gone, and there is still no single `User.preferredLanguages` list.
+Instead `src/components/preferences/DownloadLanguagesCard.tsx` renders **two** `LanguagePicker`
+instances — one bound to `setPreferredTrackLanguagesAction.bind(null, "AUDIO")`, one to
+`.bind(null, "SUBTITLE")` — backed by `UserPreferences.audioLanguages`/`subtitleLanguages` in
+`src/actions/preferences.ts`, on the new `/preferences` screen (see "Two per-user settings screens"
+below). Neither passes a `name` prop, so both fall through to `LanguagePicker`'s `"tags"` default,
+same as the two per-title call sites.
+**The installation-wide `default_languages` setting is untouched on the `api` side but has no `web`
+editor any more**: `021-user-preferences` REQ-6 deleted `DownloadPanel.tsx`, `SettingsForm`'s Descarga
+tab, and `updateDefaultLanguagesAction`/`ALWAYS_SENT_STRING_KEYS` from `src/actions/settings.ts` — the
+`default_languages` row in `settings` keeps whatever value it already held and keeps feeding
+`getEncodeJobDetails`'s merge (`services/api/CLAUDE.md`'s `process-jobs/`), but nothing in `web` can
+change it until a future spec (the same one that will split `allowedLanguagesIso3` by track kind at
+encode time) gives it a home. `SettingsForm` now shows five tabs with no Descarga; `Movie.tsx` and
+`Show.tsx` still each bind `LanguagePicker` to their own per-title action, passing no `name` — that
+level is untouched; `Show.tsx` stays a Server Component with the picker as a client child.
 
 **The Media Server tab's "Re-sync" control is the same kind of exception** (`034-jellyfin-library-reconciliation`),
 by a different mechanism: `MediaServerFields.tsx`'s `MediaServerIndexPanel` is not a nested `<form>`
@@ -421,6 +419,28 @@ and the viewer's own timezone.
 **The listing queries deliberately do not select `preferredLanguages`.** They are `api` field
 resolvers that only run when selected — `getMovieById`/`getShowById` select them, `getMovies`/
 `getShows` must not, or 200 rows become 200 preference queries.
+
+## Two per-user settings screens (`021-user-preferences`)
+
+`/settings` ("Ajustes") is installation-wide config, admin-only since `029-settings-screen-tabs`
+(`notFound()` for a non-admin, both the sidebar and page level). `/preferences` ("Preferencias") is
+new, per-user, and **deliberately carries no admin check anywhere** — it renders in full for every
+signed-in user, admin or not, because everything on it is scoped to the caller by the `api` resolver
+(`Query.preferences`/`Mutation.set*` never take a user id). `src/app/(dashboard)/preferences/page.tsx`
+is a Server Component fetching `Promise.all([getCurrentUser(), getPreferences(), getLanguages(),
+getTorrentGroups()])` and rendering three sections in the spec's order — *Idiomas* (`UiLocaleCard` +
+`DownloadLanguagesCard`), *Películas* (`CinemaReleasesCard` + a `TorrentGroupsCard` scoped `MOVIE`),
+*Series* (a second `TorrentGroupsCard` scoped `SHOW`) — each saving independently through its own
+action in `src/actions/preferences.ts`, never one shared form.
+`TorrentGroupsCard` decides between its empty state and `TorrentGroupPicker` (a sibling of
+`LanguagePicker`, not a generalization of it — bound to one `TorrentGroupScope` at a time) on
+`options.length === 0`, **before** the picker is ever referenced in the render tree: an empty catalog
+must never reach a form that could submit an empty "clear my selection" write by accident.
+Both nav entries — sidebar (`AppSidebar.tsx`'s `baseNavItems`, the array every signed-in user gets,
+not the `isAdmin` spread beneath it) and the header (`UserDropdown.tsx`, beside the pre-existing
+*Ajustes* item) — show *Preferencias* unconditionally and *Ajustes* only where each surface already
+gated it. The header menu's *Ajustes* item was never admin-gated before this feature and still isn't
+— a pre-existing inconsistency with the sidebar's admin-gated copy, deliberately left alone.
 
 ## Library listings: two parallel screens, not one parameterized one
 
@@ -518,10 +538,10 @@ parity check with an exit code.
 
 ## Current state
 
-As of 2026-08-26 (`027-replace-completed-media`): `bin/cli web npx --no tsc --noEmit` reports
+As of 2026-09-02 (`021-user-preferences`): `bin/cli web npx --no tsc --noEmit` reports
 **0 errors** and `bin/npm web run build` exits 0. Re-run both rather than trusting this — report the
 numbers before and after a change to prove you added nothing.
 
-`bin/npm web run lint` is **not** a usable gate: `biome check` reports ~1598 errors and ~96 warnings
+`bin/npm web run lint` is **not** a usable gate: `biome check` reports ~1519 errors and ~65 warnings
 across the pre-existing template, with or without any given change. Judge a new file by running Biome
 on that file, never on the repo.

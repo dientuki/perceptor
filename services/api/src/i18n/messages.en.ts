@@ -79,6 +79,10 @@ export const MESSAGES_EN: Record<string, string> = {
     'Setting "{key}" is missing — configure it in Settings before encoding',
   [ERROR_KEYS.LANGUAGE_DUPLICATE]: 'Language {tag} is repeated',
   [ERROR_KEYS.LANGUAGE_UNAVAILABLE]: 'Language {tag} is not available',
+  [ERROR_KEYS.TORRENT_GROUP_NOT_FOUND]: 'Torrent group {id} does not exist',
+  [ERROR_KEYS.TORRENT_GROUP_DUPLICATED]: 'Torrent group {id} is repeated',
+  [ERROR_KEYS.TORRENT_GROUP_WRONG_SCOPE]:
+    'Torrent group {id} does not belong to {scope}',
   [ERROR_KEYS.MEDIA_SERVER_UNKNOWN]: 'Unknown media server: "{id}"',
   [ERROR_KEYS.MEDIA_SERVER_NOT_CONFIGURED]:
     'Configure a media server before syncing the library.',

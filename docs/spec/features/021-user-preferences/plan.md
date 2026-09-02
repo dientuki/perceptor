@@ -2,7 +2,7 @@
 title: User Preferences — Implementation Plan
 spec_version: 0.2.0
 last_updated: 2026-09-01
-status: Approved
+status: Implemented
 ---
 
 # PLAN: User Preferences (`plan.md`)

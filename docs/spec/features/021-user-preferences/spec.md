@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-19
 last_updated: 2026-09-01
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -63,35 +63,42 @@ exactly the tracks it selected before it.
       `/settings`, titled *Ajustes*, holds installation-wide configuration only. A control appears
       on one or the other, never on both.
 
-- [ ] **REQ-2 (Navigation)**: Both screens must be reachable. The sidebar
-      (`services/web/src/layout/AppSidebar.tsx`) and the header user menu
-      (`services/web/src/components/header/UserDropdown.tsx`) must each offer *Preferencias*
-      alongside the existing *Ajustes* entry, and *Ajustes* must keep pointing at `/settings`.
-      **`/preferences` is visible to every signed-in user, administrator or not.** `/settings` has
-      been administrator-only since `029-settings-screen-tabs` — `AdminGuard` on the resolver, a
-      `notFound()` on the page, and the sidebar entry rendered only when `isAdmin` — and none of
-      that may leak onto the new screen: a preference is the one thing on either screen that a
-      non-administrator must be able to edit.
+- [ ] **REQ-2 (Navigation)**: Both screens must be reachable, each from one place, not both.
+      *Preferencias* lives only in the header user menu
+      (`services/web/src/components/header/UserDropdown.tsx`), visible to every signed-in user —
+      it is a personal control, not an installation one, so it does not belong in the admin-facing
+      sidebar. *Ajustes* lives only in the sidebar
+      (`services/web/src/layout/AppSidebar.tsx`), pointing at `/settings`, exactly as before this
+      feature — neither entry is duplicated into the other's home. **`/preferences` is visible to
+      every signed-in user, administrator or not.** `/settings` has been administrator-only since
+      `029-settings-screen-tabs` — `AdminGuard` on the resolver, a `notFound()` on the page, and the
+      sidebar entry rendered only when `isAdmin` — and none of that may leak onto the new screen: a
+      preference is the one thing on either screen that a non-administrator must be able to edit.
 
-- [ ] **REQ-3 (Group: Idiomas)**: The *Idiomas* group must show three controls:
+- [ ] **REQ-3 (Tab: General)**: `/preferences` is laid out as tabs — the same `TabNav` pattern
+      `/settings` already uses (`services/web/src/components/ui/tabs/TabNav.tsx`), not stacked
+      sections. Unlike `/settings`'s single cross-tab `<form>`, each panel here saves independently
+      (REQ-7 below), so panels may switch visibility without protecting unsaved state across tabs.
+      The *General* tab shows **Idioma de Perceptor** — a single choice among `supportedLocales`,
+      saved on the caller. Choosing one must take precedence over the installation's `ui_locale`
+      setting; leaving it unset must fall back to it. This is the existing `setUiLocale` mutation,
+      given the control that `018-ui-i18n` deliberately did not build.
 
-      1. **Idioma de Perceptor** — a single choice among `supportedLocales`, saved on the caller.
-         Choosing one must take precedence over the installation's `ui_locale` setting; leaving it
-         unset must fall back to it. This is the existing `setUiLocale` mutation, given the control
-         that `018-ui-i18n` deliberately did not build.
-      2. **Idiomas de audio** — a multi-select over the `languages` catalog.
-      3. **Idiomas de subtítulos** — a second, independent multi-select over the same catalog.
+- [ ] **REQ-3b (Tab: Idiomas de descarga)**: The *Idiomas de descarga* tab shows two controls:
+
+      1. **Idiomas de audio** — a multi-select over the `languages` catalog.
+      2. **Idiomas de subtítulos** — a second, independent multi-select over the same catalog.
 
       The two language lists are independent in both directions: saving one must leave the other
       exactly as it was. The copy must state that the title's original language and subtitles are
       always kept regardless, so that an empty selection reads as a deliberate answer rather than a
       missing one.
 
-- [ ] **REQ-4 (Group: Películas)**: The *Películas* group must show a yes/no control for whether
+- [ ] **REQ-4 (Tab: Películas)**: The *Películas* tab must show a yes/no control for whether
       cinema-recorded releases are acceptable, and a multi-select of preferred torrent groups
       restricted to the film catalog.
 
-- [ ] **REQ-5 (Group: Series)**: The *Series* group must show a multi-select of preferred torrent
+- [ ] **REQ-5 (Tab: Series)**: The *Series* tab must show a multi-select of preferred torrent
       groups restricted to the series catalog. Changing the film selection must leave the series
       selection untouched, and the reverse.
 
@@ -111,9 +118,15 @@ exactly the tracks it selected before it.
       each group picker must then render an explanatory message saying no groups have been loaded,
       with nothing selectable, no mutation sent, and the rest of the screen working.
 
-- [ ] **REQ-8 (Every control saves on its own)**: Each of the six controls must persist
-      independently. A failure saving one must leave the other five untouched and must not stop the
-      user from saving them. There is no single *Guardar* button spanning the screen.
+- [ ] **REQ-8 (One Guardar button, six mutations)**: `/preferences` uses the same single-form,
+      single-*Guardar*-button shape `/settings`/`SettingsForm.tsx` already uses — one button fires
+      all six controls' mutations together, regardless of which tab is active when it is pressed.
+      This reverses this requirement's original text, which forbade a screen-spanning button; that
+      was the shipped behaviour until the visual-parity request that superseded it. The six
+      mutations remain individually scoped API calls with no shared transaction — a failure saving
+      one must leave the other five's already-persisted values untouched, and the failed field's
+      **UI** must revert to what the server still holds (never invent a rollback of the ones that
+      already succeeded). The single button controls the trigger, not atomicity across controls.
 
 - [ ] **REQ-9 (Self only)**: Every read and every write on this screen targets the authenticated
       caller. No query and no mutation accepts a user id, and none of this surface may be reachable
@@ -283,14 +296,15 @@ The two `error.language.*` keys and `error.auth.unauthenticated` already exist i
 `services/api/src/i18n/error-keys.ts` and in both message catalogs; re-using them is the point.
 The three `error.torrent_group.*` keys are new and need an entry per locale.
 
-**What `web` does with each.** The five `BadRequestException` rows surface as an inline message on
-the card that failed, leaving the other cards alone (REQ-8), **with that card's selection reverted
-to what the server still holds** — a picker left showing a set the API refused is a UI that
-disagrees with the database until the next reload, which is worse than the refusal it is reporting.
-`error.auth.unauthenticated` never reaches a card: `redirectIfUnauthenticated` intercepts it in the
-server action, clears the cookie and sends the browser to `/login`, as every action under
-`services/web/src/actions/` already does. `setAllowCinemaReleases` has no failure of its own — a
-boolean cannot be invalid — so the unauthenticated path is its only one.
+**What `web` does with each.** The five `BadRequestException` rows surface as one of possibly
+several inline messages under the single *Guardar* button, naming which control failed, while the
+controls that saved successfully keep their new values (REQ-8) **and the failed control's own
+selection reverts to what the server still holds** — a picker left showing a set the API refused is
+a UI that disagrees with the database until the next reload, which is worse than the refusal it is
+reporting. `error.auth.unauthenticated` never reaches that error area: `redirectIfUnauthenticated`
+intercepts it inside the server action, clears the cookie and sends the browser to `/login`, as
+every action under `services/web/src/actions/` already does. `setAllowCinemaReleases` has no
+failure of its own — a boolean cannot be invalid — so the unauthenticated path is its only one.
 
 ## Data Model Changes
 
@@ -328,75 +342,78 @@ Notes:
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: `/preferences` renders three groups — *Idiomas*, *Películas*, *Series* — with the
-      six controls REQ-3 to REQ-5 list, and `/settings` shows five tabs with no *Descarga* among
-      them. `grep -rn "DownloadPanel" services/web/src` returns nothing.
+- [x] **AC-1**: `/preferences` renders four tabs — *General*, *Idiomas de descarga*, *Películas*,
+      *Series* — with the six controls REQ-3/REQ-3b/REQ-4/REQ-5 list, and `/settings` shows five
+      tabs with no *Descarga* among them. `grep -rn "DownloadPanel" services/web/src` returns
+      nothing.
 
-- [ ] **AC-2**: Signed in as an administrator, the sidebar and the header user menu both show
-      *Preferencias* and *Ajustes*, landing on `/preferences` and `/settings` respectively.
+- [x] **AC-2**: Signed in as an administrator, the sidebar shows *Ajustes* (and not *Preferencias*)
+      and the header user menu shows *Preferencias* (and not *Ajustes*), landing on `/settings` and
+      `/preferences` respectively.
 
-- [ ] **AC-2b**: Signed in as a **non-administrator**, the sidebar shows *Preferencias* and not
-      *Ajustes*, and `/preferences` renders in full — the six controls all present and all
-      writable.
+- [x] **AC-2b**: Signed in as a **non-administrator**, the sidebar shows neither entry (it never
+      showed *Ajustes* to a non-administrator, and *Preferencias* does not live there), the header
+      user menu still shows *Preferencias*, and `/preferences` renders in full — the six controls
+      all present and all writable.
 
-- [ ] **AC-3**: With the installation's `ui_locale` set to `es`, a user who picks English on
+- [x] **AC-3**: With the installation's `ui_locale` set to `es`, a user who picks English on
       `/preferences` and reloads sees Perceptor in English, `me { uiLocale }` returns `en`, and a
       second user who never picked one still sees Spanish — the override applies to its owner only.
 
-- [ ] **AC-4**: Selecting two audio languages and one subtitle language, then reloading, shows
+- [x] **AC-4**: Selecting two audio languages and one subtitle language, then reloading, shows
       exactly that;
       `bin/mysql -e 'select kind, count(*) from user_language_preferences group by kind'` prints
       `AUDIO 2` and `SUBTITLE 1`.
 
-- [ ] **AC-5** *(failure path — the silent one)*: With both lists populated, saving the audio list
+- [x] **AC-5** *(failure path — the silent one)*: With both lists populated, saving the audio list
       alone leaves the subtitle list intact, and the reverse. Verified on the row count above before
       and after each save, not only in the UI.
 
-- [ ] **AC-6**: Ticking *Permitir películas de cine* and reloading keeps it ticked, and
+- [x] **AC-6**: Ticking *Permitir películas de cine* and reloading keeps it ticked, and
       `bin/mysql -e 'select allowCinemaReleases from users where username = "<username>"'` prints
       `1`; unticking and reloading prints `0`. A user created afterwards through `/users` prints `0`
       with no row written for them anywhere.
 
-- [ ] **AC-7**: On a freshly migrated install, `torrentGroups` returns `[]` and both group pickers
+- [x] **AC-7**: On a freshly migrated install, `torrentGroups` returns `[]` and both group pickers
       render the "no groups loaded" message, with nothing selectable and no mutation sent.
 
-- [ ] **AC-8**: After inserting one `MOVIE` row and one `SHOW` row by hand
+- [x] **AC-8**: After inserting one `MOVIE` row and one `SHOW` row by hand
       (`bin/mysql -e "insert into torrent_groups (name, scope) values ('GRUPO-A','MOVIE'),('GRUPO-B','SHOW')"`),
       selecting the film group and reloading keeps it selected with the series selection still
       empty; selecting the series group afterwards leaves the film selection in place.
 
-- [ ] **AC-9** *(failure path)*: `setPreferredTorrentGroups(scope: MOVIE, ids: [<the SHOW row's id>])`
+- [x] **AC-9** *(failure path)*: `setPreferredTorrentGroups(scope: MOVIE, ids: [<the SHOW row's id>])`
       is refused with `error.torrent_group.wrong_scope`, and `preferences { torrentGroups { id } }`
       afterwards shows the previously saved set unchanged.
 
-- [ ] **AC-10** *(failure path)*: `setPreferredTorrentGroups` with an id matching no row is refused
+- [x] **AC-10** *(failure path)*: `setPreferredTorrentGroups` with an id matching no row is refused
       with `error.torrent_group.not_found`, and with the same id twice with
       `error.torrent_group.duplicated`. In both cases
       `bin/mysql -e 'select count(*) from user_torrent_groups'` prints the same number before and
       after.
 
-- [ ] **AC-11** *(failure path)*: `setPreferredTrackLanguages(kind: AUDIO, tags: ["zz"])` is refused
+- [x] **AC-11** *(failure path)*: `setPreferredTrackLanguages(kind: AUDIO, tags: ["zz"])` is refused
       with `error.language.unavailable` and `setPreferredTrackLanguages(kind: AUDIO, tags: ["en","en"])`
       with `error.language.duplicate`; `user_language_preferences` is unchanged after each.
 
-- [ ] **AC-12** *(failure path)*: `preferences`, `setPreferredTrackLanguages`,
+- [x] **AC-12** *(failure path)*: `preferences`, `setPreferredTrackLanguages`,
       `setPreferredTorrentGroups` and `setAllowCinemaReleases` called with `SERVICE_TOKEN` as the
       bearer are all refused with `error.auth.unauthenticated`.
 
-- [ ] **AC-13** *(failure path)*: `users { id preferences { allowCinemaReleases } }` fails to
+- [x] **AC-13** *(failure path)*: `users { id preferences { allowCinemaReleases } }` fails to
       validate — there is no such field on `User`, and no query in the schema accepts a user id and
       returns preferences.
 
-- [ ] **AC-14**: Deleting a user through `removeUser` leaves no row of theirs behind:
+- [x] **AC-14**: Deleting a user through `removeUser` leaves no row of theirs behind:
       `bin/mysql -e 'select count(*) from user_language_preferences where userId = "<id>"'` and the
       same against `user_torrent_groups` both print `0`.
 
-- [ ] **AC-15**: `bin/mysql -e "select value from settings where \`key\` = 'default_languages'"`
+- [x] **AC-15**: `bin/mysql -e "select value from settings where \`key\` = 'default_languages'"`
       prints the same value before and after this feature ships, and an encode started afterwards
       logs the same `allowedLanguagesIso3` it logged before — the Descarga tab is gone, its data is
       not (REQ-6, NFR-1).
 
-- [ ] **AC-16**: `bin/cli api npx --no tsc --noEmit` and `bin/cli web npx --no tsc --noEmit` report
+- [x] **AC-16**: `bin/cli api npx --no tsc --noEmit` and `bin/cli web npx --no tsc --noEmit` report
       0 errors, `bin/npm web run build` exits 0, and `bin/npm api test` reports no failures.
 
 ## Out of Scope

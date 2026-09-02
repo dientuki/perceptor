@@ -80,6 +80,11 @@
       "unavailable": "\"{tag}\" is not a known language",
       "duplicate": "\"{tag}\" was submitted twice"
     },
+    "torrent_group": {
+      "not_found": "Torrent group {id} does not exist",
+      "duplicated": "Torrent group {id} is repeated",
+      "wrong_scope": "Torrent group {id} does not belong to {scope}"
+    },
     "mediaServer": {
       "not_configured": "Configure a media server before syncing the library."
     }
@@ -107,7 +112,7 @@
   },
   "userMenu": {
     "editProfile": "Edit profile",
-    "settings": "Settings",
+    "preferences": "Preferences",
     "signOut": "Sign out",
     "themeLight": "Light mode",
     "themeDark": "Dark mode"
@@ -158,6 +163,11 @@
     },
     "showDetail": {
       "metadataDescription": "Series details page"
+    },
+    "preferences": {
+      "title": "Preferences",
+      "metadataTitle": "Preferences | Perceptor",
+      "metadataDescription": "Your personal language and torrent-group preferences"
     },
     "settings": {
       "title": "Settings",
@@ -411,6 +421,31 @@
       "saved": "Settings saved.",
       "saving": "Saving...",
       "save": "Save"
+    }
+  },
+  "preferences": {
+    "tabs": {
+      "general": "General",
+      "downloadLanguages": "Download Languages",
+      "movies": "Movies",
+      "shows": "Series"
+    },
+    "form": {
+      "uiLocaleLabel": "Perceptor language",
+      "audioLanguagesLabel": "Audio languages",
+      "subtitleLanguagesLabel": "Subtitle languages",
+      "cinemaLabel": "Allow cinema releases",
+      "movieGroupsLabel": "Preferred movie groups",
+      "showGroupsLabel": "Preferred series groups",
+      "noneLoaded": "No torrent groups have been loaded yet.",
+      "saved": "Preferences saved.",
+      "save": "Save",
+      "saving": "Saving..."
+    },
+    "torrentGroups": {
+      "chosenLabel": "Chosen groups",
+      "emptyChosen": "No groups chosen.",
+      "removeGroup": "Remove {name}"
     }
   },
   "users": {

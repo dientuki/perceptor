@@ -2,7 +2,7 @@
 title: User Preferences — web slice
 service: web
 last_updated: 2026-09-01
-status: Approved
+status: Implemented
 ---
 
 # PLAN: User Preferences — `web` (`web/plan.md`)

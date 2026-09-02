@@ -47,6 +47,16 @@ enum MediaStatus {
   ERROR // Falló la descarga o el encode
 }
 
+enum LanguageTrackKind {
+  AUDIO
+  SUBTITLE
+}
+
+enum TorrentGroupScope {
+  MOVIE
+  SHOW
+}
+
 model Setting {
   id    Int    @id @default(autoincrement())
   key   String @unique
@@ -71,8 +81,13 @@ model User {
   // BCP-47 UI language tag. Null means unset — resolve from Accept-Language, then "en".
   uiLocale String? @db.VarChar(35)
 
+  allowCinemaReleases Boolean @default(false)
+
   movies UserMovie[]
   shows  UserShow[]
+
+  languages     UserLanguagePreference[]
+  torrentGroups UserTorrentGroup[]
 
   @@map("users")
 }
@@ -121,6 +136,7 @@ model Language {
 
   userMoviePreferences UserMovieLanguage[]
   userShowPreferences  UserShowLanguage[]
+  userPreferences      UserLanguagePreference[]
 
   @@map("languages")
 }
@@ -157,6 +173,43 @@ model UserShowLanguage {
   @@id([userId, showId, languageId])
   @@index([languageId])
   @@map("user_show_languages")
+}
+
+model UserLanguagePreference {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  languageId Int
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  kind LanguageTrackKind
+
+  @@id([userId, languageId, kind])
+  @@index([languageId])
+  @@map("user_language_preferences")
+}
+
+model TorrentGroup {
+  id    Int               @id @default(autoincrement())
+  name  String
+  scope TorrentGroupScope
+
+  users UserTorrentGroup[]
+
+  @@unique([name, scope])
+  @@map("torrent_groups")
+}
+
+model UserTorrentGroup {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  torrentGroupId Int
+  torrentGroup   TorrentGroup @relation(fields: [torrentGroupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, torrentGroupId])
+  @@index([torrentGroupId])
+  @@map("user_torrent_groups")
 }
 
 // Origen del material para un pedido: torrent, archivo o carpeta local

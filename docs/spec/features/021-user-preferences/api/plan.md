@@ -2,7 +2,7 @@
 title: User Preferences — api slice
 service: api
 last_updated: 2026-09-01
-status: Approved
+status: Implemented
 ---
 
 # PLAN: User Preferences — `api` (`api/plan.md`)

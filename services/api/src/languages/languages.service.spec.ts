@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
+import { LanguageTrackKind } from '@prisma/client';
 import { LanguagesService } from './languages.service';
 import { PrismaService } from '@/prisma/prisma.service';
 
@@ -31,6 +32,7 @@ describe('LanguagesService — preference writes', () => {
   let tx: {
     userMovieLanguage: { deleteMany: jest.Mock; createMany: jest.Mock };
     userShowLanguage: { deleteMany: jest.Mock; createMany: jest.Mock };
+    userLanguagePreference: { deleteMany: jest.Mock; createMany: jest.Mock };
   };
   let readFindMany: jest.Mock;
   let transactionMock: jest.Mock;
@@ -41,6 +43,7 @@ describe('LanguagesService — preference writes', () => {
     tx = {
       userMovieLanguage: { deleteMany: jest.fn(), createMany: jest.fn() },
       userShowLanguage: { deleteMany: jest.fn(), createMany: jest.fn() },
+      userLanguagePreference: { deleteMany: jest.fn(), createMany: jest.fn() },
     };
     transactionMock = jest.fn(async (callback: (tx: unknown) => Promise<void>) => {
       await callback(tx);
@@ -50,6 +53,7 @@ describe('LanguagesService — preference writes', () => {
       language: { findMany: languageFindMany },
       userMovieLanguage: { findMany: readFindMany },
       userShowLanguage: { findMany: readFindMany },
+      userLanguagePreference: { findMany: readFindMany },
       $transaction: transactionMock,
     };
 
@@ -140,6 +144,36 @@ describe('LanguagesService — preference writes', () => {
       });
     });
   }
+
+  it('setPreferredTrackLanguagesFor: writing AUDIO deletes only AUDIO rows, leaving SUBTITLE untouched, and the reverse', async () => {
+    // Both kinds live in the same `userLanguagePreference` table, keyed apart
+    // only by `kind` — the fault this guards against is `deleteMany`'s `where`
+    // narrowed to `{ userId }`, which would silently wipe the caller's other
+    // kind on every write. Verified to fail with `kind` dropped from the
+    // `where` (T009).
+    languageFindMany.mockResolvedValue([spanish, english]);
+
+    await service.setPreferredTrackLanguagesFor('user-1', LanguageTrackKind.AUDIO, ['es']);
+
+    expect(tx.userLanguagePreference.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', kind: LanguageTrackKind.AUDIO },
+    });
+    expect(tx.userLanguagePreference.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', kind: LanguageTrackKind.AUDIO, languageId: spanish.id }],
+    });
+
+    tx.userLanguagePreference.deleteMany.mockClear();
+    tx.userLanguagePreference.createMany.mockClear();
+
+    await service.setPreferredTrackLanguagesFor('user-1', LanguageTrackKind.SUBTITLE, ['en']);
+
+    expect(tx.userLanguagePreference.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', kind: LanguageTrackKind.SUBTITLE },
+    });
+    expect(tx.userLanguagePreference.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', kind: LanguageTrackKind.SUBTITLE, languageId: english.id }],
+    });
+  });
 
   it('resolves every tag even with a third, unrelated language present in the table', async () => {
     // Guards against a lookup that only checks "at least one row exists"

@@ -213,6 +213,37 @@ type FfprobeLog {
   createdAt: DateTime!
 }
 
+"""
+A release group, scoped to films or to series. The catalog is administrator-curated.
+"""
+type TorrentGroup {
+  id: Int!
+  name: String!
+  scope: TorrentGroupScope!
+}
+
+enum TorrentGroupScope {
+  MOVIE
+  SHOW
+}
+
+"""
+The signed-in caller's own preferences. Never reachable from another user.
+"""
+type UserPreferences {
+  """
+  CAM/TS releases acceptable for this user. False for every user until they say otherwise.
+  """
+  allowCinemaReleases: Boolean!
+  audioLanguages: [Language!]!
+  subtitleLanguages: [Language!]!
+
+  """
+  The caller's selection, both scopes in one list — web splits it by `scope`.
+  """
+  torrentGroups: [TorrentGroup!]!
+}
+
 type Query {
   ping: String!
   items: [Item!]!
@@ -260,6 +291,8 @@ type Query {
 
   """Fetch one recorded ffprobe payload by id"""
   ffprobeLog(id: Int!): FfprobeLog!
+  preferences: UserPreferences!
+  torrentGroups(scope: TorrentGroupScope): [TorrentGroup!]!
 }
 
 type Mutation {
@@ -343,6 +376,9 @@ type Mutation {
 
   """Delete one recorded ffprobe payload by id"""
   deleteFfprobeLog(id: Int!): Boolean!
+  setAllowCinemaReleases(allowed: Boolean!): UserPreferences!
+  setPreferredTrackLanguages(kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
+  setPreferredTorrentGroups(scope: TorrentGroupScope!, ids: [Int!]!): [TorrentGroup!]!
 }
 
 input LoginInput {
@@ -387,4 +423,10 @@ input ScannedMatchInput {
   filePath: String!
   seasonNumber: Int
   episodeNumber: Int
+}
+
+"""Which side of the encode a language preference applies to."""
+enum LanguageTrackKind {
+  AUDIO
+  SUBTITLE
 }

@@ -207,7 +207,10 @@ All three services typecheck clean (0 errors) and `bin/npm web run build` exits 
 (`worker` untouched by that feature) — and again 2026-08-31 after
 `034-jellyfin-library-reconciliation`: `api` 285/31 suites (`worker` untouched; `web` has no test
 suite — see `services/web/CLAUDE.md`) — and again 2026-09-01 after `037-indexer-result-loss`:
-`api` 294/32 suites (`worker` untouched by that feature).
+`api` 294/32 suites (`worker` untouched by that feature) — and again 2026-09-01 after
+`038-encode-report-durability`: `api` 301/32 suites (`worker` untouched by that feature) — and again
+2026-09-02 after `021-user-preferences`: `api` 308/33 suites, `web` typechecks at 0 errors and
+`bin/npm web run build` exits 0 (`worker` untouched by that feature).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 
