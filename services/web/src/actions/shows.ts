@@ -96,12 +96,14 @@ const GET_SHOW_QUERY = `
         id
         tag
         iso2
+        iso3
         name
       }
       subtitleLanguages {
         id
         tag
         iso2
+        iso3
         name
       }
       audioMandatory

@@ -68,12 +68,14 @@ const GET_MOVIE_QUERY = `
         id
         tag
         iso2
+        iso3
         name
       }
       subtitleLanguages {
         id
         tag
         iso2
+        iso3
         name
       }
       audioMandatory
