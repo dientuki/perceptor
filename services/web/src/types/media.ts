@@ -1,5 +1,6 @@
 import type { Movie } from "@/actions/movies";
 import type { Episode } from "@/actions/shows";
+import type { Language } from "@/types/languages";
 
 export const MEDIA_TYPE = {
   MOVIE: "movie",
@@ -18,6 +19,11 @@ export type AcquisitionTarget =
       episode: Episode;
       showTitle: string;
       seasonNumber: number;
+      // The parent series' language preference (`039-per-title-language-split`) —
+      // an episode has none of its own, so the ranking heuristic (`036`, REQ-25)
+      // reads the series' flag through this branch instead.
+      audioMandatory: boolean;
+      audioLanguages: Language[];
     };
 
 // The discriminated return of every acquisition Server Action (magnet,

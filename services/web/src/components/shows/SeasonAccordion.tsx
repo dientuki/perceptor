@@ -9,6 +9,7 @@ import ImportMagnetModal from "@/components/import/importMagnetModal";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
+import type { Language } from "@/types/languages";
 import type { AcquisitionTarget } from "@/types/media";
 
 function statusBadgeClass(status: string): string {
@@ -103,10 +104,14 @@ export default function SeasonAccordion({
   season,
   defaultOpen,
   showTitle,
+  audioMandatory,
+  audioLanguages,
 }: {
   season: Season;
   defaultOpen: boolean;
   showTitle: string;
+  audioMandatory: boolean;
+  audioLanguages: Language[];
 }) {
   const t = useTranslations("shows.seasonAccordion");
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -149,6 +154,8 @@ export default function SeasonAccordion({
         episode: activeEpisode,
         showTitle,
         seasonNumber: season.seasonNumber,
+        audioMandatory,
+        audioLanguages,
       }
     : null;
 

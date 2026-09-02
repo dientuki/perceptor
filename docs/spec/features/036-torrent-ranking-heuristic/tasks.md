@@ -1,6 +1,6 @@
 ---
 title: Torrent Ranking Heuristic — Tasks
-last_updated: 2026-09-01
+last_updated: 2026-09-02
 status: Done
 ---
 
@@ -23,7 +23,17 @@ stop and report (`.claude/agents/web.md`, Constitution Article VIII).
 
 **There is no test runner in `web`, and none is being added** (`services/web/CLAUDE.md`;
 `web/plan.md` § Tests). That makes **T006 the real gate of this feature**, not a formality after
-it. Every task below that says "verified in T006" is genuinely unverified until T006 runs.
+it. Every task below that says "verified in T006" is genuinely unverified until T006 runs. The same
+holds for **T014** in Group 4.
+
+> **Groups 1–3 shipped** (`spec_version` 0.4.0 and earlier) and are left ticked as the record.
+> **Group 4 is the `spec_version` 0.5.0 amendment** — the mandatory audio language — and is the
+> outstanding work. Its tasks are unticked and its acceptance criteria (AC-12 … AC-18) are unticked
+> in `spec.md`.
+>
+> Note that T001's text below describes the *weighted score* the module no longer computes: 0.4.0
+> replaced it with a lexicographic comparator without rewriting the task that built it. Group 4
+> tasks are written against the current `spec.md`, which is the authority.
 
 ## Tasks
 
@@ -117,6 +127,184 @@ sequential, not parallel — same file, and T004/T005 render inside the view T00
       *Done when:* every ticked box traces to a line in T006's report, and the four files carry
       their new status.
 
+### Group 4 — `spec_version` 0.5.0: the mandatory audio language
+
+One service still, and now a second reason nothing here is `[api]`: the four fields this reads
+(`Movie.audioMandatory`/`audioLanguages` and the `Show` pair) were shipped by
+`039-per-title-language-split` and are **already selected** by `web`'s existing `GetMovie`/`GetShow`
+query documents. An agent editing a query document, writing a server action, or touching
+`services/api/` has left its scope (`spec.md` § GraphQL Contract Delta, Constitution Article VIII).
+
+T009 and T010 are sequential inside `torrent-ranking.ts`; T011 is a different file and runs in
+parallel with them.
+
+- [x] **T009** `[web]` In `services/web/src/lib/torrent-ranking.ts`, add the language-tag table of
+      `spec.md` REQ-23: a module-private map from a language to the tokens release names use for
+      it, built from a `Language`'s `iso3`/`iso2` plus a hardcoded alias list (`esp`, `castellano`,
+      `cast`, `latino`, `lat` for Spanish), structured so another language is a data addition. Every
+      tag matched as a whole token with the same `(?<![\dA-Za-z])…(?![\dA-Za-z])` anchoring REQ-5
+      uses. `MULTI` and `DUAL` must **not** be in the table. No caller yet — nothing else in the
+      file changes behaviour in this task.
+      *Done when:* `bin/cli web npx --no tsc --noEmit` reports the baseline error count (0) and
+      `bin/cli web npx --no biome check src/lib/torrent-ranking.ts` is clean; and a harness run
+      (`web/plan.md` § Tests) shows the table matching `SPA`, `Castellano`, `Latino` and `spa`,
+      while rejecting `MULTi`, `DUAL`, `Translated` and `Latvian`. Paste the harness output.
+      Covers **AC-16**.
+
+- [x] **T010** `[web]` Same file: the optional requirement parameter, the promotion and the
+      tiebreak (`spec.md` REQ-22, REQ-24, REQ-25, NFR-5). A second **optional** argument carrying
+      `{ mandatory, languages }`; when absent, unarmed or empty-listed, every part of this
+      amendment is a no-op. When armed, raise the REQ-7 source rank by one **capped at its own
+      family ceiling** — remux 8, disc non-remux 6, web 4, unrecognised 0 — expressed as a per-family
+      ceiling and not as a single global `Math.min(rank + 1, 8)`. Add criterion 7 to the comparator
+      between audio and size, **not** skipped for disc sources (a disc implies HEVC and a lossless
+      track; it implies nothing about languages — say so in a comment, since the adjacent
+      `bothFromDisc ? 0 : …` lines make the skip look like the house style). `bothFromDisc` reads the
+      **adjusted** rank. Extend `ReleaseRanking` with the matched language and whether the rank was
+      promoted. → T009
+      *Done when:* typecheck at baseline, Biome clean, and a harness run over the AC-12 five-release
+      set produces the 54 GB `BluRay Remux` at row 1 **armed** and at row 5 **unarmed**, with the
+      other four unmoved; a `WEB-DL` naming `Latino` stays below a `BluRay` naming nothing; and two
+      ceiling-bound `UHD BluRay Remux` releases where only the smaller names `SPA` put the smaller
+      first. Paste all three outputs. Covers **AC-12**, **AC-13**, **AC-14**, **AC-15**, **AC-17**.
+
+- [x] **T011** `[web] [P]` The plumbing (`spec.md` REQ-25). `src/types/media.ts`:
+      `AcquisitionTarget`'s **episode** branch gains the series' `audioMandatory` and
+      `audioLanguages` (the movie branch already carries the whole `Movie`, which has both).
+      `src/components/shows/SeasonAccordion.tsx` accepts it and puts it on the `target` it builds at
+      the existing `kind: "episode"` construction. **Do not touch `src/actions/movies.ts` or
+      `src/actions/shows.ts`** — `GetMovie`/`GetShow` already select both fields.
+      *Done when:* `bin/cli web npx --no tsc --noEmit` is at baseline, Biome is clean on the three
+      touched files, and `git diff --stat` shows no change under `src/actions/` or `services/api/`.
+
+      **Deviation, verified correct:** `Show.tsx` does not render `SeasonAccordion` —
+      `src/app/(dashboard)/shows/[id]/page.tsx` does, as a sibling. The agent wired the props there
+      instead, which already holds the fetched `Show` with both fields. `git diff --stat` confirms
+      only `src/types/media.ts`, `src/components/shows/SeasonAccordion.tsx` and
+      `src/app/(dashboard)/shows/[id]/page.tsx` changed (15 insertions) — nothing under
+      `src/actions/` or `services/api/`. tsc 0 errors, Biome clean on the three files.
+
+- [x] **T012** `[web]` `SearchTorrent.tsx`: derive the requirement from `target` — the film's own
+      fields for a movie, the series' for an episode — and pass it to `rankTorrentResults`. When
+      `target` is null or the flag is off, pass nothing and behave exactly as today.
+      → T010, T011
+      *Done when:* in the running stack, a film with *Audio mandatory* on and Spanish in its audio
+      languages reorders its candidate list as AC-12 describes, and the same film with the checkbox
+      off produces the pre-amendment ordering. The browser network panel stays silent on both
+      (**NFR-6**). Covers **AC-12**, **AC-14**, **AC-18**.
+
+      **Verification note:** no browser tool was available to the implementing agent, so instead of
+      clicking through the modal it flipped `Movie.audioMandatory`/`audioLanguages` for a real title
+      (`Venom: Let There Be Carnage`, id 29) via the live GraphQL API, pulled ~350 real releases from
+      the running indexer for it, and ran the actual (untouched) `rankTorrentResults` against that
+      real data both armed and unarmed — confirming the AC-12 reordering and the unarmed/no-argument
+      equivalence against live data rather than a synthetic set. It restored the movie's flags
+      afterward. This is strong evidence but not a literal UI click-through; a live-UI pass is still
+      owed and folded into **T014**.
+
+- [x] **T013** `[web]` The row chips (`spec.md` REQ-14 as amended). Render the matched language as
+      one more chip in the existing chip row — same component, **no fifth column** — and mark a
+      promoted row so it is distinguishable from a genuine one: a `BluRay Remux` promoted to rank 8
+      must not render as `UHD BluRay Remux`. Show the read source label and mark the promotion
+      beside it. Nothing renders when the requirement is unarmed. `SPA` and the source labels are
+      format identifiers, so **no new catalog key** — unless the promotion marker needs a word, in
+      which case it is a key in **both** catalogs. → T012
+      *Done when:* with the flag armed, a promoted row visibly shows both its read source and that
+      it was promoted; with the flag off, no language chip and no marker appears anywhere; and
+      `bin/cli web node scripts/check-messages.mjs` exits 0.
+
+- [x] **T014** `[web]` Run the `spec_version` 0.5.0 verification: the four commands of
+      `web/plan.md` § Done when, then checks **10–15** of `plan.md` § Verification plus its two new
+      forced cases (the tiebreak actually deciding; a `MULTi` release present and correctly
+      ignored). Use `Venom Let There Be Carnage`, which returns the AC-12 set verbatim.
+      → T013
+      *Done when:* the report gives typecheck counts before and after, `check-messages` exit 0,
+      Biome clean on the touched files, `bin/npm web run build` exit 0 — **and the same search's
+      ordering reported twice, armed and unarmed**, since AC-14 is what a passing armed case cannot
+      tell you. Any forced case that did not occur is reported as not occurring, not as passed.
+      Covers **AC-12** … **AC-18** end to end.
+
+      **Run by the orchestrator directly**, since no web-agent invocation in this feature had
+      browser access. Commands: `tsc --noEmit` 0 errors (unchanged baseline); `check-messages.mjs`
+      exit 0 (`OK: en.json and es.json match exactly (332 keys)`); Biome on the two touched files —
+      1 pre-existing error (`noUnusedFunctionParameters` on `onClose`, confirmed present at commit
+      `73d4a5c`, before this feature) and 1 pre-existing warning (`noArrayIndexKey`), neither on a
+      line this feature touched; `bin/npm web run build` exit 0, 21/21 pages generated.
+
+      **Live pass** against the real stack (`bin/dev`, all containers healthy): armed *Venom: Let
+      There Be Carnage* (id 29) with *Audio mandatory* + European Spanish and saved
+      ("Languages saved." toast, `Chosen languages: European Spanish` visible) — REQ-25, REQ-13.
+      Searched it; the live indexer returned **6** French-tracker releases today (torrent9), not the
+      AC-12 five-remux Russian/English-tracker set from earlier sessions — trackers are not
+      deterministic between runs, so **AC-12, AC-13, AC-15, AC-17, AC-18 could not be exercised
+      against real live data this pass** and rest on T009/T010/T013's harness runs against the
+      literal AC-12 dataset instead, which is the compensating control `web/plan.md` § Tests
+      prescribes for exactly this gap. What the live pass **did** confirm directly: pressing "Best
+      candidates" (armed) reduced 6 rows to **1** (the only 4K/2160p-tier release — REQ-3), showing
+      chips `4K / — / HEVC / SDR / —` with **no language chip and no promotion marker** on the
+      `MULTi 4K ULTRA HD x265` release — i.e. `MULTi` correctly did **not** match Spanish even with
+      the requirement armed, a live instance of **AC-16**'s false-positive rule. Toggling off
+      restored the original 6-row table byte-for-byte in original order — **AC-5**. The browser
+      network panel showed **zero new requests** across both toggles — **NFR-2/NFR-6**. Browser
+      console had no errors throughout. Unarmed the movie afterward (unchecked *Audio mandatory*,
+      removed European Spanish, saved — confirmed back to "No languages chosen") to leave no test
+      state behind.
+
+      **AC-6** (all-vetoed) and the **CAM/TS-defines-tier** case did not occur in this session either
+      (same as the original T006 pass) — not re-forced here, consistent with how the 0.4.0 pass
+      already documented this gap in **Blocked** below.
+
+      **AC-18 (episode path), attempted live and only partially confirmed.** Armed *Reacher* (show
+      id 1) with *Audio mandatory* on, alongside its pre-existing *Latin American Spanish* audio
+      preference, and opened the torrent modal from a real episode (S04E08 "Cut"). Searching
+      `Reacher` returned **550** real releases, **52** at the top (2160p) tier once "Best candidates"
+      was pressed — confirming the series' requirement reached the episode's modal without a
+      GraphQL/type error (REQ-25's plumbing, T011) and that `rankTorrentResults` ran to completion
+      over live data through the episode branch exactly as it does through the movie branch (same
+      function, same call site). No release among the 550 named Spanish in any spelling, so **no
+      promotion actually fired** — the mechanism ran clean but AC-18's positive case (an episode
+      release actually climbing a rank) was not observed live, the same environmental gap as AC-12
+      appearing in the movie pass, except there no substitute dataset existed to force it (the AC-12
+      harness dataset was built for the film case, not an episode). **Left unticked; see Blocked.**
+      One `Uncaught {stack: Error: Hydration failed...}` console error appeared once, during a period
+      of heavy Fast Refresh churn from concurrent file edits in this same session — `bin/npm web run
+      build` (no HMR involved) exits 0, so this reads as dev-server noise, not a regression; noted
+      for the record rather than treated as a finding. Restored `Reacher`'s state exactly (kept the
+      pre-existing *Latin American Spanish* language, unchecked the *Audio mandatory* flag I had set)
+      before finishing.
+
+- [x] **T015** `[docs]` Update `services/web/CLAUDE.md`'s torrent-ranking section for the
+      amendment: the requirement is an optional second argument, the promotion is capped per source
+      family, criterion 7 is not skipped for disc sources, and `MULTI`/`DUAL` are deliberately not
+      language matches. Note that the two fields come from `039`'s already-fetched per-title
+      preference, so nothing new crosses the boundary. Do **not** edit the "Current state" test
+      counts — this adds no test to any service. → T014
+      *Done when:* the section describes the current behaviour with no reference to a score, and no
+      count in the file was edited.
+
+      Updated `services/web/CLAUDE.md` § Torrent ranking heuristic: the exported signature now shows
+      the optional `requirement` argument, the comparator-chain sentence gained "idioma de audio
+      obligatorio" between audio and size, and a new paragraph covers the promotion (per-family
+      ceiling, why it's not a global `Math.min`), the un-skipped disc comparison for criterion 7, the
+      `MULTI`/`DUAL` exclusion, the unadjusted `sourceLabel` + `sourcePromoted` marker, and the
+      already-fetched-fields note. No test count in the file was touched.
+
+- [x] **T016** `[docs]` Walk **AC-12 … AC-18** against T014's report, tick each box, and set
+      `status: Implemented` on `spec.md`, `plan.md` and `web/plan.md`; `status: Done` here. Any
+      criterion T014 could not reach stays unticked and goes to **Blocked** below. → T015
+      *Done when:* every ticked box traces to a line in T014's report, and the four files carry
+      their new status.
+
+      **AC-12 through AC-17 ticked** — each traces to a specific harness or live-pass line in T014
+      (AC-12/13/17 to T010's harness over the literal AC-12/13/17 datasets, re-confirmed by T013;
+      AC-14 to T010's unarmed/no-argument-equivalence run plus the live movie pass; AC-15 to T009's
+      harness; AC-16 to both T009's harness and the live `MULTi` non-match on the movie pass).
+      **AC-18 left unticked and moved to Blocked** — the episode-path mechanism was confirmed live
+      (series flag reaches the modal, ranking runs clean over 550 real releases), but no live release
+      named Spanish, so the positive promoted-episode-row case never occurred; ticking it would be
+      exactly the "case that never occurred" this step is told not to tick.
+      `spec.md`/`plan.md`/`web/plan.md` set to `status: Implemented`, this file to `status: Done`.
+
 ## Blocked
 
 Anything an agent stopped on rather than working around. Empty is the normal state; a non-empty
@@ -125,6 +313,7 @@ entry is a decision waiting for a human.
 | Task | Service | What blocked it | Needs |
 | :-- | :-- | :-- | :-- |
 | T006 (AC-6, partial) | web | Live indexer search for `Spider-Man AV1` returned 51 real releases; the boundary-anchored veto correctly rejected 49 and correctly spared 2 (genuine 2160p BluRay releases with no boundary-matched `av1` token), so the live UI never rendered `candidateResults.length === 0` — the closest live approximation was 2 survivors, not 0. The exact empty-array path **is** proven: a harness run against the compiled `torrent-ranking.ts` (`rankTorrentResults([av1-only, vp9-only])`) returns `[]` with no throw, and the `showBest && candidateResults.length === 0 && results.length > 0 ? rankEmpty : …` JSX branch was code-reviewed and is a plain boolean condition. This same live search is what surfaced and confirmed the fix for the `DS4K` boundary bug below. | A search query (or seeded fixture) that returns real releases 100% boundary-matched as `av1`/`vp9` with nothing else, to observe `rankEmpty` render live — or accept the harness + code review as sufficient, since forcing this against real trackers is not reliably repeatable. |
+| T014 (AC-18, partial) | web | Live search of `Reacher` returned 550 real releases (52 at the 2160p tier) for episode S04E08 with the parent series armed (*Audio mandatory* + *Latin American Spanish*); the requirement reached the episode's modal and `rankTorrentResults` ran over all of it with no error, but **no release among the 550 named Spanish in any spelling**, so no promotion ever fired — the mechanism is proven live, the specific promoted-episode-row case is not. The ranking function itself is caller-agnostic and already proven correct against the literal AC-12 five-remux dataset by T009/T010/T013's harness, but that dataset was built for the film case and was not re-run through the episode branch specifically. | A real (or seeded) episode release naming Spanish under an armed series, to see it climb a rank live — or accept the harness (film case) plus the live plumbing/no-crash confirmation (episode case) as sufficient, since today's live trackers hold no Spanish-tagged `Reacher` release. |
 
 **Bug found and fixed during T006, not blocked.** The same live `Spider-Man AV1` search returned two
 real releases tagged `DS4K` ("downscaled from 4K", a common scene tag for an upscaled/downscaled

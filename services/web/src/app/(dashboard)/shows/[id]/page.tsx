@@ -100,6 +100,8 @@ export default async function ShowDetailsPage({ params }: PageProps) {
             season={season}
             defaultOpen={season.seasonNumber === lastSeasonNumber}
             showTitle={show.title}
+            audioMandatory={show.audioMandatory ?? false}
+            audioLanguages={show.audioLanguages ?? []}
           />
         ))}
       </div>

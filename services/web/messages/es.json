@@ -268,7 +268,8 @@
       "noResultsYet": "Todavía no hay resultados. Probá buscar un release específico.",
       "rankButton": "Mejores candidatos",
       "rankButtonReset": "Todos los resultados",
-      "rankEmpty": "La heurística descartó todos los releases. Volvé a todos los resultados para verlos."
+      "rankEmpty": "La heurística descartó todos los releases. Volvé a todos los resultados para verlos.",
+      "sourcePromoted": "Ascendido por coincidir con un idioma de audio obligatorio"
     }
   },
   "billboard": {

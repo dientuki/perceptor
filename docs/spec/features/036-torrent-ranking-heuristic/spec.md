@@ -1,9 +1,9 @@
 ---
 title: Torrent Ranking Heuristic
-spec_version: 0.4.0
+spec_version: 0.5.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-31
-last_updated: 2026-09-01
+last_updated: 2026-09-02
 status: Implemented
 services: [web]
 ---
@@ -66,6 +66,54 @@ The cost is that a criterion can no longer express *degree*: a release that is m
 source wins as decisively as one that is far better. That is accepted, and for the top of the list —
 the only part that matters once the automatic picker exists — it is the desired behaviour.
 
+### Amended At 0.5.0 — The Mandatory Audio Language
+
+`039-per-title-language-split` split each language preference into an audio list and a subtitle
+list, and added an **Audio mandatory** checkbox beside the audio list at three scopes — the user's
+general preference, one per (user, film), one per (user, series). It shipped that flag deliberately
+**inert**: stored and rendered, read by nothing (`039` REQ-11), with the note that "a future spec
+decides what *mandatory* does". Ranking a candidate set is the first thing that can usefully read
+it, and this amendment is that decision *for the ranking only*.
+
+The rule it adds: when the target title has *Audio mandatory* on, a release whose name advertises
+one of that title's audio languages **climbs one rank inside its own source family** (REQ-22).
+
+Three properties of that sentence carry the whole design.
+
+**It promotes; it does not veto.** "Mandatory" reads like a filter, and a filter is what it cannot
+be. A release name is not a track listing: a UHD BluRay Remux carries every audio track on the disc
+and its name almost never enumerates them, so a title that fails to say `SPA` is overwhelmingly
+likely to *have* Spanish anyway. Presence of a language tag is strong evidence; **absence is not
+evidence of absence**. Vetoing on it would discard nearly every disc source in favour of the one
+multi-audio repack that happened to spell its languages out — the exact inversion this feature
+exists to prevent. Enforcing "mandatory" for real needs the tracks themselves, which only exist
+after the download, at encode time, where `ffprobe` can see them; that stays `039`'s open question
+and is out of scope here.
+
+**It moves one rank, not to the top.** The obvious shape — a new criterion above source in the
+chain — was tried against real results and rejected: it makes the language outweigh the *entire*
+source hierarchy, so an 18 GB WEB-DL advertising `Latino` beats four 43 GB UHD BluRay Remuxes that
+do not. That is a worse answer than the one it replaces. Under a lexicographic comparator a
+criterion cannot express "a bit more important"; it dominates everything below it, completely. So
+the language does not enter the chain as a peer of source — it **adjusts the source rank**, which
+is the one operation that can express "one step up".
+
+**The step is clamped to its own family** (REQ-22). An unclamped `+1` promotes `WEB-DL` (4) to `5`,
+which is `BluRay`'s rank — the language would smuggle a web source into disc territory and
+reintroduce exactly the compensation problem § Why Not A Score exists to forbid. The bump therefore
+never crosses a structural boundary: web sources cap at `WEB-DL`, disc non-remux at `UHD BluRay`,
+remuxes at `UHD BluRay Remux`.
+
+The worked case is the real one this came from. A 54 GB `BluRay Remux` listing twelve audio tracks
+including `Spa` sat *below* four 43-and-under GB `UHD BluRay Remux` releases, because the only thing
+separating them was the `UHD` token. With Spanish marked mandatory the remux climbs 7 → 8, ties the
+UHD remuxes on source, and wins on size — which is the release a human picks looking at the same
+list.
+
+None of this crosses the service boundary. `Movie.audioLanguages`/`Movie.audioMandatory` and their
+`Show` counterparts already exist and are already fetched by the detail pages that open this modal
+(`039` REQ-3, REQ-8); the amendment spends them, and adds no query, field or request (REQ-25).
+
 A button beside "Buscar" toggles this view on and off. It searches nothing — it works on exactly
 the list the last "Buscar" produced, without a network call. Everything it computes is derived and
 in-memory: not persisted, never across the GraphQL boundary. Toggling off restores the full,
@@ -87,9 +135,15 @@ behaviour it has; `web` gains a view over its results.
       any component — the eventual automatic picker is the second caller — and not embedded in the
       search modal's markup.
 
-- [x] **REQ-2 (Inputs Only)**: Every judgement must derive exclusively from fields the results
-      already carry — `title`, `size`, `seeders`, `leechers`. No new request, no new field, no
-      re-search.
+- [x] **REQ-2 (Inputs Only)**: Every judgement about a *release* must derive exclusively from
+      fields the results already carry — `title`, `size`, `seeders`, `leechers`. No new request, no
+      new field, no re-search.
+
+      *Amended in `spec_version` 0.5.0.* The unit gains a **second argument**: the audio-language
+      requirement of the title being acquired (REQ-25). That is not a new release field and not a
+      new fetch — it is data `web` already holds in the component that opens the modal. The
+      prohibition it was written to enforce is unchanged: the unit still issues no request of its
+      own, and still reads nothing about a release beyond the four fields above.
 
 - [x] **REQ-3 (Selection, Then Ordering)**: The unit runs three passes over the list, in order:
       1. **Veto** — discard every release matching REQ-4 or REQ-4a.
@@ -148,6 +202,10 @@ behaviour it has; `web` gains a view over its results.
       UHD BluRay → 6, BluRay/BDRip → 5, WEB-DL → 4, WEBRip → 3, HDRip → 2, nothing recognised
       → 0. Nothing is discarded for its source; an unrecognised one simply ranks last.
 
+      This rank is the only one in the feature that is not final as read: **REQ-22 may raise it by
+      one**, within the bounds that requirement sets. Everything the comparator does with source
+      (REQ-11) operates on the adjusted value.
+
       **Remux-ness is the primary split, ahead of the `UHD` tag.** A remux is an already-usable
       video file pulled straight off the disc; a non-remux BluRay/UHD BluRay release is frequently
       a raw ISO image, which contributes nothing to the pipeline until someone extracts it — so a
@@ -204,24 +262,31 @@ behaviour it has; `web` gains a view over its results.
       | :-- | :-- | :-- |
       | 1 | Resolution (REQ-5) | higher first |
       | 2 | Preferred group (REQ-6) | preferred first |
-      | 3 | Source (REQ-7) | higher first |
+      | 3 | Source (REQ-7), **as adjusted by REQ-22** | higher first |
       | 4 | Codec (REQ-8) | higher first — **skipped if both are disc sources** |
       | 5 | Dynamic range (REQ-9) | higher first |
       | 6 | Audio (REQ-10) | higher first — **skipped if both are disc sources** |
-      | 7 | Size | **larger** first; a null size sorts as 0 |
-      | 8 | Seeders | **more** first |
-      | 9 | Leechers | **fewer** first |
+      | 7 | Mandatory audio language (REQ-24) | **advertised** first; inert unless REQ-22 is armed |
+      | 8 | Size | **larger** first; a null size sorts as 0 |
+      | 9 | Seeders | **more** first |
+      | 10 | Leechers | **fewer** first |
 
       A "disc source" is BluRay, BDRip, BluRay Remux or either UHD variant — REQ-7 rank 5 and
       above. Criteria 4 and 6 are only ever reached when the two candidates already tie on source,
-      so testing one of them for disc-ness tests both.
+      so testing one of them for disc-ness tests both. **Disc-ness is tested on the adjusted rank**
+      (REQ-22), which cannot change the answer: the bump never crosses the disc boundary, so a
+      candidate is a disc source before it if and only if it is one after.
+
+      *Criterion 7 added in `spec_version` 0.5.0.* Row 3 is where the mandatory audio language does
+      its real work; row 7 only settles the pairs row 3 could not — two candidates already sharing
+      an adjusted source rank, where one advertises the language and the other does not.
+
+      The sort must be **stable**, so candidates tying on all ten keep the order the API returned
+      them in rather than being shuffled (NFR-4).
 
       Criterion 1 can never actually differ among the candidates — pass 2 already removed every
       release below the top tier — but it is kept in the chain so the comparator is correct in
       isolation and remains reusable by a caller that does not filter first.
-
-      The sort must be **stable**, so candidates tying on all nine keep the order the API returned
-      them in rather than being shuffled (NFR-4).
 
 - [x] **REQ-13 (Toggle Button)**: A button sits beside "Buscar" in the search modal. Pressing it
       switches the table to the candidate view; pressing it again restores the full result list in
@@ -240,9 +305,17 @@ behaviour it has; `web` gains a view over its results.
       `DS4K` matched, or as SDR because its HDR tag was spelled unusually, is visible at a glance
       against its own title on the same row.
 
-      These labels are format identifiers (`HEVC`, `HDR10`, `UHD BluRay Remux`), not prose: they
-      are the same in every locale and are deliberately **not** catalog keys (REQ-21). Where a
-      criterion recognises nothing the label is `—`, which is language-neutral.
+      *Amended in `spec_version` 0.5.0.* When the requirement of REQ-25 is armed, a row that
+      advertises the mandatory language must show that too, and a promoted row must show that its
+      source rank was raised rather than silently displaying the higher label as if it had been read
+      from the name. A user comparing a promoted `BluRay Remux` against a genuine `UHD BluRay Remux`
+      has to be able to tell which is which; without it the harness misreports the one thing this
+      amendment changed. Nothing is shown when the requirement is not armed.
+
+      These labels are format identifiers (`HEVC`, `HDR10`, `UHD BluRay Remux`) and language tags
+      (`SPA`), not prose: they are the same in every locale and are deliberately **not** catalog
+      keys (REQ-21). Where a criterion recognises nothing the label is `—`, which is
+      language-neutral.
 
       Nothing is shown in the normal view, where it would be noise.
 
@@ -275,6 +348,101 @@ behaviour it has; `web` gains a view over its results.
       the empty-candidate message — is a new key under `search.torrent` in
       `services/web/messages/{en,es}.json`. No hardcoded string in the component (`018-ui-i18n`).
 
+- [x] **REQ-22 (Mandatory-Audio Promotion)** *(`0.5.0`)*: When the requirement of REQ-25 is
+      **armed** — the target title's *Audio mandatory* flag is on **and** its audio-language list is
+      non-empty — a release whose name advertises at least one of those languages (REQ-23) has its
+      REQ-7 source rank raised by **one**, capped at the ceiling of its own source family:
+
+      | Source family | Ranks | Ceiling |
+      | :-- | :-- | :-- |
+      | Remux | BluRay Remux (7), UHD BluRay Remux (8) | **8** |
+      | Disc, non-remux | BluRay/BDRip (5), UHD BluRay (6) | **6** |
+      | Web | HDRip (2), WEBRip (3), WEB-DL (4) | **4** |
+      | Unrecognised | 0 | **0** — never promoted |
+
+      A release already at its family's ceiling keeps its rank; the promotion is not lost, there was
+      simply nowhere to go. Nothing else in the chain is touched, and no release is ever *demoted*
+      for lacking the language.
+
+      **The cap is the requirement, not an optimisation.** An uncapped `+1` would lift `WEB-DL` to
+      `5` — `BluRay`'s rank — letting an advertised language buy a web source a place among disc
+      sources. That is the additive trade § Why Not A Score rules out, reintroduced through a side
+      door. Capping per family confines the promotion to the one question it is competent to answer:
+      *among sources of the same kind, which one is likelier to carry the language the user
+      requires.*
+
+      When the requirement is **not armed** the rank is exactly REQ-7's, and the entire feature
+      orders precisely as it did at `spec_version` 0.4.0 (AC-14).
+
+- [x] **REQ-23 (Reading A Language Off A Release Name)** *(`0.5.0`)*: A release advertises a
+      language when its name contains, as its own boundary-anchored token and case-insensitively,
+      any tag mapped to that language. The mapping is a constant in `web` built from two sources:
+
+      1. The `Language` record itself — its `iso3` (`spa`) and `iso2` (`es`).
+      2. A hardcoded alias table for the spellings release names actually use, which no ISO code
+         covers: `esp`, `castellano`, `cast`, `latino`, `lat` for Spanish, and equivalents added for
+         other languages as real release names produce them.
+
+      **Regional variants collapse into their language.** A user who marks Spanish mandatory is
+      asking for Spanish; `castellano` and `latino` both satisfy it, and so does a bare `spa`. The
+      ranking does not distinguish `es-ES` from `es-419` even though `039` stores the distinction —
+      release names use the two spellings interchangeably and inconsistently, so treating them as
+      different requirements would fail on the naming, not on the content. Choosing *between* the
+      variants is a track-selection decision the worker makes at encode time, not a search-time one.
+
+      **`MULTI` and `DUAL` are not a match**, for any language. They assert that more than one track
+      exists without saying which, so reading them as a hit would promote releases that may not
+      carry the required language at all — precisely the false positive REQ-22 must not manufacture.
+      They stay unrecognised until someone has a rule that makes them mean something specific.
+
+      The same boundary discipline as REQ-5 and REQ-7 applies, and matters more here because the
+      tokens are short: an unanchored `lat` matches `Translated` and `Latvian`, an unanchored `es`
+      matches almost everything. Every tag is matched as a whole token or not at all.
+
+- [x] **REQ-24 (Criterion 7 — Mandatory-Audio Tiebreak)** *(`0.5.0`)*: When the requirement is
+      armed, a candidate that advertises the language ranks above one that does not, at position 7
+      of the comparator (REQ-11) — after audio, before size. When it is not armed the criterion is
+      inert and every candidate ties on it.
+
+      This exists because REQ-22's cap means the promotion does nothing for a release already at its
+      family ceiling: two `UHD BluRay Remux` releases, or two `WEB-DL`s, one advertising the
+      language and one not, would otherwise be separated by size alone. It is placed **below** audio
+      so it can never override a structural judgement, and **above** size so the language outweighs
+      raw byte count between otherwise equal candidates.
+
+      **Unlike codec (REQ-8) and audio (REQ-10), this criterion is *not* skipped between two disc
+      sources.** Those two are skipped because a disc source implies them — a BluRay is HEVC and
+      carries the disc's lossless track whether the name says so or not. A disc source implies
+      nothing about which *languages* it carries: a US UHD disc may have no Spanish at all. Presence
+      of the tag is therefore real information for a remux exactly as it is for a WEB-DL, and the
+      skip would throw it away.
+
+- [x] **REQ-25 (Where The Requirement Comes From)** *(`0.5.0`)*: The unit is handed the audio
+      requirement of **the title being acquired**, not of the user in general:
+
+      - For a film: `Movie.audioMandatory` and `Movie.audioLanguages`.
+      - For an episode: the parent series' `Show.audioMandatory` and `Show.audioLanguages` — an
+        episode has no language preference of its own (`039`).
+
+      Both already resolve to *the calling user's* per-title choice (`039` REQ-3, REQ-8) and are
+      already fetched by the movie and show detail queries, so this adds no query, field or request.
+
+      **The user's general `/preferences` value is deliberately not consulted, and does not act as a
+      fallback.** `039` REQ-9 fixed the three flags as independent, with no inheritance and no
+      precedence order, and explicitly left it to "whichever rule eventually reads them" to decide
+      how they combine. This is that rule, and it decides: for ranking a specific title, only that
+      title's own flag counts. A per-title flag left off means the promotion is not armed, whatever
+      the user's general preference says — which is what a checkbox with no "unset" state can
+      honestly mean.
+
+      `web` must thread the pair from the components that already hold it to the modal.
+      `AcquisitionTarget`'s movie branch already carries the whole `Movie`; its **episode branch
+      carries only `showTitle` and `seasonNumber`**, so the series' two fields have to reach it
+      through `SeasonAccordion`. That is a `web`-internal type and prop change, not a contract one.
+
+      When the flag is off, the list is empty, or the target is null, the unit behaves exactly as at
+      `spec_version` 0.4.0. The requirement is an **option**, and its absence is the default path.
+
 ### Non-Functional & Operational Requirements
 
 - [x] **NFR-1 (Nothing Persisted)**: Scores, tiers and the toggle state exist only for the lifetime
@@ -289,10 +457,22 @@ behaviour it has; `web` gains a view over its results.
       unparseable release lands in tier 0 with whatever its recognised parts are worth.
 
 - [x] **NFR-4 (Degenerate Lists)**: A single-result list, a list where every size is null, a list
-      where every release is vetoed, and a list where every candidate ties on all nine comparator
+      where every release is vetoed, and a list where every candidate ties on all ten comparator
       keys must all resolve without throwing and without reordering rows arbitrarily — the last
       case is what makes the stable sort of REQ-11 a requirement rather than an implementation
       detail.
+
+- [x] **NFR-5 (The Requirement Is Optional)** *(`0.5.0`)*: The unit must remain callable with no
+      language requirement at all, and must produce the `spec_version` 0.4.0 ordering when called
+      that way. A caller that has no target — the eventual automatic picker running over a list it
+      was handed, a future season-pack entry point — must not be forced to synthesise an empty
+      requirement to use the unit. A null, absent or unarmed requirement is a supported input, not
+      an error.
+
+- [x] **NFR-6 (No New Data Crosses The Boundary)** *(`0.5.0`)*: The two fields REQ-25 reads are
+      already fetched by the movie and show detail queries. No query document gains a field, no new
+      request is issued when the modal opens or the toggle is pressed, and the requirement is never
+      sent anywhere — NFR-1 and NFR-2 hold unchanged.
 
 ## GraphQL Contract Delta
 
@@ -301,6 +481,14 @@ behaviour it has; `web` gains a view over its results.
 `searchTorrents` already returns every field the heuristic reads (`title`, `size`, `seeders`,
 `leechers`), the selection is derived in the browser from the list already in memory, and nothing
 about it is sent back to `api`. No query, mutation, type, field or error condition changes.
+
+**Still none at `spec_version` 0.5.0.** REQ-25 reads `Movie.audioMandatory`/`Movie.audioLanguages`
+and their `Show` counterparts, all four of which `039-per-title-language-split` already added to the
+schema *and* which `web`'s existing `GetMovie`/`GetShow` query documents already select
+(`services/web/src/actions/movies.ts`, `services/web/src/actions/shows.ts`). The amendment spends
+data `web` has already fetched by the time the modal opens; it adds no field to any query document,
+issues no request, and sends nothing to `api`. If an implementer finds themselves editing a query
+document or anything under `services/api/`, they have left scope and must stop and report.
 
 ## Data Model Changes
 
@@ -365,6 +553,40 @@ about it is sent back to `api`. No query, mutation, type, field or error conditi
 - [x] **AC-11**: `bin/npm web run build` exits 0 and `grep -rn "Ordenar" services/web/src` returns
       nothing — the copy lives in `messages/es.json`.
 
+- [x] **AC-12** *(`0.5.0`, the promotion)*: Given a film with *Audio mandatory* on and Spanish in
+      its audio languages, and a candidate set of five 2160p releases — four `UHD BluRay Remux`
+      (43, 43, 42, 41 GB) naming no language, and one 54 GB `BluRay Remux` whose name lists
+      `… Por Spa Cze …` — when the button is pressed, the **54 GB release is row 1**. Turning the
+      checkbox off and re-opening the modal puts it back in **row 5**.
+
+- [x] **AC-13** *(`0.5.0`, the family cap)*: Given the same film and a candidate set holding a
+      `WEB-DL` naming `Latino` and a `BluRay` naming no language, when the button is pressed the
+      **BluRay leads**. The promotion must not lift a web source to or past any disc source, at any
+      size or seeder count.
+
+- [x] **AC-14** *(`0.5.0`, inert by default)*: Given a film with *Audio mandatory* **off**, when
+      the button is pressed, the ordering is identical to the one the same list produced before this
+      amendment — no promotion, no tiebreak, and no language chip on any row. The same holds for a
+      film with the flag on but an empty audio-language list.
+
+- [x] **AC-15** *(`0.5.0`, regional variants)*: Given Spanish marked mandatory, three otherwise
+      identical `WEB-DL` releases naming `SPA`, `Castellano` and `Latino` respectively each rank
+      above a fourth naming none — all three spellings satisfy the requirement (REQ-23).
+
+- [x] **AC-16** *(`0.5.0`, no false positives)*: Given Spanish marked mandatory, a release named
+      `… MULTi …` and a release named `… DUAL …` are **not** treated as advertising Spanish, and a
+      release named `… Translated …` or `… Latvian …` is not matched by the `lat` alias.
+
+- [x] **AC-17** *(`0.5.0`, the tiebreak)*: Given Spanish marked mandatory and two `UHD BluRay
+      Remux` releases identical in every criterion except that the **smaller** one names `SPA`, when
+      the button is pressed the smaller one leads — both are at the family ceiling, so REQ-24
+      decides, and it outranks size.
+
+- [ ] **AC-18** *(`0.5.0`, the episode path)*: Given a series with *Audio mandatory* on and Spanish
+      in its audio languages, when the torrent modal is opened for one of its episodes and the
+      button is pressed, an episode release naming `SPA` is promoted the same way a film's is — the
+      series' preference reaches the modal (REQ-25).
+
 ## Out of Scope
 
 - **The automatic pick itself.** This feature renders the decision; it never acts on it (REQ-15).
@@ -411,6 +633,28 @@ about it is sent back to `api`. No query, mutation, type, field or error conditi
   with its own detection list, its own i18n keys and its own persistence question — not a weight,
   and not something to fold into this button. Until it ships, the human reading the candidate view
   is the filter.
+
+- **Enforcing "mandatory" anywhere but the ranking** *(`0.5.0`)*. REQ-22 promotes; it never vetoes,
+  and a release that does not advertise the language is still perfectly eligible to be picked and
+  downloaded. `039`'s question — what the flag should do to *track selection*, whether an encode
+  should fail when no audio track matches the way `011` REQ-6 already does for the original
+  language — is untouched and still open. That decision belongs where the tracks are visible, in
+  the worker after `ffprobe`, and this amendment neither makes it nor forecloses it.
+
+- **Subtitle languages** *(`0.5.0`)*. `039` split the preference in two; only the audio half is read
+  here, and only because the *Audio mandatory* flag exists to arm it. There is no subtitle-mandatory
+  flag, and a subtitle track is trivially addable after the fact in a way an audio track is not, so
+  it is a much weaker signal about the source.
+
+- **The user's general audio preference** *(`0.5.0`)*. REQ-25 reads only the per-title flag. Making
+  `/preferences`'s value a fallback for titles that never set one is a coherent alternative design;
+  it is also exactly the inheritance `039` REQ-9 refused to define, and it should be decided
+  deliberately rather than acquired here as a convenience.
+
+- **Ranking the languages against each other** *(`0.5.0`)*. A title with three mandatory audio
+  languages treats a release advertising one of them the same as a release advertising all three.
+  Counting matches, or ordering the requested languages by priority, is another rung on REQ-24 and
+  needs a rule about what "mandatory" means when only some are satisfied.
 
 - **Channel layout.** REQ-10 reads the audio *codec* (`TrueHD`, `Atmos`, `DTS-HD MA`, `DDP`) but
   not the channel count — `7.1`, `5.1` and `2.0` rank identically. Adding it is another rung on an

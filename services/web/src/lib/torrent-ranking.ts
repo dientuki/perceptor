@@ -10,6 +10,7 @@
 // producing orderings the user disagreed with.
 
 import type { TorrentResult } from "@/types/indexer";
+import type { Language } from "@/types/languages";
 
 /** Groups the user trusts on reputation. Ranked directly under resolution, above source. */
 const PREFERRED_GROUPS = ["ntb", "btm", "flux"];
@@ -32,6 +33,55 @@ const STREAMING_SERVICES = [
   "bcore",
 ];
 
+/**
+ * REQ-23 — the spellings release names actually use for a language that no ISO code covers.
+ * Keyed by `iso3`, so adding a language is a data addition here, never a code change. Regional
+ * variants collapse into the language they belong to — `castellano` and `latino` both satisfy a
+ * request for Spanish, exactly like a bare `spa`.
+ *
+ * `MULTI`/`DUAL` are deliberately absent, for every language, and must stay that way: they assert
+ * that more than one audio track exists without saying which, so reading either as a hit would
+ * promote a release that may not carry the required language at all — the false positive REQ-22
+ * exists to avoid.
+ */
+const LANGUAGE_ALIASES: Record<string, string[]> = {
+  spa: ["esp", "castellano", "cast", "latino", "lat"],
+};
+
+/**
+ * REQ-23 — the full boundary-anchored token set for a language: its `iso3`, its `iso2`, plus
+ * whatever `LANGUAGE_ALIASES` adds for it. `Pick` rather than the whole `Language` record, since
+ * this is the only part of it release-name matching ever reads.
+ */
+function languageTokens(language: Pick<Language, "iso2" | "iso3">): string[] {
+  const tokens = [
+    language.iso3,
+    language.iso2,
+    ...(LANGUAGE_ALIASES[language.iso3.toLowerCase()] ?? []),
+  ];
+  return Array.from(
+    new Set(
+      tokens.filter((tag) => tag.length > 0).map((tag) => tag.toLowerCase()),
+    ),
+  );
+}
+
+/**
+ * REQ-23 — whether `title` advertises `language`: any of its tokens present as its own
+ * boundary-anchored token, case-insensitively. Same `(?<![\dA-Za-z])…(?![\dA-Za-z])` discipline
+ * REQ-5/REQ-7 use, and it matters more here — these are the shortest tokens in the file, and an
+ * unanchored `lat` matches `Translated`/`Latvian` while an unanchored `es` matches almost every
+ * release name.
+ */
+export function matchesLanguage(
+  title: string,
+  language: Pick<Language, "iso2" | "iso3">,
+): boolean {
+  return languageTokens(language).some((tag) =>
+    new RegExp(`(?<![\\dA-Za-z])${tag}(?![\\dA-Za-z])`, "i").test(title),
+  );
+}
+
 /** The parsed interpretation behind a candidate's placement — rendered per row, see REQ-14. */
 export type ReleaseRanking = {
   resolutionTier: number;
@@ -46,7 +96,75 @@ export type ReleaseRanking = {
   dynamicRangeLabel: string;
   audioRank: number;
   audioLabel: string;
+  /**
+   * REQ-22/REQ-23/REQ-14, added `spec_version` 0.5.0 — the mandatory audio language advertised by
+   * this release's title, as its uppercased `iso3` (e.g. `"SPA"`), or `null` when the requirement
+   * is absent/unarmed or the title advertises none of the required languages. `sourceRank` above
+   * already carries any promotion this produced; `sourceLabel` deliberately does not change, so a
+   * promoted `BluRay Remux` never renders as if it had been read as `UHD BluRay Remux`.
+   */
+  matchedLanguage: string | null;
+  /**
+   * REQ-22/REQ-14 — whether `sourceRank` was actually raised by the promotion, as opposed to a
+   * matched release that was already sitting at its family's ceiling (REQ-22's "nowhere to go"
+   * case). Lets the UI distinguish a promoted rank from a genuine one at the same value.
+   */
+  sourcePromoted: boolean;
 };
+
+/**
+ * REQ-25 — the audio-language requirement of the title being acquired, threaded in from whichever
+ * component holds the `Movie`/`Show` (or `null`/absent for a caller with no target, e.g. the
+ * eventual automatic picker — NFR-5). `Pick` mirrors `matchesLanguage`'s parameter: only `iso2`/
+ * `iso3` are ever read.
+ */
+export type LanguageRequirement = {
+  mandatory: boolean;
+  languages: Pick<Language, "iso2" | "iso3">[];
+};
+
+/**
+ * REQ-22/NFR-5 — "armed" means every part of the amendment actually runs: the flag is on and there
+ * is at least one language to match against. Anything else (absent, `mandatory: false`, an empty
+ * list) is a no-op, indistinguishable from calling `rankTorrentResults` with no second argument.
+ */
+function isArmed(
+  requirement: LanguageRequirement | null | undefined,
+): requirement is LanguageRequirement {
+  return (
+    requirement != null &&
+    requirement.mandatory === true &&
+    requirement.languages.length > 0
+  );
+}
+
+/**
+ * REQ-22 — the ceiling for the source family `rank` belongs to. Expressed as a per-family lookup,
+ * not a single global `Math.min(rank + 1, 8)`: a global cap would let `WEB-DL` (4) climb to `5`,
+ * which is `BluRay`'s rank, smuggling a web source into disc territory. Ranks 7/8 are the remux
+ * family (ceiling 8), 5/6 are disc non-remux (ceiling 6), 2/3/4 are web (ceiling 4), and 0
+ * (unrecognised) never promotes — its own ceiling.
+ */
+function familyCeiling(rank: number): number {
+  if (rank >= 7) return 8;
+  if (rank >= 5) return 6;
+  if (rank >= 2) return 4;
+  return 0;
+}
+
+/**
+ * REQ-22 — the adjusted source rank: `+1` when `matched`, capped at the rank's own family ceiling,
+ * a no-op when `matched` is false. `promoted` reports whether the rank actually moved, so a release
+ * already sitting at its ceiling (REQ-22's "nowhere to go" case) is not misreported as promoted.
+ */
+function adjustSourceRank(
+  rank: number,
+  matched: boolean,
+): { rank: number; promoted: boolean } {
+  if (!matched) return { rank, promoted: false };
+  const adjusted = Math.min(rank + 1, familyCeiling(rank));
+  return { rank: adjusted, promoted: adjusted > rank };
+}
 
 export type RankedTorrentResult = TorrentResult & {
   ranking: ReleaseRanking;
@@ -244,7 +362,10 @@ function audio(title: string): { rank: number; label: string } {
   return { rank: 0, label: UNKNOWN_LABEL };
 }
 
-function buildRanking(title: string): ReleaseRanking {
+function buildRanking(
+  title: string,
+  requirement: LanguageRequirement | null | undefined,
+): ReleaseRanking {
   const res = resolution(title);
   const group = preferredGroup(title);
   const src = source(title);
@@ -252,12 +373,29 @@ function buildRanking(title: string): ReleaseRanking {
   const range = dynamicRange(title);
   const aud = audio(title);
 
+  // REQ-23 — first requested language whose tokens appear in the title, or none. `matchedLanguage`
+  // stays `null` whenever the requirement is absent/unarmed (REQ-22, NFR-5), which is also what
+  // keeps `adjustSourceRank` a no-op below.
+  const armed = isArmed(requirement);
+  const match = armed
+    ? requirement.languages.find((language) => matchesLanguage(title, language))
+    : undefined;
+  const matchedLanguage = match ? match.iso3.toUpperCase() : null;
+
+  const { rank: adjustedSourceRank, promoted } = adjustSourceRank(
+    src.rank,
+    matchedLanguage !== null,
+  );
+
   return {
     resolutionTier: res.tier,
     resolutionLabel: res.label,
     preferredGroup: group.preferred,
     groupLabel: group.label,
-    sourceRank: src.rank,
+    // REQ-7/REQ-22 — the adjusted rank. `sourceLabel` deliberately stays `src.label`: the promotion
+    // moves the rank, never the read label, so a promoted release is never rendered as if its name
+    // had said something it didn't (REQ-14).
+    sourceRank: adjustedSourceRank,
     sourceLabel: src.label,
     codecRank: cod.rank,
     codecLabel: cod.label,
@@ -265,6 +403,8 @@ function buildRanking(title: string): ReleaseRanking {
     dynamicRangeLabel: range.label,
     audioRank: aud.rank,
     audioLabel: aud.label,
+    matchedLanguage,
+    sourcePromoted: promoted,
   };
 }
 
@@ -285,7 +425,18 @@ const DISC_SOURCE_MIN_RANK = 5;
  * is looked at, so they are gone long before this comparator runs.
  *
  * Both candidates are known to share a source rank by the time either check runs — the line above
- * returned non-zero otherwise — so testing one is testing both.
+ * returned non-zero otherwise — so testing one is testing both. `ranking.sourceRank` is already the
+ * REQ-22-adjusted value (see `buildRanking`), so `bothFromDisc` is read off it directly rather than
+ * off a second, unadjusted copy — this can never change the answer, since the promotion never
+ * crosses the disc boundary, but it keeps one source of truth for "is this a disc source".
+ *
+ * **Criterion 7 (REQ-24), between audio and size, is the mandatory-audio-language tiebreak — and it
+ * is deliberately *not* skipped for two disc sources**, unlike codec and audio just above. Those two
+ * are skipped because a disc source *implies* them: a BluRay is HEVC and carries the disc's lossless
+ * track whether the name says so or not. A disc source implies nothing about which languages it
+ * carries — a US UHD disc may hold no Spanish at all — so the tag is real, non-redundant information
+ * for a remux exactly as it is for a WEB-DL, and skipping it here would throw that information away.
+ * It is inert (both `null`) whenever the requirement is absent/unarmed.
  */
 function compareCandidates(
   a: RankedTorrentResult,
@@ -300,6 +451,8 @@ function compareCandidates(
     (bothFromDisc ? 0 : b.ranking.codecRank - a.ranking.codecRank) ||
     b.ranking.dynamicRangeRank - a.ranking.dynamicRangeRank ||
     (bothFromDisc ? 0 : b.ranking.audioRank - a.ranking.audioRank) ||
+    Number(b.ranking.matchedLanguage !== null) -
+      Number(a.ranking.matchedLanguage !== null) ||
     (b.size ?? 0) - (a.size ?? 0) ||
     b.seeders - a.seeders ||
     a.leechers - b.leechers
@@ -309,9 +462,15 @@ function compareCandidates(
 /**
  * The single exported entry point (REQ-1). Vetoes, keeps only the highest resolution tier, then
  * orders what remains through the lexicographic comparator. Never mutates its argument.
+ *
+ * `requirement` is REQ-25's second, optional argument (REQ-22/NFR-5): the target title's audio
+ * requirement, or `null`/absent for a caller with no target — the eventual automatic picker running
+ * over a bare list, a future season-pack entry point. Absent, unarmed or empty-listed, it is a
+ * complete no-op: this produces exactly the `spec_version` 0.4.0 ordering (AC-14).
  */
 export function rankTorrentResults(
   results: TorrentResult[],
+  requirement?: LanguageRequirement | null,
 ): RankedTorrentResult[] {
   // Pass 1 — veto (REQ-4, REQ-4a). Runs first, so a vetoed release never sets the tier for pass 2.
   const notVetoed = results.filter(
@@ -326,7 +485,7 @@ export function rankTorrentResults(
 
   const ranked: RankedTorrentResult[] = notVetoed.map((result) => ({
     ...result,
-    ranking: buildRanking(lowerTitle(result)),
+    ranking: buildRanking(lowerTitle(result), requirement),
   }));
 
   const maxTier = Math.max(

@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Loader2, Search, Sparkles } from "lucide-react";
+import { ArrowUp, Download, Loader2, Search, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -11,7 +11,10 @@ import {
 import { addTorrentToEpisodeAction } from "@/actions/shows";
 import ReplaceWarning from "@/components/import/ReplaceWarning";
 import Button from "@/components/ui/button/Button";
-import type { RankedTorrentResult } from "@/lib/torrent-ranking";
+import type {
+  LanguageRequirement,
+  RankedTorrentResult,
+} from "@/lib/torrent-ranking";
 import { rankTorrentResults } from "@/lib/torrent-ranking";
 import type { TorrentResult } from "@/types/indexer";
 import type { AcquisitionResult, AcquisitionTarget } from "@/types/media";
@@ -71,10 +74,26 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     }
   }, [target]);
 
+  // REQ-25 — the mandatory audio-language requirement of the title being acquired, read off
+  // `target` itself: the movie's own fields for a film, the parent series' fields (threaded
+  // through the episode branch, see T011) for an episode. `undefined` for a null target keeps
+  // `rankTorrentResults` on its no-op path rather than passing an armed-looking empty object.
+  const languageRequirement: LanguageRequirement | undefined = target
+    ? target.kind === "movie"
+      ? {
+          mandatory: target.movie.audioMandatory,
+          languages: target.movie.audioLanguages,
+        }
+      : {
+          mandatory: target.audioMandatory,
+          languages: target.audioLanguages,
+        }
+    : undefined;
+
   // The candidate view derives from `results` without ever mutating it — REQ-16/AC-5 depend on
   // `results` surviving in the API's original order for as long as the modal is open.
   const candidateResults: (TorrentResult | RankedTorrentResult)[] = showBest
-    ? rankTorrentResults(results)
+    ? rankTorrentResults(results, languageRequirement)
     : results;
 
   const filteredResults = candidateResults.filter((res) =>
@@ -304,6 +323,10 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                             ["codec", res.ranking.codecLabel],
                             ["range", res.ranking.dynamicRangeLabel],
                             ["audio", res.ranking.audioLabel],
+                            // REQ-14 (0.5.0) — the matched mandatory audio language, one more chip
+                            // in the same row. `null` whenever the requirement is absent/unarmed
+                            // or this release matched none of it, so nothing renders in that case.
+                            ["language", res.ranking.matchedLanguage],
                           ] as [string, string | null][]
                         )
                           .filter(
@@ -313,9 +336,22 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                           .map(([criterion, label]) => (
                             <span
                               key={criterion}
-                              className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400"
                             >
                               {label}
+                              {/* REQ-14 (0.5.0) — the source chip's promotion marker: a promoted
+                                  `BluRay Remux` must not be indistinguishable from a genuine one at
+                                  the same adjusted rank. Visual + an accessible label, no new
+                                  format-identifier chip. */}
+                              {criterion === "source" &&
+                                res.ranking.sourcePromoted && (
+                                  <span title={t("sourcePromoted")}>
+                                    <ArrowUp
+                                      className="h-2.5 w-2.5"
+                                      aria-label={t("sourcePromoted")}
+                                    />
+                                  </span>
+                                )}
                             </span>
                           ))}
                       </div>
