@@ -1,33 +1,30 @@
 ---
 title: User Preferences — web slice
 service: web
-last_updated: 2026-08-19
+last_updated: 2026-09-01
 status: Approved
 ---
 
 # PLAN: User Preferences — `web` (`web/plan.md`)
 
-Read `../spec.md` and `../plan.md` first, then `services/web/AGENTS.md`. The GraphQL delta in
-`../spec.md` is read-only.
+Read `../spec.md` and `../plan.md` first, then `services/web/CLAUDE.md` and
+`docs/constitution.md`. The GraphQL delta in `../spec.md` is read-only.
 
-This is Next 16, not the Next.js in your training data — `middleware.ts` is `proxy.ts`, and the App
-Router conventions have moved. `018-ui-i18n` has already landed by the time this slice starts, so
-`next-intl` is installed, `messages/en.json` and `messages/es.json` exist, and **no user-facing
-string in this slice is a literal** — every label, heading, hint and message is a catalog entry in
-both files.
+This is Next 16, not the Next.js in your training data — `middleware.ts` is `proxy.ts` here, and
+the App Router conventions have moved. `018-ui-i18n` has landed: `next-intl` is installed,
+`messages/en.json` and `messages/es.json` exist, and **no user-facing string in this slice is a
+literal** — every label, heading, hint and message is a catalog entry in both files.
 
 ## Scope
 
-`web` owns the split: a new `/preferences` screen holding everything scoped to the signed-in user,
-and a `/settings` screen reduced to installation-wide configuration. It builds the new torrent-group
-picker and the new cinema checkbox, wires the interface-language control on top of `018-ui-i18n`'s
-`setUiLocale`, and adds the navigation entries.
+`web` builds `/preferences` and its five cards, removes the *Descarga* tab from `/settings`, and
+adds the navigation entries. It consumes the new contract; it defines none of it.
 
-`web` does **not** define any error key — that vocabulary is `api`'s and is frozen in `../spec.md`.
-`web` does not change `LanguagePicker.tsx` or `PreferredLanguagesCard.tsx` beyond what relocating
-them requires; they work today and their mutation is untouched by this feature. `web` does not touch
-`SettingsForm.tsx`'s fields, `EDITABLE_KEYS`, or anything else about how installation settings are
-saved. `web` never touches the database (Article II).
+`web` does **not** touch `src/components/media/LanguagePicker.tsx` — it has three live call sites
+and this slice makes it two more, all as a consumer. `web` does not change `SettingsForm`'s five
+remaining panels, `EDITABLE_KEYS`, `BOOLEAN_KEYS`, or anything about how installation settings are
+saved beyond deleting the download-languages path that no longer has a screen. `web` never touches
+the database (Article II).
 
 Writes are confined to `services/web/` and this directory. Anything else is a stop-and-report (see
 `.claude/agents/web.md`).
@@ -36,114 +33,130 @@ Writes are confined to `services/web/` and this directory. Anything else is a st
 
 | File | New / Modified | What changes |
 | :-- | :-- | :-- |
-| `services/web/src/types/torrent-groups.ts` | New | `TorrentGroup`, `TorrentGroupScope` — hand-typed from `../spec.md` |
-| `services/web/src/actions/torrent-groups.ts` | New | `getTorrentGroups()`, `setPreferredTorrentGroupsAction` |
-| `services/web/src/actions/preferences.ts` | New | `setAllowCinemaReleasesAction` |
-| `services/web/src/actions/auth.ts` | Modified | `ME_QUERY` gains `allowCinemaReleases` and `preferredTorrentGroups { id name scope }` |
-| `services/web/src/app/(dashboard)/preferences/page.tsx` | New | Server Component: one `Promise.all`, four independent cards |
-| `services/web/src/components/preferences/LanguagesGroup.tsx` | New | Interface language + the relocated preferred-languages card |
-| `services/web/src/components/preferences/UiLocaleCard.tsx` | New | Single-select over `supportedLocales`, names via `Intl.DisplayNames` |
+| `services/web/src/types/preferences.ts` | New | `TorrentGroup`, `TorrentGroupScope`, `LanguageTrackKind`, `UserPreferences` — hand-typed from `../spec.md` |
+| `services/web/src/actions/preferences.ts` | New | `getPreferences`, `getTorrentGroups`, `setAllowCinemaReleasesAction`, `setPreferredTrackLanguagesAction`, `setPreferredTorrentGroupsAction` |
+| `services/web/src/app/(dashboard)/preferences/page.tsx` | New | Server Component, one `Promise.all`, three sections, five cards |
+| `services/web/src/components/preferences/UiLocaleCard.tsx` | New | Single choice over `SUPPORTED_LOCALES`, names via `Intl.DisplayNames` |
+| `services/web/src/components/preferences/DownloadLanguagesCard.tsx` | New | The audio and subtitle pickers, each bound to its own kind |
 | `services/web/src/components/preferences/CinemaReleasesCard.tsx` | New | The yes/no control |
-| `services/web/src/components/preferences/TorrentGroupsCard.tsx` | New | Owns the empty state; renders the picker only when the catalog is non-empty |
-| `services/web/src/components/preferences/TorrentGroupPicker.tsx` | New | `<select multiple>` + `useActionState`, bound to one scope |
-| `services/web/src/app/(dashboard)/settings/page.tsx` | Modified | Drops `PreferredLanguagesCard`, `getLanguages()` and `getCurrentUser()` |
-| `services/web/src/components/settings/PreferredLanguagesCard.tsx` | Moved | To `src/components/preferences/`; contents unchanged apart from its import path |
-| `services/web/src/layout/AppSidebar.tsx` | Modified | A *Preferencias* entry beside *Ajustes* |
-| `services/web/src/components/header/UserDropdown.tsx` | Modified | A *Preferencias* item beside `019-user-menu`'s *Ajustes* |
-| `services/web/messages/en.json`, `messages/es.json` | Modified | Every new string, plus the three `error.torrent_group.*` keys |
+| `services/web/src/components/preferences/TorrentGroupsCard.tsx` | New | Owns the empty state; renders the picker only over a non-empty catalog |
+| `services/web/src/components/preferences/TorrentGroupPicker.tsx` | New | Sibling of `LanguagePicker`, bound to one scope |
+| `services/web/src/components/settings/SettingsForm.tsx` | Modified | Five tabs; the download tab, its panel and the `activeTab === "download"` hide/show branch all go |
+| `services/web/src/components/settings/DownloadPanel.tsx` | Deleted | Its only content moves to `/preferences` as a per-user control |
+| `services/web/src/actions/settings.ts` | Modified | `updateDefaultLanguagesAction` and `ALWAYS_SENT_STRING_KEYS` deleted — dead once the panel is gone |
+| `services/web/src/app/(dashboard)/settings/page.tsx` | Modified | Drops `getLanguages()` and the `languages` prop |
+| `services/web/src/layout/AppSidebar.tsx` | Modified | *Preferencias* in `baseNavItems` — **not** in the `isAdmin` branch |
+| `services/web/src/components/header/UserDropdown.tsx` | Modified | A *Preferencias* item beside *Ajustes* |
+| `services/web/messages/en.json`, `messages/es.json` | Modified | Every new string, plus `errors.torrent_group.*` |
 
 ## Existing code to reuse
 
-- **The server-action shape** in `services/web/CLAUDE.md`. Copy `src/actions/languages.ts` — it is
-  the closest analogue in the repo: a read function that `throw`s and calls `redirectToClearSession`
-  because Server Components `await` it during render, plus form actions taking
-  `(prevState, formData)` and returning `{ error?: string } | { success: true }` and calling
-  `redirectIfUnauthenticated`. Do not invent a variant, and re-derive which of the two redirect
-  helpers applies from the caller's context rather than copying whichever is nearest.
+- **`src/actions/locale.ts`'s `setUiLocaleAction` is used verbatim.** It already has the
+  `(prevState, formData)` shape, already derives its error through `translateGraphQLError`, already
+  calls `redirectIfUnauthenticated`, and its own comment says it exists for the picker
+  `018-ui-i18n` chose not to build. Do not write a second one, and do not change it. Its only
+  requirement on the card is a form field named `locale`.
 
-- **`LanguagePicker.tsx`** — the visual and behavioural template for `TorrentGroupPicker`:
-  `<select multiple>` with `defaultValue` from the current selection, a `useActionState` form, an
-  error paragraph, a success paragraph, and a submit button that disables while pending. Build a
-  sibling; do **not** generalize `LanguagePicker` itself. It has three other call sites (the global
-  card plus both per-title pickers) and `018-ui-i18n`'s `web` plan ring-fences it. The reasoning is
-  in `../plan.md` § Approach.
+- **`src/actions/media-server.ts`** is the server-action shape to copy for the new file
+  (`services/web/CLAUDE.md` § "The server-action pattern"): `'use server'` first line, the document
+  as a module-level SCREAMING_SNAKE const, the shape as `fetchGraphQL<T>`'s type parameter, errors
+  through `src/lib/graphql-error.ts`. **Read functions use `redirectToClearSession`; form actions
+  use `redirectIfUnauthenticated`** — `getPreferences` and `getTorrentGroups` are `await`ed during
+  the page's render pass, where cookie mutation throws, so they take the first. Re-derive this from
+  where the call happens rather than copying the nearest example; `services/web/CLAUDE.md` §
+  "not interchangeable" explains why getting it backwards is a redirect loop and not a style bug.
 
-- **`PreferredLanguagesCard.tsx`** — **move** it, do not copy it. Its header comment already explains
-  why it is not part of `SettingsForm`; that comment now describes the whole screen it lives on and
-  should be updated to say so, not deleted. Its props, its action and its behaviour do not change.
+- **`src/components/media/LanguagePicker.tsx`** is used **as is** for both language cards, as its
+  fourth and fifth call sites. It renders its own `<form>`, emits one hidden input named by its
+  `name` prop carrying a comma-separated list of BCP-47 tags, and defaults that name to `"tags"` —
+  which is what `setPreferredTrackLanguages` expects, so neither card needs to pass `name`. Each
+  card binds it to an action already bound to its `kind`, the same way `Movie.tsx` binds it to an
+  action already bound to a title id. Do not add a `kind` prop to the component.
 
-- **`src/lib/graphql-error.ts` (`018-ui-i18n`)** — turns `extensions.i18n` into a translated string
-  with `message` as the fallback. Every new action derives its `error` through it. Never
-  string-match on a message.
+- **`src/i18n/locales.ts`'s `SUPPORTED_LOCALES`** is the list `UiLocaleCard` renders. `web` cannot
+  render a locale it has no `messages/*.json` for, so this list — not a round trip to
+  `Query.supportedLocales` — is the truthful set for a picker; the API's copy stays what validates
+  the write on the other side. `services/web/CLAUDE.md` § i18n names this file as the one list every
+  consumer of the supported set reads.
 
-- **`Intl.DisplayNames` (`018-ui-i18n` REQ-13)** — the source of the language names in the interface
-  picker. Locale display names are not catalog entries; duplicating them per locale is how a catalog
-  rots.
+- **`Intl.DisplayNames`** supplies the locale names, exactly as `LanguagePicker` already does for
+  language names. Locale display names are never catalog entries — duplicating them per locale is
+  how a catalog rots (`services/web/CLAUDE.md` § "Language names are not a catalog entry").
 
-- **`src/actions/auth.ts`'s `getCurrentUser()`** — extend `ME_QUERY` rather than adding a second
-  round trip for the preference values. `018-ui-i18n` already splits out a `cache()`d
-  `getCurrentUserOrNull()`; the additions ride along on the same query.
+- **`src/components/form/input/Checkbox.tsx` + the hidden-input idiom** in `MediaManagerPanel` /
+  `SettingsForm` — the visual template for the cinema control. Reuse the markup; do **not** reuse the
+  mechanism, which posts a settings key. This one calls its own mutation.
 
 - **`src/app/(dashboard)/users/page.tsx`** — the precedent for a dashboard Server Component that
-  fetches on the server and hands data to client components. `/preferences` has no admin gate, so
-  its fetches may all go in one `Promise.all` (the sequential pattern there exists only because of
-  the `isAdmin` check, and copying it here would be cargo cult).
+  fetches server-side and hands data to client children. Copy the data flow and **not** the admin
+  gate: both it and `settings/page.tsx` open with a sequential `getCurrentUser()` and a
+  `notFound()` for a non-administrator, which on this screen would 404 every user who most needs it
+  (REQ-2, AC-2b). `/preferences` has no gate, so its reads may all go in one `Promise.all`.
 
-- **`src/components/settings/SettingsForm.tsx`** — the checkbox markup for `movies_enabled` is the
-  visual template for the cinema control. Reuse the markup; do **not** reuse the mechanism — that
-  checkbox posts a settings key through `updateSettings`, and this one calls its own mutation.
+- **`src/lib/graphql-error.ts`** — every action derives its error text through
+  `translateGraphQLError`. Never string-match a message; never render a bare key.
+
+**Article XI applies to every new file.** The components and actions named above predate it and
+carry explanatory comments; that is legacy, not a pattern. Copy their structure and write no
+comments. This slice owes no test header either, because it owes no tests (§ Tests).
 
 ## Steps
 
-1. Add `src/types/torrent-groups.ts`, hand-typed from `../spec.md`'s SDL. `TorrentGroupScope` is a
-   string union (`'MOVIE' | 'SHOW'`), matching how the other enums are retyped in this service.
+1. Add `src/types/preferences.ts`, hand-typed from `../spec.md`'s SDL. `TorrentGroupScope` and
+   `LanguageTrackKind` are string unions (`'MOVIE' | 'SHOW'`, `'AUDIO' | 'SUBTITLE'`), matching how
+   the other enums are retyped in this service.
 
-2. Write `src/actions/torrent-groups.ts` and `src/actions/preferences.ts`. `setPreferredTorrentGroupsAction`
-   is bound per scope at the call site, the same way `setMoviePreferredLanguagesAction` is bound to a
-   movie id. `ids` arrive from `formData.getAll('ids')` and must be converted with `Number` — form
-   values are always strings, and `Int!` will reject them otherwise, at runtime, with no compile
-   error.
+2. Write `src/actions/preferences.ts`. `setPreferredTrackLanguagesAction` is bound per `kind` and
+   `setPreferredTorrentGroupsAction` per `scope` at the call site, the way the per-title language
+   actions are bound to a title id. Torrent-group ids arrive from the form as strings and must be
+   converted with `Number` — `[Int!]!` rejects strings at runtime with no compile error here
+   (`services/web/CLAUDE.md` § "id is a string in this service's types").
 
-3. Extend `ME_QUERY` in `src/actions/auth.ts` and the `CurrentUser` type with `allowCinemaReleases`
-   and `preferredTorrentGroups`.
+3. Build the five cards under `src/components/preferences/`, plus `TorrentGroupPicker`.
+   `TorrentGroupsCard` decides between the empty state and the picker on `options.length === 0`:
+   the picker must never render over an empty catalog, because an empty submission is a valid
+   "clear my selection" write (REQ-7, `../plan.md` § Risks). `UiLocaleCard` must leave the page
+   rendering in the newly chosen language without the user reloading by hand — the locale is
+   resolved server-side per request, so the card refreshes the route after a successful save.
 
-4. Build the four cards and the picker under `src/components/preferences/`. `TorrentGroupsCard`
-   decides between the empty state and the picker on `options.length === 0` — the picker must never
-   render over an empty catalog, because an empty `<select multiple>` submits `ids: []`, which is a
-   valid "clear my selection" write (see `../plan.md` § Risks).
+4. Write `src/app/(dashboard)/preferences/page.tsx`: one
+   `Promise.all([getPreferences(), getLanguages(), getTorrentGroups()])`, then the three sections in
+   the order the spec lists them — *Idiomas*, *Películas*, *Series* — with `PageBreadcrumb` and
+   `generateMetadata` from the catalog, like every other dashboard page. No `isAdmin` check.
 
-5. Move `PreferredLanguagesCard.tsx` from `src/components/settings/` to `src/components/preferences/`
-   and update its import.
+5. Strip `/settings`: delete `DownloadPanel.tsx`, remove the download tab from `SettingsForm`'s
+   `TABS`/`tabItems` and remove the `activeTab === "download"` hide/show wrapper that existed only
+   to keep `LanguagePicker`'s own `<form>` out of the main one, delete `updateDefaultLanguagesAction`
+   and `ALWAYS_SENT_STRING_KEYS` from `src/actions/settings.ts`, and drop `getLanguages()` and the
+   `languages` prop from `settings/page.tsx`. **Nothing about the `default_languages` key itself
+   changes on the `api` side** — it stays in `SETTINGS_CATALOG` with its row intact (REQ-6). Confirm
+   with `grep -rn "DownloadPanel\|updateDefaultLanguagesAction" services/web/src` returning nothing.
 
-6. Write `src/app/(dashboard)/preferences/page.tsx`: `Promise.all([getCurrentUser(), getLanguages(),
-   getTorrentGroups(), getSupportedLocales()])`, then the three groups in the order the spec lists
-   them — *Idiomas*, *Películas*, *Series* — with `PageBreadcrumb` and `metadata.title` from the
-   catalog like every other dashboard page.
+6. Add *Preferencias* to `AppSidebar.tsx`'s `baseNavItems` — the array every user gets, not the
+   `isAdmin` spread beneath it — and to `UserDropdown.tsx` beside the existing *Ajustes* item. Both
+   labels come from the `nav` and `userMenu` catalog namespaces. Leave the *Ajustes* item's own
+   (missing) admin gating alone; it is named in `../spec.md` § Out of Scope.
 
-7. Strip `/settings`: remove `PreferredLanguagesCard`, and with it the now-unused `getLanguages()`
-   and `getCurrentUser()` calls from `settings/page.tsx`. Confirm with
-   `grep -rn "PreferredLanguagesCard" "services/web/src/app/(dashboard)/settings"` returning nothing
-   (AC-12).
-
-8. Add the *Preferencias* entry to `AppSidebar.tsx`'s `navItems` and to `UserDropdown.tsx` beside
-   `019-user-menu`'s *Ajustes*. Both labels come from the catalog.
-
-9. Add every new string to `messages/en.json` and `messages/es.json`, including translations for the
-   three `error.torrent_group.*` keys, and run the catalog parity check `018-ui-i18n` installs
-   (`scripts/check-messages.mjs`).
+7. Add every new string to both catalogs, including `errors.torrent_group.not_found`,
+   `errors.torrent_group.duplicated` and `errors.torrent_group.wrong_scope` (the `error.` prefix is
+   stripped and the rest lands under the `errors` namespace), and run
+   `bin/cli web node scripts/check-messages.mjs`. `es` keeps the existing Rioplatense register.
 
 ## Contract obligations
 
 `web` consumes exactly what `../spec.md` § GraphQL Contract Delta defines. There is no codegen, so
 every one of these is a runtime failure if retyped wrong:
 
+- `preferences` is a **root query**, not a field on `me`. Do not try to select it inside
+  `ME_QUERY` — it does not exist there, and `me` needs no change in this feature.
 - `torrentGroups` is called **without** `scope`; the whole catalog comes back and `web` splits it by
   `group.scope` to fill the two pickers.
-- `preferredTorrentGroups` on `me` is likewise unfiltered and unscoped — split it the same way. The
-  two pickers read the same array, which is what keeps them from disagreeing.
-- `setPreferredTorrentGroups(scope:, ids:)` takes `Int!` ids, not strings, and **replaces** the
-  selection for that scope. The other scope's card must not be re-submitted alongside it.
-- `setAllowCinemaReleases(allowed: Boolean!)` returns the whole `User`.
+- `preferences.torrentGroups` is likewise unfiltered — split it the same way. Both pickers read the
+  same array, which is what keeps them from disagreeing.
+- `setPreferredTrackLanguages(kind:, tags:)` takes BCP-47 tag strings, not ids, and **replaces** the
+  list for that kind. The other kind's card must not be re-submitted alongside it.
+- `setPreferredTorrentGroups(scope:, ids:)` takes `Int!` ids and replaces one scope. Same rule.
+- `setAllowCinemaReleases(allowed: Boolean!)` returns the whole `UserPreferences`.
 - `allowCinemaReleases` is non-null; there is no "unset" state to render.
 
 Every error condition, and what this slice does with it:
@@ -153,29 +166,33 @@ Every error condition, and what this slice does with it:
 | `error.torrent_group.not_found` | Inline error on the failing card only; revert its selection to what the server still holds |
 | `error.torrent_group.duplicated` | Same |
 | `error.torrent_group.wrong_scope` | Same |
-| `error.auth.unauthenticated` | Never reaches the card — `redirectIfUnauthenticated` intercepts it in the action, clears the cookie, redirects to `/login` |
+| `error.language.unavailable` | Same, on the failing language card. Existing key, already in both catalogs |
+| `error.language.duplicate` | Same. Existing key |
+| `error.user.unsupported_locale` | Inline error on the locale card. Existing key |
+| `error.auth.unauthenticated` | Never reaches a card — `redirectIfUnauthenticated` intercepts it in the action, clears the cookie, redirects to `/login` |
 
-Reverting the selection on failure is not cosmetic: a picker left showing what the user chose after
-the server refused it is a UI that disagrees with the database until the next reload. A card that
-only handles the happy path compiles fine and is wrong.
+Reverting the selection on a refusal is not cosmetic: a picker left showing what the user chose
+after the server refused it is a UI that disagrees with the database until the next reload. A card
+that only handles the happy path compiles fine and is wrong.
 
-`setAllowCinemaReleases` has no failure of its own — a boolean cannot be invalid — so its only error
-path is the unauthenticated one.
+`setAllowCinemaReleases` has no failure of its own — a boolean cannot be invalid — so the
+unauthenticated path is its only one.
 
 ## Tests
 
-**None owed.** `services/web` has no test runner: no Vitest, no Playwright, no `test` script in
-`package.json`, and introducing one is its own decision (`services/web/CLAUDE.md`), not something to
-smuggle in with a preferences screen.
+**None owed.** `services/web` has no test runner: no Vitest, no Playwright, no `test` script, and
+introducing one is its own decision with its own spec (`services/web/CLAUDE.md` § "Tests: there are
+none"). Do not add one as a side effect of this feature.
 
-Nothing in this slice fails silently in the Article IX sense either. Every failure mode here is
+Nothing here fails silently in the Article IX sense either. Every failure mode in this slice is
 visible on the screen the moment it happens: a mis-typed field name yields a GraphQL error the card
-renders, a wrong scope split shows the wrong groups in the wrong picker, and the empty-state bug is
-what AC-6 looks at directly. The one genuinely silent failure in this feature — a scope-blind write
-wiping the other scope — lives in `api` and is covered by `api/plan.md`'s spec file.
+renders, a wrong split shows the wrong groups in the wrong picker, the empty-state bug is what AC-7
+looks at directly, and the admin-gate hazard is what AC-2b looks at. The one genuinely silent
+failure in this feature — a scope- or kind-blind write wiping the sibling list — lives in `api` and
+is covered by that slice's spec files.
 
-The typecheck and the production build are the safety net for this slice, and both are in § Done
-when.
+The typecheck, the production build, Biome and the catalog parity check are the safety net here,
+and all four are in § Done when.
 
 ## Done when
 
@@ -183,11 +200,13 @@ when.
 bin/cli web npx --no tsc --noEmit
 bin/npm web run build
 bin/npm web run lint
+bin/cli web node scripts/check-messages.mjs
 ```
 
-Typecheck reports **0 errors** and `next build` exits **0** — the baseline in the root `CLAUDE.md`
-after `016-web-build-errors`, which must not regress. Report both counts before and after. Biome
-reports no new findings.
+Typecheck reports **0 errors** and `next build` exits **0** — the baseline from
+`016-web-build-errors` that must not regress; report both before and after. Biome reports no new
+findings and the catalog check exits 0.
 
-Then, with the stack up, walk AC-1 through AC-7 and AC-12 from `../spec.md` in the browser; the
-playground-only criteria (AC-8 through AC-11) belong to the `api` slice.
+Then, with the stack up, walk AC-1, AC-2, AC-2b, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8 and AC-15 from
+`../spec.md` in the browser — **AC-2b signed in as a non-administrator**, not as the seeded admin.
+The playground-only criteria (AC-9 through AC-14) belong to the `api` slice.
