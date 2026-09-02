@@ -294,7 +294,10 @@
       "removeLanguage": "Remove {name}",
       "saved": "Languages saved.",
       "save": "Save",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "audioLabel": "Audio languages",
+      "subtitleLabel": "Subtitle languages",
+      "audioMandatoryLabel": "Mandatory audio"
     }
   },
   "movies": {
