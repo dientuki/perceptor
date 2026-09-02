@@ -17,6 +17,7 @@ export type TorrentGroup = {
 
 export type UserPreferences = {
   allowCinemaReleases: boolean;
+  audioMandatory: boolean;
   audioLanguages: Language[];
   subtitleLanguages: Language[];
   torrentGroups: TorrentGroup[];

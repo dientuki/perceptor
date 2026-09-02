@@ -224,4 +224,14 @@ export class UsersService {
       data: { allowCinemaReleases: allowed },
     });
   }
+
+  // Twin of setAllowCinemaReleases — the general per-user *Audio mandatory*
+  // flag (039-per-title-language-split REQ-9). Inert this cycle: nothing
+  // reads it yet (REQ-11).
+  async setAudioMandatory(userId: string, mandatory: boolean): Promise<User> {
+    return await this.prisma.user.update({
+      where: { id: userId },
+      data: { audioMandatory: mandatory },
+    });
+  }
 }

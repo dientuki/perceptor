@@ -22,8 +22,10 @@ export type EncodeJobDetails = {
   year: number | null;
   originalLanguage: string;
   originalLanguageIso3: string;
-  allowedLanguagesIso3: string[];
-  allowedLanguageTags: string[];
+  allowedAudioLanguagesIso3: string[];
+  allowedAudioLanguageTags: string[];
+  allowedSubtitleLanguagesIso3: string[];
+  allowedSubtitleLanguageTags: string[];
   isLiveAction: boolean;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -72,7 +74,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedLanguagesIso3 allowedLanguageTags isLiveAction
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags isLiveAction
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
         compressionEnabled
@@ -90,7 +92,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   // "compressing", which is the safe default and must be visible as such.
   const compressing = details.compressionEnabled !== false;
   console.log(
-    `[encode] ${processJobId}: compressing=${compressing} allowedLanguagesIso3=${JSON.stringify(details.allowedLanguagesIso3)} allowedLanguageTags=${JSON.stringify(details.allowedLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3}`,
+    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3}`,
   );
 
   let encodeCompleted: EncodeCompletedResult | undefined;
@@ -167,8 +169,10 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         finalOutputPath,
         {
           originalLanguageIso3: details.originalLanguageIso3,
-          allowedLanguagesIso3: details.allowedLanguagesIso3,
-          allowedLanguageTags: details.allowedLanguageTags ?? [],
+          allowedAudioLanguagesIso3: details.allowedAudioLanguagesIso3,
+          allowedAudioLanguageTags: details.allowedAudioLanguageTags ?? [],
+          allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
+          allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
           isLiveAction: details.isLiveAction,
         },
         onProgress,
@@ -181,8 +185,10 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         outputPath,
         {
           originalLanguageIso3: details.originalLanguageIso3,
-          allowedLanguagesIso3: details.allowedLanguagesIso3,
-          allowedLanguageTags: details.allowedLanguageTags ?? [],
+          allowedAudioLanguagesIso3: details.allowedAudioLanguagesIso3,
+          allowedAudioLanguageTags: details.allowedAudioLanguageTags ?? [],
+          allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
+          allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
           isLiveAction: details.isLiveAction,
         },
         onProgress,

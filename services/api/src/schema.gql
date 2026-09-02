@@ -42,7 +42,9 @@ type Movie {
   filePath: String
   createdAt: DateTime!
   updatedAt: DateTime!
-  preferredLanguages: [Language!]!
+  audioLanguages: [Language!]!
+  subtitleLanguages: [Language!]!
+  audioMandatory: Boolean!
 }
 
 """
@@ -128,8 +130,10 @@ type EncodeJobDetails {
   year: Int
   originalLanguage: String!
   originalLanguageIso3: String!
-  allowedLanguagesIso3: [String!]!
-  allowedLanguageTags: [String!]!
+  allowedAudioLanguagesIso3: [String!]!
+  allowedAudioLanguageTags: [String!]!
+  allowedSubtitleLanguagesIso3: [String!]!
+  allowedSubtitleLanguageTags: [String!]!
   isLiveAction: Boolean!
   seasonNumber: Int
   episodeNumber: Int
@@ -203,7 +207,9 @@ type Show {
   createdAt: DateTime!
   updatedAt: DateTime!
   seasons: [Season!]!
-  preferredLanguages: [Language!]!
+  audioLanguages: [Language!]!
+  subtitleLanguages: [Language!]!
+  audioMandatory: Boolean!
 }
 
 type FfprobeLog {
@@ -235,6 +241,11 @@ type UserPreferences {
   CAM/TS releases acceptable for this user. False for every user until they say otherwise.
   """
   allowCinemaReleases: Boolean!
+
+  """
+  Whether the audio track in a preferred language is mandatory. Inert this cycle — nothing reads it yet.
+  """
+  audioMandatory: Boolean!
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
 
@@ -314,8 +325,15 @@ type Mutation {
   """
   addMagnetToMovie(movieId: Int!, magnet: String!, force: Boolean = false): Movie!
 
-  """Reemplaza la preferencia de idiomas del usuario para esta película"""
-  setMoviePreferredLanguages(movieId: Int!, tags: [String!]!): [Language!]!
+  """
+  Reemplaza la preferencia de idiomas del usuario para esta película, para un tipo de pista
+  """
+  setMoviePreferredTrackLanguages(movieId: Int!, kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
+
+  """
+  Marca si el audio en el idioma preferido es obligatorio para esta película
+  """
+  setMovieAudioMandatory(movieId: Int!, mandatory: Boolean!): Boolean!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
   resyncMediaServerIndex: MediaServerIndexStatus!
 
@@ -363,8 +381,15 @@ type Mutation {
   addMagnetToEpisode(episodeId: Int!, magnet: String!, force: Boolean = false): Episode!
   addMedia(tmdbId: Int!, type: String!): MediaRef!
 
-  """Reemplaza la preferencia de idiomas del usuario para una serie puntual"""
-  setShowPreferredLanguages(showId: Int!, tags: [String!]!): [Language!]!
+  """
+  Reemplaza la preferencia de idiomas del usuario para una serie puntual, para un tipo de pista
+  """
+  setShowPreferredTrackLanguages(showId: Int!, kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
+
+  """
+  Marca si el audio en el idioma preferido es obligatorio para esta serie
+  """
+  setShowAudioMandatory(showId: Int!, mandatory: Boolean!): Boolean!
 
   """
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la temporada
@@ -377,6 +402,7 @@ type Mutation {
   """Delete one recorded ffprobe payload by id"""
   deleteFfprobeLog(id: Int!): Boolean!
   setAllowCinemaReleases(allowed: Boolean!): UserPreferences!
+  setAudioMandatory(mandatory: Boolean!): UserPreferences!
   setPreferredTrackLanguages(kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
   setPreferredTorrentGroups(scope: TorrentGroupScope!, ids: [Int!]!): [TorrentGroup!]!
 }
@@ -407,6 +433,12 @@ input UpdateProfileInput {
   password: String
 }
 
+"""Which side of the encode a language preference applies to."""
+enum LanguageTrackKind {
+  AUDIO
+  SUBTITLE
+}
+
 input SettingInput {
   key: String!
   value: String!
@@ -423,10 +455,4 @@ input ScannedMatchInput {
   filePath: String!
   seasonNumber: Int
   episodeNumber: Int
-}
-
-"""Which side of the encode a language preference applies to."""
-enum LanguageTrackKind {
-  AUDIO
-  SUBTITLE
 }

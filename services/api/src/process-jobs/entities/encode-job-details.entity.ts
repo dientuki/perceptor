@@ -39,26 +39,35 @@ export class EncodeJobDetails {
   @Field()
   originalLanguageIso3: string;
 
-  // Every ISO-639-2/B code the encode is allowed to keep for audio/subtitles —
-  // the original language plus the union of every owner's global and
-  // per-title preference (REQ-3), deduplicated, original first. Never empty.
-  // originalLanguageIso3 stays a separate field even though it duplicates the
-  // first element here: the worker needs to know *which* of these is
-  // mandatory (REQ-6), and inferring that from list position is a rule that
-  // breaks the first time someone reorders the list.
+  // Every ISO-639-2/B code the encode is allowed to keep for audio tracks —
+  // the original language plus the union of the installation's
+  // `default_languages` setting and every owner's per-title AUDIO preference
+  // (039-per-title-language-split, REQ-5/REQ-6), deduplicated, original
+  // first. Never empty. originalLanguageIso3 stays a separate field even
+  // though it duplicates the first element here: the worker needs to know
+  // *which* of these is mandatory (REQ-6/REQ-7), and inferring that from list
+  // position is a rule that breaks the first time someone reorders the list.
   @Field(() => [String])
-  allowedLanguagesIso3: string[];
+  allowedAudioLanguagesIso3: string[];
 
-  // The same merge as `allowedLanguagesIso3`, expressed in BCP-47 tags
+  // The same merge as `allowedAudioLanguagesIso3`, expressed in BCP-47 tags
   // instead of resolved ISO-639-2/B codes (030-language-regional-variants,
-  // REQ-8). Not redundant with the field above: the iso3 list is what the
-  // worker's ffmpeg rules match against `ffprobe`'s tags.language and is
-  // lossy by design (`es-419`/`es-ES` both collapse to `spa`); this list is
-  // what preserves which regional variant was actually asked for. Additive
-  // and unread by the worker this cycle (NFR-4) — a follow-up spec teaches
-  // it to act on this.
+  // REQ-8) — preserves which regional variant was actually asked for
+  // (`es-419`/`es-ES` both collapse to `spa` in the iso3 list above).
   @Field(() => [String])
-  allowedLanguageTags: string[];
+  allowedAudioLanguageTags: string[];
+
+  // Same shape as the audio pair above, but for subtitle tracks: the
+  // original language plus `default_languages` (unsplit — it still feeds
+  // both pairs, NFR-4) plus every owner's per-title SUBTITLE preference only
+  // (039-per-title-language-split, REQ-5/REQ-6). A title with no per-title
+  // preference of either kind produces a pair identical to the audio one —
+  // no regression for the common case.
+  @Field(() => [String])
+  allowedSubtitleLanguagesIso3: string[];
+
+  @Field(() => [String])
+  allowedSubtitleLanguageTags: string[];
 
   @Field()
   isLiveAction: boolean;

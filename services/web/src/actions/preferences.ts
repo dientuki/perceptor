@@ -18,6 +18,7 @@ const PREFERENCES_QUERY = `
   query Preferences {
     preferences {
       allowCinemaReleases
+      audioMandatory
       audioLanguages {
         id
         tag
@@ -56,6 +57,7 @@ export async function getPreferences(): Promise<UserPreferences> {
   return (
     data?.preferences ?? {
       allowCinemaReleases: false,
+      audioMandatory: false,
       audioLanguages: [],
       subtitleLanguages: [],
       torrentGroups: [],
@@ -145,6 +147,65 @@ export async function setAllowCinemaReleasesAction(
     success: true,
     preferences: (result.data as { setAllowCinemaReleases: UserPreferences })
       .setAllowCinemaReleases,
+  };
+}
+
+const SET_AUDIO_MANDATORY_MUTATION = `
+  mutation SetAudioMandatory($mandatory: Boolean!) {
+    setAudioMandatory(mandatory: $mandatory) {
+      allowCinemaReleases
+      audioMandatory
+      audioLanguages {
+        id
+        tag
+        iso2
+        iso3
+        name
+      }
+      subtitleLanguages {
+        id
+        tag
+        iso2
+        iso3
+        name
+      }
+      torrentGroups {
+        id
+        name
+        scope
+      }
+    }
+  }
+`;
+
+// A boolean cannot be invalid, same as setAllowCinemaReleasesAction above —
+// the unauthenticated redirect is its only failure path.
+export async function setAudioMandatoryAction(
+  mandatory: boolean,
+): Promise<
+  { error: string } | { success: true; preferences: UserPreferences }
+> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_AUDIO_MANDATORY_MUTATION, {
+      mandatory,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return {
+    success: true,
+    preferences: (result.data as { setAudioMandatory: UserPreferences })
+      .setAudioMandatory,
   };
 }
 

@@ -21,8 +21,10 @@ const CASES_DIR = join(__dirname, '..', '..', 'ffmpeg');
 type CaseInput = {
   file: string;
   output: string;
-  allowedLanguagesIso3: string[];
-  allowedLanguageTags?: string[];
+  allowedAudioLanguagesIso3: string[];
+  allowedAudioLanguageTags?: string[];
+  allowedSubtitleLanguagesIso3: string[];
+  allowedSubtitleLanguageTags?: string[];
   originalLanguageIso3: string;
   isLiveAction: boolean;
 };
@@ -60,8 +62,10 @@ function validate(fileName: string, raw: unknown): Case {
   const {
     file,
     output,
-    allowedLanguagesIso3,
-    allowedLanguageTags,
+    allowedAudioLanguagesIso3,
+    allowedAudioLanguageTags,
+    allowedSubtitleLanguagesIso3,
+    allowedSubtitleLanguageTags,
     originalLanguageIso3,
     isLiveAction,
   } = input as Record<string, unknown>;
@@ -69,17 +73,30 @@ function validate(fileName: string, raw: unknown): Case {
   if (typeof file !== 'string') fail(fileName, 'input.file must be a string');
   if (typeof output !== 'string') fail(fileName, 'input.output must be a string');
   if (
-    !Array.isArray(allowedLanguagesIso3) ||
-    allowedLanguagesIso3.some((lang) => typeof lang !== 'string')
+    !Array.isArray(allowedAudioLanguagesIso3) ||
+    allowedAudioLanguagesIso3.some((lang) => typeof lang !== 'string')
   ) {
-    fail(fileName, 'input.allowedLanguagesIso3 must be an array of strings');
+    fail(fileName, 'input.allowedAudioLanguagesIso3 must be an array of strings');
   }
   if (
-    allowedLanguageTags !== undefined &&
-    (!Array.isArray(allowedLanguageTags) ||
-      allowedLanguageTags.some((tag) => typeof tag !== 'string'))
+    allowedAudioLanguageTags !== undefined &&
+    (!Array.isArray(allowedAudioLanguageTags) ||
+      allowedAudioLanguageTags.some((tag) => typeof tag !== 'string'))
   ) {
-    fail(fileName, 'input.allowedLanguageTags must be an array of strings when present');
+    fail(fileName, 'input.allowedAudioLanguageTags must be an array of strings when present');
+  }
+  if (
+    !Array.isArray(allowedSubtitleLanguagesIso3) ||
+    allowedSubtitleLanguagesIso3.some((lang) => typeof lang !== 'string')
+  ) {
+    fail(fileName, 'input.allowedSubtitleLanguagesIso3 must be an array of strings');
+  }
+  if (
+    allowedSubtitleLanguageTags !== undefined &&
+    (!Array.isArray(allowedSubtitleLanguageTags) ||
+      allowedSubtitleLanguageTags.some((tag) => typeof tag !== 'string'))
+  ) {
+    fail(fileName, 'input.allowedSubtitleLanguageTags must be an array of strings when present');
   }
   if (typeof originalLanguageIso3 !== 'string') {
     fail(fileName, 'input.originalLanguageIso3 must be a string');
@@ -166,8 +183,10 @@ describe('ffmpeg cases', () => {
   it.each(cases)('$fileName — $parsed.title', ({ parsed }) => {
     const { input } = parsed;
     const details = {
-      allowedLanguagesIso3: input.allowedLanguagesIso3,
-      allowedLanguageTags: input.allowedLanguageTags ?? [],
+      allowedAudioLanguagesIso3: input.allowedAudioLanguagesIso3,
+      allowedAudioLanguageTags: input.allowedAudioLanguageTags ?? [],
+      allowedSubtitleLanguagesIso3: input.allowedSubtitleLanguagesIso3,
+      allowedSubtitleLanguageTags: input.allowedSubtitleLanguageTags ?? [],
       originalLanguageIso3: input.originalLanguageIso3,
       isLiveAction: input.isLiveAction,
     };

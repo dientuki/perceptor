@@ -158,6 +158,32 @@ export class MoviesService implements MediaTypeService {
     return { id: movie.id, type: MEDIA_TYPE.MOVIE };
   }
 
+  // The caller's own `audioMandatory` flag for this film, read off the
+  // ownership row (039-per-title-language-split REQ-9). Callers must already
+  // hold a row that passed findOneFromDb — no fallback default here, since a
+  // missing row means the caller has no business asking.
+  async findAudioMandatoryFor(userId: string, movieId: number): Promise<boolean> {
+    const row = await this.prisma.userMovie.findUnique({
+      where: { userId_movieId: { userId, movieId } },
+    });
+    return row?.audioMandatory ?? false;
+  }
+
+  // Single-column update on a row addressed by its full primary key — the
+  // caller (movies.resolver.ts) already ran findOneFromDb's ownership check,
+  // so this row is guaranteed to exist and `update` (not `upsert`) is safe.
+  async setAudioMandatoryFor(
+    userId: string,
+    movieId: number,
+    mandatory: boolean,
+  ): Promise<boolean> {
+    await this.prisma.userMovie.update({
+      where: { userId_movieId: { userId, movieId } },
+      data: { audioMandatory: mandatory },
+    });
+    return mandatory;
+  }
+
   // upsert en vez de create: un segundo addMovie del mismo usuario para la misma
   // película no debe explotar con un P2002 sobre la primary key compuesta — el
   // botón que dispara esto en el UI puede volver a llamarse antes de que

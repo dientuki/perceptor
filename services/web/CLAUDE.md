@@ -109,7 +109,7 @@ substring. This replaced a `message.includes(t("conflictMarker"))` pattern that 
 **English** error text regardless of the active locale, which meant the "Reemplazar" affordance
 never appeared at all when rendering in `es`.
 
-**Language names are not a catalog entry.** `LanguagePicker.tsx` renders each option through
+**Language names are not a catalog entry.** `LanguagePickerField.tsx` renders each option through
 `Intl.DisplayNames([activeLocale], { type: 'language' })` and sorts with `localeCompare(...,
 activeLocale)` — `api`'s `languages` query returns English names only (display authority moved
 here); do not add a language-name list to either catalog. This still holds for regional variant
@@ -367,43 +367,51 @@ may be ambiguous with a non-service token (`ma` collides with DTS-HD MA, `max` w
 Written to be reusable outside this modal — an eventual automatic picker (no user toggle) is meant
 to call the same function.
 
-## Language pickers: four call sites, one component
+## Language pickers: `LanguagePickerField`, three call sites
 
 `src/actions/languages.ts` follows the standard server-action shape; `getLanguages` uses
-`redirectToClearSession`, the two per-title writes use `redirectIfUnauthenticated` (see the auth
-section). `src/components/media/LanguagePicker.tsx` is the one client component all four call sites
-share — since `030-language-regional-variants` a **dual-pane control**, not a `<select multiple>`: a
-scrolling left pane of toggle buttons (grouped by shared `iso2` into a non-selectable heading with its
-variant rows beneath, whenever more than one row shares it — the grouping is derived from the
-`options` array, never a hard-coded list of which languages carry variants) and a right pane showing
-the chosen set as removable `ui/badge/Badge.tsx` badges. One state value backs both panes, so a badge
-removal and an entry untick can never disagree. It emits exactly one
-`<input type="hidden" name={name} value={selected.join(",")}>` — a comma-separated list of BCP-47
-`tag`s, not `iso2` codes — with `name` defaulting to `"tags"` (what the per-title mutations expect)
-and Settings passing `name="default_languages"` explicitly. Entries are real
-`<button type="button" aria-pressed>`, not `role="listbox"` — a listbox's children must be `option`s,
-and toggle buttons give correct keyboard operation for free (NFR-5 of `030`).
-`src/components/form/MultiSelect.tsx`, the control this replaced in Settings, stays in the repository
-unused — deleting it was explicitly out of scope.
+`redirectToClearSession`. The four per-title actions
+(`set{Movie,Show}PreferredTrackLanguagesAction`) and the two per-title `audioMandatory` actions
+(`set{Movie,Show}AudioMandatoryAction`) use `redirectIfUnauthenticated` (see the auth section).
+**`src/components/media/LanguagePicker.tsx` is gone as of `039-per-title-language-split`** — its
+`<form>`-per-picker, own-submit-button shape stopped fitting once a single *Guardar* needed to fire
+several mutations at once (`/preferences` first, `021-user-preferences`; a title's two language
+lists plus its `audioMandatory` checkbox since `039`). `src/components/preferences/
+LanguagePickerField.tsx` is its controlled replacement and now the **only** picker widget in the
+codebase: same dual-pane visual (a scrolling left pane of toggle buttons, grouped by shared `iso2`
+into a non-selectable heading with its variant rows beneath whenever more than one row shares it —
+the grouping is derived from the `options` array, never a hard-coded list of which languages carry
+variants — and a right pane showing the chosen set as removable `ui/badge/Badge.tsx` badges, one
+state value backing both so a badge removal and an entry untick can never disagree), but it takes
+`value`/`onChange` instead of owning a `<form>`, an action, or a save button of its own — the parent
+component's single submit owns all of that. Entries are real `<button type="button" aria-pressed>`,
+not `role="listbox"` (NFR-5 of `030-language-regional-variants`).
+`src/components/form/MultiSelect.tsx`, the control `030` replaced in Settings, stays in the
+repository unused — deleting it was explicitly out of scope then and still is.
 
-**A per-user global preference exists again, split by track kind** (`021-user-preferences`), but it
-is not the same feature `029-settings-screen-tabs` removed: `PreferredLanguagesCard.tsx` and
-`setPreferredLanguagesAction` stay gone, and there is still no single `User.preferredLanguages` list.
-Instead `src/components/preferences/DownloadLanguagesCard.tsx` renders **two** `LanguagePicker`
-instances — one bound to `setPreferredTrackLanguagesAction.bind(null, "AUDIO")`, one to
-`.bind(null, "SUBTITLE")` — backed by `UserPreferences.audioLanguages`/`subtitleLanguages` in
-`src/actions/preferences.ts`, on the new `/preferences` screen (see "Two per-user settings screens"
-below). Neither passes a `name` prop, so both fall through to `LanguagePicker`'s `"tags"` default,
-same as the two per-title call sites.
+**Three call sites, all Client Components, all the same "fire N mutations with one `Promise.all`,
+revert only the field that failed" shape** (established by `PreferencesForm.tsx`,
+`021-user-preferences`):
+- `/preferences`'s `downloadLanguages` tab (`PreferencesForm.tsx`) — two `LanguagePickerField`s
+  (audio, subtitle) plus, since `039`, a `Checkbox` for `UserPreferences.audioMandatory` inside the
+  audio column, saved together with the rest of that screen's now-seven-entry `Promise.all`.
+- `src/components/media/TitleLanguagesForm.tsx` (new in `039`) — the per-title twin: two
+  `LanguagePickerField`s under one *Guardar*, plus the same `audioMandatory` `Checkbox` under the
+  audio pane's badge list, submitting `set{Movie,Show}PreferredTrackLanguagesAction` (once per kind)
+  and `set{Movie,Show}AudioMandatoryAction` together. `Movie.tsx` and `Show.tsx` each render one,
+  bound to their own title id; `Show.tsx` stays a Server Component with `TitleLanguagesForm` as its
+  client child, same as `LanguagePicker` was before it.
+
 **The installation-wide `default_languages` setting is untouched on the `api` side but has no `web`
 editor any more**: `021-user-preferences` REQ-6 deleted `DownloadPanel.tsx`, `SettingsForm`'s Descarga
 tab, and `updateDefaultLanguagesAction`/`ALWAYS_SENT_STRING_KEYS` from `src/actions/settings.ts` — the
 `default_languages` row in `settings` keeps whatever value it already held and keeps feeding
-`getEncodeJobDetails`'s merge (`services/api/CLAUDE.md`'s `process-jobs/`), but nothing in `web` can
-change it until a future spec (the same one that will split `allowedLanguagesIso3` by track kind at
-encode time) gives it a home. `SettingsForm` now shows five tabs with no Descarga; `Movie.tsx` and
-`Show.tsx` still each bind `LanguagePicker` to their own per-title action, passing no `name` — that
-level is untouched; `Show.tsx` stays a Server Component with the picker as a client child.
+`getEncodeJobDetails`'s merge (`services/api/CLAUDE.md`'s `process-jobs/`), unsplit by kind even after
+`039` split everything downstream of it. `SettingsForm` shows five tabs with no Descarga.
+
+**`Movie`/`Show`'s `audioLanguages`/`subtitleLanguages` replace the single `preferredLanguages`
+field** `039-per-title-language-split` removed (not deprecated) — see
+`docs/spec/graphql-contract.md` for the full contract delta.
 
 **The Media Server tab's "Re-sync" control is the same kind of exception** (`034-jellyfin-library-reconciliation`),
 by a different mechanism: `MediaServerFields.tsx`'s `MediaServerIndexPanel` is not a nested `<form>`
@@ -416,26 +424,30 @@ timestamp is rendered only after mount (`useEffect`-gated) — `toLocaleString()
 runtime's timezone, and formatting it during SSR produces a hydration mismatch between the container
 and the viewer's own timezone.
 
-**The listing queries deliberately do not select `preferredLanguages`.** They are `api` field
-resolvers that only run when selected — `getMovieById`/`getShowById` select them, `getMovies`/
-`getShows` must not, or 200 rows become 200 preference queries.
+**The listing queries deliberately do not select `audioLanguages`/`subtitleLanguages`/
+`audioMandatory`.** They are `api` field resolvers that only run when selected — `getMovieById`/
+`getShowById` select them, `getMovies`/`getShows` must not, or 200 rows become hundreds of extra
+queries.
 
 ## Two per-user settings screens (`021-user-preferences`)
 
 `/settings` ("Ajustes") is installation-wide config, admin-only since `029-settings-screen-tabs`
 (`notFound()` for a non-admin, both the sidebar and page level). `/preferences` ("Preferencias") is
-new, per-user, and **deliberately carries no admin check anywhere** — it renders in full for every
+per-user, and **deliberately carries no admin check anywhere** — it renders in full for every
 signed-in user, admin or not, because everything on it is scoped to the caller by the `api` resolver
 (`Query.preferences`/`Mutation.set*` never take a user id). `src/app/(dashboard)/preferences/page.tsx`
 is a Server Component fetching `Promise.all([getCurrentUser(), getPreferences(), getLanguages(),
-getTorrentGroups()])` and rendering three sections in the spec's order — *Idiomas* (`UiLocaleCard` +
-`DownloadLanguagesCard`), *Películas* (`CinemaReleasesCard` + a `TorrentGroupsCard` scoped `MOVIE`),
-*Series* (a second `TorrentGroupsCard` scoped `SHOW`) — each saving independently through its own
-action in `src/actions/preferences.ts`, never one shared form.
-`TorrentGroupsCard` decides between its empty state and `TorrentGroupPicker` (a sibling of
-`LanguagePicker`, not a generalization of it — bound to one `TorrentGroupScope` at a time) on
-`options.length === 0`, **before** the picker is ever referenced in the render tree: an empty catalog
-must never reach a form that could submit an empty "clear my selection" write by accident.
+getTorrentGroups()])` and rendering `PreferencesForm.tsx` — **one tabbed Client Component, one shared
+*Guardar*, not the one-card-per-section layout this section used to describe.** Four tabs (`general`,
+`downloadLanguages`, `movies`, `shows`), all mounted at once and switched with `hidden` (never
+unmounted, so tab-switching never resets unsaved edits); pressing *Guardar* fires every field's
+mutation together via one `Promise.all`, reverting only the field whose result carried an error —
+seven mutations as of `039-per-title-language-split` (`setUiLocale`, `setPreferredTrackLanguages`
+×2, `setAllowCinemaReleases`, `setAudioMandatory`, `setPreferredTorrentGroups` ×2). The `movies` tab
+decides between its empty state and `TorrentGroupPickerField` (a sibling of `LanguagePickerField`,
+not a generalization of it — bound to one `TorrentGroupScope` at a time) on `options.length === 0`,
+**before** the picker is ever referenced in the render tree: an empty catalog must never reach a form
+that could submit an empty "clear my selection" write by accident.
 Both nav entries — sidebar (`AppSidebar.tsx`'s `baseNavItems`, the array every signed-in user gets,
 not the `isAdmin` spread beneath it) and the header (`UserDropdown.tsx`, beside the pre-existing
 *Ajustes* item) — show *Preferencias* unconditionally and *Ajustes* only where each surface already

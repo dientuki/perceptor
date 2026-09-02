@@ -116,9 +116,12 @@ describe('ProcessJobsService', () => {
   // also carries `tag`, defaulting to `iso3` for the ordinary case where a
   // preference has no regional variant (tag === iso2 !== iso3, but the tests
   // that only care about iso3 pass an iso3-shaped tag on purpose — the tag
-  // vocabulary is exercised explicitly where it matters).
-  const owner = (titleIso3s: string[], tags: string[] = titleIso3s) => ({
-    languages: titleIso3s.map((iso3, i) => ({ language: { iso3, tag: tags[i] } })),
+  // vocabulary is exercised explicitly where it matters). Since
+  // 039-per-title-language-split the select also carries `kind`, defaulting
+  // to `'AUDIO'` so every pre-existing case (all written before the split)
+  // keeps exercising the audio pair without change.
+  const owner = (titleIso3s: string[], tags: string[] = titleIso3s, kind: 'AUDIO' | 'SUBTITLE' = 'AUDIO') => ({
+    languages: titleIso3s.map((iso3, i) => ({ kind, language: { iso3, tag: tags[i] } })),
   });
 
   // This block exists because getEncodeJobDetails's downloadsRoot is the only
@@ -241,7 +244,7 @@ describe('ProcessJobsService', () => {
 
       const details = await service.getEncodeJobDetails(1);
 
-      expect(details.allowedLanguagesIso3.sort()).toEqual(['eng', 'jpn', 'spa'].sort());
+      expect(details.allowedAudioLanguagesIso3.sort()).toEqual(['eng', 'jpn', 'spa'].sort());
     });
 
     it('always includes the original language even with zero preferences and no default set', async () => {
@@ -251,7 +254,7 @@ describe('ProcessJobsService', () => {
 
       const details = await service.getEncodeJobDetails(1);
 
-      expect(details.allowedLanguagesIso3).toEqual(['jpn']);
+      expect(details.allowedAudioLanguagesIso3).toEqual(['jpn']);
     });
 
     it('returns iso3 codes, not iso2 — fails if the join selects the wrong field', async () => {
@@ -265,8 +268,8 @@ describe('ProcessJobsService', () => {
       // ('es') that would leak through if the select were switched to
       // `language.iso2` — that mistake would still produce a two-element
       // array and pass a looser assertion, so the exact string matters.
-      expect(details.allowedLanguagesIso3).toContain('spa');
-      expect(details.allowedLanguagesIso3).not.toContain('es');
+      expect(details.allowedAudioLanguagesIso3).toContain('spa');
+      expect(details.allowedAudioLanguagesIso3).not.toContain('es');
     });
 
     it('resolves an episode\'s owners through season.show, not through the episode', async () => {
@@ -283,7 +286,7 @@ describe('ProcessJobsService', () => {
       // episode.season.showId would silently return an empty owner set for
       // every episode, even when the show has real language preferences.
       expect(args.where).toEqual({ showId: 77 });
-      expect(details.allowedLanguagesIso3.sort()).toEqual(['eng', 'jpn'].sort());
+      expect(details.allowedAudioLanguagesIso3.sort()).toEqual(['eng', 'jpn'].sort());
     });
 
     it('returns exactly one element — the original — for a title with no owners', async () => {
@@ -293,7 +296,7 @@ describe('ProcessJobsService', () => {
 
       const details = await service.getEncodeJobDetails(1);
 
-      expect(details.allowedLanguagesIso3).toEqual(['jpn']);
+      expect(details.allowedAudioLanguagesIso3).toEqual(['jpn']);
     });
 
     // AC-8 / T011: the plan's headline silent failure — a forgotten
@@ -309,9 +312,9 @@ describe('ProcessJobsService', () => {
 
       const details = await service.getEncodeJobDetails(1);
 
-      expect(details.allowedLanguagesIso3[0]).toBe('jpn');
-      expect(details.allowedLanguagesIso3.sort()).toEqual(['fra', 'jpn', 'spa'].sort());
-      expect(new Set(details.allowedLanguagesIso3).size).toBe(details.allowedLanguagesIso3.length);
+      expect(details.allowedAudioLanguagesIso3[0]).toBe('jpn');
+      expect(details.allowedAudioLanguagesIso3.sort()).toEqual(['fra', 'jpn', 'spa'].sort());
+      expect(new Set(details.allowedAudioLanguagesIso3).size).toBe(details.allowedAudioLanguagesIso3.length);
     });
 
     // AC-10 / T008: `resolveOriginalLanguage` looks up by `tag`, not by
@@ -336,21 +339,71 @@ describe('ProcessJobsService', () => {
 
       expect(prisma.language.findUnique).toHaveBeenCalledWith({ where: { tag: 'es' } });
       expect(details.originalLanguageIso3).toBe('spa');
-      expect(details.allowedLanguagesIso3).toEqual(['spa']);
-      expect(details.allowedLanguageTags).toEqual(['es']);
+      expect(details.allowedAudioLanguagesIso3).toEqual(['spa']);
+      expect(details.allowedAudioLanguageTags).toEqual(['es']);
     });
   });
 
-  // 030-language-regional-variants, T009: `allowedLanguageTags` and
-  // `allowedLanguagesIso3` are produced from the SAME merge walk
+  // 039-per-title-language-split, REQ-5: the two silent failures the plan
+  // names for this merge — a kind-blind filter that starves the subtitle
+  // pair of the original language/default (AC-8), and an owner preference
+  // that leaks into the pair it does not belong to (AC-9). Neither produces
+  // an error anywhere: the encode still completes, just with the wrong
+  // tracks kept or dropped.
+  describe('getEncodeJobDetails — REQ-5 audio/subtitle split', () => {
+    // AC-8: with no per-title preference of either kind, both pairs must be
+    // identical to each other and to what the single pre-split list would
+    // have produced (original + installation default).
+    it('AC-8: with no per-title preference, both pairs are identical to each other and to the single-list case', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.language.findMany.mockResolvedValue([{ tag: 'es', iso2: 'es', iso3: 'spa' }]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', default_languages: 'es' });
+      prisma.userMovie.findMany.mockResolvedValue([]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.allowedAudioLanguagesIso3.sort()).toEqual(['jpn', 'spa'].sort());
+      expect(details.allowedSubtitleLanguagesIso3.sort()).toEqual(details.allowedAudioLanguagesIso3.sort());
+      expect(details.allowedSubtitleLanguageTags.sort()).toEqual(details.allowedAudioLanguageTags.sort());
+    });
+
+    // AC-9: an audio-only per-title preference must reach the audio pair and
+    // must not leak into the subtitle pair.
+    it('AC-9: an audio-only per-title preference reaches only the audio pair, not the subtitle one', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([owner(['fre'], ['fr'], 'AUDIO')]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.allowedAudioLanguagesIso3).toContain('fre');
+      expect(details.allowedSubtitleLanguagesIso3).not.toContain('fre');
+    });
+
+    // The mirror case: a subtitle-only preference must not leak into audio.
+    it('a subtitle-only per-title preference reaches only the subtitle pair, not the audio one', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([owner(['fre'], ['fr'], 'SUBTITLE')]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.allowedSubtitleLanguagesIso3).toContain('fre');
+      expect(details.allowedAudioLanguagesIso3).not.toContain('fre');
+    });
+  });
+
+  // 030-language-regional-variants, T009: `allowedAudioLanguageTags` and
+  // `allowedAudioLanguagesIso3` are produced from the SAME merge walk
   // (`collectAllowedLanguages`), not two separate ones. A drift between them
   // — e.g. a tag added to one Set but not the other, or `resolveDefaultLanguages`
-  // left querying by `iso2` instead of `tag` — ships an `allowedLanguageTags`
-  // that silently disagrees with `allowedLanguagesIso3`, or an empty one, with
+  // left querying by `iso2` instead of `tag` — ships an `allowedAudioLanguageTags`
+  // that silently disagrees with `allowedAudioLanguagesIso3`, or an empty one, with
   // no error anywhere: the worker doesn't read the field yet (NFR-4), so
   // nothing fails until the follow-up spec ships and its rules see a stale or
   // empty tag list.
-  describe('getEncodeJobDetails — allowedLanguageTags (030-language-regional-variants)', () => {
+  describe('getEncodeJobDetails — allowedAudioLanguageTags (030-language-regional-variants)', () => {
     it('AC-9: carries a chosen variant tag, and collapses both Spanish variants to `spa` exactly once', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -358,9 +411,9 @@ describe('ProcessJobsService', () => {
 
       const details = await service.getEncodeJobDetails(1);
 
-      expect(details.allowedLanguageTags).toContain('es-419');
-      expect(details.allowedLanguageTags).toContain('es-ES');
-      expect(details.allowedLanguagesIso3.filter((code) => code === 'spa')).toHaveLength(1);
+      expect(details.allowedAudioLanguageTags).toContain('es-419');
+      expect(details.allowedAudioLanguageTags).toContain('es-ES');
+      expect(details.allowedAudioLanguagesIso3.filter((code) => code === 'spa')).toHaveLength(1);
     });
 
     it('resolves the installation default by `tag`, not `iso2` — a stale `iso2` lookup would silently drop it', async () => {
@@ -377,19 +430,19 @@ describe('ProcessJobsService', () => {
       const details = await service.getEncodeJobDetails(1);
 
       expect(prisma.language.findMany).toHaveBeenCalledWith({ where: { tag: { in: ['es-419'] } } });
-      expect(details.allowedLanguageTags).toContain('es-419');
-      expect(details.allowedLanguagesIso3).toContain('spa');
+      expect(details.allowedAudioLanguageTags).toContain('es-419');
+      expect(details.allowedAudioLanguagesIso3).toContain('spa');
     });
 
-    it('is original-tag-first and deduplicated, mirroring allowedLanguagesIso3\'s ordering exactly', async () => {
+    it('is original-tag-first and deduplicated, mirroring allowedAudioLanguagesIso3\'s ordering exactly', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
       prisma.userMovie.findMany.mockResolvedValue([owner(['eng', 'eng'], ['en', 'en'])]);
 
       const details = await service.getEncodeJobDetails(1);
 
-      expect(details.allowedLanguageTags[0]).toBe('ja');
-      expect(details.allowedLanguageTags).toEqual(['ja', 'en']);
+      expect(details.allowedAudioLanguageTags[0]).toBe('ja');
+      expect(details.allowedAudioLanguageTags).toEqual(['ja', 'en']);
     });
 
     it('is emitted on the EPISODE branch too', async () => {
@@ -399,7 +452,7 @@ describe('ProcessJobsService', () => {
 
       const details = await service.getEncodeJobDetails(2);
 
-      expect(details.allowedLanguageTags).toEqual(['ja', 'es-ES']);
+      expect(details.allowedAudioLanguageTags).toEqual(['ja', 'es-ES']);
     });
   });
 

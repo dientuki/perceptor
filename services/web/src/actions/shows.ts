@@ -39,8 +39,10 @@ export interface Show {
   // Only present when fetched via getShowById — getShows() doesn't request it
   seasons?: Season[];
   // Only present when fetched via getShowById — getShows() must not select
-  // this field resolver, or a library listing turns into one query per row
-  preferredLanguages?: Language[];
+  // these field resolvers, or a library listing turns into one query per row
+  audioLanguages?: Language[];
+  subtitleLanguages?: Language[];
+  audioMandatory?: boolean;
 }
 
 const GET_SHOWS_QUERY = `
@@ -90,12 +92,19 @@ const GET_SHOW_QUERY = `
       isLiveAction
       status
       seasonsSyncedAt
-      preferredLanguages {
+      audioLanguages {
         id
         tag
         iso2
         name
       }
+      subtitleLanguages {
+        id
+        tag
+        iso2
+        name
+      }
+      audioMandatory
       seasons {
         id
         seasonNumber

@@ -1,8 +1,10 @@
 import { Resolver, Query, Mutation, ResolveField, Parent, Args, Int } from '@nestjs/graphql';
+import { LanguageTrackKind as PrismaLanguageTrackKind } from '@prisma/client';
 import { ShowsService } from './shows.service';
 import { Show } from './entities/show.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { LanguagesService } from '@/languages/languages.service';
+import { LanguageTrackKind } from '@/preferences/entities/language-track-kind.enum';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
 import { i18nError } from '@/i18n/i18n-error';
@@ -37,25 +39,50 @@ export class ShowsResolver {
     return this.showsService.findOneFromDb(id, userId);
   }
 
-  // The calling user's own per-title preference (011-av1-transcode). Only
-  // runs when the client selects the field — see the same note on
-  // Show.preferredLanguages in show.entity.ts, and 011's plan.md risk on
-  // N+1 listings.
+  // The calling user's own per-title preference, per kind
+  // (039-per-title-language-split). Only runs when the client selects the
+  // field — see the same note on Show.audioLanguages/subtitleLanguages in
+  // show.entity.ts, and 011's plan.md risk on N+1 listings.
   @ResolveField(() => [Language])
-  async preferredLanguages(@Parent() show: Show, @CurrentUser() principal: AuthPrincipal) {
+  async audioLanguages(@Parent() show: Show, @CurrentUser() principal: AuthPrincipal) {
     const userId = principal.type === 'user' ? principal.id : '';
-    return this.languagesService.findShowPreferredLanguagesFor(userId, show.id);
+    return this.languagesService.findShowPreferredTrackLanguagesFor(
+      userId,
+      show.id,
+      PrismaLanguageTrackKind.AUDIO,
+    );
   }
 
-  // Replaces the authenticated user's per-title preference for one series —
-  // refused, unchanged, on a series the caller does not own (see
-  // ShowsService.findOneFromDb and 009-show-detail's frozen error message).
+  @ResolveField(() => [Language])
+  async subtitleLanguages(@Parent() show: Show, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.languagesService.findShowPreferredTrackLanguagesFor(
+      userId,
+      show.id,
+      PrismaLanguageTrackKind.SUBTITLE,
+    );
+  }
+
+  // The caller's own audio-mandatory flag for this series (039-per-title-
+  // language-split REQ-9). Only runs when the client selects it, same
+  // N+1-avoidance reasoning as audioLanguages/subtitleLanguages above.
+  @ResolveField(() => Boolean)
+  async audioMandatory(@Parent() show: Show, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.showsService.findAudioMandatoryFor(userId, show.id);
+  }
+
+  // Replaces the authenticated user's per-title preference for one series,
+  // for one kind — refused, unchanged, on a series the caller does not own
+  // (see ShowsService.findOneFromDb and 009-show-detail's frozen error
+  // message).
   @Mutation(() => [Language], {
-    name: 'setShowPreferredLanguages',
-    description: 'Reemplaza la preferencia de idiomas del usuario para una serie puntual',
+    name: 'setShowPreferredTrackLanguages',
+    description: 'Reemplaza la preferencia de idiomas del usuario para una serie puntual, para un tipo de pista',
   })
-  async setShowPreferredLanguages(
+  async setShowPreferredTrackLanguages(
     @Args('showId', { type: () => Int }) showId: number,
+    @Args('kind', { type: () => LanguageTrackKind }) kind: LanguageTrackKind,
     @Args('tags', { type: () => [String] }) tags: string[],
     @CurrentUser() principal: AuthPrincipal,
   ) {
@@ -65,6 +92,28 @@ export class ShowsResolver {
     // becomes the refusal 009-show-detail already froze for this resource.
     const show = await this.showsService.findOneFromDb(showId, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
-    return this.languagesService.setShowPreferredLanguagesFor(userId, showId, tags);
+    return this.languagesService.setShowPreferredTrackLanguagesFor(
+      userId,
+      showId,
+      kind as unknown as PrismaLanguageTrackKind,
+      tags,
+    );
+  }
+
+  @Mutation(() => Boolean, {
+    name: 'setShowAudioMandatory',
+    description: 'Marca si el audio en el idioma preferido es obligatorio para esta serie',
+  })
+  async setShowAudioMandatory(
+    @Args('showId', { type: () => Int }) showId: number,
+    @Args('mandatory', { type: () => Boolean }) mandatory: boolean,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    // Same ownership refusal as setShowPreferredTrackLanguages, reused
+    // verbatim (039-per-title-language-split REQ-10).
+    const show = await this.showsService.findOneFromDb(showId, userId);
+    if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
+    return this.showsService.setAudioMandatoryFor(userId, showId, mandatory);
   }
 }

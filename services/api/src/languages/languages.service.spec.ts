@@ -72,18 +72,30 @@ describe('LanguagesService — preference writes', () => {
   // service owns.
   const targets = [
     {
-      name: 'setMoviePreferredLanguagesFor (user + movie)',
-      call: (tags: string[]) => service.setMoviePreferredLanguagesFor('user-1', 42, tags),
+      name: 'setMoviePreferredTrackLanguagesFor (user + movie + kind)',
+      call: (tags: string[]) =>
+        service.setMoviePreferredTrackLanguagesFor('user-1', 42, LanguageTrackKind.AUDIO, tags),
       txModel: () => tx.userMovieLanguage,
-      expectedDeleteWhere: { userId: 'user-1', movieId: 42 },
-      expectedCreateRow: (languageId: number) => ({ userId: 'user-1', movieId: 42, languageId }),
+      expectedDeleteWhere: { userId: 'user-1', movieId: 42, kind: LanguageTrackKind.AUDIO },
+      expectedCreateRow: (languageId: number) => ({
+        userId: 'user-1',
+        movieId: 42,
+        kind: LanguageTrackKind.AUDIO,
+        languageId,
+      }),
     },
     {
-      name: 'setShowPreferredLanguagesFor (user + show)',
-      call: (tags: string[]) => service.setShowPreferredLanguagesFor('user-1', 7, tags),
+      name: 'setShowPreferredTrackLanguagesFor (user + show + kind)',
+      call: (tags: string[]) =>
+        service.setShowPreferredTrackLanguagesFor('user-1', 7, LanguageTrackKind.AUDIO, tags),
       txModel: () => tx.userShowLanguage,
-      expectedDeleteWhere: { userId: 'user-1', showId: 7 },
-      expectedCreateRow: (languageId: number) => ({ userId: 'user-1', showId: 7, languageId }),
+      expectedDeleteWhere: { userId: 'user-1', showId: 7, kind: LanguageTrackKind.AUDIO },
+      expectedCreateRow: (languageId: number) => ({
+        userId: 'user-1',
+        showId: 7,
+        kind: LanguageTrackKind.AUDIO,
+        languageId,
+      }),
     },
   ];
 
@@ -175,18 +187,92 @@ describe('LanguagesService — preference writes', () => {
     });
   });
 
+  it('setMoviePreferredTrackLanguagesFor: writing AUDIO deletes only AUDIO rows for that movie, leaving SUBTITLE untouched, and the reverse', async () => {
+    // Same fault as the per-user case above, but for the per-title table:
+    // both kinds live in `userMovieLanguage`, keyed apart only by `kind` on
+    // top of `userId`/`movieId`. The fault this guards against is
+    // `deleteMany`'s `where` narrowed back to `{ userId, movieId }`, which
+    // would silently wipe the caller's other kind for the same movie on
+    // every save. Verified to fail by temporarily dropping `kind` from
+    // `setMoviePreferredTrackLanguagesFor`'s `deleteMany` where and watching
+    // this assertion fail (`{ userId: 'user-1', movieId: 42 }` instead of the
+    // kind-narrowed where), then restoring it (039-per-title-language-split,
+    // T002/NFR-3).
+    languageFindMany.mockResolvedValue([spanish, english]);
+
+    await service.setMoviePreferredTrackLanguagesFor('user-1', 42, LanguageTrackKind.AUDIO, ['es']);
+
+    expect(tx.userMovieLanguage.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', movieId: 42, kind: LanguageTrackKind.AUDIO },
+    });
+    expect(tx.userMovieLanguage.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', movieId: 42, kind: LanguageTrackKind.AUDIO, languageId: spanish.id }],
+    });
+
+    tx.userMovieLanguage.deleteMany.mockClear();
+    tx.userMovieLanguage.createMany.mockClear();
+
+    await service.setMoviePreferredTrackLanguagesFor(
+      'user-1',
+      42,
+      LanguageTrackKind.SUBTITLE,
+      ['en'],
+    );
+
+    expect(tx.userMovieLanguage.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', movieId: 42, kind: LanguageTrackKind.SUBTITLE },
+    });
+    expect(tx.userMovieLanguage.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', movieId: 42, kind: LanguageTrackKind.SUBTITLE, languageId: english.id }],
+    });
+  });
+
+  it('setShowPreferredTrackLanguagesFor: writing AUDIO deletes only AUDIO rows for that show, leaving SUBTITLE untouched, and the reverse', async () => {
+    // Same fault, for `userShowLanguage`. Verified to fail by temporarily
+    // dropping `kind` from `setShowPreferredTrackLanguagesFor`'s `deleteMany`
+    // where and watching this assertion fail, then restoring it
+    // (039-per-title-language-split, T002/NFR-3).
+    languageFindMany.mockResolvedValue([spanish, english]);
+
+    await service.setShowPreferredTrackLanguagesFor('user-1', 7, LanguageTrackKind.AUDIO, ['es']);
+
+    expect(tx.userShowLanguage.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', showId: 7, kind: LanguageTrackKind.AUDIO },
+    });
+    expect(tx.userShowLanguage.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', showId: 7, kind: LanguageTrackKind.AUDIO, languageId: spanish.id }],
+    });
+
+    tx.userShowLanguage.deleteMany.mockClear();
+    tx.userShowLanguage.createMany.mockClear();
+
+    await service.setShowPreferredTrackLanguagesFor('user-1', 7, LanguageTrackKind.SUBTITLE, ['en']);
+
+    expect(tx.userShowLanguage.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', showId: 7, kind: LanguageTrackKind.SUBTITLE },
+    });
+    expect(tx.userShowLanguage.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', showId: 7, kind: LanguageTrackKind.SUBTITLE, languageId: english.id }],
+    });
+  });
+
   it('resolves every tag even with a third, unrelated language present in the table', async () => {
     // Guards against a lookup that only checks "at least one row exists"
     // instead of mapping every requested tag — that bug would silently
     // resolve 'pt' to spanish's id if the map were built wrong.
     languageFindMany.mockResolvedValue([spanish, english, portuguese]);
 
-    await service.setMoviePreferredLanguagesFor('user-1', 42, ['pt', 'es']);
+    await service.setMoviePreferredTrackLanguagesFor(
+      'user-1',
+      42,
+      LanguageTrackKind.AUDIO,
+      ['pt', 'es'],
+    );
 
     expect(tx.userMovieLanguage.createMany).toHaveBeenCalledWith({
       data: [
-        { userId: 'user-1', movieId: 42, languageId: portuguese.id },
-        { userId: 'user-1', movieId: 42, languageId: spanish.id },
+        { userId: 'user-1', movieId: 42, kind: LanguageTrackKind.AUDIO, languageId: portuguese.id },
+        { userId: 'user-1', movieId: 42, kind: LanguageTrackKind.AUDIO, languageId: spanish.id },
       ],
     });
   });

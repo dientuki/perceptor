@@ -14,6 +14,12 @@ export class UserPreferences {
   })
   allowCinemaReleases: boolean;
 
+  @Field({
+    description:
+      'Whether the audio track in a preferred language is mandatory. Inert this cycle — nothing reads it yet.',
+  })
+  audioMandatory: boolean;
+
   @Field(() => [Language])
   audioLanguages: Language[];
 

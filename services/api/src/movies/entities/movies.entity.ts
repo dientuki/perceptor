@@ -40,9 +40,18 @@ export class Movie {
   updatedAt: Date;
 
   // Resolved by MoviesResolver's @ResolveField() — the calling user's own
-  // per-title preference, never the merged set of every owner (that merge is
-  // encode-time only, see process-jobs.service.ts). Never populated by
-  // MoviesService itself.
+  // per-title preference, split by kind (039-per-title-language-split),
+  // never the merged set of every owner (that merge is encode-time only,
+  // see process-jobs.service.ts). Never populated by MoviesService itself.
   @Field(() => [Language])
-  preferredLanguages: Language[];
+  audioLanguages: Language[];
+
+  @Field(() => [Language])
+  subtitleLanguages: Language[];
+
+  // The calling user's own audio-mandatory flag for this film, read off the
+  // ownership row (039-per-title-language-split REQ-9). Inert this cycle —
+  // nothing consumes it yet (REQ-11). Never populated by MoviesService itself.
+  @Field()
+  audioMandatory: boolean;
 }

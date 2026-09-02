@@ -40,6 +40,7 @@ export class PreferencesService {
 
     return {
       allowCinemaReleases: user.allowCinemaReleases,
+      audioMandatory: user.audioMandatory,
       audioLanguages,
       subtitleLanguages,
       torrentGroups,
@@ -56,6 +57,11 @@ export class PreferencesService {
 
   async setAllowCinemaReleases(userId: string, allowed: boolean): Promise<UserPreferences> {
     await this.usersService.setAllowCinemaReleases(userId, allowed);
+    return this.findForUser(userId);
+  }
+
+  async setAudioMandatory(userId: string, mandatory: boolean): Promise<UserPreferences> {
+    await this.usersService.setAudioMandatory(userId, mandatory);
     return this.findForUser(userId);
   }
 

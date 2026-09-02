@@ -52,11 +52,15 @@ export function buildFfmpegCommand(
     ...getVideoParams(vStream, details.isLiveAction, quality),
     ...getAudioParams(
       aStreams,
-      details.allowedLanguagesIso3,
+      details.allowedAudioLanguagesIso3,
       details.originalLanguageIso3,
-      details.allowedLanguageTags,
+      details.allowedAudioLanguageTags,
     ),
-    ...getSubtitleParams(sStreams, details.allowedLanguagesIso3, details.allowedLanguageTags),
+    ...getSubtitleParams(
+      sStreams,
+      details.allowedSubtitleLanguagesIso3,
+      details.allowedSubtitleLanguageTags,
+    ),
     "-map_metadata:g",
     "-1",
   ];

@@ -136,25 +136,33 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `name` per `tag` from `language-names.ts`, not stored — `web` renders the localized display name
   via `Intl.DisplayNames` since `018-ui-i18n`; this map is an internal English label, not the UI
   string) plus the per-title preference writes backing
-  `setMoviePreferredLanguages`/`setShowPreferredLanguages`. **Since `030-language-regional-variants`,
-  `Language.tag` (a unique BCP-47 tag) is the identifier, not `iso2`** — `iso2` stays on the row and in
-  the table but is no longer unique, since a base language and its regional variants share it (`es`,
-  `es-419`, `es-ES` all carry `iso2: "es"`). `findAll()` omits a base row from the query's result only
-  when another row shares its `iso2` — the naive rule "hide any row whose `tag` equals its `iso2`"
-  would hide every ordinary language, since `en`'s tag *is* `en`. The validator,
+  `setMoviePreferredTrackLanguages`/`setShowPreferredTrackLanguages`. **Since
+  `039-per-title-language-split`, every per-title write and read takes a `kind: LanguageTrackKind`**
+  (`AUDIO`/`SUBTITLE`, the enum `029-settings-screen-tabs`/`021-user-preferences` already seeded) —
+  `UserMovieLanguage`/`UserShowLanguage` are keyed additionally by it
+  (`@@id([userId, movieId, languageId, kind])`), and both `set…PreferredTrackLanguagesFor`/
+  `find…PreferredTrackLanguagesFor` narrow every `deleteMany`/`createMany`/read `where` to
+  `{ userId, movieId, kind }` (or `showId`) — dropping `kind` from a `where` would silently wipe or
+  read the caller's *other* kind, not fail. **Since `030-language-regional-variants`, `Language.tag`
+  (a unique BCP-47 tag) is the identifier, not `iso2`** — `iso2` stays on the row and in the table but
+  is no longer unique, since a base language and its regional variants share it (`es`, `es-419`,
+  `es-ES` all carry `iso2: "es"`). `findAll()` omits a base row from the query's result only when
+  another row shares its `iso2` — the naive rule "hide any row whose `tag` equals its `iso2`" would
+  hide every ordinary language, since `en`'s tag *is* `en`. The validator,
   `validateAndResolveLanguageIds` (public since `029-settings-screen-tabs`, reused by `settings/`'s
   `default_languages` validation), checks a submitted tag against the table `findAll()` reads from
   *before* filtering — a directly-submitted `es` is accepted even though the query never offers it,
   because it is a real row meaning "Spanish, no variant preference." Each write validates every `tag`
   through it, rejects duplicates within one argument, then replaces the whole set atomically
   (`deleteMany` + `createMany` in a `$transaction`). Exported so `movies/` and `shows/` each host their
-  own `@ResolveField()` for `preferredLanguages` — deliberately not centralised. **The per-user global
-  level is gone** (`029-settings-screen-tabs`): `setPreferredLanguages`, `User.preferredLanguages` and
-  the `UserLanguage` table no longer exist, replaced by the installation-wide `default_languages`
-  setting (see `settings/` below and `process-jobs/`'s merge). Neither join table
-  (`UserMovieLanguage`/`UserShowLanguage`) changed shape for the tag rework — both still reference
-  `Language.id`, so a preference for a variant is the same kind of row a preference for a language
-  already was.
+  own two `@ResolveField()`s, `audioLanguages`/`subtitleLanguages` (replacing the single
+  `preferredLanguages` field `039-per-title-language-split` removed, not deprecated) — deliberately
+  not centralised. **The per-user global level is gone** (`029-settings-screen-tabs`):
+  `setPreferredLanguages`, `User.preferredLanguages` and the `UserLanguage` table no longer exist,
+  replaced by the installation-wide `default_languages` setting (see `settings/` below and
+  `process-jobs/`'s merge). Neither join table (`UserMovieLanguage`/`UserShowLanguage`) changed shape
+  for the tag rework — both still reference `Language.id`, so a preference for a variant is the same
+  kind of row a preference for a language already was.
 - **`media-sources/`** — the `MediaSource` row representing one acquisition attempt. `sourceScanned`
   takes `matches: [ScannedMatchInput!]!`, one entry per file the worker resolved (a film or single
   episode reports exactly one, both numbers `null`). The service loads the source with its season's
@@ -221,22 +229,25 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   writes the `ProcessJob` row as normal but skips the `movie`/`episode` update entirely on **both**
   mutations — a demoted source's late outcome, success or failure, must not move the title the
   winner is still encoding.
-  `getEncodeJobDetails` resolves `allowedLanguagesIso3`: the title's original language followed by the
-  union of the installation-wide `default_languages` setting (since `029-settings-screen-tabs`,
-  resolved tag → iso3 through `SettingsService`) and every owner's per-title preference, deduplicated,
-  selecting `language.iso3`. **This is the one place that merge happens** — `Movie.preferredLanguages`
-  and `Show.preferredLanguages` deliberately return only the calling user's own list. Since
-  `030-language-regional-variants`, `resolveOriginalLanguage(iso2)` resolves a title's TMDB
+  `getEncodeJobDetails` resolves four fields, an audio pair and a subtitle pair — since
+  `039-per-title-language-split` this is no longer one merged list: `allowedAudioLanguagesIso3`/
+  `allowedAudioLanguageTags` and `allowedSubtitleLanguagesIso3`/`allowedSubtitleLanguageTags`. Each
+  pair is the title's original language, plus the union of the installation-wide `default_languages`
+  setting (unsplit — the same setting seeds both pairs), plus every owner's per-title preference **of
+  that kind only**, deduplicated. **This is the one place the merge happens** — `Movie.audioLanguages`/
+  `subtitleLanguages` and the `Show` twins deliberately return only the calling user's own list, per
+  kind. Since `030-language-regional-variants`, `resolveOriginalLanguage(iso2)` resolves a title's TMDB
   `originalLanguage` to `{ tag, iso3 }` via a single lookup **keyed by `tag`, not `iso2`** — a base
   row's tag is its ISO-639-1 code by construction, so this is exact where `findFirst` on the now
   non-unique `iso2` would not be: it could return a variant row for an ordinary Spanish-original title.
-  `collectAllowedLanguages` produces `allowedLanguagesIso3` and the parallel `allowedLanguageTags` from
-  the **same** walk over original/default/per-title preferences — one merge, not two that can drift —
-  and `resolveDefaultLanguages` (the renamed `resolveDefaultLanguagesIso3`) looks the setting's stored
-  tags up **by `tag`**; left on `iso2` it would silently match nothing, since `default_languages` now
-  stores tags. `allowedLanguageTags` is additive and not yet read by the worker — it exists so the
-  variant survives the collapse to `iso3` (`es-419`/`es-ES` both resolve to `spa`) for a follow-up spec
-  to act on.
+  `collectAllowedLanguages` produces all four fields from **one walk** building four `Set`s — original
+  language and every `default_languages` entry seed all four unconditionally, each owner's per-title
+  row seeds only the pair matching its `kind` — one merge, not two (or four) that can drift apart, and
+  `resolveDefaultLanguages` (the renamed `resolveDefaultLanguagesIso3`) looks the setting's stored tags
+  up **by `tag`**; left on `iso2` it would silently match nothing, since `default_languages` now stores
+  tags. The tag lists exist so the variant survives the collapse to `iso3` (`es-419`/`es-ES` both
+  resolve to `spa`); the worker has read them since `031-worker-language-variants`, now split per kind
+  and routed to `getAudioParams`/`getSubtitleParams` respectively (`services/worker/CLAUDE.md`).
 - **`ffprobe-logs/`** — an append-only diagnostic log: one row per `ffprobe` the worker runs, holding
   the probed path and the raw JSON as an opaque `MediumText` string this service never parses.
   `recordFfprobe` is the worker's write path and carries `@AllowService()`; `ffprobeLogs`,
@@ -271,9 +282,17 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `prisma.setting` directly, never through `SettingsService`.
 - **`preferences/`** (`021-user-preferences`) — the caller's own settings, distinct from
   `settings/`'s installation-wide config: `Query.preferences`, `Query.torrentGroups(scope)`,
-  `Mutation.setAllowCinemaReleases`/`setPreferredTrackLanguages`/`setPreferredTorrentGroups`, all
-  self-only (no operation takes a user id; every one carries the same explicit
-  `principal.type !== 'user'` guard `auth.resolver.ts` uses, never `@AllowService()`).
+  `Mutation.setAllowCinemaReleases`/`setPreferredTrackLanguages`/`setPreferredTorrentGroups`/
+  `setAudioMandatory` (`039-per-title-language-split`, `0.2.0`), all self-only (no operation takes a
+  user id; every one carries the same explicit `principal.type !== 'user'` guard `auth.resolver.ts`
+  uses, never `@AllowService()`). **The *Audio mandatory* flag has three independent scopes, not one**
+  — `User.audioMandatory` (this module's `setAudioMandatory`, twin of `setAllowCinemaReleases`),
+  `UserMovie.audioMandatory` (`movies/`'s `setMovieAudioMandatory`) and `UserShow.audioMandatory`
+  (`shows/`'s `setShowAudioMandatory`), each its own column on its own ownership row, default `false`,
+  written by a plain `update` (never an `upsert` — a row that passed the mutation's ownership check
+  already exists). **Nothing reads any of the three** — `EncodeJobDetails` gains no field for it and
+  `process-jobs/` never imports it; the flag is inert by requirement, not by omission (see
+  `docs/spec/graphql-contract.md` § "The *Audio mandatory* flag is inert by design").
   `PreferencesService.setAllowCinemaReleases` delegates the write to `UsersService`, then re-reads;
   `setPreferredTorrentGroupsFor` is the one write this module owns directly — it resolves every id
   against `torrent_groups` before any write (`TORRENT_GROUP_NOT_FOUND`/`_DUPLICATED`/`_WRONG_SCOPE`,

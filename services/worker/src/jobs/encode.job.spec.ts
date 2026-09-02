@@ -60,8 +60,10 @@ const PROCESS_JOB_DETAILS = {
   year: 2020,
   originalLanguage: 'en',
   originalLanguageIso3: 'eng',
-  allowedLanguagesIso3: ['eng'],
-  allowedLanguageTags: ['en'],
+  allowedAudioLanguagesIso3: ['eng'],
+  allowedAudioLanguageTags: ['en'],
+  allowedSubtitleLanguagesIso3: ['eng'],
+  allowedSubtitleLanguageTags: ['en'],
   isLiveAction: true,
   seasonNumber: null,
   episodeNumber: null,
@@ -166,14 +168,20 @@ describe('handleEncode — encodeFailed reporting (018-ui-i18n REQ-11)', () => {
   });
 });
 
-// Defends the payload seam of 031-worker-language-variants (worker/plan.md
-// § Steps 1-3): `allowedLanguageTags` is a third hand-retyped field with no
-// compiler across the GraphQL boundary, and the top row of `../plan.md`
-// § Risks is exactly this field arriving `undefined` and the regional
-// preference silently doing nothing forever. These two cases pin that the
-// field reaches the driver, and that its absence degrades to `[]` (NFR-2)
-// rather than throwing or dropping the encode.
-describe('handleEncode — allowedLanguageTags payload seam (031-worker-language-variants)', () => {
+// Defends the payload seam of 031-worker-language-variants, extended by
+// 039-per-title-language-split (worker/plan.md § Steps 1-3): the single
+// `allowedLanguagesIso3`/`allowedLanguageTags` pair became four hand-retyped
+// fields — `allowedAudioLanguagesIso3`, `allowedAudioLanguageTags`,
+// `allowedSubtitleLanguagesIso3`, `allowedSubtitleLanguageTags` — with no
+// compiler across the GraphQL boundary. Three of the four renamed correctly
+// and the fourth missed is exactly the failure mode this suite exists to
+// catch: the field arrives `undefined`, reads as "no preference of that
+// kind", and the feature does nothing for that list forever. These cases pin
+// that all four reach the driver under their own name, and that the two
+// **tag** lists specifically degrade to `[]` (NFR-2) rather than throwing —
+// the two iso3 lists stay undefended per worker/plan.md § Existing code to
+// reuse, so a missing one still fails loudly instead of degrading here.
+describe('handleEncode — allowed*Language* payload seam (031-worker-language-variants, 039-per-title-language-split)', () => {
   function mockSuccessfulGraphQL(processJob: Record<string, unknown>) {
     fetchGraphQLMock.mockImplementation((query: string) => {
       if (query.includes('processJob(id:')) {
@@ -193,26 +201,40 @@ describe('handleEncode — allowedLanguageTags payload seam (031-worker-language
     });
   }
 
-  it('passes allowedLanguageTags through to the encode() call unchanged', async () => {
-    mockSuccessfulGraphQL({ ...PROCESS_JOB_DETAILS, allowedLanguageTags: ['en', 'es-419'] });
+  it('passes all four allowed*Language* lists through to the encode() call unchanged, each under its own name', async () => {
+    mockSuccessfulGraphQL({
+      ...PROCESS_JOB_DETAILS,
+      allowedAudioLanguagesIso3: ['eng', 'jpn'],
+      allowedAudioLanguageTags: ['en', 'ja'],
+      allowedSubtitleLanguagesIso3: ['spa'],
+      allowedSubtitleLanguageTags: ['es-419'],
+    });
     encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
 
     await handleEncode(makeJob());
 
     expect(encodeMock).toHaveBeenCalledTimes(1);
     const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
-    expect(details.allowedLanguageTags).toEqual(['en', 'es-419']);
+    expect(details.allowedAudioLanguagesIso3).toEqual(['eng', 'jpn']);
+    expect(details.allowedAudioLanguageTags).toEqual(['en', 'ja']);
+    expect(details.allowedSubtitleLanguagesIso3).toEqual(['spa']);
+    expect(details.allowedSubtitleLanguageTags).toEqual(['es-419']);
   });
 
-  it('degrades a processJob with no allowedLanguageTags to [] rather than throwing (NFR-2)', async () => {
-    const { allowedLanguageTags: _omit, ...withoutTags } = PROCESS_JOB_DETAILS;
+  it('degrades a processJob with no allowedAudioLanguageTags/allowedSubtitleLanguageTags to [] rather than throwing (NFR-2)', async () => {
+    const {
+      allowedAudioLanguageTags: _omitAudio,
+      allowedSubtitleLanguageTags: _omitSubtitle,
+      ...withoutTags
+    } = PROCESS_JOB_DETAILS;
     mockSuccessfulGraphQL(withoutTags);
     encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
 
     await expect(handleEncode(makeJob())).resolves.toBeUndefined();
 
     const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
-    expect(details.allowedLanguageTags).toEqual([]);
+    expect(details.allowedAudioLanguageTags).toEqual([]);
+    expect(details.allowedSubtitleLanguageTags).toEqual([]);
   });
 });
 

@@ -15,7 +15,9 @@ export interface Movie {
   originalLanguage: string;
   isLiveAction: boolean;
   status: string;
-  preferredLanguages: Language[];
+  audioLanguages: Language[];
+  subtitleLanguages: Language[];
+  audioMandatory: boolean;
 }
 
 export async function getMovies(): Promise<Movie[]> {
@@ -62,12 +64,19 @@ const GET_MOVIE_QUERY = `
       originalLanguage
       isLiveAction
       status
-      preferredLanguages {
+      audioLanguages {
         id
         tag
         iso2
         name
       }
+      subtitleLanguages {
+        id
+        tag
+        iso2
+        name
+      }
+      audioMandatory
     }
   }
 `;

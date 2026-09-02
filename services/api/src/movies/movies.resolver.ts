@@ -1,8 +1,10 @@
 import { Resolver, Query, Mutation, Args, Int, ResolveField, Parent } from '@nestjs/graphql';
+import { LanguageTrackKind as PrismaLanguageTrackKind } from '@prisma/client';
 import { MoviesService } from './movies.service';
 import { Movie } from './entities/movies.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { LanguagesService } from '@/languages/languages.service';
+import { LanguageTrackKind } from '@/preferences/entities/language-track-kind.enum';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
 import { i18nError } from '@/i18n/i18n-error';
@@ -15,13 +17,37 @@ export class MoviesResolver {
     private readonly languagesService: LanguagesService,
   ) {}
 
-  // A field resolver only runs when the client selects it — keeps the
+  // Field resolvers only run when the client selects them — keeps the
   // `movies` listing from turning into N+1 (see 011-av1-transcode/plan.md's
-  // risk table). The caller's own per-title list, never the merged set.
+  // risk table). The caller's own per-title list, per kind, never the
+  // merged set (039-per-title-language-split).
   @ResolveField(() => [Language])
-  async preferredLanguages(@Parent() movie: Movie, @CurrentUser() principal: AuthPrincipal) {
+  async audioLanguages(@Parent() movie: Movie, @CurrentUser() principal: AuthPrincipal) {
     const userId = principal.type === 'user' ? principal.id : '';
-    return this.languagesService.findMoviePreferredLanguagesFor(userId, movie.id);
+    return this.languagesService.findMoviePreferredTrackLanguagesFor(
+      userId,
+      movie.id,
+      PrismaLanguageTrackKind.AUDIO,
+    );
+  }
+
+  @ResolveField(() => [Language])
+  async subtitleLanguages(@Parent() movie: Movie, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.languagesService.findMoviePreferredTrackLanguagesFor(
+      userId,
+      movie.id,
+      PrismaLanguageTrackKind.SUBTITLE,
+    );
+  }
+
+  // The caller's own audio-mandatory flag for this film (039-per-title-
+  // language-split REQ-9). Only runs when the client selects it, same
+  // N+1-avoidance reasoning as audioLanguages/subtitleLanguages above.
+  @ResolveField(() => Boolean)
+  async audioMandatory(@Parent() movie: Movie, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.findAudioMandatoryFor(userId, movie.id);
   }
 
   // Direct query against the DB (MariaDB / Prisma), scoped to the caller's
@@ -80,11 +106,12 @@ export class MoviesResolver {
   }
 
   @Mutation(() => [Language], {
-    name: 'setMoviePreferredLanguages',
-    description: 'Reemplaza la preferencia de idiomas del usuario para esta película',
+    name: 'setMoviePreferredTrackLanguages',
+    description: 'Reemplaza la preferencia de idiomas del usuario para esta película, para un tipo de pista',
   })
-  async setMoviePreferredLanguages(
+  async setMoviePreferredTrackLanguages(
     @Args('movieId', { type: () => Int }) movieId: number,
+    @Args('kind', { type: () => LanguageTrackKind }) kind: LanguageTrackKind,
     @Args('tags', { type: () => [String] }) tags: string[],
     @CurrentUser() principal: AuthPrincipal,
   ) {
@@ -97,6 +124,28 @@ export class MoviesResolver {
     // as movie(id), same message reused verbatim from 008-movie-detail.
     const movie = await this.moviesService.findOneFromDb(movieId, userId);
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
-    return this.languagesService.setMoviePreferredLanguagesFor(userId, movieId, tags);
+    return this.languagesService.setMoviePreferredTrackLanguagesFor(
+      userId,
+      movieId,
+      kind as unknown as PrismaLanguageTrackKind,
+      tags,
+    );
+  }
+
+  @Mutation(() => Boolean, {
+    name: 'setMovieAudioMandatory',
+    description: 'Marca si el audio en el idioma preferido es obligatorio para esta película',
+  })
+  async setMovieAudioMandatory(
+    @Args('movieId', { type: () => Int }) movieId: number,
+    @Args('mandatory', { type: () => Boolean }) mandatory: boolean,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    // Same ownership refusal as setMoviePreferredTrackLanguages, reused
+    // verbatim (039-per-title-language-split REQ-10).
+    const movie = await this.moviesService.findOneFromDb(movieId, userId);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
+    return this.moviesService.setAudioMandatoryFor(userId, movieId, mandatory);
   }
 }

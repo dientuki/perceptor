@@ -210,7 +210,12 @@ suite — see `services/web/CLAUDE.md`) — and again 2026-09-01 after `037-inde
 `api` 294/32 suites (`worker` untouched by that feature) — and again 2026-09-01 after
 `038-encode-report-durability`: `api` 301/32 suites (`worker` untouched by that feature) — and again
 2026-09-02 after `021-user-preferences`: `api` 308/33 suites, `web` typechecks at 0 errors and
-`bin/npm web run build` exits 0 (`worker` untouched by that feature).
+`bin/npm web run build` exits 0 (`worker` untouched by that feature) — and again 2026-09-02 after
+`039-per-title-language-split`: `api` 313/33 suites, `worker` 151/152 tests across 16 suites (one
+pre-existing, unrelated failure in `src/ffmpeg/cases.spec.ts` — a stale expected track-title string
+in the `2.json` corpus fixture, confirmed present at `HEAD` before this feature touched anything;
+not fixed here since `params.ts` was explicitly out of scope), `web` typechecks at 0 errors and
+`bin/npm web run build` exits 0.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

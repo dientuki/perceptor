@@ -50,10 +50,20 @@ export class Show {
   @Field(() => [Season])
   seasons: Season[];
 
-  // The calling user's own per-title preference — never the merged set of
-  // every owner (011-av1-transcode). Resolved by ShowsResolver, not
-  // included by ShowsService.findOneFromDb, so listing this show does not
-  // trigger the resolve unless the client actually selects the field.
+  // The calling user's own per-title preference, split by kind
+  // (039-per-title-language-split) — never the merged set of every owner
+  // (011-av1-transcode). Resolved by ShowsResolver, not included by
+  // ShowsService.findOneFromDb, so listing this show does not trigger the
+  // resolve unless the client actually selects the field.
   @Field(() => [Language])
-  preferredLanguages: Language[];
+  audioLanguages: Language[];
+
+  @Field(() => [Language])
+  subtitleLanguages: Language[];
+
+  // The calling user's own audio-mandatory flag for this series, read off
+  // the ownership row (039-per-title-language-split REQ-9). Inert this cycle
+  // — nothing consumes it yet (REQ-11).
+  @Field()
+  audioMandatory: boolean;
 }

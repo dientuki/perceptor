@@ -1,8 +1,11 @@
 import Image from "next/image";
 import { getTranslations } from "next-intl/server";
-import { setShowPreferredLanguagesAction } from "@/actions/languages";
+import {
+  setShowAudioMandatoryAction,
+  setShowPreferredTrackLanguagesAction,
+} from "@/actions/languages";
 import type { Show as ShowRecord } from "@/actions/shows";
-import LanguagePicker from "@/components/media/LanguagePicker";
+import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
 import type { Language } from "@/types/languages";
 
 export default async function Show({
@@ -13,7 +16,17 @@ export default async function Show({
   languageOptions: Language[];
 }) {
   const t = await getTranslations("shows.detail");
-  const setPreferredLanguages = setShowPreferredLanguagesAction.bind(
+  const setShowAudioLanguages = setShowPreferredTrackLanguagesAction.bind(
+    null,
+    show.id,
+    "AUDIO",
+  );
+  const setShowSubtitleLanguages = setShowPreferredTrackLanguagesAction.bind(
+    null,
+    show.id,
+    "SUBTITLE",
+  );
+  const setShowAudioMandatory = setShowAudioMandatoryAction.bind(
     null,
     show.id,
   );
@@ -63,10 +76,14 @@ export default async function Show({
         </div>
 
         <div className="space-y-2">
-          <LanguagePicker
+          <TitleLanguagesForm
             options={languageOptions}
-            selected={show.preferredLanguages ?? []}
-            action={setPreferredLanguages}
+            audioSelected={show.audioLanguages ?? []}
+            subtitleSelected={show.subtitleLanguages ?? []}
+            audioMandatory={show.audioMandatory ?? false}
+            setAudioAction={setShowAudioLanguages}
+            setSubtitleAction={setShowSubtitleLanguages}
+            setAudioMandatoryAction={setShowAudioMandatory}
           />
         </div>
       </div>

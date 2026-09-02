@@ -7,6 +7,7 @@ import { useMemo, useState, useTransition } from "react";
 import { setUiLocaleAction } from "@/actions/locale";
 import {
   setAllowCinemaReleasesAction,
+  setAudioMandatoryAction,
   setPreferredTorrentGroupsAction,
   setPreferredTrackLanguagesAction,
 } from "@/actions/preferences";
@@ -71,6 +72,9 @@ export default function PreferencesForm({
   const [allowCinemaReleases, setAllowCinemaReleases] = useState(
     preferences.allowCinemaReleases,
   );
+  const [audioMandatory, setAudioMandatory] = useState(
+    preferences.audioMandatory,
+  );
   const [movieGroupIds, setMovieGroupIds] = useState<string[]>(() =>
     idsFrom(preferences.torrentGroups, "MOVIE"),
   );
@@ -128,6 +132,7 @@ export default function PreferencesForm({
         cinemaResult,
         movieResult,
         showResult,
+        audioMandatoryResult,
       ] = await Promise.all([
         setUiLocaleAction(null, localeForm),
         setPreferredTrackLanguagesAction("AUDIO", null, audioForm),
@@ -135,6 +140,7 @@ export default function PreferencesForm({
         setAllowCinemaReleasesAction(allowCinemaReleases),
         setPreferredTorrentGroupsAction("MOVIE", null, movieForm),
         setPreferredTorrentGroupsAction("SHOW", null, showForm),
+        setAudioMandatoryAction(audioMandatory),
       ]);
 
       const newErrors: string[] = [];
@@ -161,6 +167,10 @@ export default function PreferencesForm({
       if (showResult && "error" in showResult && showResult.error) {
         newErrors.push(showResult.error);
         setShowGroupIds(idsFrom(preferences.torrentGroups, "SHOW"));
+      }
+      if ("error" in audioMandatoryResult && audioMandatoryResult.error) {
+        newErrors.push(audioMandatoryResult.error);
+        setAudioMandatory(preferences.audioMandatory);
       }
 
       setErrors(newErrors);
@@ -197,12 +207,20 @@ export default function PreferencesForm({
 
         <div className={panelClass("downloadLanguages")}>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <LanguagePickerField
-              options={languages}
-              value={audioTags}
-              onChange={setAudioTags}
-              label={t("audioLanguagesLabel")}
-            />
+            <div className="space-y-4">
+              <LanguagePickerField
+                options={languages}
+                value={audioTags}
+                onChange={setAudioTags}
+                label={t("audioLanguagesLabel")}
+              />
+              <Checkbox
+                id="audio-mandatory"
+                checked={audioMandatory}
+                onChange={setAudioMandatory}
+                label={t("audioMandatoryLabel")}
+              />
+            </div>
             <LanguagePickerField
               options={languages}
               value={subtitleTags}

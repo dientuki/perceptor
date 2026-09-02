@@ -383,7 +383,7 @@ already receives a `mediaType` prop for its own empty-state text and now forward
 `web` retypes this query by hand in `src/actions/shows.ts`'s `getShowById`, same as every other
 query — no codegen.
 
-### Language preferences drive the encode payload, in two different ISO vocabularies (`011-av1-transcode`, revised by `029-settings-screen-tabs`, `030-language-regional-variants`)
+### Language preferences drive the encode payload, in two different ISO vocabularies (`011-av1-transcode`, revised by `029-settings-screen-tabs`, `030-language-regional-variants`, `039-per-title-language-split`)
 
 ```graphql
 type Language {
@@ -399,24 +399,46 @@ type Query {
 }
 
 type Movie {
-  preferredLanguages: [Language!]!
+  audioLanguages: [Language!]!
+  subtitleLanguages: [Language!]!
+  audioMandatory: Boolean!
 }
 
 type Show {
-  preferredLanguages: [Language!]!
+  audioLanguages: [Language!]!
+  subtitleLanguages: [Language!]!
+  audioMandatory: Boolean!
+}
+
+type UserPreferences {
+  audioMandatory: Boolean!
 }
 
 type Mutation {
-  setMoviePreferredLanguages(movieId: Int!, tags: [String!]!): [Language!]!
-  setShowPreferredLanguages(showId: Int!, tags: [String!]!): [Language!]!
+  setMoviePreferredTrackLanguages(movieId: Int!, kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
+  setShowPreferredTrackLanguages(showId: Int!, kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
+  setMovieAudioMandatory(movieId: Int!, mandatory: Boolean!): Boolean!
+  setShowAudioMandatory(showId: Int!, mandatory: Boolean!): Boolean!
+  setAudioMandatory(mandatory: Boolean!): UserPreferences!
 }
 
 type EncodeJobDetails {
   # …every existing field, unchanged…
-  allowedLanguagesIso3: [String!]!
-  allowedLanguageTags: [String!]!
+  allowedAudioLanguagesIso3: [String!]!
+  allowedAudioLanguageTags: [String!]!
+  allowedSubtitleLanguagesIso3: [String!]!
+  allowedSubtitleLanguageTags: [String!]!
 }
 ```
+
+As of `039-per-title-language-split`, `Movie.preferredLanguages`/`Show.preferredLanguages` and
+`setMoviePreferredLanguages`/`setShowPreferredLanguages` are **gone, not deprecated** —
+`audioLanguages`/`subtitleLanguages` and `setMoviePreferredTrackLanguages`/
+`setShowPreferredTrackLanguages` (taking `kind: LanguageTrackKind!`) replace them one for one, backed
+by the same `UserMovieLanguage`/`UserShowLanguage` join tables, now keyed additionally by `kind`
+(`@@id([userId, movieId, languageId, kind])`). `EncodeJobDetails.allowedLanguagesIso3`/
+`allowedLanguageTags` are gone the same way, replaced by an audio pair and a subtitle pair built by
+one walk over the same merge described below — see that section for the split.
 
 `Language.tag` is the identifier as of `030-language-regional-variants`: a unique BCP-47 tag (`en`,
 `ja`, `es-419`, `es-ES`). `iso2` stays on the type and in the table but **is no longer unique** —
@@ -441,11 +463,14 @@ composite-key row pointing at `Language`, cascading through the *ownership* row 
 the user's library. Both mutations **replace** the whole list; there is no add/remove pair, and `[]`
 clears it.
 
-`Movie.preferredLanguages`/`Show.preferredLanguages` resolve to the **calling user's own** list for
-that title, never the merge across owners — the merge is an encode-time-only concept. Both mutations
-are scoped exactly like `movie(id)`/`show(id)` already are: an unowned title is refused with the
-existing `La película <id> no existe` / `Recurso no disponible para este usuario`, reused verbatim,
-never a new string. Neither mutation carries `@AllowService()`.
+`Movie.audioLanguages`/`Movie.subtitleLanguages` (and the `Show` twins) resolve to the **calling
+user's own** list for that title and kind, never the merge across owners — the merge is an
+encode-time-only concept. Both mutations are scoped exactly like `movie(id)`/`show(id)` already are:
+an unowned title is refused with the existing `La película <id> no existe` / `Recurso no disponible
+para este usuario`, reused verbatim, never a new string. Neither mutation carries `@AllowService()`.
+`Movie.audioMandatory`/`Show.audioMandatory` are read the same way, off the `user_movies`/
+`user_shows` ownership row rather than a join table — see "The *Audio mandatory* flag is inert by
+design" below.
 
 Both mutations' list argument is `tags` as of `030-language-regional-variants` — renamed from `iso2`,
 since a stored preference is now identified by BCP-47 tag rather than ISO-639-1 code. This is the
@@ -472,43 +497,63 @@ deduplicated — the per-title level above is completely unchanged; only the glo
 per-user table to a single setting. No backfill: the old `user_languages` rows were discarded with
 the table, since the project was still in development when this shipped.
 
-`EncodeJobDetails.allowedLanguagesIso3` is where the two vocabularies meet. Every stored preference
-is now a BCP-47 tag (`es`, `es-419`, `es-ES`, `en`, `ja`) — `es-419`/`es-ES` share the ISO-639-1 code
-`es` with the base row, which is the same alphabet `Movie.originalLanguage`/`Show.originalLanguage`
-already use, since that's what TMDB returns. But `ffprobe` reports `tags.language` in ISO-639-2/B
-(`spa`, `eng`, `jpn`), and that's what the worker actually compares against. `allowedLanguagesIso3`
-is `api`'s merge — `{original} ∪ ⋃(global pref of every owner) ∪ ⋃(per-title pref of every owner)`,
-deduplicated, original first — resolved server-side into `iso3` before it ever leaves `api`, because
-`Language` (with both codes) only exists on this side of the boundary. `originalLanguageIso3` stays
-on the payload alongside it, not redundant with the list's first element: the worker needs to know
-*which* of the allowed languages is the mandatory one, and inferring that from list position is a
-rule that breaks the moment someone reorders the list. The field is hand-retyped in **two** places on
-the worker side with no compiler across either seam — `src/jobs/encode.job.ts`'s `EncodeJobDetails`
-and `src/encode/types.ts`'s `EncodeInput` — miss one and the field silently arrives `undefined`,
-which the rule functions would read as "keep the original language only," no error anywhere.
+`EncodeJobDetails.allowedAudioLanguagesIso3`/`allowedSubtitleLanguagesIso3` is where the two
+vocabularies meet. Every stored preference is a BCP-47 tag (`es`, `es-419`, `es-ES`, `en`, `ja`) —
+`es-419`/`es-ES` share the ISO-639-1 code `es` with the base row, which is the same alphabet
+`Movie.originalLanguage`/`Show.originalLanguage` already use, since that's what TMDB returns. But
+`ffprobe` reports `tags.language` in ISO-639-2/B (`spa`, `eng`, `jpn`), and that's what the worker
+actually compares against. As of `039-per-title-language-split`, this used to be **one** merged list
+feeding both the audio and subtitle rule functions; it is now **two**, each built the same way —
+`{original} ∪ ⋃(`default_languages`) ∪ ⋃(per-title preference of every owner, of that kind only)`,
+deduplicated, original first — resolved server-side into `iso3` before either ever leaves `api`,
+because `Language` (with both codes) only exists on this side of the boundary. `originalLanguageIso3`
+stays on the payload alongside the audio pair only, not redundant with either list's first element:
+the worker needs to know *which* of the allowed audio languages is the mandatory one, and inferring
+that from list position is a rule that breaks the moment someone reorders the list. Both fields are
+hand-retyped in **two** places on the worker side with no compiler across either seam —
+`src/jobs/encode.job.ts`'s `EncodeJobDetails` and `src/encode/types.ts`'s `EncodeInput` — miss one and
+that field silently arrives `undefined`, which the rule function reads as "no preference of that
+kind," no error anywhere. **`default_languages` itself is not split** — the same installation-wide
+setting seeds both the audio and the subtitle pair, unsplit, exactly as it did before this feature;
+only the per-title, per-owner preference is kind-specific.
 
-`EncodeJobDetails.allowedLanguageTags` is the same merge, expressed in tags instead of resolved to
-ISO-639-2/B — added by `030-language-regional-variants` and consumed by the worker since
-`031-worker-language-variants`.
-It exists because the collapse to `iso3` is lossy by design: `es-419` and `es-ES` both resolve to
-`spa`, so `allowedLanguagesIso3` alone cannot tell the worker which Spanish variant, if any, was
-actually asked for. `allowedLanguageTags` preserves that. It is **not** a superset that makes
-`allowedLanguagesIso3` redundant — the worker only ever matches `ffprobe`'s ISO-639-2/B output, so
-`allowedLanguagesIso3` cannot be dropped or narrowed without breaking every encode. Both fields are
-produced by the same walk in `collectAllowedLanguages`
-(`services/api/src/process-jobs/process-jobs.service.ts`), with the same dedup and the same
-original-first ordering, so the two lists cannot drift apart from separate merges. `EncodeJobDetails`
-resolves a title's `originalLanguage` (ISO-639-1) to `{ tag, iso3 }` via `resolveOriginalLanguage`, a
-single lookup **keyed by `tag`** rather than `iso2` — a base row's tag is its ISO-639-1 code by
-construction, so this is exact, unlike a lookup on the now-non-unique `iso2`, which could return a
-variant row instead of the base one and open every Spanish-original title's `allowedLanguageTags` with
-a variant nobody chose. `031-worker-language-variants` is the follow-up `030` left this to: the
-worker now reads the tags and uses them to choose *which* Spanish track to keep. It resolves
-`es-419`/`es-ES` → `spa` from a worker-local table (`services/worker/src/ffmpeg/variants.ts`), in the
-same spirit as `iso639.ts`, because the payload carries two flat lists and not the tag→`iso3`
-association — only `api` holds the `languages` table that links them. Moving `{ tag, iso3 }` pairs
-onto the wire would remove that duplication and is the right move the day a third language grows
-variants; it stayed out of scope for two table rows.
+`EncodeJobDetails.allowedAudioLanguageTags`/`allowedSubtitleLanguageTags` are the same two merges,
+expressed in tags instead of resolved to ISO-639-2/B — added by `030-language-regional-variants` (as
+one field) and consumed by the worker since `031-worker-language-variants`; split into a pair by
+`039-per-title-language-split` alongside the iso3 pair, for the identical reason. They exist because
+the collapse to `iso3` is lossy by design: `es-419` and `es-ES` both resolve to `spa`, so the iso3
+lists alone cannot tell the worker which Spanish variant, if any, was actually asked for — the tag
+lists preserve that. Neither tag list is a superset that makes its iso3 counterpart redundant — the
+worker only ever matches `ffprobe`'s ISO-639-2/B output, so neither iso3 list can be dropped or
+narrowed without breaking every encode. All four fields are produced by **one walk** over four `Set`s
+in `collectAllowedLanguages` (`services/api/src/process-jobs/process-jobs.service.ts`) — the original
+language and every `default_languages` entry seed all four unconditionally, and each owner's per-title
+preference seeds only the pair matching its `kind` — so the audio and subtitle lists cannot drift
+apart from being built by two separate passes over the same data. `EncodeJobDetails` resolves a
+title's `originalLanguage` (ISO-639-1) to `{ tag, iso3 }` via `resolveOriginalLanguage`, a single
+lookup **keyed by `tag`** rather than `iso2` — a base row's tag is its ISO-639-1 code by construction,
+so this is exact, unlike a lookup on the now-non-unique `iso2`, which could return a variant row
+instead of the base one and open every Spanish-original title's tag lists with a variant nobody chose.
+`031-worker-language-variants` is the follow-up `030` left this to: the worker reads the tags and uses
+them to choose *which* Spanish track to keep, routing the audio pair to `getAudioParams` and the
+subtitle pair to `getSubtitleParams` in `src/ffmpeg/buildCommand.ts` — two argument pairs into two
+functions, never crossed. It resolves `es-419`/`es-ES` → `spa` from a worker-local table
+(`services/worker/src/ffmpeg/variants.ts`), in the same spirit as `iso639.ts`, because the payload
+carries flat lists and not the tag→`iso3` association — only `api` holds the `languages` table that
+links them. Moving `{ tag, iso3 }` pairs onto the wire would remove that duplication and is the right
+move the day a third language grows variants; it stayed out of scope here too.
+
+**The *Audio mandatory* flag is inert by design (`039-per-title-language-split`, `0.2.0`).**
+`UserPreferences.audioMandatory`, `Movie.audioMandatory` and `Show.audioMandatory` are three
+independent booleans (`User.audioMandatory`, `UserMovie.audioMandatory`, `UserShow.audioMandatory` —
+one column each, default `false`, not per-language and not tri-state), written by
+`setAudioMandatory`/`setMovieAudioMandatory`/`setShowAudioMandatory` respectively. **Nothing reads
+any of the three** — `EncodeJobDetails` gains no field for it, `collectAllowedLanguages` never touches
+it, and `grep -rn "audioMandatory" services/worker/` returns nothing. This is the requirement, not an
+oversight left for later: the flag exists in the UI and the database only, as a placeholder for a
+future worker rule that does not exist yet. A future change that starts consuming it must add a new
+`EncodeJobDetails` field explicitly — reading `UserMovie.audioMandatory` directly from `worker` would
+violate Article III (the database belongs to `api`) even once a consumer exists.
 
 A missing original-language audio track is a hard failure (`encodeFailed`, no new GraphQL surface) —
 replacing the previous behaviour of silently copying every audio track untranscoded. A missing *extra*

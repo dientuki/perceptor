@@ -80,63 +80,77 @@ export class LanguagesService {
     });
   }
 
-  // A user's per-title preference for a film, added to the installation's
-  // `default_languages` setting at encode time — never a replacement for it
-  // (029-settings-screen-tabs). Replaces the whole set for this
-  // (userId, movieId) pair; [] clears it.
-  async setMoviePreferredLanguagesFor(
+  // A user's per-title, per-kind preference for a film, added to the
+  // installation's `default_languages` setting at encode time — never a
+  // replacement for it (029-settings-screen-tabs). Replaces the whole set for
+  // this (userId, movieId, kind) triple; [] clears it. The delete is narrowed
+  // to `{ userId, movieId, kind }` — never bare `{ userId, movieId }` — so
+  // writing AUDIO can never wipe the sibling SUBTITLE rows for the same title
+  // (039-per-title-language-split).
+  async setMoviePreferredTrackLanguagesFor(
     userId: string,
     movieId: number,
+    kind: LanguageTrackKind,
     tags: string[],
   ): Promise<Language[]> {
     const languageIds = await this.validateAndResolveLanguageIds(tags);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.userMovieLanguage.deleteMany({ where: { userId, movieId } });
+      await tx.userMovieLanguage.deleteMany({ where: { userId, movieId, kind } });
       if (languageIds.length > 0) {
         await tx.userMovieLanguage.createMany({
-          data: languageIds.map((languageId) => ({ userId, movieId, languageId })),
+          data: languageIds.map((languageId) => ({ userId, movieId, kind, languageId })),
         });
       }
     });
 
-    return this.findMoviePreferredLanguagesFor(userId, movieId);
+    return this.findMoviePreferredTrackLanguagesFor(userId, movieId, kind);
   }
 
-  async findMoviePreferredLanguagesFor(userId: string, movieId: number): Promise<Language[]> {
+  async findMoviePreferredTrackLanguagesFor(
+    userId: string,
+    movieId: number,
+    kind: LanguageTrackKind,
+  ): Promise<Language[]> {
     const rows = await this.prisma.userMovieLanguage.findMany({
-      where: { userId, movieId },
+      where: { userId, movieId, kind },
       include: { language: true },
     });
     return rows.map((row) => this.toLanguage(row.language));
   }
 
-  // A user's per-title preference for a series, added to the installation's
-  // `default_languages` setting at encode time — never a replacement for it
-  // (029-settings-screen-tabs). Replaces the whole set for this
-  // (userId, showId) pair; [] clears it.
-  async setShowPreferredLanguagesFor(
+  // A user's per-title, per-kind preference for a series, added to the
+  // installation's `default_languages` setting at encode time — never a
+  // replacement for it (029-settings-screen-tabs). Replaces the whole set for
+  // this (userId, showId, kind) triple; [] clears it. Same narrowed-delete
+  // reasoning as the movie twin above (039-per-title-language-split).
+  async setShowPreferredTrackLanguagesFor(
     userId: string,
     showId: number,
+    kind: LanguageTrackKind,
     tags: string[],
   ): Promise<Language[]> {
     const languageIds = await this.validateAndResolveLanguageIds(tags);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.userShowLanguage.deleteMany({ where: { userId, showId } });
+      await tx.userShowLanguage.deleteMany({ where: { userId, showId, kind } });
       if (languageIds.length > 0) {
         await tx.userShowLanguage.createMany({
-          data: languageIds.map((languageId) => ({ userId, showId, languageId })),
+          data: languageIds.map((languageId) => ({ userId, showId, kind, languageId })),
         });
       }
     });
 
-    return this.findShowPreferredLanguagesFor(userId, showId);
+    return this.findShowPreferredTrackLanguagesFor(userId, showId, kind);
   }
 
-  async findShowPreferredLanguagesFor(userId: string, showId: number): Promise<Language[]> {
+  async findShowPreferredTrackLanguagesFor(
+    userId: string,
+    showId: number,
+    kind: LanguageTrackKind,
+  ): Promise<Language[]> {
     const rows = await this.prisma.userShowLanguage.findMany({
-      where: { userId, showId },
+      where: { userId, showId, kind },
       include: { language: true },
     });
     return rows.map((row) => this.toLanguage(row.language));

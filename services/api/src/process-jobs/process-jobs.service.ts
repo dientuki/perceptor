@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { LanguageTrackKind } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { SettingsService } from '@/settings/settings.service';
@@ -54,10 +55,12 @@ export class ProcessJobsService {
     if (processJob.movie) {
       const { movie } = processJob;
       const original = await this.resolveOriginalLanguage(movie.originalLanguage);
-      const { iso3Codes: allowedLanguagesIso3, tags: allowedLanguageTags } = await this.mergeMovieAllowedLanguages(
-        movie.id,
-        original,
-      );
+      const {
+        audioIso3Codes: allowedAudioLanguagesIso3,
+        audioTags: allowedAudioLanguageTags,
+        subtitleIso3Codes: allowedSubtitleLanguagesIso3,
+        subtitleTags: allowedSubtitleLanguageTags,
+      } = await this.mergeMovieAllowedLanguages(movie.id, original);
       return {
         ...base,
         kind: 'MOVIE',
@@ -71,8 +74,10 @@ export class ProcessJobsService {
         episodeNumber: null,
         episodeTitle: null,
         outputRoot: await this.resolveOutputRoot('path_movies'),
-        allowedLanguagesIso3,
-        allowedLanguageTags,
+        allowedAudioLanguagesIso3,
+        allowedAudioLanguageTags,
+        allowedSubtitleLanguagesIso3,
+        allowedSubtitleLanguageTags,
       };
     }
 
@@ -80,10 +85,12 @@ export class ProcessJobsService {
       const { episode } = processJob;
       const { show } = episode.season;
       const original = await this.resolveOriginalLanguage(show.originalLanguage);
-      const { iso3Codes: allowedLanguagesIso3, tags: allowedLanguageTags } = await this.mergeShowAllowedLanguages(
-        show.id,
-        original,
-      );
+      const {
+        audioIso3Codes: allowedAudioLanguagesIso3,
+        audioTags: allowedAudioLanguageTags,
+        subtitleIso3Codes: allowedSubtitleLanguagesIso3,
+        subtitleTags: allowedSubtitleLanguageTags,
+      } = await this.mergeShowAllowedLanguages(show.id, original);
       return {
         ...base,
         kind: 'EPISODE',
@@ -97,8 +104,10 @@ export class ProcessJobsService {
         episodeNumber: episode.episodeNumber,
         episodeTitle: episode.title,
         outputRoot: await this.resolveOutputRoot('path_shows'),
-        allowedLanguagesIso3,
-        allowedLanguageTags,
+        allowedAudioLanguagesIso3,
+        allowedAudioLanguageTags,
+        allowedSubtitleLanguagesIso3,
+        allowedSubtitleLanguageTags,
       };
     }
 
@@ -144,26 +153,27 @@ export class ProcessJobsService {
     return { tag: language.tag, iso3: language.iso3 };
   }
 
-  // REQ-3/REQ-8 (029), extended by REQ-8/AC-9 (030): the set of languages an
-  // encode may keep is {original} ∪ the installation's `default_languages`
-  // setting ∪ every owner's per-title preference, deduplicated, original
-  // first — expressed as BOTH the ISO-639-2/B list the worker matches
-  // against (`allowedLanguagesIso3`) and the BCP-47 tag list that survives
-  // the collapse to iso3 (`allowedLanguageTags`). Both lists come out of the
-  // SAME walk in `collectAllowedLanguages` on purpose: two separate merges
-  // could drift (e.g. a tag added to one Set but not the other), which would
-  // silently mismatch the two fields on the wire with no error anywhere. A
-  // `Set` per list gives us dedup and insertion order for free. A title with
-  // no owners and no default falls through to just the original — no special
-  // case needed (see plan.md's risk list).
+  // REQ-3/REQ-8 (029), extended by REQ-8/AC-9 (030) and REQ-5 (039): the set
+  // of languages an encode may keep, split by track kind. Each pair is
+  // {original} ∪ the installation's `default_languages` setting (unsplit,
+  // contributes to both pairs) ∪ every owner's per-title preference **of
+  // that kind**, deduplicated, original first — expressed as BOTH the
+  // ISO-639-2/B list the worker matches against and the BCP-47 tag list that
+  // survives the collapse to iso3. All four lists come out of the SAME walk
+  // in `collectAllowedLanguages` on purpose: separate merges could drift
+  // (e.g. a tag added to one Set but not another), which would silently
+  // mismatch the fields on the wire with no error anywhere. A `Set` per list
+  // gives us dedup and insertion order for free. A title with no owners and
+  // no default falls through to just the original for both pairs — no
+  // special case needed (see plan.md's risk list).
   private async mergeMovieAllowedLanguages(
     movieId: number,
     original: { tag: string; iso3: string },
-  ): Promise<{ iso3Codes: string[]; tags: string[] }> {
+  ): Promise<{ audioIso3Codes: string[]; audioTags: string[]; subtitleIso3Codes: string[]; subtitleTags: string[] }> {
     const owners = await this.prisma.userMovie.findMany({
       where: { movieId },
       select: {
-        languages: { select: { language: { select: { tag: true, iso3: true } } } },
+        languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
       },
     });
 
@@ -173,11 +183,11 @@ export class ProcessJobsService {
   private async mergeShowAllowedLanguages(
     showId: number,
     original: { tag: string; iso3: string },
-  ): Promise<{ iso3Codes: string[]; tags: string[] }> {
+  ): Promise<{ audioIso3Codes: string[]; audioTags: string[]; subtitleIso3Codes: string[]; subtitleTags: string[] }> {
     const owners = await this.prisma.userShow.findMany({
       where: { showId },
       select: {
-        languages: { select: { language: { select: { tag: true, iso3: true } } } },
+        languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
       },
     });
 
@@ -219,26 +229,45 @@ export class ProcessJobsService {
       .filter((entry): entry is { tag: string; iso3: string } => entry !== null);
   }
 
+  // 039-per-title-language-split, REQ-5: one walk building four Sets, never
+  // two separate merges — see the comment on the two callers above for why.
+  // The original language and every `default_languages` entry seed both
+  // pairs unconditionally; each owner's per-title preference seeds only the
+  // pair matching its own `kind`.
   private async collectAllowedLanguages(
     original: { tag: string; iso3: string },
     owners: Array<{
-      languages: Array<{ language: { tag: string; iso3: string } }>;
+      languages: Array<{ kind: LanguageTrackKind; language: { tag: string; iso3: string } }>;
     }>,
-  ): Promise<{ iso3Codes: string[]; tags: string[] }> {
-    const iso3Codes = new Set<string>([original.iso3]);
-    const tags = new Set<string>([original.tag]);
+  ): Promise<{ audioIso3Codes: string[]; audioTags: string[]; subtitleIso3Codes: string[]; subtitleTags: string[] }> {
+    const audioIso3Codes = new Set<string>([original.iso3]);
+    const audioTags = new Set<string>([original.tag]);
+    const subtitleIso3Codes = new Set<string>([original.iso3]);
+    const subtitleTags = new Set<string>([original.tag]);
 
     for (const defaultLanguage of await this.resolveDefaultLanguages()) {
-      iso3Codes.add(defaultLanguage.iso3);
-      tags.add(defaultLanguage.tag);
+      audioIso3Codes.add(defaultLanguage.iso3);
+      audioTags.add(defaultLanguage.tag);
+      subtitleIso3Codes.add(defaultLanguage.iso3);
+      subtitleTags.add(defaultLanguage.tag);
     }
     for (const owner of owners) {
       for (const titlePref of owner.languages) {
-        iso3Codes.add(titlePref.language.iso3);
-        tags.add(titlePref.language.tag);
+        if (titlePref.kind === LanguageTrackKind.AUDIO) {
+          audioIso3Codes.add(titlePref.language.iso3);
+          audioTags.add(titlePref.language.tag);
+        } else {
+          subtitleIso3Codes.add(titlePref.language.iso3);
+          subtitleTags.add(titlePref.language.tag);
+        }
       }
     }
-    return { iso3Codes: Array.from(iso3Codes), tags: Array.from(tags) };
+    return {
+      audioIso3Codes: Array.from(audioIso3Codes),
+      audioTags: Array.from(audioTags),
+      subtitleIso3Codes: Array.from(subtitleIso3Codes),
+      subtitleTags: Array.from(subtitleTags),
+    };
   }
 
   async encodeStarted(processJobId: number) {

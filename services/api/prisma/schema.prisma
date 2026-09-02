@@ -82,6 +82,7 @@ model User {
   uiLocale String? @db.VarChar(35)
 
   allowCinemaReleases Boolean @default(false)
+  audioMandatory      Boolean @default(false)
 
   movies UserMovie[]
   shows  UserShow[]
@@ -103,6 +104,8 @@ model UserMovie {
 
   createdAt DateTime @default(now())
 
+  audioMandatory Boolean @default(false)
+
   languages UserMovieLanguage[]
 
   @@id([userId, movieId])
@@ -120,6 +123,8 @@ model UserShow {
   show   Show   @relation(fields: [showId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+
+  audioMandatory Boolean @default(false)
 
   languages UserShowLanguage[]
 
@@ -154,7 +159,9 @@ model UserMovieLanguage {
   languageId Int
   language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
 
-  @@id([userId, movieId, languageId])
+  kind LanguageTrackKind @default(AUDIO)
+
+  @@id([userId, movieId, languageId, kind])
   @@index([languageId])
   @@map("user_movie_languages")
 }
@@ -170,7 +177,9 @@ model UserShowLanguage {
   languageId Int
   language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
 
-  @@id([userId, showId, languageId])
+  kind LanguageTrackKind @default(AUDIO)
+
+  @@id([userId, showId, languageId, kind])
   @@index([languageId])
   @@map("user_show_languages")
 }

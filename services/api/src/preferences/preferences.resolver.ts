@@ -60,6 +60,18 @@ export class PreferencesResolver {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Mutation(() => UserPreferences)
+  async setAudioMandatory(
+    @CurrentUser() principal: AuthPrincipal,
+    @Args('mandatory') mandatory: boolean,
+  ): Promise<UserPreferences> {
+    if (principal.type !== 'user') {
+      throw i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED);
+    }
+    return this.preferencesService.setAudioMandatory(principal.id, mandatory);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Mutation(() => [Language])
   async setPreferredTrackLanguages(
     @CurrentUser() principal: AuthPrincipal,

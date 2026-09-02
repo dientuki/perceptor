@@ -433,6 +433,7 @@
     "form": {
       "uiLocaleLabel": "Idioma de Perceptor",
       "audioLanguagesLabel": "Idiomas de audio",
+      "audioMandatoryLabel": "Audio obligatorio",
       "subtitleLanguagesLabel": "Idiomas de subtítulos",
       "cinemaLabel": "Permitir películas de cine",
       "movieGroupsLabel": "Grupos preferidos para películas",

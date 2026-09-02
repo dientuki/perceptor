@@ -2,11 +2,14 @@
 import { FileVideo, Magnet } from "lucide-react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { setMoviePreferredLanguagesAction } from "@/actions/languages";
+import {
+  setMovieAudioMandatoryAction,
+  setMoviePreferredTrackLanguagesAction,
+} from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
-import LanguagePicker from "@/components/media/LanguagePicker";
+import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import type { Language } from "@/types/languages";
@@ -31,7 +34,17 @@ export default function Movie({
     closeModal: closeMagnetModal,
   } = useModal();
   const target: AcquisitionTarget = { kind: "movie", movie };
-  const setMoviePreferredLanguages = setMoviePreferredLanguagesAction.bind(
+  const setMovieAudioLanguages = setMoviePreferredTrackLanguagesAction.bind(
+    null,
+    movie.id,
+    "AUDIO",
+  );
+  const setMovieSubtitleLanguages = setMoviePreferredTrackLanguagesAction.bind(
+    null,
+    movie.id,
+    "SUBTITLE",
+  );
+  const setMovieAudioMandatory = setMovieAudioMandatoryAction.bind(
     null,
     movie.id,
   );
@@ -95,10 +108,14 @@ export default function Movie({
           <h4 className="font-semibold uppercase tracking-wider text-gray-400">
             {t("languagesTitle")}
           </h4>
-          <LanguagePicker
+          <TitleLanguagesForm
             options={languageOptions}
-            selected={movie.preferredLanguages}
-            action={setMoviePreferredLanguages}
+            audioSelected={movie.audioLanguages}
+            subtitleSelected={movie.subtitleLanguages}
+            audioMandatory={movie.audioMandatory}
+            setAudioAction={setMovieAudioLanguages}
+            setSubtitleAction={setMovieSubtitleLanguages}
+            setAudioMandatoryAction={setMovieAudioMandatory}
           />
         </div>
       </div>

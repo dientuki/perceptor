@@ -102,24 +102,31 @@ Article V.
 ## Audio/subtitle/quality rules read a resolved list, never guess (`011-av1-transcode`)
 
 `src/ffmpeg/params.ts`'s `getAudioParams`/`getSubtitleParams` take the allow-list `api` already
-merged and resolved (`EncodeInput.allowedLanguagesIso3`, plus the mandatory
-`originalLanguageIso3`) — they no longer derive their own `[original, 'spa', 'eng']`. This service
-never queries the database and never re-derives that list from an env var (Constitution, Article
-III); a missing edit to either `EncodeJobDetails` (`src/jobs/encode.job.ts`) or `EncodeInput`
-(`src/encode/types.ts`) means the field silently arrives `undefined`, which reads as "keep the
-original language only" with no error anywhere.
+merged and resolved — they no longer derive their own `[original, 'spa', 'eng']`. Since
+`039-per-title-language-split`, that is no longer one list feeding both functions: `EncodeInput`
+carries an **audio pair** (`allowedAudioLanguagesIso3`/`allowedAudioLanguageTags`) handed to
+`getAudioParams` and a separate **subtitle pair**
+(`allowedSubtitleLanguagesIso3`/`allowedSubtitleLanguageTags`) handed to `getSubtitleParams`, plus
+the mandatory `originalLanguageIso3` on the audio side only. This service never queries the
+database and never re-derives either list from an env var (Constitution, Article III); a missing
+edit to either `EncodeJobDetails` (`src/jobs/encode.job.ts`) or `EncodeInput`
+(`src/encode/types.ts`) means one of the four fields silently arrives `undefined`, which reads as
+"no preference of that kind" with no error anywhere.
 
-`031-worker-language-variants` added a **third** field down that same path,
-`allowedLanguageTags` — the same merge expressed in BCP-47 (`en`, `es-419`, `es-ES`) rather than
-collapsed to ISO-639-2/B. The collapse is lossy on purpose: both Spanish variants resolve to `spa`,
-so the tags are the only thing that says *which* Spanish the user asked for. The two lists are not
-interchangeable and neither replaces the other — `allowedLanguagesIso3` is still the only list
-compared against `ffprobe`'s `tags.language`, and narrowing or dropping it breaks every encode in
-every language. `details.allowedLanguageTags ?? []` in `handleEncode` is the **only** defensive
-normalization in that path; both rule functions take the parameter as required, so a call site that
-forgets it fails to compile rather than silently reverting to no regional preference. The existing
-`[encode] <id>:` log line prints both lists, which is how a live encode shows whether the seam is
-actually carrying them.
+`031-worker-language-variants` added the tag lists down that same path — the same merge expressed
+in BCP-47 (`en`, `es-419`, `es-ES`) rather than collapsed to ISO-639-2/B. The collapse is lossy on
+purpose: both Spanish variants resolve to `spa`, so the tags are the only thing that says *which*
+Spanish the user asked for. Within each pair the iso3 list and the tag list are not interchangeable
+and neither replaces the other — the iso3 list is still the only one compared against `ffprobe`'s
+`tags.language`, and narrowing or dropping it breaks every encode in every language; the audio pair
+and the subtitle pair are likewise independent of each other, and passing one where the other
+belongs compiles clean (both are `string[]`) while silently selecting the wrong tracks.
+`details.allowedAudioLanguageTags ?? []`/`details.allowedSubtitleLanguageTags ?? []` in
+`handleEncode` are the **only** defensive normalization in that path — the two iso3 lists stay
+undefended, so a missing one fails loudly instead of degrading; both rule functions take their
+parameters as required, so a call site that forgets one fails to compile rather than silently
+reverting to no preference. The existing `[encode] <id>:` log line prints all four lists, which is
+how a live encode shows whether the seam is actually carrying them.
 
 What the tags changed, in one sentence: a regional variant is now selected **only when the user
 asked for it**. The unconditional Latin American title heuristic is gone — with no requested variant,

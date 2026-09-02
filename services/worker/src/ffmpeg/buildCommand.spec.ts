@@ -12,8 +12,10 @@ import type { EncodeInput } from '../encode/types';
 function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
   return {
     originalLanguageIso3: 'eng',
-    allowedLanguagesIso3: ['eng'],
-    allowedLanguageTags: ['en'],
+    allowedAudioLanguagesIso3: ['eng'],
+    allowedAudioLanguageTags: ['en'],
+    allowedSubtitleLanguagesIso3: ['eng'],
+    allowedSubtitleLanguageTags: ['en'],
     isLiveAction: true,
     ...overrides,
   };
@@ -129,7 +131,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
     expect(args[i + 1]).toBe('5');
   });
 
-  it('forwards allowedLanguagesIso3 into the audio arguments', () => {
+  it('forwards allowedAudioLanguagesIso3 into the audio arguments', () => {
     const metadata = {
       streams: [
         videoStream({ bit_rate: '8000000' }),
@@ -144,8 +146,8 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       metadata,
       details({
         originalLanguageIso3: 'eng',
-        allowedLanguagesIso3: ['eng', 'spa'],
-        allowedLanguageTags: ['en', 'es-419'],
+        allowedAudioLanguagesIso3: ['eng', 'spa'],
+        allowedAudioLanguageTags: ['en', 'es-419'],
       }),
     );
 
@@ -157,7 +159,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
     expect(args.filter((a) => a === '-metadata:s:a:1').length).toBeGreaterThan(0);
   });
 
-  it('reaches getAudioParams/getSubtitleParams without throwing when allowedLanguageTags is present — no rule reads it yet', () => {
+  it('reaches getAudioParams/getSubtitleParams without throwing when allowedAudioLanguageTags/allowedSubtitleLanguageTags are present — no rule reads them yet', () => {
     const metadata = {
       streams: [
         videoStream({ bit_rate: '8000000' }),
@@ -170,8 +172,64 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
         'Some.Movie.WEB-DL.mkv',
         '/out/Some.Movie.WEB-DL.mkv',
         metadata,
-        details({ allowedLanguageTags: ['en', 'es-419'] }),
+        details({
+          allowedAudioLanguageTags: ['en', 'es-419'],
+          allowedSubtitleLanguageTags: ['en', 'es-419'],
+        }),
       ),
     ).not.toThrow();
+  });
+
+  // Before the audio/subtitle allow-lists split, both getAudioParams and
+  // getSubtitleParams read the same array — swapping the two arguments in
+  // buildFfmpegCommand would have been a silent no-op, since every existing
+  // fixture used equal lists for both. This case uses disjoint lists so a
+  // swap is instead a wrong-track selection: audio must never fall back to
+  // 'spa', and no English subtitle may ever be selected.
+  it('routes the audio allow-list and the subtitle allow-list independently (disjoint lists)', () => {
+    const metadata = {
+      streams: [
+        videoStream({ bit_rate: '8000000' }),
+        audioStream({ codec_name: 'ac3', tags: { language: 'jpn' } }),
+        audioStream({ index: 2, codec_name: 'ac3', tags: { language: 'eng' } }),
+        audioStream({ index: 3, codec_name: 'ac3', tags: { language: 'spa' } }),
+        {
+          index: 4,
+          codec_type: 'subtitle' as const,
+          codec_name: 'subrip',
+          tags: { language: 'spa', NUMBER_OF_BYTES: '4000', NUMBER_OF_FRAMES: '100' },
+        },
+        {
+          index: 5,
+          codec_type: 'subtitle' as const,
+          codec_name: 'subrip',
+          tags: { language: 'eng', NUMBER_OF_BYTES: '4000', NUMBER_OF_FRAMES: '100' },
+        },
+      ],
+    };
+
+    const args = buildFfmpegCommand(
+      'Some.Movie.WEB-DL.mkv',
+      '/out/Some.Movie.WEB-DL.mkv',
+      metadata,
+      details({
+        originalLanguageIso3: 'jpn',
+        allowedAudioLanguagesIso3: ['jpn', 'eng'],
+        allowedAudioLanguageTags: [],
+        allowedSubtitleLanguagesIso3: ['spa'],
+        allowedSubtitleLanguageTags: [],
+      }),
+    );
+
+    // Audio: 0:1 (jpn) and 0:2 (eng) selected, 0:3 (spa) never — spa is not
+    // in the audio allow-list.
+    expect(args).toContain('0:1');
+    expect(args).toContain('0:2');
+    expect(args).not.toContain('0:3');
+
+    // Subtitles: 0:4 (spa) selected, 0:5 (eng) never — eng is not in the
+    // subtitle allow-list.
+    expect(args).toContain('0:4');
+    expect(args).not.toContain('0:5');
   });
 });
