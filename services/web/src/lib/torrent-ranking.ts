@@ -12,8 +12,12 @@
 import type { TorrentResult } from "@/types/indexer";
 import type { Language } from "@/types/languages";
 
-/** Groups the user trusts on reputation. Ranked directly under resolution, above source. */
-const PREFERRED_GROUPS = ["ntb", "btm", "flux"];
+/**
+ * Groups the user trusts on reputation. Ranked directly under resolution, above source. Used only
+ * when the caller passes no `preferredGroups` of its own (or an empty one) to `rankTorrentResults`
+ * — the normal case is the caller's own `UserPreferences.torrentGroups`, scoped to MOVIE or SHOW.
+ */
+const DEFAULT_PREFERRED_GROUPS = ["ntb", "btm", "flux"];
 
 /**
  * Streaming-service tags that identify a WEB-DL even when the name never spells out "WEB-DL".
@@ -234,7 +238,10 @@ function resolution(title: string): { tier: number; label: string } {
  * Matched on the trailing release-group segment only, so a title merely containing `flux`
  * mid-string does not match.
  */
-function preferredGroup(title: string): {
+function preferredGroup(
+  title: string,
+  groups: string[],
+): {
   preferred: boolean;
   label: string | null;
 } {
@@ -243,7 +250,7 @@ function preferredGroup(title: string): {
       .trim()
       .split(/[\s.-]+/)
       .pop() ?? "";
-  return PREFERRED_GROUPS.includes(trailingSegment)
+  return groups.includes(trailingSegment)
     ? { preferred: true, label: trailingSegment.toUpperCase() }
     : { preferred: false, label: null };
 }
@@ -365,9 +372,10 @@ function audio(title: string): { rank: number; label: string } {
 function buildRanking(
   title: string,
   requirement: LanguageRequirement | null | undefined,
+  groups: string[],
 ): ReleaseRanking {
   const res = resolution(title);
-  const group = preferredGroup(title);
+  const group = preferredGroup(title, groups);
   const src = source(title);
   const cod = codec(title);
   const range = dynamicRange(title);
@@ -471,7 +479,17 @@ function compareCandidates(
 export function rankTorrentResults(
   results: TorrentResult[],
   requirement?: LanguageRequirement | null,
+  preferredGroups?: string[] | null,
 ): RankedTorrentResult[] {
+  // Caller's own preferred groups (UserPreferences.torrentGroups, scoped MOVIE/SHOW), lower-cased
+  // for the same case-insensitive match `matchesLanguage` uses; falls back to the hardcoded
+  // defaults when the caller passes nothing or an empty list, so a user with no group preference
+  // set yet keeps the original behaviour.
+  const groups =
+    preferredGroups && preferredGroups.length > 0
+      ? preferredGroups.map((g) => g.toLowerCase())
+      : DEFAULT_PREFERRED_GROUPS;
+
   // Pass 1 — veto (REQ-4, REQ-4a). Runs first, so a vetoed release never sets the tier for pass 2.
   const notVetoed = results.filter(
     (result) => !isVetoed(lowerTitle(result)) && !isDeadSwarm(result),
@@ -485,7 +503,7 @@ export function rankTorrentResults(
 
   const ranked: RankedTorrentResult[] = notVetoed.map((result) => ({
     ...result,
-    ranking: buildRanking(lowerTitle(result), requirement),
+    ranking: buildRanking(lowerTitle(result), requirement, groups),
   }));
 
   const maxTier = Math.max(

@@ -2,11 +2,13 @@
 import { FileVideo, Magnet } from "lucide-react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import {
   setMovieAudioMandatoryAction,
   setMoviePreferredTrackLanguagesAction,
 } from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
+import { getPreferences } from "@/actions/preferences";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
@@ -14,6 +16,11 @@ import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import type { Language } from "@/types/languages";
 import type { AcquisitionTarget } from "@/types/media";
+import type { UserPreferences } from "@/types/preferences";
+
+// Debug: the resolution tiers `torrent-ranking.ts`'s `resolution()` recognises, best first —
+// static, so it never needs fetching, but it's the first line of "what are we filtering by".
+const RESOLUTION_ORDER = ["4K", "1080p", "720p", "480p", "360p"];
 
 export default function Movie({
   movie,
@@ -34,6 +41,32 @@ export default function Movie({
     closeModal: closeMagnetModal,
   } = useModal();
   const target: AcquisitionTarget = { kind: "movie", movie };
+
+  const [preferences, setPreferences] = useState<UserPreferences | null>(
+    null,
+  );
+  useEffect(() => {
+    getPreferences()
+      .then(setPreferences)
+      .catch(() => setPreferences(null));
+  }, []);
+
+  // Same merge SearchTorrent.tsx does before ranking: a title with no languages of its own falls
+  // back to the caller's global /preferences instead of ranking unarmed.
+  const usingGlobalLanguages = movie.audioLanguages.length === 0;
+  const effectiveAudioMandatory =
+    usingGlobalLanguages && preferences
+      ? preferences.audioMandatory
+      : movie.audioMandatory;
+  const effectiveAudioLanguages =
+    usingGlobalLanguages && preferences
+      ? preferences.audioLanguages
+      : movie.audioLanguages;
+  const effectiveGroups = preferences
+    ? preferences.torrentGroups
+        .filter((g) => g.scope === "MOVIE")
+        .map((g) => g.name)
+    : [];
   const setMovieAudioLanguages = setMoviePreferredTrackLanguagesAction.bind(
     null,
     movie.id,
@@ -101,6 +134,55 @@ export default function Movie({
           </h4>
           <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">
             {movie.overview || t("noOverview")}
+          </p>
+        </div>
+
+        <div className="space-y-1 rounded-lg border border-dashed border-gray-300 p-3 font-mono text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+          <p className="font-semibold text-gray-600 dark:text-gray-300">
+            Debug — filtros de ranking, en orden
+          </p>
+          <p>resolución (orden): {RESOLUTION_ORDER.join(" > ")}</p>
+          <p>
+            grupos preferidos (scope MOVIE
+            {preferences ? "" : ", cargando…"}):{" "}
+            {effectiveGroups.join(", ") || "— (usa defaults hardcodeados)"}
+          </p>
+          <p>
+            idiomas de audio — efectivo (
+            {usingGlobalLanguages ? "fallback: preferencias globales" : "título"}):{" "}
+            {effectiveAudioLanguages
+              .map((l) => `${l.tag}/${l.iso3}`)
+              .join(", ") || "—"}
+          </p>
+          <p>
+            audio obligatorio — efectivo: {String(effectiveAudioMandatory)}
+          </p>
+          <p className="pt-1 text-gray-400 dark:text-gray-500">
+            título: audioMandatory={String(movie.audioMandatory)},
+            audioLanguages=
+            {movie.audioLanguages.map((l) => `${l.tag}/${l.iso3}`).join(", ") ||
+              "—"}
+            , subtitleLanguages=
+            {movie.subtitleLanguages
+              .map((l) => `${l.tag}/${l.iso3}`)
+              .join(", ") || "—"}
+          </p>
+          <p className="text-gray-400 dark:text-gray-500">
+            global (/preferences): audioMandatory=
+            {preferences ? String(preferences.audioMandatory) : "…"},
+            audioLanguages=
+            {preferences
+              ? preferences.audioLanguages
+                  .map((l) => `${l.tag}/${l.iso3}`)
+                  .join(", ") || "—"
+              : "…"}
+            , grupos(movie)=
+            {preferences
+              ? preferences.torrentGroups
+                  .filter((g) => g.scope === "MOVIE")
+                  .map((g) => g.name)
+                  .join(", ") || "—"
+              : "…"}
           </p>
         </div>
 

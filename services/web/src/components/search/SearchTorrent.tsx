@@ -8,6 +8,7 @@ import {
   addTorrentToMovieAction,
   searchTorrentsAction,
 } from "@/actions/indexer";
+import { getPreferences } from "@/actions/preferences";
 import { addTorrentToEpisodeAction } from "@/actions/shows";
 import ReplaceWarning from "@/components/import/ReplaceWarning";
 import Button from "@/components/ui/button/Button";
@@ -18,6 +19,7 @@ import type {
 import { rankTorrentResults } from "@/lib/torrent-ranking";
 import type { TorrentResult } from "@/types/indexer";
 import type { AcquisitionResult, AcquisitionTarget } from "@/types/media";
+import type { UserPreferences } from "@/types/preferences";
 
 interface SearchTorrentProps {
   target: AcquisitionTarget | null;
@@ -54,7 +56,18 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   const [addError, setAddError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState<TorrentResult | null>(null);
+  const [preferences, setPreferences] = useState<UserPreferences | null>(
+    null,
+  );
   const router = useRouter();
+
+  // Fetched once per mount, independent of `target` — the caller's own preferences are what a
+  // title with nothing configured of its own falls back to (see the language/group merge below).
+  useEffect(() => {
+    getPreferences()
+      .then(setPreferences)
+      .catch(() => setPreferences(null));
+  }, []);
 
   useEffect(() => {
     if (!target) return;
@@ -76,9 +89,14 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
 
   // REQ-25 — the mandatory audio-language requirement of the title being acquired, read off
   // `target` itself: the movie's own fields for a film, the parent series' fields (threaded
-  // through the episode branch, see T011) for an episode. `undefined` for a null target keeps
-  // `rankTorrentResults` on its no-op path rather than passing an armed-looking empty object.
-  const languageRequirement: LanguageRequirement | undefined = target
+  // through the episode branch, see T011) for an episode. When the title carries no audio
+  // languages of its own, fall back to the caller's global `/preferences` (downloadLanguages tab)
+  // instead of ranking as if no requirement existed at all — a title's per-title config and the
+  // user's own default are two different tables (UserMovie/UserMovieLanguage vs UserPreferences)
+  // with nothing merging them anywhere else, so this is the one place that does. `undefined` for a
+  // null target keeps `rankTorrentResults` on its no-op path rather than passing an armed-looking
+  // empty object.
+  const titleAudio = target
     ? target.kind === "movie"
       ? {
           mandatory: target.movie.audioMandatory,
@@ -88,12 +106,31 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
           mandatory: target.audioMandatory,
           languages: target.audioLanguages,
         }
+    : null;
+  const usingGlobalLanguages = titleAudio !== null && titleAudio.languages.length === 0;
+  const languageRequirement: LanguageRequirement | undefined = titleAudio
+    ? usingGlobalLanguages && preferences
+      ? {
+          mandatory: preferences.audioMandatory,
+          languages: preferences.audioLanguages,
+        }
+      : titleAudio
     : undefined;
+
+  // Same idea for the preferred-groups tiebreak — `UserPreferences.torrentGroups` scoped to this
+  // target's kind. There is no per-title override for groups, only the user's global preference.
+  const preferredGroups = preferences
+    ? preferences.torrentGroups
+        .filter(
+          (g) => g.scope === (target?.kind === "movie" ? "MOVIE" : "SHOW"),
+        )
+        .map((g) => g.name)
+    : [];
 
   // The candidate view derives from `results` without ever mutating it — REQ-16/AC-5 depend on
   // `results` surviving in the API's original order for as long as the modal is open.
   const candidateResults: (TorrentResult | RankedTorrentResult)[] = showBest
-    ? rankTorrentResults(results, languageRequirement)
+    ? rankTorrentResults(results, languageRequirement, preferredGroups)
     : results;
 
   const filteredResults = candidateResults.filter((res) =>
