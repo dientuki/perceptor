@@ -378,9 +378,19 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   return is now `throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED)` — the browser sees a
   real error instead of a completed-looking upload that never starts encoding.
 - **`scheduler/`** (`035-scheduled-tasks`) — a cron-driven registry of four tasks (`refresh_movies`,
-  `refresh_shows`, `refresh_episodes`, `acquire_pending`), each still a stub `run()` returning
-  `{ itemsProcessed: 0 }` — the per-task logic (finding a new release, refreshing show/episode
-  metadata) is deliberately out of scope; this module only owns the schedule itself. Cadence and
+  `refresh_shows`, `refresh_episodes`, `acquire_pending`). Three still stub `run()` returning
+  `{ itemsProcessed: 0 }` — the per-task logic is deliberately out of scope for those; this module
+  only owns the schedule itself. `refresh_episodes` is real since `041-episode-info-refresh`:
+  `RefreshEpisodesTask.run()` selects every `Episode` whose `releaseDate` is `NULL` or on/after a
+  fixed two-day-grace cutoff (UTC start-of-day, module-level constant — not a Setting), groups the
+  selection by `` `${show.tmdbId}:${season.seasonNumber}` ``, and walks the groups **sequentially**
+  (never `Promise.all`, same reason as `ShowsService.hydrate()`) calling `TmdbClient.seasonDetails`
+  once per group and writing back only `title`/`overview`/`releaseDate` on the rows it selected — an
+  episode TMDB doesn't return is left untouched and uncounted, and it never creates a row or touches
+  `Season`/`Show`/`Episode.status`. A per-group TMDB failure is caught individually so the rest of the
+  sweep still runs, but the handler then throws (naming the failed/succeeded counts), which is what
+  makes `SchedulerService.runTask` record the run as `FAILED` rather than a silently-partial
+  `SUCCESS`. Cadence and
   enablement are ordinary `settings/` rows (`schedule_<id>_enabled`/`schedule_<id>_cron`, catalog
   kind `'cron'`), not mutation arguments, so the Scheduling tab saves through the same
   `updateSettings` as every other setting; `SettingsResolver.updateSettings` calls
@@ -505,8 +515,8 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-09-02 (`021-user-preferences`): `bin/cli api npx --no tsc --noEmit` reports
-**0 errors**, `bin/npm api test` is green at **308** tests across **33** suites. **Re-run both
+As of 2026-09-03 (`041-episode-info-refresh`): `bin/cli api npx --no tsc --noEmit` reports
+**0 errors**, `bin/npm api test` is green at **336** tests across **36** suites. **Re-run both
 rather than trusting these numbers** — they exist so an agent can prove a change added nothing, not
 as a fact to cite.
 
