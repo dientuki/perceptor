@@ -83,10 +83,6 @@ const EDITABLE_KEYS = [
   "media_server_port",
   "media_server_api_key",
   "ui_locale",
-  "schedule_refresh_movies_cron",
-  "schedule_refresh_shows_cron",
-  "schedule_refresh_episodes_cron",
-  "schedule_acquire_pending_cron",
 ] as const;
 
 // Rendered through Checkbox.tsx + a hidden input carrying an explicit

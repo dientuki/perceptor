@@ -157,12 +157,17 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   (`deleteMany` + `createMany` in a `$transaction`). Exported so `movies/` and `shows/` each host their
   own two `@ResolveField()`s, `audioLanguages`/`subtitleLanguages` (replacing the single
   `preferredLanguages` field `039-per-title-language-split` removed, not deprecated) — deliberately
-  not centralised. **The per-user global level is gone** (`029-settings-screen-tabs`):
-  `setPreferredLanguages`, `User.preferredLanguages` and the `UserLanguage` table no longer exist,
-  replaced by the installation-wide `default_languages` setting (see `settings/` below and
-  `process-jobs/`'s merge). Neither join table (`UserMovieLanguage`/`UserShowLanguage`) changed shape
-  for the tag rework — both still reference `Language.id`, so a preference for a variant is the same
-  kind of row a preference for a language already was.
+  not centralised. **The per-user global level was removed by `029-settings-screen-tabs`**
+  (`setPreferredLanguages`, `User.preferredLanguages` and the old `UserLanguage` table), replaced at
+  the time by the installation-wide `default_languages` setting alone (see `settings/` below). **It
+  came back with `021-user-preferences`**, reshaped: `UserLanguagePreference` (`preferences/` below),
+  split by `kind` from the start, unlike the table `029` removed. Its rows had no encode-time reader
+  until `042-encode-global-language-preferences`, which folds each owner's global rows into the same
+  merge as the installation default and the per-title preference (`process-jobs/` below) — a
+  `/preferences` edit now reaches the next encode of anything that user owns. Neither join table
+  (`UserMovieLanguage`/`UserShowLanguage`) changed shape for the tag rework — both still reference
+  `Language.id`, so a preference for a variant is the same kind of row a preference for a language
+  already was.
 - **`media-sources/`** — the `MediaSource` row representing one acquisition attempt. `sourceScanned`
   takes `matches: [ScannedMatchInput!]!`, one entry per file the worker resolved (a film or single
   episode reports exactly one, both numbers `null`). The service loads the source with its season's
@@ -233,21 +238,28 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `039-per-title-language-split` this is no longer one merged list: `allowedAudioLanguagesIso3`/
   `allowedAudioLanguageTags` and `allowedSubtitleLanguagesIso3`/`allowedSubtitleLanguageTags`. Each
   pair is the title's original language, plus the union of the installation-wide `default_languages`
-  setting (unsplit — the same setting seeds both pairs), plus every owner's per-title preference **of
-  that kind only**, deduplicated. **This is the one place the merge happens** — `Movie.audioLanguages`/
-  `subtitleLanguages` and the `Show` twins deliberately return only the calling user's own list, per
-  kind. Since `030-language-regional-variants`, `resolveOriginalLanguage(iso2)` resolves a title's TMDB
+  setting (unsplit — the same setting seeds both pairs), plus every owner's global
+  `UserLanguagePreference` **of that kind** (`042-encode-global-language-preferences`), plus every
+  owner's per-title preference **of that kind only**, deduplicated. **This is the one place the merge
+  happens** — `Movie.audioLanguages`/`subtitleLanguages` and the `Show` twins deliberately return only
+  the calling user's own per-title list, per kind, never the global one (`042` REQ-6). Since
+  `030-language-regional-variants`, `resolveOriginalLanguage(iso2)` resolves a title's TMDB
   `originalLanguage` to `{ tag, iso3 }` via a single lookup **keyed by `tag`, not `iso2`** — a base
   row's tag is its ISO-639-1 code by construction, so this is exact where `findFirst` on the now
   non-unique `iso2` would not be: it could return a variant row for an ordinary Spanish-original title.
   `collectAllowedLanguages` produces all four fields from **one walk** building four `Set`s — original
-  language and every `default_languages` entry seed all four unconditionally, each owner's per-title
-  row seeds only the pair matching its `kind` — one merge, not two (or four) that can drift apart, and
-  `resolveDefaultLanguages` (the renamed `resolveDefaultLanguagesIso3`) looks the setting's stored tags
-  up **by `tag`**; left on `iso2` it would silently match nothing, since `default_languages` now stores
-  tags. The tag lists exist so the variant survives the collapse to `iso3` (`es-419`/`es-ES` both
-  resolve to `spa`); the worker has read them since `031-worker-language-variants`, now split per kind
-  and routed to `getAudioParams`/`getSubtitleParams` respectively (`services/worker/CLAUDE.md`).
+  language and every `default_languages` entry seed all four unconditionally, each owner's global and
+  per-title rows each seed only the pair matching their `kind`, through the same branch — one merge,
+  not two (or four) that can drift apart. The global rows ride along on the same `userMovie`/`userShow`
+  `findMany` that already fetches the per-title rows (`user: { select: { languages: {…} } }`, the
+  `UserLanguagePreference` back-relation on `User`), so this costs no extra query — resolved fresh on
+  every `getEncodeJobDetails` call, so a `/preferences` edit applies to anything encoded afterwards
+  with no backfill. `resolveDefaultLanguages` (the renamed `resolveDefaultLanguagesIso3`) looks the
+  setting's stored tags up **by `tag`**; left on `iso2` it would silently match nothing, since
+  `default_languages` now stores tags. The tag lists exist so the variant survives the collapse to
+  `iso3` (`es-419`/`es-ES` both resolve to `spa`); the worker has read them since
+  `031-worker-language-variants`, now split per kind and routed to `getAudioParams`/`getSubtitleParams`
+  respectively (`services/worker/CLAUDE.md`).
 - **`ffprobe-logs/`** — an append-only diagnostic log: one row per `ffprobe` the worker runs, holding
   the probed path and the raw JSON as an opaque `MediumText` string this service never parses.
   `recordFfprobe` is the worker's write path and carries `@AllowService()`; `ffprobeLogs`,
@@ -515,10 +527,10 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-09-03 (`041-episode-info-refresh`): `bin/cli api npx --no tsc --noEmit` reports
-**0 errors**, `bin/npm api test` is green at **336** tests across **36** suites. **Re-run both
-rather than trusting these numbers** — they exist so an agent can prove a change added nothing, not
-as a fact to cite.
+As of 2026-09-03 (`042-encode-global-language-preferences`): `bin/cli api npx --no tsc --noEmit`
+reports **0 errors**, `bin/npm api test` is green at **342** tests across **36** suites. **Re-run
+both rather than trusting these numbers** — they exist so an agent can prove a change added
+nothing, not as a fact to cite.
 
 ## Known debt
 

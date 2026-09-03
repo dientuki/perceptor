@@ -379,7 +379,6 @@
     "scheduling": {
       "timezoneNote": "Schedules are evaluated in the API container's timezone (UTC unless the host sets TZ). \"03:00\" refers to that timezone, not yours.",
       "enabledLabel": "Enabled",
-      "cronLabel": "Cron expression",
       "lastRunLabel": "Last run",
       "lastRunNever": "Never run",
       "nextRunLabel": "Next run",

@@ -382,7 +382,6 @@
     "scheduling": {
       "timezoneNote": "Los horarios se evalúan en la zona horaria del contenedor de la API (UTC salvo que el host configure TZ). \"03:00\" se refiere a esa zona, no a la tuya.",
       "enabledLabel": "Habilitada",
-      "cronLabel": "Expresión cron",
       "lastRunLabel": "Última ejecución",
       "lastRunNever": "Nunca se ejecutó",
       "nextRunLabel": "Próxima ejecución",

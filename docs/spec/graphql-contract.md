@@ -487,15 +487,23 @@ with `error.language.duplicate`. Both are **write-path** errors only — they an
 have a row for," never "does this release contain the track" — nothing in either mutation inspects a
 file.
 
-**The per-user global level (`User.preferredLanguages`, `Mutation.setPreferredLanguages`,
-`UserLanguage`) is gone as of `029-settings-screen-tabs`.** It is replaced by the installation-wide
-`default_languages` setting (see "Settings become administrator-only" below) — one value administrators set from the
-Descarga tab, not a row per user. `collectAllowedLanguages` in
-`services/api/src/process-jobs/process-jobs.service.ts` now unions the title's original language ∪
-`default_languages` (resolved iso2 → iso3) ∪ each owner's per-title preference, original first,
-deduplicated — the per-title level above is completely unchanged; only the global level moved from a
-per-user table to a single setting. No backfill: the old `user_languages` rows were discarded with
-the table, since the project was still in development when this shipped.
+**The old per-user global level (`User.preferredLanguages`, `Mutation.setPreferredLanguages`,
+`UserLanguage`) was removed by `029-settings-screen-tabs`**, replaced at the time by the
+installation-wide `default_languages` setting (see "Settings become administrator-only" below) —
+one value administrators set from the Descarga tab, not a row per user. No backfill: the old
+`user_languages` rows were discarded with the table, since the project was still in development
+when this shipped.
+
+**A per-user global level came back with `021-user-preferences`**, reshaped:
+`UserLanguagePreference`, keyed `@@id([userId, languageId, kind])` and split by
+`LanguageTrackKind` from the start (see `Query.preferences`/`Mutation.setPreferredTrackLanguages`
+below). Its rows had no encode-time reader until `042-encode-global-language-preferences`.
+`collectAllowedLanguages` in `services/api/src/process-jobs/process-jobs.service.ts` now unions the
+title's original language ∪ `default_languages` (resolved iso2 → iso3) ∪ each owner's global
+`UserLanguagePreference` of that kind ∪ each owner's per-title preference of that kind, original
+first, deduplicated. The per-title level is unchanged by `042`; the global level moved from
+"stored but unread" to "read at encode time, additively, on the same terms as everything else in
+the union."
 
 `EncodeJobDetails.allowedAudioLanguagesIso3`/`allowedSubtitleLanguagesIso3` is where the two
 vocabularies meet. Every stored preference is a BCP-47 tag (`es`, `es-419`, `es-ES`, `en`, `ja`) —
@@ -504,8 +512,10 @@ vocabularies meet. Every stored preference is a BCP-47 tag (`es`, `es-419`, `es-
 `ffprobe` reports `tags.language` in ISO-639-2/B (`spa`, `eng`, `jpn`), and that's what the worker
 actually compares against. As of `039-per-title-language-split`, this used to be **one** merged list
 feeding both the audio and subtitle rule functions; it is now **two**, each built the same way —
-`{original} ∪ ⋃(`default_languages`) ∪ ⋃(per-title preference of every owner, of that kind only)`,
-deduplicated, original first — resolved server-side into `iso3` before either ever leaves `api`,
+`{original} ∪ ⋃(`default_languages`) ∪ ⋃(global preference of every owner, of that kind only) ∪
+⋃(per-title preference of every owner, of that kind only)` (the global term added by
+`042-encode-global-language-preferences`), deduplicated, original first — resolved server-side into
+`iso3` before either ever leaves `api`,
 because `Language` (with both codes) only exists on this side of the boundary. `originalLanguageIso3`
 stays on the payload alongside the audio pair only, not redundant with either list's first element:
 the worker needs to know *which* of the allowed audio languages is the mandatory one, and inferring
@@ -527,9 +537,10 @@ lists preserve that. Neither tag list is a superset that makes its iso3 counterp
 worker only ever matches `ffprobe`'s ISO-639-2/B output, so neither iso3 list can be dropped or
 narrowed without breaking every encode. All four fields are produced by **one walk** over four `Set`s
 in `collectAllowedLanguages` (`services/api/src/process-jobs/process-jobs.service.ts`) — the original
-language and every `default_languages` entry seed all four unconditionally, and each owner's per-title
-preference seeds only the pair matching its `kind` — so the audio and subtitle lists cannot drift
-apart from being built by two separate passes over the same data. `EncodeJobDetails` resolves a
+language and every `default_languages` entry seed all four unconditionally, and each owner's global
+and per-title preference each seed only the pair matching their `kind`, through the same branch — so
+the audio and subtitle lists cannot drift apart from being built by two separate passes over the same
+data. `EncodeJobDetails` resolves a
 title's `originalLanguage` (ISO-639-1) to `{ tag, iso3 }` via `resolveOriginalLanguage`, a single
 lookup **keyed by `tag`** rather than `iso2` — a base row's tag is its ISO-639-1 code by construction,
 so this is exact, unlike a lookup on the now-non-unique `iso2`, which could return a variant row

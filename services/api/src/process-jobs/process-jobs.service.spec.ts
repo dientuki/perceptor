@@ -111,17 +111,31 @@ describe('ProcessJobsService', () => {
 
   // Owner row shape returned by both userMovie.findMany and userShow.findMany
   // with the `select` used in the service — per-title (languages) preference
-  // only. The global level (029) is a `default_languages` setting, not a
-  // per-owner row anymore. Since 030-language-regional-variants the select
-  // also carries `tag`, defaulting to `iso3` for the ordinary case where a
-  // preference has no regional variant (tag === iso2 !== iso3, but the tests
-  // that only care about iso3 pass an iso3-shaped tag on purpose — the tag
-  // vocabulary is exercised explicitly where it matters). Since
-  // 039-per-title-language-split the select also carries `kind`, defaulting
-  // to `'AUDIO'` so every pre-existing case (all written before the split)
-  // keeps exercising the audio pair without change.
-  const owner = (titleIso3s: string[], tags: string[] = titleIso3s, kind: 'AUDIO' | 'SUBTITLE' = 'AUDIO') => ({
+  // plus, since 042-encode-global-language-preferences, the owning user's
+  // global preference nested under `user.languages` (the relation Prisma
+  // exposes on `User` — see prisma/schema.prisma; NOT to be confused with
+  // this same select's outer `languages`, the per-title UserMovie/UserShowLanguage
+  // rows). Since 030-language-regional-variants the select also carries
+  // `tag`, defaulting to `iso3` for the ordinary case where a preference has
+  // no regional variant (tag === iso2 !== iso3, but the tests that only care
+  // about iso3 pass an iso3-shaped tag on purpose — the tag vocabulary is
+  // exercised explicitly where it matters). Since 039-per-title-language-split
+  // the select also carries `kind`, defaulting to `'AUDIO'` so every
+  // pre-existing case (all written before the split) keeps exercising the
+  // audio pair without change. The global-list parameters default to empty,
+  // so every call site written before 042 keeps working unchanged.
+  const owner = (
+    titleIso3s: string[],
+    tags: string[] = titleIso3s,
+    kind: 'AUDIO' | 'SUBTITLE' = 'AUDIO',
+    globalIso3s: string[] = [],
+    globalTags: string[] = globalIso3s,
+    globalKind: 'AUDIO' | 'SUBTITLE' = 'AUDIO',
+  ) => ({
     languages: titleIso3s.map((iso3, i) => ({ kind, language: { iso3, tag: tags[i] } })),
+    user: {
+      languages: globalIso3s.map((iso3, i) => ({ kind: globalKind, language: { iso3, tag: globalTags[i] } })),
+    },
   });
 
   // This block exists because getEncodeJobDetails's downloadsRoot is the only
@@ -453,6 +467,125 @@ describe('ProcessJobsService', () => {
       const details = await service.getEncodeJobDetails(2);
 
       expect(details.allowedAudioLanguageTags).toEqual(['ja', 'es-ES']);
+    });
+  });
+
+  // 042-encode-global-language-preferences, REQ-1/REQ-2/REQ-3/REQ-5: every
+  // owner's global `UserLanguagePreference` (not just their per-title one)
+  // must reach the merge, additively, scoped to owners only, matched by
+  // `kind`, and on both the movie and episode branch. Each case here is
+  // verified to fail when the fold in `collectAllowedLanguages` is removed
+  // (Article IX) — done by hand for this diff and restored before reporting.
+  describe('getEncodeJobDetails — 042 global language preference merge', () => {
+    // AC-1: a language with NO per-title row at all, contributed only
+    // through the owner's global preference, still reaches both lists of
+    // its kind. `kor`/`ko` is distinct from the fixture's original (`ja`/
+    // `jpn`) and from every per-title fixture value in this file, so a
+    // regression that reads `User.languages` (a different, unrelated
+    // relation than the global-preference one this select actually nests
+    // under `user`) instead of the global preference relation returns no
+    // rows and this assertion goes red too, not just an empty-fold bug.
+    it('AC-1: a global-only audio preference reaches both the iso3 and the tag list', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([owner([], [], 'AUDIO', ['kor'], ['ko'], 'AUDIO')]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.allowedAudioLanguagesIso3).toContain('kor');
+      expect(details.allowedAudioLanguageTags).toContain('ko');
+    });
+
+    // AC-2 (failure path): a global AUDIO-only preference must not widen the
+    // subtitle allow-list — the same kind-blind-leak bug class REQ-5 (039)
+    // exists to forbid, now reachable a second way through the global level.
+    it('AC-2: a global AUDIO-only preference does not leak into either subtitle list', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([owner([], [], 'AUDIO', ['spa'], ['es-419'], 'AUDIO')]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.allowedSubtitleLanguagesIso3).not.toContain('spa');
+      expect(details.allowedSubtitleLanguageTags).not.toContain('es-419');
+    });
+
+    // AC-3 (failure path): a user who does not own the title never shapes
+    // its encode. `userMovie.findMany`'s own `where: { movieId }` is the
+    // only thing enforcing that — there is no second, narrower filter to
+    // drop — so this asserts that scope directly: a fold that started
+    // reading every user's global preference instead of only the rows this
+    // query returns would still pass every other case in this file, since
+    // none of them mocks a second, unrelated owner.
+    it('AC-3: a non-owner never contributes, because they never appear in the scoped owners row', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      // Only the film's real owner is returned. A user who owns nothing but
+      // has `fr` in both their global lists is never part of this array —
+      // the `where: { movieId }` clause asserted below is what keeps them
+      // out in the real query.
+      prisma.userMovie.findMany.mockResolvedValue([owner(['eng'])]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(prisma.userMovie.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { movieId: 42 } }));
+      expect(details.allowedAudioLanguagesIso3).not.toContain('fra');
+      expect(details.allowedAudioLanguageTags).not.toContain('fr');
+      expect(details.allowedSubtitleLanguagesIso3).not.toContain('fra');
+      expect(details.allowedSubtitleLanguageTags).not.toContain('fr');
+    });
+
+    // AC-4: two owners' global preferences, plus one owner's per-title
+    // override duplicating the *other* owner's global entry — the union
+    // stays deduplicated across sources and across owners, and the
+    // per-title level neither replaces nor duplicates the global one.
+    it('AC-4: two owners plus a per-title override duplicating a global entry — each language exactly once', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      const ownerA = owner([], [], 'AUDIO', ['spa'], ['es-419'], 'AUDIO');
+      const ownerB = owner(['spa'], ['es-419'], 'AUDIO', ['por'], ['pt'], 'AUDIO');
+      prisma.userMovie.findMany.mockResolvedValue([ownerA, ownerB]);
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.allowedAudioLanguagesIso3.sort()).toEqual(['jpn', 'por', 'spa'].sort());
+      expect(details.allowedAudioLanguagesIso3.filter((code) => code === 'spa')).toHaveLength(1);
+      expect(details.allowedAudioLanguageTags.sort()).toEqual(['es-419', 'ja', 'pt'].sort());
+      expect(details.allowedAudioLanguageTags.filter((tag) => tag === 'es-419')).toHaveLength(1);
+    });
+
+    // REQ-5: mergeShowAllowedLanguages is an independent copy of the same
+    // select — a correct movie branch proves nothing about it.
+    it('REQ-5: a global preference reaches the episode branch too', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userShow.findMany.mockResolvedValue([owner([], [], 'AUDIO', ['kor'], ['ko'], 'AUDIO')]);
+
+      const details = await service.getEncodeJobDetails(2);
+
+      expect(details.allowedAudioLanguagesIso3).toContain('kor');
+      expect(details.allowedAudioLanguageTags).toContain('ko');
+    });
+
+    // NFR-2: folding the global list must not cost a second query — a
+    // per-owner `findPreferredTrackLanguagesFor` call (the alternative
+    // ../plan.md rejects) would multiply calls here instead of staying at
+    // one, on a resolver the worker hits once per encode job.
+    it('NFR-2: userMovie.findMany / userShow.findMany stay at exactly one call each with the global fold in place', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([owner([], [], 'AUDIO', ['kor'], ['ko'], 'AUDIO')]);
+
+      await service.getEncodeJobDetails(1);
+
+      expect(prisma.userMovie.findMany).toHaveBeenCalledTimes(1);
+
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      prisma.userShow.findMany.mockResolvedValue([owner([], [], 'AUDIO', ['kor'], ['ko'], 'AUDIO')]);
+
+      await service.getEncodeJobDetails(2);
+
+      expect(prisma.userShow.findMany).toHaveBeenCalledTimes(1);
     });
   });
 

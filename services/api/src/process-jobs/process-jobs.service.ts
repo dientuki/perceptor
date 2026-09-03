@@ -153,19 +153,20 @@ export class ProcessJobsService {
     return { tag: language.tag, iso3: language.iso3 };
   }
 
-  // REQ-3/REQ-8 (029), extended by REQ-8/AC-9 (030) and REQ-5 (039): the set
-  // of languages an encode may keep, split by track kind. Each pair is
-  // {original} ∪ the installation's `default_languages` setting (unsplit,
-  // contributes to both pairs) ∪ every owner's per-title preference **of
-  // that kind**, deduplicated, original first — expressed as BOTH the
-  // ISO-639-2/B list the worker matches against and the BCP-47 tag list that
-  // survives the collapse to iso3. All four lists come out of the SAME walk
-  // in `collectAllowedLanguages` on purpose: separate merges could drift
-  // (e.g. a tag added to one Set but not another), which would silently
-  // mismatch the fields on the wire with no error anywhere. A `Set` per list
-  // gives us dedup and insertion order for free. A title with no owners and
-  // no default falls through to just the original for both pairs — no
-  // special case needed (see plan.md's risk list).
+  // REQ-3/REQ-8 (029), extended by REQ-8/AC-9 (030), REQ-5 (039) and REQ-1/
+  // REQ-2 (042): the set of languages an encode may keep, split by track
+  // kind. Each pair is {original} ∪ the installation's `default_languages`
+  // setting (unsplit, contributes to both pairs) ∪ every owner's global
+  // `UserLanguagePreference` **of that kind** ∪ every owner's per-title
+  // preference **of that kind**, deduplicated, original first — expressed as
+  // BOTH the ISO-639-2/B list the worker matches against and the BCP-47 tag
+  // list that survives the collapse to iso3. All four lists come out of the
+  // SAME walk in `collectAllowedLanguages` on purpose: separate merges could
+  // drift (e.g. a tag added to one Set but not another), which would
+  // silently mismatch the fields on the wire with no error anywhere. A `Set`
+  // per list gives us dedup and insertion order for free. A title with no
+  // owners and no default falls through to just the original for both pairs
+  // — no special case needed (see plan.md's risk list).
   private async mergeMovieAllowedLanguages(
     movieId: number,
     original: { tag: string; iso3: string },
@@ -174,6 +175,11 @@ export class ProcessJobsService {
       where: { movieId },
       select: {
         languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
+        user: {
+          select: {
+            languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
+          },
+        },
       },
     });
 
@@ -188,6 +194,11 @@ export class ProcessJobsService {
       where: { showId },
       select: {
         languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
+        user: {
+          select: {
+            languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
+          },
+        },
       },
     });
 
@@ -229,15 +240,18 @@ export class ProcessJobsService {
       .filter((entry): entry is { tag: string; iso3: string } => entry !== null);
   }
 
-  // 039-per-title-language-split, REQ-5: one walk building four Sets, never
-  // two separate merges — see the comment on the two callers above for why.
-  // The original language and every `default_languages` entry seed both
-  // pairs unconditionally; each owner's per-title preference seeds only the
-  // pair matching its own `kind`.
+  // 039-per-title-language-split, REQ-5, extended by 042's REQ-1/REQ-2: one
+  // walk building four Sets, never two separate merges — see the comment on
+  // the two callers above for why. The original language and every
+  // `default_languages` entry seed both pairs unconditionally; each owner's
+  // global preference and per-title preference each seed only the pair
+  // matching their own `kind`, through the same branch, since both arrive
+  // shaped identically off the owner row.
   private async collectAllowedLanguages(
     original: { tag: string; iso3: string },
     owners: Array<{
       languages: Array<{ kind: LanguageTrackKind; language: { tag: string; iso3: string } }>;
+      user: { languages: Array<{ kind: LanguageTrackKind; language: { tag: string; iso3: string } }> };
     }>,
   ): Promise<{ audioIso3Codes: string[]; audioTags: string[]; subtitleIso3Codes: string[]; subtitleTags: string[] }> {
     const audioIso3Codes = new Set<string>([original.iso3]);
@@ -252,13 +266,13 @@ export class ProcessJobsService {
       subtitleTags.add(defaultLanguage.tag);
     }
     for (const owner of owners) {
-      for (const titlePref of owner.languages) {
-        if (titlePref.kind === LanguageTrackKind.AUDIO) {
-          audioIso3Codes.add(titlePref.language.iso3);
-          audioTags.add(titlePref.language.tag);
+      for (const pref of [...owner.languages, ...owner.user.languages]) {
+        if (pref.kind === LanguageTrackKind.AUDIO) {
+          audioIso3Codes.add(pref.language.iso3);
+          audioTags.add(pref.language.tag);
         } else {
-          subtitleIso3Codes.add(titlePref.language.iso3);
-          subtitleTags.add(titlePref.language.tag);
+          subtitleIso3Codes.add(pref.language.iso3);
+          subtitleTags.add(pref.language.tag);
         }
       }
     }

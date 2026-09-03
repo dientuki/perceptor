@@ -344,6 +344,12 @@ the scope it belongs to, and no fourth table is introduced for one boolean.
   them at encode time today (021's own stated boundary) and this feature does not change that — only
   the per-title preference gains a live consumer.
 
+  **Superseded by `042-encode-global-language-preferences`.** The boundary above held only until a
+  real encode showed why it mattered — an English-original title with no per-title override and an
+  empty `default_languages` setting collapsed to just the original language, silently dropping a
+  user's global audio and subtitle preferences. `042` gives that global preference the same
+  encode-time reader the per-title one already had, additively, in the same single-pass merge.
+
 - **Any change to which tracks `getAudioParams`/`getSubtitleParams` pick once the allow-list is
   fixed** — SDH ordering, codec priority, variant-title detection. This feature only changes which
   list arrives, never the selection rule applied to it.
