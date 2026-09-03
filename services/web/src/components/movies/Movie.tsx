@@ -67,6 +67,11 @@ export default function Movie({
         .filter((g) => g.scope === "MOVIE")
         .map((g) => g.name)
     : [];
+  const usingGlobalSubtitles = movie.subtitleLanguages.length === 0;
+  const effectiveSubtitleLanguages =
+    usingGlobalSubtitles && preferences
+      ? preferences.subtitleLanguages
+      : movie.subtitleLanguages;
   const setMovieAudioLanguages = setMoviePreferredTrackLanguagesAction.bind(
     null,
     movie.id,
@@ -157,6 +162,14 @@ export default function Movie({
           <p>
             audio obligatorio — efectivo: {String(effectiveAudioMandatory)}
           </p>
+          <p>
+            idiomas de subtítulos — efectivo (
+            {usingGlobalSubtitles ? "fallback: preferencias globales" : "título"}
+            ):{" "}
+            {effectiveSubtitleLanguages
+              .map((l) => `${l.tag}/${l.iso3}`)
+              .join(", ") || "—"}
+          </p>
           <p className="pt-1 text-gray-400 dark:text-gray-500">
             título: audioMandatory={String(movie.audioMandatory)},
             audioLanguages=
@@ -173,6 +186,12 @@ export default function Movie({
             audioLanguages=
             {preferences
               ? preferences.audioLanguages
+                  .map((l) => `${l.tag}/${l.iso3}`)
+                  .join(", ") || "—"
+              : "…"}
+            , subtitleLanguages=
+            {preferences
+              ? preferences.subtitleLanguages
                   .map((l) => `${l.tag}/${l.iso3}`)
                   .join(", ") || "—"
               : "…"}
