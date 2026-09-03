@@ -57,6 +57,30 @@ type Setting {
   value: String!
 }
 
+type ScheduledTaskRun {
+  id: Int!
+  startedAt: DateTime!
+  finishedAt: DateTime
+  outcome: ScheduledTaskOutcome!
+  itemsProcessed: Int!
+  error: String
+}
+
+enum ScheduledTaskOutcome {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+type ScheduledTask {
+  id: String!
+  enabled: Boolean!
+  cron: String!
+  running: Boolean!
+  nextRunAt: DateTime
+  lastRun: ScheduledTaskRun
+}
+
 type MediaRoot {
   id: ID!
   label: String!
@@ -277,6 +301,9 @@ type Query {
   """
   languages: [Language!]!
 
+  """List every registered scheduled task and its current status"""
+  scheduledTasks: [ScheduledTask!]!
+
   """
   Media servers soportados, derivados del registro de clientes — la UI arma el combo con esto en vez de hardcodear las opciones.
   """
@@ -335,6 +362,11 @@ type Mutation {
   """
   setMovieAudioMandatory(movieId: Int!, mandatory: Boolean!): Boolean!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
+
+  """
+  Trigger a registered scheduled task immediately, regardless of its cadence
+  """
+  runScheduledTask(id: String!): ScheduledTask!
   resyncMediaServerIndex: MediaServerIndexStatus!
 
   """Aviso del cliente de torrents de que una descarga terminó"""

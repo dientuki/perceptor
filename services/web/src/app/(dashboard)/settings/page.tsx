@@ -7,6 +7,7 @@ import {
   getMediaServerIndexStatus,
   getMediaServerOptions,
 } from "@/actions/media-server";
+import { getScheduledTasks } from "@/actions/scheduler";
 import { getSettings } from "@/actions/settings";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import SettingsForm from "@/components/settings/SettingsForm";
@@ -33,13 +34,19 @@ export default async function SettingsPage() {
     notFound();
   }
 
-  const [settings, mediaRoots, mediaServerOptions, mediaServerIndexStatus] =
-    await Promise.all([
-      getSettings(),
-      getMediaRoots(),
-      getMediaServerOptions(),
-      getMediaServerIndexStatus(),
-    ]);
+  const [
+    settings,
+    mediaRoots,
+    mediaServerOptions,
+    mediaServerIndexStatus,
+    scheduledTasks,
+  ] = await Promise.all([
+    getSettings(),
+    getMediaRoots(),
+    getMediaServerOptions(),
+    getMediaServerIndexStatus(),
+    getScheduledTasks(),
+  ]);
 
   return (
     <div>
@@ -52,6 +59,7 @@ export default async function SettingsPage() {
               mediaRoots={mediaRoots}
               mediaServerOptions={mediaServerOptions}
               mediaServerIndexStatus={mediaServerIndexStatus}
+              scheduledTasks={scheduledTasks}
             />
           </div>
         </div>

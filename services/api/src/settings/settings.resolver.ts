@@ -1,5 +1,5 @@
 import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, Inject, forwardRef } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { Setting } from './entities/setting.entity';
 import { SettingInput } from './dto/setting.input';
@@ -10,6 +10,20 @@ import { MEDIA_SERVER_NONE } from '@/clients/media-server/types';
 import { AdminGuard } from '@/auth/guards/admin.guard';
 import { Public } from '@/auth/decorators/public.decorator';
 import { isSupportedLocale } from '@/i18n/locales';
+import { SchedulerService } from '@/scheduler/scheduler.service';
+import {
+  SCHEDULED_TASKS,
+  scheduleCronSettingKey,
+  scheduleEnabledSettingKey,
+} from '@/scheduler/scheduler.registry';
+
+// The eight `schedule_*` keys a settings change re-arms the scheduler for —
+// derived from the same registry `SchedulerService.arm()` reads, so a fifth
+// task added there is covered here with no edit needed.
+const SCHEDULE_SETTING_KEYS = SCHEDULED_TASKS.flatMap((task) => [
+  scheduleEnabledSettingKey(task.id),
+  scheduleCronSettingKey(task.id),
+]);
 
 // The four keys a media-server index rebuild depends on. Only these, and
 // only when the submitted entry differs from what was already stored —
@@ -36,6 +50,8 @@ export class SettingsResolver {
     private readonly qbittorrentClient: QbittorrentClient,
     private readonly mediaRootsService: MediaRootsService,
     private readonly mediaServerIndex: MediaServerIndexService,
+    @Inject(forwardRef(() => SchedulerService))
+    private readonly schedulerService: SchedulerService,
   ) {}
 
   @Public()
@@ -107,6 +123,20 @@ export class SettingsResolver {
           apiKey: after.media_server_api_key,
         });
       }
+    }
+
+    // REQ-3: a cadence or enable/disable flip must take effect on the next
+    // tick, not only after a restart. Re-arm only when a `schedule_*` key
+    // genuinely changed — same before/after guard as the two blocks above,
+    // so a submission that never touched scheduling does not needlessly
+    // replace every armed cron job.
+    const scheduleChanged = entries.some(
+      (entry) =>
+        SCHEDULE_SETTING_KEYS.includes(entry.key) &&
+        before[entry.key] !== entry.value,
+    );
+    if (scheduleChanged) {
+      await this.schedulerService.arm();
     }
 
     return result;

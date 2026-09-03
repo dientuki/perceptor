@@ -2,9 +2,9 @@
 title: Scheduled Tasks
 spec_version: 0.1.0
 author: Juan "Dientuki" Farias
-created_at: 2026-08-31
-last_updated: 2026-08-31
-status: Draft
+created_at: 2026-09-02
+last_updated: 2026-09-02
+status: Implemented
 services: [api, web]
 ---
 
@@ -166,15 +166,24 @@ same shape as the existing `int` and `enum` kinds, not a new validation mechanis
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: On a fresh `bin/dbreset`, `bin/mysql -e "select \`key\`, value from Setting where \`key\` like 'schedule_%'"` returns eight rows, every `_enabled` is `false`, and `api` boots with no scheduled task registered as active.
-- [ ] **AC-2**: Given an admin session, querying `scheduledTasks` returns exactly four entries (`refresh_movies`, `refresh_shows`, `refresh_episodes`, `acquire_pending`), each `enabled: false`, `nextRunAt: null`, `lastRun: null`.
-- [ ] **AC-3**: Given `schedule_refresh_shows_enabled` set to `true` with cron `* * * * *`, then within two minutes `scheduledTasks` shows a `lastRun` with `outcome: SUCCESS` and `itemsProcessed: 0`, and `nextRunAt` is in the future.
-- [ ] **AC-4**: Given an admin on `/settings` → Scheduling, when they press "Ejecutar ahora" on `refresh_movies` (still disabled), then a run is recorded and the row shows its outcome and timestamp; `nextRunAt` for that task is unchanged.
-- [ ] **AC-5 (failure path)**: Given a handler forced to throw, when its occurrence runs, then `lastRun.outcome` is `FAILED` with the error message on the record, the Scheduling tab shows the failure, `api` stays up, and the next occurrence of that task and every other task still runs.
-- [ ] **AC-6 (failure path)**: `updateSettings` with `{ key: "schedule_refresh_movies_cron", value: "every 5 minutes" }` returns `error.setting.expected_cron`, no row is written (`bin/mysql` still shows the previous value), and the tab shows the message inline.
-- [ ] **AC-7 (failure path)**: Given `refresh_movies` is `RUNNING`, when `runScheduledTask(id: "refresh_movies")` is called, then it returns `error.schedule.task_already_running` and no second run record is created.
-- [ ] **AC-8**: `runScheduledTask(id: "nope")` returns `error.schedule.task_not_found`; the same call from a non-admin session returns `error.auth.admin_required`.
-- [ ] **AC-9**: `bin/npm api run test` and `bin/npm web run build` both exit 0.
+- [x] **AC-1**: On a fresh `bin/dbreset`, `bin/mysql -e "select \`key\`, value from Setting where \`key\` like 'schedule_%'"` returns eight rows, every `_enabled` is `false`, and `api` boots with no scheduled task registered as active.
+      *Observed:* verified live post-`bin/dbreset` — eight `schedule_*` rows, all `_enabled = false`; `arm()` runs at `onModuleInit` and leaves every task disarmed since none is enabled, confirmed by `scheduledTasks` returning `nextRunAt: null` for all four (see AC-2).
+- [x] **AC-2**: Given an admin session, querying `scheduledTasks` returns exactly four entries (`refresh_movies`, `refresh_shows`, `refresh_episodes`, `acquire_pending`), each `enabled: false`, `nextRunAt: null`, `lastRun: null`.
+      *Observed:* live GraphQL query against the running `api` container returned exactly this shape for all four tasks.
+- [x] **AC-3**: Given `schedule_refresh_shows_enabled` set to `true` with cron `* * * * *`, then within two minutes `scheduledTasks` shows a `lastRun` with `outcome: SUCCESS` and `itemsProcessed: 0`, and `nextRunAt` is in the future.
+      *Observed:* verified via a real `arm()` + live cron tick (65s wait) during `scheduler.service.ts`'s own development — a `scheduled_task_runs` row appeared with `outcome: SUCCESS`, `itemsProcessed: 0`, `nextRunAt` in the future. Settings reverted to seeded defaults afterward.
+- [x] **AC-4**: Given an admin on `/settings` → Scheduling, when they press "Ejecutar ahora" on `refresh_movies` (still disabled), then a run is recorded and the row shows its outcome and timestamp; `nextRunAt` for that task is unchanged.
+      *Observed:* live `runScheduledTask(id: "refresh_movies")` while the task was disabled recorded a `SUCCESS` run and left `nextRunAt: null`; `SchedulingPanel.tsx`'s `TaskRow` renders the returned `lastRun`'s outcome/timestamp/itemsProcessed in place after the transition resolves.
+- [x] **AC-5 (failure path)**: Given a handler forced to throw, when its occurrence runs, then `lastRun.outcome` is `FAILED` with the error message on the record, the Scheduling tab shows the failure, `api` stays up, and the next occurrence of that task and every other task still runs.
+      *Observed:* a forced-throw handler run recorded `outcome: FAILED` with the thrown message in `error`, `runTask` did not rethrow, and the `api` container stayed healthy throughout; `scheduler.service.spec.ts` covers the same path as a permanent regression guard. `SchedulingPanel.tsx` renders `current.lastRun.error` inline in red when `outcome === "FAILED"`.
+- [x] **AC-6 (failure path)**: `updateSettings` with `{ key: "schedule_refresh_movies_cron", value: "every 5 minutes" }` returns `error.setting.expected_cron`, no row is written (`bin/mysql` still shows the previous value), and the tab shows the message inline.
+      *Observed:* live mutation returned `extensions.i18n.key: "error.setting.expected_cron"`; `bin/mysql` confirmed the stored value unchanged. `SettingsForm`'s existing error banner (shared by every setting kind) renders `translateGraphQLError`'s Spanish message.
+- [x] **AC-7 (failure path)**: Given `refresh_movies` is `RUNNING`, when `runScheduledTask(id: "refresh_movies")` is called, then it returns `error.schedule.task_already_running` and no second run record is created.
+      *Observed:* `scheduler.service.spec.ts`'s concurrency-guard suite exercises exactly this — a second manual call while the first is in-flight is refused and produces no second run row; the window is too short to force live via GraphQL against a stub handler that resolves synchronously.
+- [x] **AC-8**: `runScheduledTask(id: "nope")` returns `error.schedule.task_not_found`; the same call from a non-admin session returns `error.auth.admin_required`.
+      *Observed:* live — unknown id returned `error.schedule.task_not_found`; a non-admin session (temporary user, deleted after) got `error.auth.admin_required` on both `scheduledTasks` and `runScheduledTask`.
+- [x] **AC-9**: `bin/npm api run test` and `bin/npm web run build` both exit 0.
+      *Observed:* `bin/npm api run test` → 331/331 tests, 35/35 suites; `bin/npm web run build` → exit 0.
 
 ## Out of Scope
 

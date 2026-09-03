@@ -83,6 +83,10 @@ const EDITABLE_KEYS = [
   "media_server_port",
   "media_server_api_key",
   "ui_locale",
+  "schedule_refresh_movies_cron",
+  "schedule_refresh_shows_cron",
+  "schedule_refresh_episodes_cron",
+  "schedule_acquire_pending_cron",
 ] as const;
 
 // Rendered through Checkbox.tsx + a hidden input carrying an explicit
@@ -96,6 +100,10 @@ const BOOLEAN_KEYS = [
   "movies_enabled",
   "shows_enabled",
   "compression_enabled",
+  "schedule_refresh_movies_enabled",
+  "schedule_refresh_shows_enabled",
+  "schedule_refresh_episodes_enabled",
+  "schedule_acquire_pending_enabled",
 ] as const;
 
 export async function updateSettingsAction(

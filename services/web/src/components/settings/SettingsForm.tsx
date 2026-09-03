@@ -1,6 +1,6 @@
 "use client";
 
-import { Cloud, FolderTree, Globe, Server, Sliders } from "lucide-react";
+import { Clock, Cloud, FolderTree, Globe, Server, Sliders } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useActionState, useState } from "react";
 import { updateSettingsAction } from "@/actions/settings";
@@ -8,6 +8,7 @@ import CompressionPanel from "@/components/settings/CompressionPanel";
 import GeneralPanel from "@/components/settings/GeneralPanel";
 import MediaManagerPanel from "@/components/settings/MediaManagerPanel";
 import MediaServerFields from "@/components/settings/MediaServerFields";
+import SchedulingPanel from "@/components/settings/SchedulingPanel";
 import TorrentManagerPanel from "@/components/settings/TorrentManagerPanel";
 import Button from "@/components/ui/button/Button";
 import TabNav, { type TabNavItem } from "@/components/ui/tabs/TabNav";
@@ -16,6 +17,7 @@ import type {
   MediaServerIndexStatus,
   MediaServerOption,
 } from "@/types/media-server";
+import type { ScheduledTask } from "@/types/scheduler";
 import type { Setting } from "@/types/settings";
 
 interface SettingsFormProps {
@@ -23,6 +25,7 @@ interface SettingsFormProps {
   mediaRoots: MediaRoot[];
   mediaServerOptions: MediaServerOption[];
   mediaServerIndexStatus: MediaServerIndexStatus;
+  scheduledTasks: ScheduledTask[];
 }
 
 const TABS = [
@@ -31,6 +34,7 @@ const TABS = [
   "mediaServer",
   "torrentManager",
   "compression",
+  "scheduling",
 ] as const;
 type TabKey = (typeof TABS)[number];
 
@@ -45,6 +49,7 @@ export default function SettingsForm({
   mediaRoots,
   mediaServerOptions,
   mediaServerIndexStatus,
+  scheduledTasks,
 }: SettingsFormProps) {
   const t = useTranslations("settings.form");
   const tTabs = useTranslations("settings.tabs");
@@ -70,6 +75,7 @@ export default function SettingsForm({
     { key: "mediaServer", label: tTabs("mediaServer"), icon: Server },
     { key: "torrentManager", label: tTabs("torrentManager"), icon: Cloud },
     { key: "compression", label: tTabs("compression"), icon: Sliders },
+    { key: "scheduling", label: tTabs("scheduling"), icon: Clock },
   ];
 
   const panelClass = (key: TabKey) => (key === activeTab ? "" : "hidden");
@@ -124,6 +130,10 @@ export default function SettingsForm({
                 getSettingValue("compression_enabled") === "true"
               }
             />
+          </div>
+
+          <div className={panelClass("scheduling")}>
+            <SchedulingPanel tasks={scheduledTasks} />
           </div>
         </div>
 

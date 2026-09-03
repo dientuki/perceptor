@@ -60,6 +60,7 @@ export const ERROR_KEYS = {
   SETTING_EXPECTED_INT: 'error.setting.expected_int',
   SETTING_EXPECTED_ENUM: 'error.setting.expected_enum',
   SETTING_MISSING: 'error.setting.missing',
+  SETTING_EXPECTED_CRON: 'error.setting.expected_cron',
   LANGUAGE_DUPLICATE: 'error.language.duplicate',
   LANGUAGE_UNAVAILABLE: 'error.language.unavailable',
   TORRENT_GROUP_NOT_FOUND: 'error.torrent_group.not_found',
@@ -94,6 +95,10 @@ export const ERROR_KEYS = {
   // ffprobe-logs
   FFPROBE_LOG_NOT_FOUND: 'error.ffprobeLog.not_found',
   FFPROBE_LOG_EMPTY_PAYLOAD: 'error.ffprobeLog.empty_payload',
+
+  // scheduler
+  SCHEDULE_TASK_NOT_FOUND: 'error.schedule.task_not_found',
+  SCHEDULE_TASK_ALREADY_RUNNING: 'error.schedule.task_already_running',
 
   // class-validator DTO constraints (018 REQ-9). Not part of `spec.md`'s error
   // tables — spec.md doesn't name these eight, so the keys are named here,

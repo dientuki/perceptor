@@ -216,7 +216,9 @@ pre-existing, unrelated failure in `src/ffmpeg/cases.spec.ts` — a stale expect
 in the `2.json` corpus fixture, confirmed present at `HEAD` before this feature touched anything;
 not fixed here since `params.ts` was explicitly out of scope), `web` typechecks at 0 errors and
 `bin/npm web run build` exits 0 — and again 2026-09-02 after `040-indexer-search-cache`: `api`
-321/34 suites (`worker`/`web` untouched by that feature).
+321/34 suites (`worker`/`web` untouched by that feature) — and again 2026-09-03 after
+`035-scheduled-tasks`: `api` 331/35 suites, `web` typechecks at 0 errors and `bin/npm web run build`
+exits 0 (`worker` untouched by that feature).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

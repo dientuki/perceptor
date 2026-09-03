@@ -433,7 +433,11 @@ editor any more**: `021-user-preferences` REQ-6 deleted `DownloadPanel.tsx`, `Se
 tab, and `updateDefaultLanguagesAction`/`ALWAYS_SENT_STRING_KEYS` from `src/actions/settings.ts` — the
 `default_languages` row in `settings` keeps whatever value it already held and keeps feeding
 `getEncodeJobDetails`'s merge (`services/api/CLAUDE.md`'s `process-jobs/`), unsplit by kind even after
-`039` split everything downstream of it. `SettingsForm` shows five tabs with no Descarga.
+`039` split everything downstream of it. `SettingsForm` shows six tabs with no Descarga — a sixth,
+*Programación* (`035-scheduled-tasks`), was added after this to hold the four scheduled tasks'
+enable toggle and cron field, each saved through the same `updateSettings` as every other tab
+(`schedule_<id>_enabled`/`schedule_<id>_cron` in `EDITABLE_KEYS`/`BOOLEAN_KEYS`), plus a
+`useTransition` "Ejecutar ahora" per task calling `runScheduledTaskAction` outside the form.
 
 **`Movie`/`Show`'s `audioLanguages`/`subtitleLanguages` replace the single `preferredLanguages`
 field** `039-per-title-language-split` removed (not deprecated) — see

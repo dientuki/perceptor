@@ -77,6 +77,8 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SETTING_EXPECTED_ENUM]: '"{key}" must be one of: {options}',
   [ERROR_KEYS.SETTING_MISSING]:
     'Setting "{key}" is missing — configure it in Settings before encoding',
+  [ERROR_KEYS.SETTING_EXPECTED_CRON]:
+    '"{key}" must be a valid cron expression',
   [ERROR_KEYS.LANGUAGE_DUPLICATE]: 'Language {tag} is repeated',
   [ERROR_KEYS.LANGUAGE_UNAVAILABLE]: 'Language {tag} is not available',
   [ERROR_KEYS.TORRENT_GROUP_NOT_FOUND]: 'Torrent group {id} does not exist',
@@ -123,6 +125,11 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.FFPROBE_LOG_NOT_FOUND]: 'ffprobe log {id} does not exist',
   [ERROR_KEYS.FFPROBE_LOG_EMPTY_PAYLOAD]:
     'recordFfprobe requires a non-empty file and ffprobe payload',
+
+  // scheduler
+  [ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND]: 'Scheduled task not found',
+  [ERROR_KEYS.SCHEDULE_TASK_ALREADY_RUNNING]:
+    'This scheduled task is already running',
 
   // class-validator DTO constraints
   [ERROR_KEYS.VALIDATION_SETTING_KEY_REQUIRED]: 'The key is required',

@@ -87,6 +87,13 @@
     },
     "mediaServer": {
       "not_configured": "Configure a media server before syncing the library."
+    },
+    "schedule": {
+      "task_not_found": "The scheduled task does not exist",
+      "task_already_running": "The task is already running"
+    },
+    "setting": {
+      "expected_cron": "The value of {key} must be a valid cron expression"
     }
   },
   "landing": {
@@ -366,7 +373,44 @@
       "mediaServer": "Media Server",
       "torrentManager": "Torrent Manager",
       "download": "Download",
-      "compression": "Compression"
+      "compression": "Compression",
+      "scheduling": "Scheduling"
+    },
+    "scheduling": {
+      "timezoneNote": "Schedules are evaluated in the API container's timezone (UTC unless the host sets TZ). \"03:00\" refers to that timezone, not yours.",
+      "enabledLabel": "Enabled",
+      "cronLabel": "Cron expression",
+      "lastRunLabel": "Last run",
+      "lastRunNever": "Never run",
+      "nextRunLabel": "Next run",
+      "nextRunNone": "Not scheduled",
+      "itemsProcessed": "{count} items processed",
+      "runButton": "Run now",
+      "running": "Running…",
+      "runErrorDefault": "Could not run the task.",
+      "outcome": {
+        "SUCCESS": "Success",
+        "FAILED": "Failed",
+        "SKIPPED": "Skipped"
+      },
+      "tasks": {
+        "refresh_movies": {
+          "label": "Refresh movies",
+          "description": "Refreshes registered movie data against TMDB."
+        },
+        "refresh_shows": {
+          "label": "Refresh shows",
+          "description": "Refreshes seasons and episodes of registered shows."
+        },
+        "refresh_episodes": {
+          "label": "Refresh episodes",
+          "description": "Refreshes registered episode data."
+        },
+        "acquire_pending": {
+          "label": "Acquire pending",
+          "description": "Searches for a release for titles that still have none."
+        }
+      }
     },
     "general": {
       "uiLocaleLabel": "App language"

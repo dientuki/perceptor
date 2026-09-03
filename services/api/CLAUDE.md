@@ -270,7 +270,9 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `LanguagesService.validateAndResolveLanguageIds` — the installation-wide replacement for the old
   per-user global language preference; see `languages/` and `process-jobs/`), plus
   `compression_enabled` (`kind: 'boolean'`, seeded `"true"` — `032-optional-compression`, beside
-  `movies_enabled`/`shows_enabled`). It is not read by any resolver directly: `ProcessJobsService`
+  `movies_enabled`/`shows_enabled`), and `kind: 'cron'` (`035-scheduled-tasks`, validated via
+  `CronTime` from the `cron` package), which the eight `schedule_<id>_enabled`/`schedule_<id>_cron`
+  rows use — see `scheduler/` below for what reads them. It is not read by any resolver directly: `ProcessJobsService`
   reads it off `SettingsService.getMap()` and flattens it onto `EncodeJobDetails.compressionEnabled`
   at query time, since the worker authenticates as a service principal and cannot call the
   admin-only `settings` query itself. Three more rows — `media_server_index_state`,
@@ -375,6 +377,24 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   losing side of an upload-versus-upload race: what used to be a `console.log` and a silent early
   return is now `throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED)` — the browser sees a
   real error instead of a completed-looking upload that never starts encoding.
+- **`scheduler/`** (`035-scheduled-tasks`) — a cron-driven registry of four tasks (`refresh_movies`,
+  `refresh_shows`, `refresh_episodes`, `acquire_pending`), each still a stub `run()` returning
+  `{ itemsProcessed: 0 }` — the per-task logic (finding a new release, refreshing show/episode
+  metadata) is deliberately out of scope; this module only owns the schedule itself. Cadence and
+  enablement are ordinary `settings/` rows (`schedule_<id>_enabled`/`schedule_<id>_cron`, catalog
+  kind `'cron'`), not mutation arguments, so the Scheduling tab saves through the same
+  `updateSettings` as every other setting; `SettingsResolver.updateSettings` calls
+  `SchedulerService.arm()` after a changed `schedule_*` write re-arms `SchedulerRegistry`
+  live, no restart (a `forwardRef` on both `SettingsModule` and `SchedulerModule` — each needs the
+  other). `SchedulerService.runTask(id, trigger)` is the single execution path for both a cron tick
+  and `Mutation.runScheduledTask` — it never rethrows (a stub or, eventually, a real handler that
+  throws still leaves the process up: `AC-5`), guards concurrency with an in-memory `Set` (a
+  single-process assumption, not a distributed lock — documented as a known limitation, not solved
+  here), and writes one `ScheduledTaskRun` row per attempt (`finishedAt: null` is the "still
+  running" marker, since `ScheduledTaskOutcome` has no `RUNNING` value). `onModuleInit` closes out
+  any row still `finishedAt: null` at boot, so a crash mid-run can never permanently lock a task out
+  as "already running". `scheduledTasks`/`runScheduledTask` carry `@UseGuards(AdminGuard)` **per
+  method** (the `ffprobe-logs.resolver.ts` split).
 
 **Infrastructure**: `prisma/` (`PrismaModule` + `PrismaService`, effectively global), `redis/`,
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).

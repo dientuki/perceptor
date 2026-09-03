@@ -24,6 +24,7 @@ import { LanguagesModule } from './languages/languages.module';
 import { SeasonsModule } from './seasons/seasons.module';
 import { FfprobeLogsModule } from './ffprobe-logs/ffprobe-logs.module';
 import { PreferencesModule } from './preferences/preferences.module';
+import { SchedulerModule } from './scheduler/scheduler.module';
 import { formatGraphQLError } from './i18n/graphql-error.formatter';
 
 @Module({
@@ -66,6 +67,7 @@ import { formatGraphQLError } from './i18n/graphql-error.formatter';
     SeasonsModule,
     FfprobeLogsModule,
     PreferencesModule,
+    SchedulerModule,
   ],
   providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })

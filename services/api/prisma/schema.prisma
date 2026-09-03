@@ -57,6 +57,12 @@ enum TorrentGroupScope {
   SHOW
 }
 
+enum ScheduledTaskOutcome {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
 model Setting {
   id    Int    @id @default(autoincrement())
   key   String @unique
@@ -440,4 +446,23 @@ model MediaServerItem {
 
   @@unique([mediaType, tmdbId])
   @@map("media_server_items")
+}
+
+// One row per occurrence (scheduled tick or manual trigger) of a task from the
+// static registry in src/scheduler/scheduler.registry.ts. No relation to that
+// registry: a taskId that is no longer registered just stops accumulating rows.
+model ScheduledTaskRun {
+  id Int @id @default(autoincrement())
+
+  taskId    String   @db.VarChar(100)
+  startedAt DateTime @default(now())
+
+  finishedAt DateTime?
+
+  outcome        ScheduledTaskOutcome
+  itemsProcessed Int                  @default(0)
+  error          String?              @db.Text
+
+  @@index([taskId, startedAt])
+  @@map("scheduled_task_runs")
 }

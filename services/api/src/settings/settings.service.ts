@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { normalize } from 'node:path';
+import { CronTime } from 'cron';
 import { PrismaService } from '@/prisma/prisma.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { LanguagesService } from '@/languages/languages.service';
@@ -77,6 +78,14 @@ export class SettingsService {
           key: entry.key,
           options: catalogEntry.options!.join(', '),
         });
+      }
+
+      if (catalogEntry.kind === 'cron') {
+        try {
+          new CronTime(entry.value);
+        } catch {
+          throw i18nError.badRequest(ERROR_KEYS.SETTING_EXPECTED_CRON, { key: entry.key });
+        }
       }
 
       if (catalogEntry.kind === 'languages') {

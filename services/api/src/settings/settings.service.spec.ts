@@ -153,3 +153,54 @@ describe('SettingsService — languages kind', () => {
     expect(call.update.value).not.toBe('es , en');
   });
 });
+
+// This suite exists because otherwise a `schedule_*_cron` value that
+// `new CronTime()` cannot parse would only surface as a scheduler that
+// silently never fires — the job registered against a bad cron expression
+// throws deep inside `cron`'s own scheduling internals, nowhere near the
+// settings write that introduced it, and by then the stored value already
+// looks "saved" to whoever set it. Each case fails if the cron-kind branch,
+// its i18n key, or the write-nothing-on-failure ordering is removed.
+describe('SettingsService — cron kind', () => {
+  let service: SettingsService;
+  let upsert: jest.Mock;
+  let findMany: jest.Mock;
+
+  beforeEach(async () => {
+    upsert = jest.fn().mockResolvedValue({});
+    findMany = jest.fn().mockResolvedValue([]);
+
+    const prisma = {
+      setting: { upsert, findMany },
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SettingsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: MediaRootsService, useValue: { resolveFromRoot: jest.fn() } },
+        { provide: LanguagesService, useValue: { validateAndResolveLanguageIds: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get<SettingsService>(SettingsService);
+  });
+
+  it('rejects a schedule_*_cron value that is not a valid cron expression, without writing it', async () => {
+    let caught: unknown;
+
+    try {
+      await service.updateMany([
+        { key: 'schedule_refresh_movies_cron', value: 'every 5 minutes' },
+      ]);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BadRequestException);
+    expect((caught as BadRequestException).getResponse()).toMatchObject({
+      i18n: { key: 'error.setting.expected_cron' },
+    });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+});

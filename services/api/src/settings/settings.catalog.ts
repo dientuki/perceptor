@@ -5,7 +5,15 @@ import { SUPPORTED_LOCALES } from '@/i18n/locales';
 // (client-only hasta ahora). `updateSettings` aceptaba cualquier key/value —
 // esto es lo que lo cierra: toda key que llega tiene que estar acá, y las de
 // tipo 'path' se validan contra media-roots antes de guardarse.
-export type SettingKind = 'path' | 'string' | 'boolean' | 'int' | 'secret' | 'enum' | 'languages';
+export type SettingKind =
+  | 'path'
+  | 'string'
+  | 'boolean'
+  | 'int'
+  | 'secret'
+  | 'enum'
+  | 'languages'
+  | 'cron';
 
 export type SettingCatalogEntry = {
   kind: SettingKind;
@@ -40,6 +48,16 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   // un literal acá — sumar un locale ahí lo vuelve válido acá automáticamente.
   ui_locale: { kind: 'enum', options: [...SUPPORTED_LOCALES] },
   default_languages: { kind: 'languages' },
+  // Cadence and enablement for the scheduler (src/scheduler/) — keys are
+  // derived from the registry's task ids, not written out twice.
+  schedule_refresh_movies_enabled: { kind: 'boolean' },
+  schedule_refresh_movies_cron: { kind: 'cron' },
+  schedule_refresh_shows_enabled: { kind: 'boolean' },
+  schedule_refresh_shows_cron: { kind: 'cron' },
+  schedule_refresh_episodes_enabled: { kind: 'boolean' },
+  schedule_refresh_episodes_cron: { kind: 'cron' },
+  schedule_acquire_pending_enabled: { kind: 'boolean' },
+  schedule_acquire_pending_cron: { kind: 'cron' },
 };
 
 export function getSettingCatalogEntry(key: string): SettingCatalogEntry | undefined {

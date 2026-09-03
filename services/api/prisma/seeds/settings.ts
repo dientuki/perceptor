@@ -50,6 +50,19 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'ui_locale', value: '' },
     { key: 'default_languages', value: '' },
 
+    // Cadence + enablement for the scheduler (src/scheduler/). Every task ships
+    // disabled: an upgrade must not silently start hitting TMDB/the indexer on a
+    // schedule nobody chose. Crons are 5-field expressions validated by the
+    // 'cron' SettingKind in settings.catalog.ts.
+    { key: 'schedule_refresh_movies_enabled', value: 'false' },
+    { key: 'schedule_refresh_movies_cron', value: '0 4 * * *' },
+    { key: 'schedule_refresh_shows_enabled', value: 'false' },
+    { key: 'schedule_refresh_shows_cron', value: '0 5 * * *' },
+    { key: 'schedule_refresh_episodes_enabled', value: 'false' },
+    { key: 'schedule_refresh_episodes_cron', value: '0 6 * * *' },
+    { key: 'schedule_acquire_pending_enabled', value: 'false' },
+    { key: 'schedule_acquire_pending_cron', value: '0 * * * *' },
+
     // State the system writes about the media-server index rebuild (034), not
     // configuration a person sets — deliberately absent from
     // settings.catalog.ts so updateSettings keeps rejecting them, same as
