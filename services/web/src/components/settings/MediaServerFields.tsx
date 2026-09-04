@@ -6,7 +6,7 @@ import { useEffect, useState, useTransition } from "react";
 import { resyncMediaServerIndexAction } from "@/actions/media-server";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
-import SelectWithChevron from "@/components/form/SelectWithChevron";
+import Select from "@/components/form/Select";
 import Button from "@/components/ui/button/Button";
 import type {
   MediaServerIndexStatus,
@@ -123,7 +123,7 @@ export default function MediaServerFields({
     <div className="space-y-6">
       <div>
         <Label htmlFor="media_server_client">{t("label")}</Label>
-        <SelectWithChevron
+        <Select
           id="media_server_client"
           name="media_server_client"
           value={selected}

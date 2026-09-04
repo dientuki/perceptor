@@ -1,4 +1,5 @@
 import React, { FC } from "react";
+import { ChevronDown } from "lucide-react";
 
 interface SelectOption {
   value: string;
@@ -38,21 +39,26 @@ const Select: FC<SelectProps> = ({
   } ${className}`;
 
   return (
-    <select
-      id={id}
-      name={name}
-      value={value}
-      defaultValue={defaultValue}
-      onChange={onChange}
-      disabled={disabled}
-      className={selectClasses}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <div className="relative">
+      <select
+        id={id}
+        name={name}
+        value={value}
+        defaultValue={defaultValue}
+        onChange={onChange}
+        disabled={disabled}
+        className={selectClasses}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">
+        <ChevronDown size={18} />
+      </span>
+    </div>
   );
 };
 
