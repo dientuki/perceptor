@@ -32,7 +32,9 @@
     },
     "media": {
       "catalog_unavailable": "No se pudo consultar el catálogo. Revisá la API key de TMDB.",
-      "unsupported_type": "Tipo de medio no soportado: {type}"
+      "unsupported_type": "Tipo de medio no soportado: {type}",
+      "type_disabled": "{type, select, movie {Las películas están deshabilitadas en este sistema} show {Las series están deshabilitadas en este sistema} other {Este tipo de medio está deshabilitado en este sistema}}",
+      "search_unavailable": "La búsqueda está deshabilitada en este sistema"
     },
     "episode": {
       "already_completed": "Este episodio ya está descargado. Confirmá para reemplazar el archivo actual."
@@ -91,7 +93,8 @@
     },
     "schedule": {
       "task_not_found": "La tarea programada no existe",
-      "task_already_running": "La tarea ya se está ejecutando"
+      "task_already_running": "La tarea ya se está ejecutando",
+      "task_unavailable": "Esta tarea no está disponible: su tipo de contenido está deshabilitado"
     },
     "setting": {
       "expected_cron": "El valor de {key} tiene que ser una expresión cron válida"
@@ -138,6 +141,9 @@
   },
   "header": {
     "searchPlaceholder": "Buscar Películas & Series",
+    "searchPlaceholderMovies": "Buscar Películas",
+    "searchPlaceholderShows": "Buscar Series",
+    "searchUnavailable": "Búsqueda no disponible",
     "toggleSidebar": "Alternar barra lateral"
   },
   "pages": {
@@ -246,7 +252,8 @@
       "addButton": "Agregar",
       "adding": "Agregando...",
       "errorSearch": "No se pudo completar la búsqueda. Intentá de nuevo.",
-      "errorAdd": "No se pudo agregar la {noun}. Intentá de nuevo."
+      "errorAdd": "No se pudo agregar la {noun}. Intentá de nuevo.",
+      "unavailable": "La búsqueda está deshabilitada en este sistema."
     },
     "input": {
       "placeholder": "Buscar {noun}...",
@@ -282,7 +289,8 @@
   },
   "billboard": {
     "moviesHeading": "Películas populares",
-    "showsHeading": "Series populares"
+    "showsHeading": "Series populares",
+    "unavailable": "Las películas y las series están deshabilitadas en este sistema."
   },
   "media": {
     "card": {
@@ -391,6 +399,7 @@
       "runButton": "Ejecutar ahora",
       "running": "Ejecutando…",
       "runErrorDefault": "No se pudo ejecutar la tarea.",
+      "unavailableReason": "No disponible: su tipo de contenido está deshabilitado en el Media Manager.",
       "outcome": {
         "SUCCESS": "Éxito",
         "FAILED": "Falló",

@@ -1,5 +1,6 @@
 import { Type } from '@nestjs/common';
 
+import { MediaType } from '@/types/media';
 import { AcquirePendingTask } from './tasks/acquire-pending.task';
 import { RefreshEpisodesTask } from './tasks/refresh-episodes.task';
 import { RefreshMoviesTask } from './tasks/refresh-movies.task';
@@ -9,12 +10,16 @@ import { RefreshShowsTask } from './tasks/refresh-shows.task';
  * Every scheduled task's shape: a stable id, the cron cadence it ships with
  * before an administrator ever touches Settings, and the injectable that
  * runs when the task fires. A row configured for an id outside this array
- * cannot be queried, triggered or run (REQ-1).
+ * cannot be queried, triggered or run (REQ-1). `mediaType`, when present,
+ * ties the task to the `movies_enabled`/`shows_enabled` switch that gates it
+ * (045-media-type-availability) — omitted for a task that belongs to no
+ * type, which stays unconditionally available.
  */
 export interface ScheduledTaskDefinition {
   id: string;
   defaultCron: string;
   handler: Type<ScheduledTaskHandler>;
+  mediaType?: MediaType;
 }
 
 /**
@@ -41,16 +46,19 @@ export const SCHEDULED_TASKS: readonly ScheduledTaskDefinition[] = [
     id: 'refresh_movies',
     defaultCron: '0 4 * * *',
     handler: RefreshMoviesTask,
+    mediaType: 'movie',
   },
   {
     id: 'refresh_shows',
     defaultCron: '0 5 * * *',
     handler: RefreshShowsTask,
+    mediaType: 'show',
   },
   {
     id: 'refresh_episodes',
     defaultCron: '0 6 * * *',
     handler: RefreshEpisodesTask,
+    mediaType: 'show',
   },
   {
     id: 'acquire_pending',

@@ -24,6 +24,7 @@ const SCHEDULED_TASKS_QUERY = `
         itemsProcessed
         error
       }
+      available
     }
   }
 `;
@@ -61,6 +62,7 @@ const RUN_SCHEDULED_TASK_MUTATION = `
         itemsProcessed
         error
       }
+      available
     }
   }
 `;

@@ -3,7 +3,7 @@
 import { Film, Globe, Languages, TvMinimal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { setUiLocaleAction } from "@/actions/locale";
 import {
   setAllowCinemaReleasesAction,
@@ -20,6 +20,7 @@ import Button from "@/components/ui/button/Button";
 import TabNav, { type TabNavItem } from "@/components/ui/tabs/TabNav";
 import { SUPPORTED_LOCALES } from "@/i18n/locales";
 import type { Language } from "@/types/languages";
+import type { MediaCapabilities } from "@/types/media";
 import type { TorrentGroup, UserPreferences } from "@/types/preferences";
 
 interface PreferencesFormProps {
@@ -27,6 +28,7 @@ interface PreferencesFormProps {
   preferences: UserPreferences;
   languages: Language[];
   torrentGroups: TorrentGroup[];
+  capabilities: MediaCapabilities;
 }
 
 const TABS = ["general", "downloadLanguages", "movies", "shows"] as const;
@@ -52,12 +54,15 @@ export default function PreferencesForm({
   preferences,
   languages,
   torrentGroups,
+  capabilities,
 }: PreferencesFormProps) {
   const t = useTranslations("preferences.form");
   const tTabs = useTranslations("preferences.tabs");
   const activeLocale = useLocale();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const showMoviesTab = capabilities.moviesEnabled;
+  const showShowsTab = capabilities.showsEnabled;
   const [activeTab, setActiveTab] = useState<TabKey>("general");
   const [errors, setErrors] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
@@ -104,9 +109,26 @@ export default function PreferencesForm({
       label: tTabs("downloadLanguages"),
       icon: Languages,
     },
-    { key: "movies", label: tTabs("movies"), icon: Film },
-    { key: "shows", label: tTabs("shows"), icon: TvMinimal },
+    ...(showMoviesTab
+      ? [{ key: "movies", label: tTabs("movies"), icon: Film }]
+      : []),
+    ...(showShowsTab
+      ? [{ key: "shows", label: tTabs("shows"), icon: TvMinimal }]
+      : []),
   ];
+
+  // The active tab cannot be hidden on first render (capabilities are read
+  // server-side before this component mounts), but a `router.refresh()`
+  // after toggling a switch in another tab can make it so — fall back to
+  // "general" rather than leaving the panel stuck on a tab with no nav item.
+  useEffect(() => {
+    if (
+      (activeTab === "movies" && !showMoviesTab) ||
+      (activeTab === "shows" && !showShowsTab)
+    ) {
+      setActiveTab("general");
+    }
+  }, [activeTab, showMoviesTab, showShowsTab]);
 
   const panelClass = (key: TabKey) => (key === activeTab ? "" : "hidden");
 
@@ -133,17 +155,21 @@ export default function PreferencesForm({
         audioResult,
         subtitleResult,
         cinemaResult,
+        audioMandatoryResult,
         movieResult,
         showResult,
-        audioMandatoryResult,
       ] = await Promise.all([
         setUiLocaleAction(null, localeForm),
         setPreferredTrackLanguagesAction("AUDIO", null, audioForm),
         setPreferredTrackLanguagesAction("SUBTITLE", null, subtitleForm),
         setAllowCinemaReleasesAction(allowCinemaReleases),
-        setPreferredTorrentGroupsAction("MOVIE", null, movieForm),
-        setPreferredTorrentGroupsAction("SHOW", null, showForm),
         setAudioMandatoryAction(audioMandatory),
+        showMoviesTab
+          ? setPreferredTorrentGroupsAction("MOVIE", null, movieForm)
+          : Promise.resolve(null),
+        showShowsTab
+          ? setPreferredTorrentGroupsAction("SHOW", null, showForm)
+          : Promise.resolve(null),
       ]);
 
       const newErrors: string[] = [];

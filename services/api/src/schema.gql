@@ -79,6 +79,7 @@ type ScheduledTask {
   running: Boolean!
   nextRunAt: DateTime
   lastRun: ScheduledTaskRun
+  available: Boolean!
 }
 
 type MediaRoot {
@@ -212,6 +213,11 @@ type MediaRef {
   type: String!
 }
 
+type MediaCapabilities {
+  moviesEnabled: Boolean!
+  showsEnabled: Boolean!
+}
+
 type Season {
   id: ID!
   seasonNumber: Int!
@@ -315,6 +321,7 @@ type Query {
 
   """Datos que el worker necesita para encodear un ProcessJob"""
   processJob(id: Int!): EncodeJobDetails!
+  mediaCapabilities: MediaCapabilities!
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
   searchAllMedia(query: String!): [MediaSearchResult!]!
   popularMedia(type: String!): [MediaSearchResult!]!

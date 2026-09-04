@@ -272,6 +272,39 @@ without affecting the other carousel.
 this service's Tailwind 4 `@theme` only defines `--color-brand-*`. Do not reintroduce a `primary`
 token; reuse the shared component.
 
+## Media type availability (`045-media-type-availability`)
+
+The installation-wide `movies_enabled`/`shows_enabled` settings are readable by every signed-in user
+through `getMediaCapabilities()` (`src/actions/media.ts`, `cache()`-wrapped like `fetchMe` — one round
+trip per request), backing `Query.mediaCapabilities`. It never falls back to
+`{ moviesEnabled: false, showsEnabled: false }` on failure: that would render the product as
+uninstalled rather than as broken. `src/app/(dashboard)/layout.tsx` reads it once and threads it
+through `AdminShell.tsx` to `AppSidebar.tsx` (filters the Movies/Series nav entries) and
+`AppHeader.tsx` (picks the search placeholder — `searchPlaceholderMovies`/`searchPlaceholderShows`/
+the existing both-enabled `searchPlaceholder`/`searchUnavailable` — and disables the input when both
+are off). `(dashboard)/page.tsx`'s billboard and `preferences/page.tsx`'s tab list read it directly
+rather than through the shell, since neither needs it plumbed through a shared component.
+
+**`searchMediaForPage(query, type)` exists solely because a Server Component's render pass cannot
+mutate cookies.** `/search`'s page component calls it (or `searchAllMedia` when both types are
+enabled) instead of the pre-existing `searchMedia`, which ends in the cookie-mutating
+`redirectIfUnauthenticated` and is legal only from a Server Action or Route Handler.
+`searchMediaForPage` is a third function, not a third query — it reuses `SEARCH_MEDIA_QUERY` and
+copies `searchAllMedia`'s `redirectToClearSession` handling. `searchMedia` itself is untouched and
+still backs `/movies/add`/`/shows/add`, which are client-driven and legally cookie-mutating.
+
+`/movies`, `/movies/add`, `/shows`, `/shows/add` call `notFound()` when their type is disabled — the
+same shape `users/page.tsx` uses for its admin check. **`/movies/[id]` and `/shows/[id]` are
+deliberately untouched**: an already-registered title stays reachable by direct link no matter what
+the flags say (in-flight work is never refused). `SchedulingPanel.tsx` disables a row's `Switch` and
+run button when `ScheduledTask.available` is false, but **keeps rendering the hidden
+`schedule_<id>_enabled` input at the task's stored value** — dropping it, or forcing it to `"false"`,
+would make saving any unrelated setting silently disable the task for good.
+
+Enforcement itself is `api`-only and system-wide (no admin bypass); this slice is display and
+routing only, with the three `errors.media.*`/`errors.schedule.*` catalog keys as its backstop for
+the race where an administrator flips a switch between render and submit.
+
 ## Detail pages are scoped, with a route-segment 404
 
 `/movies/[id]` and `/shows/[id]` are structural twins. `api` returns `null` both for a nonexistent id
@@ -600,7 +633,7 @@ parity check with an exit code.
 
 ## Current state
 
-As of 2026-09-03 (`043-pipeline-status-normalization`): `bin/cli web npx --no tsc --noEmit` reports
+As of 2026-09-04 (`045-media-type-availability`): `bin/cli web npx --no tsc --noEmit` reports
 **0 errors** and `bin/npm web run build` exits 0. Re-run both rather than trusting this — report the
 numbers before and after a change to prove you added nothing.
 

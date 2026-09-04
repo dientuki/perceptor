@@ -27,6 +27,13 @@ export type ScheduledTaskTrigger = 'cron' | 'manual';
  * turn `scheduled_task_runs` into an unbounded table on a self-hosted MariaDB. */
 const RUN_HISTORY_LIMIT = 50;
 
+/** The Settings key that gates a media type, keyed the same way `MediaType`
+ * values already read (045-media-type-availability). */
+const MEDIA_TYPE_ENABLED_SETTING_KEY: Record<string, string> = {
+  movie: 'movies_enabled',
+  show: 'shows_enabled',
+};
+
 @Injectable()
 export class SchedulerService implements OnModuleInit {
   // In-process concurrency guard for REQ-5. This is *not* a database lock —
@@ -38,6 +45,23 @@ export class SchedulerService implements OnModuleInit {
   // not before (Article X) — the run rows at least make the doubling
   // visible after the fact.
   private readonly runningTaskIds = new Set<string>();
+
+  // 045-media-type-availability: derives availability from the settings map
+  // the caller already holds, rather than injecting `MediaCapabilitiesService`
+  // — doing so would pull `MediaModule` (and with it `MoviesModule`/
+  // `ShowsModule`) into `SchedulerModule`, adding a third edge to the
+  // `SettingsModule ⇄ SchedulerModule` cycle that already needs `forwardRef`
+  // on both sides. A task with no `mediaType` (e.g. `acquire_pending`) is
+  // always available. `!== 'false'` matches the idiom used elsewhere for a
+  // boolean Setting: an absent row reads as enabled.
+  private isAvailable(
+    definition: ScheduledTaskDefinition,
+    settingsMap: Record<string, string>,
+  ): boolean {
+    if (!definition.mediaType) return true;
+    const key = MEDIA_TYPE_ENABLED_SETTING_KEY[definition.mediaType];
+    return settingsMap[key] !== 'false';
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -92,6 +116,11 @@ export class SchedulerService implements OnModuleInit {
       const enabled = map[scheduleEnabledSettingKey(id)] === 'true';
       if (!enabled) continue;
 
+      // REQ-9: a disabled media type is never armed, even while the task's
+      // own `schedule_*_enabled` flag is still stored as `true` — the stored
+      // value is never rewritten, so re-enabling the type re-arms it as-is.
+      if (!this.isAvailable(definition, map)) continue;
+
       const cronExpression = map[scheduleCronSettingKey(id)] ?? definition.defaultCron;
 
       // NFR-2: a missing, malformed or unseeded scheduling setting must
@@ -123,6 +152,18 @@ export class SchedulerService implements OnModuleInit {
     const definition = findScheduledTask(id);
     if (!definition) {
       throw i18nError.notFound(ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND, { id });
+    }
+
+    // REQ-9: a task whose media type is currently disabled refuses a manual
+    // trigger outright; a cron tick (unreachable while `arm()` is correct,
+    // since it would never have armed the job) just returns without a run
+    // row — a SKIPPED row for it would be noise, not signal.
+    const map = await this.settingsService.getMap();
+    if (!this.isAvailable(definition, map)) {
+      if (trigger === 'manual') {
+        throw i18nError.forbidden(ERROR_KEYS.SCHEDULE_TASK_UNAVAILABLE, { id });
+      }
+      return;
     }
 
     if (this.runningTaskIds.has(id)) {
@@ -210,6 +251,7 @@ export class SchedulerService implements OnModuleInit {
     task.nextRunAt = this.schedulerRegistry.doesExist('cron', id)
       ? this.schedulerRegistry.getCronJob(id).nextDate().toJSDate()
       : undefined;
+    task.available = this.isAvailable(definition, settingsMap);
 
     // Only a *finished* run is a candidate for `lastRun` — a row still open
     // (`finishedAt: null`) has no meaningful `outcome` yet (see runTask's

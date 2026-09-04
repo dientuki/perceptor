@@ -1,13 +1,57 @@
 "use server";
 
+import { cache } from "react";
 import {
   redirectIfUnauthenticated,
   redirectToClearSession,
 } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { translateGraphQLError } from "@/lib/graphql-error";
-import type { MediaType } from "@/types/media";
+import type { MediaCapabilities, MediaType } from "@/types/media";
 import type { MediaSearchResult } from "@/types/search";
+
+const MEDIA_CAPABILITIES_QUERY = `
+  query MediaCapabilities {
+    mediaCapabilities {
+      moviesEnabled
+      showsEnabled
+    }
+  }
+`;
+
+// The actual round trip, cache()-wrapped so multiple components asking
+// within the same request/render pass dedupe to a single GraphQL call
+// (NFR-6), matching fetchMe()'s idiom in src/actions/auth.ts.
+const fetchMediaCapabilities = cache(() =>
+  fetchGraphQL<{ mediaCapabilities: MediaCapabilities }>(
+    MEDIA_CAPABILITIES_QUERY,
+  ),
+);
+
+// Read from the dashboard layout's Server Component render pass, where
+// cookie mutation is illegal — an auth failure hands off to the Route
+// Handler via redirectToClearSession, mirroring getCurrentUser()'s use of
+// fetchMe() in src/actions/auth.ts, rather than redirectIfUnauthenticated
+// (which mutates cookies and is only legal from a Server Action / Route
+// Handler context).
+//
+// A failed read must never fall back to { moviesEnabled: false, showsEnabled:
+// false } — that would render the product as uninstalled rather than as
+// broken (NFR-4). Every failure throws a translated error instead.
+export async function getMediaCapabilities(): Promise<MediaCapabilities> {
+  const { data, errors } = await fetchMediaCapabilities();
+
+  if (errors && errors.length > 0) {
+    redirectToClearSession(errors);
+    throw new Error(await translateGraphQLError(errors[0]));
+  }
+
+  if (!data?.mediaCapabilities) {
+    throw new Error("El API no devolvió las capacidades de medios");
+  }
+
+  return data.mediaCapabilities;
+}
 
 const SEARCH_MEDIA_QUERY = `
   query SearchMedia($query: String!, $type: String!) {
@@ -38,6 +82,30 @@ export async function searchMedia(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
+    throw new Error(await translateGraphQLError(errors[0]));
+  }
+
+  return data?.searchMedia ?? [];
+}
+
+// Render-safe sibling of searchMedia, for /search's Server Component render
+// pass (which cannot call redirectIfUnauthenticated — that mutates cookies,
+// legal only from a Server Action / Route Handler). Reuses SEARCH_MEDIA_QUERY
+// and copies searchAllMedia's redirectToClearSession auth-failure handling
+// verbatim (web/plan.md step 6).
+export async function searchMediaForPage(
+  query: string,
+  type: MediaType,
+): Promise<MediaSearchResult[]> {
+  // El API ya corta con [] en query vacía, pero evitamos el round trip
+  if (!query.trim()) return [];
+
+  const { data, errors } = await fetchGraphQL<{
+    searchMedia: MediaSearchResult[];
+  }>(SEARCH_MEDIA_QUERY, { query, type });
+
+  if (errors && errors.length > 0) {
+    redirectToClearSession(errors);
     throw new Error(await translateGraphQLError(errors[0]));
   }
 

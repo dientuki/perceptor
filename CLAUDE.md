@@ -9,7 +9,7 @@ implementation detail.
 
 | Stage | Where | Specs |
 | :-- | :-- | :-- |
-| Search catalog (TMDB) | `api` — `src/media/`, `src/movies/`, `src/shows/`, `src/clients/tmdb/`; `web` — the header search box and `/search` | `005`, `006`, `026` |
+| Search catalog (TMDB) | `api` — `src/media/`, `src/movies/`, `src/shows/`, `src/clients/tmdb/`; `web` — the header search box and `/search`. Since `045`, the installation-wide `movies_enabled`/`shows_enabled` Settings are no longer write-only: `api`'s `mediaCapabilities` query exposes them to every user and refuses a disabled type at `searchMedia`/`popularMedia`/`addMedia`; `web` reads the pair to filter the sidebar, the billboard, the search placeholder/results and the `/preferences` tabs, and to 404 `/movies(/add)`/`/shows(/add)` — system-wide, identical for every user, and never refused for work already in flight | `005`, `006`, `026`, `045` |
 | Register title in DB | `api` — `media`/`movies`/`shows` + Prisma; a new series fetches its seasons/episodes in the background; a registration also reconciles the title against the configured media server, promoting `MISSING` to `COMPLETED` (per episode for a series) when that server already holds it; a scheduled sweep (`scheduler/`'s `refresh_episodes` task, opt-in) also writes back title/overview/air-date for episodes still in flight, days after registration | `006`, `034`, `041` |
 | Find release | Prowlarr (`indexer`) + `flaresolverr`, `api` — `src/clients/indexer/client.ts`; every Prowlarr row survives the search, grouped by `infoHash` (or a derived key when the indexer supplied none) rather than dropped for missing metadata — `infoHash` is resolved lazily, only for the release the user actually adds (`src/clients/indexer/resolve-info-hash.ts`); a repeat search for the same (normalized) query inside 10 minutes is served from Redis instead of re-querying Prowlarr, read-through in `src/indexer/indexer.service.ts` (`040`); manual fallback is pasting a magnet (`src/clients/torrent/magnet.ts`); `web` — a "Best candidates" toggle in the movie detail page's torrent modal re-ranks the already-fetched list client-side (`src/lib/torrent-ranking.ts`), hiding everything below the best resolution tier — a harness for eventually picking automatically, not a fetch of new results | `010`, `014`, `036`, `037`, `040` |
 | Download | qBittorrent (`torrent`), `api` — `src/clients/torrent/client.ts`, per-torrent save path; no longer fire-and-forget — `api` reads live progress/speed back and starts, stops and deletes torrents on the user's behalf, and a title may race several sources at once | `010`, `022` |
@@ -227,7 +227,10 @@ by that feature, deliberately — no pipeline stage changed status, the reportin
 did) — and again 2026-09-04 after `044-settings-screen-polish`: `api` 363/37 suites, `web`
 typechecks at 0 errors and `bin/npm web run build` exits 0 (`worker` untouched by that feature,
 deliberately — no pipeline stage changed, only the admin Settings screen and the `/preferences`
-torrent-group catalog it feeds).
+torrent-group catalog it feeds) — and again 2026-09-04 after `045-media-type-availability`: `api`
+390/39 suites, `web` typechecks at 0 errors and `bin/npm web run build` exits 0 (`worker` untouched
+by that feature, deliberately — NFR-5 makes an untouched worker the mechanism by which a title
+already in flight finishes even after its type is disabled mid-pipeline).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

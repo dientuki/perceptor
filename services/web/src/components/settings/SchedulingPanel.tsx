@@ -41,6 +41,7 @@ function TaskRow({ task }: { task: ScheduledTask }) {
     : null;
 
   const isRunning = current.running || isPending;
+  const isUnavailable = !current.available;
 
   const handleRun = () => {
     setError(null);
@@ -49,6 +50,10 @@ function TaskRow({ task }: { task: ScheduledTask }) {
       if ("error" in result) {
         if (result.errorKey === "error.schedule.task_already_running") {
           setCurrent((prev) => ({ ...prev, running: true }));
+          return;
+        }
+        if (result.errorKey === "error.schedule.task_unavailable") {
+          setCurrent((prev) => ({ ...prev, available: false }));
           return;
         }
         setError(result.error || t("runErrorDefault"));
@@ -75,7 +80,7 @@ function TaskRow({ task }: { task: ScheduledTask }) {
           type="button"
           size="sm"
           variant="outline"
-          disabled={isRunning}
+          disabled={isRunning || isUnavailable}
           onClick={handleRun}
         >
           {isRunning ? t("running") : t("runButton")}
@@ -87,8 +92,15 @@ function TaskRow({ task }: { task: ScheduledTask }) {
           <Switch
             label={t("enabledLabel")}
             defaultChecked={current.enabled}
+            disabled={isUnavailable}
             onChange={setEnabled}
           />
+          {isUnavailable && (
+            <p className="mt-1 text-error-500">{t("unavailableReason")}</p>
+          )}
+          {/* Always emits the task's stored value, even while unavailable —
+              dropping this or forcing "false" would silently disable the
+              task for good the next time any setting is saved (REQ-9). */}
           <input
             type="hidden"
             name={`schedule_${current.id}_enabled`}

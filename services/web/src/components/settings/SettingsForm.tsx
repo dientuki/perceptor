@@ -9,7 +9,8 @@ import {
   Library,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useState } from "react";
 import { updateSettingsAction } from "@/actions/settings";
 import CompressionPanel from "@/components/settings/CompressionPanel";
 import GeneralPanel from "@/components/settings/GeneralPanel";
@@ -63,10 +64,22 @@ export default function SettingsForm({
 }: SettingsFormProps) {
   const t = useTranslations("settings.form");
   const tTabs = useTranslations("settings.tabs");
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(
     updateSettingsAction,
     null,
   );
+
+  // A successful save can change data another route's Server Components read
+  // (e.g. movies_enabled/shows_enabled feeding the (dashboard) layout's
+  // sidebar) — router.refresh() clears the client Router Cache so the next
+  // navigation re-fetches those shared segments instead of serving the stale
+  // cached RSC payload from before this save.
+  useEffect(() => {
+    if (state && "success" in state && state.success) {
+      router.refresh();
+    }
+  }, [state, router]);
   const [activeTab, setActiveTab] = useState<TabKey>("general");
   // Tracks whether the current `state` (success/error) has been dismissed by
   // a tab change. Reset to false whenever `state` itself changes — i.e. a

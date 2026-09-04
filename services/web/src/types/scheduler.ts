@@ -23,4 +23,5 @@ export type ScheduledTask = {
   running: boolean;
   nextRunAt: string | null;
   lastRun: ScheduledTaskRun | null;
+  available: boolean;
 };

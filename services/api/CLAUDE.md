@@ -108,7 +108,19 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `TmdbClient.popular()`) before running the same `cacheAndEnrich` ownership step every other entry
   point uses — the cache write happens strictly before enrichment, same ordering trap as
   `movies/`'s below. A TMDB failure here surfaces as `error.media.catalog_unavailable`
-  (`ServiceUnavailableException`), a new key in `error-keys.ts`.
+  (`ServiceUnavailableException`), a new key in `error-keys.ts`. Since
+  `045-media-type-availability`, `MediaCapabilitiesService` reads the `movies_enabled`/
+  `shows_enabled` Settings (`!== 'false'`, an absent row reads as enabled — same idiom as
+  `compression_enabled`) and answers `read()`/`isEnabled(type)`/`assertEnabled(type)`/
+  `enabledTypes()`. The `mediaCapabilities` query exposes the pair to every authenticated user with
+  no `AdminGuard` (the `settings` query stays admin-only — it also holds the TMDB bearer token and
+  other credentials this query must never leak). `assertEnabled` gates `searchMedia`, `popularMedia`
+  and `addMedia` before the dispatch call, and `searchAll` narrows its rows to the enabled types
+  before grouping — never after, since filtering post-`cacheAndEnrich` would still write a disabled
+  type's rows into that type's Redis cache. An unrecognised type is left to
+  `MediaDispatchService.resolve()`'s own `MEDIA_UNSUPPORTED_TYPE`, not reinterpreted here. Nothing
+  downstream of registration is gated — an in-flight download/encode for a type disabled mid-flight
+  still finishes (REQ-11).
 - **`movies/`** — CRUD over `Movie`, plus `search`/`register` (implementing `MediaTypeService`) and
   `addTorrentToMovie`/`addMagnetToMovie`, the two entry points into the download pipeline. `Movie` is
   a **shared catalog row** (`tmdbId @unique`, never duplicated) joined to `User` through `UserMovie`.
@@ -449,7 +461,20 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   running" marker, since `ScheduledTaskOutcome` has no `RUNNING` value). `onModuleInit` closes out
   any row still `finishedAt: null` at boot, so a crash mid-run can never permanently lock a task out
   as "already running". `scheduledTasks`/`runScheduledTask` carry `@UseGuards(AdminGuard)` **per
-  method** (the `ffprobe-logs.resolver.ts` split).
+  method** (the `ffprobe-logs.resolver.ts` split). Since `045-media-type-availability`, a task's
+  `ScheduledTaskDefinition` carries an optional `mediaType` (`refresh_movies` → movie,
+  `refresh_shows`/`refresh_episodes` → show, `acquire_pending` → none, always available) and
+  `ScheduledTask.available` reports whether that type is currently enabled — derived from the same
+  settings map `arm()`/`runTask()`/`buildStatus()` already hold, deliberately **not** by injecting
+  `MediaCapabilitiesService` (that would add a third edge to the existing `SettingsModule ⇄
+  SchedulerModule` `forwardRef` cycle for two boolean reads). `arm()` skips registering a cron job
+  for an unavailable task even if its own `schedule_*_enabled` is `true`; `runTask()` throws
+  `SCHEDULE_TASK_UNAVAILABLE` for a `'manual'` trigger and returns silently (no run row) for a
+  `'cron'` one. Flipping `movies_enabled`/`shows_enabled` through `updateSettings` now also re-arms
+  the scheduler — the `scheduleChanged` guard's key list was widened to include them, so an
+  administrator disabling a type doesn't leave its cron armed and firing until the next restart. The
+  stored `schedule_<id>_enabled` value is never rewritten by any of this — only its *effective*
+  availability changes.
 
 **Infrastructure**: `prisma/` (`PrismaModule` + `PrismaService`, effectively global), `redis/`,
 `queue/` (BullMQ producers; `queue/types.ts` is the job payload contract with the worker).
@@ -561,10 +586,11 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-09-03 (`043-pipeline-status-normalization`): `bin/cli api npx --no tsc --noEmit`
-reports **0 errors**, `bin/npm api test` is green at **361** tests across **37** suites. **Re-run
-both rather than trusting these numbers** — they exist so an agent can prove a change added
-nothing, not as a fact to cite.
+As of 2026-09-04 (`045-media-type-availability`): `bin/cli api npx --no tsc --noEmit`
+reports **0 errors**, `bin/npm api test` is green at **390** tests across **39** suites, and
+`git status --short services/api/prisma` prints nothing (no migration — this feature reads two
+existing Setting rows, it does not add any). **Re-run both rather than trusting these numbers** —
+they exist so an agent can prove a change added nothing, not as a fact to cite.
 
 ## Known debt
 

@@ -50,6 +50,8 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.MEDIA_UNSUPPORTED_TYPE]: 'Unsupported media type: {type}',
   [ERROR_KEYS.MEDIA_CATALOG_UNAVAILABLE]:
     'Could not reach the catalog. Check the TMDB API key.',
+  [ERROR_KEYS.MEDIA_TYPE_DISABLED]: '{type} is disabled on this system',
+  [ERROR_KEYS.MEDIA_SEARCH_UNAVAILABLE]: 'Search is disabled on this system',
 
   // magnet parsing
   [ERROR_KEYS.MAGNET_NOT_A_MAGNET]: 'That does not look like a magnet link',
@@ -130,6 +132,8 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND]: 'Scheduled task not found',
   [ERROR_KEYS.SCHEDULE_TASK_ALREADY_RUNNING]:
     'This scheduled task is already running',
+  [ERROR_KEYS.SCHEDULE_TASK_UNAVAILABLE]:
+    'This task is not available: its content type is disabled',
 
   // class-validator DTO constraints
   [ERROR_KEYS.VALIDATION_SETTING_KEY_REQUIRED]: 'The key is required',

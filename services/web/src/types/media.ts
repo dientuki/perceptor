@@ -9,6 +9,13 @@ export const MEDIA_TYPE = {
 
 export type MediaType = (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
 
+// System-wide capability flags — identical for every user, read from the
+// `movies_enabled` / `shows_enabled` Settings rows (045-media-type-availability).
+export interface MediaCapabilities {
+  moviesEnabled: boolean;
+  showsEnabled: boolean;
+}
+
 // Discriminated union so a target is either a movie or an episode, never
 // both — an episode paired with MEDIA_TYPE.MOVIE was exactly how an episode
 // id used to reach a movieId argument with no compile error.

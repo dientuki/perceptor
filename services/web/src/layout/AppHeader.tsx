@@ -7,14 +7,26 @@ import { useEffect, useRef } from "react";
 import type { CurrentUser } from "@/actions/auth";
 import UserDropdown from "@/components/header/UserDropdown";
 import { useSidebar } from "@/context/SidebarContext";
+import type { MediaCapabilities } from "@/types/media";
 
 interface AppHeaderProps {
   user: CurrentUser;
+  capabilities: MediaCapabilities;
 }
 
-const AppHeader: React.FC<AppHeaderProps> = ({ user }) => {
+const AppHeader: React.FC<AppHeaderProps> = ({ user, capabilities }) => {
   const t = useTranslations("header");
   const router = useRouter();
+
+  const { moviesEnabled, showsEnabled } = capabilities;
+  const searchDisabled = !moviesEnabled && !showsEnabled;
+  const placeholder = searchDisabled
+    ? t("searchUnavailable")
+    : moviesEnabled && showsEnabled
+      ? t("searchPlaceholder")
+      : moviesEnabled
+        ? t("searchPlaceholderMovies")
+        : t("searchPlaceholderShows");
 
   const { isMobileOpen, toggleMobileSidebar } = useSidebar();
 
@@ -51,6 +63,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user }) => {
           className="flex-grow"
           onSubmit={(e) => {
             e.preventDefault();
+            if (searchDisabled) {
+              return;
+            }
             const query = new FormData(e.currentTarget).get("q");
             const value = typeof query === "string" ? query : "";
             router.push(`/search?q=${encodeURIComponent(value)}`);
@@ -64,14 +79,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user }) => {
               ref={inputRef}
               type="text"
               name="q"
-              placeholder={t("searchPlaceholder")}
+              placeholder={placeholder}
+              disabled={searchDisabled}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
                   e.currentTarget.value = "";
                   e.currentTarget.blur();
                 }
               }}
-              className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-14 text-base text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+              className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-14 text-base text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />
 
             <span className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-[7px] py-[4.5px] text-xs -tracking-[0.2px] text-gray-500 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 sm:inline-flex">

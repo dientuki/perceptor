@@ -39,6 +39,8 @@ export const ERROR_KEYS = {
   MAGNET_ALREADY_ATTACHED: 'error.magnet.already_attached',
   MEDIA_UNSUPPORTED_TYPE: 'error.media.unsupported_type',
   MEDIA_CATALOG_UNAVAILABLE: 'error.media.catalog_unavailable',
+  MEDIA_TYPE_DISABLED: 'error.media.type_disabled',
+  MEDIA_SEARCH_UNAVAILABLE: 'error.media.search_unavailable',
 
   // magnet parsing (services/api/src/clients/torrent/magnet.ts)
   MAGNET_NOT_A_MAGNET: 'error.magnet.not_a_magnet',
@@ -99,6 +101,7 @@ export const ERROR_KEYS = {
   // scheduler
   SCHEDULE_TASK_NOT_FOUND: 'error.schedule.task_not_found',
   SCHEDULE_TASK_ALREADY_RUNNING: 'error.schedule.task_already_running',
+  SCHEDULE_TASK_UNAVAILABLE: 'error.schedule.task_unavailable',
 
   // class-validator DTO constraints (018 REQ-9). Not part of `spec.md`'s error
   // tables — spec.md doesn't name these eight, so the keys are named here,

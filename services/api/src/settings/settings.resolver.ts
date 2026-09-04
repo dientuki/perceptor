@@ -19,11 +19,20 @@ import {
 
 // The eight `schedule_*` keys a settings change re-arms the scheduler for —
 // derived from the same registry `SchedulerService.arm()` reads, so a fifth
-// task added there is covered here with no edit needed.
-const SCHEDULE_SETTING_KEYS = SCHEDULED_TASKS.flatMap((task) => [
-  scheduleEnabledSettingKey(task.id),
-  scheduleCronSettingKey(task.id),
-]);
+// task added there is covered here with no edit needed. `movies_enabled`/
+// `shows_enabled` are included too: flipping either changes which tasks
+// `arm()` considers available (045-media-type-availability) — without
+// re-arming here, turning a type off leaves its task's cron armed and
+// firing until the next restart, behind a UI that correctly shows it as
+// unavailable, with no error and no log line.
+const SCHEDULE_SETTING_KEYS = [
+  ...SCHEDULED_TASKS.flatMap((task) => [
+    scheduleEnabledSettingKey(task.id),
+    scheduleCronSettingKey(task.id),
+  ]),
+  'movies_enabled',
+  'shows_enabled',
+];
 
 // The four keys a media-server index rebuild depends on. Only these, and
 // only when the submitted entry differs from what was already stored —

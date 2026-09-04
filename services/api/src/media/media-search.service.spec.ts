@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MediaSearchService } from './media-search.service';
 import { MediaDispatchService } from './media-dispatch.service';
+import { MediaCapabilitiesService } from './media-capabilities.service';
 import { TmdbClient } from '@/clients/tmdb/client';
 import { MEDIA_TYPE } from '@/types/media';
 
@@ -30,6 +31,7 @@ describe('MediaSearchService', () => {
   let movies: { cacheAndEnrich: jest.Mock };
   let shows: { cacheAndEnrich: jest.Mock };
   let dispatch: { resolve: jest.Mock };
+  let capabilities: { enabledTypes: jest.Mock };
 
   const filmRow = (overrides = {}) => ({
     id: 42,
@@ -60,12 +62,16 @@ describe('MediaSearchService', () => {
     dispatch = {
       resolve: jest.fn((type: string) => (type === MEDIA_TYPE.MOVIE ? movies : shows)),
     };
+    capabilities = {
+      enabledTypes: jest.fn().mockResolvedValue([MEDIA_TYPE.MOVIE, MEDIA_TYPE.SHOW]),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MediaSearchService,
         { provide: TmdbClient, useValue: tmdb },
         { provide: MediaDispatchService, useValue: dispatch },
+        { provide: MediaCapabilitiesService, useValue: capabilities },
       ],
     }).compile();
 
@@ -158,6 +164,32 @@ describe('MediaSearchService', () => {
     const result = await service.searchAll('   ', 'user-1');
 
     expect(result).toEqual([]);
+    expect(tmdb.searchMulti).not.toHaveBeenCalled();
+  });
+
+  // 045-media-type-availability § REQ-10: filtering the disabled type's rows
+  // out of the *response* is not enough — cacheAndEnrich must never be
+  // called for it, because that call is what writes the disabled type's rows
+  // into its Redis cache. Moving the filter after the grouping loop would
+  // still pass on the returned list while failing this assertion.
+  it('never calls cacheAndEnrich for a disabled type', async () => {
+    capabilities.enabledTypes.mockResolvedValue([MEDIA_TYPE.MOVIE]);
+    const film = filmRow();
+    const series = seriesRow();
+    tmdb.searchMulti.mockResolvedValue([film, series]);
+    movies.cacheAndEnrich.mockResolvedValue([{ ...film, mediaId: null, inLibrary: false }]);
+
+    const result = await service.searchAll('dune', 'user-1');
+
+    expect(dispatch.resolve).not.toHaveBeenCalledWith(MEDIA_TYPE.SHOW);
+    expect(shows.cacheAndEnrich).not.toHaveBeenCalled();
+    expect(result.map(r => r.type)).toEqual([MEDIA_TYPE.MOVIE]);
+  });
+
+  it('refuses the search when both types are disabled, without contacting the catalog', async () => {
+    capabilities.enabledTypes.mockResolvedValue([]);
+
+    await expect(service.searchAll('dune', 'user-1')).rejects.toThrow();
     expect(tmdb.searchMulti).not.toHaveBeenCalled();
   });
 });

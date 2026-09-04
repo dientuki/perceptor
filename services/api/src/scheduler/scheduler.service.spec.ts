@@ -242,4 +242,67 @@ describe('SchedulerService', () => {
       }
     });
   });
+
+  // 045-media-type-availability (AC-6): a disabled media type must not leave
+  // a cron ticking behind a UI that shows the task as unavailable, and a
+  // hand-issued manual trigger must not slip through just because the
+  // task's own `schedule_*_enabled` flag is still stored `true`.
+  describe('media type availability (REQ-9)', () => {
+    const disabledMovieMap = {
+      movies_enabled: 'false',
+      schedule_refresh_movies_enabled: 'true',
+      schedule_refresh_movies_cron: '0 4 * * *',
+    };
+
+    it('arm() registers no cron job for a task whose media type is disabled, even while its own flag is true', async () => {
+      settingsService.getMap.mockResolvedValue(disabledMovieMap);
+
+      await service.arm();
+
+      expect(schedulerRegistry.addCronJob).not.toHaveBeenCalled();
+    });
+
+    it('buildStatus (via list()) reports available: false and nextRunAt undefined, without rewriting the stored enabled flag', async () => {
+      settingsService.getMap.mockResolvedValue(disabledMovieMap);
+      schedulerRegistry.doesExist.mockReturnValue(false);
+
+      const tasks = await service.list();
+      const refreshMovies = tasks.find((task) => task.id === 'refresh_movies');
+
+      expect(refreshMovies).toBeDefined();
+      expect(refreshMovies?.available).toBe(false);
+      expect(refreshMovies?.nextRunAt).toBeUndefined();
+      // The stored value itself is untouched — re-enabling the type must
+      // re-arm the task exactly as it was, not as something `list()` rewrote.
+      expect(refreshMovies?.enabled).toBe(true);
+    });
+
+    it('runTask throws SCHEDULE_TASK_UNAVAILABLE for a manual trigger while the media type is disabled, writing no run row', async () => {
+      settingsService.getMap.mockResolvedValue(disabledMovieMap);
+
+      await expect(service.runTask('refresh_movies', 'manual')).rejects.toThrow();
+
+      expect(prisma.scheduledTaskRun.create).not.toHaveBeenCalled();
+    });
+
+    it('runTask returns silently for a cron trigger while the media type is disabled, writing no run row', async () => {
+      settingsService.getMap.mockResolvedValue(disabledMovieMap);
+
+      await expect(service.runTask('refresh_movies', 'cron')).resolves.toBeUndefined();
+
+      expect(prisma.scheduledTaskRun.create).not.toHaveBeenCalled();
+    });
+
+    it('a task with no mediaType (acquire_pending) stays available regardless of the media flags', async () => {
+      settingsService.getMap.mockResolvedValue({
+        movies_enabled: 'false',
+        shows_enabled: 'false',
+      });
+
+      const tasks = await service.list();
+      const acquirePending = tasks.find((task) => task.id === 'acquire_pending');
+
+      expect(acquirePending?.available).toBe(true);
+    });
+  });
 });

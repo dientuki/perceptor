@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
 import { getLanguages } from "@/actions/languages";
+import { getMediaCapabilities } from "@/actions/media";
 import { getPreferences, getTorrentGroups } from "@/actions/preferences";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import PreferencesForm from "@/components/preferences/PreferencesForm";
@@ -23,12 +24,14 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PreferencesPage() {
   const t = await getTranslations("pages.preferences");
 
-  const [user, preferences, languages, torrentGroups] = await Promise.all([
-    getCurrentUser(),
-    getPreferences(),
-    getLanguages(),
-    getTorrentGroups(),
-  ]);
+  const [user, preferences, languages, torrentGroups, capabilities] =
+    await Promise.all([
+      getCurrentUser(),
+      getPreferences(),
+      getLanguages(),
+      getTorrentGroups(),
+      getMediaCapabilities(),
+    ]);
 
   return (
     <div>
@@ -40,6 +43,7 @@ export default async function PreferencesPage() {
             preferences={preferences}
             languages={languages}
             torrentGroups={torrentGroups}
+            capabilities={capabilities}
           />
         </div>
       </div>

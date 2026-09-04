@@ -23,4 +23,10 @@ export class ScheduledTask {
 
   @Field(() => ScheduledTaskRun, { nullable: true })
   lastRun?: ScheduledTaskRun;
+
+  // 045-media-type-availability: false when this task belongs to a media
+  // type (`mediaType` on its registry definition) that is currently
+  // disabled. Placed last so the generated SDL matches the frozen contract.
+  @Field()
+  available: boolean;
 }

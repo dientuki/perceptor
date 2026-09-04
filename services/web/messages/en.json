@@ -32,7 +32,9 @@
     },
     "media": {
       "catalog_unavailable": "Could not query the catalog. Check the TMDB API key.",
-      "unsupported_type": "Unsupported media type: {type}"
+      "unsupported_type": "Unsupported media type: {type}",
+      "type_disabled": "{type, select, movie {Movies are disabled on this system} show {Series are disabled on this system} other {This media type is disabled on this system}}",
+      "search_unavailable": "Search is disabled on this system"
     },
     "episode": {
       "already_completed": "This episode is already downloaded. Confirm to replace the current file."
@@ -91,7 +93,8 @@
     },
     "schedule": {
       "task_not_found": "The scheduled task does not exist",
-      "task_already_running": "The task is already running"
+      "task_already_running": "The task is already running",
+      "task_unavailable": "This task is not available: its media type is disabled"
     },
     "setting": {
       "expected_cron": "The value of {key} must be a valid cron expression"
@@ -138,6 +141,9 @@
   },
   "header": {
     "searchPlaceholder": "Search Movies & Series",
+    "searchPlaceholderMovies": "Search Movies",
+    "searchPlaceholderShows": "Search Series",
+    "searchUnavailable": "Search is unavailable",
     "toggleSidebar": "Toggle Sidebar"
   },
   "pages": {
@@ -246,7 +252,8 @@
       "addButton": "Add",
       "adding": "Adding...",
       "errorSearch": "Could not complete the search. Try again.",
-      "errorAdd": "Could not add the {noun}. Try again."
+      "errorAdd": "Could not add the {noun}. Try again.",
+      "unavailable": "Search is disabled on this system."
     },
     "input": {
       "placeholder": "Search {noun}...",
@@ -282,7 +289,8 @@
   },
   "billboard": {
     "moviesHeading": "Popular movies",
-    "showsHeading": "Popular series"
+    "showsHeading": "Popular series",
+    "unavailable": "Movies and series are both disabled on this system."
   },
   "media": {
     "card": {
@@ -388,6 +396,7 @@
       "runButton": "Run now",
       "running": "Running…",
       "runErrorDefault": "Could not run the task.",
+      "unavailableReason": "Unavailable: its media type is disabled in Media Manager.",
       "outcome": {
         "SUCCESS": "Success",
         "FAILED": "Failed",

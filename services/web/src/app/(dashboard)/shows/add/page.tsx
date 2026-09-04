@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { addMedia, searchMedia } from "@/actions/media";
+import { addMedia, getMediaCapabilities, searchMedia } from "@/actions/media";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import SearchContainer from "@/components/search/SearchContainer";
 import { MEDIA_TYPE } from "@/types/media";
@@ -16,6 +17,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function ShowAddPage() {
   const t = await getTranslations("pages.showsAdd");
+  const capabilities = await getMediaCapabilities();
+
+  if (!capabilities.showsEnabled) {
+    notFound();
+  }
 
   return (
     <div>

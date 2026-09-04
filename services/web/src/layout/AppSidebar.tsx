@@ -16,6 +16,7 @@ import { useTranslations } from "next-intl";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSidebar } from "../context/SidebarContext";
+import type { MediaCapabilities } from "@/types/media";
 
 type NavItem = {
   name: string;
@@ -26,9 +27,13 @@ type NavItem = {
 
 interface AppSidebarProps {
   isAdmin?: boolean;
+  capabilities: MediaCapabilities;
 }
 
-const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
+const AppSidebar: React.FC<AppSidebarProps> = ({
+  isAdmin = false,
+  capabilities,
+}) => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
   const t = useTranslations("nav");
@@ -40,16 +45,24 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ isAdmin = false }) => {
       name: t("billboard"),
       path: "/",
     },
-    {
-      icon: <Film />,
-      name: t("movies"),
-      path: "/movies",
-    },
-    {
-      icon: <TvMinimal />,
-      name: t("shows"),
-      path: "/shows",
-    },
+    ...(capabilities.moviesEnabled
+      ? [
+          {
+            icon: <Film />,
+            name: t("movies"),
+            path: "/movies",
+          },
+        ]
+      : []),
+    ...(capabilities.showsEnabled
+      ? [
+          {
+            icon: <TvMinimal />,
+            name: t("shows"),
+            path: "/shows",
+          },
+        ]
+      : []),
     {
       icon: <Calendar />,
       name: t("calendar"),
