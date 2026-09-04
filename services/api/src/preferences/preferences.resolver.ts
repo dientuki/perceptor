@@ -3,6 +3,7 @@ import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { LanguageTrackKind as PrismaLanguageTrackKind } from '@prisma/client';
 
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
+import { AdminGuard } from '@/auth/guards/admin.guard';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import type { AuthPrincipal } from '@/auth/auth.types';
 import { i18nError } from '@/i18n/i18n-error';
@@ -16,9 +17,15 @@ import { TorrentGroup } from './entities/torrent-group.entity';
 import { TorrentGroupScope } from './entities/torrent-group-scope.enum';
 import { LanguageTrackKind } from './entities/language-track-kind.enum';
 
-// Every operation is rooted at @CurrentUser() and rejects a non-user
+// Most operations here are rooted at @CurrentUser() and reject a non-user
 // principal the same way AuthResolver's setUiLocale/me do — no operation
-// here takes a user id and none carries @AllowService() (REQ-9).
+// takes a user id and none carries @AllowService() (REQ-9). The two
+// exceptions are createTorrentGroup and deleteTorrentGroup: they curate the
+// shared catalog, not a caller's own selection, so they take AdminGuard
+// instead and an id/name argument rather than @CurrentUser(). The
+// torrentGroups query stays JwtAuthGuard-only despite sitting next to those
+// two — /preferences (not an admin screen) is what reads it, so any
+// signed-in user must be able to see the whole catalog to pick from it.
 @Resolver()
 export class PreferencesResolver {
   constructor(
@@ -35,16 +42,17 @@ export class PreferencesResolver {
     return this.preferencesService.findForUser(principal.id);
   }
 
+  // The catalog carries no scope, so any signed-in user reads it whole —
+  // this stays JwtAuthGuard-only, never AdminGuard, since `/preferences`
+  // (not an admin screen) is the caller. Only createTorrentGroup and
+  // deleteTorrentGroup are administrator-only.
   @UseGuards(JwtAuthGuard)
   @Query(() => [TorrentGroup])
-  async torrentGroups(
-    @CurrentUser() principal: AuthPrincipal,
-    @Args('scope', { type: () => TorrentGroupScope, nullable: true }) scope?: TorrentGroupScope,
-  ): Promise<TorrentGroup[]> {
+  async torrentGroups(@CurrentUser() principal: AuthPrincipal): Promise<TorrentGroup[]> {
     if (principal.type !== 'user') {
       throw i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED);
     }
-    return this.preferencesService.findCatalog(scope ?? undefined);
+    return this.preferencesService.findCatalog();
   }
 
   @UseGuards(JwtAuthGuard)
@@ -86,6 +94,18 @@ export class PreferencesResolver {
       kind as unknown as PrismaLanguageTrackKind,
       tags,
     );
+  }
+
+  @UseGuards(AdminGuard)
+  @Mutation(() => TorrentGroup)
+  async createTorrentGroup(@Args('name') name: string): Promise<TorrentGroup> {
+    return this.preferencesService.createTorrentGroup(name);
+  }
+
+  @UseGuards(AdminGuard)
+  @Mutation(() => Boolean)
+  async deleteTorrentGroup(@Args('id', { type: () => Int }) id: number): Promise<boolean> {
+    return this.preferencesService.deleteTorrentGroup(id);
   }
 
   @UseGuards(JwtAuthGuard)

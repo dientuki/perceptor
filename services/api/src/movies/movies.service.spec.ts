@@ -172,7 +172,9 @@ describe('MoviesService', () => {
 
   describe('findAll', () => {
     it('scopes the query to the caller through the user_movies join', async () => {
-      prisma.movie.findMany.mockResolvedValue([{ id: 1, title: 'Mine' }]);
+      prisma.movie.findMany.mockResolvedValue([
+        { id: 1, title: 'Mine', status: 'MISSING', mediaSources: [], processJobs: [] },
+      ]);
 
       await service.findAll('user-1');
 
@@ -190,7 +192,13 @@ describe('MoviesService', () => {
 
   describe('findOneFromDb', () => {
     it('scopes the query to the caller through the user_movies join', async () => {
-      prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Mine' });
+      prisma.movie.findFirst.mockResolvedValue({
+        id: 7,
+        title: 'Mine',
+        status: 'MISSING',
+        mediaSources: [],
+        processJobs: [],
+      });
 
       await service.findOneFromDb(7, 'user-1');
 

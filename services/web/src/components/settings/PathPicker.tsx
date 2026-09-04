@@ -11,6 +11,11 @@ interface PathPickerProps {
   root: MediaRoot;
   // Valor guardado, relativo a la raíz ('.' significa "la raíz misma").
   value: string;
+  // When true, the visible input becomes read-only — the hidden input below
+  // keeps submitting `segment`'s current value regardless, so a gating
+  // switch never blanks, drops or defaults the stored path to '.' (which
+  // means "the media root itself" and would silently repoint the library).
+  disabled?: boolean;
 }
 
 // La ruta de container nunca se muestra ni se tipea acá — sólo la raíz del
@@ -24,6 +29,7 @@ export default function PathPicker({
   label,
   root,
   value,
+  disabled = false,
 }: PathPickerProps) {
   const t = useTranslations("settings.pathPicker");
   const [segment, setSegment] = useState(value === "." ? "" : value);
@@ -38,7 +44,11 @@ export default function PathPicker({
     <div>
       <Label htmlFor={`${settingKey}-input`}>{label}</Label>
 
-      <div className="flex items-stretch overflow-hidden rounded-lg border border-gray-300 shadow-theme-xs dark:border-gray-700">
+      <div
+        className={`flex items-stretch overflow-hidden rounded-lg border border-gray-300 shadow-theme-xs dark:border-gray-700 ${
+          disabled ? "bg-gray-50 dark:bg-gray-900" : ""
+        }`}
+      >
         <span
           className="flex items-center whitespace-nowrap bg-gray-50 px-3 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
           title={root.hostPath}
@@ -50,8 +60,13 @@ export default function PathPicker({
           type="text"
           value={segment}
           onChange={(e) => setSegment(e.target.value)}
+          readOnly={disabled}
           placeholder={t("placeholder")}
-          className="h-11 w-full min-w-0 bg-transparent px-2 text-gray-800 focus:outline-hidden dark:text-white/90"
+          className={`h-11 w-full min-w-0 bg-transparent px-2 focus:outline-hidden ${
+            disabled
+              ? "cursor-not-allowed text-gray-400 dark:text-gray-500"
+              : "text-gray-800 dark:text-white/90"
+          }`}
         />
       </div>
 

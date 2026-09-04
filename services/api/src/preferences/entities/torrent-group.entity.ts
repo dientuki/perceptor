@@ -1,10 +1,9 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
 
-import { TorrentGroupScope } from './torrent-group-scope.enum';
-
 @ObjectType({
   description:
-    'A release group, scoped to films or to series. The catalog is administrator-curated.',
+    'A release group name in the administrator-curated catalog. Carries no scope of its own — ' +
+    'a user decides, per group, whether it applies to their films, their series, both or neither.',
 })
 export class TorrentGroup {
   @Field(() => Int)
@@ -12,7 +11,4 @@ export class TorrentGroup {
 
   @Field()
   name: string;
-
-  @Field(() => TorrentGroupScope)
-  scope: TorrentGroupScope;
 }

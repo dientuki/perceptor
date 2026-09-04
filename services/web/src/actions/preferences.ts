@@ -33,10 +33,13 @@ const PREFERENCES_QUERY = `
         iso3
         name
       }
-      torrentGroups {
+      movieTorrentGroups {
         id
         name
-        scope
+      }
+      showTorrentGroups {
+        id
+        name
       }
     }
   }
@@ -60,7 +63,8 @@ export async function getPreferences(): Promise<UserPreferences> {
       audioMandatory: false,
       audioLanguages: [],
       subtitleLanguages: [],
-      torrentGroups: [],
+      movieTorrentGroups: [],
+      showTorrentGroups: [],
     }
   );
 }
@@ -70,13 +74,12 @@ const TORRENT_GROUPS_QUERY = `
     torrentGroups {
       id
       name
-      scope
     }
   }
 `;
 
-// Called without `scope` — the whole catalog comes back and callers split it
-// by `group.scope` themselves (spec § "Query.torrentGroups is the catalog").
+// The catalog is a flat, unpartitioned list — both Movies and Series tabs
+// offer the same full set of options.
 export async function getTorrentGroups(): Promise<TorrentGroup[]> {
   const { data, errors } = await fetchGraphQL<{
     torrentGroups: TorrentGroup[];
@@ -108,10 +111,13 @@ const SET_ALLOW_CINEMA_RELEASES_MUTATION = `
         iso3
         name
       }
-      torrentGroups {
+      movieTorrentGroups {
         id
         name
-        scope
+      }
+      showTorrentGroups {
+        id
+        name
       }
     }
   }
@@ -169,10 +175,13 @@ const SET_AUDIO_MANDATORY_MUTATION = `
         iso3
         name
       }
-      torrentGroups {
+      movieTorrentGroups {
         id
         name
-        scope
+      }
+      showTorrentGroups {
+        id
+        name
       }
     }
   }
@@ -255,12 +264,81 @@ export async function setPreferredTrackLanguagesAction(
   return { success: true };
 }
 
+const CREATE_TORRENT_GROUP_MUTATION = `
+  mutation CreateTorrentGroup($name: String!) {
+    createTorrentGroup(name: $name) {
+      id
+      name
+    }
+  }
+`;
+
+// Called from the admin-only Torrent Manager panel (/settings). Returns the
+// created group rather than throwing, so the panel can render the
+// duplicate-name / empty-name message inline without an unhandled error
+// boundary — a thrown Server Action error loses extensions.i18n.key.
+export async function createTorrentGroupAction(
+  name: string,
+): Promise<{ error: string } | { success: true; torrentGroup: TorrentGroup }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(CREATE_TORRENT_GROUP_MUTATION, { name });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return {
+    success: true,
+    torrentGroup: (result.data as { createTorrentGroup: TorrentGroup })
+      .createTorrentGroup,
+  };
+}
+
+const DELETE_TORRENT_GROUP_MUTATION = `
+  mutation DeleteTorrentGroup($id: Int!) {
+    deleteTorrentGroup(id: $id)
+  }
+`;
+
+// id arrives as a string from the badge's remove button; converted with
+// Number before it goes on the wire, same convention as
+// setPreferredTorrentGroupsAction below.
+export async function deleteTorrentGroupAction(
+  id: string,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(DELETE_TORRENT_GROUP_MUTATION, {
+      id: Number(id),
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
+}
+
 const SET_PREFERRED_TORRENT_GROUPS_MUTATION = `
   mutation SetPreferredTorrentGroups($scope: TorrentGroupScope!, $ids: [Int!]!) {
     setPreferredTorrentGroups(scope: $scope, ids: $ids) {
       id
       name
-      scope
     }
   }
 `;

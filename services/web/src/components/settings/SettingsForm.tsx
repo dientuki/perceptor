@@ -1,6 +1,13 @@
 "use client";
 
-import { Clock, Cloud, FolderTree, Globe, Server, Sliders } from "lucide-react";
+import {
+  Cast,
+  Clock,
+  Cloud,
+  FileVideoCamera,
+  Globe,
+  Library,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useActionState, useState } from "react";
 import { updateSettingsAction } from "@/actions/settings";
@@ -17,6 +24,7 @@ import type {
   MediaServerIndexStatus,
   MediaServerOption,
 } from "@/types/media-server";
+import type { TorrentGroup } from "@/types/preferences";
 import type { ScheduledTask } from "@/types/scheduler";
 import type { Setting } from "@/types/settings";
 
@@ -26,6 +34,7 @@ interface SettingsFormProps {
   mediaServerOptions: MediaServerOption[];
   mediaServerIndexStatus: MediaServerIndexStatus;
   scheduledTasks: ScheduledTask[];
+  torrentGroups: TorrentGroup[];
 }
 
 const TABS = [
@@ -50,6 +59,7 @@ export default function SettingsForm({
   mediaServerOptions,
   mediaServerIndexStatus,
   scheduledTasks,
+  torrentGroups,
 }: SettingsFormProps) {
   const t = useTranslations("settings.form");
   const tTabs = useTranslations("settings.tabs");
@@ -58,6 +68,16 @@ export default function SettingsForm({
     null,
   );
   const [activeTab, setActiveTab] = useState<TabKey>("general");
+  // Tracks whether the current `state` (success/error) has been dismissed by
+  // a tab change. Reset to false whenever `state` itself changes — i.e. a
+  // new save attempt — via the "adjust state during render" pattern, since a
+  // ref would not trigger the re-render that hides/shows the message.
+  const [messageDismissed, setMessageDismissed] = useState(false);
+  const [lastState, setLastState] = useState(state);
+  if (state !== lastState) {
+    setLastState(state);
+    setMessageDismissed(false);
+  }
 
   const getSettingValue = (key: string) =>
     settings.find((setting) => setting.key === key)?.value ?? "";
@@ -71,22 +91,27 @@ export default function SettingsForm({
 
   const tabItems: TabNavItem[] = [
     { key: "general", label: tTabs("general"), icon: Globe },
-    { key: "mediaManager", label: tTabs("mediaManager"), icon: FolderTree },
-    { key: "mediaServer", label: tTabs("mediaServer"), icon: Server },
+    { key: "mediaManager", label: tTabs("mediaManager"), icon: Library },
+    { key: "mediaServer", label: tTabs("mediaServer"), icon: Cast },
     { key: "torrentManager", label: tTabs("torrentManager"), icon: Cloud },
-    { key: "compression", label: tTabs("compression"), icon: Sliders },
+    {
+      key: "compression",
+      label: tTabs("compression"),
+      icon: FileVideoCamera,
+    },
     { key: "scheduling", label: tTabs("scheduling"), icon: Clock },
   ];
 
   const panelClass = (key: TabKey) => (key === activeTab ? "" : "hidden");
 
+  const handleTabChange = (key: string) => {
+    setActiveTab(key as TabKey);
+    setMessageDismissed(true);
+  };
+
   return (
     <div>
-      <TabNav
-        items={tabItems}
-        active={activeTab}
-        onChange={(key) => setActiveTab(key as TabKey)}
-      />
+      <TabNav items={tabItems} active={activeTab} onChange={handleTabChange} />
 
       <form action={formAction}>
         <div className="mt-6 space-y-6">
@@ -121,6 +146,7 @@ export default function SettingsForm({
               downloadsFolder={getSettingValue("path_downloads")}
               trackerApiKey={getSettingValue("tracker_api_key")}
               downloadsRoot={rootOf("downloads")}
+              torrentGroups={torrentGroups}
             />
           </div>
 
@@ -129,6 +155,7 @@ export default function SettingsForm({
               compressionEnabled={
                 getSettingValue("compression_enabled") === "true"
               }
+              compressionResolution={getSettingValue("compression_resolution")}
             />
           </div>
 
@@ -137,13 +164,13 @@ export default function SettingsForm({
           </div>
         </div>
 
-        {state && "error" in state && state.error && (
+        {!messageDismissed && state && "error" in state && state.error && (
           <p className="mt-6 rounded-lg bg-error-50 p-3 text-error-500 dark:bg-error-500/10">
             {state.error}
           </p>
         )}
 
-        {state && "success" in state && state.success && (
+        {!messageDismissed && state && "success" in state && state.success && (
           <p className="mt-6 text-success-500">{t("saved")}</p>
         )}
 

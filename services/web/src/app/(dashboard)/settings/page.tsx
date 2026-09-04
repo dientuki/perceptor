@@ -7,6 +7,7 @@ import {
   getMediaServerIndexStatus,
   getMediaServerOptions,
 } from "@/actions/media-server";
+import { getTorrentGroups } from "@/actions/preferences";
 import { getScheduledTasks } from "@/actions/scheduler";
 import { getSettings } from "@/actions/settings";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
@@ -40,12 +41,14 @@ export default async function SettingsPage() {
     mediaServerOptions,
     mediaServerIndexStatus,
     scheduledTasks,
+    torrentGroups,
   ] = await Promise.all([
     getSettings(),
     getMediaRoots(),
     getMediaServerOptions(),
     getMediaServerIndexStatus(),
     getScheduledTasks(),
+    getTorrentGroups(),
   ]);
 
   return (
@@ -60,6 +63,7 @@ export default async function SettingsPage() {
               mediaServerOptions={mediaServerOptions}
               mediaServerIndexStatus={mediaServerIndexStatus}
               scheduledTasks={scheduledTasks}
+              torrentGroups={torrentGroups}
             />
           </div>
         </div>

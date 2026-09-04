@@ -19,7 +19,9 @@ const DOWNLOAD_FIELDS = `
   episodeId
   status
   torrentState
-  progress
+  downloadProgress
+  encodeProgress
+  compressionEnabled
   downloadSpeed
   readAt
 `;

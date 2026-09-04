@@ -301,6 +301,21 @@ scope) are gated on `infoHash != null`, never on `kind`: `SourceKind` has two to
 show's torrents renders with no buttons at all rather than a wrong one. No polling — a refresh
 control re-reads via `router.refresh()`.
 
+Since `043-pipeline-status-normalization`, `Download.status` (and `Movie.status`/`Episode.status`)
+is one of eight normalized values — `MISSING`/`QUEUED`/`DOWNLOADING`/`PAUSED`/`DOWNLOADED`/
+`ENCODING`/`COMPLETED`/`ERROR` — derived server-side, never decided in `web`. `src/components/
+status/StatusBadge.tsx` is the **single** status pill: `DownloadsPanel.tsx` and
+`SeasonAccordion.tsx` both render it rather than each carrying its own `statusBadgeClass`, and
+`Movie.tsx`/`Show.tsx` render it for the title-level status too. It maps a value to a color
+(`COMPLETED` green, `ERROR` red, `MISSING` gray, everything else the pulsing in-progress blue) and
+to its label via `useTranslations("status")` — the eight keys live in a `status` namespace in
+`messages/{en,es}.json`, not under `errors` (they are display copy, not a keyed error). An
+unrecognised value renders the raw string rather than crashing. `DownloadsPanel.tsx` draws two
+progress bars per row from `download.downloadProgress`/`download.encodeProgress` (0..100, `null`
+renders an empty track and `—`, never a spinner), the second only when
+`download.compressionEnabled` is `true`. `Download.progress` was renamed to `downloadProgress` in
+the same change — there is no back-compat alias.
+
 ## The `AcquisitionTarget` union
 
 `SearchTorrentModal.tsx`, `SearchTorrent.tsx`, `importMagnetModal.tsx` and `importFileModal.tsx` all
@@ -475,9 +490,14 @@ mutation together via one `Promise.all`, reverting only the field whose result c
 seven mutations as of `039-per-title-language-split` (`setUiLocale`, `setPreferredTrackLanguages`
 ×2, `setAllowCinemaReleases`, `setAudioMandatory`, `setPreferredTorrentGroups` ×2). The `movies` tab
 decides between its empty state and `TorrentGroupPickerField` (a sibling of `LanguagePickerField`,
-not a generalization of it — bound to one `TorrentGroupScope` at a time) on `options.length === 0`,
-**before** the picker is ever referenced in the render tree: an empty catalog must never reach a form
-that could submit an empty "clear my selection" write by accident.
+not a generalization of it) on `options.length === 0`, **before** the picker is ever referenced in the
+render tree: an empty catalog must never reach a form that could submit an empty "clear my selection"
+write by accident. Since `044-settings-screen-polish` the picker itself was never scope-aware — it
+only ever read whatever `options`/`value` its caller passed — but the catalog it's fed **is** now one
+flat, unscoped list (`torrentGroups` lost its argument; `TorrentGroup` itself lost `scope`), offered
+identically on the `movies` and `shows` tabs; only `UserPreferences.movieTorrentGroups`/
+`showTorrentGroups` and the `setPreferredTorrentGroups(scope, ids)` write stay scope-specific, so the
+same group can be one user's Movies pick and someone else's (or the same user's) Series pick.
 Both nav entries — sidebar (`AppSidebar.tsx`'s `baseNavItems`, the array every signed-in user gets,
 not the `isAdmin` spread beneath it) and the header (`UserDropdown.tsx`, beside the pre-existing
 *Ajustes* item) — show *Preferencias* unconditionally and *Ajustes* only where each surface already
@@ -580,7 +600,7 @@ parity check with an exit code.
 
 ## Current state
 
-As of 2026-09-02 (`021-user-preferences`): `bin/cli web npx --no tsc --noEmit` reports
+As of 2026-09-03 (`043-pipeline-status-normalization`): `bin/cli web npx --no tsc --noEmit` reports
 **0 errors** and `bin/npm web run build` exits 0. Re-run both rather than trusting this — report the
 numbers before and after a change to prove you added nothing.
 

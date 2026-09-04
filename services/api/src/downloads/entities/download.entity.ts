@@ -48,7 +48,13 @@ export class Download {
   torrentState?: string;
 
   @Field(() => Float, { nullable: true })
-  progress?: number;
+  downloadProgress?: number;
+
+  @Field(() => Float, { nullable: true })
+  encodeProgress?: number;
+
+  @Field()
+  compressionEnabled: boolean;
 
   @Field(() => Float, { nullable: true })
   downloadSpeed?: number;

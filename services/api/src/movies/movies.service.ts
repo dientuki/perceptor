@@ -17,6 +17,7 @@ import { SourceKind } from '@prisma/client';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
+import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
@@ -72,7 +73,7 @@ export class MoviesService implements MediaTypeService {
   // scoped the same way — movie(id) only resolves against the caller's own
   // library.
   async findAll(userId: string) {
-    return this.prisma.movie.findMany({
+    const movies = await this.prisma.movie.findMany({
       where: { users: { some: { userId } } },
       orderBy: { createdAt: 'desc' }, // Las más recientes primero
       include: {
@@ -80,6 +81,7 @@ export class MoviesService implements MediaTypeService {
         processJobs: true,
       },
     });
+    return movies.map((movie) => this.withDerivedStatus(movie));
   }
 
   // Same ownership clause as attachTorrentSource: returns the film only when
@@ -87,13 +89,36 @@ export class MoviesService implements MediaTypeService {
   // id does not exist and when it exists but belongs to someone else — the
   // two are deliberately indistinguishable from here on (see spec.md § Errors).
   async findOneFromDb(id: number, userId: string) {
-    return this.prisma.movie.findFirst({
+    const movie = await this.prisma.movie.findFirst({
       where: { id, users: { some: { userId } } },
       include: {
         mediaSources: true,
         processJobs: true,
       },
     });
+    return movie ? this.withDerivedStatus(movie) : null;
+  }
+
+  // REQ-4's title-altitude derivation, mapped onto a Prisma row that already
+  // carries mediaSources/processJobs (findAll/findOneFromDb's own include —
+  // no extra query here). Done in the service, not a @ResolveField, since the
+  // Prisma result is where those relations are typed; the entity type never
+  // declares them.
+  private withDerivedStatus<
+    T extends {
+      status: import('@prisma/client').MediaStatus;
+      mediaSources: { status: import('@prisma/client').SourceStatus }[];
+      processJobs: { status: import('@prisma/client').EncodeStatus }[];
+    },
+  >(movie: T): Omit<T, 'status'> & { status: string } {
+    return {
+      ...movie,
+      status: deriveTitleStatus({
+        status: movie.status,
+        sources: movie.mediaSources,
+        jobs: movie.processJobs,
+      }),
+    };
   }
 
   async update(id: number, updateMovieDto: UpdateMovieDto) {

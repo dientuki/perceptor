@@ -27,7 +27,12 @@ export class UserPreferences {
   subtitleLanguages: Language[];
 
   @Field(() => [TorrentGroup], {
-    description: "The caller's selection, both scopes in one list — web splits it by `scope`.",
+    description: "The caller's selected torrent groups for their films.",
   })
-  torrentGroups: TorrentGroup[];
+  movieTorrentGroups: TorrentGroup[];
+
+  @Field(() => [TorrentGroup], {
+    description: "The caller's selected torrent groups for their series.",
+  })
+  showTorrentGroups: TorrentGroup[];
 }

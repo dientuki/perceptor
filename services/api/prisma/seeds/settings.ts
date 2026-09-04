@@ -46,6 +46,14 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'movies_enabled', value: 'true' },
     { key: 'shows_enabled', value: 'false' },
     { key: 'compression_enabled', value: 'true' },
+    // '1080p' is the resolution the worker already downscales HEVC 4K to
+    // (042/044) — one of the four values in settings.catalog.ts's
+    // `COMPRESSION_RESOLUTIONS`. Not imported from there: this file runs
+    // under plain ts-node (see prisma.config.ts's `seed` command), which has
+    // no tsconfig-paths register step, and settings.catalog.ts itself pulls
+    // in other modules through the unresolvable `@/*` alias (same limitation
+    // documented in scripts/reset-password.ts and prisma/seeds/index.ts).
+    { key: 'compression_resolution', value: '1080p' },
 
     { key: 'ui_locale', value: '' },
     { key: 'default_languages', value: '' },

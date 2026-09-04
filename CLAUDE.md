@@ -219,7 +219,15 @@ not fixed here since `params.ts` was explicitly out of scope), `web` typechecks 
 321/34 suites (`worker`/`web` untouched by that feature) — and again 2026-09-03 after
 `035-scheduled-tasks`: `api` 331/35 suites, `web` typechecks at 0 errors and `bin/npm web run build`
 exits 0 (`worker` untouched by that feature) — and again 2026-09-03 after
-`041-episode-info-refresh`: `api` 336/36 suites (`worker`/`web` untouched by that feature).
+`041-episode-info-refresh`: `api` 336/36 suites (`worker`/`web` untouched by that feature) — and
+again 2026-09-03 after `042-encode-global-language-preferences`: `api` 342/36 suites (`worker`/`web`
+untouched by that feature) — and again 2026-09-03 after `043-pipeline-status-normalization`: `api`
+361/37 suites, `web` typechecks at 0 errors and `bin/npm web run build` exits 0 (`worker` untouched
+by that feature, deliberately — no pipeline stage changed status, the reporting layer above them
+did) — and again 2026-09-04 after `044-settings-screen-polish`: `api` 363/37 suites, `web`
+typechecks at 0 errors and `bin/npm web run build` exits 0 (`worker` untouched by that feature,
+deliberately — no pipeline stage changed, only the admin Settings screen and the `/preferences`
+torrent-group catalog it feeds).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

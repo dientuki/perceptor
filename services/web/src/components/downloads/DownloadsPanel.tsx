@@ -5,25 +5,11 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { startDownloadAction, stopDownloadAction } from "@/actions/downloads";
+import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import type { Download } from "@/types/downloads";
 import DeleteDownloadModal from "./DeleteDownloadModal";
-
-// Same treatment as SeasonAccordion.tsx:13-24 — the two screens share one
-// visual vocabulary for a status pill.
-function statusBadgeClass(status: string): string {
-  switch (status) {
-    case "COMPLETED":
-      return "bg-green-500/10 text-green-500";
-    case "ERROR":
-      return "bg-red-500/10 text-red-500";
-    case "MISSING":
-      return "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400";
-    default:
-      return "animate-pulse bg-blue-500/10 text-blue-500";
-  }
-}
 
 function formatSpeed(bytesPerSecond: number | null): string {
   if (bytesPerSecond === null) return "—";
@@ -96,16 +82,35 @@ function DownloadRow({ download, onDeleteRequest }: DownloadRowProps) {
         )}
       </td>
       <td className="px-4 py-3">
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold uppercase tracking-wider ${statusBadgeClass(
-            download.status,
-          )}`}
-        >
-          {download.status}
-        </span>
+        <StatusBadge status={download.status} />
       </td>
-      <td className="whitespace-nowrap px-4 py-3 text-gray-700 dark:text-gray-300">
-        {formatProgress(download.progress)}
+      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-full min-w-[6rem] overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+              <div
+                className="h-full rounded-full bg-brand-500 transition-all"
+                style={{ width: `${download.downloadProgress ?? 0}%` }}
+              />
+            </div>
+            <span className="shrink-0 whitespace-nowrap text-xs">
+              {formatProgress(download.downloadProgress)}
+            </span>
+          </div>
+          {download.compressionEnabled && (
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-full min-w-[6rem] overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                <div
+                  className="h-full rounded-full bg-brand-500 transition-all"
+                  style={{ width: `${download.encodeProgress ?? 0}%` }}
+                />
+              </div>
+              <span className="shrink-0 whitespace-nowrap text-xs">
+                {formatProgress(download.encodeProgress)}
+              </span>
+            </div>
+          )}
+        </div>
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-gray-700 dark:text-gray-300">
         {formatSpeed(download.downloadSpeed)}

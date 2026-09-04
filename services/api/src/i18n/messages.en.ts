@@ -83,8 +83,8 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.LANGUAGE_UNAVAILABLE]: 'Language {tag} is not available',
   [ERROR_KEYS.TORRENT_GROUP_NOT_FOUND]: 'Torrent group {id} does not exist',
   [ERROR_KEYS.TORRENT_GROUP_DUPLICATED]: 'Torrent group {id} is repeated',
-  [ERROR_KEYS.TORRENT_GROUP_WRONG_SCOPE]:
-    'Torrent group {id} does not belong to {scope}',
+  [ERROR_KEYS.TORRENT_GROUP_NAME_TAKEN]:
+    'A torrent group named "{name}" already exists',
   [ERROR_KEYS.MEDIA_SERVER_UNKNOWN]: 'Unknown media server: "{id}"',
   [ERROR_KEYS.MEDIA_SERVER_NOT_CONFIGURED]:
     'Configure a media server before syncing the library.',
@@ -142,4 +142,6 @@ export const MESSAGES_EN: Record<string, string> = {
     'The username must be at least 3 characters long',
   [ERROR_KEYS.VALIDATION_PASSWORD_MIN_LENGTH]:
     'The password must be at least 6 characters long',
+  [ERROR_KEYS.VALIDATION_TORRENT_GROUP_NAME_REQUIRED]:
+    'The torrent group name is required',
 };

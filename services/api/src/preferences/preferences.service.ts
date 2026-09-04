@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { TorrentGroupScope as PrismaTorrentGroupScope } from '@prisma/client';
+import { Prisma, TorrentGroupScope as PrismaTorrentGroupScope } from '@prisma/client';
 
 import { PrismaService } from '@/prisma/prisma.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
@@ -31,28 +31,77 @@ export class PreferencesService {
   ) {}
 
   async findForUser(userId: string): Promise<UserPreferences> {
-    const [user, audioLanguages, subtitleLanguages, torrentGroups] = await Promise.all([
-      this.prisma.user.findUniqueOrThrow({ where: { id: userId } }),
-      this.languagesService.findPreferredTrackLanguagesFor(userId, 'AUDIO'),
-      this.languagesService.findPreferredTrackLanguagesFor(userId, 'SUBTITLE'),
-      this.findSelectedTorrentGroupsFor(userId),
-    ]);
+    const [user, audioLanguages, subtitleLanguages, movieTorrentGroups, showTorrentGroups] =
+      await Promise.all([
+        this.prisma.user.findUniqueOrThrow({ where: { id: userId } }),
+        this.languagesService.findPreferredTrackLanguagesFor(userId, 'AUDIO'),
+        this.languagesService.findPreferredTrackLanguagesFor(userId, 'SUBTITLE'),
+        this.findSelectedTorrentGroupsFor(userId, TorrentGroupScope.MOVIE),
+        this.findSelectedTorrentGroupsFor(userId, TorrentGroupScope.SHOW),
+      ]);
 
     return {
       allowCinemaReleases: user.allowCinemaReleases,
       audioMandatory: user.audioMandatory,
       audioLanguages,
       subtitleLanguages,
-      torrentGroups,
+      movieTorrentGroups,
+      showTorrentGroups,
     };
   }
 
-  async findCatalog(scope?: TorrentGroupScope): Promise<TorrentGroup[]> {
+  async findCatalog(): Promise<TorrentGroup[]> {
     const rows = await this.prisma.torrentGroup.findMany({
-      where: scope !== undefined ? { scope: this.toPrismaScope(scope) } : undefined,
       orderBy: { name: 'asc' },
     });
     return rows.map((row) => this.toTorrentGroup(row));
+  }
+
+  // Validate-then-write: the trimmed, case-insensitive lookup rejects the
+  // common case with a translated message before touching the database, but
+  // it is not the only authority — MariaDB's default collation makes the
+  // `name` unique index case-insensitive too, so two concurrent creates of
+  // "FLUX" and "flux" can both pass the lookup and race on the insert. The
+  // catch below turns that race's raw P2002 into the same translated error
+  // rather than letting it reach the user untranslated.
+  async createTorrentGroup(name: string): Promise<TorrentGroup> {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw i18nError.badRequest(ERROR_KEYS.VALIDATION_TORRENT_GROUP_NAME_REQUIRED);
+    }
+
+    // MariaDB's default collation is already case-insensitive, so a plain
+    // `equals` lookup here matches "FLUX" against a stored "flux" without
+    // needing Prisma's `mode: 'insensitive'` — which the mysql provider
+    // does not support in the first place.
+    const existing = await this.prisma.torrentGroup.findFirst({
+      where: { name: trimmed },
+    });
+    if (existing !== null) {
+      throw i18nError.badRequest(ERROR_KEYS.TORRENT_GROUP_NAME_TAKEN, { name: trimmed });
+    }
+
+    try {
+      const row = await this.prisma.torrentGroup.create({ data: { name: trimmed } });
+      return this.toTorrentGroup(row);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw i18nError.badRequest(ERROR_KEYS.TORRENT_GROUP_NAME_TAKEN, { name: trimmed });
+      }
+      throw error;
+    }
+  }
+
+  async deleteTorrentGroup(id: number): Promise<boolean> {
+    const row = await this.prisma.torrentGroup.findUnique({ where: { id } });
+    if (row === null) {
+      throw i18nError.notFound(ERROR_KEYS.TORRENT_GROUP_NOT_FOUND, { id });
+    }
+
+    // `onDelete: Cascade` on UserTorrentGroup.torrentGroup already removes
+    // every user's selection of this group — no manual cleanup here.
+    await this.prisma.torrentGroup.delete({ where: { id } });
+    return true;
   }
 
   async setAllowCinemaReleases(userId: string, allowed: boolean): Promise<UserPreferences> {
@@ -91,22 +140,18 @@ export class PreferencesService {
     const byId = new Map(rows.map((row) => [row.id, row]));
 
     for (const id of ids) {
-      const row = byId.get(id);
-      if (row === undefined) {
+      if (byId.get(id) === undefined) {
         throw i18nError.badRequest(ERROR_KEYS.TORRENT_GROUP_NOT_FOUND, { id });
-      }
-      if (row.scope !== prismaScope) {
-        throw i18nError.badRequest(ERROR_KEYS.TORRENT_GROUP_WRONG_SCOPE, { id, scope });
       }
     }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userTorrentGroup.deleteMany({
-        where: { userId, torrentGroup: { scope: prismaScope } },
+        where: { userId, scope: prismaScope },
       });
       if (ids.length > 0) {
         await tx.userTorrentGroup.createMany({
-          data: ids.map((torrentGroupId) => ({ userId, torrentGroupId })),
+          data: ids.map((torrentGroupId) => ({ userId, torrentGroupId, scope: prismaScope })),
         });
       }
     });
@@ -121,7 +166,7 @@ export class PreferencesService {
     const rows = await this.prisma.userTorrentGroup.findMany({
       where: {
         userId,
-        torrentGroup: scope !== undefined ? { scope: this.toPrismaScope(scope) } : undefined,
+        scope: scope !== undefined ? this.toPrismaScope(scope) : undefined,
       },
       include: { torrentGroup: true },
     });
@@ -137,11 +182,7 @@ export class PreferencesService {
     return scope as unknown as PrismaTorrentGroupScope;
   }
 
-  private toTorrentGroup(row: {
-    id: number;
-    name: string;
-    scope: PrismaTorrentGroupScope;
-  }): TorrentGroup {
-    return { id: row.id, name: row.name, scope: row.scope as unknown as TorrentGroupScope };
+  private toTorrentGroup(row: { id: number; name: string }): TorrentGroup {
+    return { id: row.id, name: row.name };
   }
 }

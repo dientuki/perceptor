@@ -6,7 +6,7 @@ import { useEffect, useState, useTransition } from "react";
 import { resyncMediaServerIndexAction } from "@/actions/media-server";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
-import Select from "@/components/form/Select";
+import SelectWithChevron from "@/components/form/SelectWithChevron";
 import Button from "@/components/ui/button/Button";
 import type {
   MediaServerIndexStatus,
@@ -97,9 +97,7 @@ function MediaServerIndexPanel({ status }: { status: MediaServerIndexStatus }) {
           {t("resyncButton")}
         </Button>
       </div>
-      {error && (
-        <p className="text-error-500">{error}</p>
-      )}
+      {error && <p className="text-error-500">{error}</p>}
     </div>
   );
 }
@@ -125,7 +123,7 @@ export default function MediaServerFields({
     <div className="space-y-6">
       <div>
         <Label htmlFor="media_server_client">{t("label")}</Label>
-        <Select
+        <SelectWithChevron
           id="media_server_client"
           name="media_server_client"
           value={selected}

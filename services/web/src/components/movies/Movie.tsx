@@ -12,6 +12,7 @@ import { getPreferences } from "@/actions/preferences";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
+import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import type { Language } from "@/types/languages";
@@ -42,9 +43,7 @@ export default function Movie({
   } = useModal();
   const target: AcquisitionTarget = { kind: "movie", movie };
 
-  const [preferences, setPreferences] = useState<UserPreferences | null>(
-    null,
-  );
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   useEffect(() => {
     getPreferences()
       .then(setPreferences)
@@ -63,9 +62,7 @@ export default function Movie({
       ? preferences.audioLanguages
       : movie.audioLanguages;
   const effectiveGroups = preferences
-    ? preferences.torrentGroups
-        .filter((g) => g.scope === "MOVIE")
-        .map((g) => g.name)
+    ? preferences.movieTorrentGroups.map((g) => g.name)
     : [];
   const usingGlobalSubtitles = movie.subtitleLanguages.length === 0;
   const effectiveSubtitleLanguages =
@@ -118,7 +115,8 @@ export default function Movie({
             {movie.releaseDate
               ? new Date(movie.releaseDate).getFullYear()
               : t("unknownYear")}{" "}
-            • {movie.originalLanguage.toUpperCase()} • {movie.status}
+            • {movie.originalLanguage.toUpperCase()} •{" "}
+            <StatusBadge status={movie.status} />
           </p>
         </div>
 
@@ -154,17 +152,20 @@ export default function Movie({
           </p>
           <p>
             idiomas de audio — efectivo (
-            {usingGlobalLanguages ? "fallback: preferencias globales" : "título"}):{" "}
+            {usingGlobalLanguages
+              ? "fallback: preferencias globales"
+              : "título"}
+            ):{" "}
             {effectiveAudioLanguages
               .map((l) => `${l.tag}/${l.iso3}`)
               .join(", ") || "—"}
           </p>
-          <p>
-            audio obligatorio — efectivo: {String(effectiveAudioMandatory)}
-          </p>
+          <p>audio obligatorio — efectivo: {String(effectiveAudioMandatory)}</p>
           <p>
             idiomas de subtítulos — efectivo (
-            {usingGlobalSubtitles ? "fallback: preferencias globales" : "título"}
+            {usingGlobalSubtitles
+              ? "fallback: preferencias globales"
+              : "título"}
             ):{" "}
             {effectiveSubtitleLanguages
               .map((l) => `${l.tag}/${l.iso3}`)
@@ -197,10 +198,8 @@ export default function Movie({
               : "…"}
             , grupos(movie)=
             {preferences
-              ? preferences.torrentGroups
-                  .filter((g) => g.scope === "MOVIE")
-                  .map((g) => g.name)
-                  .join(", ") || "—"
+              ? preferences.movieTorrentGroups.map((g) => g.name).join(", ") ||
+                "—"
               : "…"}
           </p>
         </div>

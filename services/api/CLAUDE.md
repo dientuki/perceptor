@@ -194,6 +194,21 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `season.findUniqueOrThrow` that **must `include` the episodes** — `Season.episodes` is non-null, so
   a bare row fails the mutation *after* qBittorrent already accepted the torrent, orphaning the
   download with no `MediaSource` tracking it.
+- **`pipeline-status/`** — since `043-pipeline-status-normalization`, the single derivation behind
+  every status a user reads: a plain exported function, no Nest module, no injection.
+  `deriveSourceStatus` decides one `MediaSource`'s status from its column, its `ProcessJob` rows
+  (reached via `sourceFile → processJob`, since `MediaSource` has no direct job relation) and an
+  optional live torrent reading, by REQ-3's six ordered rules — used by `downloads/`.
+  `deriveTitleStatus` decides one `Movie`/`Episode`'s status as the maximum, over an eight-value
+  rank ladder, of its own stored `MediaStatus` and each non-`ERROR` source's derived status — `ERROR`
+  surfaces **only** from the stored column, never from a raw job/source read, so a demoted
+  (`SOURCE_REPLACED`) sibling can never poison a completed title. Takes no live reading and does not
+  group jobs by source (title-level `processJobs` are already denormalized to the film/episode).
+  Both read `services/api/prisma/schema.prisma`'s existing enums only — no migration, no new column;
+  the eight-value vocabulary (`MISSING`/`QUEUED`/`DOWNLOADING`/`PAUSED`/`DOWNLOADED`/`ENCODING`/
+  `COMPLETED`/`ERROR`) is a read-time projection over `SourceStatus`/`EncodeStatus`/`MediaStatus`,
+  which stay exactly as they were. `MediaSource.status` itself is **not** routed through this
+  module — it stays the raw `SourceStatus` column, since the worker reads it.
 - **`downloads/`** — `torrentCompleted`, called by qBittorrent's AutoRun hook. Matches **exclusively
   by infoHash** and silently ignores unknown hashes by design. An episode-owned source moves its
   `Episode` to `ENCODING` just as a movie-owned one does; a source already `ERROR` (superseded by a
@@ -212,6 +227,17 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `READY`/`SCANNED`, in which case the call is a no-op. `process-jobs/`'s `downloadRemove` sweeps
   the losing siblings when the winner's cleanup runs, regardless of whether the winner itself has an
   `infoHash`.
+  Since `043-pipeline-status-normalization`, `Download.status`/`downloadProgress`/`encodeProgress`/
+  `compressionEnabled` are produced by `pipeline-status/`'s `deriveSourceStatus` rather than copying
+  `source.status` — `toDownload` loads every listed source's `ProcessJob` rows in one query (grouped
+  by `mediaSourceId`, never per-row) and reads `compression_enabled` once per request alongside the
+  existing `torrents/info?tag=` call. `downloadStart`/`downloadStop` also write `QUEUED`/`PAUSED` to
+  the `MediaSource` row (REQ-7), guarded via `updateMany`'s `where` to the non-terminal statuses only
+  — so a manual pause is visible to a reader with no live torrent data, and resuming an
+  already-finished download can never regress it. `Movie.status`/`Episode.status` are mapped through
+  `deriveTitleStatus` in `movies.service.ts`/`shows.service.ts`, with no extra query — both queries
+  already include the `mediaSources`/`processJobs` the derivation needs. `Show.status` and
+  `MediaSource.status` are unchanged (see `pipeline-status/` above).
 - **`process-jobs/`** — the `ProcessJob` lifecycle: `sourceScanned` → encode queued →
   `encodeCompleted`. Resolves `outputRoot` and `downloadsRoot` for the worker; `downloadsRoot` is
   `resolveFromRoot('downloads', '.')` — the **root itself**, not `path_downloads`, because a torrent's
@@ -294,13 +320,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   configuration a person sets, so `updateSettings` rejects a write to any of them with
   `error.setting.not_editable`. `MediaServerIndexService` reads and writes them through
   `prisma.setting` directly, never through `SettingsService`.
-- **`preferences/`** (`021-user-preferences`) — the caller's own settings, distinct from
-  `settings/`'s installation-wide config: `Query.preferences`, `Query.torrentGroups(scope)`,
-  `Mutation.setAllowCinemaReleases`/`setPreferredTrackLanguages`/`setPreferredTorrentGroups`/
-  `setAudioMandatory` (`039-per-title-language-split`, `0.2.0`), all self-only (no operation takes a
-  user id; every one carries the same explicit `principal.type !== 'user'` guard `auth.resolver.ts`
-  uses, never `@AllowService()`). **The *Audio mandatory* flag has three independent scopes, not one**
-  — `User.audioMandatory` (this module's `setAudioMandatory`, twin of `setAllowCinemaReleases`),
+- **`preferences/`** (`021-user-preferences`, torrent-group ABM added by `044-settings-screen-polish`)
+  — the caller's own settings, distinct from `settings/`'s installation-wide config: `Query.preferences`,
+  `Query.torrentGroups` (no longer scoped — the catalog is one flat list, offered on both the movies
+  and series tabs), `Mutation.setAllowCinemaReleases`/`setPreferredTrackLanguages`/
+  `setPreferredTorrentGroups`/`setAudioMandatory`, all self-only (no operation takes a user id; every
+  one carries the same explicit `principal.type !== 'user'` guard `auth.resolver.ts` uses, never
+  `@AllowService()`). **The *Audio mandatory* flag has three independent scopes, not one** —
+  `User.audioMandatory` (this module's `setAudioMandatory`, twin of `setAllowCinemaReleases`),
   `UserMovie.audioMandatory` (`movies/`'s `setMovieAudioMandatory`) and `UserShow.audioMandatory`
   (`shows/`'s `setShowAudioMandatory`), each its own column on its own ownership row, default `false`,
   written by a plain `update` (never an `upsert` — a row that passed the mutation's ownership check
@@ -309,13 +336,19 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `docs/spec/graphql-contract.md` § "The *Audio mandatory* flag is inert by design").
   `PreferencesService.setAllowCinemaReleases` delegates the write to `UsersService`, then re-reads;
   `setPreferredTorrentGroupsFor` is the one write this module owns directly — it resolves every id
-  against `torrent_groups` before any write (`TORRENT_GROUP_NOT_FOUND`/`_DUPLICATED`/`_WRONG_SCOPE`,
-  each leaving the stored set untouched), then replaces inside a `$transaction` whose `deleteMany` is
-  narrowed to the caller **and** the scope via a join to `TorrentGroup.scope` — `user_torrent_groups`
-  itself carries no scope column, so a naive `{ userId }` delete would wipe both scopes at once. The
-  language half is not here: `setPreferredTrackLanguagesFor`/`findPreferredTrackLanguagesFor` live on
-  `LanguagesService`, beside the per-title pairs, narrowed to `{ userId, kind }` for the same reason.
-  Imports `LanguagesModule` and `UsersModule` (which now `exports: [UsersService]` for this).
+  against `torrent_groups` before any write (`TORRENT_GROUP_NOT_FOUND`/`_DUPLICATED`, each leaving the
+  stored set untouched; the old `_WRONG_SCOPE` rejection is gone — any catalog id is valid for either
+  scope now), then replaces inside a `$transaction` whose `deleteMany` is narrowed to the caller **and**
+  the scope directly on `user_torrent_groups.scope` — `044` moved the scope column off `TorrentGroup`
+  (which only ever meant "one release-group name, admin-managed") onto `UserTorrentGroup` (a per-user,
+  per-scope selection), since the same physical group can be someone's Movies pick and someone else's
+  (or the same user's) Series pick. **`createTorrentGroup`/`deleteTorrentGroup`** (`044`) are this
+  module's first non-self operations — both `@UseGuards(AdminGuard)`, building the catalog every other
+  operation here reads from; `torrentGroups` itself stays `JwtAuthGuard`-only since any authenticated
+  user needs to read the catalog to pick from it. The language half is not here:
+  `setPreferredTrackLanguagesFor`/`findPreferredTrackLanguagesFor` live on `LanguagesService`, beside
+  the per-title pairs, narrowed to `{ userId, kind }` for the same reason. Imports `LanguagesModule`
+  and `UsersModule` (which now `exports: [UsersService]` for this).
 - **`media-roots/`** — the two declared roots and every path translation. See below.
 - **`media-server/`** — post-encode notification (Jellyfin today), opt-in from Settings, **plus**
   (`034-jellyfin-library-reconciliation`) reflecting what that server already holds back onto a newly
@@ -498,9 +531,10 @@ There are 19 models and 24 migrations (counted 2026-09-02, after
 leaves the library. The three newest models — `UserLanguagePreference`, `TorrentGroup`,
 `UserTorrentGroup` (`021-user-preferences`) — are the per-user counterpart: `UserLanguagePreference`
 is keyed `@@id([userId, languageId, kind])`, split by `LanguageTrackKind` rather than per-title, and
-`UserTorrentGroup` carries no `scope` column of its own — a write scoped to one `TorrentGroupScope`
-has to narrow its `deleteMany` through a join to `TorrentGroup.scope`, or it silently wipes both
-scopes at once.
+`UserTorrentGroup` carries its own `scope` column (`044-settings-screen-polish` moved it here from
+`TorrentGroup`, which is now just `{ id, name }`) as part of its widened `@@id([userId,
+torrentGroupId, scope])` — a write scoped to one `TorrentGroupScope` narrows its `deleteMany` to
+`{ userId, scope }` directly, no join needed, or it would silently wipe both scopes at once.
 
 ## Tests
 
@@ -527,8 +561,8 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-09-03 (`042-encode-global-language-preferences`): `bin/cli api npx --no tsc --noEmit`
-reports **0 errors**, `bin/npm api test` is green at **342** tests across **36** suites. **Re-run
+As of 2026-09-03 (`043-pipeline-status-normalization`): `bin/cli api npx --no tsc --noEmit`
+reports **0 errors**, `bin/npm api test` is green at **361** tests across **37** suites. **Re-run
 both rather than trusting these numbers** — they exist so an agent can prove a change added
 nothing, not as a fact to cite.
 

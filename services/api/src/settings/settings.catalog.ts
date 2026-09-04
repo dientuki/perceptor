@@ -24,6 +24,13 @@ export type SettingCatalogEntry = {
   options?: string[];
 };
 
+// Resolution cap the worker's downscale logic implements today (042/044) —
+// declared once here so this catalog entry's `options` isn't a bare literal.
+// prisma/seeds/settings.ts's seeded default ('1080p') can't import this
+// constant (see that file's own comment) but must stay one of these four
+// values.
+export const COMPRESSION_RESOLUTIONS = ['4k', '1080p', '720p', '360p'] as const;
+
 // torrent_port no es editable: es el puerto interno de qBittorrent dentro de
 // la red de Docker (QBITTORRENT_WEBUI_PORT en .env), no algo que el usuario
 // final deba tocar desde Settings. Sigue existiendo como fila en la DB
@@ -37,6 +44,7 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   movies_enabled: { kind: 'boolean' },
   shows_enabled: { kind: 'boolean' },
   compression_enabled: { kind: 'boolean' },
+  compression_resolution: { kind: 'enum', options: [...COMPRESSION_RESOLUTIONS] },
   // options sale del registro de clientes (clients/media-server/registry.ts),
   // no de una lista a mano: sumar un media server ahí lo vuelve válido acá
   // automáticamente.

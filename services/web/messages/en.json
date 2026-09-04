@@ -65,7 +65,8 @@
       "missingLocale": "Missing language to save.",
       "missingSettingsValues": "There are no values to save.",
       "passwordMismatch": "Passwords do not match",
-      "passwordPairIncomplete": "Fill in both password fields or leave both blank"
+      "passwordPairIncomplete": "Fill in both password fields or leave both blank",
+      "torrent_group_name_required": "The group name cannot be empty"
     },
     "user": {
       "username_taken": "That username is already registered",
@@ -83,7 +84,7 @@
     "torrent_group": {
       "not_found": "Torrent group {id} does not exist",
       "duplicated": "Torrent group {id} is repeated",
-      "wrong_scope": "Torrent group {id} does not belong to {scope}"
+      "name_taken": "A group named {name} already exists"
     },
     "mediaServer": {
       "not_configured": "Configure a media server before syncing the library."
@@ -419,11 +420,12 @@
     },
     "compression": {
       "enabledLabel": "Enable compression",
-      "presetLabel": "Preset",
-      "presets": {
-        "fast": "Fast",
-        "balanced": "Balanced",
-        "quality": "Quality"
+      "resolutionLabel": "Resolution",
+      "resolutions": {
+        "4k": "4K",
+        "1080p": "1080p",
+        "720p": "720p",
+        "360p": "360p"
       }
     },
     "mediaServer": {
@@ -458,6 +460,10 @@
       "downloadsFolderLabel": "Downloads folder",
       "indexerSection": "Indexer",
       "indexerApiKeyLabel": "Indexer API key",
+      "groupNameLabel": "Torrent groups",
+      "groupNamePlaceholder": "Group name",
+      "addGroup": "Add",
+      "removeGroup": "Remove {name}",
       "moviesShowsSection": "Movies and series",
       "tmdbApiKeyLabel": "TMDB API key",
       "moviesEnabledLabel": "Enable movies",
@@ -495,6 +501,16 @@
       "emptyChosen": "No groups chosen.",
       "removeGroup": "Remove {name}"
     }
+  },
+  "status": {
+    "missing": "Missing",
+    "queued": "Queued",
+    "downloading": "Downloading",
+    "paused": "Paused",
+    "downloaded": "Downloaded",
+    "encoding": "Encoding",
+    "completed": "Completed",
+    "error": "Error"
   },
   "users": {
     "add": {

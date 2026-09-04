@@ -83,6 +83,7 @@ const EDITABLE_KEYS = [
   "media_server_port",
   "media_server_api_key",
   "ui_locale",
+  "compression_resolution",
 ] as const;
 
 // Rendered through Checkbox.tsx + a hidden input carrying an explicit

@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { PreferencesService } from './preferences.service';
 import { TorrentGroupScope } from './entities/torrent-group-scope.enum';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -18,18 +19,18 @@ import { UsersService } from '@/users/users.service';
 // arguments, so a wrongly-scoped `where` produces the wrong stored rows here
 // exactly as it would in MariaDB.
 describe('PreferencesService — setPreferredTorrentGroupsFor', () => {
-  type CatalogRow = { id: number; name: string; scope: 'MOVIE' | 'SHOW' };
-  type SelectionRow = { userId: string; torrentGroupId: number };
+  type CatalogRow = { id: number; name: string };
+  type SelectionRow = { userId: string; torrentGroupId: number; scope: 'MOVIE' | 'SHOW' };
   type Where = {
     userId?: string;
     id?: { in: number[] };
-    torrentGroup?: { scope: 'MOVIE' | 'SHOW' };
+    scope?: 'MOVIE' | 'SHOW';
   };
 
-  const movieA: CatalogRow = { id: 1, name: 'movie-a', scope: 'MOVIE' };
-  const movieB: CatalogRow = { id: 2, name: 'movie-b', scope: 'MOVIE' };
-  const showC: CatalogRow = { id: 3, name: 'show-c', scope: 'SHOW' };
-  const showD: CatalogRow = { id: 4, name: 'show-d', scope: 'SHOW' };
+  const movieA: CatalogRow = { id: 1, name: 'movie-a' };
+  const movieB: CatalogRow = { id: 2, name: 'movie-b' };
+  const showC: CatalogRow = { id: 3, name: 'show-c' };
+  const showD: CatalogRow = { id: 4, name: 'show-d' };
 
   let catalog: CatalogRow[];
   let selections: SelectionRow[];
@@ -42,11 +43,8 @@ describe('PreferencesService — setPreferredTorrentGroupsFor', () => {
     if (where.userId !== undefined && row.userId !== where.userId) {
       return false;
     }
-    if (where.torrentGroup?.scope !== undefined) {
-      const group = catalog.find((candidate) => candidate.id === row.torrentGroupId);
-      if (group === undefined || group.scope !== where.torrentGroup.scope) {
-        return false;
-      }
+    if (where.scope !== undefined && row.scope !== where.scope) {
+      return false;
     }
     return true;
   }
@@ -58,10 +56,10 @@ describe('PreferencesService — setPreferredTorrentGroupsFor', () => {
   beforeEach(async () => {
     catalog = [movieA, movieB, showC, showD];
     selections = [
-      { userId: 'user-1', torrentGroupId: movieA.id },
-      { userId: 'user-1', torrentGroupId: showC.id },
-      { userId: 'user-2', torrentGroupId: movieA.id },
-      { userId: 'user-2', torrentGroupId: showC.id },
+      { userId: 'user-1', torrentGroupId: movieA.id, scope: 'MOVIE' },
+      { userId: 'user-1', torrentGroupId: showC.id, scope: 'SHOW' },
+      { userId: 'user-2', torrentGroupId: movieA.id, scope: 'MOVIE' },
+      { userId: 'user-2', torrentGroupId: showC.id, scope: 'SHOW' },
     ];
 
     deleteManyMock = jest.fn(async ({ where }: { where: Where }) => {
@@ -132,18 +130,6 @@ describe('PreferencesService — setPreferredTorrentGroupsFor', () => {
     );
   });
 
-  it('an id whose row is SHOW, passed with scope MOVIE, throws wrong_scope and writes nothing', async () => {
-    const before = [...selections];
-
-    await expect(
-      service.setPreferredTorrentGroupsFor('user-1', TorrentGroupScope.MOVIE, [showC.id]),
-    ).rejects.toThrow('Torrent group 3 does not belong to MOVIE');
-
-    expect(selections).toEqual(before);
-    expect(deleteManyMock).not.toHaveBeenCalled();
-    expect(createManyMock).not.toHaveBeenCalled();
-  });
-
   it('an id matching no row throws not_found and writes nothing', async () => {
     const before = [...selections];
 
@@ -173,5 +159,109 @@ describe('PreferencesService — setPreferredTorrentGroupsFor', () => {
 
     expect(result).toEqual([]);
     expect(selectionsOf('user-1').map((row) => row.torrentGroupId)).toEqual([showC.id]);
+  });
+
+  it('the same group id selected for both scopes yields two rows and neither save clobbers the other', async () => {
+    await service.setPreferredTorrentGroupsFor('user-1', TorrentGroupScope.MOVIE, [movieA.id]);
+    await service.setPreferredTorrentGroupsFor('user-1', TorrentGroupScope.SHOW, [movieA.id]);
+
+    const rows = selectionsOf('user-1');
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { userId: 'user-1', torrentGroupId: movieA.id, scope: 'MOVIE' },
+        { userId: 'user-1', torrentGroupId: movieA.id, scope: 'SHOW' },
+      ]),
+    );
+    expect(rows).toHaveLength(2);
+
+    await service.setPreferredTorrentGroupsFor('user-1', TorrentGroupScope.MOVIE, [movieB.id]);
+
+    expect(selectionsOf('user-1')).toEqual(
+      expect.arrayContaining([
+        { userId: 'user-1', torrentGroupId: movieB.id, scope: 'MOVIE' },
+        { userId: 'user-1', torrentGroupId: movieA.id, scope: 'SHOW' },
+      ]),
+    );
+    expect(selectionsOf('user-1')).toHaveLength(2);
+  });
+});
+
+// createTorrentGroup checks for a name collision in JS before writing, but
+// the JS comparison and MariaDB's column collation are two different
+// authorities that nothing forces to agree — a lookup bug in one must not
+// let a duplicate reach the database as long as the other still catches it.
+describe('PreferencesService — createTorrentGroup name collision', () => {
+  let rows: { id: number; name: string }[];
+  let nextId: number;
+  let service: PreferencesService;
+  let prisma: {
+    torrentGroup: {
+      findFirst: jest.Mock;
+      create: jest.Mock;
+    };
+  };
+
+  beforeEach(async () => {
+    rows = [];
+    nextId = 1;
+
+    prisma = {
+      torrentGroup: {
+        findFirst: jest.fn(async ({ where }: { where: { name: string } }) => {
+          const normalized = where.name.toLowerCase();
+          return rows.find((row) => row.name.toLowerCase() === normalized) ?? null;
+        }),
+        create: jest.fn(async ({ data }: { data: { name: string } }) => {
+          const normalized = data.name.toLowerCase();
+          if (rows.some((row) => row.name.toLowerCase() === normalized)) {
+            throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+              code: 'P2002',
+              clientVersion: 'test',
+            });
+          }
+          const row = { id: nextId++, name: data.name };
+          rows.push(row);
+          return row;
+        }),
+      },
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PreferencesService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: LanguagesService, useValue: {} },
+        { provide: UsersService, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get<PreferencesService>(PreferencesService);
+  });
+
+  it('rejects a case-insensitive duplicate found by the JS lookup, leaving one row', async () => {
+    await service.createTorrentGroup('FLUX');
+
+    await expect(service.createTorrentGroup('flux')).rejects.toThrow(
+      'A torrent group named "flux" already exists',
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].name).toBe('FLUX');
+  });
+
+  it('translates a P2002 the JS lookup missed into the same name_taken message', async () => {
+    // Simulates the JS lookup and the collation disagreeing: findFirst is
+    // stubbed to miss the duplicate (as a case-sensitive query against a
+    // case-insensitive column could), so only the unique-index race,
+    // surfaced here as a raw P2002 from create(), is left to catch it. The
+    // caller must still see the translated message, not the raw Prisma error.
+    rows.push({ id: 1, name: 'FLUX' });
+    prisma.torrentGroup.findFirst.mockResolvedValueOnce(null);
+
+    await expect(service.createTorrentGroup('flux')).rejects.toThrow(
+      'A torrent group named "flux" already exists',
+    );
+
+    expect(rows).toHaveLength(1);
   });
 });

@@ -7,23 +7,11 @@ import type { Episode, Season } from "@/actions/shows";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
+import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import type { Language } from "@/types/languages";
 import type { AcquisitionTarget } from "@/types/media";
-
-function statusBadgeClass(status: string): string {
-  switch (status) {
-    case "COMPLETED":
-      return "bg-green-500/10 text-green-500";
-    case "ERROR":
-      return "bg-red-500/10 text-red-500";
-    case "MISSING":
-      return "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400";
-    default:
-      return "animate-pulse bg-blue-500/10 text-blue-500";
-  }
-}
 
 function EpisodeRow({
   episode,
@@ -60,13 +48,7 @@ function EpisodeRow({
           : "-"}
       </td>
       <td className="px-4 py-3">
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold uppercase tracking-wider ${statusBadgeClass(
-            episode.status,
-          )}`}
-        >
-          {episode.status}
-        </span>
+        <StatusBadge status={episode.status} />
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">

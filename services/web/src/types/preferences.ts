@@ -12,7 +12,6 @@ export type TorrentGroupScope = "MOVIE" | "SHOW";
 export type TorrentGroup = {
   id: string;
   name: string;
-  scope: TorrentGroupScope;
 };
 
 export type UserPreferences = {
@@ -20,5 +19,6 @@ export type UserPreferences = {
   audioMandatory: boolean;
   audioLanguages: Language[];
   subtitleLanguages: Language[];
-  torrentGroups: TorrentGroup[];
+  movieTorrentGroups: TorrentGroup[];
+  showTorrentGroups: TorrentGroup[];
 };

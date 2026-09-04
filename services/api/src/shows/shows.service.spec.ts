@@ -157,7 +157,7 @@ describe('ShowsService', () => {
 
   describe('findOneFromDb', () => {
     it('scopes the query to the caller through the user_shows join', async () => {
-      prisma.show.findFirst.mockResolvedValue({ id: 7, title: 'Mine' });
+      prisma.show.findFirst.mockResolvedValue({ id: 7, title: 'Mine', seasons: [] });
 
       await service.findOneFromDb(7, 'user-1');
 
@@ -211,6 +211,38 @@ describe('ShowsService', () => {
       expect(args.include.seasons.include.episodes.orderBy).toEqual({
         episodeNumber: 'asc',
       });
+    });
+
+    // AC-1 / 043-pipeline-status-normalization: this is the reported
+    // Daredevil bug — an episode whose stored MediaStatus is still
+    // DOWNLOADING (nothing writes it back to COMPLETED) but whose
+    // MediaSource is SCANNED and whose ProcessJob is COMPLETED must read
+    // COMPLETED once it crosses GraphQL. Failing to route through the
+    // include and the derivation would silently keep reporting DOWNLOADING.
+    it('derives COMPLETED for an episode with a SCANNED source and a COMPLETED job', async () => {
+      prisma.show.findFirst.mockResolvedValue({
+        id: 7,
+        title: 'Mine',
+        seasons: [
+          {
+            id: 1,
+            seasonNumber: 1,
+            episodes: [
+              {
+                id: 101,
+                episodeNumber: 1,
+                status: 'DOWNLOADING',
+                mediaSources: [{ status: 'SCANNED' }],
+                processJobs: [{ status: 'COMPLETED' }],
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = await service.findOneFromDb(7, 'user-1');
+
+      expect(result?.seasons[0].episodes[0].status).toBe('COMPLETED');
     });
   });
 

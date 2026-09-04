@@ -65,7 +65,7 @@ export const ERROR_KEYS = {
   LANGUAGE_UNAVAILABLE: 'error.language.unavailable',
   TORRENT_GROUP_NOT_FOUND: 'error.torrent_group.not_found',
   TORRENT_GROUP_DUPLICATED: 'error.torrent_group.duplicated',
-  TORRENT_GROUP_WRONG_SCOPE: 'error.torrent_group.wrong_scope',
+  TORRENT_GROUP_NAME_TAKEN: 'error.torrent_group.name_taken',
   MEDIA_SERVER_UNKNOWN: 'error.mediaServer.unknown',
   MEDIA_SERVER_NOT_CONFIGURED: 'error.mediaServer.not_configured',
   INDEXER_UNAVAILABLE: 'error.indexer.unavailable',
@@ -116,6 +116,8 @@ export const ERROR_KEYS = {
   VALIDATION_USER_NAME_REQUIRED: 'error.validation.user_name_required',
   VALIDATION_USERNAME_MIN_LENGTH: 'error.validation.username_min_length',
   VALIDATION_PASSWORD_MIN_LENGTH: 'error.validation.password_min_length',
+  VALIDATION_TORRENT_GROUP_NAME_REQUIRED:
+    'error.validation.torrent_group_name_required',
 } as const;
 
 export type ErrorKey = (typeof ERROR_KEYS)[keyof typeof ERROR_KEYS];

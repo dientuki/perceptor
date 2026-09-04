@@ -36,8 +36,8 @@ function tagsFrom(languages: Language[]): string[] {
   return languages.map((language) => language.tag);
 }
 
-function idsFrom(groups: TorrentGroup[], scope: TorrentGroup["scope"]) {
-  return groups.filter((group) => group.scope === scope).map((g) => g.id);
+function idsFrom(groups: TorrentGroup[]) {
+  return groups.map((g) => g.id);
 }
 
 // One <form>, four panels, all mounted at once and switched with `hidden`
@@ -76,10 +76,10 @@ export default function PreferencesForm({
     preferences.audioMandatory,
   );
   const [movieGroupIds, setMovieGroupIds] = useState<string[]>(() =>
-    idsFrom(preferences.torrentGroups, "MOVIE"),
+    idsFrom(preferences.movieTorrentGroups),
   );
   const [showGroupIds, setShowGroupIds] = useState<string[]>(() =>
-    idsFrom(preferences.torrentGroups, "SHOW"),
+    idsFrom(preferences.showTorrentGroups),
   );
 
   const displayNames = useMemo(
@@ -91,8 +91,11 @@ export default function PreferencesForm({
     label: displayNames.of(code) ?? code,
   }));
 
-  const movieCatalog = torrentGroups.filter((g) => g.scope === "MOVIE");
-  const showCatalog = torrentGroups.filter((g) => g.scope === "SHOW");
+  // The catalog is no longer scoped — both tabs offer the whole thing, and
+  // which titles each id applies to is decided by which list it's saved
+  // into (movieTorrentGroups vs. showTorrentGroups), not by a per-group tag.
+  const movieCatalog = torrentGroups;
+  const showCatalog = torrentGroups;
 
   const tabItems: TabNavItem[] = [
     { key: "general", label: tTabs("general"), icon: Globe },
@@ -162,11 +165,11 @@ export default function PreferencesForm({
       }
       if (movieResult && "error" in movieResult && movieResult.error) {
         newErrors.push(movieResult.error);
-        setMovieGroupIds(idsFrom(preferences.torrentGroups, "MOVIE"));
+        setMovieGroupIds(idsFrom(preferences.movieTorrentGroups));
       }
       if (showResult && "error" in showResult && showResult.error) {
         newErrors.push(showResult.error);
-        setShowGroupIds(idsFrom(preferences.torrentGroups, "SHOW"));
+        setShowGroupIds(idsFrom(preferences.showTorrentGroups));
       }
       if ("error" in audioMandatoryResult && audioMandatoryResult.error) {
         newErrors.push(audioMandatoryResult.error);
@@ -193,9 +196,7 @@ export default function PreferencesForm({
       <div className="mt-6 space-y-6">
         <div className={panelClass("general")}>
           <div>
-            <Label htmlFor="preferences-locale">
-              {t("uiLocaleLabel")}
-            </Label>
+            <Label htmlFor="preferences-locale">{t("uiLocaleLabel")}</Label>
             <Select
               id="preferences-locale"
               value={locale}

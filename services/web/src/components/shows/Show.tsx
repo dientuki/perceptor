@@ -6,6 +6,7 @@ import {
 } from "@/actions/languages";
 import type { Show as ShowRecord } from "@/actions/shows";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
+import StatusBadge from "@/components/status/StatusBadge";
 import type { Language } from "@/types/languages";
 
 export default async function Show({
@@ -26,10 +27,7 @@ export default async function Show({
     show.id,
     "SUBTITLE",
   );
-  const setShowAudioMandatory = setShowAudioMandatoryAction.bind(
-    null,
-    show.id,
-  );
+  const setShowAudioMandatory = setShowAudioMandatoryAction.bind(null, show.id);
 
   return (
     <div className="flex flex-col gap-8 md:flex-row">
@@ -62,7 +60,8 @@ export default async function Show({
             {show.releaseDate
               ? new Date(show.releaseDate).getFullYear()
               : t("unknownYear")}{" "}
-            • {show.originalLanguage.toUpperCase()} • {show.status}
+            • {show.originalLanguage.toUpperCase()} •{" "}
+            <StatusBadge status={show.status} />
           </p>
         </div>
 

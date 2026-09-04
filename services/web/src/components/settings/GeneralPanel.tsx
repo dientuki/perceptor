@@ -3,7 +3,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
 import Label from "@/components/form/Label";
-import Select from "@/components/form/Select";
+import SelectWithChevron from "@/components/form/SelectWithChevron";
 import { SUPPORTED_LOCALES } from "@/i18n/locales";
 
 interface GeneralPanelProps {
@@ -32,7 +32,7 @@ export default function GeneralPanel({ uiLocale }: GeneralPanelProps) {
     <div className="space-y-6">
       <div>
         <Label htmlFor="ui_locale">{t("uiLocaleLabel")}</Label>
-        <Select
+        <SelectWithChevron
           id="ui_locale"
           name="ui_locale"
           defaultValue={uiLocale}

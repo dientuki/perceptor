@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { EncodeStatus, SourceStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { TorrentClientInfo } from '@/clients/torrent/types';
+import { SettingsService } from '@/settings/settings.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { i18nError } from '@/i18n/i18n-error';
+import { deriveSourceStatus, SourceAltitudeJob } from '@/pipeline-status/pipeline-status';
 import { Download } from './entities/download.entity';
 
 // REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw.
@@ -32,7 +35,7 @@ function seasonLabel(show: { title: string }, season: { seasonNumber: number }):
 type MediaSourceRow = {
   id: number;
   kind: string;
-  status: string;
+  status: SourceStatus;
   infoHash: string | null;
   releaseTitle: string | null;
   movieId: number | null;
@@ -46,6 +49,7 @@ export class DownloadsService {
     private readonly prisma: PrismaService,
     private readonly queue: ProcessQueueService,
     private readonly qbittorrent: QbittorrentClient,
+    private readonly settings: SettingsService,
   ) {}
 
   // REQ-9/REQ-10: DB-first, joined to qBittorrent on infoHash. A torrent
@@ -61,7 +65,44 @@ export class DownloadsService {
     }
   }
 
-  private toDownload(source: MediaSourceRow, label: string, live: TorrentClientInfo | undefined): Download {
+  // REQ-3: one query per page/mutation, never one per row — see
+  // movieDownloads/showDownloads/downloadStart/downloadStop/downloadStart
+  // for the callers, each of which loads the jobs for its own set of
+  // mediaSourceIds and passes the matching group in here.
+  private async jobsBySourceId(mediaSourceIds: number[]): Promise<Map<number, SourceAltitudeJob[]>> {
+    const rows = await this.prisma.processJob.findMany({
+      where: { sourceFile: { mediaSourceId: { in: mediaSourceIds } } },
+      select: { status: true, progress: true, sourceFile: { select: { mediaSourceId: true } } },
+    });
+
+    const grouped = new Map<number, SourceAltitudeJob[]>();
+    for (const row of rows) {
+      const mediaSourceId = row.sourceFile.mediaSourceId;
+      const jobs = grouped.get(mediaSourceId) ?? [];
+      jobs.push({ status: row.status as EncodeStatus, progress: row.progress });
+      grouped.set(mediaSourceId, jobs);
+    }
+    return grouped;
+  }
+
+  private async compressionEnabled(): Promise<boolean> {
+    const settingsMap = await this.settings.getMap();
+    return settingsMap['compression_enabled'] !== 'false';
+  }
+
+  private toDownload(
+    source: MediaSourceRow,
+    label: string,
+    live: TorrentClientInfo | undefined,
+    jobs: SourceAltitudeJob[],
+    compressionEnabled: boolean,
+  ): Download {
+    const derived = deriveSourceStatus({
+      sourceStatus: source.status,
+      jobs,
+      live: live ? { state: live.state, progress: live.progress } : null,
+    });
+
     return {
       mediaSourceId: source.id,
       infoHash: source.infoHash ?? undefined,
@@ -71,11 +112,11 @@ export class DownloadsService {
       movieId: source.movieId ?? undefined,
       seasonId: source.seasonId ?? undefined,
       episodeId: source.episodeId ?? undefined,
-      status: source.status,
-      // progress crosses the client boundary as 0..1 (client.ts's own
-      // contract) and is converted to 0..100 exactly once, here.
+      status: derived.status,
       torrentState: live?.rawState,
-      progress: live ? live.progress * 100 : undefined,
+      downloadProgress: derived.downloadProgress ?? undefined,
+      encodeProgress: derived.encodeProgress ?? undefined,
+      compressionEnabled,
       downloadSpeed: live?.dlspeed,
       readAt: new Date(),
     };
@@ -100,9 +141,21 @@ export class DownloadsService {
     // REQ-4: every server-side lookup of a title's torrents uses the title
     // tag only — never the season/episode tags, which are flat and shared
     // across shows on purpose.
-    const live = await this.liveInfoByHash(sanitizeTag(movie.title, movie.id));
+    const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
+      this.liveInfoByHash(sanitizeTag(movie.title, movie.id)),
+      this.jobsBySourceId(sources.map((source) => source.id)),
+      this.compressionEnabled(),
+    ]);
 
-    return sources.map((source) => this.toDownload(source, movie.title, source.infoHash ? live.get(source.infoHash) : undefined));
+    return sources.map((source) =>
+      this.toDownload(
+        source,
+        movie.title,
+        source.infoHash ? live.get(source.infoHash) : undefined,
+        jobsBySourceId.get(source.id) ?? [],
+        compressionEnabled,
+      ),
+    );
   }
 
   // Same ownership clause ShowsResolver already uses for `show(id)`
@@ -127,7 +180,11 @@ export class DownloadsService {
       orderBy: { createdAt: 'asc' },
     });
 
-    const live = await this.liveInfoByHash(sanitizeTag(show.title, show.id));
+    const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
+      this.liveInfoByHash(sanitizeTag(show.title, show.id)),
+      this.jobsBySourceId(sources.map((source) => source.id)),
+      this.compressionEnabled(),
+    ]);
 
     return sources.map((source) => {
       const label = source.episode
@@ -135,7 +192,13 @@ export class DownloadsService {
         : source.season
           ? seasonLabel(show, source.season)
           : show.title; // unreachable in practice — a show-scoped source always has one or the other
-      return this.toDownload(source, label, source.infoHash ? live.get(source.infoHash) : undefined);
+      return this.toDownload(
+        source,
+        label,
+        source.infoHash ? live.get(source.infoHash) : undefined,
+        jobsBySourceId.get(source.id) ?? [],
+        compressionEnabled,
+      );
     });
   }
 
@@ -209,14 +272,44 @@ export class DownloadsService {
     return '';
   }
 
+  // REQ-7/../plan.md § Approach decision 2: the write is a guarded
+  // `updateMany`, never a read-then-write, so a concurrent transition (the
+  // race arbiter, a completion notice) can't be clobbered by a stale read.
+  // The `where` only matches the non-terminal statuses — a source already
+  // at READY/SCANNED/ERROR is left untouched, so a `downloadStart` on a
+  // finished-but-still-seeding torrent cannot walk the title's derived
+  // status backwards (NFR-3).
+  private static readonly NON_TERMINAL_STATUSES: SourceStatus[] = ['PENDING', 'QUEUED', 'DOWNLOADING', 'PAUSED'];
+
+  // Returns whether the guard matched, so the caller can keep the in-memory
+  // row it already has consistent with what was actually written — a
+  // matched write means `status` is now the real column value; a skipped
+  // one (row already terminal) means the row the caller read is still
+  // accurate as-is.
+  private async writeStatusIfNonTerminal(mediaSourceId: number, status: SourceStatus): Promise<boolean> {
+    const result = await this.prisma.mediaSource.updateMany({
+      where: { id: mediaSourceId, status: { in: DownloadsService.NON_TERMINAL_STATUSES } },
+      data: { status },
+    });
+    return result.count > 0;
+  }
+
   async downloadStart(mediaSourceId: number, userId: string): Promise<Download> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
     const infoHash = this.requireTorrent(source);
 
     await this.callTorrentClient(() => this.qbittorrent.start(infoHash));
+    if (await this.writeStatusIfNonTerminal(mediaSourceId, 'QUEUED')) {
+      source.status = 'QUEUED';
+    }
 
-    const [label, live] = await Promise.all([this.labelFor(source), this.liveInfoForHash(infoHash)]);
-    return this.toDownload(source, label, live);
+    const [label, live, jobsBySourceId, compressionEnabled] = await Promise.all([
+      this.labelFor(source),
+      this.liveInfoForHash(infoHash),
+      this.jobsBySourceId([source.id]),
+      this.compressionEnabled(),
+    ]);
+    return this.toDownload(source, label, live, jobsBySourceId.get(source.id) ?? [], compressionEnabled);
   }
 
   async downloadStop(mediaSourceId: number, userId: string): Promise<Download> {
@@ -224,9 +317,17 @@ export class DownloadsService {
     const infoHash = this.requireTorrent(source);
 
     await this.callTorrentClient(() => this.qbittorrent.stop(infoHash));
+    if (await this.writeStatusIfNonTerminal(mediaSourceId, 'PAUSED')) {
+      source.status = 'PAUSED';
+    }
 
-    const [label, live] = await Promise.all([this.labelFor(source), this.liveInfoForHash(infoHash)]);
-    return this.toDownload(source, label, live);
+    const [label, live, jobsBySourceId, compressionEnabled] = await Promise.all([
+      this.labelFor(source),
+      this.liveInfoForHash(infoHash),
+      this.jobsBySourceId([source.id]),
+      this.compressionEnabled(),
+    ]);
+    return this.toDownload(source, label, live, jobsBySourceId.get(source.id) ?? [], compressionEnabled);
   }
 
   async downloadDelete(mediaSourceId: number, userId: string): Promise<boolean> {

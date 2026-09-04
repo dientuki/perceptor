@@ -65,7 +65,8 @@
       "missingLocale": "Falta el idioma a guardar.",
       "missingSettingsValues": "No hay valores para guardar.",
       "passwordMismatch": "Las contraseñas no coinciden",
-      "passwordPairIncomplete": "Completá ambos campos de contraseña o dejá los dos vacíos"
+      "passwordPairIncomplete": "Completá ambos campos de contraseña o dejá los dos vacíos",
+      "torrent_group_name_required": "El nombre del grupo no puede estar vacío"
     },
     "user": {
       "username_taken": "Ese nombre de usuario ya está registrado",
@@ -83,7 +84,7 @@
     "torrent_group": {
       "not_found": "El grupo de torrents {id} no existe",
       "duplicated": "El grupo de torrents {id} está repetido",
-      "wrong_scope": "El grupo de torrents {id} no pertenece a {scope}"
+      "name_taken": "Ya existe un grupo llamado {name}"
     },
     "mediaServer": {
       "not_configured": "Configurá un media server antes de sincronizar la biblioteca"
@@ -419,11 +420,12 @@
     },
     "compression": {
       "enabledLabel": "Habilitar compresión",
-      "presetLabel": "Preset",
-      "presets": {
-        "fast": "Rápido",
-        "balanced": "Equilibrado",
-        "quality": "Calidad"
+      "resolutionLabel": "Resolución",
+      "resolutions": {
+        "4k": "4K",
+        "1080p": "1080p",
+        "720p": "720p",
+        "360p": "360p"
       }
     },
     "mediaServer": {
@@ -458,6 +460,10 @@
       "downloadsFolderLabel": "Carpeta de descargas",
       "indexerSection": "Indexer",
       "indexerApiKeyLabel": "API key del indexer",
+      "groupNameLabel": "Grupos de torrents",
+      "groupNamePlaceholder": "Nombre del grupo",
+      "addGroup": "Agregar",
+      "removeGroup": "Eliminar {name}",
       "moviesShowsSection": "Películas y series",
       "tmdbApiKeyLabel": "API key de TMDB",
       "moviesEnabledLabel": "Habilitar películas",
@@ -495,6 +501,16 @@
       "emptyChosen": "No elegiste ningún grupo.",
       "removeGroup": "Quitar {name}"
     }
+  },
+  "status": {
+    "missing": "Falta",
+    "queued": "En cola",
+    "downloading": "Descargando",
+    "paused": "Pausado",
+    "downloaded": "Descargado",
+    "encoding": "Comprimiendo",
+    "completed": "Completado",
+    "error": "Error"
   },
   "users": {
     "add": {

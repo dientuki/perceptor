@@ -11,6 +11,7 @@ import { MEDIA_TYPE } from '@/types/media';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
+import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs) — same value as
 // MoviesService, kept as its own constant here on purpose (see class doc
@@ -54,16 +55,43 @@ export class ShowsService implements MediaTypeService {
   // when it exists but belongs to someone else — the two are deliberately
   // indistinguishable from here on, same rule as MoviesService.findOneFromDb
   // (008-movie-detail, see spec.md § Errors there and in 009-show-detail).
+  //
+  // Each episode also carries mediaSources/processJobs (043 REQ-4): an
+  // episode inside a season pack has no MediaSource of its own (the source
+  // targets the season) but does have processJobs, denormalized per episode
+  // by sourceScanned — that is the only path that reaches its derived
+  // status. Show.status itself is left untouched (out of scope).
   async findOneFromDb(id: number, userId: string) {
-    return this.prisma.show.findFirst({
+    const show = await this.prisma.show.findFirst({
       where: { id, users: { some: { userId } } },
       include: {
         seasons: {
           orderBy: { seasonNumber: 'asc' },
-          include: { episodes: { orderBy: { episodeNumber: 'asc' } } },
+          include: {
+            episodes: {
+              orderBy: { episodeNumber: 'asc' },
+              include: { mediaSources: true, processJobs: true },
+            },
+          },
         },
       },
     });
+    if (!show) return show;
+
+    return {
+      ...show,
+      seasons: show.seasons.map((season) => ({
+        ...season,
+        episodes: season.episodes.map((episode) => ({
+          ...episode,
+          status: deriveTitleStatus({
+            status: episode.status,
+            sources: episode.mediaSources,
+            jobs: episode.processJobs,
+          }),
+        })),
+      })),
+    };
   }
 
   // Única definición de la clave de cache, compartida por el write de la búsqueda

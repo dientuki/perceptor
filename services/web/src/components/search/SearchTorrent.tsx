@@ -56,9 +56,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   const [addError, setAddError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState<TorrentResult | null>(null);
-  const [preferences, setPreferences] = useState<UserPreferences | null>(
-    null,
-  );
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const router = useRouter();
 
   // Fetched once per mount, independent of `target` — the caller's own preferences are what a
@@ -107,7 +105,8 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
           languages: target.audioLanguages,
         }
     : null;
-  const usingGlobalLanguages = titleAudio !== null && titleAudio.languages.length === 0;
+  const usingGlobalLanguages =
+    titleAudio !== null && titleAudio.languages.length === 0;
   const languageRequirement: LanguageRequirement | undefined = titleAudio
     ? usingGlobalLanguages && preferences
       ? {
@@ -117,14 +116,14 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
       : titleAudio
     : undefined;
 
-  // Same idea for the preferred-groups tiebreak — `UserPreferences.torrentGroups` scoped to this
-  // target's kind. There is no per-title override for groups, only the user's global preference.
+  // Same idea for the preferred-groups tiebreak — `UserPreferences.movieTorrentGroups`/
+  // `showTorrentGroups`, picked by this target's kind. There is no per-title override for
+  // groups, only the user's global preference.
   const preferredGroups = preferences
-    ? preferences.torrentGroups
-        .filter(
-          (g) => g.scope === (target?.kind === "movie" ? "MOVIE" : "SHOW"),
-        )
-        .map((g) => g.name)
+    ? (target?.kind === "movie"
+        ? preferences.movieTorrentGroups
+        : preferences.showTorrentGroups
+      ).map((g) => g.name)
     : [];
 
   // The candidate view derives from `results` without ever mutating it — REQ-16/AC-5 depend on
