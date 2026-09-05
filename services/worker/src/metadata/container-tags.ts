@@ -23,7 +23,15 @@ export function buildContainerTitle(details: ContainerTagsInput): string {
   return details.episodeTitle ? `${base} ${details.episodeTitle}` : base;
 }
 
-export function buildSourceTag(downloadsRoot: string, inputFilePath: string): string {
+export function buildSourceTag(
+  downloadsRoot: string,
+  inputFilePath: string,
+  downloadPath: string | null,
+): string {
+  if (downloadPath && isInsideRoot(downloadPath, inputFilePath)) {
+    return relative(downloadPath, inputFilePath).split(sep).join('/');
+  }
+
   if (isInsideRoot(downloadsRoot, inputFilePath)) {
     return relative(downloadsRoot, inputFilePath).split(sep).join('/');
   }
