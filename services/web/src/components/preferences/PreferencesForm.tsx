@@ -14,6 +14,7 @@ import {
 import Checkbox from "@/components/form/input/Checkbox";
 import Label from "@/components/form/Label";
 import Select from "@/components/form/Select";
+import Switch from "@/components/form/switch/Switch";
 import LanguagePickerField from "@/components/preferences/LanguagePickerField";
 import TorrentGroupPickerField from "@/components/preferences/TorrentGroupPickerField";
 import Button from "@/components/ui/button/Button";
@@ -259,9 +260,9 @@ export default function PreferencesForm({
 
         <div className={panelClass("movies")}>
           <div className="space-y-6">
-            <Checkbox
-              id="allow-cinema-releases"
-              checked={allowCinemaReleases}
+            <Switch
+              key={`allow-cinema-releases-${allowCinemaReleases}`}
+              defaultChecked={allowCinemaReleases}
               onChange={setAllowCinemaReleases}
               label={t("cinemaLabel")}
             />
