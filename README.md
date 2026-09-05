@@ -29,43 +29,77 @@ Perceptor is the whole path as a single product:
 ## What it does today
 
 ### Find and add
-- 🔎 **Search TMDB for films and series** from one dialog and add them to your library.
+- 🔎 **One search box for everything.** Type a title in the header — from any screen, on any
+  viewport — and get films and series back in a single ranked list, without deciding first which
+  one you meant.
 - 📺 **Series come with their seasons and episodes**, fetched in the background when you add them.
+  A scheduled sweep later fills in the titles, overviews and air dates of episodes that had none
+  when you registered the series.
 - 🧲 **Or paste a magnet** — for a film, a single episode, or a whole season pack — and skip the
   search entirely.
 - 📤 **Or upload a file you already have**, resumable, up to tens of gigabytes, straight from the
   browser.
+- 🪞 **A title you already own isn't re-downloaded.** Registering something reconciles it against
+  your media server first: if Jellyfin already has the film — or some of the episodes — they come
+  in as complete, not missing.
 
 ### Acquire
 - 🌐 **Indexer search through Prowlarr**, for a full film or one specific episode, with a
-  **FlareSolverr** proxy pre-registered for Cloudflare-fronted trackers.
-- ⬇️ **Downloads through qBittorrent**, each with its own save path, and completion detected
-  automatically — no polling, no cron.
+  **FlareSolverr** proxy pre-registered for Cloudflare-fronted trackers. Every row Prowlarr returns
+  survives the trip: nothing is dropped for missing metadata.
+- 🏆 **"Best candidates"** re-ranks the results the way an automatic picker would, so you can see
+  the shortlist instead of reading release names one by one.
+- ⚡ **Repeat searches are cached** for ten minutes, so re-opening the modal doesn't hammer your
+  trackers.
+- ⬇️ **Downloads through qBittorrent**, each with its own save path, with live progress and speed in
+  the UI and start/stop/delete from Perceptor itself. A title can race several sources at once —
+  the first one to finish wins, the losers are demoted.
+- ♻️ **A finished title can be replaced.** A bad cut, a broken encode or the wrong language isn't a
+  dead end: point a new torrent or a new upload at it and it supersedes what's there.
 - 🔑 **No API-key copy-paste on a fresh checkout.** The installer generates Prowlarr's key and the
   container adopts it before boot.
 
 ### Process
 - 🎞️ **H264 / VC-1 → AV1** via `libsvtav1`; **4K HDR10 and Dolby Vision downscaled to 1080p with
   their HDR preserved**, never flattened to SDR; audio to Opus.
-- 🗣️ **Language preferences you choose** — globally, plus extra languages per title. The encode
-  keeps the original language plus the union of what every owner of that title asked for. Nobody
-  ends up with a file they can't understand.
+- 🗣️ **Language preferences you choose**, at three levels that merge rather than override: the
+  installation default, your own account preferences, and extra languages on one specific title.
+  **Audio and subtitles are chosen separately** — original audio plus Spanish subtitles is a thing
+  you can actually ask for.
+- 🌎 **Regional variants are first-class.** `es-419` and `es-ES` are different preferences, and the
+  encode picks the right one instead of guessing from the track title.
 - 🧠 **Decisions made from the container, not the filename.** Remux vs. web-grade quality comes from
   `ffprobe` metadata, so a badly named release still gets the right treatment.
 - 📦 **Season packs fan out correctly**: every file is enumerated, matched to its episode by
   `SxxEyy`, and each becomes its own job — cleanup waits for the whole pack, not the first episode
   to finish.
+- 🔕 **Compression is optional.** Turn it off from Settings and the pipeline still renames, moves
+  and files the release — it just never invokes FFmpeg.
+- 🏷️ **Every transcoded file records where it came from.** A `title` tag for players, and a
+  `PERCEPTOR_SOURCE` tag naming the exact release path — so "which rip is this?" is answerable
+  months after the download was cleaned up.
+- 📮 **A finished encode is never lost.** If the api is restarting when the worker reports back, the
+  worker keeps retrying until it's acknowledged; both outcome mutations are safe to receive twice.
 
 ### Enjoy
 - 🗂️ **Automatic filing** into your library layout.
 - 🔔 **Media server notification** — Jellyfin today, opt-in from Settings — with the path translated
-  to what your media server actually sees.
-- 🖥️ **Library browsing** for films and series, with a per-series season accordion and per-episode
-  actions (search, import a file, add a torrent).
-- ⚙️ **Settings in the UI**: paths, TMDB key, indexer key, media server, which media types are
-  enabled.
-- 👥 **User management**: create users, disable them (which revokes their live sessions immediately,
-  not just their next login), and `bin/reset-password` as the recovery path when nobody can sign in.
+  to what your media server actually sees, plus a local index you can re-sync on demand.
+- 🖥️ **Library browsing** for films and series, with a billboard home, a per-series season accordion
+  and per-episode actions (search, import a file, add a torrent).
+- 📊 **One status vocabulary.** Queued, downloading, encoding, done — the same words everywhere, so
+  two screens never disagree about the same title.
+- ⏰ **Scheduled tasks** an admin can enable and pace from Settings, for the work that has to happen
+  after registration rather than during it.
+- ⚙️ **Settings in the UI**, split into tabs: paths, TMDB key, indexer key, media server,
+  compression, scheduling, and which media types are enabled. **Disabling films or series actually
+  disables them** — sidebar, billboard, search and routes all follow, while anything already in the
+  pipeline is allowed to finish.
+- 🙋 **Per-user preferences** at `/preferences`: interface language, audio and subtitle languages,
+  and the torrent groups you care about.
+- 👥 **User management**: create, edit and disable users (disabling revokes live sessions
+  immediately, not just the next login), with `bin/reset-password` as the recovery path when nobody
+  can sign in.
 
 ## Technical summary
 
@@ -188,20 +222,26 @@ bin/cli api npx prisma studio
 
 ## Status and known limitations
 
-The pipeline runs end to end for both films and series — search, register, find a release,
-download, scan, transcode, file, notify, browse. Fourteen feature specs (`001` through `014`) are
-implemented; `docs/spec/features/` has each one, and the root `CLAUDE.md` has a stage-by-stage table.
+The pipeline runs end to end for both films and series — search, register, find a release, download,
+scan, transcode, file, notify, browse. Forty-six feature specs (`001` through `046`) are implemented;
+`docs/spec/features/` has each one, and the root `CLAUDE.md` has a stage-by-stage table plus the
+current test and build numbers.
 
 Rough edges, stated plainly:
 
-- **`bin/npm web run build` fails.** 11 TypeScript errors across 4 pre-GraphQL files, none of them
-  reachable from the running UI. Dev mode is unaffected. Tracked as spec `016-web-build-errors`.
-- **Production images aren't reproducible yet.** The three Node services run their `dev` stage and
-  install dependencies at first boot. Tracked as spec `015-reproducible-image-builds`.
 - **Season packs are api-only.** `addMagnetToSeason` works; there's no web UI for it yet.
+- **Releases are never picked automatically.** "Best candidates" shows the shortlist an automatic
+  picker would produce, but a human still clicks. Nothing in the stack acquires a title unattended.
+- **The scheduler does one real job.** `035` built the scheduling machinery and registered four task
+  ids; only `refresh_episodes` has a body. The other three are still stubs.
 - **AV1 encoding is CPU-bound by design** — no current consumer GPU encodes AV1 in hardware, and
   the pipeline has no GPU-accelerated stage of any kind.
 - **Which indexers sit behind Cloudflare is a manual call.** The FlareSolverr proxy is registered
   automatically, but tagging the indexers that need it stays a step in Prowlarr's UI.
 - **Jellyfin is the only media server client** implemented so far, and it's expected to run outside
   this stack.
+- **Libraries don't overlap.** Each user sees only their own titles; a title someone else registered
+  answers "not available for this user" rather than rendering. There is no shared or household
+  library.
+- **No quality profiles, no upgrade loop.** Perceptor normalizes what it gets rather than chasing a
+  better release later — a deliberate omission, not a backlog item.
