@@ -17,6 +17,8 @@ function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
     allowedSubtitleLanguagesIso3: ['eng'],
     allowedSubtitleLanguageTags: ['en'],
     isLiveAction: true,
+    containerTitle: 'Some Title',
+    sourceTag: 'some/source.mkv',
     ...overrides,
   };
 }

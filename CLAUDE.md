@@ -15,7 +15,7 @@ implementation detail.
 | Download | qBittorrent (`torrent`), `api` — `src/clients/torrent/client.ts`, per-torrent save path; no longer fire-and-forget — `api` reads live progress/speed back and starts, stops and deletes torrents on the user's behalf, and a title may race several sources at once | `010`, `022` |
 | Detect completion, enqueue | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer); a shared race arbiter also runs from the tus upload path, since an uploaded file competes in the same race as any torrent of its target — an upload always demotes a `READY`/`SCANNED` sibling of its own target rather than deferring to it, and a losing upload gets a `409` instead of being silently ignored; both outcome mutations the worker reports back through (`encodeCompleted`/`encodeFailed`) are safe to receive more than once, which is what lets the worker retry a lost report until `api` acknowledges it | `022`, `038` |
 | Scan files, inventory | `worker` — enumerates every file, resolves episodes by parsing `SxxEyy`; episode names come from the api, never the filename | `013` |
-| Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K downscaled to 1080p preserving HDR (Dolby Vision/HDR10 keep their colour tags rather than flattening to SDR), Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode. Optional per installation — an administrator can turn compression off from Settings, in which case the file is still renamed and moved to its destination, just never touched by FFmpeg | `011`, `013`, `024`, `031`, `032`, `042` |
+| Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K downscaled to 1080p preserving HDR (Dolby Vision/HDR10 keep their colour tags rather than flattening to SDR), Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode. Optional per installation — an administrator can turn compression off from Settings, in which case the file is still renamed and moved to its destination, just never touched by FFmpeg. Since `046`, every transcoded output also carries two container-level tags — `-metadata title=<film title or "Series SNN-ENN Episode title">` (verbatim from TMDB, decorative) and `-metadata PERCEPTOR_SOURCE=<release path relative to the downloads root>` (a provenance record of the exact source release); neither is written when compression is off | `011`, `013`, `024`, `031`, `032`, `042`, `046` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`); no longer write-only — a local index (`src/media-server-index/`) lets a client with no native provider-id lookup answer "does this title exist" too, rebuilt on demand from Settings or a "Re-sincronizar" button in `web` | `034` |
 | Browse library | `api` — the three resolvers; `web` — `/`, the billboard, plus `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010`, `033` |
 
@@ -230,7 +230,12 @@ deliberately — no pipeline stage changed, only the admin Settings screen and t
 torrent-group catalog it feeds) — and again 2026-09-04 after `045-media-type-availability`: `api`
 390/39 suites, `web` typechecks at 0 errors and `bin/npm web run build` exits 0 (`worker` untouched
 by that feature, deliberately — NFR-5 makes an untouched worker the mechanism by which a title
-already in flight finishes even after its type is disabled mid-pipeline).
+already in flight finishes even after its type is disabled mid-pipeline) — and again 2026-09-04
+after `046-encode-metadata-tags`: `worker` typechecks at 0 errors, `bin/npm worker run build` exits
+0, and `bin/npm worker test` runs 157 tests across 17 suites, 156 passing (`api`/`web` untouched by
+that feature; the one failure is the pre-existing, unrelated stale track-title string in
+`ffmpeg/2.json` first recorded under `039-per-title-language-split` above, still present and still
+out of scope here).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

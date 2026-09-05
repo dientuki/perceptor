@@ -10,6 +10,8 @@ export type EncodeInput = {
   allowedSubtitleLanguagesIso3: string[];
   allowedSubtitleLanguageTags: string[];
   isLiveAction: boolean;
+  containerTitle: string;
+  sourceTag: string;
 };
 
 // Contrato común entre drivers de encode (mock hoy, ffmpeg real después). En

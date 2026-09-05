@@ -63,6 +63,10 @@ export function buildFfmpegCommand(
     ),
     "-map_metadata:g",
     "-1",
+    "-metadata",
+    `title=${details.containerTitle}`,
+    "-metadata",
+    `PERCEPTOR_SOURCE=${details.sourceTag}`,
   ];
 
   // Sólo mientras se prueba el workflow: encodear unos pocos segundos en vez

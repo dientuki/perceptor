@@ -20,7 +20,9 @@
       "es-419"
     ],
     "originalLanguageIso3": "eng",
-    "isLiveAction": true
+    "isLiveAction": true,
+    "containerTitle": "Widows Bay - S01E01",
+    "sourceTag": "Widows Bay S01E01.mkv"
   },
   "ffprobe": {
     "streams": [
@@ -752,6 +754,10 @@
     "title=Latino",
     "-map_metadata:g",
     "-1",
+    "-metadata",
+    "title=Widows Bay - S01E01",
+    "-metadata",
+    "PERCEPTOR_SOURCE=Widows Bay S01E01.mkv",
     "-y",
     "/media/Shows/Widows Bay/Season 01/Widows Bay - S01E01.mkv"
   ]

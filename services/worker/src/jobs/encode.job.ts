@@ -7,6 +7,7 @@ import { passthrough } from '../encode/passthrough';
 import { withSourceExtension } from '../paths/with-source-extension';
 import { isInsideRoot } from '../paths/is-inside-root';
 import { cleanupSource } from './cleanup-source';
+import { buildContainerTitle, buildSourceTag } from '../metadata/container-tags';
 import type { EncodeJob } from '../queue/types';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
@@ -174,6 +175,8 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
           allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
           allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
           isLiveAction: details.isLiveAction,
+          containerTitle: buildContainerTitle(details),
+          sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath),
         },
         onProgress,
         onProbe,
@@ -190,6 +193,8 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
           allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
           allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
           isLiveAction: details.isLiveAction,
+          containerTitle: buildContainerTitle(details),
+          sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath),
         },
         onProgress,
         onProbe,

@@ -20,7 +20,9 @@
       "es-419"
     ],
     "originalLanguageIso3": "eng",
-    "isLiveAction": true
+    "isLiveAction": true,
+    "containerTitle": "Starship Troopers (1997)",
+    "sourceTag": "Starship.Troopers.1997.Eng.Fre.Ger.Ita.Spa.2160p.BluRay.Remux.DV.HDR.HEVC.Atmos-SGF.mkv"
   },
   "ffprobe": {
     "streams": [
@@ -1477,6 +1479,10 @@
     "language=spa",
     "-map_metadata:g",
     "-1",
+    "-metadata",
+    "title=Starship Troopers (1997)",
+    "-metadata",
+    "PERCEPTOR_SOURCE=Starship.Troopers.1997.Eng.Fre.Ger.Ita.Spa.2160p.BluRay.Remux.DV.HDR.HEVC.Atmos-SGF.mkv",
     "-y",
     "/output/Starship.Troopers.1997.mkv"
   ]

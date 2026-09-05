@@ -42,6 +42,7 @@ src/encode/              the driver seam (see below)
 src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639
 src/paths/build-output-path.ts   composes the final library path
 src/paths/is-inside-root.ts      pure containment check, used before any delete
+src/metadata/container-tags.ts   buildContainerTitle · buildSourceTag — the two container-level tags
 ```
 
 ## The encode driver seam
@@ -66,6 +67,14 @@ nothing forever, with no error anywhere.
 (`jobs/encode.job.ts`), retyped locally rather than imported, so the driver isn't coupled to the
 full shape of the GraphQL query. `paths/build-output-path.ts` does the same with `OutputPathInput`.
 That is the house pattern for small pure modules here, not an oversight.
+
+Since `046-encode-metadata-tags`, `EncodeInput` also carries two required, container-level tags:
+`containerTitle` and `sourceTag`, both composed by `src/metadata/container-tags.ts` (a third small
+pure module following the same local-type pattern) and populated at both `EncodeInput` literals in
+`jobs/encode.job.ts` — never inside a driver. `src/ffmpeg/buildCommand.ts` writes them as
+`-metadata title=<containerTitle>` and `-metadata PERCEPTOR_SOURCE=<sourceTag>`, appended right
+after the existing `-map_metadata:g -1` strip so they survive it. `passthrough.ts` still ignores
+`details` entirely and writes neither tag, by design.
 
 **A third `EncodeFn` exists that is never reachable through `ENCODE_DRIVER`.**
 `src/encode/passthrough.ts` (`032-optional-compression`) implements the same interface — `mkdir`,
