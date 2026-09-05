@@ -1,7 +1,7 @@
 ---
 title: Torrent Ranking Heuristic — web slice
 service: web
-last_updated: 2026-09-02
+last_updated: 2026-09-05
 status: Implemented
 ---
 
@@ -44,6 +44,14 @@ Writes are confined to `services/web/` and this directory.
 | `services/web/src/components/shows/SeasonAccordion.tsx` | Modified | Accepts the series' two fields as props and puts them on the `target` it builds. |
 | `services/web/src/components/shows/Show.tsx` | Modified | Passes them down to `SeasonAccordion` from the `Show` it already holds. |
 | `services/web/src/components/search/SearchTorrent.tsx` | Modified | Derives the requirement from `target`, hands it to the module, renders the language chip and the promotion marker. |
+
+**`spec_version` 0.6.0 (pending — `../spec.md` § Post-Implementation Amendments, REQ-4b):**
+
+| File | New / Modified | What changes |
+| :-- | :-- | :-- |
+| `services/web/src/lib/torrent-ranking.ts` | Modified | A third pass-1 veto predicate, `isUpscaled(title)`, alongside `isVetoed`/`isDeadSwarm` — boundary-anchored match on `upscaled`/`upscale`/`ai upscale`/`ai-upscale`/`aiupscale`. Unioned into the same pass-1 filter; no new pass, no new comparator criterion, no new `ranking` field (a veto has nothing to label — the release is simply absent). |
+
+No caller change: `SearchTorrent.tsx` already renders whatever pass 1 leaves standing.
 
 No other file. In particular `src/actions/indexer.ts` and `src/types/indexer.ts` are **unchanged** —
 the module consumes `TorrentResult` as it already exists — and so are

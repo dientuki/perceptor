@@ -1,9 +1,9 @@
 ---
 title: Torrent Ranking Heuristic
-spec_version: 0.5.0
+spec_version: 0.6.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-31
-last_updated: 2026-09-02
+last_updated: 2026-09-05
 status: Implemented
 services: [web]
 ---
@@ -171,6 +171,16 @@ behaviour it has; `web` gains a view over its results.
       no seeder but real leecher interest tends to revive, and discarding it would hand the pick to
       a worse source that merely happens to be alive at this moment. Like REQ-4 it runs before the
       tier pass, so a dead 2160p release cannot set the tier and evict every live 1080p one.
+
+- [ ] **REQ-4b (Upscale Veto)** *(pending, see § Post-Implementation Amendments)*: A release whose
+      name identifies it as an upscale — `upscaled`, `ai upscale`/`ai-upscale`/`aiupscale`,
+      `upscale` — is discarded in pass 1 alongside REQ-4 and REQ-4a, whatever resolution it claims.
+
+      An upscaled release did not originate at the resolution it advertises — the extra pixels are
+      synthesized, not sourced — so a "2160p" upscale is worse evidence of quality than an honest
+      1080p release, exactly the inversion REQ-3's tier pass exists to prevent for AV1/VP9. Like
+      REQ-4/REQ-4a this runs before the tier pass, so an upscaled 2160p release cannot set the tier
+      and evict every genuine 1080p one.
 
 - [x] **REQ-5 (Criterion 1 — Resolution)**: Read from the release name, case-insensitive, highest
       match wins: `2160`/`4k` → 5, `1080` → 4, `720` → 3, `480` → 2, `360` → 1, nothing recognised
@@ -528,6 +538,10 @@ document or anything under `services/api/`, they have left scope and must stop a
       button is pressed the **larger** of the two leads — the terse title is not punished for
       being terse. Given the same pair as WEB-DLs, the one naming HEVC and Atmos leads instead.
 
+- [ ] **AC-4c** (upscale veto, pending): Given a list whose only 2160p release is tagged
+      `Upscaled` or `AI Upscale`, when the button is pressed, that release is absent and the
+      candidate set is drawn from the next tier down — same shape as AC-4, different trigger.
+
 - [x] **AC-5** (nothing is lost): Given the candidate view is active, when the button is pressed
       again, the table is byte-identical to AC-1 — every hidden release back, in its original
       position, with no parsed-attribute labels.
@@ -624,7 +638,8 @@ document or anything under `services/api/`, they have left scope and must stop a
   When the automatic pick moves this logic to `api`, that is the code it should replace.
 
 - **Handling bad rips (`CAM`, `TS`, `TELESYNC`, `SCREENER`) and specific groups (`YTS`, `RARBG`).**
-  Only the AV1/VP9 veto removes; nothing else does. An unrecognised source ranks last under REQ-7,
+  Only the AV1/VP9 veto (and, pending, the upscale veto — REQ-4b) removes; nothing else does. An
+  unrecognised source ranks last under REQ-7,
   which is a weak defence — and note a `CAM` tagged `1080p` not only survives but can *define* the
   tier, evicting every legitimate 720p release from the candidate set. REQ-3 makes this sharper
   than it was under a pure ordering, and it is the first thing to watch for in the manual pass.
@@ -659,3 +674,19 @@ document or anything under `services/api/`, they have left scope and must stop a
 - **Channel layout.** REQ-10 reads the audio *codec* (`TrueHD`, `Atmos`, `DTS-HD MA`, `DDP`) but
   not the channel count — `7.1`, `5.1` and `2.0` rank identically. Adding it is another rung on an
   existing criterion, not a restructure.
+
+## Post-Implementation Amendments (2026-09-05)
+
+One follow-up requirement recorded ahead of implementation — flagged during a debug session on the
+movie detail page, once the language/group fallback (`spec_version` unrelated to this one) made the
+candidate set actually match what a user would search with. Not yet implemented; tracked here so
+`/tasks` has an approved requirement to dispatch against rather than a chat message.
+
+- **REQ-4b (Upscale Veto), AC-4c.** Some indexer results advertise themselves as `Upscaled` or
+  `AI Upscale` — a release whose reported resolution was never actually captured at that
+  resolution, only interpolated up to it after the fact. Ranking these as genuine high-resolution
+  sources is worse than ranking them last: under REQ-3's tier pass, a fake 2160p release can *evict*
+  every honest 1080p candidate from the set entirely, not just lose a tiebreak to one. This is the
+  same failure mode REQ-4 (AV1/VP9) and REQ-4a (dead swarm) already exist to prevent, so the fix is
+  the same shape — a third pass-1 veto, not a new comparator criterion. See `web/plan.md`'s
+  amendments table for the implementation detail once it lands.

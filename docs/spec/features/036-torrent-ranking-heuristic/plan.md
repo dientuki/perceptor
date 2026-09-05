@@ -1,17 +1,18 @@
 ---
 title: Torrent Ranking Heuristic — Implementation Plan
-spec_version: 0.5.0
-last_updated: 2026-09-02
+spec_version: 0.6.0
+last_updated: 2026-09-05
 status: Implemented
 ---
 
 # PLAN: Torrent Ranking Heuristic (`plan.md`)
 
-> **Two amendments are folded in here.** `spec_version` 0.4.0 replaced the weighted score with a
+> **Three amendments are folded in here.** `spec_version` 0.4.0 replaced the weighted score with a
 > lexicographic comparator; this plan was never updated for it and described `qualityScore` long
 > after the code had stopped computing one. `spec_version` 0.5.0 adds the mandatory-audio
 > promotion. Both are reflected below — the 0.4.0 text is a correction of documentation drift, not
-> new work, and nothing in § Order of Work for it remains to be done.
+> new work, and nothing in § Order of Work for it remains to be done. `spec_version` 0.6.0
+> (REQ-4b, the upscale veto) is recorded but **not yet implemented** — step 9 below is pending.
 
 ## Approach
 
@@ -91,6 +92,13 @@ module has to accept one before the component can pass it:
 | 7 | `web` | The plumbing (REQ-25) — `AcquisitionTarget`'s episode branch grows the series' two fields, `SeasonAccordion` passes them, `Movie.tsx`/`page.tsx` already hold theirs, and `SearchTorrent` derives the requirement and hands it to the module. Consumes steps 5 and 6. |
 | 8 | `web` | The chip on the row (REQ-14 as amended), then verification. |
 
+Steps 1–8 are **done**. `spec_version` 0.6.0 (`spec.md` § Post-Implementation Amendments,
+2026-09-05) adds one more, pending:
+
+| Step | Service | Why it must come here |
+| :-- | :-- | :-- |
+| 9 | `web` | REQ-4b — a third pass-1 veto predicate (`isUpscaled`) alongside `isVetoed`/`isDeadSwarm` in `torrent-ranking.ts`, matching `upscaled`/`ai upscale`/`ai-upscale`/`aiupscale`, boundary-anchored. No new caller wiring — pass 1 already unions its predicates, so this is a same-shape addition, not a new pass. |
+
 ## Contract Freeze
 
 `spec.md` § GraphQL Contract Delta is **None**, and that is the frozen part: this feature adds no
@@ -148,6 +156,7 @@ from it. That is the failure mode to defend against.
 | **`Math.max()` over an empty array is `-Infinity`.** When every release is vetoed, the tier pass runs over nothing. | The empty set survives by luck, but a `reduce` with no initial value throws, and `Math.max(...spread)` over a large list can blow the stack. | Guard the empty case explicitly and return an empty candidate set. AC-6. |
 | **The empty-candidate state reuses "no results" copy.** | The user reads "no se encontraron resultados" and searches again, when the releases are one press away. | REQ-17 requires its own message and its own key. AC-6 checks the exact copy. |
 | **No test runner in `web`.** | Every row above is exactly the class of bug Article IX says is owed a test, and this service has nowhere to put one. | Accepted and recorded, not waved away — see `web/plan.md` § Tests. The manual pass is the compensating control; moving the heuristic to `api` (where jest lives) is the named follow-up and the destination anyway. |
+| **The upscale veto matches too loosely.** `includes("upscale")` also hits an unrelated title token, or a hyphen/space variant is missed. | Either a legitimate release is discarded (silent, looks like it just wasn't in the results) or an upscale survives and can define the tier exactly like an unvetoed AV1 release would. | Boundary-anchored matching for every spelling (`upscaled`, `upscale`, `ai upscale`, `ai-upscale`, `aiupscale`), checked by eye in the manual pass against real indexer titles — same discipline as REQ-4/REQ-4a. AC-4c is the direct check. |
 
 ## Verification
 

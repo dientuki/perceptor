@@ -1,7 +1,7 @@
 ---
 title: Torrent Ranking Heuristic — Tasks
-last_updated: 2026-09-02
-status: Done
+last_updated: 2026-09-05
+status: In Progress
 ---
 
 # TASKS: Torrent Ranking Heuristic (`tasks.md`)
@@ -34,6 +34,10 @@ holds for **T014** in Group 4.
 > Note that T001's text below describes the *weighted score* the module no longer computes: 0.4.0
 > replaced it with a lexicographic comparator without rewriting the task that built it. Group 4
 > tasks are written against the current `spec.md`, which is the authority.
+>
+> **Group 5 is the `spec_version` 0.6.0 amendment** — the upscale veto (REQ-4b) — added
+> 2026-09-05, not yet implemented. Its tasks (T017–T019) are unticked and AC-4c is unticked in
+> `spec.md`.
 
 ## Tasks
 
@@ -304,6 +308,45 @@ parallel with them.
       named Spanish, so the positive promoted-episode-row case never occurred; ticking it would be
       exactly the "case that never occurred" this step is told not to tick.
       `spec.md`/`plan.md`/`web/plan.md` set to `status: Implemented`, this file to `status: Done`.
+
+### Group 5 — `spec_version` 0.6.0: the upscale veto (pending)
+
+One service, one file, no new caller. `spec.md` REQ-4b: a release identified as an upscale is
+discarded in pass 1 alongside REQ-4/REQ-4a, before the tier pass runs. This is a same-shape
+addition to an existing pattern (`isVetoed`/`isDeadSwarm`), not new architecture, and no other
+service is touched.
+
+T017 and T018 are sequential; T019 is `[docs]` and closes the amendment.
+
+- [ ] **T017** `[web]` In `services/web/src/lib/torrent-ranking.ts`, add `isUpscaled(title)`
+      alongside `isVetoed`/`isDeadSwarm` (`spec.md` REQ-4b): boundary-anchored match on
+      `upscaled`, `upscale`, `ai upscale`, `ai-upscale`, `aiupscale`, case-insensitive, the same
+      `\b…\b`-style anchoring REQ-4/REQ-5 use so a title merely containing the substring elsewhere
+      does not false-positive. Union it into pass 1's existing filter alongside the other two
+      predicates — no new pass, no new comparator criterion, no new `ranking` field.
+      *Done when:* `bin/cli web npx --no tsc --noEmit` reports the baseline error count (0) and
+      `bin/cli web npx --no biome check src/lib/torrent-ranking.ts` is clean; a harness run
+      (`web/plan.md` § Tests) shows `Movie.2024.2160p.Upscaled.BluRay.Remux` and
+      `Movie.2024.2160p.AI.Upscale.WEB-DL` both discarded in pass 1, while
+      `Movie.2024.2160p.BluRay.Remux` and a title containing an unrelated `upscale`-adjacent word
+      (if one is found in real indexer data) are not. Paste the harness output. Covers **AC-4c**.
+
+- [ ] **T018** `[web]` Run the `spec_version` 0.6.0 verification: `bin/cli web npx --no tsc
+      --noEmit` and `bin/npm web run build`, plus a live pass against a real search list
+      containing at least one `Upscaled`/`AI Upscale` release — confirm it is absent from the
+      candidate view and does not set the tier, and that toggling "Best candidates" off still
+      restores the full original list (REQ-16/AC-5, re-checked because pass 1 changed). → T017
+      *Done when:* both commands report their baseline counts and the live pass output is pasted,
+      naming the exact release title that was excluded.
+
+- [ ] **T019** `[docs]` Update `services/web/CLAUDE.md`'s torrent-ranking section: pass 1 now
+      vetoes three things, not two (`av1`/`vp9`, dead swarms, upscales). Walk **AC-4c** against
+      T018's report, tick it in `spec.md` along with REQ-4b, and set `status: Implemented` back on
+      `spec.md`, `plan.md` and `web/plan.md` (they never left it, but the pending markers added on
+      2026-09-05 need removing once this lands) and `status: Done` here. → T018
+      *Done when:* the CLAUDE.md section names the third veto, REQ-4b/AC-4c are ticked with a
+      trace to T018's report, and no "pending"/"not yet implemented" marker remains in any of the
+      four feature files.
 
 ## Blocked
 
