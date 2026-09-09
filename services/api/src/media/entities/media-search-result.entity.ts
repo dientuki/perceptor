@@ -43,4 +43,13 @@ export class MediaSearchResult {
   // is already in Redis.
   @Field()
   inLibrary: boolean;
+
+  // 048-shorts-category REQ-7: false for a title nobody has registered,
+  // otherwise reflects the registered row's flag. Attached in
+  // enrichWithOwnership alongside mediaId/inLibrary, per-request and after
+  // the cache write — deliberately absent from clients/types.ts's
+  // MediaSearchResult, the shared Redis-cached shape, for the same leak
+  // reason documented on mediaId above.
+  @Field()
+  isShort: boolean;
 }

@@ -13,6 +13,8 @@ interface MediaManagerPanelProps {
   showsFolder: string;
   moviesEnabled: boolean;
   showsEnabled: boolean;
+  shortsFolder: string;
+  shortsEnabled: boolean;
   libraryRoot: MediaRoot;
   movieDbApiKey: string;
 }
@@ -32,12 +34,15 @@ export default function MediaManagerPanel({
   showsFolder,
   moviesEnabled,
   showsEnabled,
+  shortsFolder,
+  shortsEnabled,
   libraryRoot,
   movieDbApiKey,
 }: MediaManagerPanelProps) {
   const t = useTranslations("settings.form");
   const [moviesOn, setMoviesOn] = useState(moviesEnabled);
   const [showsOn, setShowsOn] = useState(showsEnabled);
+  const [shortsOn, setShortsOn] = useState(shortsEnabled);
 
   return (
     <div className="space-y-6">
@@ -91,6 +96,28 @@ export default function MediaManagerPanel({
         root={libraryRoot}
         value={showsFolder}
         disabled={!showsOn}
+      />
+
+      <div>
+        <Switch
+          label={t("shortsEnabledLabel")}
+          defaultChecked={shortsEnabled}
+          onChange={setShortsOn}
+          disabled={!moviesOn}
+        />
+        <input
+          type="hidden"
+          name="shorts_enabled"
+          value={shortsOn ? "true" : "false"}
+        />
+      </div>
+
+      <PathPicker
+        settingKey="path_shorts"
+        label={t("shortsFolderLabel")}
+        root={libraryRoot}
+        value={shortsFolder}
+        disabled={!moviesOn || !shortsOn}
       />
     </div>
   );

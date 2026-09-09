@@ -2,6 +2,7 @@
 
 import {
   Calendar,
+  Clapperboard,
   CloudDownload,
   Film,
   Popcorn,
@@ -51,6 +52,15 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             icon: <Film />,
             name: t("movies"),
             path: "/movies",
+          },
+        ]
+      : []),
+    ...(capabilities.shortsEnabled
+      ? [
+          {
+            icon: <Clapperboard />,
+            name: t("shorts"),
+            path: "/shorts",
           },
         ]
       : []),

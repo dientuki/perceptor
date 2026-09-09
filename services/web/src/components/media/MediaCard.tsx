@@ -13,6 +13,7 @@ interface MediaCardProps {
   mediaType?: (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
   showTypeBadge?: boolean; // Opt-in: a mixed grid needs it, a single-type grid doesn't
   showMeta?: boolean; // Opt-in: hide title/overview/year when the card renders its own caption
+  showShortBadge?: boolean; // Opt-in: only rendered while shorts are effectively enabled
 }
 
 export function MediaCard({
@@ -22,11 +23,13 @@ export function MediaCard({
   mediaType,
   showTypeBadge = false,
   showMeta = true,
+  showShortBadge = false,
 }: MediaCardProps) {
   const t = useTranslations("media.card");
   // Read from the item's own type, never the `mediaType` prop — on a mixed
   // grid that prop is one value for cards of two different kinds.
   const isShow = item.type === MEDIA_TYPE.SHOW;
+  const isShort = showShortBadge && item.isShort === true;
   const year = item.releaseDate
     ? new Date(item.releaseDate).getFullYear()
     : "N/A";
@@ -56,6 +59,11 @@ export function MediaCard({
             }`}
           >
             {isShow ? t("typeShow") : t("typeMovie")}
+          </span>
+        )}
+        {isShort && (
+          <span className="absolute right-2 top-2 z-10 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold uppercase text-white">
+            {t("typeShort")}
           </span>
         )}
         {showLink ? (

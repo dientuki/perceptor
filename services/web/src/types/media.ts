@@ -14,6 +14,7 @@ export type MediaType = (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
 export interface MediaCapabilities {
   moviesEnabled: boolean;
   showsEnabled: boolean;
+  shortsEnabled: boolean;
 }
 
 // Discriminated union so a target is either a movie or an episode, never

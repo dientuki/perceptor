@@ -5,6 +5,8 @@ import { QbittorrentClient } from '@/clients/torrent/client';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // This suite exists because getEncodeJobDetails's REQ-3 merge is the only
 // place that decides which audio/subtitle languages an encode is allowed to
@@ -28,6 +30,7 @@ describe('ProcessJobsService', () => {
   let mediaRoots: { resolveFromRoot: jest.Mock };
   let mediaServer: { notifyCreated: jest.Mock };
   let torrentClient: { remove: jest.Mock };
+  let mediaCapabilities: { isShortsEnabled: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -43,6 +46,7 @@ describe('ProcessJobsService', () => {
     mediaRoots = { resolveFromRoot: jest.fn().mockResolvedValue('/library/Movies') };
     mediaServer = { notifyCreated: jest.fn().mockResolvedValue(undefined) };
     torrentClient = { remove: jest.fn().mockResolvedValue(undefined) };
+    mediaCapabilities = { isShortsEnabled: jest.fn().mockResolvedValue(false) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -52,6 +56,7 @@ describe('ProcessJobsService', () => {
         { provide: SettingsService, useValue: settings },
         { provide: MediaRootsService, useValue: mediaRoots },
         { provide: MediaServerService, useValue: mediaServer },
+        { provide: MediaCapabilitiesService, useValue: mediaCapabilities },
       ],
     }).compile();
 
@@ -78,6 +83,7 @@ describe('ProcessJobsService', () => {
       releaseDate: new Date('2020-01-01'),
       originalLanguage: 'ja',
       isLiveAction: true,
+      isShort: false,
     },
     episode: null,
     ...overrides,
@@ -242,6 +248,124 @@ describe('ProcessJobsService', () => {
       const details = await service.getEncodeJobDetails(2);
 
       expect(details.compressionEnabled).toBe(false);
+    });
+  });
+
+  // REQ-12/REQ-13 (048-shorts-category): a film flagged `isShort` must land
+  // under `path_shorts` instead of `path_movies`, but only while the shorts
+  // category is *effectively* enabled — a wrong branch here transcodes
+  // successfully (no ffmpeg error, no status change) and just files the
+  // output somewhere the user never looks, forever, with nothing anywhere
+  // logging the mistake.
+  describe('getEncodeJobDetails — REQ-12 shorts outputRoot', () => {
+    it('resolves outputRoot from path_movies when the film is not flagged short, shorts enabled', async () => {
+      mediaCapabilities.isShortsEnabled.mockResolvedValue(true);
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({
+          movie: {
+            id: 42,
+            tmdbId: 999,
+            title: 'A Japanese Film',
+            releaseDate: new Date('2020-01-01'),
+            originalLanguage: 'ja',
+            isLiveAction: true,
+            isShort: false,
+          },
+        }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', path_shorts: 'Shorts' });
+
+      await service.getEncodeJobDetails(1);
+
+      expect(mediaRoots.resolveFromRoot).toHaveBeenCalledWith('library', 'Movies');
+    });
+
+    it('resolves outputRoot from path_movies when the film is flagged short but shorts are disabled', async () => {
+      mediaCapabilities.isShortsEnabled.mockResolvedValue(false);
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({
+          movie: {
+            id: 42,
+            tmdbId: 999,
+            title: 'A Japanese Film',
+            releaseDate: new Date('2020-01-01'),
+            originalLanguage: 'ja',
+            isLiveAction: true,
+            isShort: true,
+          },
+        }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', path_shorts: 'Shorts' });
+
+      await service.getEncodeJobDetails(1);
+
+      expect(mediaRoots.resolveFromRoot).toHaveBeenCalledWith('library', 'Movies');
+    });
+
+    it('resolves outputRoot from path_movies when the film is not flagged short and shorts are disabled', async () => {
+      mediaCapabilities.isShortsEnabled.mockResolvedValue(false);
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', path_shorts: 'Shorts' });
+
+      await service.getEncodeJobDetails(1);
+
+      expect(mediaRoots.resolveFromRoot).toHaveBeenCalledWith('library', 'Movies');
+    });
+
+    it('resolves outputRoot from path_shorts only when the film is flagged short AND shorts are effectively enabled', async () => {
+      mediaCapabilities.isShortsEnabled.mockResolvedValue(true);
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({
+          movie: {
+            id: 42,
+            tmdbId: 999,
+            title: 'A Japanese Film',
+            releaseDate: new Date('2020-01-01'),
+            originalLanguage: 'ja',
+            isLiveAction: true,
+            isShort: true,
+          },
+        }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', path_shorts: 'Shorts' });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(mediaRoots.resolveFromRoot).toHaveBeenCalledWith('library', 'Shorts');
+      expect(details.outputRoot).toBe('/library/Movies'); // stubbed mediaRoots.resolveFromRoot return value
+    });
+
+    it('raises error.setting.missing for a flagged, effectively-enabled short when path_shorts is absent', async () => {
+      mediaCapabilities.isShortsEnabled.mockResolvedValue(true);
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({
+          movie: {
+            id: 42,
+            tmdbId: 999,
+            title: 'A Japanese Film',
+            releaseDate: new Date('2020-01-01'),
+            originalLanguage: 'ja',
+            isLiveAction: true,
+            isShort: true,
+          },
+        }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' });
+
+      await expect(service.getEncodeJobDetails(1)).rejects.toMatchObject({
+        status: 404,
+        response: { i18n: { key: ERROR_KEYS.SETTING_MISSING, params: { key: 'path_shorts' } } },
+      });
     });
   });
 

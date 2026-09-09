@@ -35,6 +35,10 @@ export class CreateMovieDto {
   isLiveAction?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  isShort?: boolean;
+
+  @IsOptional()
   @IsEnum(MediaStatus)
   status?: MediaStatus;
 

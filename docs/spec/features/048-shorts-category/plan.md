@@ -1,8 +1,8 @@
 ---
 title: Shorts Category — Implementation Plan
 spec_version: 0.1.0
-last_updated: 2026-09-07
-status: Approved
+last_updated: 2026-09-09
+status: Implemented
 ---
 
 # PLAN: Shorts Category (`plan.md`)

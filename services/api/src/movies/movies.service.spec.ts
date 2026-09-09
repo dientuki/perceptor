@@ -136,8 +136,11 @@ describe('MoviesService', () => {
       // Someone else already registered this film too, so enrichWithOwnership
       // has real, non-default values to smuggle into the cache if the
       // ordering were ever broken.
+      // isShort: true here too, so a leak into the cached shape would show
+      // up as a non-default value rather than accidentally matching the
+      // false default (048-shorts-category).
       prisma.movie.findMany.mockResolvedValue([
-        { id: 7, tmdbId: 42, users: [{ userId: 'user-1' }] },
+        { id: 7, tmdbId: 42, isShort: true, users: [{ userId: 'user-1' }] },
       ]);
       const pipelineSet = jest.fn().mockReturnThis();
       const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
@@ -149,7 +152,12 @@ describe('MoviesService', () => {
       // this is exactly why the assertion below has to look at the Redis
       // call, not at this.
       expect(results).toEqual([
-        expect.objectContaining({ id: 42, mediaId: 7, inLibrary: true }),
+        expect.objectContaining({
+          id: 42,
+          mediaId: 7,
+          inLibrary: true,
+          isShort: true,
+        }),
       ]);
 
       expect(pipelineSet).toHaveBeenCalledTimes(1);
@@ -158,6 +166,7 @@ describe('MoviesService', () => {
       const cached = JSON.parse(cachedJson);
       expect(cached).not.toHaveProperty('movieId');
       expect(cached).not.toHaveProperty('inLibrary');
+      expect(cached).not.toHaveProperty('isShort');
       expect(cached).toEqual({
         id: 42,
         title: 'Dune',
@@ -182,6 +191,48 @@ describe('MoviesService', () => {
       // films: asserting the where-clause is the only way a mocked Prisma
       // can catch it, since the mock returns whatever we told it to
       // regardless of what it was actually asked for.
+      expect(prisma.movie.findMany).toHaveBeenCalledWith({
+        where: { users: { some: { userId: 'user-1' } } },
+        orderBy: { createdAt: 'desc' },
+        include: { mediaSources: true, processJobs: true },
+      });
+    });
+
+    // 048-shorts-category REQ-8: the where clause must only carry `isShort`
+    // when the resolver was actually given the argument — a version that
+    // always adds `isShort: undefined` looks the same to Prisma today but
+    // would silently break the moment someone tightens the mock, and a
+    // version that defaults to `false` would wrongly exclude every short
+    // from the unfiltered `/movies` listing (REQ-11).
+    it('adds isShort to the where clause only when the argument is given', async () => {
+      prisma.movie.findMany.mockResolvedValue([]);
+
+      await service.findAll('user-1', true);
+
+      expect(prisma.movie.findMany).toHaveBeenCalledWith({
+        where: { users: { some: { userId: 'user-1' } }, isShort: true },
+        orderBy: { createdAt: 'desc' },
+        include: { mediaSources: true, processJobs: true },
+      });
+    });
+
+    it('filters for isShort: false as a real filter, not a falsy no-op', async () => {
+      prisma.movie.findMany.mockResolvedValue([]);
+
+      await service.findAll('user-1', false);
+
+      expect(prisma.movie.findMany).toHaveBeenCalledWith({
+        where: { users: { some: { userId: 'user-1' } }, isShort: false },
+        orderBy: { createdAt: 'desc' },
+        include: { mediaSources: true, processJobs: true },
+      });
+    });
+
+    it('omits isShort from the where clause when the argument is undefined', async () => {
+      prisma.movie.findMany.mockResolvedValue([]);
+
+      await service.findAll('user-1', undefined);
+
       expect(prisma.movie.findMany).toHaveBeenCalledWith({
         where: { users: { some: { userId: 'user-1' } } },
         orderBy: { createdAt: 'desc' },
@@ -232,6 +283,52 @@ describe('MoviesService', () => {
       await expect(
         service.findOneFromDb(999999999, 'user-1'),
       ).resolves.toBeNull();
+    });
+  });
+
+  describe('setShort', () => {
+    it('flips isShort on an owned film and returns it through withDerivedStatus', async () => {
+      prisma.movie.findFirst.mockResolvedValue({
+        id: 7,
+        title: 'Mine',
+        status: 'MISSING',
+        mediaSources: [],
+        processJobs: [],
+      });
+      prisma.movie.update.mockResolvedValue({
+        id: 7,
+        title: 'Mine',
+        status: 'MISSING',
+        isShort: true,
+        mediaSources: [],
+        processJobs: [],
+      });
+
+      const result = await service.setShort(7, 'user-1', true);
+
+      expect(prisma.movie.update).toHaveBeenCalledWith({
+        where: { id: 7 },
+        data: { isShort: true },
+        include: { mediaSources: true, processJobs: true },
+      });
+      // The derived-status wrapper must run on the update's result, not just
+      // findOneFromDb's read — otherwise the mutation's `status` field would
+      // reflect the row's state before the flip rather than after it.
+      expect(result.status).toBe('MISSING');
+      expect((result as { isShort: boolean }).isShort).toBe(true);
+    });
+
+    it('refuses a film the caller does not own without writing anything', async () => {
+      // findOneFromDb's ownership scope returns null both for a missing id
+      // and for another user's film (already covered above) — setShort must
+      // never reach `movie.update` in either case, or a caller who cannot
+      // even read the row could still flip its flag.
+      prisma.movie.findFirst.mockResolvedValue(null);
+
+      await expect(service.setShort(7, 'user-2', true)).rejects.toMatchObject({
+        response: { i18n: { key: ERROR_KEYS.MOVIE_NOT_FOUND } },
+      });
+      expect(prisma.movie.update).not.toHaveBeenCalled();
     });
   });
 

@@ -1,6 +1,10 @@
 "use server";
 
-import { redirectToClearSession } from "@/lib/auth-session";
+import { getTranslations } from "next-intl/server";
+import {
+  redirectIfUnauthenticated,
+  redirectToClearSession,
+} from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
@@ -14,16 +18,17 @@ export interface Movie {
   releaseDate?: string;
   originalLanguage: string;
   isLiveAction: boolean;
+  isShort: boolean;
   status: string;
   audioLanguages: Language[];
   subtitleLanguages: Language[];
   audioMandatory: boolean;
 }
 
-export async function getMovies(): Promise<Movie[]> {
+export async function getMovies(isShort?: boolean): Promise<Movie[]> {
   const query = `
-    query GetStoredMovies {
-      movies {
+    query GetStoredMovies($isShort: Boolean) {
+      movies(isShort: $isShort) {
         id
         overview
         title
@@ -33,7 +38,13 @@ export async function getMovies(): Promise<Movie[]> {
     }
   `;
 
-  const { data, errors } = await fetchGraphQL<{ movies: Movie[] }>(query);
+  // The GraphQL argument is optional and tri-state: omitted/null means
+  // "every film the caller owns" (spec REQ-8/REQ-11). `undefined` here is
+  // stripped by fetchGraphQL's variable serialization the same way as not
+  // sending the key at all.
+  const { data, errors } = await fetchGraphQL<{ movies: Movie[] }>(query, {
+    isShort,
+  });
 
   // GraphQL responde 200 con `errors` poblado: sin este chequeo `data` viene undefined
   if (errors && errors.length > 0) {
@@ -63,6 +74,7 @@ const GET_MOVIE_QUERY = `
       releaseDate
       originalLanguage
       isLiveAction
+      isShort
       status
       audioLanguages {
         id
@@ -99,4 +111,42 @@ export async function getMovieById(id: number): Promise<Movie | null> {
 
   // El API devuelve null cuando el id no existe; la página lo traduce a notFound()
   return data?.movie ?? null;
+}
+
+const SET_MOVIE_SHORT_MUTATION = `
+  mutation SetMovieShort($movieId: Int!, $isShort: Boolean!) {
+    setMovieShort(movieId: $movieId, isShort: $isShort) {
+      id
+    }
+  }
+`;
+
+// Same shape as setMovieAudioMandatoryAction in src/actions/languages.ts: a
+// boolean flip cannot be invalid input, so the only failure paths are the
+// unauthenticated redirect and the refusals of the GraphQL Contract Delta
+// (shorts disabled, movies disabled, not owned) — a plain server function,
+// not a useActionState form action.
+export async function setMovieShortAction(
+  movieId: string,
+  isShort: boolean,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_MOVIE_SHORT_MUTATION, {
+      movieId: Number(movieId),
+      isShort,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
 }

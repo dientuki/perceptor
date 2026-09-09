@@ -78,6 +78,7 @@ const EDITABLE_KEYS = [
   "movie_db_api_key",
   "path_movies",
   "path_shows",
+  "path_shorts",
   "media_server_client",
   "media_server_host",
   "media_server_port",
@@ -96,6 +97,7 @@ const EDITABLE_KEYS = [
 const BOOLEAN_KEYS = [
   "movies_enabled",
   "shows_enabled",
+  "shorts_enabled",
   "compression_enabled",
   "schedule_refresh_movies_enabled",
   "schedule_refresh_shows_enabled",

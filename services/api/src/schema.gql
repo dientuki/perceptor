@@ -38,6 +38,7 @@ type Movie {
   releaseDate: DateTime
   originalLanguage: String!
   isLiveAction: Boolean!
+  isShort: Boolean!
   status: String!
   filePath: String
   createdAt: DateTime!
@@ -206,6 +207,7 @@ type MediaSearchResult {
   status: String
   mediaId: Int
   inLibrary: Boolean!
+  isShort: Boolean!
 }
 
 type MediaRef {
@@ -216,6 +218,7 @@ type MediaRef {
 type MediaCapabilities {
   moviesEnabled: Boolean!
   showsEnabled: Boolean!
+  shortsEnabled: Boolean!
 }
 
 type Season {
@@ -289,7 +292,7 @@ type Query {
   me: User!
   users: [User!]!
   user(id: ID!): User!
-  movies: [Movie!]!
+  movies(isShort: Boolean): [Movie!]!
   movie(id: Int!): Movie
   defaultUiLocale: String
   settings: [Setting!]!
@@ -365,6 +368,9 @@ type Mutation {
   Marca si el audio en el idioma preferido es obligatorio para esta película
   """
   setMovieAudioMandatory(movieId: Int!, mandatory: Boolean!): Boolean!
+
+  """Marca o desmarca una película como corto (048-shorts-category)"""
+  setMovieShort(movieId: Int!, isShort: Boolean!): Movie!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
 
   """
@@ -415,7 +421,7 @@ type Mutation {
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia al episodio
   """
   addMagnetToEpisode(episodeId: Int!, magnet: String!, force: Boolean = false): Episode!
-  addMedia(tmdbId: Int!, type: String!): MediaRef!
+  addMedia(tmdbId: Int!, type: String!, asShort: Boolean): MediaRef!
 
   """
   Reemplaza la preferencia de idiomas del usuario para una serie puntual, para un tipo de pista

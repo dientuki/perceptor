@@ -41,6 +41,8 @@ export const ERROR_KEYS = {
   MEDIA_CATALOG_UNAVAILABLE: 'error.media.catalog_unavailable',
   MEDIA_TYPE_DISABLED: 'error.media.type_disabled',
   MEDIA_SEARCH_UNAVAILABLE: 'error.media.search_unavailable',
+  MEDIA_SHORTS_DISABLED: 'error.media.shorts_disabled',
+  MEDIA_SHORTS_NOT_A_MOVIE: 'error.media.shorts_not_a_movie',
 
   // magnet parsing (services/api/src/clients/torrent/magnet.ts)
   MAGNET_NOT_A_MAGNET: 'error.magnet.not_a_magnet',

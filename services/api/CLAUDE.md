@@ -120,7 +120,21 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   type's rows into that type's Redis cache. An unrecognised type is left to
   `MediaDispatchService.resolve()`'s own `MEDIA_UNSUPPORTED_TYPE`, not reinterpreted here. Nothing
   downstream of registration is gated — an in-flight download/encode for a type disabled mid-flight
-  still finishes (REQ-11).
+  still finishes (REQ-11). Since `048-shorts-category`, `MediaCapabilitiesService` lives in its own
+  `MediaCapabilitiesModule` (imports `SettingsModule` only) rather than being declared directly by
+  `MediaModule`, so `MoviesModule` and `ProcessJobsModule` can read the capability without importing
+  `MediaModule` itself — `MediaModule` already imports `MoviesModule`, and the reverse import would
+  be a Nest circular dependency. **No `forwardRef` anywhere in this split**: the module boundary was
+  drawn so none is needed. `read()` gained a third field, `shortsEnabled`
+  (`moviesEnabled && map['shorts_enabled'] === 'true'`) — note the `=== 'true'`, the deliberate
+  **opposite** of the `!== 'false'` idiom two lines above it, so an install predating this feature
+  reads the absent row as *off* rather than growing a category nobody enabled.
+  `isShortsEnabled()`/`assertShortsEnabled()` are `shortsEnabled`'s single-purpose twins of
+  `isEnabled`/`assertEnabled`, throwing `error.media.shorts_disabled`. `addMedia` gained an optional
+  `asShort` argument: guarded, in order, by `assertEnabled(type)`, then
+  `error.media.shorts_not_a_movie` when `asShort` is set for a non-movie type, then
+  `assertShortsEnabled()` — before `MediaTypeService.register`'s new optional third parameter
+  (`options?: { asShort?: boolean }`) is even reached.
 - **`movies/`** — CRUD over `Movie`, plus `search`/`register` (implementing `MediaTypeService`) and
   `addTorrentToMovie`/`addMagnetToMovie`, the two entry points into the download pipeline. `Movie` is
   a **shared catalog row** (`tmdbId @unique`, never duplicated) joined to `User` through `UserMovie`.
@@ -133,6 +147,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   cache write in `cacheMovies`. That cache key is global across all users — computing ownership
   before it leaks one user's `inLibrary` into every other user's results for 24h
   (`movies.service.spec.ts`, plus `media-search.service.spec.ts` for the mixed-search entry point).
+  Since `048-shorts-category`, `Movie.isShort` (`Boolean @default(false)`) follows the exact same
+  rule: `enrichWithOwnership` adds it to the same per-request `select`, alongside `mediaId`/
+  `inLibrary`, never to the cached shape (`false` for anything unregistered). `findAll` takes an
+  optional `isShort` filter applied to the Prisma `where` only when given — omitted/`null` still
+  means "every film the caller owns", which is what `/movies` sends while the category is disabled.
+  `setShort(id, userId, isShort)` is a single-column update behind the same `findOneFromDb` ownership
+  gate every per-title mutation already runs, exposed as `setMovieShort`, guarded by
+  `assertEnabled('movie')` then `assertShortsEnabled()` in that order.
 - **`shows/`** — `ShowsService`, `MoviesService`'s structural twin, **deliberately not factored into
   a shared base class** (see `006-media-search/spec.md` § Out of Scope). Same cache-before-enrich
   ordering, same upsert-based idempotent linking, scoped through `UserShow`. `shows` is a per-user
@@ -262,6 +284,12 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `encodeCompleted`. Resolves `outputRoot` and `downloadsRoot` for the worker; `downloadsRoot` is
   `resolveFromRoot('downloads', '.')` — the **root itself**, not `path_downloads`, because a torrent's
   save path and a tus upload's staging directory sit under different segments of it.
+  `resolveOutputRoot`'s film arm is the single place a film's destination is decided: since
+  `048-shorts-category`, it resolves from `path_shorts` instead of `path_movies` when
+  `movie.isShort && await mediaCapabilities.isShortsEnabled()`, imports `MediaCapabilitiesModule` for
+  the check, and adds no lock and no snapshot of the flag — a job whose details were already handed
+  out keeps whatever root it was given at that moment (REQ-13). The episode arm is untouched; a
+  short is `Movie`-only, never a `Show`/`Episode` concept.
   `encodeCompleted` returns `EncodeCompletedResult` (`message`, `removeTorrent`, `deleteInputFile`,
   `deleteDownloadPath`): the cleanup verdict for the job that just finished, computed from its sibling
   jobs (a season pack shares one `MediaSource` across many jobs) and the source's

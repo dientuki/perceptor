@@ -11,4 +11,7 @@ export class MediaCapabilities {
 
   @Field()
   showsEnabled: boolean;
+
+  @Field()
+  shortsEnabled: boolean;
 }

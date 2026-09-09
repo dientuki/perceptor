@@ -32,6 +32,7 @@ export default async function ShowAddPage() {
             type={MEDIA_TYPE.MOVIE}
             addAction={addMedia}
             searchAction={searchMedia}
+            shortsEnabled={capabilities.shortsEnabled}
           />
         </div>
       </div>

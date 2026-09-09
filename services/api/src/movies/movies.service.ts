@@ -72,9 +72,12 @@ export class MoviesService implements MediaTypeService {
   // registered, filtered through the user_movies join. findOneFromDb() is
   // scoped the same way — movie(id) only resolves against the caller's own
   // library.
-  async findAll(userId: string) {
+  async findAll(userId: string, isShort?: boolean) {
     const movies = await this.prisma.movie.findMany({
-      where: { users: { some: { userId } } },
+      where: {
+        users: { some: { userId } },
+        ...(isShort === undefined ? {} : { isShort }),
+      },
       orderBy: { createdAt: 'desc' }, // Las más recientes primero
       include: {
         mediaSources: true,
@@ -151,9 +154,16 @@ export class MoviesService implements MediaTypeService {
   // existente sin reescribir nada. En ambas ramas nos aseguramos de que exista
   // el vínculo con el usuario que llama (REQ-3): la fila de la película es
   // compartida, pero cada usuario necesita su propio user_movies.
-  async register(tmdbId: number, userId: string): Promise<MediaRef> {
+  async register(
+    tmdbId: number,
+    userId: string,
+    options?: { asShort?: boolean },
+  ): Promise<MediaRef> {
     const existing = await this.prisma.movie.findUnique({ where: { tmdbId } });
     if (existing) {
+      // 048-shorts-category REQ-6: an already-registered film keeps its
+      // stored isShort as-is — the detail-page toggle is the only way to
+      // change it, registering again never rewrites the flag.
       await this.linkUserToMovie(userId, existing.id);
       // Awaited (NFR-3): one indexed DB read and no HTTP unless a media
       // server is actually configured, so the caller sees the right status
@@ -176,6 +186,7 @@ export class MoviesService implements MediaTypeService {
         ? new Date(cached.releaseDate)
         : undefined,
       originalLanguage: cached.originalLanguage,
+      isShort: options?.asShort === true,
     });
 
     await this.linkUserToMovie(userId, movie.id);
@@ -207,6 +218,27 @@ export class MoviesService implements MediaTypeService {
       data: { audioMandatory: mandatory },
     });
     return mandatory;
+  }
+
+  // 048-shorts-category REQ-6: the only way an already-registered film gets
+  // reclassified. Ownership check first — findOneFromDb() returns null both
+  // for a missing id and for a film the caller does not own, and the two
+  // stay indistinguishable from here on (same stance as setAudioMandatoryFor
+  // above). isShort is a property of the film itself (REQ-1), so this is a
+  // plain `movie.update`, not scoped through UserMovie.
+  async setShort(id: number, userId: string, isShort: boolean) {
+    const movie = await this.findOneFromDb(id, userId);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
+
+    const updated = await this.prisma.movie.update({
+      where: { id },
+      data: { isShort },
+      include: {
+        mediaSources: true,
+        processJobs: true,
+      },
+    });
+    return this.withDerivedStatus(updated);
   }
 
   // upsert en vez de create: un segundo addMovie del mismo usuario para la misma
@@ -326,6 +358,7 @@ export class MoviesService implements MediaTypeService {
       select: {
         id: true,
         tmdbId: true,
+        isShort: true,
         users: { where: { userId }, select: { userId: true } },
       },
     });
@@ -338,6 +371,7 @@ export class MoviesService implements MediaTypeService {
         ...result,
         mediaId: registered?.id ?? null,
         inLibrary: (registered?.users.length ?? 0) > 0,
+        isShort: registered?.isShort ?? false,
       };
     });
   }

@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { cache } from "react";
 import { getMovieDownloads } from "@/actions/downloads";
 import { getLanguages } from "@/actions/languages";
+import { getMediaCapabilities } from "@/actions/media";
 import { getMovieById } from "@/actions/movies";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import DownloadsPanel from "@/components/downloads/DownloadsPanel";
@@ -67,10 +68,11 @@ export default async function MovieDetailsPage({ params }: PageProps) {
     notFound();
   }
 
-  const [movie, languages, downloads] = await Promise.all([
+  const [movie, languages, downloads, capabilities] = await Promise.all([
     getMovie(movieId),
     getLanguages(),
     getMovieDownloads(movieId),
+    getMediaCapabilities(),
   ]);
 
   if (!movie) {
@@ -84,7 +86,11 @@ export default async function MovieDetailsPage({ params }: PageProps) {
       <PageBreadcrumb pageTitle={movie.title} />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
-          <Movie movie={movie} languageOptions={languages} />
+          <Movie
+            movie={movie}
+            languageOptions={languages}
+            shortsEnabled={capabilities.shortsEnabled}
+          />
           <SearchTorrent target={target} />
         </div>
       </div>

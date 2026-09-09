@@ -1264,6 +1264,91 @@ as `string | null` on both add mutations with **no `?? ''` coercion**, and keys/
 in-flight-add state off `id` instead of `infoHash`. `worker` has no obligation; it never queries
 `searchTorrents` or either add mutation.
 
+### Shorts are a flag on `Movie`, not a third media type (`048-shorts-category`)
+
+```graphql
+type MediaCapabilities {
+  moviesEnabled: Boolean!
+  showsEnabled: Boolean!
+  shortsEnabled: Boolean!
+}
+
+type Movie {
+  isShort: Boolean!
+}
+
+type MediaSearchResult {
+  isShort: Boolean!
+}
+
+type Query {
+  movies(isShort: Boolean): [Movie!]!
+}
+
+type Mutation {
+  addMedia(tmdbId: Int!, type: String!, asShort: Boolean): MediaRef!
+  setMovieShort(movieId: Int!, isShort: Boolean!): Movie!
+}
+```
+
+**`MediaCapabilities.shortsEnabled` is the effective capability, never the raw stored row.** `api`
+computes `movies_enabled && shorts_enabled` once, in `MediaCapabilitiesService.read()`, and ships one
+boolean; no consumer re-derives the `&&`. Turning `movies_enabled` off turns `shortsEnabled` off with
+it, without touching the stored `shorts_enabled` value — the same subordination `045` established
+for scheduled tasks.
+
+**The absent-row default is inverted from its two twins.** `movies_enabled`/`shows_enabled` read an
+absent Settings row as *enabled* (`!== 'false'`); `shorts_enabled` reads an absent row as *disabled*
+(`=== 'true'`), so an install that predates this feature does not grow a category nobody turned on.
+
+**`isShort` never enters the shared TMDB cache shape.** `MediaSearchResult.isShort` is populated in
+`MoviesService.enrichWithOwnership`/`ShowsService`'s equivalent, the per-request step that runs
+*after* `cacheAndEnrich` writes the catalog-only row to the shared Redis key `tmdb:movie:<id>` (24h,
+read by every user). It is `false` for a series and for any title nobody has registered; `false` on
+the cached object is never written at all — the field simply does not exist on
+`src/clients/types.ts`'s `MediaSearchResult`, the interface that shape is typed against.
+
+**`movies(isShort: Boolean)` is optional and tri-state.** `null`/omitted means "every film the caller
+owns" — the value `web`'s `/movies` sends while shorts are disabled, so a library never appears to
+shrink just because an administrator turned the category off. `true`/`false` are real filters, not a
+client-side `.filter()` over the full list.
+
+**`addMedia(asShort:)` keeps registration atomic.** One optional argument, defaulting to `false`, so
+an unpatched consumer keeps working. Guard order in the resolver, before any per-type service runs:
+`assertEnabled(type)` → `error.media.shorts_not_a_movie` when `asShort` is set for a non-movie type →
+`assertShortsEnabled()`. Re-registering an already-registered film never rewrites its `isShort` flag —
+the detail-page toggle (`setMovieShort`) is the only way to reclassify one already in the library.
+
+**`setMovieShort` reuses the existing ownership gate.** It runs through `MoviesService.findOneFromDb`
+the same as every other per-title mutation, so an unowned or nonexistent film id both return
+`error.movie.not_found`, indistinguishable from each other. Guarded by `assertEnabled('movie')` then
+`assertShortsEnabled()`, in that order, so a caller with movies disabled sees `error.media.type_disabled`
+rather than a shorts-specific message.
+
+**Flipping `isShort` is never a file move.** It takes effect on the *next* encode of that film, at the
+moment `ProcessJobsService.getEncodeJobDetails` resolves `outputRoot` from `path_shorts` instead of
+`path_movies` when `movie.isShort && shortsEnabled`. No lock, no snapshot: a job whose details were
+already handed out finishes at the root it was given. Nothing already written to the library moves,
+copies or gets deleted (Constitution, Article XII).
+
+| Condition | HTTP / GraphQL error |
+| :-- | :-- |
+| `addMedia(asShort: true)` or `setMovieShort` while shorts are not effectively enabled | `error.media.shorts_disabled` (403) |
+| `addMedia(asShort: true, type: "show")` | `error.media.shorts_not_a_movie` (400) |
+| `movies(isShort: …)` / `setMovieShort` while movies are disabled | `error.media.type_disabled` (403, existing) |
+| `setMovieShort` for a film id the caller does not own, or that does not exist | `error.movie.not_found` (404, existing) |
+| `getEncodeJobDetails` for a short while `path_shorts` is missing from Settings | `error.setting.missing` (404, existing) |
+
+Consumer obligations: `web` reads `capabilities.shortsEnabled` once per render (the existing
+`cache()`-wrapped `getMediaCapabilities()`) and threads it down — the sidebar entry, the `/movies`
+↔ `/shorts` split, the search badge, the "add as short" affordance and the detail toggle all gate on
+that one value. `worker` has no obligation at all: `EncodeJobDetails.outputRoot` is already a resolved
+string by the time the worker sees it, and the worker cannot tell a short from a feature film.
+
+Note: `mediaCapabilities`/`MediaCapabilities` itself was introduced by `045-media-type-availability`,
+which has no section of its own in this document — that gap predates this feature and is not closed
+here.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

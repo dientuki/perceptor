@@ -274,7 +274,12 @@ describe('ShowsService', () => {
       // this is exactly why the assertion below has to look at the Redis
       // call, not at this.
       expect(results).toEqual([
-        expect.objectContaining({ id: 42, mediaId: 7, inLibrary: true }),
+        expect.objectContaining({
+          id: 42,
+          mediaId: 7,
+          inLibrary: true,
+          isShort: false,
+        }),
       ]);
 
       expect(pipelineSet).toHaveBeenCalledTimes(1);

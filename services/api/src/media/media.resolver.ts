@@ -8,6 +8,9 @@ import { MediaRef } from './entities/media-ref.entity';
 import { MediaCapabilities } from './entities/media-capabilities.entity';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
+import { MEDIA_TYPE } from '@/types/media';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 @Resolver()
 export class MediaResolver {
@@ -68,9 +71,19 @@ export class MediaResolver {
     @Args('tmdbId', { type: () => Int }) tmdbId: number,
     @Args('type') type: string,
     @CurrentUser() principal: AuthPrincipal,
+    @Args('asShort', { type: () => Boolean, nullable: true }) asShort?: boolean,
   ) {
     await this.mediaCapabilitiesService.assertEnabled(type);
+    // 048-shorts-category REQ-14: both guards run before any per-type
+    // service does, in this order — "not a film" is a shape problem
+    // independent of whether shorts are enabled, so it is checked first.
+    if (asShort && type !== MEDIA_TYPE.MOVIE) {
+      throw i18nError.badRequest(ERROR_KEYS.MEDIA_SHORTS_NOT_A_MOVIE);
+    }
+    if (asShort) {
+      await this.mediaCapabilitiesService.assertShortsEnabled();
+    }
     const userId = principal.type === 'user' ? principal.id : '';
-    return this.mediaDispatch.resolve(type).register(tmdbId, userId);
+    return this.mediaDispatch.resolve(type).register(tmdbId, userId, { asShort });
   }
 }

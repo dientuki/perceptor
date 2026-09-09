@@ -13,6 +13,7 @@ interface MediaListProps {
   showLink?: boolean; // Nueva propiedad para controlar si se muestra el enlace
   emptyMessage?: string; // Sobreescribe el vacío por defecto ("registradas" no aplica en búsquedas)
   showTypeBadge?: boolean; // Opt-in: only a mixed-type grid (the multi search) needs it
+  showShortBadge?: boolean; // Opt-in: only while shorts are effectively enabled
 }
 
 export function MediaList({
@@ -22,6 +23,7 @@ export function MediaList({
   showLink = false,
   emptyMessage,
   showTypeBadge = false,
+  showShortBadge = false,
 }: MediaListProps) {
   const t = useTranslations("media.list");
 
@@ -49,6 +51,7 @@ export function MediaList({
           showLink={showLink}
           mediaType={mediaType}
           showTypeBadge={showTypeBadge}
+          showShortBadge={showShortBadge}
         />
       ))}
     </div>

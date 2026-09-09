@@ -13,6 +13,11 @@ interface MediaResultActionProps {
   ownedMediaId: string | null;
   adding: boolean;
   onAdd: (item: MediaSearchResult) => void;
+  // REQ-5: the "add as short" affordance is a film-only, shorts-enabled
+  // extra offered alongside the plain add — never a replacement for it.
+  shortsEnabled?: boolean;
+  addingShort?: boolean;
+  onAddAsShort?: (item: MediaSearchResult) => void;
 }
 
 // Shared by SearchContainer (/movies/add, /shows/add) and MultiSearchResults
@@ -24,6 +29,9 @@ export function MediaResultAction({
   ownedMediaId,
   adding,
   onAdd,
+  shortsEnabled = false,
+  addingShort = false,
+  onAddAsShort,
 }: MediaResultActionProps) {
   const t = useTranslations("search.container");
 
@@ -43,15 +51,30 @@ export function MediaResultAction({
     );
   }
 
+  const showAddAsShort =
+    shortsEnabled && item.type === MEDIA_TYPE.MOVIE && onAddAsShort;
+
   return (
-    <Button
-      size="sm"
-      onClick={() => onAdd(item)}
-      startIcon={<Plus />}
-      className="mt-2"
-      disabled={adding}
-    >
-      {adding ? t("adding") : t("addButton")}
-    </Button>
+    <div className="mt-2 flex flex-col gap-2">
+      <Button
+        size="sm"
+        onClick={() => onAdd(item)}
+        startIcon={<Plus />}
+        disabled={adding || addingShort}
+      >
+        {adding ? t("adding") : t("addButton")}
+      </Button>
+      {showAddAsShort && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onAddAsShort(item)}
+          startIcon={<Plus />}
+          disabled={adding || addingShort}
+        >
+          {addingShort ? t("addingShort") : t("addShortButton")}
+        </Button>
+      )}
+    </div>
   );
 }

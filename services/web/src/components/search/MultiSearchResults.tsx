@@ -12,6 +12,7 @@ interface MultiSearchResultsProps {
   results: MediaSearchResult[];
   searched: boolean;
   initialError?: string | null;
+  shortsEnabled?: boolean;
 }
 
 // Client-side twin of SearchContainer for the mixed /search screen: the
@@ -21,31 +22,44 @@ export function MultiSearchResults({
   results,
   searched,
   initialError = null,
+  shortsEnabled = false,
 }: MultiSearchResultsProps) {
   const t = useTranslations("search.container");
   const [error, setError] = useState<string | null>(initialError);
   const [addingId, setAddingId] = useState<number | null>(null);
+  const [addingShortId, setAddingShortId] = useState<number | null>(null);
   // TMDB id -> registered row id, for results added this session (before
   // `inLibrary` would reflect it on a fresh search)
   const [addedMediaIds, setAddedMediaIds] = useState<Record<number, string>>(
     {},
   );
 
-  const handleAdd = async (item: MediaSearchResult) => {
-    setAddingId(item.id);
-    setError(null);
-
+  const addItem = async (item: MediaSearchResult, asShort: boolean) => {
     try {
-      const mediaId = await addMedia(item.id, item.type);
+      const mediaId = await addMedia(item.id, item.type, asShort);
       setAddedMediaIds((prev) => ({ ...prev, [item.id]: mediaId }));
     } catch (err) {
       console.error("Error al agregar:", err);
       const noun =
         item.type === MEDIA_TYPE.SHOW ? t("showNoun") : t("movieNoun");
-      setError(t("errorAdd", { noun }));
-    } finally {
-      setAddingId(null);
+      setError(
+        err instanceof Error && asShort ? err.message : t("errorAdd", { noun }),
+      );
     }
+  };
+
+  const handleAdd = async (item: MediaSearchResult) => {
+    setAddingId(item.id);
+    setError(null);
+    await addItem(item, false);
+    setAddingId(null);
+  };
+
+  const handleAddAsShort = async (item: MediaSearchResult) => {
+    setAddingShortId(item.id);
+    setError(null);
+    await addItem(item, true);
+    setAddingShortId(null);
   };
 
   return (
@@ -60,6 +74,7 @@ export function MultiSearchResults({
         items={results}
         showLink={false}
         showTypeBadge
+        showShortBadge={shortsEnabled}
         emptyMessage={
           searched
             ? t("resultsEmptySearched")
@@ -79,6 +94,9 @@ export function MultiSearchResults({
               ownedMediaId={ownedMediaId}
               adding={addingId === item.id}
               onAdd={handleAdd}
+              shortsEnabled={shortsEnabled}
+              addingShort={addingShortId === item.id}
+              onAddAsShort={handleAddAsShort}
             />
           );
         }}

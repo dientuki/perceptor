@@ -2,13 +2,15 @@
 import { FileVideo, Magnet } from "lucide-react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   setMovieAudioMandatoryAction,
   setMoviePreferredTrackLanguagesAction,
 } from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
+import { setMovieShortAction } from "@/actions/movies";
 import { getPreferences } from "@/actions/preferences";
+import Switch from "@/components/form/switch/Switch";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
@@ -26,11 +28,17 @@ const RESOLUTION_ORDER = ["4K", "1080p", "720p", "480p", "360p"];
 export default function Movie({
   movie,
   languageOptions,
+  shortsEnabled,
 }: {
   movie: MovieRecord;
   languageOptions: Language[];
+  shortsEnabled: boolean;
 }) {
   const t = useTranslations("movies.detail");
+  const [isShort, setIsShort] = useState(movie.isShort);
+  const [shortSwitchKey, setShortSwitchKey] = useState(0);
+  const [shortError, setShortError] = useState<string | null>(null);
+  const [isShortPending, startShortTransition] = useTransition();
   const {
     isOpen: isFileModalOpen,
     openModal: openFileModal,
@@ -84,6 +92,24 @@ export default function Movie({
     movie.id,
   );
 
+  // The Switch component owns its own display state internally
+  // (defaultChecked, not a controlled `checked`), so reverting it on a
+  // server refusal means remounting it with the previous value rather than
+  // re-rendering with a new prop — the same reason PathPicker et al. use a
+  // raw controlled input instead. shortSwitchKey forces that remount.
+  const handleShortToggle = (checked: boolean) => {
+    setShortError(null);
+    startShortTransition(async () => {
+      const result = await setMovieShortAction(movie.id, checked);
+      if ("error" in result) {
+        setShortError(result.error);
+        setShortSwitchKey((key) => key + 1);
+        return;
+      }
+      setIsShort(checked);
+    });
+  };
+
   return (
     <div className="flex flex-col gap-8 md:flex-row">
       {/* Poster a la izquierda */}
@@ -130,6 +156,19 @@ export default function Movie({
             {t("magnetButton")}
           </Button>
         </div>
+
+        {shortsEnabled && (
+          <div className="space-y-1">
+            <Switch
+              key={shortSwitchKey}
+              label={t("shortLabel")}
+              defaultChecked={isShort}
+              disabled={isShortPending}
+              onChange={handleShortToggle}
+            />
+            {shortError && <p className="text-error-500">{shortError}</p>}
+          </div>
+        )}
 
         <div className="space-y-2">
           <h4 className="font-semibold uppercase tracking-wider text-gray-400">

@@ -5,9 +5,16 @@ import { RedisModule } from '@/redis/redis.module';
 import { SettingsModule } from '@/settings/settings.module';
 import { LanguagesModule } from '@/languages/languages.module';
 import { MediaServerModule } from '@/media-server/media-server.module';
+import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
 
 @Module({
-  imports: [RedisModule, SettingsModule, LanguagesModule, MediaServerModule],
+  imports: [
+    RedisModule,
+    SettingsModule,
+    LanguagesModule,
+    MediaServerModule,
+    MediaCapabilitiesModule,
+  ],
   providers: [MoviesResolver, MoviesService],
   exports: [MoviesService],
 })

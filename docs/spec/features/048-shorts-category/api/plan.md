@@ -1,8 +1,8 @@
 ---
 title: Shorts Category — api slice
 service: api
-last_updated: 2026-09-07
-status: Approved
+last_updated: 2026-09-09
+status: Implemented
 ---
 
 # PLAN: Shorts Category — `api` (`api/plan.md`)

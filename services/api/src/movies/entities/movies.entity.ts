@@ -27,6 +27,12 @@ export class Movie {
   @Field()
   isLiveAction: boolean;
 
+  // 048-shorts-category REQ-1: a property of the film, shared by every user
+  // who has it in their library — straight off the Prisma row, no
+  // @ResolveField (api/plan.md step 11).
+  @Field()
+  isShort: boolean;
+
   @Field()
   status: string;
 

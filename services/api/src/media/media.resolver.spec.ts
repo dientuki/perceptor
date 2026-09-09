@@ -33,6 +33,7 @@ describe('MediaResolver capability enforcement', () => {
     const mediaCapabilitiesService = {
       read: jest.fn(),
       assertEnabled: jest.fn(),
+      assertShortsEnabled: jest.fn(),
     } as unknown as MediaCapabilitiesService;
 
     const resolver = new MediaResolver(
@@ -84,7 +85,7 @@ describe('MediaResolver capability enforcement', () => {
     await resolver.addMedia(1399, 'movie', principal);
 
     expect(mediaCapabilitiesService.assertEnabled).toHaveBeenCalledWith('movie');
-    expect(register).toHaveBeenCalledWith(1399, 'u1');
+    expect(register).toHaveBeenCalledWith(1399, 'u1', { asShort: undefined });
   });
 
   // The ordering guarantee itself: a bogus type must still fail as
@@ -122,5 +123,81 @@ describe('MediaResolver capability enforcement', () => {
     const result = await resolver.mediaCapabilities();
 
     expect(result).toEqual({ moviesEnabled: true, showsEnabled: false });
+  });
+});
+
+// This suite exists because otherwise `addMedia(asShort: true)` could reach
+// `MoviesService.register`/`ShowsService.register` before either shorts-
+// specific guard has run — writing a `shows` row (or a `movies` row with the
+// flag set) for a request that should have been refused, with no error
+// anywhere (048-shorts-category REQ-14).
+describe('MediaResolver addMedia(asShort:) guards', () => {
+  const principal: AuthPrincipal = { type: 'user', id: 'u1', username: 'alice', jti: 'session-1' };
+
+  const buildResolver = () => {
+    const mediaDispatch = {
+      resolve: jest.fn(),
+    } as unknown as MediaDispatchService;
+    const mediaSearch = { searchAll: jest.fn() } as unknown as MediaSearchService;
+    const popularMediaService = { list: jest.fn() } as unknown as PopularMediaService;
+    const mediaCapabilitiesService = {
+      read: jest.fn(),
+      assertEnabled: jest.fn().mockResolvedValue(undefined),
+      assertShortsEnabled: jest.fn(),
+    } as unknown as MediaCapabilitiesService;
+
+    const resolver = new MediaResolver(
+      mediaDispatch,
+      mediaSearch,
+      popularMediaService,
+      mediaCapabilitiesService,
+    );
+
+    return { resolver, mediaDispatch, mediaCapabilitiesService };
+  };
+
+  it('refuses asShort:true for a show with MEDIA_SHORTS_NOT_A_MOVIE, before assertShortsEnabled or dispatch run', async () => {
+    const { resolver, mediaDispatch, mediaCapabilitiesService } = buildResolver();
+
+    await expect(resolver.addMedia(1399, 'show', principal, true)).rejects.toMatchObject({
+      response: { i18n: { key: ERROR_KEYS.MEDIA_SHORTS_NOT_A_MOVIE } },
+    });
+    expect(mediaCapabilitiesService.assertShortsEnabled).not.toHaveBeenCalled();
+    expect(mediaDispatch.resolve).not.toHaveBeenCalled();
+  });
+
+  it('refuses asShort:true for a film with MEDIA_SHORTS_DISABLED when shorts are off, before dispatch runs', async () => {
+    const { resolver, mediaDispatch, mediaCapabilitiesService } = buildResolver();
+    (mediaCapabilitiesService.assertShortsEnabled as jest.Mock).mockRejectedValue(
+      new ForbiddenException({ i18n: { key: ERROR_KEYS.MEDIA_SHORTS_DISABLED } }),
+    );
+
+    await expect(resolver.addMedia(1399, 'movie', principal, true)).rejects.toMatchObject({
+      response: { i18n: { key: ERROR_KEYS.MEDIA_SHORTS_DISABLED } },
+    });
+    expect(mediaDispatch.resolve).not.toHaveBeenCalled();
+  });
+
+  it('never calls assertShortsEnabled when asShort is not set', async () => {
+    const { resolver, mediaDispatch, mediaCapabilitiesService } = buildResolver();
+    const register = jest.fn().mockResolvedValue({ id: 'm1' });
+    (mediaDispatch.resolve as jest.Mock).mockReturnValue({ register });
+
+    await resolver.addMedia(1399, 'movie', principal);
+
+    expect(mediaCapabilitiesService.assertShortsEnabled).not.toHaveBeenCalled();
+    expect(register).toHaveBeenCalledWith(1399, 'u1', { asShort: undefined });
+  });
+
+  it('registers a film as a short once both guards pass', async () => {
+    const { resolver, mediaDispatch, mediaCapabilitiesService } = buildResolver();
+    (mediaCapabilitiesService.assertShortsEnabled as jest.Mock).mockResolvedValue(undefined);
+    const register = jest.fn().mockResolvedValue({ id: 'm1' });
+    (mediaDispatch.resolve as jest.Mock).mockReturnValue({ register });
+
+    await resolver.addMedia(1399, 'movie', principal, true);
+
+    expect(mediaCapabilitiesService.assertShortsEnabled).toHaveBeenCalled();
+    expect(register).toHaveBeenCalledWith(1399, 'u1', { asShort: true });
   });
 });

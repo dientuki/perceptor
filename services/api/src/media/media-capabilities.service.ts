@@ -15,11 +15,17 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 export class MediaCapabilitiesService {
   constructor(private readonly settingsService: SettingsService) {}
 
+  // `shortsEnabled` deliberately uses `=== 'true'`, the opposite of the
+  // `!== 'false'` idiom below — an absent `shorts_enabled` row must read as
+  // OFF, so an install that predates 048-shorts-category never grows a
+  // category nobody enabled (spec NFR-3).
   async read(): Promise<MediaCapabilities> {
     const map = await this.settingsService.getMap();
+    const moviesEnabled = this.isEnabledInMap(map, MEDIA_TYPE.MOVIE);
     return {
-      moviesEnabled: this.isEnabledInMap(map, MEDIA_TYPE.MOVIE),
+      moviesEnabled,
       showsEnabled: this.isEnabledInMap(map, MEDIA_TYPE.SHOW),
+      shortsEnabled: moviesEnabled && map['shorts_enabled'] === 'true',
     };
   }
 
@@ -40,6 +46,23 @@ export class MediaCapabilitiesService {
     const enabled = await this.isEnabled(type);
     if (!enabled) {
       throw i18nError.forbidden(ERROR_KEYS.MEDIA_TYPE_DISABLED, { type });
+    }
+  }
+
+  // 048-shorts-category REQ-3/REQ-4: the effective capability, already
+  // folding in `movies_enabled` — read() computes it once, this just names
+  // it for callers that only care about the boolean.
+  async isShortsEnabled(): Promise<boolean> {
+    const capabilities = await this.read();
+    return capabilities.shortsEnabled;
+  }
+
+  // REQ-14: enforcement, not just hiding. Thrown by both addMedia(asShort:)
+  // and setMovieShort before either touches a row.
+  async assertShortsEnabled(): Promise<void> {
+    const enabled = await this.isShortsEnabled();
+    if (!enabled) {
+      throw i18nError.forbidden(ERROR_KEYS.MEDIA_SHORTS_DISABLED);
     }
   }
 

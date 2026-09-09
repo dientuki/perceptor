@@ -416,6 +416,9 @@ export class ShowsService implements MediaTypeService {
         ...result,
         mediaId: registered?.id ?? null,
         inLibrary: (registered?.users.length ?? 0) > 0,
+        // 048-shorts-category: a series is never a short (isShort exists
+        // on Movie only), and the field is non-null on every search result.
+        isShort: false,
       };
     });
   }

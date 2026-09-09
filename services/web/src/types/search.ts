@@ -11,4 +11,5 @@ export type MediaSearchResult = {
   jobStatus?: string; // Nuevo campo para el estado del job asociado, si existe
   mediaId: number | null; // the id of the registered row in whatever table `type` names
   inLibrary: boolean; // true only when the calling user already has this film
+  isShort: boolean; // false for anything not registered as a short (or for a series)
 };

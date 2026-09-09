@@ -2,8 +2,8 @@ import { getMovies } from "@/actions/movies";
 import { MediaList } from "@/components/media/MediaList";
 import { MEDIA_TYPE } from "@/types/media";
 
-export default async function Movies() {
-  const dbMovies = await getMovies();
+export default async function Movies({ isShort }: { isShort?: boolean }) {
+  const dbMovies = await getMovies(isShort);
 
   return (
     <div>

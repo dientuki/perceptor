@@ -12,6 +12,7 @@ export async function seedSettings(prisma: PrismaClient) {
     // cualquier valor nuevo contra esas mismas raíces.
     { key: 'path_movies', value: 'Movies' },
     { key: 'path_shows', value: 'Shows' },
+    { key: 'path_shorts', value: 'Shorts' },
     { key: 'path_downloads', value: '.' },
 
     { key: 'torrent_client', value: 'qbittorrent' },
@@ -45,6 +46,7 @@ export async function seedSettings(prisma: PrismaClient) {
 
     { key: 'movies_enabled', value: 'true' },
     { key: 'shows_enabled', value: 'false' },
+    { key: 'shorts_enabled', value: 'false' },
     { key: 'compression_enabled', value: 'true' },
     // '1080p' is the resolution the worker already downscales HEVC 4K to
     // (042/044) — one of the four values in settings.catalog.ts's

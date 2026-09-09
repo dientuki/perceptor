@@ -340,6 +340,7 @@ model Movie {
   releaseDate      DateTime?
   originalLanguage String
   isLiveAction     Boolean   @default(true)
+  isShort          Boolean   @default(false)
 
   // Estado consolidado para mostrar rápido en tarjetas/listados de la App
   status   MediaStatus @default(MISSING)

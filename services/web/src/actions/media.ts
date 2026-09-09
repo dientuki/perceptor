@@ -15,6 +15,7 @@ const MEDIA_CAPABILITIES_QUERY = `
     mediaCapabilities {
       moviesEnabled
       showsEnabled
+      shortsEnabled
     }
   }
 `;
@@ -65,6 +66,7 @@ const SEARCH_MEDIA_QUERY = `
       type
       mediaId
       inLibrary
+      isShort
     }
   }
 `;
@@ -124,6 +126,7 @@ const SEARCH_ALL_MEDIA_QUERY = `
       type
       mediaId
       inLibrary
+      isShort
     }
   }
 `;
@@ -188,8 +191,8 @@ export async function getPopularMedia(
 }
 
 const ADD_MEDIA_MUTATION = `
-  mutation AddMedia($tmdbId: Int!, $type: String!) {
-    addMedia(tmdbId: $tmdbId, type: $type) {
+  mutation AddMedia($tmdbId: Int!, $type: String!, $asShort: Boolean) {
+    addMedia(tmdbId: $tmdbId, type: $type, asShort: $asShort) {
       id
       type
     }
@@ -199,10 +202,11 @@ const ADD_MEDIA_MUTATION = `
 export async function addMedia(
   tmdbId: number,
   type: MediaType,
+  asShort?: boolean,
 ): Promise<string> {
   const { data, errors } = await fetchGraphQL<{
     addMedia: { id: number; type: string };
-  }>(ADD_MEDIA_MUTATION, { tmdbId, type });
+  }>(ADD_MEDIA_MUTATION, { tmdbId, type, asShort });
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);

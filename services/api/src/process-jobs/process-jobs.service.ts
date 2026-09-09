@@ -5,6 +5,7 @@ import { QbittorrentClient } from '@/clients/torrent/client';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
@@ -17,6 +18,7 @@ export class ProcessJobsService {
     private readonly settings: SettingsService,
     private readonly mediaRoots: MediaRootsService,
     private readonly mediaServer: MediaServerService,
+    private readonly mediaCapabilities: MediaCapabilitiesService,
   ) {}
 
   async getEncodeJobDetails(id: number): Promise<EncodeJobDetails> {
@@ -61,6 +63,12 @@ export class ProcessJobsService {
         subtitleIso3Codes: allowedSubtitleLanguagesIso3,
         subtitleTags: allowedSubtitleLanguageTags,
       } = await this.mergeMovieAllowedLanguages(movie.id, original);
+      // REQ-12: a short is filed under path_shorts only while the category is
+      // effectively enabled (movies_enabled && shorts_enabled) — resolved
+      // fresh on every call, with no lock and no snapshot (REQ-13): a job
+      // whose details were already handed out keeps whatever root it got.
+      const outputSettingKey =
+        movie.isShort && (await this.mediaCapabilities.isShortsEnabled()) ? 'path_shorts' : 'path_movies';
       return {
         ...base,
         kind: 'MOVIE',
@@ -73,7 +81,7 @@ export class ProcessJobsService {
         seasonNumber: null,
         episodeNumber: null,
         episodeTitle: null,
-        outputRoot: await this.resolveOutputRoot('path_movies'),
+        outputRoot: await this.resolveOutputRoot(outputSettingKey),
         allowedAudioLanguagesIso3,
         allowedAudioLanguageTags,
         allowedSubtitleLanguagesIso3,
@@ -122,7 +130,7 @@ export class ProcessJobsService {
   // para armar la carpeta de salida. Si la setting falta o se escapa de la
   // raíz, el job falla acá con un mensaje claro — mejor que el worker
   // reciba una ruta ambigua o escriba fuera de la biblioteca.
-  private async resolveOutputRoot(settingKey: 'path_movies' | 'path_shows'): Promise<string> {
+  private async resolveOutputRoot(settingKey: 'path_movies' | 'path_shows' | 'path_shorts'): Promise<string> {
     const config = await this.settings.getMap();
     const relPath = config[settingKey];
     if (relPath === undefined) {

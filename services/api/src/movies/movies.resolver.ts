@@ -9,12 +9,15 @@ import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
+import { MEDIA_TYPE } from '@/types/media';
 
 @Resolver(() => Movie)
 export class MoviesResolver {
   constructor(
     private readonly moviesService: MoviesService,
     private readonly languagesService: LanguagesService,
+    private readonly mediaCapabilitiesService: MediaCapabilitiesService,
   ) {}
 
   // Field resolvers only run when the client selects them — keeps the
@@ -55,9 +58,15 @@ export class MoviesResolver {
   // of these operations carry @AllowService(), so principal should always be
   // 'user' — narrowed anyway, for structural safety (see auth.types.ts).
   @Query(() => [Movie], { name: 'movies' })
-  async getMovies(@CurrentUser() principal: AuthPrincipal) {
+  async getMovies(
+    // 048-shorts-category REQ-8: omitted or null both mean "every film the
+    // caller owns" — MoviesService.findAll only adds the where clause when
+    // the argument is actually given (api/plan.md step 9).
+    @Args('isShort', { type: () => Boolean, nullable: true }) isShort: boolean | null,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
     const userId = principal.type === 'user' ? principal.id : '';
-    return this.moviesService.findAll(userId);
+    return this.moviesService.findAll(userId, isShort ?? undefined);
   }
 
   // Single film by internal DB id, scoped to the caller's own library — see
@@ -147,5 +156,23 @@ export class MoviesResolver {
     const movie = await this.moviesService.findOneFromDb(movieId, userId);
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
     return this.moviesService.setAudioMandatoryFor(userId, movieId, mandatory);
+  }
+
+  @Mutation(() => Movie, {
+    name: 'setMovieShort',
+    description: 'Marca o desmarca una película como corto (048-shorts-category)',
+  })
+  async setMovieShort(
+    @Args('movieId', { type: () => Int }) movieId: number,
+    @Args('isShort', { type: () => Boolean }) isShort: boolean,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    // 048-shorts-category REQ-14: guard order matters — movies-disabled is
+    // checked first so a caller with movies off gets error.media.type_disabled
+    // rather than the shorts-specific refusal (see spec.md's error table).
+    await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.MOVIE);
+    await this.mediaCapabilitiesService.assertShortsEnabled();
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.setShort(movieId, userId, isShort);
   }
 }

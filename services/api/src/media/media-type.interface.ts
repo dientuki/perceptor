@@ -9,7 +9,11 @@ import { MediaSearchResult } from '@/clients/types';
 // Specification and § Context & Goal).
 export interface MediaTypeService {
   search(query: string, userId: string): Promise<MediaSearchResultEntity[]>;
-  register(tmdbId: number, userId: string): Promise<MediaRef>;
+  // `options.asShort` is only ever set for a movie registration — the
+  // resolver's guard order (048-shorts-category REQ-14) refuses a show
+  // before dispatch, so ShowsService.register never has to look at it and
+  // keeps its narrower two-parameter signature.
+  register(tmdbId: number, userId: string, options?: { asShort?: boolean }): Promise<MediaRef>;
   // Takes already-fetched, catalog-only rows (e.g. one type's slice of a
   // mixed `search/multi` response) and runs the same cache-then-enrich this
   // service's own search() runs internally — added by 026-multi-search so a

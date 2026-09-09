@@ -52,6 +52,9 @@ export const MESSAGES_EN: Record<string, string> = {
     'Could not reach the catalog. Check the TMDB API key.',
   [ERROR_KEYS.MEDIA_TYPE_DISABLED]: '{type} is disabled on this system',
   [ERROR_KEYS.MEDIA_SEARCH_UNAVAILABLE]: 'Search is disabled on this system',
+  [ERROR_KEYS.MEDIA_SHORTS_DISABLED]: 'Shorts are disabled on this system',
+  [ERROR_KEYS.MEDIA_SHORTS_NOT_A_MOVIE]:
+    'Only a film can be registered as a short',
 
   // magnet parsing
   [ERROR_KEYS.MAGNET_NOT_A_MAGNET]: 'That does not look like a magnet link',

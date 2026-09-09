@@ -10,17 +10,23 @@ import { SearchInput } from "./SearchInput";
 
 interface SearchContainerProps {
   type: MediaType;
-  addAction: (id: number, type: MediaType) => Promise<string>;
+  addAction: (
+    id: number,
+    type: MediaType,
+    asShort?: boolean,
+  ) => Promise<string>;
   searchAction: (
     query: string,
     type: MediaType,
   ) => Promise<MediaSearchResult[]>;
+  shortsEnabled?: boolean; // Opt-in: only the movies search grid has one to show
 }
 
 export default function SearchContainer({
   type,
   addAction,
   searchAction,
+  shortsEnabled = false,
 }: SearchContainerProps) {
   const t = useTranslations("search.container");
   const noun = type === MEDIA_TYPE.SHOW ? t("showNoun") : t("movieNoun");
@@ -29,6 +35,7 @@ export default function SearchContainer({
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [addingId, setAddingId] = useState<number | null>(null);
+  const [addingShortId, setAddingShortId] = useState<number | null>(null);
   // TMDB id -> registered row id, for results added this session (before `inLibrary` would reflect it on a fresh search)
   const [addedMediaIds, setAddedMediaIds] = useState<Record<number, string>>(
     {},
@@ -52,19 +59,30 @@ export default function SearchContainer({
     }
   };
 
-  const handleAdd = async (item: MediaSearchResult) => {
-    setAddingId(item.id);
-    setError(null);
-
+  const addItem = async (item: MediaSearchResult, asShort: boolean) => {
     try {
-      const mediaId = await addAction(item.id, type);
+      const mediaId = await addAction(item.id, type, asShort);
       setAddedMediaIds((prev) => ({ ...prev, [item.id]: mediaId }));
     } catch (err) {
       console.error("Error al agregar:", err);
-      setError(t("errorAdd", { noun }));
-    } finally {
-      setAddingId(null);
+      setError(
+        err instanceof Error && asShort ? err.message : t("errorAdd", { noun }),
+      );
     }
+  };
+
+  const handleAdd = async (item: MediaSearchResult) => {
+    setAddingId(item.id);
+    setError(null);
+    await addItem(item, false);
+    setAddingId(null);
+  };
+
+  const handleAddAsShort = async (item: MediaSearchResult) => {
+    setAddingShortId(item.id);
+    setError(null);
+    await addItem(item, true);
+    setAddingShortId(null);
   };
 
   return (
@@ -80,6 +98,7 @@ export default function SearchContainer({
       <MediaList
         items={results}
         showLink={false}
+        showShortBadge={shortsEnabled}
         emptyMessage={
           searched
             ? t("resultsEmptySearched")
@@ -97,6 +116,9 @@ export default function SearchContainer({
               ownedMediaId={ownedMediaId}
               adding={addingId === item.id}
               onAdd={handleAdd}
+              shortsEnabled={shortsEnabled}
+              addingShort={addingShortId === item.id}
+              onAddAsShort={handleAddAsShort}
             />
           );
         }}

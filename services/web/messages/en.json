@@ -34,7 +34,9 @@
       "catalog_unavailable": "Could not query the catalog. Check the TMDB API key.",
       "unsupported_type": "Unsupported media type: {type}",
       "type_disabled": "{type, select, movie {Movies are disabled on this system} show {Series are disabled on this system} other {This media type is disabled on this system}}",
-      "search_unavailable": "Search is disabled on this system"
+      "search_unavailable": "Search is disabled on this system",
+      "shorts_disabled": "Shorts are disabled on this system",
+      "shorts_not_a_movie": "Only a movie can be registered as a short"
     },
     "episode": {
       "already_completed": "This episode is already downloaded. Confirm to replace the current file."
@@ -115,6 +117,7 @@
   "nav": {
     "billboard": "Browse",
     "movies": "My movies",
+    "shorts": "My shorts",
     "shows": "My series",
     "calendar": "Calendar",
     "downloads": "Downloads",
@@ -169,6 +172,11 @@
       "title": "Series",
       "metadataTitle": "Series | Perceptor",
       "metadataDescription": "List of tracked series"
+    },
+    "shorts": {
+      "title": "Shorts",
+      "metadataTitle": "Shorts | Perceptor",
+      "metadataDescription": "List of tracked short films"
     },
     "showsAdd": {
       "title": "Add series",
@@ -251,6 +259,8 @@
       "go": "Go",
       "addButton": "Add",
       "adding": "Adding...",
+      "addShortButton": "Add as short",
+      "addingShort": "Adding as short...",
       "errorSearch": "Could not complete the search. Try again.",
       "errorAdd": "Could not add the {noun}. Try again.",
       "unavailable": "Search is disabled on this system."
@@ -296,12 +306,14 @@
     "card": {
       "noPoster": "No Poster",
       "typeMovie": "MOVIE",
-      "typeShow": "SERIES"
+      "typeShow": "SERIES",
+      "typeShort": "SHORT"
     },
     "list": {
       "emptyDefault": "No {noun} registered",
       "movieNoun": "movies",
-      "showNoun": "series"
+      "showNoun": "series",
+      "emptyShorts": "No shorts registered"
     },
     "languagePicker": {
       "defaultLabel": "Preferred languages",
@@ -325,7 +337,8 @@
       "magnetButton": "Magnet",
       "synopsisTitle": "Synopsis",
       "noOverview": "No overview available.",
-      "languagesTitle": "Languages"
+      "languagesTitle": "Languages",
+      "shortLabel": "Registered as a short"
     }
   },
   "shows": {
@@ -481,6 +494,8 @@
       "moviesFolderLabel": "Movies folder",
       "showsEnabledLabel": "Enable series",
       "showsFolderLabel": "Series folder",
+      "shortsEnabledLabel": "Enable shorts",
+      "shortsFolderLabel": "Shorts folder",
       "mediaServerSection": "Media server",
       "saved": "Settings saved.",
       "saving": "Saving...",

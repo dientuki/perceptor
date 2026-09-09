@@ -32,7 +32,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const query = (Array.isArray(rawQuery) ? rawQuery[0] : rawQuery) ?? "";
   const searched = query.trim().length > 0;
 
-  const { moviesEnabled, showsEnabled } = await getMediaCapabilities();
+  const { moviesEnabled, showsEnabled, shortsEnabled } =
+    await getMediaCapabilities();
 
   if (!moviesEnabled && !showsEnabled) {
     return (
@@ -76,6 +77,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           results={results}
           searched={searched}
           initialError={error}
+          shortsEnabled={shortsEnabled}
         />
       </div>
     </div>

@@ -34,7 +34,9 @@
       "catalog_unavailable": "No se pudo consultar el catálogo. Revisá la API key de TMDB.",
       "unsupported_type": "Tipo de medio no soportado: {type}",
       "type_disabled": "{type, select, movie {Las películas están deshabilitadas en este sistema} show {Las series están deshabilitadas en este sistema} other {Este tipo de medio está deshabilitado en este sistema}}",
-      "search_unavailable": "La búsqueda está deshabilitada en este sistema"
+      "search_unavailable": "La búsqueda está deshabilitada en este sistema",
+      "shorts_disabled": "Los cortos están deshabilitados en este sistema",
+      "shorts_not_a_movie": "Sólo una película puede registrarse como corto"
     },
     "episode": {
       "already_completed": "Este episodio ya está descargado. Confirmá para reemplazar el archivo actual."
@@ -115,6 +117,7 @@
   "nav": {
     "billboard": "Cartelera",
     "movies": "Mis películas",
+    "shorts": "Mis cortos",
     "shows": "Mis series",
     "calendar": "Calendario",
     "downloads": "Descargas",
@@ -169,6 +172,11 @@
       "title": "Series",
       "metadataTitle": "Series | Perceptor",
       "metadataDescription": "Listado de series seguidas"
+    },
+    "shorts": {
+      "title": "Cortos",
+      "metadataTitle": "Cortos | Perceptor",
+      "metadataDescription": "Listado de cortos seguidos"
     },
     "showsAdd": {
       "title": "Agregar serie",
@@ -251,6 +259,8 @@
       "go": "Ir",
       "addButton": "Agregar",
       "adding": "Agregando...",
+      "addShortButton": "Agregar como corto",
+      "addingShort": "Agregando como corto...",
       "errorSearch": "No se pudo completar la búsqueda. Intentá de nuevo.",
       "errorAdd": "No se pudo agregar la {noun}. Intentá de nuevo.",
       "unavailable": "La búsqueda está deshabilitada en este sistema."
@@ -296,12 +306,14 @@
     "card": {
       "noPoster": "Sin Poster",
       "typeMovie": "PELÍCULA",
-      "typeShow": "SERIE"
+      "typeShow": "SERIE",
+      "typeShort": "CORTO"
     },
     "list": {
       "emptyDefault": "No hay {noun} registradas",
       "movieNoun": "películas",
-      "showNoun": "series"
+      "showNoun": "series",
+      "emptyShorts": "No hay cortos registrados"
     },
     "languagePicker": {
       "defaultLabel": "Idiomas preferidos",
@@ -325,7 +337,8 @@
       "magnetButton": "Magnet",
       "synopsisTitle": "Sinopsis",
       "noOverview": "Sin sinopsis disponible.",
-      "languagesTitle": "Idiomas"
+      "languagesTitle": "Idiomas",
+      "shortLabel": "Registrado como corto"
     }
   },
   "shows": {
@@ -481,6 +494,8 @@
       "moviesFolderLabel": "Carpeta de películas",
       "showsEnabledLabel": "Habilitar series",
       "showsFolderLabel": "Carpeta de series",
+      "shortsEnabledLabel": "Habilitar cortos",
+      "shortsFolderLabel": "Carpeta de cortos",
       "mediaServerSection": "Media server",
       "saved": "Configuración guardada.",
       "saving": "Guardando...",

@@ -138,6 +138,8 @@ export default function SettingsForm({
               showsFolder={getSettingValue("path_shows")}
               moviesEnabled={getSettingValue("movies_enabled") === "true"}
               showsEnabled={getSettingValue("shows_enabled") === "true"}
+              shortsFolder={getSettingValue("path_shorts")}
+              shortsEnabled={getSettingValue("shorts_enabled") === "true"}
               libraryRoot={rootOf("library")}
               movieDbApiKey={getSettingValue("movie_db_api_key")}
             />

@@ -26,19 +26,21 @@ describe('MediaCapabilitiesService', () => {
     service = module.get(MediaCapabilitiesService);
   };
 
-  it('reads an empty settings map as both types enabled', async () => {
+  it('reads an empty settings map as both types enabled, shorts disabled', async () => {
     await build({});
     await expect(service.read()).resolves.toEqual({
       moviesEnabled: true,
       showsEnabled: true,
+      shortsEnabled: false,
     });
   });
 
-  it('reads a map with unrelated keys as both types enabled', async () => {
+  it('reads a map with unrelated keys as both types enabled, shorts disabled', async () => {
     await build({ movie_db_api_key: 'abc' });
     await expect(service.read()).resolves.toEqual({
       moviesEnabled: true,
       showsEnabled: true,
+      shortsEnabled: false,
     });
   });
 
@@ -47,6 +49,7 @@ describe('MediaCapabilitiesService', () => {
     await expect(service.read()).resolves.toEqual({
       moviesEnabled: true,
       showsEnabled: true,
+      shortsEnabled: false,
     });
   });
 
@@ -55,6 +58,25 @@ describe('MediaCapabilitiesService', () => {
     await expect(service.read()).resolves.toEqual({
       moviesEnabled: false,
       showsEnabled: true,
+      shortsEnabled: false,
+    });
+  });
+
+  it('reads shorts as enabled only when both movies and shorts are on', async () => {
+    await build({ movies_enabled: 'true', shorts_enabled: 'true' });
+    await expect(service.read()).resolves.toEqual({
+      moviesEnabled: true,
+      showsEnabled: true,
+      shortsEnabled: true,
+    });
+  });
+
+  it('reads shorts as disabled when movies is off, even if shorts_enabled is "true"', async () => {
+    await build({ movies_enabled: 'false', shorts_enabled: 'true' });
+    await expect(service.read()).resolves.toEqual({
+      moviesEnabled: false,
+      showsEnabled: true,
+      shortsEnabled: false,
     });
   });
 
@@ -85,6 +107,29 @@ describe('MediaCapabilitiesService', () => {
     it('resolves silently for a type it does not recognise, leaving MEDIA_UNSUPPORTED_TYPE to MediaDispatchService', async () => {
       await build({ movies_enabled: 'false', shows_enabled: 'false' });
       await expect(service.assertEnabled('podcast')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('assertShortsEnabled', () => {
+    it('resolves silently when movies and shorts are both enabled', async () => {
+      await build({ shorts_enabled: 'true' });
+      await expect(service.assertShortsEnabled()).resolves.toBeUndefined();
+    });
+
+    it('throws MEDIA_SHORTS_DISABLED when shorts_enabled is absent', async () => {
+      await build({});
+      await expect(service.assertShortsEnabled()).rejects.toMatchObject({
+        status: 403,
+        response: { i18n: { key: ERROR_KEYS.MEDIA_SHORTS_DISABLED } },
+      });
+    });
+
+    it('throws MEDIA_SHORTS_DISABLED when movies is off even if shorts_enabled is "true"', async () => {
+      await build({ movies_enabled: 'false', shorts_enabled: 'true' });
+      await expect(service.assertShortsEnabled()).rejects.toMatchObject({
+        status: 403,
+        response: { i18n: { key: ERROR_KEYS.MEDIA_SHORTS_DISABLED } },
+      });
     });
   });
 
