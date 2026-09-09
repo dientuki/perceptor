@@ -1,8 +1,8 @@
 ---
 title: Perceptor Constitution
-version: 1.0.0
+version: 1.2.0
 ratified_at: 2026-08-09
-last_amended: 2026-08-09
+last_amended: 2026-09-05
 ---
 
 # Perceptor Constitution
@@ -186,6 +186,29 @@ noisy diffs (same rule Article VI applies to Spanish comments).
 
 **Check** — a new file has no comment that is not a URL, a test header, or a guard's doc comment.
 
+## Article XII — The library is never deleted
+
+Perceptor writes to the destinations root and never removes from it. No feature, no cleanup path
+and no user action deletes a transcoded file, a title's folder, or anything else under
+`HOST_DESTINATIONS_DIR`/`CONTAINER_DESTINATIONS_DIR`. Deleting a download, a source, a job or a
+title removes rows, queue entries, torrents and whatever lives under the **downloads** root —
+never the finished file it produced. A user who wants a file out of their library removes it
+themselves, or through their media server.
+
+One exception, and it is not a library file: the worker's own `<final>.part.mkv` scratch file,
+written next to the destination during a remux and removed by `services/worker/src/ffmpeg/runner.ts`
+when the encode fails, is cancelled or completes. A temporary this codebase created and still owns
+is not the library.
+
+This is why every deletion path resolves its target against a media root before touching disk
+(Article V): the guard that keeps a delete inside `downloads` is the same guard that keeps it out
+of `destinations`.
+
+**Check** — every filesystem removal in `services/*/src` (`rm`, `rmdir`, `unlink`) either resolves
+inside the downloads root or is the `.part.mkv` cleanup in `runner.ts`. Any other path under the
+destinations root is a violation.
+
+
 ---
 
 ## Changelog
@@ -194,3 +217,4 @@ noisy diffs (same rule Article VI applies to Spanish comments).
 | :-- | :-- | :-- |
 | 1.0.0 | 2026-08-09 | Ratified. Articles I–VI codify rules already in `CLAUDE.md`; VII–IX introduce spec-driven development. |
 | 1.1.0 | 2026-08-20 | Articles X (prefer simplification) and XI (no comments) added. XI names the three cases where a comment is still owed; Article VI is unchanged, since it governs the language of a comment, not whether one exists. |
+| 1.2.0 | 2026-09-05 | Article XII (the library is never deleted) added, ratified alongside `047-source-deletion`, which needed the boundary written down: a delete unwinds the downloads side of the pipeline and stops there. Frontmatter `version` also corrected — it had stayed at 1.0.0 through the 1.1.0 amendment. |
