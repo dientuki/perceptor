@@ -43,6 +43,7 @@ import { ERROR_ENCODE_MOVE_FAILED } from '../i18n/error-keys';
 // media-roots.service.spec.ts gives for skipping mocks on this class of bug.
 
 const noopProbe = async () => {};
+const neverAborted = new AbortController().signal;
 
 async function makeTempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'passthrough-spec-'));
@@ -84,6 +85,7 @@ describe('passthrough', () => {
         progressCalls.push(progress);
       },
       noopProbe,
+      neverAborted,
     );
 
     expect(result).toEqual({ ffmpegCommand: '' });
@@ -97,7 +99,7 @@ describe('passthrough', () => {
     const output = join(baseDir, 'nested', 'deeper', 'dest.mkv');
     await writeFile(input, 'content');
 
-    await passthrough(input, output, {} as never, async () => {}, noopProbe);
+    await passthrough(input, output, {} as never, async () => {}, noopProbe, neverAborted);
 
     expect(await fileExists(output)).toBe(true);
   });
@@ -108,7 +110,7 @@ describe('passthrough', () => {
     await writeFile(input, 'content');
     await chmod(input, 0o644);
 
-    await passthrough(input, output, {} as never, async () => {}, noopProbe);
+    await passthrough(input, output, {} as never, async () => {}, noopProbe, neverAborted);
 
     const mode = (await stat(output)).mode & 0o777;
     expect(mode).toBe(0o664);
@@ -128,6 +130,7 @@ describe('passthrough', () => {
         sawFinalNameBeforeProgress = await fileExists(output);
       },
       noopProbe,
+      neverAborted,
     );
 
     expect(sawFinalNameBeforeProgress).toBe(true);
@@ -146,7 +149,7 @@ describe('passthrough', () => {
 
     try {
       await expect(
-        passthrough(input, output, {} as never, async () => {}, noopProbe),
+        passthrough(input, output, {} as never, async () => {}, noopProbe, neverAborted),
       ).rejects.toMatchObject({
         constructor: KeyedError,
         key: ERROR_ENCODE_MOVE_FAILED,
@@ -174,7 +177,7 @@ describe('passthrough', () => {
     renameCallCount.value = 0;
     forceNextRenameExdev.value = true;
 
-    const result = await passthrough(input, output, {} as never, async () => {}, noopProbe);
+    const result = await passthrough(input, output, {} as never, async () => {}, noopProbe, neverAborted);
 
     expect(result).toEqual({ ffmpegCommand: '' });
     expect(renameCallCount.value).toBe(2);

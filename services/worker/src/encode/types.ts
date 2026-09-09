@@ -23,4 +23,5 @@ export type EncodeFn = (
   details: EncodeInput,
   onProgress: (progress: number) => Promise<void>,
   onProbe: (file: string, ffprobe: string) => Promise<void>,
+  signal: AbortSignal,
 ) => Promise<{ ffmpegCommand: string }>;

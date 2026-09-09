@@ -4,6 +4,7 @@ import type { EncodeFn } from './types';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import { ERROR_ENCODE_MOVE_FAILED } from '../i18n/error-keys';
+import { EncodeCancelledError } from './cancellation';
 
 // 032-optional-compression's "compression off" driver: not an ENCODE_DRIVER
 // (never registered in ./index.ts's DRIVERS — see ../plan.md's "Alternatives
@@ -24,8 +25,12 @@ async function removeIfExists(path: string): Promise<void> {
   await rm(path, { force: true });
 }
 
-export const passthrough: EncodeFn = async (input, output, _details, onProgress, _onProbe) => {
+export const passthrough: EncodeFn = async (input, output, _details, onProgress, _onProbe, signal) => {
   try {
+    if (signal.aborted) {
+      throw new EncodeCancelledError();
+    }
+
     await mkdir(dirname(output), { recursive: true });
 
     try {
@@ -50,6 +55,11 @@ export const passthrough: EncodeFn = async (input, output, _details, onProgress,
       try {
         await copyFile(input, partPath);
         await chmod(partPath, 0o664);
+
+        if (signal.aborted) {
+          throw new EncodeCancelledError();
+        }
+
         await rename(partPath, output);
       } catch (copyErr) {
         await removeIfExists(partPath);
@@ -68,6 +78,10 @@ export const passthrough: EncodeFn = async (input, output, _details, onProgress,
 
     return { ffmpegCommand: '' };
   } catch (err) {
+    if (err instanceof EncodeCancelledError) {
+      throw err;
+    }
+
     const detail = err instanceof Error ? err.message : String(err);
     const params = { detail };
     throw new KeyedError(

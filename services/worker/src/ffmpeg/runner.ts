@@ -8,6 +8,12 @@ import {
   ERROR_ENCODE_MKVMERGE_FAILED,
   ERROR_ENCODE_NO_OUTPUT,
 } from '../i18n/error-keys';
+import { EncodeCancelledError } from '../encode/cancellation';
+
+// Grace period between SIGTERM and SIGKILL for a cancelled encode's active
+// child (whichever of ffmpeg/mkvmerge is running right now) — long enough
+// for either to flush and exit cleanly on its own.
+const ABORT_KILL_GRACE_MS = 10_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -53,6 +59,7 @@ export function runFfmpeg(
   output: string,
   durationSeconds: number,
   onProgress: (progress: number) => Promise<void>,
+  signal: AbortSignal,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const finalCmd = `ffmpeg ${args.map((arg) => (arg.includes(' ') ? `"${arg}"` : arg)).join(' ')}`;
@@ -61,6 +68,12 @@ export function runFfmpeg(
     const stderrTail: string[] = [];
     let progressInFlight = false;
     let settled = false;
+    // Set the moment the abort listener below fires, so the close handlers
+    // of whichever child (ffmpeg or mkvmerge) is running reject with
+    // EncodeCancelledError instead of reading the SIGTERM/SIGKILL exit code
+    // as a genuine ffmpeg/mkvmerge failure.
+    let cancelled = false;
+    let killTimer: NodeJS.Timeout | null = null;
 
     // Apunta al proceso que esté corriendo en cada momento (primero ffmpeg,
     // después mkvmerge): así una señal de cierre llega al que corresponda sin
@@ -102,6 +115,11 @@ export function runFfmpeg(
     function cleanupListeners() {
       process.removeListener('SIGINT', killHandler);
       process.removeListener('SIGTERM', killHandler);
+      signal.removeEventListener('abort', abortHandler);
+      if (killTimer) {
+        clearTimeout(killTimer);
+        killTimer = null;
+      }
     }
 
     function settleReject(err: Error) {
@@ -117,6 +135,30 @@ export function runFfmpeg(
       cleanupListeners();
       resolve(finalCmd);
     }
+
+    // A deletion cancellation (encode:cancel, 047-source-deletion), not a
+    // container shutdown — that's killHandler/SIGINT/SIGTERM above, a
+    // separate concern left untouched. SIGTERM first, SIGKILL only if the
+    // child is still alive after the grace period.
+    function abortHandler() {
+      cancelled = true;
+      if (activeChild && !activeChild.killed) {
+        console.log('[ffmpeg] cancelación recibida, matando el proceso activo...');
+        activeChild.kill('SIGTERM');
+        killTimer = setTimeout(() => {
+          if (activeChild && !activeChild.killed) {
+            activeChild.kill('SIGKILL');
+          }
+        }, ABORT_KILL_GRACE_MS);
+      }
+    }
+
+    if (signal.aborted) {
+      settleReject(new EncodeCancelledError());
+      return;
+    }
+
+    signal.addEventListener('abort', abortHandler);
 
     const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
     activeChild = child;
@@ -162,6 +204,11 @@ export function runFfmpeg(
     });
 
     async function handleFfmpegClose(code: number | null) {
+      if (cancelled) {
+        settleReject(new EncodeCancelledError());
+        return;
+      }
+
       if (code !== 0) {
         // stderr is a param, not part of the sentence — this tail is what
         // reaches encodeFailed's errorParams, kept exactly as before.
@@ -214,6 +261,11 @@ export function runFfmpeg(
         return;
       }
 
+      if (cancelled) {
+        settleReject(new EncodeCancelledError());
+        return;
+      }
+
       const merge = spawn('mkvmerge', ['-o', partPath, workingPath]);
       activeChild = merge;
 
@@ -231,6 +283,11 @@ export function runFfmpeg(
     }
 
     async function handleMergeClose(mergeCode: number | null, mergeStderr: string) {
+      if (cancelled) {
+        settleReject(new EncodeCancelledError());
+        return;
+      }
+
       if (mergeCode !== 0) {
         const params = { code: mergeCode ?? 0, stderr: mergeStderr.trim().slice(-500) };
         settleReject(

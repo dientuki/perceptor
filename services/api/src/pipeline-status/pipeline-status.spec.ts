@@ -1,4 +1,4 @@
-import { deriveSourceStatus, deriveTitleStatus } from './pipeline-status';
+import { deriveSourceStatus, deriveTitleStatus, toMediaStatus, PIPELINE_STATUSES } from './pipeline-status';
 
 // The bug class this defends against: four incompatible status vocabularies collapsing into one
 // derivation, wrong. A wrong status here renders as a confident, plausible word on screen — the
@@ -174,4 +174,28 @@ describe('deriveTitleStatus', () => {
 
     expect(result).toBe('COMPLETED');
   });
+});
+
+// 047-source-deletion REQ-12: the eight-value vocabulary written back into the
+// five-value MediaStatus column after a delete recomputes a title's status. A
+// value this collapse gets wrong either rejects the Prisma write outright (a
+// PipelineStatus with no matching MediaStatus member) or writes a value no
+// consumer of the five-value column understands.
+describe('toMediaStatus', () => {
+  const expected: Record<(typeof PIPELINE_STATUSES)[number], string> = {
+    MISSING: 'MISSING',
+    QUEUED: 'DOWNLOADING',
+    PAUSED: 'DOWNLOADING',
+    DOWNLOADING: 'DOWNLOADING',
+    DOWNLOADED: 'DOWNLOADING',
+    ENCODING: 'ENCODING',
+    COMPLETED: 'COMPLETED',
+    ERROR: 'ERROR',
+  };
+
+  for (const status of PIPELINE_STATUSES) {
+    it(`collapses ${status} to ${expected[status]}`, () => {
+      expect(toMediaStatus(status)).toBe(expected[status]);
+    });
+  }
 });

@@ -369,7 +369,9 @@
     },
     "deleteModal": {
       "title": "Eliminar descarga",
-      "message": "¿Estás seguro de que querés eliminar <b>{target}</b>? El torrent y sus archivos se van a eliminar permanentemente.",
+      "messageTorrent": "¿Estás seguro de que querés eliminar <b>{target}</b>? El torrent y sus archivos se van a eliminar permanentemente.",
+      "messageUpload": "¿Estás seguro de que querés eliminar <b>{target}</b>? El archivo que subiste se va a eliminar permanentemente.",
+      "encodingWarning": "La compresión en curso se va a detener.",
       "confirm": "Eliminar",
       "cancel": "Cancelar",
       "deleting": "Eliminando..."

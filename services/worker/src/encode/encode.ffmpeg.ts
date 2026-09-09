@@ -24,7 +24,7 @@ function toPartPath(output: string): string {
 // los streams del archivo y los datos de la media, corre ffmpeg + mkvmerge.
 // Sin escrituras a la base ni llamadas GraphQL acá — eso lo hace
 // jobs/encode.job.ts con lo que este driver devuelve.
-export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress, onProbe) => {
+export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress, onProbe, signal) => {
   const workingPath = toWorkingPath(input);
   const partPath = toPartPath(output);
 
@@ -45,7 +45,15 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress,
   const durationSeconds = sampleSeconds ? Number(sampleSeconds) : Number(metadata.format?.duration ?? 0);
 
   const args = buildFfmpegCommand(input, workingPath, metadata, details);
-  const ffmpegCommand = await runFfmpeg(args, workingPath, partPath, output, durationSeconds, onProgress);
+  const ffmpegCommand = await runFfmpeg(
+    args,
+    workingPath,
+    partPath,
+    output,
+    durationSeconds,
+    onProgress,
+    signal,
+  );
 
   return { ffmpegCommand };
 };

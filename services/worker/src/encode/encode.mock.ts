@@ -1,6 +1,7 @@
 import { mkdir, copyFile, chmod, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { EncodeFn } from './types';
+import { EncodeCancelledError } from './cancellation';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -23,7 +24,11 @@ const STEPS = 10;
 // resto del pipeline (mover a la biblioteca, borrar el torrent, avisar al
 // media server) contra datos de verdad. Se elige con ENCODE_DRIVER=mock
 // (default) en src/encode/index.ts.
-export const encodeMock: EncodeFn = async (input, output, _details, onProgress, _onProbe) => {
+export const encodeMock: EncodeFn = async (input, output, _details, onProgress, _onProbe, signal) => {
+  if (signal.aborted) {
+    throw new EncodeCancelledError();
+  }
+
   const workingPath = toWorkingPath(output);
   await mkdir(dirname(output), { recursive: true });
   await copyFile(input, workingPath);
@@ -38,6 +43,9 @@ export const encodeMock: EncodeFn = async (input, output, _details, onProgress, 
   const totalMs = Number(process.env.ENCODE_MOCK_SECONDS ?? 5) * 1000;
   for (let step = 1; step <= STEPS; step++) {
     await sleep(totalMs / STEPS);
+    if (signal.aborted) {
+      throw new EncodeCancelledError();
+    }
     // await, no fire-and-forget: serializa los reportes de progreso para que
     // ninguno pueda seguir en vuelo cuando el caller dispare encodeCompleted
     // (ver comentario en encode.job.ts sobre el error 1020 de MariaDB).

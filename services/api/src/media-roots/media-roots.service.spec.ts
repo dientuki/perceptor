@@ -215,4 +215,59 @@ describe('MediaRootsService', () => {
   it('corre en un filesystem POSIX', () => {
     expect(sep).toBe('/');
   });
+
+  // 047-source-deletion: isInsideRoot is the check that guards a recursive rm
+  // against a MediaSource.downloadPath the api itself no longer trusts. Wrong
+  // in either direction is a real bug — true-when-outside deletes something
+  // outside the downloads root, false-when-inside leaves every delete on disk
+  // forever — so it gets the same real-mkdtemp, real-symlink treatment as
+  // resolveFromRoot above rather than mocks.
+  describe('isInsideRoot', () => {
+    it('true for a path that resolves inside the root', async () => {
+      expect(await service.isInsideRoot('library', join(libraryRoot, 'Movies'))).toBe(true);
+    });
+
+    it('true for the root itself', async () => {
+      expect(await service.isInsideRoot('library', libraryRoot)).toBe(true);
+    });
+
+    it('false for a symlinked segment inside the root that points outside it', async () => {
+      expect(await service.isInsideRoot('library', join(libraryRoot, 'Escape'))).toBe(false);
+    });
+
+    it('false for a symlinked segment pointing to a sibling with a shared string prefix', async () => {
+      expect(await service.isInsideRoot('library', join(libraryRoot, 'EscapeSibling'))).toBe(false);
+    });
+
+    it('false for a path genuinely outside the root', async () => {
+      expect(await service.isInsideRoot('library', outsideDir)).toBe(false);
+    });
+
+    it('false for a relative path', async () => {
+      expect(await service.isInsideRoot('library', 'Movies')).toBe(false);
+    });
+
+    it('false for a NUL-bearing path', async () => {
+      expect(await service.isInsideRoot('library', join(libraryRoot, 'Movies\0evil'))).toBe(false);
+    });
+
+    it('false for a non-string path', async () => {
+      expect(await service.isInsideRoot('library', undefined as unknown as string)).toBe(false);
+    });
+
+    it('false for an unknown root, never throws', async () => {
+      expect(await service.isInsideRoot('nope', '/whatever')).toBe(false);
+    });
+
+    it('false when the root is not mounted', async () => {
+      const missingRoots: MediaRootConfig[] = [
+        { id: 'library', label: 'Biblioteca', hostPath: '/host/library', containerPath: join(baseDir, 'no-existe') },
+      ];
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [MediaRootsService, { provide: MEDIA_ROOTS, useValue: missingRoots }],
+      }).compile();
+      const s = module.get<MediaRootsService>(MediaRootsService);
+      expect(await s.isInsideRoot('library', '/no-existe/x')).toBe(false);
+    });
+  });
 });

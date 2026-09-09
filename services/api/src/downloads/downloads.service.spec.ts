@@ -1,9 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { rm, rmdir } from 'node:fs/promises';
 import { DownloadsService } from './downloads.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
+import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { SettingsService } from '@/settings/settings.service';
+import { MediaRootsService } from '@/media-roots/media-roots.service';
+
+jest.mock('node:fs/promises', () => ({
+  rm: jest.fn().mockResolvedValue(undefined),
+  rmdir: jest.fn().mockResolvedValue(undefined),
+}));
 
 // This suite exists because two failure classes here produce no error
 // anywhere (spec.md NFR-5 (a)/(b)):
@@ -31,16 +39,19 @@ describe('DownloadsService', () => {
       findMany: jest.Mock;
       update: jest.Mock;
       updateMany: jest.Mock;
+      delete: jest.Mock;
     };
     movie: { update: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock };
-    episode: { update: jest.Mock };
+    episode: { update: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
     processJob: { findMany: jest.Mock };
     setting: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
-  let queue: { addSourceReady: jest.Mock };
-  let qbittorrent: { stop: jest.Mock; start: jest.Mock; info: jest.Mock };
+  let queue: { addSourceReady: jest.Mock; removeSourceReady: jest.Mock };
+  let encodeQueue: { publishCancel: jest.Mock; removeEncode: jest.Mock };
+  let qbittorrent: { stop: jest.Mock; start: jest.Mock; info: jest.Mock; remove: jest.Mock };
   let settings: { getMap: jest.Mock };
+  let mediaRoots: { resolveFromRoot: jest.Mock; isInsideRoot: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -49,28 +60,40 @@ describe('DownloadsService', () => {
         findMany: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        delete: jest.fn(),
       },
       movie: { update: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
-      episode: { update: jest.fn() },
+      episode: { update: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
       processJob: { findMany: jest.fn().mockResolvedValue([]) },
       setting: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (cb: (tx: unknown) => Promise<void>) => cb(prisma)),
     };
-    queue = { addSourceReady: jest.fn() };
+    queue = { addSourceReady: jest.fn(), removeSourceReady: jest.fn() };
+    encodeQueue = { publishCancel: jest.fn(), removeEncode: jest.fn() };
     qbittorrent = {
       stop: jest.fn().mockResolvedValue(undefined),
       start: jest.fn().mockResolvedValue(undefined),
       info: jest.fn().mockResolvedValue([]),
+      remove: jest.fn().mockResolvedValue(undefined),
     };
     settings = { getMap: jest.fn().mockResolvedValue({}) };
+    mediaRoots = {
+      resolveFromRoot: jest.fn().mockResolvedValue('/media/downloads'),
+      isInsideRoot: jest.fn().mockResolvedValue(true),
+    };
+
+    (rm as jest.Mock).mockClear().mockResolvedValue(undefined);
+    (rmdir as jest.Mock).mockClear().mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DownloadsService,
         { provide: PrismaService, useValue: prisma },
         { provide: ProcessQueueService, useValue: queue },
+        { provide: EncodeQueueService, useValue: encodeQueue },
         { provide: QbittorrentClient, useValue: qbittorrent },
         { provide: SettingsService, useValue: settings },
+        { provide: MediaRootsService, useValue: mediaRoots },
       ],
     }).compile();
 
@@ -373,6 +396,141 @@ describe('DownloadsService', () => {
       expect(first!.encodeProgress).toBe(100);
       expect(second!.status).toBe('ENCODING');
       expect(second!.encodeProgress).toBe(30);
+    });
+  });
+
+  // 047-source-deletion: this suite exists because a wrong step order here
+  // reports `true` while leaving real work behind — a torrent still
+  // downloading in qBittorrent, an encode still running in the worker, or a
+  // folder still on disk — with no error anywhere to say so (../plan.md §
+  // Risks). Every case below is a fault-injection case: reordering the
+  // steps in `downloadDelete` (per `api/plan.md` § Steps 6) makes at least
+  // one of them fail.
+  describe('downloadDelete — deletion orchestration', () => {
+    function ownedTorrentSource(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 1,
+        kind: 'TORRENT_SEARCH',
+        status: 'DOWNLOADING',
+        infoHash: 'hash-1',
+        releaseTitle: null,
+        downloadPath: '/media/downloads/abc123',
+        movieId: 7,
+        seasonId: null,
+        episodeId: null,
+        movie: { id: 7, users: [{ userId: 'user-1' }] },
+        episode: null,
+        season: null,
+        ...overrides,
+      };
+    }
+
+    beforeEach(() => {
+      prisma.movie.findUnique.mockResolvedValue({ filePath: null, mediaSources: [], processJobs: [] });
+    });
+
+    it('accepts an upload with no infoHash instead of refusing it (REQ-1)', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(
+        ownedTorrentSource({ infoHash: null, downloadPath: null, kind: 'LOCAL_FILE' }),
+      );
+
+      const result = await service.downloadDelete(1, 'user-1');
+
+      expect(result).toBe(true);
+      expect(qbittorrent.remove).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+    });
+
+    it('calls the torrent client before any Prisma delete or any disk removal, and a rejection leaves everything untouched', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(ownedTorrentSource());
+      prisma.processJob.findMany.mockResolvedValue([{ id: 101 }]);
+      qbittorrent.remove.mockRejectedValue(new Error('qBittorrent unreachable'));
+
+      await expect(service.downloadDelete(1, 'user-1')).rejects.toThrow();
+
+      expect(prisma.mediaSource.delete).not.toHaveBeenCalled();
+      expect(rm).not.toHaveBeenCalled();
+      expect(rmdir).not.toHaveBeenCalled();
+      expect(encodeQueue.publishCancel).not.toHaveBeenCalled();
+      expect(encodeQueue.removeEncode).not.toHaveBeenCalled();
+      expect(queue.removeSourceReady).not.toHaveBeenCalled();
+    });
+
+    it('runs every step in order: torrent client, then queue withdrawal, then disk, then the row', async () => {
+      const order: string[] = [];
+      prisma.mediaSource.findUnique.mockResolvedValue(ownedTorrentSource());
+      prisma.processJob.findMany.mockResolvedValue([{ id: 101 }]);
+      qbittorrent.remove.mockImplementation(async () => {
+        order.push('torrent-client');
+      });
+      encodeQueue.publishCancel.mockImplementation(async () => {
+        order.push('publish-cancel');
+      });
+      encodeQueue.removeEncode.mockImplementation(async () => {
+        order.push('remove-encode');
+      });
+      queue.removeSourceReady.mockImplementation(async () => {
+        order.push('remove-source-ready');
+      });
+      (rm as jest.Mock).mockImplementation(async () => {
+        order.push('rm');
+      });
+      prisma.mediaSource.delete.mockImplementation(async () => {
+        order.push('db-delete');
+        return {};
+      });
+
+      await service.downloadDelete(1, 'user-1');
+
+      expect(order).toEqual([
+        'torrent-client',
+        'publish-cancel',
+        'remove-encode',
+        'remove-source-ready',
+        'rm',
+        'db-delete',
+      ]);
+    });
+
+    it('cancels and withdraws exactly one entry per ProcessJob of this source, none belonging to another source', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(ownedTorrentSource());
+      prisma.processJob.findMany.mockResolvedValue([{ id: 101 }, { id: 102 }, { id: 103 }]);
+
+      await service.downloadDelete(1, 'user-1');
+
+      expect(prisma.processJob.findMany).toHaveBeenCalledWith({
+        where: { sourceFile: { mediaSourceId: 1 } },
+        select: { id: true },
+      });
+      expect(encodeQueue.publishCancel).toHaveBeenCalledTimes(3);
+      expect(encodeQueue.removeEncode).toHaveBeenCalledTimes(3);
+      for (const id of [101, 102, 103]) {
+        expect(encodeQueue.publishCancel).toHaveBeenCalledWith(id);
+        expect(encodeQueue.removeEncode).toHaveBeenCalledWith(id);
+      }
+      expect(encodeQueue.publishCancel).not.toHaveBeenCalledWith(999);
+      expect(encodeQueue.removeEncode).not.toHaveBeenCalledWith(999);
+    });
+
+    it('withdraws the process-ready entry exactly once', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(ownedTorrentSource());
+
+      await service.downloadDelete(1, 'user-1');
+
+      expect(queue.removeSourceReady).toHaveBeenCalledTimes(1);
+      expect(queue.removeSourceReady).toHaveBeenCalledWith(1);
+    });
+
+    it('deletes nothing on disk for a downloadPath outside the downloads root, but still deletes the row (AC-10)', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(ownedTorrentSource({ downloadPath: '/etc' }));
+      mediaRoots.isInsideRoot.mockResolvedValue(false);
+
+      const result = await service.downloadDelete(1, 'user-1');
+
+      expect(result).toBe(true);
+      expect(rm).not.toHaveBeenCalled();
+      expect(rmdir).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 1 } });
     });
   });
 });

@@ -1001,6 +1001,54 @@ Consumer obligations:
   deleteFiles: false)` for the winner with an unchanged signature and receives an unchanged
   `omitido: …` shape; it does not see the sweep happening beside its own call.
 
+### `downloadDelete` accepts every source and cancels what it can (`047-source-deletion`)
+
+The SDL is unchanged:
+
+```graphql
+type Mutation {
+  downloadDelete(mediaSourceId: Int!): Boolean!
+}
+```
+
+What changed is which sources it accepts and which errors it can raise, not its shape.
+
+**`error.download.not_a_torrent` is no longer reachable from `downloadDelete`.** Before this
+feature, `downloadDelete` called the same `requireTorrent` guard as `downloadStart`/`downloadStop`,
+so an uploaded file (`infoHash: null`) could not be deleted at all — the exact gap `web`'s panel
+worked around by hiding the button for that row. `requireTorrent` is now only called by
+`downloadStart`/`downloadStop`, which remain torrent-only and still raise the key; it stays in
+`error-keys.ts`/`messages.en.ts` for that reason. `downloadDelete` now accepts any `MediaSource` the
+caller owns, torrent or upload, and only two errors can leave it:
+
+| Condition | Error | Message |
+| :-- | :-- | :-- |
+| `mediaSourceId` missing, or owned by another user | `error.source.not_found` | `El medio {id} no existe` |
+| The torrent client rejects the delete, or is unreachable | `error.download.torrent_client_rejected` | `El cliente de torrents rechazó la solicitud ({status})` |
+
+**One delete now unwinds the whole pipeline, not just the torrent and the row.** In order:
+`callTorrentClient` (only if `infoHash` is set — the sole step that can fail the mutation, per
+`022-download-status-tags` NFR-6, so nothing is removed from disk or the database if it fails); a
+Redis pub/sub cancellation published per `ProcessJob` of the source (below); every queue entry
+withdrawn (`process`'s `media-source-<id>`, `encode`'s `job-<id>` for each job); the source's
+downloads-side residue deleted from disk, confined to the downloads root
+(`MediaRootsService.isInsideRoot`); the row deleted (Prisma cascades take `SourceFile`/`ProcessJob`
+with it); the target's status recomputed from what remains, never walking a title with a `filePath`
+already set (an already-completed source) backwards. **The library is never touched** — this is now
+Article XII of the constitution, not just this feature's scope note.
+
+**`web`'s controllability split.** `infoHash != null` remains the test for Play/Stop (unchanged from
+`022-download-status-tags`); the delete button no longer sits behind that gate and renders for every
+row, with kind-dependent confirmation copy (`messages.deleteModal.messageTorrent` /
+`.messageUpload`) and an `encodingWarning` line when `status === "ENCODING"`.
+
+Consumer obligations:
+
+- **`web`**: no signature change to retype. `deleteDownloadAction` now gets called for rows with no
+  `infoHash`; the confirmation modal branches on `infoHash != null`, the same test as the row
+  buttons, never on `kind`.
+- **`worker`**: subscribes to the cancellation channel below; no GraphQL obligation.
+
 ### Compression becomes optional (`032-optional-compression`)
 
 ```graphql
@@ -1243,6 +1291,25 @@ GraphQL schema. Both ends declare it, and both files say so in their opening com
 
 They must be changed together. Nothing enforces it. A feature touching the queue declares that
 payload in its `spec.md` the same way it declares the GraphQL delta.
+
+**A second such contract, added by `047-source-deletion`: `encode:cancel`.** Unlike the BullMQ
+payload this one is a Redis pub/sub channel, not a queue — a cancellation is only meaningful to a
+worker running that job *right now* and must never be persisted for one to pick up later.
+
+```
+channel: encode:cancel
+message: {"processJobId": <Int>}   // JSON, one job per message
+```
+
+`api`'s `EncodeQueueService.publishCancel` publishes once per `ProcessJob` when its source is
+deleted; `worker`'s `src/index.ts` subscribes for the process's lifetime and calls
+`cancelEncode(processJobId)` (`src/encode/cancellation.ts`), which aborts the `AbortSignal` threaded
+through the `EncodeFn` driver seam (`services/worker/src/encode/types.ts`) the same way `onProbe`
+was added by `023-ffprobe-log` — a required parameter, so a driver that forgets it fails to compile
+rather than silently never cancelling. There is no ack channel: the api does not wait, and a message
+for a `processJobId` the worker is not currently encoding is a logged no-op. Declared in both
+`services/api/src/queue/types.ts` and `services/worker/src/queue/types.ts`, same hand-sync
+obligation as the queue payload above.
 
 ### What never crosses the boundary
 

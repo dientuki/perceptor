@@ -116,37 +116,39 @@ function DownloadRow({ download, onDeleteRequest }: DownloadRowProps) {
         {formatSpeed(download.downloadSpeed)}
       </td>
       <td className="px-4 py-3">
-        {isControllable && (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              title={t("startTitle")}
-              disabled={isPending}
-              onClick={handleStart}
-            >
-              <Play size={16} />
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              title={t("stopTitle")}
-              disabled={isPending}
-              onClick={handleStop}
-            >
-              <Square size={16} />
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              title={t("deleteTitle")}
-              disabled={isPending}
-              onClick={() => onDeleteRequest(download)}
-            >
-              <Trash2 size={16} className="text-error-500" />
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {isControllable && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                title={t("startTitle")}
+                disabled={isPending}
+                onClick={handleStart}
+              >
+                <Play size={16} />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                title={t("stopTitle")}
+                disabled={isPending}
+                onClick={handleStop}
+              >
+                <Square size={16} />
+              </Button>
+            </>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            title={t("deleteTitle")}
+            disabled={isPending}
+            onClick={() => onDeleteRequest(download)}
+          >
+            <Trash2 size={16} className="text-error-500" />
+          </Button>
+        </div>
       </td>
     </tr>
   );

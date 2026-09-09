@@ -54,6 +54,41 @@ export class MediaRootsService {
     return join(root.hostPath, relative(root.containerPath, containerAbsolutePath));
   }
 
+  // Containment check for a path the api itself already computed and stored (a
+  // MediaSource.downloadPath), not one typed by a user — hence returning false
+  // rather than throwing for every failure mode (047-source-deletion REQ-10): the
+  // caller's job is to log and skip the delete, not to blow up the mutation. Reuses
+  // the same realpath-of-deepest-existing-ancestor check resolveFromRoot ends with,
+  // because a plain prefix/".." guard alone does not catch a symlinked segment.
+  async isInsideRoot(rootId: string, absolutePath: string): Promise<boolean> {
+    let root: MediaRootConfig;
+    try {
+      root = this.getRootConfig(rootId);
+    } catch {
+      return false;
+    }
+
+    if (!existsSync(root.containerPath)) {
+      return false;
+    }
+
+    if (typeof absolutePath !== 'string' || absolutePath.includes('\0')) {
+      return false;
+    }
+
+    if (!isAbsolute(absolutePath)) {
+      return false;
+    }
+
+    try {
+      const realRoot = await realpath(root.containerPath);
+      const realAncestor = await this.realpathOfDeepestExisting(absolutePath);
+      return realAncestor === realRoot || realAncestor.startsWith(realRoot + sep);
+    } catch {
+      return false;
+    }
+  }
+
   private getRootConfig(rootId: string): MediaRootConfig {
     const root = this.roots.find((r) => r.id === rootId);
     if (!root) {

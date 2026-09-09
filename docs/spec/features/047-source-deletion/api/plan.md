@@ -1,8 +1,8 @@
 ---
 title: Source deletion — api slice
 service: api
-last_updated: 2026-09-05
-status: Approved
+last_updated: 2026-09-08
+status: Implemented
 ---
 
 # PLAN: Source deletion — `api` (`api/plan.md`)

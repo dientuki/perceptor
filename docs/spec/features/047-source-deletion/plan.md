@@ -1,8 +1,8 @@
 ---
 title: Source deletion — torrent, uploaded file and queued work — Implementation Plan
 spec_version: 0.1.0
-last_updated: 2026-09-05
-status: Approved
+last_updated: 2026-09-08
+status: Implemented
 ---
 
 # PLAN: Source deletion — torrent, uploaded file and queued work (`plan.md`)

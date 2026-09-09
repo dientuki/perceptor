@@ -63,6 +63,22 @@ the mock could not exercise it, so no test could reach it without FFmpeg. It is 
 parameter on purpose: an optional callback a call site forgets to pass compiles clean and records
 nothing forever, with no error anywhere.
 
+Since `047-source-deletion`, `EncodeFn` also takes a required `signal: AbortSignal`, added for the
+same stated reason and wired through all three implementations (`encode.ffmpeg.ts` forwards it to
+`runFfmpeg`; `encode.mock.ts` checks it between its steps; `passthrough.ts` checks it before the
+move and after the `EXDEV` copy fallback, removing a partial copy on abort). Each throws
+`EncodeCancelledError` (`src/encode/cancellation.ts`) when aborted — deliberately **not** a
+`KeyedError`, since it must never reach a user or acquire a translation key; its whole purpose is to
+be recognised and rethrown, unreported, before any GraphQL call happens. `jobs/encode.job.ts` calls
+`registerEncode(processJobId)` before the encode and `releaseEncode` in a `finally`; `src/index.ts`
+opens one ioredis subscriber on the `encode:cancel` channel (declared in `src/queue/types.ts`,
+hand-synced from `services/api/src/queue/types.ts` the same way the BullMQ payload is) for the
+process's lifetime, calling `cancelEncode(processJobId)` on each message. `ffmpeg/runner.ts` reuses
+its existing `activeChild` (already pointed at whichever of FFmpeg/mkvmerge is running) and
+`cleanupTemps()` (already removing both `<input>.working.mkv` and `<final>.part.mkv`) — an `abort`
+listener kills `activeChild` with `SIGTERM`, then `SIGKILL` after a 10s grace, and the rejection that
+follows is `EncodeCancelledError` rather than the usual ffmpeg/mkvmerge `KeyedError`.
+
 `EncodeInput` in `encode/types.ts` is a deliberate *subset* of `EncodeJobDetails`
 (`jobs/encode.job.ts`), retyped locally rather than imported, so the driver isn't coupled to the
 full shape of the GraphQL query. `paths/build-output-path.ts` does the same with `OutputPathInput`.
@@ -188,6 +204,13 @@ audio and subtitles, the regional-Spanish vocabulary, and the table of track tit
 output. A rule change goes there and arrives with the case that proves it.
 
 ## Post-encode cleanup, and where deleting a source lives (`012-post-download-processing`)
+
+`src/jobs/cleanup-source.ts` remains the **post-success** path only: it runs after a source's own
+encode finished and `api`'s `encodeCompleted` verdict says what to remove. It has no role in a
+user-initiated delete — since `047-source-deletion`, `downloadDelete` on the api unwinds a source
+mid-pipeline itself (queue withdrawal, encode cancellation, on-disk residue, the row), duplicating
+this file's `rm`/`rmdir` logic across a service boundary that has no shared package, the same
+accepted duplication as `src/queue/types.ts`. The two paths never call into each other.
 
 `src/jobs/cleanup-source.ts`'s `cleanupSource(input)` is called from `encode.job.ts` **after** the
 encode's own `try/catch` has closed — not from inside it — wrapped in a second `try` whose `catch`

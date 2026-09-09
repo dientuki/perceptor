@@ -71,15 +71,24 @@ export default function DeleteDownloadModal({
           {error && <p className={ERROR_CLASS}>{error}</p>}
 
           <p className="text-gray-600 dark:text-gray-300">
-            {t.rich("message", {
-              target: download.label,
-              b: (chunks) => (
-                <span className="font-medium text-gray-800 dark:text-white">
-                  {chunks}
-                </span>
-              ),
-            })}
+            {t.rich(
+              download.infoHash != null ? "messageTorrent" : "messageUpload",
+              {
+                target: download.label,
+                b: (chunks) => (
+                  <span className="font-medium text-gray-800 dark:text-white">
+                    {chunks}
+                  </span>
+                ),
+              },
+            )}
           </p>
+
+          {download.status === "ENCODING" && (
+            <p className="text-gray-600 dark:text-gray-300">
+              {t("encodingWarning")}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
           <Button size="sm" variant="outline" onClick={onClose} type="button">

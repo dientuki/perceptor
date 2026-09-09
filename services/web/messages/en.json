@@ -369,7 +369,9 @@
     },
     "deleteModal": {
       "title": "Delete download",
-      "message": "Are you sure you want to delete <b>{target}</b>? The torrent and its files will be permanently removed.",
+      "messageTorrent": "Are you sure you want to delete <b>{target}</b>? The torrent and its files will be permanently removed.",
+      "messageUpload": "Are you sure you want to delete <b>{target}</b>? The file you uploaded will be permanently removed.",
+      "encodingWarning": "The encode in progress will be stopped.",
       "confirm": "Delete",
       "cancel": "Cancel",
       "deleting": "Deleting..."

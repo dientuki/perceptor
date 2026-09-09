@@ -3,8 +3,8 @@ title: Source deletion — torrent, uploaded file and queued work
 spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-05
-last_updated: 2026-09-05
-status: Approved
+last_updated: 2026-09-08
+status: Implemented
 services: [api, web, worker]
 ---
 
@@ -43,54 +43,54 @@ and `web` offers the button on every row instead of torrents only. Nothing about
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (One delete for every source)**: `downloadDelete` must accept any `MediaSource` the
+- [x] **REQ-1 (One delete for every source)**: `downloadDelete` must accept any `MediaSource` the
       caller owns, whether it came from a torrent or from a tus upload. `DOWNLOAD_NOT_A_TORRENT`
       must no longer be raised by this mutation; it stays on `downloadStart`/`downloadStop`, which
       remain torrent-only.
-- [ ] **REQ-2 (Torrent removed whatever its state)**: when the source carries an `infoHash`, the
+- [x] **REQ-2 (Torrent removed whatever its state)**: when the source carries an `infoHash`, the
       torrent must be removed from the torrent client with its files — downloading, queued,
       paused/stopped, seeding after completion, or already unknown to the client. A hash the
       client no longer knows must not abort the rest of the deletion.
-- [ ] **REQ-3 (Queued work withdrawn)**: every queue entry that belongs to the source must be
+- [x] **REQ-3 (Queued work withdrawn)**: every queue entry that belongs to the source must be
       removed before its row is deleted — the `process` queue's `media-source-<mediaSourceId>`
       entry and the `encode` queue's `job-<processJobId>` entry for each of the source's
       `ProcessJob` rows — in whatever state the entry is (waiting, delayed, prioritized, failed).
       A source with several `ProcessJob`s (a season pack fan-out) must have all of them withdrawn,
       not just the first.
-- [ ] **REQ-4 (Running encode cancelled)**: if any `ProcessJob` of the source is being transcoded
+- [x] **REQ-4 (Running encode cancelled)**: if any `ProcessJob` of the source is being transcoded
       when the delete arrives, the api must ask the worker to abandon it, and the worker must
       terminate the process it currently has running — FFmpeg, or `mkvmerge` if the encode already
       moved on to the remux — rather than letting it run to completion.
-- [ ] **REQ-5 (Both temporaries removed)**: after a cancelled encode, neither temporary survives:
+- [x] **REQ-5 (Both temporaries removed)**: after a cancelled encode, neither temporary survives:
       the `<input>.working.mkv` beside the source file, nor the `<final>.part.mkv` at the
       destination. The `.part.mkv` is the worker's own scratch file, not a library file, and is the
       single thing this feature removes from under the destinations root (see REQ-13).
-- [ ] **REQ-6 (A cancelled encode reports nothing)**: a job abandoned because its source was
+- [x] **REQ-6 (A cancelled encode reports nothing)**: a job abandoned because its source was
       deleted must not report `encodeCompleted` or `encodeFailed`. Deletion is the outcome — there
       is no row left to record a result on, and an `ERROR` the user did not cause must not appear
       anywhere.
-- [ ] **REQ-7 (A late report is inert)**: if an outcome report still reaches the api for a
+- [x] **REQ-7 (A late report is inert)**: if an outcome report still reaches the api for a
       `ProcessJob` that no longer exists, the api must reject it plainly, the worker must not
       retry it, and nothing must be created, resurrected or notified as a result.
-- [ ] **REQ-8 (Torrent isolation folder removed)**: the per-torrent folder recorded in
+- [x] **REQ-8 (Torrent isolation folder removed)**: the per-torrent folder recorded in
       `MediaSource.downloadPath` must be gone from disk after the delete, together with anything
       left inside it — the client's own residue, a partially written `.working.mkv`, an
       `incomplete` subdirectory.
-- [ ] **REQ-9 (Uploaded file and its folder removed)**: for a `LOCAL_FILE` source, both the
+- [x] **REQ-9 (Uploaded file and its folder removed)**: for a `LOCAL_FILE` source, both the
       uploaded file and the `imports/<uploadId>` directory it was staged into must be gone.
-- [ ] **REQ-10 (Deletion is confined to the downloads root)**: no path outside the downloads root
+- [x] **REQ-10 (Deletion is confined to the downloads root)**: no path outside the downloads root
       may ever be deleted. A `downloadPath` that does not resolve inside it must be left untouched
       and logged; the rest of the deletion still proceeds.
-- [ ] **REQ-11 (Row and its dependents removed)**: the `MediaSource` row and everything that
+- [x] **REQ-11 (Row and its dependents removed)**: the `MediaSource` row and everything that
       cascades from it — `SourceFile`, `ProcessJob` — must be gone once the mutation answers.
-- [ ] **REQ-12 (Title status recomputed)**: after the deletion the target's status must reflect
+- [x] **REQ-12 (Title status recomputed)**: after the deletion the target's status must reflect
       the sources that remain. With no source left, the movie/episode returns to `MISSING` and can
       be requested again; with sources left, it reads as the most advanced of them.
-- [ ] **REQ-13 (The library is never touched)**: a transcoded file already delivered under the
+- [x] **REQ-13 (The library is never touched)**: a transcoded file already delivered under the
       destinations root is never deleted by this feature, whatever the state of the source that
       produced it. Deleting a source that already finished removes its row and its downloads-side
       residue and nothing else.
-- [ ] **REQ-14 (Delete offered on every row)**: `web`'s downloads panel must offer the delete
+- [x] **REQ-14 (Delete offered on every row)**: `web`'s downloads panel must offer the delete
       button for an uploaded file as well as a torrent; start and stop stay torrent-only. The
       confirmation copy must say what will actually be removed for that kind of source — a torrent
       and its files, or the uploaded file — and must say when an encode in progress will be
@@ -98,24 +98,24 @@ and `web` offers the button on every row instead of torrents only. Nothing about
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (Cancellation is one-way and idempotent)**: the api does not wait for the worker to
+- [x] **NFR-1 (Cancellation is one-way and idempotent)**: the api does not wait for the worker to
       acknowledge a cancellation, and correctness does not depend on the two happening in a
       particular order. A cancellation for a job that is not running — already finished, never
       started, running on a worker that has since restarted — is a no-op, and a repeated
       cancellation for the same job is the same no-op.
-- [ ] **NFR-2 (A torrent-client failure fails the whole delete)**: if the torrent client rejects
+- [x] **NFR-2 (A torrent-client failure fails the whole delete)**: if the torrent client rejects
       or is unreachable, the mutation must fail with `TORRENT_CLIENT_REJECTED` before anything is
       removed from disk or from the database, so a retry finds the same state it started from.
       This is the existing `callTorrentClient` contract (`022-download-status-tags` NFR-6) and it
       is preserved.
-- [ ] **NFR-3 (No new status vocabulary)**: cancellation introduces no `CANCELLED` value in
+- [x] **NFR-3 (No new status vocabulary)**: cancellation introduces no `CANCELLED` value in
       `SourceStatus`, `EncodeStatus` or `MediaStatus`, and no new pipeline status. A cancelled job
       is a deleted job; consumers that retyped the eight-value vocabulary of
       `043-pipeline-status-normalization` are unaffected.
-- [ ] **NFR-4 (A delete racing a scan enqueues nothing)**: a deletion that lands while the worker
+- [x] **NFR-4 (A delete racing a scan enqueues nothing)**: a deletion that lands while the worker
       is mid-scan of that source must not leave enqueued encode work behind. The scan's
       `sourceScanned` report finds no source, fails, and enqueues nothing.
-- [ ] **NFR-5 (Ownership unchanged)**: the mutation resolves through the same ownership clause it
+- [x] **NFR-5 (Ownership unchanged)**: the mutation resolves through the same ownership clause it
       uses today. A source belonging to a title the caller does not own answers exactly as a
       source that does not exist.
 
@@ -170,47 +170,47 @@ removed through relations that already cascade (`SourceFile.mediaSourceId`,
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a torrent in `DOWNLOADING`, when the user deletes it from the movie detail
+- [x] **AC-1**: Given a torrent in `DOWNLOADING`, when the user deletes it from the movie detail
       panel, then the torrent is gone from qBittorrent's list, `bin/cli torrent ls
       <downloads>/<folder>` reports no such directory, and `bin/mysql -e 'select id from
       media_sources where id = <id>'` returns no rows.
-- [ ] **AC-2**: Given that same movie had no other source, when the delete finishes, then
+- [x] **AC-2**: Given that same movie had no other source, when the delete finishes, then
       `bin/mysql -e 'select status from movies where id = <id>'` returns `MISSING` and the movie
       page offers the search-a-release action again.
-- [ ] **AC-3**: Given a torrent that finished downloading while the worker container is stopped
+- [x] **AC-3**: Given a torrent that finished downloading while the worker container is stopped
       (`docker compose stop worker`), when the user deletes it, then `bin/cli redis redis-cli
       EXISTS bull:process:media-source-<id>` returns `0`, and restarting the worker processes
       nothing for that source.
-- [ ] **AC-4**: Given a stopped/paused torrent, when the user deletes it, then the outcome is
+- [x] **AC-4**: Given a stopped/paused torrent, when the user deletes it, then the outcome is
       identical to AC-1 — no residue on disk, no row, no queue entry.
-- [ ] **AC-5**: Given an encode in progress, when the user deletes its source, then within 15
+- [x] **AC-5**: Given an encode in progress, when the user deletes its source, then within 15
       seconds `bin/cli worker ps ax` lists no `ffmpeg` or `mkvmerge` process for that input, no
       `*.working.mkv` remains anywhere under the downloads root, and no `*.part.mkv` remains under
       the destinations root.
-- [ ] **AC-6**: Given the encode cancelled in AC-5, when the worker logs are read
+- [x] **AC-6**: Given the encode cancelled in AC-5, when the worker logs are read
       (`docker compose logs worker`), then no `encodeCompleted` and no `encodeFailed` was sent for
       that job, and no `ProcessJob` row was left in `ERROR` — there is no row at all.
-- [ ] **AC-7**: Given an uploaded file waiting for its turn in the worker, when the user deletes it
+- [x] **AC-7**: Given an uploaded file waiting for its turn in the worker, when the user deletes it
       from the panel, then the `imports/<uploadId>` directory is gone in full and the row is gone.
       (Today the panel offers no button for this row at all — its presence is part of the
       criterion.)
-- [ ] **AC-8**: Given an uploaded file being transcoded, when the user deletes it, then AC-5 and
+- [x] **AC-8**: Given an uploaded file being transcoded, when the user deletes it, then AC-5 and
       AC-7 both hold for it.
-- [ ] **AC-9** *(failure path)*: Given the torrent client stopped (`docker compose stop torrent`),
+- [x] **AC-9** *(failure path)*: Given the torrent client stopped (`docker compose stop torrent`),
       when the user deletes a torrent source, then the panel shows `El cliente de torrents rechazó
       la solicitud (0)`, the row still exists in `media_sources`, the download folder is still on
       disk, and the same delete succeeds once the client is back.
-- [ ] **AC-10** *(failure path)*: Given a `MediaSource` whose `downloadPath` is pointed outside the
+- [x] **AC-10** *(failure path)*: Given a `MediaSource` whose `downloadPath` is pointed outside the
       downloads root by hand (`bin/mysql -e "update media_sources set download_path = '/etc' where
       id = <id>"`), when the user deletes it, then `/etc` is untouched, the api logs the refusal
       naming the path and the root, and the row is still deleted.
-- [ ] **AC-11**: Given a season pack that fanned out into three `ProcessJob`s — one `ENCODING`, two
+- [x] **AC-11**: Given a season pack that fanned out into three `ProcessJob`s — one `ENCODING`, two
       `WAITING` — when the user deletes the source, then `bin/cli redis redis-cli KEYS
       'bull:encode:job-*'` lists none of the three and the running FFmpeg is gone (AC-5).
-- [ ] **AC-12**: Given a source whose encode already completed and whose file is in the library,
+- [x] **AC-12**: Given a source whose encode already completed and whose file is in the library,
       when the user deletes the source, then the file under the destinations root still exists,
       byte-identical, and only the row and any downloads-side residue are gone.
-- [ ] **AC-13**: `bin/npm api test` and `bin/npm worker test` pass, and `bin/npm web run build`
+- [x] **AC-13**: `bin/npm api test` and `bin/npm worker test` pass, and `bin/npm web run build`
       exits 0.
 
 ## Out of Scope

@@ -20,6 +20,17 @@ export class ProcessQueueService implements OnModuleDestroy {
     });
   }
 
+  // Mirror of addSourceReady: same derived id, so withdrawal can never target a
+  // different entry than the one the add put there. A 0 return means there was
+  // nothing to remove (already processed) or the entry is currently active
+  // (BullMQ refuses to remove an active job) — both are normal, never thrown.
+  async removeSourceReady(mediaSourceId: number): Promise<void> {
+    const removed = await this.queue.remove(`media-source-${mediaSourceId}`);
+    if (!removed) {
+      console.log(`ProcessQueueService.removeSourceReady: nothing removed for media-source-${mediaSourceId}`);
+    }
+  }
+
   async onModuleDestroy() {
     await this.queue.close();
   }

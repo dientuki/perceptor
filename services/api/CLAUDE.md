@@ -229,8 +229,16 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `movieDownloads`/`showDownloads` (DB-first, scoped through the same ownership clause
   `movies/`/`shows/` use, written locally rather than imported — deliberate, see
   `010`'s triplication precedent) joined to one `torrents/info?tag=` read per title, and
-  `downloadStart`/`downloadStop`/`downloadDelete`, each refusing a source with no `infoHash` (a
-  `LOCAL_FILE` upload) with `DOWNLOAD_NOT_A_TORRENT` before any client call. `DownloadsService`
+  `downloadStart`/`downloadStop`/`downloadDelete`. `downloadStart`/`downloadStop` still refuse a
+  source with no `infoHash` (a `LOCAL_FILE` upload) with `DOWNLOAD_NOT_A_TORRENT` before any client
+  call. Since `047-source-deletion`, `downloadDelete` no longer does — it accepts any owned source,
+  torrent or upload, and is the orchestrator for the whole unwind: the torrent client (only if
+  `infoHash` is set, the one step that can fail the mutation), a Redis `encode:cancel` publish plus
+  a queue withdrawal per `ProcessJob`, the source's downloads-side residue deleted from disk
+  (confined to the downloads root via `MediaRootsService.isInsideRoot`), the row (Prisma cascades
+  take `SourceFile`/`ProcessJob` with it), then the target's status recomputed from what remains —
+  never walking a title with `filePath` already set backwards. The library itself is never touched
+  (constitution Article XII). `DownloadsService`
   also exposes the shared race arbiter, `resolveRace(mediaSourceId)`: called from
   `torrentCompleted` **and** from `uploads/uploads.service.ts`'s `onUploadFinish` — a tus upload
   competes in the same race as any torrent of its target and never passes through this module any
@@ -528,7 +536,12 @@ the base `es` row (`030-language-regional-variants`); idempotent via `findUnique
 validation, by `QbittorrentClient` to resolve `path_downloads`, and by `ProcessJobsService` to resolve
 `path_movies`/`path_shows` into the worker's `outputRoot`. `MediaRootsService.resolveFromRoot()` is
 the actual traversal/symlink guard — see its doc comments and `media-roots.service.spec.ts` for the
-escape suite it defends against.
+escape suite it defends against. Since `047-source-deletion`, it also answers a plain containment
+question — `isInsideRoot(rootId, absolutePath): Promise<boolean>`, built on the same
+`realpath`-of-deepest-existing-ancestor check — used by `DownloadsService` to gate an on-disk delete
+to the downloads root before it recurses. **Do not use `containerToHostPath` for containment**: it
+returns `null` whenever `hostPath` is relative, the `.env.example` default, which would silently
+refuse every path on a default install.
 
 ## Schema/enum reality check
 

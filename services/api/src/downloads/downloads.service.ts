@@ -1,14 +1,18 @@
 import { Injectable } from '@nestjs/common';
+import { dirname } from 'node:path';
+import { rm, rmdir } from 'node:fs/promises';
 import { EncodeStatus, SourceStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
+import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { TorrentClientInfo } from '@/clients/torrent/types';
 import { SettingsService } from '@/settings/settings.service';
+import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { i18nError } from '@/i18n/i18n-error';
-import { deriveSourceStatus, SourceAltitudeJob } from '@/pipeline-status/pipeline-status';
+import { deriveSourceStatus, deriveTitleStatus, toMediaStatus, SourceAltitudeJob } from '@/pipeline-status/pipeline-status';
 import { Download } from './entities/download.entity';
 
 // REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw.
@@ -38,6 +42,7 @@ type MediaSourceRow = {
   status: SourceStatus;
   infoHash: string | null;
   releaseTitle: string | null;
+  downloadPath: string | null;
   movieId: number | null;
   seasonId: number | null;
   episodeId: number | null;
@@ -48,8 +53,10 @@ export class DownloadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: ProcessQueueService,
+    private readonly encodeQueue: EncodeQueueService,
     private readonly qbittorrent: QbittorrentClient,
     private readonly settings: SettingsService,
+    private readonly mediaRoots: MediaRootsService,
   ) {}
 
   // REQ-9/REQ-10: DB-first, joined to qBittorrent on infoHash. A torrent
@@ -330,17 +337,152 @@ export class DownloadsService {
     return this.toDownload(source, label, live, jobsBySourceId.get(source.id) ?? [], compressionEnabled);
   }
 
+  // 047-source-deletion: the orchestrator for the whole unwind. Order is the
+  // contract (api/plan.md § Steps 6) — torrent client first (the only step
+  // that can fail the mutation, NFR-2), then queued/running work withdrawn,
+  // then disk, then the row, then the target's status. REQ-1: no
+  // requireTorrent here — an upload is accepted the same as a torrent.
   async downloadDelete(mediaSourceId: number, userId: string): Promise<boolean> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
-    const infoHash = this.requireTorrent(source);
 
-    // REQ-11: always with its files — this is the user-facing sibling of
-    // downloadRemove, which is @AllowService()-only and always deletes with
-    // deleteFiles:false. Different defaults, deliberately never shared.
-    await this.callTorrentClient(() => this.qbittorrent.remove(infoHash, true));
+    const jobs = await this.prisma.processJob.findMany({
+      where: { sourceFile: { mediaSourceId } },
+      select: { id: true },
+    });
+
+    if (source.infoHash) {
+      const infoHash = source.infoHash;
+      // REQ-2/REQ-11: always with its files — this is the user-facing
+      // sibling of downloadRemove, which is @AllowService()-only and always
+      // deletes with deleteFiles:false. Different defaults, deliberately
+      // never shared.
+      await this.callTorrentClient(() => this.qbittorrent.remove(infoHash, true));
+    }
+
+    // REQ-3/REQ-4: cancel before withdraw so a job mid-transition is caught
+    // by one or the other; withdrawal alone can't stop one already active.
+    for (const job of jobs) {
+      await this.encodeQueue.publishCancel(job.id);
+      await this.encodeQueue.removeEncode(job.id);
+    }
+    await this.queue.removeSourceReady(mediaSourceId);
+
+    await this.deleteResidue(source);
+
+    // Cascades remove SourceFile/ProcessJob — never deleted by hand.
     await this.prisma.mediaSource.delete({ where: { id: mediaSourceId } });
 
+    await this.recomputeStatus(source);
+
     return true;
+  }
+
+  // T006/REQ-8/REQ-9/REQ-10: deletes whatever the source left on disk under
+  // the downloads root. Never throws — the torrent is already gone from the
+  // client by the time this runs, so a failure here must not leave the user
+  // unable to retry the delete.
+  private async deleteResidue(source: MediaSourceRow): Promise<void> {
+    const downloadPath = source.downloadPath;
+    if (!downloadPath) {
+      console.log(`[DownloadsService] mediaSource ${source.id}: sin downloadPath, nada que borrar`);
+      return;
+    }
+
+    let downloadsRoot: string;
+    try {
+      const config = await this.settings.getMap();
+      downloadsRoot = await this.mediaRoots.resolveFromRoot('downloads', config.path_downloads ?? '.');
+    } catch (err) {
+      console.error(`[DownloadsService] mediaSource ${source.id}: no se pudo resolver la raíz de downloads:`, err);
+      return;
+    }
+
+    if (!(await this.mediaRoots.isInsideRoot('downloads', downloadPath))) {
+      console.error(
+        `[DownloadsService] mediaSource ${source.id}: downloadPath ${downloadPath} está fuera de la raíz de downloads (${downloadsRoot}) — no se borra nada`,
+      );
+      return;
+    }
+
+    try {
+      if (source.kind === 'LOCAL_FILE') {
+        // A tus upload: one file staged in its own directory
+        // (<downloads>/imports/<uploadId>/<file>). Non-recursive rmdir on
+        // purpose — an ENOTEMPTY must leave whatever else is in there alone.
+        await rm(downloadPath, { force: true });
+        await rmdir(dirname(downloadPath)).catch((err) => {
+          console.log(
+            `[DownloadsService] mediaSource ${source.id}: no se pudo rmdir ${dirname(downloadPath)} (probablemente no está vacío):`,
+            err instanceof Error ? err.message : err,
+          );
+        });
+      } else {
+        // TORRENT_SEARCH, TORRENT_FILE, LOCAL_FOLDER: the whole download
+        // directory (or the file itself, for a single-file torrent) is
+        // owned by this source alone.
+        await rm(downloadPath, { recursive: true, force: true });
+      }
+    } catch (err) {
+      console.error(`[DownloadsService] mediaSource ${source.id}: no se pudo borrar ${downloadPath}:`, err);
+    }
+  }
+
+  // T007/REQ-12: recomputes the target's status from the rows that remain
+  // after the delete. A season has no status column — it recomputes every
+  // episode of it instead (see the comment above ShowsService.findOneFromDb
+  // for why a season-pack episode carries its own processJobs).
+  private async recomputeStatus(source: MediaSourceRow): Promise<void> {
+    if (source.movieId) {
+      await this.recomputeMovieStatus(source.movieId);
+      return;
+    }
+    if (source.episodeId) {
+      await this.recomputeEpisodeStatus(source.episodeId);
+      return;
+    }
+    if (source.seasonId) {
+      const episodes = await this.prisma.episode.findMany({
+        where: { seasonId: source.seasonId },
+        select: { id: true },
+      });
+      for (const episode of episodes) {
+        await this.recomputeEpisodeStatus(episode.id);
+      }
+    }
+  }
+
+  private async recomputeMovieStatus(movieId: number): Promise<void> {
+    const movie = await this.prisma.movie.findUnique({
+      where: { id: movieId },
+      include: { mediaSources: true, processJobs: true },
+    });
+    if (!movie) return;
+
+    // REQ-13/AC-12: a title already delivered to the library never walks
+    // backwards — checked before deriveTitleStatus is even called.
+    if (movie.filePath != null) {
+      await this.prisma.movie.update({ where: { id: movieId }, data: { status: 'COMPLETED' } });
+      return;
+    }
+
+    const derived = deriveTitleStatus({ status: 'MISSING', sources: movie.mediaSources, jobs: movie.processJobs });
+    await this.prisma.movie.update({ where: { id: movieId }, data: { status: toMediaStatus(derived) } });
+  }
+
+  private async recomputeEpisodeStatus(episodeId: number): Promise<void> {
+    const episode = await this.prisma.episode.findUnique({
+      where: { id: episodeId },
+      include: { mediaSources: true, processJobs: true },
+    });
+    if (!episode) return;
+
+    if (episode.filePath != null) {
+      await this.prisma.episode.update({ where: { id: episodeId }, data: { status: 'COMPLETED' } });
+      return;
+    }
+
+    const derived = deriveTitleStatus({ status: 'MISSING', sources: episode.mediaSources, jobs: episode.processJobs });
+    await this.prisma.episode.update({ where: { id: episodeId }, data: { status: toMediaStatus(derived) } });
   }
 
   // Single-torrent lookup for the three control mutations above — cheaper

@@ -43,6 +43,7 @@ vi.mock('./cleanup-source', () => ({
 
 import { handleEncode } from './encode.job';
 import { KeyedError } from '../i18n/keyed-error';
+import { EncodeCancelledError } from '../encode/cancellation';
 import { ApiUnreachableError } from '../api/graphql-client';
 import {
   ERROR_ENCODE_FFMPEG_FAILED,
@@ -601,6 +602,64 @@ describe('handleEncode — encodeCompleted delivered through deliverReport (038-
     const [, variables] = failedCall as [string, Record<string, unknown>];
     expect(variables.key).toBe(ERROR_ENCODE_FFMPEG_FAILED);
 
+    expect(cleanupSourceMock).not.toHaveBeenCalled();
+  });
+});
+
+// Defends REQ-6 of 047-source-deletion (worker/plan.md § Tests): a job
+// abandoned because its source was deleted must report nothing at all — no
+// encodeCompleted, no encodeFailed — and must never run cleanupSource, since
+// there is no row left for either outcome to land on. Both call sites that
+// EncodeCancelledError can come from (encode() and passthrough(), picked at
+// runtime by compressionEnabled) are exercised separately: wiring the signal
+// into only one of them would leave the other uncancellable with no compile
+// error anywhere, exactly the failure mode worker/plan.md § Steps 8 warns
+// about.
+describe('handleEncode — a cancelled encode reports nothing (047-source-deletion REQ-6)', () => {
+  function mockSuccessfulGraphQL(processJob: Record<string, unknown> = PROCESS_JOB_DETAILS) {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob });
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  it('reports neither encodeCompleted nor encodeFailed and skips cleanupSource on the compressing path', async () => {
+    mockSuccessfulGraphQL();
+    const cancelled = new EncodeCancelledError();
+    encodeMock.mockRejectedValue(cancelled);
+
+    await expect(handleEncode(makeJob())).rejects.toBe(cancelled);
+
+    expect(passthroughMock).not.toHaveBeenCalled();
+    const completedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeCompleted'),
+    );
+    const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeFailed'),
+    );
+    expect(completedCall).toBeUndefined();
+    expect(failedCall).toBeUndefined();
+    expect(cleanupSourceMock).not.toHaveBeenCalled();
+  });
+
+  it('reports neither encodeCompleted nor encodeFailed and skips cleanupSource on the passthrough (compressionEnabled: false) path', async () => {
+    mockSuccessfulGraphQL({ ...PROCESS_JOB_DETAILS, compressionEnabled: false });
+    const cancelled = new EncodeCancelledError();
+    passthroughMock.mockRejectedValue(cancelled);
+
+    await expect(handleEncode(makeJob())).rejects.toBe(cancelled);
+
+    expect(encodeMock).not.toHaveBeenCalled();
+    const completedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeCompleted'),
+    );
+    const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeFailed'),
+    );
+    expect(completedCall).toBeUndefined();
+    expect(failedCall).toBeUndefined();
     expect(cleanupSourceMock).not.toHaveBeenCalled();
   });
 });

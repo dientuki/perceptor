@@ -154,6 +154,29 @@ export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress 
   };
 }
 
+/**
+ * Collapse of the eight-value vocabulary back to the five-value `MediaStatus` column
+ * (`047-source-deletion` REQ-12). `QUEUED`/`PAUSED`/`DOWNLOADING`/`DOWNLOADED` all mean "some
+ * source is still being acquired" from the title's perspective, so they collapse to
+ * `DOWNLOADING`; the rest already spell the same word. Exhaustive `switch`, no `default` — a
+ * future `PipelineStatus` member must fail to compile here, not silently fall through into a
+ * column value nothing understands.
+ */
+export function toMediaStatus(status: PipelineStatus): MediaStatus {
+  switch (status) {
+    case 'QUEUED':
+    case 'PAUSED':
+    case 'DOWNLOADING':
+    case 'DOWNLOADED':
+      return 'DOWNLOADING';
+    case 'MISSING':
+    case 'ENCODING':
+    case 'COMPLETED':
+    case 'ERROR':
+      return status;
+  }
+}
+
 export type TitleAltitudeSource = {
   status: SourceStatus;
 };

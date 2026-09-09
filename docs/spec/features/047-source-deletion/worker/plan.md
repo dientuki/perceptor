@@ -1,8 +1,8 @@
 ---
 title: Source deletion — worker slice
 service: worker
-last_updated: 2026-09-05
-status: Approved
+last_updated: 2026-09-08
+status: Implemented
 ---
 
 # PLAN: Source deletion — `worker` (`worker/plan.md`)
