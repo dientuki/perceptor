@@ -1,6 +1,8 @@
 # Publishes the five own images to GHCR (dientuki/perceptor namespace) on every vX.Y.Z tag —
-# REQ-1/REQ-2/NFR-1. Each image is built from its `runner` stage, linux/amd64 only, and pushed
-# under two tags: the exact version and `latest`. One workflow run publishes all five or none —
+# REQ-1/REQ-2/NFR-1. web/api/worker build from their `runner` stage; torrent/indexer are
+# single-stage Dockerfiles (linuxserver/qbittorrent, linuxserver/prowlarr bases) with no target
+# to name. All five build for linux/amd64 only and push under two tags: the exact version and
+# `latest`. One workflow run publishes all five or none —
 # a partial publish would let an installation end up with a mixed set (plan.md § Contract Freeze),
 # which is exactly what NFR-6 forbids.
 name: Release
@@ -27,29 +29,36 @@ jobs:
       fail-fast: false
       matrix:
         service: [web, api, worker, torrent, indexer]
+        include:
+          - service: web
+            target: runner
+          - service: api
+            target: runner
+          - service: worker
+            target: runner
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: services/${{ matrix.service }}
-          target: runner
+          target: ${{ matrix.target }}
           platforms: linux/amd64
           push: true
           tags: |
