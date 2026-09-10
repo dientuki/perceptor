@@ -5,7 +5,14 @@ import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
-    const adapter = new PrismaMariaDb("mysql://devuser:devpassword@db:3306/perceptor");
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      throw new Error(
+        'DATABASE_URL is not set. The api refuses to start without an explicit database ' +
+          'connection string — set DATABASE_URL in the environment, there is no default.',
+      );
+    }
+    const adapter = new PrismaMariaDb(databaseUrl);
 
     super({ adapter });
   }

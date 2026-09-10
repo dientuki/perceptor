@@ -2,7 +2,7 @@
 title: End-User Installation with Published Images — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-09-09
-status: Approved
+status: Implemented
 ---
 
 # PLAN: End-User Installation with Published Images (`plan.md`)

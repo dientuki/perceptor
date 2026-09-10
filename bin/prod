@@ -17,6 +17,6 @@ if [ "${USE_TRAEFIK}" = "true" ]; then
   SERVICES="traefik $SERVICES"
 fi
 
-COMPOSE_FILES="-f docker-compose.yaml"
+COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml"
 
 BUILD_TARGET=runner docker compose $COMPOSE_FILES up -d --build $SERVICES

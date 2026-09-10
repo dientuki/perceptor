@@ -9,6 +9,9 @@ import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { assertAuthEnv } from './auth/auth.constants';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import type { ErrorKey } from '@/i18n/error-keys';
+import { runMigrations } from './bootstrap/run-migrations';
+import { seedProduction } from './database/seed/production-seed';
+import { PrismaService } from './prisma/prisma.service';
 
 // /uploads (ver src/uploads/) recibe el body crudo de tus, potencialmente de
 // varios GB por request: no puede pasar por el body parser global. bodyParser:
@@ -25,6 +28,22 @@ async function bootstrap() {
   // boot (AC-8), before anything else — including the health check — can
   // make it look like the api started successfully without one (REQ-6).
   assertAuthEnv();
+
+  if (process.env.PERCEPTOR_AUTO_MIGRATE !== 'false') {
+    try {
+      await runMigrations();
+      const prisma = new PrismaService();
+      await prisma.$connect();
+      try {
+        await seedProduction(prisma);
+      } finally {
+        await prisma.$disconnect();
+      }
+    } catch (err) {
+      console.error('[bootstrap] Failed to migrate/seed the database:', err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
+  }
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
 

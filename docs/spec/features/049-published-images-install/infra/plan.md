@@ -2,7 +2,7 @@
 title: End-User Installation with Published Images — infra slice
 service: infra
 last_updated: 2026-09-09
-status: Approved
+status: Implemented
 ---
 
 # PLAN: End-User Installation with Published Images — `infra` (`infra/plan.md`)

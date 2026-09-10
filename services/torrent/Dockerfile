@@ -12,3 +12,8 @@ RUN sed -i \
 
 # Corre después de que existe qBittorrent.conf y antes de arrancar qbittorrent-nox
 COPY --chmod=755 custom-cont-init.d/ /custom-cont-init.d/
+
+# AutoRun hook (on-torrent-completed.sh), before it was bind-mounted from
+# ./services/torrent/commands — now baked into the image so a repository-less
+# installation still reports a completed download (REQ-4).
+COPY --chmod=755 commands/ /commands/

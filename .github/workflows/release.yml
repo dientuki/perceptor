@@ -1,0 +1,79 @@
+# Publishes the five own images to GHCR (dientuki/perceptor namespace) on every vX.Y.Z tag —
+# REQ-1/REQ-2/NFR-1. Each image is built from its `runner` stage, linux/amd64 only, and pushed
+# under two tags: the exact version and `latest`. One workflow run publishes all five or none —
+# a partial publish would let an installation end up with a mixed set (plan.md § Contract Freeze),
+# which is exactly what NFR-6 forbids.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: dientuki
+
+jobs:
+  build-and-push:
+    name: Build and push ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # One failed service must not stop the workflow from reporting every other failure, but a
+      # partial publish is still not a "done" release — see the note at the end of this file.
+      fail-fast: false
+      matrix:
+        service: [web, api, worker, torrent, indexer]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: services/${{ matrix.service }}
+          target: runner
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/perceptor-${{ matrix.service }}:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/perceptor-${{ matrix.service }}:latest
+
+      - name: Make package public
+        # A fresh package on GHCR is created private by default even with GITHUB_TOKEN's
+        # packages:write — REQ-1 needs it readable with no authentication (docker pull from a
+        # logged-out client). Best-effort: an already-public package (every release after the
+        # first) leaves this a no-op rather than a failure.
+        continue-on-error: true
+        run: |
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "/user/packages/container/perceptor-${{ matrix.service }}" \
+            -f visibility=public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# NOTE (NFR-6, "the five images must always move together"): GitHub Actions has no built-in
+# all-or-nothing matrix — a matrix job failure does not roll back the tags the other jobs already
+# pushed. Nothing this repository controls can fully prevent a half-published tag once GHCR has
+# accepted a push; the mitigation is operational, not code: watch this workflow's run to
+# completion before telling anyone to pull the tag, and re-run the failed matrix leg (or push a
+# corrected tag) before considering the release done.

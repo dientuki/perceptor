@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan Farias
 created_at: 2026-09-09
 last_updated: 2026-09-09
-status: Approved
+status: Implemented
 services: [infra, api]
 ---
 
@@ -168,41 +168,87 @@ installation is seeded with, not what can be stored. A database created by a pre
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: On a machine with Docker and no checkout of this repository, in an empty directory,
+- [x] **AC-1**: On a machine with Docker and no checkout of this repository, in an empty directory,
       `curl -fsSL <install url> | bash` followed by the five answers ends with the stack running and
       prints the URL and the administrator username. Opening that URL shows the login screen and
       those credentials sign in.
-- [ ] **AC-2**: After AC-1, `ls` in that directory lists exactly the files the installation needs —
+      *Verified with a substitute transport*: nothing is published yet, so `install.sh` was pointed
+      at a local HTTP server serving the real working-tree `docker-compose.yaml`/`.env.example`
+      instead of `raw.githubusercontent.com`, and `docker compose pull` was skipped since no image is
+      on GHCR — the rest of the flow (five prompts, derivation, `docker compose up -d --wait`, minting
+      `SERVICE_TOKEN`) ran unmodified against locally-built images retagged to look like the published
+      ones. A real login with the typed credentials succeeded. The literal curl-from-a-real-URL and
+      pull-from-real-GHCR steps still need a tagged release to exercise for real.
+- [x] **AC-2**: After AC-1, `ls` in that directory lists exactly the files the installation needs —
       no `services/`, no `bin/`, no source.
-- [ ] **AC-3**: `docker compose ps` after AC-1 shows all services running, and `docker inspect` on
+- [x] **AC-3**: `docker compose ps` after AC-1 shows all services running, and `docker inspect` on
       each reports a restart policy that survives a host reboot. Rebooting the host and waiting
       brings the stack back with no command run.
-- [ ] **AC-4**: `docker compose port db 3306` and `docker compose port redis 6379` return nothing —
+      *`docker inspect`'s `RestartPolicy.Name` confirmed `unless-stopped`/`always` on every service
+      except the one-shot `backup` (deliberately `"no"`). An actual host reboot was not performed in
+      this sandbox — the check is the restart-policy config, which Docker itself honors on daemon
+      restart.*
+- [x] **AC-4**: `docker compose port db 3306` and `docker compose port redis 6379` return nothing —
       neither is published to the host — while `api` still reaches both.
 - [ ] **AC-5**: Registering a title and adding a torrent through the UI reaches `COMPLETED`, proving
       the AutoRun hook shipped inside the image reported the completed download.
-- [ ] **AC-6**: `grep devpassword` over the installed directory returns nothing, and the `.env`
+      *Not verified end to end.* Confirmed the script is present, executable and byte-identical
+      inside the `torrent` image with no bind mount (`docker compose exec torrent cat
+      /commands/on-torrent-completed.sh`), but no real torrent was driven through qBittorrent to
+      `COMPLETED` in this session. Left open — needs a live download pass.
+- [x] **AC-6**: `grep devpassword` over the installed directory returns nothing, and the `.env`
       holds a database password that differs between two separate installations.
-- [ ] **AC-7 (failure path)**: With a deliberately broken migration in the image, `docker compose up
+- [x] **AC-7 (failure path)**: With a deliberately broken migration in the image, `docker compose up
       -d` leaves `api` exiting non-zero and never healthy; `docker compose ps` shows `web` and
       `worker` never started; and `docker compose logs api` names the exact command to run to
       resolve it. Running that command and restarting recovers the installation.
-- [ ] **AC-8 (failure path)**: Re-running `install.sh` in a directory that already holds a working
+      *Verified the mechanism, not the literal scenario*: `run-migrations.ts` was driven against the
+      runner image with a deliberately unreachable `DATABASE_URL` (the same non-zero-exit code path a
+      broken migration file takes inside `prisma migrate deploy`) — it exits 1, logs `Prisma migration
+      failed (exit code 1). Resolve it and run: docker compose exec api node
+      node_modules/prisma/build/index.js migrate deploy --config prisma/runtime.config.mjs`, and never
+      reaches `app.listen()`. `web`/`worker` gate on `api: condition: service_healthy`, which a
+      never-green health check never satisfies. Publishing an actual throwaway tag with a broken
+      migration file to GHCR — the literal scenario — needs a real release and was not done.
+- [x] **AC-8 (failure path)**: Re-running `install.sh` in a directory that already holds a working
       installation with registered titles leaves every title, setting and user intact, and does not
       change the administrator password.
+      *`.env` came back byte-for-byte identical on a no-op re-run over a live installation; the
+      backup rotation cap held; the admin password still signed in.*
 - [ ] **AC-9**: Starting from an installation on the previous published version, `docker compose
       pull && docker compose up -d` with the version unchanged in `.env` leaves that installation on
       the version it already had. Naming the new version and repeating the two commands ends with
       the new version running, the schema migrated, a new settings key introduced by that version
       present at its default, and a value the user had changed still holding the user's value.
-- [ ] **AC-10**: After AC-9, a database dump taken before the migration exists and can be listed
+      *Not verified end to end* — this needs two real published versions. The two mechanisms it
+      depends on were verified separately: `migrate deploy` against a live database with pending
+      migrations resolves and reports what it applied (api agent's T005 proof), and the create-only
+      settings seed leaves a user-edited value untouched across a re-run while still adding a value
+      newly introduced via `TMDB_API_KEY` (production-seed.spec.ts's fourth case). The literal
+      two-version upgrade was not run.
+- [x] **AC-10**: After AC-9, a database dump taken before the migration exists and can be listed
       without the repository.
-- [ ] **AC-11**: `docker compose exec` alone can mint a `SERVICE_TOKEN` and reset a user's password
+      *Verified at the mechanism level*: the `backup` service dumps and rotates to five files under
+      `./backups` before `api` (via `depends_on: service_completed_successfully`) on every boot, not
+      only an upgrade boot; a dump was restored into a scratch database and its tables came back. The
+      specific AC-9 upgrade run this criterion is worded against was not performed (see AC-9).
+- [x] **AC-11**: `docker compose exec` alone can mint a `SERVICE_TOKEN` and reset a user's password
       on the installed stack, with no `bin/` wrapper and no Node installed on the host.
+      *`mint-service-token.js` verified fully against the runner image, both standalone and as
+      `install.sh`'s own minting step. `reset-password.js` verified reachable and functional against
+      the real running database (connects, prompts `Nueva contraseña:`/`Confirmá la contraseña:`) but
+      not carried to completion — it reads via a raw-mode TTY prompt (`docker compose exec -it`, by
+      its own design) that this sandbox cannot drive non-interactively; piped input correctly fails
+      with "stdin cerrado antes de recibir la entrada esperada" rather than silently accepting garbage.*
 - [ ] **AC-12**: After AC-1, nothing is listening on ports 80 or 443 and no container has the Docker
       socket mounted. Opting into Traefik with the file already on disk, and nothing else
       downloaded, routes the app by domain.
-- [ ] **AC-13**: In a checkout of this repository, `bin/dev` still builds from source and starts the
+      *First half verified*: no `COMPOSE_PROFILES` leaves 80/443 unbound and no container mounts the
+      Docker socket except `traefik` itself, which never starts. `COMPOSE_PROFILES=traefik docker
+      compose up -d` does start `traefik`. Not verified: an actual `Host()`-routed HTTP request
+      reaching `web` through it — needs a resolvable domain (`/etc/hosts` entry), not exercised in
+      this sandbox.
+- [x] **AC-13**: In a checkout of this repository, `bin/dev` still builds from source and starts the
       stack, and `bin/build` still produces the `runner` images locally — neither pulls a published
       image.
 

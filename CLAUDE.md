@@ -36,7 +36,9 @@ docs/spec/graphql-contract.md   the web/worker <-> api boundary
 docs/spec/features/      one directory per feature spec (see below)
 .claude/agents/          one implementer subagent per service
 .claude/commands/        the /specify -> /plan-feature -> /tasks -> /implement flow
-docker-compose.yaml      the whole stack
+docker-compose.yaml      the runtime — pulls the five published images, no build: section
+docker-compose.build.yaml  the build: sections + local image tags, loaded by bin/dev/prod/build/install
+install.sh               end-user installer — curl this into an empty directory with just Docker
 .env                     single source of configuration (not committed)
 services/api/            NestJS 11 + Apollo + Prisma 7  -> services/api/CLAUDE.md
 services/web/            Next 16 + React 19 + Tailwind 4 -> services/web/CLAUDE.md
@@ -77,9 +79,9 @@ wrappers in `bin/`, which shell into the running containers.
 
 | Script | What it does | Example |
 | :-- | :-- | :-- |
-| `bin/install` | generates `.env` from `.env.example`, asking Traefik y/n + domain | run once, first checkout |
-| `bin/dev [args…]` | `docker compose up` in dev mode, reads `USE_TRAEFIK` from `.env`, always adds the `docker-compose.dev.yaml` overlay; any arguments are forwarded to `docker compose up` before the service list — pass `-d` yourself for detached, omit it to stream logs in the foreground | `bin/dev -d` |
-| `bin/prod` | same, `BUILD_TARGET=runner`, rebuilds and runs the image it built — no dev overlay | `bin/prod` |
+| `bin/install` | generates `.env` from `.env.example`, asking Traefik y/n + domain — the **developer** installer, builds from source | run once, first checkout |
+| `bin/dev [args…]` | `docker compose up` in dev mode, reads `USE_TRAEFIK` from `.env`, always adds `docker-compose.build.yaml` then `docker-compose.dev.yaml`; any arguments are forwarded to `docker compose up` before the service list — pass `-d` yourself for detached, omit it to stream logs in the foreground | `bin/dev -d` |
+| `bin/prod` | same, `BUILD_TARGET=runner`, rebuilds and runs the image it built (via `docker-compose.build.yaml`) — no dev overlay | `bin/prod` |
 | `bin/build [service]` | builds the `runner` images without starting containers; no argument builds all five own services | `bin/build web` |
 | `bin/cli <service> <cmd…>` | `docker compose exec -it <service> <cmd…>` | `bin/cli api npx prisma migrate status` |
 | `bin/npm [service] <args…>` | npm inside a service; **defaults to `web`** when the first arg is not `web`/`api`/`worker` | `bin/npm api run test` |
@@ -98,9 +100,22 @@ intentional, and it is what your editor's TypeScript server reads.
 
 The bind mount and dev-only variables live in `docker-compose.dev.yaml`, a compose overlay —
 `bin/dev` always adds it with `-f`, `bin/prod`/`bin/build` never do.
-`docker-compose.yaml` on its own describes the runtime, so `bin/prod` runs exactly the `runner` image
-it built rather than hiding it behind the host's working copy. Each Node service carries its own
-`.dockerignore` (`015-reproducible-image-builds`).
+`docker-compose.yaml` on its own describes the runtime: each of the five own services is
+`image: ghcr.io/dientuki/perceptor-<svc>:${PERCEPTOR_TAG:-latest}`, no `build:`, no path inside
+this repository — this is the file `install.sh` downloads for someone who has never cloned this
+repository (`049-published-images-install`). `docker-compose.build.yaml` carries the `build:`
+sections and overrides `image:` to `perceptor-<svc>:local`, a tag that exists in no registry;
+`bin/dev`/`bin/prod`/`bin/build`/`bin/install` all load it with `-f`, which is what lets `bin/prod`
+run exactly the `runner` image it just built rather than pulling a published one or hiding a stale
+local build behind the host's working copy. Each Node service carries its own `.dockerignore`
+(`015-reproducible-image-builds`).
+
+An end user with only Docker never sees any of this — `curl -fsSL <install url> | bash` (`install.sh`)
+writes `docker-compose.yaml` and `.env` into an empty directory, asks five questions, derives the
+rest, and starts the stack from the published images. Updating is naming a new `PERCEPTOR_TAG` in
+`.env` and `docker compose pull && docker compose up -d`; `api` applies its own pending migrations
+and production seed before it starts listening (see `services/api/CLAUDE.md`), gated behind a
+`backup` service that dumps the database to `./backups` first.
 
 ## Environment
 
@@ -145,6 +160,21 @@ Rules that are not obvious from the variable names:
 - **The media server is not in `docker-compose.yaml`** — Jellyfin is assumed to run outside the stack.
   That is why `MediaServerService.notifyCreated` translates the container output path to the host path
   via `MediaRootsService.containerToHostPath()` before sending it.
+- **`PERCEPTOR_TAG`** is the one version that applies to all five published images
+  (`ghcr.io/dientuki/perceptor-<svc>:${PERCEPTOR_TAG:-latest}`); a checkout building from source
+  never reads it, since `docker-compose.build.yaml` overrides `image:` to a local tag instead.
+  There is no per-service tag — `web`/`worker` retype the GraphQL schema by hand with no codegen
+  (Article VIII), so a mixed set fails at runtime with no compile error anywhere.
+- **`TMDB_API_KEY`** backfills the `movie_db_api_key` Setting on `api`'s first boot when that row is
+  still empty, the same way `INDEXER_API_KEY` backfills `tracker_api_key`. It is not a Settings write
+  path beyond that — leaving it unset just leaves the key editable later from the Settings screen.
+- **`PERCEPTOR_AUTO_MIGRATE`** is opt-out only, default on: unless set to `false`, `api` applies every
+  pending Prisma migration and runs its production seed before it starts listening (REQ-10 of
+  `049-published-images-install`), and the health check does not go green until both finish — `web`
+  and `worker`, gated on `service_healthy`, never observe a half-migrated database.
+- **`COMPOSE_PROFILES`** stays empty by default, which is why a fresh installation binds neither port
+  80 nor 443 and mounts no Docker socket: `traefik` sits behind `profiles: [traefik]`, and
+  `install.sh` sets `COMPOSE_PROFILES=traefik` only when the user opts into domain-based routing.
 
 ## Conventions
 
@@ -254,9 +284,6 @@ added nothing, not as a fact to cite.
 
 ## Known debt
 
-- The database DSN is hardcoded in `services/api/src/prisma/prisma.service.ts` even though
-  `DATABASE_URL` already exists in `.env`; `schema.prisma` declares `datasource db` with no `url` —
-  the connection comes solely from the driver adapter.
 - **`movieId` means two different things depending on where it appears.** `006-media-search` renamed
   `MediaSearchResult.movieId` → `mediaId` where it came to mean "film or series", but three
   occurrences still mean "a film, specifically": the argument on `addTorrentToMovie`/`addMagnetToMovie`/

@@ -1,0 +1,45 @@
+# Overlay de build: agrega las secciones `build:` que `docker-compose.yaml` ya no tiene, más un
+# override de `image:` a un tag local (`perceptor-<svc>:local`, que no existe en ningún registry) —
+# sin ese override, `bin/dev`/`bin/build` construirían la imagen pero Compose seguiría intentando
+# resolver el `ghcr.io/...` de la base al levantar, exactamente la divergencia silenciosa que este
+# overlay existe para evitar. También expone los puertos de `db`/`redis` al host — el runtime no los
+# publica (NFR-8), pero un desarrollador sí los necesita para un cliente MySQL/Redis externo.
+#
+# bin/dev, bin/prod y bin/build lo suman siempre con -f docker-compose.build.yaml; un usuario final
+# nunca lo descarga.
+services:
+  web:
+    build:
+      context: ./services/web
+      target: ${BUILD_TARGET:-dev}
+    image: perceptor-web:local
+
+  api:
+    build:
+      context: ./services/api
+      target: ${BUILD_TARGET:-dev}
+    image: perceptor-api:local
+
+  worker:
+    build:
+      context: ./services/worker
+      target: ${BUILD_TARGET:-dev}
+    image: perceptor-worker:local
+
+  torrent:
+    build:
+      context: ./services/torrent
+    image: perceptor-torrent:local
+
+  indexer:
+    build:
+      context: ./services/indexer
+    image: perceptor-indexer:local
+
+  db:
+    ports:
+      - "${DB_PORT}:3306"
+
+  redis:
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"

@@ -29,6 +29,6 @@ else
   TARGETS="$BUILDABLE"
 fi
 
-COMPOSE_FILES="-f docker-compose.yaml"
+COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml"
 
 BUILD_TARGET=runner docker compose $COMPOSE_FILES build $TARGETS

@@ -88,10 +88,12 @@ if [ -z "$current_indexer_api_key" ]; then
   # Build aparte y silencioso: si se lo dejamos a "docker compose run", un build
   # necesario (imagen ausente) manda su log a stdout y se mezcla con el resultado
   # del sed de más abajo — ese log terminó una vez escrito en INDEXER_API_KEY.
-  docker compose build --quiet indexer
+  # docker-compose.build.yaml, no la base: es ahí donde vive el build: de indexer
+  # desde que docker-compose.yaml pasó a describir sólo imágenes publicadas (049).
+  docker compose -f docker-compose.yaml -f docker-compose.build.yaml build --quiet indexer
   # --entrypoint /bin/sh evita la cadena /init de LinuxServer (no arranca nada) y --no-deps
   # evita arrastrar a flaresolverr sólo para leer un archivo.
-  existing_key=$(docker compose run --rm --no-deps --entrypoint /bin/sh indexer \
+  existing_key=$(docker compose -f docker-compose.yaml -f docker-compose.build.yaml run --rm --no-deps --entrypoint /bin/sh indexer \
     -c 'sed -n "s:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p" /config/config.xml 2>/dev/null' | tr -d '\r\n')
   if [ -n "$existing_key" ]; then
     echo "Encontrada, adoptando la key existente del volumen de indexer (no invalida tu Prowlarr configurado)."
@@ -110,7 +112,7 @@ set -a; . ./.env; set +a
 # ./services/<svc>:/app, así que /app queda como lo dejó el Dockerfile (root,
 # creado por WORKDIR) y el "npm install" del CMD de dev, corriendo como
 # PUID:PGID, falla con EACCES al escribir package-lock.json.
-COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.dev.yaml"
+COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml -f docker-compose.dev.yaml"
 
 echo
 echo "Levantando servicios... puede tardar un minuto si es la primera vez que los containers se crean."

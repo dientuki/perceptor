@@ -41,7 +41,7 @@ export async function seedSettings(prisma: PrismaClient) {
 
     { key: 'movie_db_client', value: 'tmdb' },
     { key: 'movie_db_host', value: 'https://api.themoviedb.org' },
-    { key: 'movie_db_api_key', value: '' },
+    { key: 'movie_db_api_key', value: process.env.TMDB_API_KEY ?? '' },
     { key: 'movie_db_api_version', value: '3' },
 
     { key: 'movies_enabled', value: 'true' },

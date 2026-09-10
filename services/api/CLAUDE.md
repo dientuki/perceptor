@@ -9,6 +9,17 @@ NestJS 11 + Apollo (GraphQL) + Prisma 7 + MariaDB, run only inside Docker — se
 This service owns the database and the GraphQL schema for the whole system. There is no `db`
 service: a schema change is an `api` change (Constitution, Article III).
 
+## Migrates and seeds itself on boot
+
+`src/main.ts` runs `src/bootstrap/run-migrations.ts` (`prisma migrate deploy` as a child process)
+and then `src/database/seed/production-seed.ts` (languages, the administrator user, settings) right
+after `assertAuthEnv()` and before `NestFactory.create` — unless `PERCEPTOR_AUTO_MIGRATE=false`. A
+rejection logs the exact `docker compose exec` command to resolve it and `process.exit(1)`s before
+the process ever reaches `app.listen()`, so the health check never goes green on a half-migrated
+database (`049-published-images-install`, REQ-10/NFR-2). `prisma/seeds/index.ts` is the
+**development** seed only: it calls `production-seed.ts` first, then the `movie.ts`/
+`media-source.ts` fixtures a real installation must never receive.
+
 ## GraphQL is code-first
 
 `src/app.module.ts` configures `GraphQLModule.forRoot` with `autoSchemaFile` conditional on
@@ -53,14 +64,23 @@ every error this service throws is still English-only.
 
 ## Prisma 7 via driver adapter
 
-`prisma/schema.prisma` declares `datasource db { provider = "mysql" }` with **no `url`** — the
-connection string is not read from the datasource block. `src/prisma/prisma.service.ts` builds a
-`PrismaMariaDb` adapter (`@prisma/adapter-mariadb`) and passes it into `new PrismaClient({ adapter })`.
+`prisma/schema.prisma` declares `datasource db { provider = "mysql" }` with **no `url`** —
+Prisma 7 hard-rejects `datasource.url` inside schema files (`P1012`), so the connection string is
+never read from the datasource block. `src/prisma/prisma.service.ts` builds a `PrismaMariaDb`
+adapter (`@prisma/adapter-mariadb`) from `process.env.DATABASE_URL` alone and passes it into
+`new PrismaClient({ adapter })`, throwing loudly at construction if it is unset — no default, ever.
 
-- Don't expect `DATABASE_URL` alone to configure the client — connection details live in the adapter
-  constructor call (see Known debt).
-- Migrations still work through `prisma migrate`; the adapter only affects the runtime client, not
-  the CLI's own connection.
+- `DATABASE_URL` **is** the single source of the connection string for the running app. There is no
+  hardcoded fallback (`049-published-images-install` closed that item — see root `CLAUDE.md`).
+- The CLI resolves the same variable through a **Prisma config file**, not the datasource block —
+  Prisma 7 moved connection URLs there. Two configs exist for two different runtimes:
+  `prisma.config.ts` (repo root, TypeScript, `ts-node`+`dotenv`) is what `bin/npm api run
+  prisma:migrate` and the dev seed use from a checkout; `prisma/runtime.config.mjs` (plain `.mjs`,
+  no TypeScript, no `dotenv`) is what `src/bootstrap/run-migrations.ts` passes via `--config` when
+  `api` applies migrations at boot inside the **published** image — that image has no
+  `prisma.config.ts` (outside `prisma/`, and `ts-node`/`dotenv` are devDependencies stripped by the
+  runner's `npm prune --omit=dev`), but it does already receive `prisma/runtime.config.mjs` via the
+  existing `COPY --from=builder .../prisma ./prisma` step.
 - `PrismaService` implements `OnModuleInit`/`OnModuleDestroy` to `$connect`/`$disconnect`.
 
 ## Module map
@@ -635,6 +655,4 @@ they exist so an agent can prove a change added nothing, not as a fact to cite.
 
 ## Known debt
 
-- `src/prisma/prisma.service.ts` hardcodes the MariaDB connection string in the `PrismaMariaDb(...)`
-  constructor call even though `DATABASE_URL` already exists in `.env`.
-- `prisma/schema.prisma`'s `datasource db` has no `url` — see "Prisma 7 via driver adapter" above.
+None currently recorded for this service.

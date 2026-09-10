@@ -4,6 +4,11 @@ services:
     image: traefik:v3.7
     container_name: perceptor-traefik
     restart: unless-stopped
+    # Off by default (REQ-16): a fresh installation binds neither 80 nor 443 and mounts no
+    # Docker socket unless an operator opts in with COMPOSE_PROFILES=traefik in .env. Naming
+    # the service explicitly on a command line (bin/dev does this when USE_TRAEFIK=true)
+    # still starts it despite the profile.
+    profiles: [traefik]
     ports:
       - "80:80"
       - "443:443"
@@ -25,10 +30,9 @@ services:
       retries: 3      
 
   web:
-    build:
-      context: ./services/web
-      target: ${BUILD_TARGET:-dev}
+    image: ghcr.io/dientuki/perceptor-web:${PERCEPTOR_TAG:-latest}
     container_name: perceptor-web
+    restart: unless-stopped
     # Mismo criterio que api/worker: no root, para que node_modules/.next que
     # el CMD de dev escribe en el bind mount queden con el dueño del host en
     # vez de con el uid de la imagen.
@@ -70,10 +74,9 @@ services:
       - "traefik.http.services.web.loadbalancer.server.port=3000"      
 
   api:
-    build:
-      context: ./services/api
-      target: ${BUILD_TARGET:-dev}
+    image: ghcr.io/dientuki/perceptor-api:${PERCEPTOR_TAG:-latest}
     container_name: perceptor-api
+    restart: unless-stopped
     # No root: /uploads (ver src/uploads/) escribe en el disco de descargas, y
     # el archivo tiene que quedar con el mismo dueño/grupo que espera el
     # worker — mismo criterio que ya se le aplicó a ese servicio.
@@ -100,6 +103,12 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       # Prowlarr's API key, read by the settings seed as tracker_api_key (014-dev-stack-flaresolverr).
       - INDEXER_API_KEY=${INDEXER_API_KEY}
+      # Backfills the movie_db_api_key Setting on boot when it is still empty (049, Contract
+      # Freeze) — never a Settings write path beyond that, and never queried by install.sh itself.
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      # Opt-out only, default on (049, Contract Freeze): api applies pending Prisma migrations
+      # and runs the production seed before it starts listening, unless this is set to false.
+      - PERCEPTOR_AUTO_MIGRATE=${PERCEPTOR_AUTO_MIGRATE}
       # Raíces que media-roots.module.ts arma como MEDIA_ROOTS: HOST_* es lo que
       # la UI muestra (la ruta real en la PC del usuario), CONTAINER_* es dónde
       # vive ese mismo mount adentro de este container.
@@ -115,15 +124,20 @@ services:
       retries: 3
       # Generoso a propósito: en un checkout limpio (sin node_modules) el
       # CMD de dev corre npm install + prisma generate antes de levantar,
-      # lo que puede tardar 40s+. Con un start_period corto, los healthchecks
-      # que fallan durante ese instalado cuentan como fallas reales y el
-      # container queda "unhealthy" antes de terminar de arrancar.
-      start_period: 90s
+      # lo que puede tardar 40s+ — y en el runner publicado, PERCEPTOR_AUTO_MIGRATE
+      # corre `prisma migrate deploy` + el seed de producción antes del primer
+      # request, lo que en una biblioteca grande se mide en minutos, no segundos
+      # (NFR-5). Con un start_period corto, los healthchecks que fallan durante
+      # ese arranque cuentan como fallas reales y el container queda "unhealthy"
+      # antes de terminar de migrar.
+      start_period: 600s
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      backup:
+        condition: service_completed_successfully
       #prowlarr:
       #  condition: service_healthy
       #torrent:
@@ -149,8 +163,8 @@ services:
     image: mariadb:12.3.2
     container_name: perceptor-db
     restart: always
-    ports:
-      - "${DB_PORT}:3306" # Mapeado al host para conectar clientes externos
+    # No port published to the host (NFR-8) — reachable on perceptor-net only. The build
+    # overlay republishes DB_PORT for a development client (TablePlus, mariadb CLI, ...).
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MARIADB_DATABASE: ${DB_NAME}
@@ -166,13 +180,54 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s           
+      start_period: 30s
+
+  # One-shot dump, taken before api applies any pending migration (REQ-12): a failed backup
+  # blocks api's boot via depends_on/service_completed_successfully rather than letting a
+  # migration run unprotected. Rotates to the five most recent dumps under ./backups, visible
+  # from the host with no Docker command. Reuses the mariadb image already pulled for db — no
+  # new image, no script the user has to download.
+  backup:
+    image: mariadb:12.3.2
+    container_name: perceptor-backup
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    volumes:
+      - ./backups:/backups
+    networks:
+      - perceptor-net
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # pipefail is load-bearing: without it, "mariadb-dump | gzip" reports gzip's exit code
+        # (0, even on an empty input) instead of mariadb-dump's — a failed dump would look
+        # successful to `set -e` and to compose's service_completed_successfully, letting a
+        # migration proceed unprotected (REQ-12/AC-7). /bin/sh (dash on this image) has no
+        # pipefail, hence bash here instead of the sh the rest of this file's one-liners use.
+        set -euo pipefail
+        stamp=$$(date +%Y%m%d%H%M%S)
+        dest="/backups/${DB_NAME}-$${stamp}.sql.gz"
+        # The redirect that writes dest opens the file before the pipeline runs, so a failed
+        # dump still leaves a truncated/empty .gz on disk — the trap removes it instead of
+        # letting it survive as a backup that would fail to restore if anyone reached for it.
+        trap 'rm -f "$${dest}"' ERR
+        echo "Dumping ${DB_NAME} to $${dest}..."
+        mariadb-dump -h db -u root -p"$${MARIADB_ROOT_PASSWORD}" "$${DB_NAME}" | gzip > "$${dest}"
+        echo "Rotating: keeping the 5 most recent dumps..."
+        cd /backups
+        ls -1t "${DB_NAME}"-*.sql.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
+        echo "Done."
 
   worker:
-    build:
-      context: ./services/worker
-      target: ${BUILD_TARGET:-dev}
+    image: ghcr.io/dientuki/perceptor-worker:${PERCEPTOR_TAG:-latest}
     container_name: perceptor-worker
+    restart: unless-stopped
     # Verificado en vivo: ffmpeg con SVT-AV1 puede tardar ~9s en morir tras
     # SIGTERM (multi-hilo, necesita desarmar el encoder) — el default de
     # Docker (10s) deja casi sin margen para que corra el resto de la
@@ -210,8 +265,8 @@ services:
     image: redis:7-alpine
     container_name: perceptor-redis
     restart: unless-stopped
-    ports:
-      - "${REDIS_PORT}:${REDIS_PORT}" # Expuesto al host por si querés inspeccionar con Redis Insight o TablePlus
+    # No port published to the host (NFR-8) — reachable on perceptor-net only. The build
+    # overlay republishes REDIS_PORT for Redis Insight/TablePlus in development.
     command: >
       redis-server 
       --save 60 1 
@@ -229,8 +284,7 @@ services:
       retries: 5  
 
   torrent:
-    build:
-      context: ./services/torrent
+    image: ghcr.io/dientuki/perceptor-torrent:${PERCEPTOR_TAG:-latest}
     container_name: perceptor-torrent
     restart: unless-stopped
     dns:
@@ -259,8 +313,9 @@ services:
       # Mapeo a la misma carpeta de descargas que lee el worker
       - ${HOST_DOWNLOADS_DIR}:${CONTAINER_DOWNLOADS_DIR}
 
-      # Script de AutoRun que avisa al api cuando termina una descarga
-      - ./services/torrent/commands:/commands:ro
+      # El script de AutoRun (on-torrent-completed.sh) ya viaja dentro de la imagen
+      # (services/torrent/Dockerfile, COPY --chmod=755 commands/) — sin bind mount, una
+      # instalación sin este repositorio en disco sigue reportando descargas completas (REQ-4).
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:${QBITTORRENT_WEBUI_PORT}/ || exit 1"]
       interval: 15s
@@ -277,8 +332,7 @@ services:
       - "traefik.http.services.torrent.loadbalancer.server.port=${QBITTORRENT_WEBUI_PORT}"      
     
   indexer:
-    build:
-      context: ./services/indexer
+    image: ghcr.io/dientuki/perceptor-indexer:${PERCEPTOR_TAG:-latest}
     container_name: perceptor-indexer
     restart: unless-stopped
     dns:
