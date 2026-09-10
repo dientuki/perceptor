@@ -1,5 +1,5 @@
 # Publishes the five own images to GHCR (dientuki/perceptor namespace) on every vX.Y.Z tag —
-# REQ-1/REQ-2/NFR-1. web/api/worker build from their `runner` stage; torrent/indexer are
+# REQ-1/REQ-2/NFR-1. web/api/worker build from their `prod` stage; torrent/indexer are
 # single-stage Dockerfiles (linuxserver/qbittorrent, linuxserver/prowlarr bases) with no target
 # to name. All five build for linux/amd64 only and push under two tags: the exact version and
 # `latest`. One workflow run publishes all five or none —
@@ -31,11 +31,11 @@ jobs:
         service: [web, api, worker, torrent, indexer]
         include:
           - service: web
-            target: runner
+            target: prod
           - service: api
-            target: runner
+            target: prod
           - service: worker
-            target: runner
+            target: prod
     steps:
       - name: Checkout
         uses: actions/checkout@v5

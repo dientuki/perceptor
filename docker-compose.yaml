@@ -121,7 +121,7 @@ services:
       retries: 3
       # Generoso a propósito: en un checkout limpio (sin node_modules) el
       # CMD de dev corre npm install + prisma generate antes de levantar,
-      # lo que puede tardar 40s+ — y en el runner publicado, PERCEPTOR_AUTO_MIGRATE
+      # lo que puede tardar 40s+ — y en el prod publicado, PERCEPTOR_AUTO_MIGRATE
       # corre `prisma migrate deploy` + el seed de producción antes del primer
       # request, lo que en una biblioteca grande se mide en minutos, no segundos
       # (NFR-5). Con un start_period corto, los healthchecks que fallan durante

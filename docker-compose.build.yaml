@@ -1,9 +1,13 @@
 # Overlay de build: agrega las secciones `build:` que `docker-compose.yaml` ya no tiene, más un
-# override de `image:` a un tag local (`perceptor-<svc>:local`, que no existe en ningún registry) —
-# sin ese override, `bin/dev`/`bin/build` construirían la imagen pero Compose seguiría intentando
-# resolver el `ghcr.io/...` de la base al levantar, exactamente la divergencia silenciosa que este
-# overlay existe para evitar. También expone los puertos de `db`/`redis` al host — el runtime no los
-# publica (NFR-8), pero un desarrollador sí los necesita para un cliente MySQL/Redis externo.
+# override de `image:` a un tag local que no existe en ningún registry — sin ese override,
+# `bin/dev`/`bin/build` construirían la imagen pero Compose seguiría intentando resolver el
+# `ghcr.io/...` de la base al levantar, exactamente la divergencia silenciosa que este overlay
+# existe para evitar. Para `web`/`api`/`worker`, cuyo Dockerfile tiene más de un stage runnable, el
+# tag lleva el sufijo del target (`perceptor-<svc>:local-${BUILD_TARGET:-dev}`) — un tag que no
+# registra qué stage lo produjo es un tag que dos imágenes se disputan. `torrent`/`indexer` no tienen
+# `target:` ni stages, así que conservan un único `perceptor-<svc>:local` sin sufijo. También expone
+# los puertos de `db`/`redis` al host — el runtime no los publica (NFR-8), pero un desarrollador sí
+# los necesita para un cliente MySQL/Redis externo.
 #
 # bin/dev, bin/prod y bin/build lo suman siempre con -f docker-compose.build.yaml; un usuario final
 # nunca lo descarga.
@@ -12,19 +16,19 @@ services:
     build:
       context: ./services/web
       target: ${BUILD_TARGET:-dev}
-    image: perceptor-web:local
+    image: perceptor-web:local-${BUILD_TARGET:-dev}
 
   api:
     build:
       context: ./services/api
       target: ${BUILD_TARGET:-dev}
-    image: perceptor-api:local
+    image: perceptor-api:local-${BUILD_TARGET:-dev}
 
   worker:
     build:
       context: ./services/worker
       target: ${BUILD_TARGET:-dev}
-    image: perceptor-worker:local
+    image: perceptor-worker:local-${BUILD_TARGET:-dev}
 
   torrent:
     build:

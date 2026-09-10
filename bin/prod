@@ -1,5 +1,5 @@
 #!/bin/bash
-# Levanta el stack en modo producción (stage runner de cada Dockerfile, sin
+# Levanta el stack en modo producción (stage prod de cada Dockerfile, sin
 # bind mounts de código). Lee USE_TRAEFIK de .env para decidir si el servicio
 # traefik entra en el docker compose up.
 set -e
@@ -19,4 +19,4 @@ fi
 
 COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml"
 
-BUILD_TARGET=runner docker compose $COMPOSE_FILES up -d --build $SERVICES
+BUILD_TARGET=prod docker compose $COMPOSE_FILES up -d --build $SERVICES

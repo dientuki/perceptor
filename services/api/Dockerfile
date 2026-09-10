@@ -48,9 +48,9 @@ RUN npm prune --omit=dev
 RUN node -e "require('@prisma/client')"
 
 # ==========================================
-# 4. RUNNER: Imagen Final de Producción
+# 4. PROD: Imagen Final de Producción
 # ==========================================
-FROM base AS runner
+FROM base AS prod
 ENV NODE_ENV=production
 
 # Usuario no-root por seguridad

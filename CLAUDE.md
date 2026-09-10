@@ -80,9 +80,9 @@ wrappers in `bin/`, which shell into the running containers.
 | Script | What it does | Example |
 | :-- | :-- | :-- |
 | `bin/install` | generates `.env` from `.env.example`, asking Traefik y/n + domain — the **developer** installer, builds from source | run once, first checkout |
-| `bin/dev [args…]` | `docker compose up` in dev mode, reads `USE_TRAEFIK` from `.env`, always adds `docker-compose.build.yaml` then `docker-compose.dev.yaml`; any arguments are forwarded to `docker compose up` before the service list — pass `-d` yourself for detached, omit it to stream logs in the foreground | `bin/dev -d` |
-| `bin/prod` | same, `BUILD_TARGET=runner`, rebuilds and runs the image it built (via `docker-compose.build.yaml`) — no dev overlay | `bin/prod` |
-| `bin/build [service]` | builds the `runner` images without starting containers; no argument builds all five own services | `bin/build web` |
+| `bin/dev [args…]` | `docker compose up` in dev mode, reads `USE_TRAEFIK` from `.env`, always adds `docker-compose.build.yaml` then `docker-compose.dev.yaml`; starts the existing `local-dev` images with no build pass — run `bin/build dev` first if a `Dockerfile` or dependency changed; any arguments are forwarded to `docker compose up` before the service list — pass `-d` yourself for detached, omit it to stream logs in the foreground | `bin/dev -d` |
+| `bin/prod` | same, `BUILD_TARGET=prod`, rebuilds and runs the image it built (via `docker-compose.build.yaml`) — no dev overlay | `bin/prod` |
+| `bin/build <dev\|prod> [service]` | builds the `dev` or `prod` images without starting containers, under their own `local-dev`/`local-prod` tags; no service argument builds all five own services | `bin/build prod web` |
 | `bin/cli <service> <cmd…>` | `docker compose exec -it <service> <cmd…>` | `bin/cli api npx prisma migrate status` |
 | `bin/npm [service] <args…>` | npm inside a service; **defaults to `web`** when the first arg is not `web`/`api`/`worker` | `bin/npm api run test` |
 | `bin/bash <service>` | interactive `sh` in a container | `bin/bash api` |
@@ -104,11 +104,14 @@ The bind mount and dev-only variables live in `docker-compose.dev.yaml`, a compo
 `image: ghcr.io/dientuki/perceptor-<svc>:${PERCEPTOR_TAG:-latest}`, no `build:`, no path inside
 this repository — this is the file `install.sh` downloads for someone who has never cloned this
 repository (`049-published-images-install`). `docker-compose.build.yaml` carries the `build:`
-sections and overrides `image:` to `perceptor-<svc>:local`, a tag that exists in no registry;
-`bin/dev`/`bin/prod`/`bin/build`/`bin/install` all load it with `-f`, which is what lets `bin/prod`
-run exactly the `runner` image it just built rather than pulling a published one or hiding a stale
-local build behind the host's working copy. Each Node service carries its own `.dockerignore`
-(`015-reproducible-image-builds`).
+sections and overrides `image:` to `perceptor-<svc>:local-${BUILD_TARGET:-dev}` for `web`/`api`/
+`worker` (`torrent`/`indexer` keep a single unqualified `perceptor-<svc>:local`, since they have no
+`target:` and no stages) — a tag that exists in no registry and records the stage it was built
+from, so a `dev` and a `prod` build of the same service never share a name and neither can shadow
+the other (`050-local-image-tag-collision`). `bin/dev`/`bin/prod`/`bin/build`/`bin/install` all
+load it with `-f`, which is what lets `bin/prod` run exactly the `prod` image it just built rather
+than pulling a published one or hiding a stale local build behind the host's working copy. Each
+Node service carries its own `.dockerignore` (`015-reproducible-image-builds`).
 
 An end user with only Docker never sees any of this — `curl -fsSL <install url> | bash` (`install.sh`)
 writes `docker-compose.yaml` and `.env` into an empty directory, asks five questions, derives the
@@ -148,8 +151,8 @@ Rules that are not obvious from the variable names:
   `tracker_api_key` from it. A second init script registers a FlareSolverr proxy against Prowlarr's
   API, but does **not** attach its tag to any indexer — choosing which indexers sit behind Cloudflare
   stays manual in Prowlarr's UI (`014-dev-stack-flaresolverr`).
-- **`BUILD_TARGET`** picks the Dockerfile stage (`dev` by default, `runner` for production); every
-  Dockerfile has `base` / `dev` / `builder` / `runner`.
+- **`BUILD_TARGET`** picks the Dockerfile stage (`dev` by default, `prod` for production); every
+  Dockerfile has `base` / `dev` / `builder` / `prod`.
 - **The transcode path is unconditional at install time.** `bin/dev`/`bin/prod`/`bin/build` produce
   the identical `docker compose` invocation on every host, with nothing detected, opted out of, or
   asked about at install time — see spec `024` (`docs/spec/features/`) for what this replaced and

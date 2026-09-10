@@ -27,9 +27,9 @@ COPY . .
 RUN npm run build
 
 # ==========================================
-# 4. RUNNER: Imagen Final de Producción
+# 4. PROD: Imagen Final de Producción
 # ==========================================
-FROM base AS runner
+FROM base AS prod
 ENV NODE_ENV=production
 
 # Creamos usuario no-root por seguridad

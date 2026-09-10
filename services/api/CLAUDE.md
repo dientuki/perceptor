@@ -24,7 +24,7 @@ database (`049-published-images-install`, REQ-10/NFR-2). `prisma/seeds/index.ts`
 
 `src/app.module.ts` configures `GraphQLModule.forRoot` with `autoSchemaFile` conditional on
 `NODE_ENV`: a file at `src/schema.gql` in development, `true` (in-memory, nothing written) under
-`NODE_ENV=production`, because the `runner` image has no `/app/src` to write into.
+`NODE_ENV=production`, because the `prod` image has no `/app/src` to write into.
 
 - The **source of truth** is the TypeScript decorators on resolvers, entities (`@ObjectType`,
   `@Field`, …) and DTOs (`@InputType`, …) under each module's `entities/` and `dto/`.
@@ -79,7 +79,7 @@ adapter (`@prisma/adapter-mariadb`) from `process.env.DATABASE_URL` alone and pa
   no TypeScript, no `dotenv`) is what `src/bootstrap/run-migrations.ts` passes via `--config` when
   `api` applies migrations at boot inside the **published** image — that image has no
   `prisma.config.ts` (outside `prisma/`, and `ts-node`/`dotenv` are devDependencies stripped by the
-  runner's `npm prune --omit=dev`), but it does already receive `prisma/runtime.config.mjs` via the
+  prod stage's `npm prune --omit=dev`), but it does already receive `prisma/runtime.config.mjs` via the
   existing `COPY --from=builder .../prisma ./prisma` step.
 - `PrismaService` implements `OnModuleInit`/`OnModuleDestroy` to `$connect`/`$disconnect`.
 

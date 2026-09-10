@@ -1,7 +1,7 @@
 # Overlay de desarrollo: monta el código fuente de cada servicio Node dentro del container
 # (bind mount `./services/<svc>:/app`) y agrega las variables que sólo tienen sentido en dev
 # (`NODE_ENV`, `WATCHPACK_POLLING`). Sin este overlay, `docker-compose.yaml` describe el runtime
-# de producción — target `runner`, sin bind mount, corriendo lo que el build empaquetó.
+# de producción — target `prod`, sin bind mount, corriendo lo que el build empaquetó.
 #
 # bin/dev lo suma siempre con -f docker-compose.dev.yaml; bin/prod y bin/build nunca lo incluyen
 # — esa omisión es lo que hace que `bin/prod` corra la imagen que construyó en vez de esconderla

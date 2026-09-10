@@ -198,7 +198,7 @@ Nothing runs on the host — always go through the wrappers in `bin/`:
 | :-- | :-- |
 | `bin/install` | Generate `.env`, configure Traefik/domain, mint secrets |
 | `bin/dev` | Bring the stack up in dev mode |
-| `bin/prod` | Bring the stack up in prod mode (`runner` stage, rebuilds images) |
+| `bin/prod` | Bring the stack up in prod mode (`prod` stage, rebuilds images) |
 | `bin/cli <service> <cmd…>` | Run any command inside a running container |
 | `bin/npm [service] <args…>` | npm inside a service (defaults to `web`) |
 | `bin/bash <service>` | Interactive shell in a container |

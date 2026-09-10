@@ -317,7 +317,7 @@ leaves a half-written file at the destination.
 | :-- | :-- |
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate, against `tsconfig.json` (covers `src/**/*`, including `*.spec.ts`) |
-| `bin/npm worker run build` | `tsc -p tsconfig.build.json` — the `runner` image's `builder` stage runs this; `tsconfig.build.json` extends `tsconfig.json` but excludes `**/*.spec.ts`, so `dist/` ships no test code (`015-reproducible-image-builds`) |
+| `bin/npm worker run build` | `tsc -p tsconfig.build.json` — the `prod` image's `builder` stage runs this; `tsconfig.build.json` extends `tsconfig.json` but excludes `**/*.spec.ts`, so `dist/` ships no test code (`015-reproducible-image-builds`) |
 | `bin/npm worker test` | `vitest run` — 13 suites, 124 tests, green as of spec `031`, which added `src/ffmpeg/variants.spec.ts` and took `src/ffmpeg/params.spec.ts` from 15 cases to 28 for the regional-variant rules (spec `024` before it deleted a startup-probe module's spec outright and reset the case corpus to one file — `ffmpeg/cases.spec.ts` still runs 1 case, and that case is now authored by the user and read as the requirement); `023-ffprobe-log` added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 
@@ -338,7 +338,7 @@ leaves a half-written file at the destination.
 - **Dependency skew with `api`**: `ioredis` ^5 here vs ^6 there, `@types/node` ^22 vs ^24. Not
   currently causing trouble; worth knowing before debugging a Redis behaviour difference.
 - FFmpeg and mkvtoolnix are installed in the `base` stage of `services/worker/Dockerfile`, shared
-  by `dev` and `runner`. Since spec `024`, the worker's HDR handling is a plain downscale that
+  by `dev` and `prod`. Since spec `024`, the worker's HDR handling is a plain downscale that
   preserves colour tags, on CPU, unconditionally — no filter chain choice, no device probe, no
   render-node mapping anywhere in the stack. One Alpine sub-package spec `024` set out to remove
   could not fully go: one of `ffmpeg`'s own components links a GPU-rendering library that Alpine's
