@@ -101,21 +101,21 @@ ensure_env_var PERCEPTOR_TAG "$PERCEPTOR_TAG"
 # ---------------------------------------------------------------------------
 
 if [ "$fresh_install" = true ]; then
-  read -rp "Carpeta de descargas [./data/downloads]: " downloads_dir
+  read -rp "Carpeta de descargas [./data/downloads]: " downloads_dir </dev/tty
   downloads_dir="${downloads_dir:-./data/downloads}"
   set_env_var HOST_DOWNLOADS_DIR "$downloads_dir"
 
-  read -rp "Carpeta de tu biblioteca / media server [./data/library]: " destinations_dir
+  read -rp "Carpeta de tu biblioteca / media server [./data/library]: " destinations_dir </dev/tty
   destinations_dir="${destinations_dir:-./data/library}"
   set_env_var HOST_DESTINATIONS_DIR "$destinations_dir"
 
-  read -rp "Usuario administrador [admin]: " admin_user
+  read -rp "Usuario administrador [admin]: " admin_user </dev/tty
   set_env_var ADMIN_USER "${admin_user:-admin}"
 
-  read -rsp "Contraseña de administrador: " admin_password
+  read -rsp "Contraseña de administrador: " admin_password </dev/tty
   echo
   while [ -z "$admin_password" ]; do
-    read -rsp "No puede estar vacía. Contraseña de administrador: " admin_password
+    read -rsp "No puede estar vacía. Contraseña de administrador: " admin_password </dev/tty
     echo
   done
   set_env_var ADMIN_PASSWORD "$admin_password"
@@ -125,10 +125,10 @@ if [ "$fresh_install" = true ]; then
   # servicio directo en su puerto. Desde T010, Traefik también necesita el profile encendido
   # (COMPOSE_PROFILES=traefik) — sin eso, `docker compose up -d` no lo arranca aunque
   # USE_TRAEFIK=true.
-  read -rp "¿Usar Traefik para rutear por dominio? [y/N] " use_traefik
+  read -rp "¿Usar Traefik para rutear por dominio? [y/N] " use_traefik </dev/tty
   case "$use_traefik" in
     [yY]*)
-      read -rp "Dominio a usar (ej: perceptor.local): " domain
+      read -rp "Dominio a usar (ej: perceptor.local): " domain </dev/tty
       set_env_var USE_TRAEFIK true
       set_env_var DOMAIN "${domain}"
       set_env_var COMPOSE_PROFILES traefik
@@ -144,7 +144,7 @@ if [ "$fresh_install" = true ]; then
       ;;
   esac
 
-  read -rp "TMDB API key (opcional, Enter para saltear y cargarla después desde Ajustes): " tmdb_api_key
+  read -rp "TMDB API key (opcional, Enter para saltear y cargarla después desde Ajustes): " tmdb_api_key </dev/tty
   [ -n "$tmdb_api_key" ] && set_env_var TMDB_API_KEY "$tmdb_api_key"
 fi
 
