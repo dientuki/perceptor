@@ -2,7 +2,6 @@ services:
 
   traefik:
     image: traefik:v3.7
-    container_name: perceptor-traefik
     restart: unless-stopped
     # Off by default (REQ-16): a fresh installation binds neither 80 nor 443 and mounts no
     # Docker socket unless an operator opts in with COMPOSE_PROFILES=traefik in .env. Naming
@@ -31,7 +30,6 @@ services:
 
   web:
     image: ghcr.io/dientuki/perceptor-web:${PERCEPTOR_TAG:-latest}
-    container_name: perceptor-web
     restart: unless-stopped
     # Mismo criterio que api/worker: no root, para que node_modules/.next que
     # el CMD de dev escribe en el bind mount queden con el dueño del host en
@@ -75,7 +73,6 @@ services:
 
   api:
     image: ghcr.io/dientuki/perceptor-api:${PERCEPTOR_TAG:-latest}
-    container_name: perceptor-api
     restart: unless-stopped
     # No root: /uploads (ver src/uploads/) escribe en el disco de descargas, y
     # el archivo tiene que quedar con el mismo dueño/grupo que espera el
@@ -161,7 +158,6 @@ services:
 
   db:
     image: mariadb:12.3.2
-    container_name: perceptor-db
     restart: always
     # No port published to the host (NFR-8) — reachable on perceptor-net only. The build
     # overlay republishes DB_PORT for a development client (TablePlus, mariadb CLI, ...).
@@ -189,7 +185,6 @@ services:
   # new image, no script the user has to download.
   backup:
     image: mariadb:12.3.2
-    container_name: perceptor-backup
     restart: "no"
     depends_on:
       db:
@@ -226,7 +221,6 @@ services:
 
   worker:
     image: ghcr.io/dientuki/perceptor-worker:${PERCEPTOR_TAG:-latest}
-    container_name: perceptor-worker
     restart: unless-stopped
     # Verificado en vivo: ffmpeg con SVT-AV1 puede tardar ~9s en morir tras
     # SIGTERM (multi-hilo, necesita desarmar el encoder) — el default de
@@ -263,7 +257,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: perceptor-redis
     restart: unless-stopped
     # No port published to the host (NFR-8) — reachable on perceptor-net only. The build
     # overlay republishes REDIS_PORT for Redis Insight/TablePlus in development.
@@ -285,7 +278,6 @@ services:
 
   torrent:
     image: ghcr.io/dientuki/perceptor-torrent:${PERCEPTOR_TAG:-latest}
-    container_name: perceptor-torrent
     restart: unless-stopped
     dns:
       - 1.1.1.1
@@ -333,7 +325,6 @@ services:
     
   indexer:
     image: ghcr.io/dientuki/perceptor-indexer:${PERCEPTOR_TAG:-latest}
-    container_name: perceptor-indexer
     restart: unless-stopped
     dns:
       - 1.1.1.1
@@ -371,7 +362,6 @@ services:
 
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:v3.5.0
-    container_name: perceptor-cloudflare-proxy
     restart: unless-stopped
     dns:
       - 1.1.1.1

@@ -4,6 +4,12 @@
 # tal cual a `docker compose up` antes de la lista de servicios — pasá `-d`
 # vos mismo si querés que quede en segundo plano; sin argumentos corre en
 # primer plano, mostrando los logs.
+#
+# --build es obligatorio acá: docker-compose.build.yaml taguea siempre
+# perceptor-<svc>:local sin importar el target (dev o runner), así que un
+# bin/build o bin/prod previo deja una imagen runner con ese mismo tag —
+# sin --build, `docker compose up` la reusaría tal cual en vez de reconstruir
+# en modo dev.
 set -e
 cd "$(dirname "$0")/.."
 
@@ -21,4 +27,4 @@ fi
 
 COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml -f docker-compose.dev.yaml"
 
-BUILD_TARGET=dev docker compose $COMPOSE_FILES up "$@" $SERVICES
+BUILD_TARGET=dev docker compose $COMPOSE_FILES up --build "$@" $SERVICES
