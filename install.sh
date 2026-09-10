@@ -213,9 +213,12 @@ if env_var_is_empty INDEXER_API_KEY; then
   # --entrypoint /bin/sh evita la cadena /init de LinuxServer (no arranca nada) y --no-deps
   # evita arrastrar a flaresolverr sólo para leer un archivo. Mismo truco que bin/install; acá
   # corre contra la imagen publicada (docker-compose.yaml ya no tiene build:) en vez de construir.
+  # -T y </dev/null son obligatorios bajo `curl | bash`: sin eso `docker compose run` adjunta el
+  # stdin de bash — que es el pipe con el resto del script — y el contenedor se lo come entero,
+  # dejando al script terminando en silencio con código 0 en esta misma línea.
   set -a; . ./.env; set +a
-  existing_key=$(docker compose run --rm --no-deps --entrypoint /bin/sh indexer \
-    -c 'sed -n "s:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p" /config/config.xml 2>/dev/null' | tr -d '\r\n')
+  existing_key=$(docker compose run --rm -T --no-deps --entrypoint /bin/sh indexer \
+    -c 'sed -n "s:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p" /config/config.xml 2>/dev/null' </dev/null | tr -d '\r\n')
   if [ -n "$existing_key" ]; then
     echo "Encontrada, adoptando la key existente del volumen de indexer."
     ensure_env_var INDEXER_API_KEY "$existing_key"
@@ -261,7 +264,9 @@ docker compose up -d --wait --wait-timeout 600
 
 if env_var_is_empty SERVICE_TOKEN; then
   echo "Minteando SERVICE_TOKEN..."
-  service_token=$(docker compose exec -T api node dist/scripts/mint-service-token.js)
+  # </dev/null por el mismo motivo que el `docker compose run` de arriba: bajo `curl | bash` el
+  # stdin de bash es el script mismo, y compose lo adjunta al contenedor aunque no lo lea nadie.
+  service_token=$(docker compose exec -T api node dist/scripts/mint-service-token.js </dev/null)
   ensure_env_var SERVICE_TOKEN "$service_token"
   echo "Reiniciando torrent/worker para que tomen el SERVICE_TOKEN nuevo..."
   docker compose up -d torrent worker
