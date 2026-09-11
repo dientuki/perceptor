@@ -260,13 +260,40 @@ docker compose pull
 
 echo
 echo "Levantando el stack... la primera vez puede tardar varios minutos (migración + seed de api)."
-docker compose up -d --wait --wait-timeout 600
+if ! docker compose up -d --wait --wait-timeout 600; then
+  # Sin este mensaje, `set -e` corta acá con sólo el error crudo de compose, y quien lo lea no
+  # tiene forma de saber si el stack quedó a medio levantar o si hace falta empezar de cero.
+  # `up -d` ya lanzó los containers antes de fallar el --wait — por eso pueden seguir corriendo
+  # de fondo aunque el instalador se corte — y el propio script es reentrante (ver el comentario
+  # sobre `fresh_install` al principio), así que la salida es simplemente correrlo de nuevo.
+  echo >&2
+  echo "ERROR: el stack no llegó a 'healthy' dentro de los 600 segundos de espera." >&2
+  echo "Los containers pueden haber quedado corriendo igual — revisá con:" >&2
+  echo "  docker compose ps" >&2
+  echo "Si api todavía está migrando/seedeando, esperá un momento y volvé a correr este mismo" >&2
+  echo "instalador: es reentrante y no pisa nada de lo que ya esté configurado." >&2
+  exit 1
+fi
 
 if env_var_is_empty SERVICE_TOKEN; then
   echo "Minteando SERVICE_TOKEN..."
   # </dev/null por el mismo motivo que el `docker compose run` de arriba: bajo `curl | bash` el
   # stdin de bash es el script mismo, y compose lo adjunta al contenedor aunque no lo lea nadie.
   service_token=$(docker compose exec -T api node dist/scripts/mint-service-token.js </dev/null)
+  # Un SERVICE_TOKEN vacío escrito en .env es peor que fallar acá: la instalación queda
+  # arriba y sin ningún error visible en los logs de api/worker (torrent/worker jamás
+  # reciben el aviso de torrent completado, y no hay dónde loguear eso salvo el propio
+  # AutoRun hook, que nadie mira). Mejor abortar fuerte, con la salida cruda para diagnosticar.
+  if [ -z "$service_token" ]; then
+    echo "ERROR: el minteo de SERVICE_TOKEN no devolvió nada. La instalación quedó sin ese token:" >&2
+    echo "torrent y worker no van a poder autenticarse contra la api (avisos de descarga completa" >&2
+    echo "y reportes de encode van a fallar en silencio)." >&2
+    echo "Reintentá manualmente con:" >&2
+    echo "  docker compose exec api node dist/scripts/mint-service-token.js" >&2
+    echo "y pegá el resultado en SERVICE_TOKEN dentro de .env, luego corré:" >&2
+    echo "  docker compose up -d torrent worker" >&2
+    exit 1
+  fi
   ensure_env_var SERVICE_TOKEN "$service_token"
   echo "Reiniciando torrent/worker para que tomen el SERVICE_TOKEN nuevo..."
   docker compose up -d torrent worker

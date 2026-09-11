@@ -116,7 +116,17 @@ COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml -f docker-com
 
 echo
 echo "Levantando servicios... puede tardar un minuto si es la primera vez que los containers se crean."
-BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 180 db redis api web torrent indexer flaresolverr torrent worker
+if ! BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 180 db redis api web torrent indexer flaresolverr torrent worker; then
+  # Sin este mensaje, `set -e` corta acá con sólo el error crudo de compose. `up -d` ya lanzó
+  # los containers antes de fallar el --wait, así que pueden seguir corriendo de fondo; y este
+  # script es reentrante (no pisa nada ya configurado), así que la salida es correrlo de nuevo.
+  echo >&2
+  echo "ERROR: los servicios no llegaron a 'healthy' dentro de los 180 segundos de espera." >&2
+  echo "Los containers pueden haber quedado corriendo igual — revisá con:" >&2
+  echo "  docker compose ps" >&2
+  echo "Esperá un momento y volvé a correr bin/install: es reentrante." >&2
+  exit 1
+fi
 
 # Un container "healthy" no implica un container instalado: node_modules está
 # bind-mounteado desde el host, así que se puede borrar con el container arriba
@@ -131,7 +141,14 @@ if ! docker compose exec -T api test -x node_modules/.bin/prisma; then
   # dependencias nuevas.
   echo "Reiniciando api para que levante con las dependencias nuevas..."
   docker compose restart api
-  BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 300 api
+  if ! BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 300 api; then
+    echo >&2
+    echo "ERROR: api no volvió a 'healthy' dentro de los 300 segundos de espera tras el npm install." >&2
+    echo "Revisá con:" >&2
+    echo "  docker compose logs api" >&2
+    echo "Esperá un momento y volvé a correr bin/install: es reentrante." >&2
+    exit 1
+  fi
 fi
 
 # SERVICE_TOKEN recién se puede mintear con api ya arriba (el script vive en
@@ -144,6 +161,16 @@ current_service_token=$(grep '^SERVICE_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
 if [ -z "$current_service_token" ]; then
   echo "Minteando SERVICE_TOKEN..."
   service_token=$(docker compose exec -T api npm run --silent token:service)
+  # Un SERVICE_TOKEN vacío en .env falla en silencio: torrent y worker arrancan igual,
+  # pero no pueden autenticarse contra la api, y no hay ningún error visible en los
+  # logs de api ni worker (sólo en el AutoRun hook de qBittorrent, que nadie mira).
+  if [ -z "$service_token" ]; then
+    echo "ERROR: el minteo de SERVICE_TOKEN no devolvió nada. Reintentá manualmente con:" >&2
+    echo "  docker compose exec api npm run --silent token:service" >&2
+    echo "y pegá el resultado en SERVICE_TOKEN dentro de .env, luego corré:" >&2
+    echo "  docker compose up -d torrent worker" >&2
+    exit 1
+  fi
   ensure_env_var SERVICE_TOKEN "$service_token"
 fi
 
