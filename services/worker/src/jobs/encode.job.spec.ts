@@ -41,6 +41,7 @@ vi.mock('./cleanup-source', () => ({
   cleanupSource: (...args: unknown[]) => cleanupSourceMock(...args),
 }));
 
+import { UnrecoverableError } from 'bullmq';
 import { handleEncode } from './encode.job';
 import { KeyedError } from '../i18n/keyed-error';
 import { EncodeCancelledError } from '../encode/cancellation';
@@ -109,7 +110,11 @@ describe('handleEncode — encodeFailed reporting (018-ui-i18n REQ-11)', () => {
     );
     encodeMock.mockRejectedValue(thrown);
 
-    await expect(handleEncode(makeJob())).rejects.toBe(thrown);
+    // REQ-9 (054-interrupted-encode-recovery): a KeyedError leaves the
+    // handler wrapped in UnrecoverableError, not as the original error — see
+    // the dedicated describe block below for the classification itself; this
+    // case only needs the wrapping not to break the report already sent.
+    await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
     const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
       (query as string).includes('encodeFailed'),
@@ -359,7 +364,9 @@ describe('handleEncode — ffprobe log recording (023-ffprobe-log)', () => {
     // swallow this too.
     encodeMock.mockRejectedValue(probeError);
 
-    await expect(handleEncode(makeJob())).rejects.toBe(probeError);
+    // Wrapped in UnrecoverableError (REQ-9) — see the dedicated describe
+    // block below for the classification itself.
+    await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
     const probeCall = fetchGraphQLMock.mock.calls.find(([query]) =>
       (query as string).includes('recordFfprobe'),
@@ -593,7 +600,9 @@ describe('handleEncode — encodeCompleted delivered through deliverReport (038-
     });
     encodeMock.mockRejectedValue(thrown);
 
-    await expect(handleEncode(makeJob())).rejects.toBe(thrown);
+    // Wrapped in UnrecoverableError (REQ-9) — see the dedicated describe
+    // block below for the classification itself.
+    await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
     const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
       (query as string).includes('encodeFailed'),
@@ -728,7 +737,10 @@ describe('handleEncode — a cancelled encode reports nothing (047-source-deleti
     const cancelled = new EncodeCancelledError();
     encodeMock.mockRejectedValue(cancelled);
 
-    await expect(handleEncode(makeJob())).rejects.toBe(cancelled);
+    // REQ-8 (054-interrupted-encode-recovery): wrapped in UnrecoverableError,
+    // not the original EncodeCancelledError — see the dedicated describe
+    // block below for the classification itself.
+    await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
     expect(passthroughMock).not.toHaveBeenCalled();
     const completedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
@@ -747,7 +759,7 @@ describe('handleEncode — a cancelled encode reports nothing (047-source-deleti
     const cancelled = new EncodeCancelledError();
     passthroughMock.mockRejectedValue(cancelled);
 
-    await expect(handleEncode(makeJob())).rejects.toBe(cancelled);
+    await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
     expect(encodeMock).not.toHaveBeenCalled();
     const completedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
@@ -759,5 +771,88 @@ describe('handleEncode — a cancelled encode reports nothing (047-source-deleti
     expect(completedCall).toBeUndefined();
     expect(failedCall).toBeUndefined();
     expect(cleanupSourceMock).not.toHaveBeenCalled();
+  });
+});
+
+// Defends REQ-8/REQ-9 of 054-interrupted-encode-recovery (worker/plan.md
+// § Steps 3, § Tests): once REQ-7 gives the encode queue real retries, a
+// plain throw is no longer just a failed job — it's a job BullMQ will
+// re-attempt. Only two classes must be exempted from that: a cancellation
+// (REQ-8, which must also keep reporting nothing — the 047-source-deletion
+// regression this feature's own plan.md § Risks names as its most likely
+// bug) and a KeyedError (REQ-9, a diagnosed failure that will recur
+// identically). Anything else must stay a plain, retryable throw — the case
+// that proves steps 3/4 didn't just wrap everything, which would leave REQ-7
+// inert while looking implemented.
+describe('handleEncode — non-retryable classification (054-interrupted-encode-recovery REQ-8/REQ-9)', () => {
+  function mockSuccessfulGraphQL(processJob: Record<string, unknown> = PROCESS_JOB_DETAILS) {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob });
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  it('a cancelled encode is non-retryable (UnrecoverableError) and still reports nothing', async () => {
+    mockSuccessfulGraphQL();
+    const cancelled = new EncodeCancelledError('encode cancelled: source deleted');
+    encodeMock.mockRejectedValue(cancelled);
+
+    const rejection = await handleEncode(makeJob()).catch((err) => err);
+
+    // The important assertion: BullMQ only exempts UnrecoverableError from
+    // retrying, regardless of the job's configured attempts — a plain throw
+    // here, even of EncodeCancelledError, would be retried and restart the
+    // exact encode the cancellation was meant to stop.
+    expect(rejection).toBeInstanceOf(UnrecoverableError);
+    expect((rejection as Error).message).toBe('encode cancelled: source deleted');
+
+    // Still reports nothing to api — 047-source-deletion's behaviour, which
+    // this feature's REQ-8 explicitly promises to keep intact.
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeCompleted'))).toBe(false);
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeFailed'))).toBe(false);
+    expect(cleanupSourceMock).not.toHaveBeenCalled();
+  });
+
+  it('a KeyedError is non-retryable (UnrecoverableError) and still reports encodeFailed with its own key', async () => {
+    mockSuccessfulGraphQL();
+    const thrown = new KeyedError(ERROR_ENCODE_FFMPEG_FAILED, 'ffmpeg exited with code 1', {
+      code: 1,
+    });
+    encodeMock.mockRejectedValue(thrown);
+
+    const rejection = await handleEncode(makeJob()).catch((err) => err);
+
+    expect(rejection).toBeInstanceOf(UnrecoverableError);
+    expect((rejection as Error).message).toBe('ffmpeg exited with code 1');
+
+    const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeFailed'),
+    );
+    expect(failedCall).toBeDefined();
+    const [, variables] = failedCall as [string, Record<string, unknown>];
+    expect(variables.key).toBe(ERROR_ENCODE_FFMPEG_FAILED);
+  });
+
+  it('an unclassified throw stays a plain, retryable throw', async () => {
+    mockSuccessfulGraphQL();
+    const thrown = new Error('unexpected library crash');
+    encodeMock.mockRejectedValue(thrown);
+
+    const rejection = await handleEncode(makeJob()).catch((err) => err);
+
+    // Proves steps 3/4 classify rather than blanket-wrap: neither
+    // EncodeCancelledError nor KeyedError, so it must leave the handler as
+    // the exact original error, not an UnrecoverableError — otherwise REQ-7's
+    // retries would be inert for every unclassified failure while looking
+    // implemented.
+    expect(rejection).toBe(thrown);
+    expect(rejection).not.toBeInstanceOf(UnrecoverableError);
+
+    const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeFailed'),
+    );
+    expect(failedCall).toBeDefined();
   });
 });

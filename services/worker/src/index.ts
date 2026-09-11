@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+import { UnrecoverableError, Worker } from 'bullmq';
 import Redis from 'ioredis';
 import {
   PROCESS_QUEUE,
@@ -11,6 +11,11 @@ import type { SourceReadyJob, EncodeJob, EncodeCancelMessage } from './queue/typ
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
 import { cancelEncode } from './encode/cancellation';
+import { reportEncodeWorkerStarted } from './api/encode-worker-started';
+import { deliverReport } from './api/deliver-report';
+import { fetchGraphQL } from './api/graphql-client';
+import { ERROR_ENCODE_UNEXPECTED } from './i18n/error-keys';
+import { renderMessage } from './i18n/messages.en';
 
 // El container corre como PUID:PGID (ver docker-compose.yaml, "user:"), no
 // root: sin esto el umask por defecto (022) deja carpetas 755/root y archivos
@@ -34,6 +39,13 @@ const connection = {
 // NFR-1), so the whole startup is wrapped in this async bootstrap rather
 // than switching the package to ESM as a side effect of this feature.
 async function main() {
+  // 054-interrupted-encode-recovery (REQ-1, NFR-4): sound only because exactly
+  // one worker container runs — "I just booted" and "nothing is encoding" coincide.
+  const reconciledCount = await deliverReport('encodeWorkerStarted', () =>
+    reportEncodeWorkerStarted(),
+  );
+  console.log(`[worker] encodeWorkerStarted: reconciled ${reconciledCount} orphaned job(s)`);
+
   const scanWorker = new Worker<SourceReadyJob>(
     PROCESS_QUEUE,
     async (job) => {
@@ -113,6 +125,46 @@ async function main() {
 
   encodeWorker.on('failed', (job, err) => {
     console.error(`[worker] encode falló ${job?.id}:`, err);
+
+    // 054-interrupted-encode-recovery (REQ-10): this listener only reacts to
+    // a BullMQ-level outcome, never to a plain diagnosed failure. If `err` is
+    // an UnrecoverableError, encode.job.ts already decided whether to report
+    // (KeyedError -> encodeFailed already sent; EncodeCancelledError ->
+    // deliberately nothing, per REQ-8) before converting its error, so there
+    // is nothing left to do here. Only an unclassified, still-plain throw
+    // reaches this branch, and only once BullMQ has actually exhausted every
+    // configured attempt (job.attemptsMade >= job.opts.attempts) does it mean
+    // "nobody will retry this" rather than "a retry is already queued" — the
+    // latter must never be reported, or a title would turn red while its
+    // encode is still coming.
+    if (err instanceof UnrecoverableError) return;
+    if (!job) return;
+
+    const attempts = job.opts.attempts ?? 1;
+    if (job.attemptsMade < attempts) return;
+
+    const detail = err instanceof Error ? err.message : String(err);
+    const errorKey = ERROR_ENCODE_UNEXPECTED;
+    const errorMessage = renderMessage(errorKey, { detail });
+
+    void deliverReport(`encodeFailed(exhausted:${job.data.processJobId})`, () =>
+      fetchGraphQL(
+        `mutation ($id: Int!, $key: String!, $params: String, $msg: String!) {
+          encodeFailed(processJobId: $id, errorKey: $key, errorParams: $params, errorMessage: $msg)
+        }`,
+        {
+          id: job.data.processJobId,
+          key: errorKey,
+          params: JSON.stringify({ detail }),
+          msg: errorMessage,
+        },
+      ),
+    ).catch((reportErr) => {
+      console.error(
+        `[worker] no se pudo reportar encodeFailed por agotamiento de reintentos (${job.data.processJobId}):`,
+        reportErr,
+      );
+    });
   });
 
   process.on('SIGTERM', () => {

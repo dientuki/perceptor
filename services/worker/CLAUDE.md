@@ -266,6 +266,36 @@ GraphQL selection missing a field — nothing catches this at compile time, see
 `console.error`s the missing field's name: a missing instruction is never read as `false` (silently
 never cleaning up) and never as `true` (silently deleting something live).
 
+## Recovering from a hard crash mid-encode (`054-interrupted-encode-recovery`)
+
+`main()` in `src/index.ts` calls `src/api/encode-worker-started.ts`'s `reportEncodeWorkerStarted()`
+**before either `Worker` is constructed**, wrapped in the existing `deliverReport` (so an
+unreachable `api` retries rather than failing the bootstrap). This is the whole trigger for the
+feature: a `ProcessJob` a dead run left reading `ENCODING` has no other signal that tells `api` it
+is safe to touch, since neither an `api` restart nor a stale `updatedAt` can distinguish "dead" from
+"a six-hour encode mid-`mkvmerge`, still alive." The call is sound only because exactly one `worker`
+container ever runs — "I just booted" and "nothing is encoding" coincide under that assumption
+alone, and a second replica would reconcile the first one's live encodes out from under it. The
+returned count is logged, never branched on — which jobs get skipped, failed or requeued is
+entirely `api`'s decision, made against rows this service cannot see (no Prisma, no database).
+
+Two other pieces close the loop, both inside `src/jobs/encode.job.ts`:
+
+- `runner.ts`'s `cleanupTemps()` (removing `<input>.working.mkv` and `<final>.part.mkv`) now runs
+  **before** spawning FFmpeg as well as on every exit path, unconditionally — a scratch file left by
+  a crashed run must not collide with the encode that recovers it.
+- An `EncodeCancelledError` and a `KeyedError` are both rethrown as BullMQ's own
+  `UnrecoverableError`, so BullMQ never retries either — cancellation must still report nothing
+  (`047-source-deletion`'s existing rule, unchanged), and a `KeyedError` has already reported
+  `encodeFailed` with its own diagnosis, which would just recur identically on a retry. This is what
+  makes it safe for `EncodeQueueService.addEncode` (api-side) to carry a small `attempts`/`backoff`
+  at all: an unclassified throw is the only kind BullMQ retries, and the encode worker's own
+  `failed` listener in `src/index.ts` reports `encodeFailed` (`error.encode.unexpected`) only once
+  BullMQ has actually exhausted that budget, never for a job it plans to retry.
+
+See `docs/spec/graphql-contract.md`'s `encodeWorkerStarted` section and `services/api/CLAUDE.md`'s
+`process-jobs/` bullet for the reconciliation this triggers.
+
 ## Failures carry a translation key, never a rendered sentence (`018-ui-i18n`)
 
 Every failure `encodeFailed` reports travels as a key plus interpolation params, not English prose

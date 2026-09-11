@@ -27,8 +27,21 @@ Since `053`, the worker also reports FFmpeg's own realtime multiplier (`speed=1.
 `-progress pipe:1` stream) alongside the progress it already reports, on the same throttled
 cadence — decoration, never load-bearing: a missing or unparseable speed never fails or slows an
 encode, and `api` derives it as non-null only while a job is actually `ENCODING`, never from a
-completed/failed/cancelled one's last stored value |
-`011`, `013`, `024`, `031`, `032`, `042`, `046`, `047`, `048`, `051`, `053` |
+completed/failed/cancelled one's last stored value. Since `054`, an encode interrupted by a hard
+crash — the worker container dying mid-FFmpeg with no time to write anything — recovers rather than
+sitting on "encoding" forever: `worker` announces its own boot to `api` (`encodeWorkerStarted`,
+before either BullMQ `Worker` is constructed, sound only because exactly one `worker` container
+runs) and `api` reconciles every `ProcessJob` still reading `ENCODING` at that moment, since a
+process that has just started is encoding nothing. A job is requeued from scratch (its
+`.working.mkv`/`.part.mkv` scratch cleared unconditionally before every encode, not only a
+recovered one) once automatically; a second orphaning of the same job fails it outright rather than
+looping forever on a host the encode itself keeps crashing. `docker compose restart api` alone
+never touches a live encode — the signal is the worker's boot, never the api's. A small BullMQ
+retry budget (`attempts: 2`, a 5-minute backoff) separately covers the narrower case of a stall
+BullMQ's own heartbeat detects while the worker's container survives; it never retries a
+cancellation or a diagnosed failure, both rethrown as non-retryable so `047`'s delete-mid-encode
+guarantee is unaffected |
+`011`, `013`, `024`, `031`, `032`, `042`, `046`, `047`, `048`, `051`, `053`, `054` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`); no longer write-only — a local index (`src/media-server-index/`) lets a client with no native provider-id lookup answer "does this title exist" too, rebuilt on demand from Settings or a "Re-sincronizar" button in `web` | `034` |
 | Browse library | `api` — the three resolvers; `web` — `/`, the billboard, plus `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010`, `033` |
 
@@ -313,6 +326,13 @@ directory). `web` typechecks at 0 errors and `bin/npm web run build` exits 0. `w
 passing — same 2 pre-existing `src/ffmpeg/` failures as above, confirmed unchanged; `worker`
 typecheck reports the same 2 pre-existing `src/metadata/container-tags.spec.ts` errors noted under
 `052` above and no others.
+— and again 2026-09-11 after `054-interrupted-encode-recovery`: `api` 471/43 suites, 0 typecheck
+errors, one migration (`ProcessJob.recoveryCount Int @default(0)` — `git status --short
+services/api/prisma` shows a modified `schema.prisma` and one new migration directory). `worker`
+`bin/npm worker run build` exits 0 and `bin/npm worker test` runs 181 tests across 20 suites, 179
+passing — same 2 pre-existing `src/ffmpeg/` failures as above, confirmed unchanged; `worker`
+typecheck reports the same 2 pre-existing `src/metadata/container-tags.spec.ts` errors noted under
+`052` above and no others (`web` untouched by this feature).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

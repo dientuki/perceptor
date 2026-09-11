@@ -167,65 +167,83 @@ export function runFfmpeg(
 
     signal.addEventListener('abort', abortHandler);
 
-    const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    activeChild = child;
+    // Clear any scratch file a crashed previous run left behind, before
+    // spawning ffmpeg — unconditional for every encode, not only a recovered
+    // one (054-interrupted-encode-recovery, REQ-6). `cleanupTemps` is async,
+    // so it is chained rather than awaited: this executor must stay
+    // synchronous, since a rejection thrown from an async Promise executor
+    // is swallowed instead of rejecting the promise.
+    cleanupTemps().then(startFfmpeg);
 
-    child.on('error', (err) => settleReject(err));
-
-    // out_time_us= llega en microsegundos y viene en 'N/A' durante el
-    // buffering inicial de encoders como SVT-AV1 — hay que saltearlo, no
-    // tratarlo como progreso 0. onProgress es async pero el stream 'data' no
-    // tiene backpressure para esperarlo ahí mismo: se serializa con
-    // progressInFlight ("hay uno en vuelo, descarto este") en vez de await,
-    // así nunca hay dos mutations de progreso concurrentes sobre el mismo
-    // ProcessJob — es la misma condición que ya rompió con error 1020 de
-    // MariaDB en encode.mock.ts/encode.job.ts.
-    child.stdout.on('data', (data: Buffer) => {
-      const chunk = data.toString();
-
-      // speed= can land in a different chunk than out_time_us= (the
-      // -progress block splits across chunk boundaries), so it is parsed
-      // independently and remembered in `lastSpeed` rather than required
-      // alongside out_time_us= in the same match (053-downloads-panel-repair).
-      // FFmpeg emits `speed=N/A` during startup buffering, and possibly a
-      // leading space (`speed= 1.02x`) — both fall through to null, never
-      // throwing (NFR-3).
-      const speedMatch = chunk.match(/speed=\s*([\d.]+)x/);
-      if (speedMatch) {
-        const parsedSpeed = Number(speedMatch[1]);
-        lastSpeed = Number.isFinite(parsedSpeed) ? parsedSpeed : null;
-      } else if (chunk.includes('speed=N/A')) {
-        lastSpeed = null;
+    function startFfmpeg() {
+      // The cleanup above spans an async gap — a cancellation (or another
+      // exit path) may already have settled this promise while it ran.
+      if (settled) return;
+      if (cancelled) {
+        settleReject(new EncodeCancelledError());
+        return;
       }
 
-      const match = chunk.match(/out_time_us=(\d+)/);
-      if (!match || progressInFlight || durationSeconds <= 0) return;
+      const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      activeChild = child;
 
-      const outTimeSeconds = Number(match[1]) / 1_000_000;
-      if (!Number.isFinite(outTimeSeconds)) return;
+      child.on('error', (err) => settleReject(err));
 
-      // Tope en 99: el 100 lo pone encodeCompleted recién después del rename
-      // final, cuando el archivo ya está de verdad en su ruta definitiva.
-      const progress = Math.min(99, Math.max(0, Math.round((outTimeSeconds / durationSeconds) * 100)));
-      progressInFlight = true;
-      onProgress(progress, lastSpeed)
-        .catch((err) => console.error('[ffmpeg] no se pudo reportar progreso:', err))
-        .finally(() => {
-          progressInFlight = false;
-        });
-    });
+      // out_time_us= llega en microsegundos y viene en 'N/A' durante el
+      // buffering inicial de encoders como SVT-AV1 — hay que saltearlo, no
+      // tratarlo como progreso 0. onProgress es async pero el stream 'data' no
+      // tiene backpressure para esperarlo ahí mismo: se serializa con
+      // progressInFlight ("hay uno en vuelo, descarto este") en vez de await,
+      // así nunca hay dos mutations de progreso concurrentes sobre el mismo
+      // ProcessJob — es la misma condición que ya rompió con error 1020 de
+      // MariaDB en encode.mock.ts/encode.job.ts.
+      child.stdout.on('data', (data: Buffer) => {
+        const chunk = data.toString();
 
-    child.stderr.on('data', (data: Buffer) => {
-      const line = data.toString().trim();
-      if (!line) return;
-      stderrTail.push(line);
-      if (stderrTail.length > STDERR_TAIL_LINES) stderrTail.shift();
-    });
+        // speed= can land in a different chunk than out_time_us= (the
+        // -progress block splits across chunk boundaries), so it is parsed
+        // independently and remembered in `lastSpeed` rather than required
+        // alongside out_time_us= in the same match (053-downloads-panel-repair).
+        // FFmpeg emits `speed=N/A` during startup buffering, and possibly a
+        // leading space (`speed= 1.02x`) — both fall through to null, never
+        // throwing (NFR-3).
+        const speedMatch = chunk.match(/speed=\s*([\d.]+)x/);
+        if (speedMatch) {
+          const parsedSpeed = Number(speedMatch[1]);
+          lastSpeed = Number.isFinite(parsedSpeed) ? parsedSpeed : null;
+        } else if (chunk.includes('speed=N/A')) {
+          lastSpeed = null;
+        }
 
-    child.on('close', (code) => {
-      if (settled) return;
-      void handleFfmpegClose(code);
-    });
+        const match = chunk.match(/out_time_us=(\d+)/);
+        if (!match || progressInFlight || durationSeconds <= 0) return;
+
+        const outTimeSeconds = Number(match[1]) / 1_000_000;
+        if (!Number.isFinite(outTimeSeconds)) return;
+
+        // Tope en 99: el 100 lo pone encodeCompleted recién después del rename
+        // final, cuando el archivo ya está de verdad en su ruta definitiva.
+        const progress = Math.min(99, Math.max(0, Math.round((outTimeSeconds / durationSeconds) * 100)));
+        progressInFlight = true;
+        onProgress(progress, lastSpeed)
+          .catch((err) => console.error('[ffmpeg] no se pudo reportar progreso:', err))
+          .finally(() => {
+            progressInFlight = false;
+          });
+      });
+
+      child.stderr.on('data', (data: Buffer) => {
+        const line = data.toString().trim();
+        if (!line) return;
+        stderrTail.push(line);
+        if (stderrTail.length > STDERR_TAIL_LINES) stderrTail.shift();
+      });
+
+      child.on('close', (code) => {
+        if (settled) return;
+        void handleFfmpegClose(code);
+      });
+    }
 
     async function handleFfmpegClose(code: number | null) {
       if (cancelled) {

@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.9.0
+spec_version: 1.10.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-09-01
+last_updated: 2026-09-11
 status: Approved
 target_service: api, web, worker
 ---
@@ -1487,6 +1487,36 @@ condition would silently change meaning the day `api` has any reason to send bot
 at once. `worker`: passes `speed` on every `encodeProgress` call it already makes, riding the
 existing `PROGRESS_STEP` throttle — no new network call, no new cadence.
 
+### `encodeWorkerStarted` is the first service-only operation in the schema (`054-interrupted-encode-recovery`)
+
+```graphql
+type Mutation {
+  encodeWorkerStarted: Int!
+}
+```
+
+No arguments — a worker id, hostname or timestamp would all look like they make the call safer, but
+the fact it carries is "the encode consumer just started," and the caller's credential (`SERVICE_TOKEN`)
+is the proof. Returns the number of `ProcessJob` rows `api` reconciled; `worker` logs it and never
+branches on it.
+
+Every other `@AllowService()` operation in this schema (`encodeStarted`, `encodeProgress`,
+`recordFfprobe`, …) is reachable by **both** a service principal and a signed-in user —
+`@AllowService()` widens the guard's default (every operation requires a credential) to admit a
+service principal, it does not narrow anything away from a user. This is the first mutation where
+that matters: a user calling `encodeWorkerStarted` would reset any `ProcessJob` currently `ENCODING`
+back to `WAITING`/`QUEUED`, mid-encode, with no confirmation. The resolver adds an explicit
+`principal.type !== 'service'` check before delegating, raising `error.auth.unauthenticated` — the
+same key `JwtAuthGuard` raises for the mirror-image rejection — since `@AllowService()` alone would
+not exclude a user here.
+
+Called once, by `worker`'s `main()`, before either BullMQ `Worker` is constructed
+(`services/worker/src/api/encode-worker-started.ts`), wrapped in the existing `deliverReport` so an
+unreachable `api` is retried rather than treated as a bootstrap failure — anything else `api`
+answers (including the unauthorized case, which cannot actually occur with `SERVICE_TOKEN`) fails
+the bootstrap loudly. See `services/worker/CLAUDE.md` and `services/api/CLAUDE.md` for the
+reconciliation this triggers.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST
@@ -1533,6 +1563,23 @@ rather than silently never cancelling. There is no ack channel: the api does not
 for a `processJobId` the worker is not currently encoding is a logged no-op. Declared in both
 `services/api/src/queue/types.ts` and `services/worker/src/queue/types.ts`, same hand-sync
 obligation as the queue payload above.
+
+**The encode queue gained a retry policy (`054-interrupted-encode-recovery`).** `addEncode`
+(`services/api/src/queue/encode-queue.service.ts`) now sets `attempts: 2` with a fixed 5-minute
+`backoff` on every job it adds — deliberately small, since one retry on this queue is potentially
+hours of re-encoded CPU, not the near-free retry a typical short job affords. This is a narrow
+safety net for the case BullMQ's own stall detection catches while the worker's container survives
+(the far more common "the whole process died" case is instead recovered by `encodeWorkerStarted`
+above, which runs before the retry budget ever applies). The policy only does what it should because
+`worker`'s classification in `src/jobs/encode.job.ts` rethrows both an `EncodeCancelledError` and a
+`KeyedError` as BullMQ's own `UnrecoverableError`, bypassing the attempts budget entirely — an
+unclassified throw is the only kind BullMQ actually retries. Without that classification landing
+first, a source deleted mid-encode (`047-source-deletion`) would have its cancellation retried as if
+it were a transient failure, restarting the exact encode it was meant to stop. If BullMQ exhausts
+the budget on an unclassified error, the encode worker's own `failed` listener
+(`services/worker/src/index.ts`) reports `encodeFailed` with `error.encode.unexpected` — guarded so
+it never reports a job an `UnrecoverableError` already resolved, and never reports one BullMQ still
+plans to retry (`job.attemptsMade < job.opts.attempts`).
 
 ### What never crosses the boundary
 

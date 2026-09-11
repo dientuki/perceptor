@@ -84,6 +84,7 @@ export const ERROR_KEYS = {
   SOURCE_NO_DOWNLOAD_PATH: 'error.source.no_download_path',
   SOURCE_REPLACED: 'error.source.replaced',
   PROCESS_JOB_NOT_FOUND: 'error.processJob.not_found',
+  PROCESS_JOB_RECOVERY_EXHAUSTED: 'error.processJob.recovery_exhausted',
   DOWNLOAD_NOT_A_TORRENT: 'error.download.not_a_torrent',
   TORRENT_CLIENT_REJECTED: 'error.download.torrent_client_rejected',
 

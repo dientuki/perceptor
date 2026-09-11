@@ -6,9 +6,17 @@ import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
+import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
+import { MESSAGES_EN } from '@/i18n/messages.en';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
+
+// REQ-4: one automatic recovery per ProcessJob, ever — a constant, not a
+// Setting (Article X). A job found orphaned in ENCODING a second time is
+// failed outright rather than re-armed, since an encode that is itself what
+// kills the host must not re-arm itself on every reboot.
+const RECOVERY_ALLOWANCE = 1;
 
 @Injectable()
 export class ProcessJobsService {
@@ -19,6 +27,10 @@ export class ProcessJobsService {
     private readonly mediaRoots: MediaRootsService,
     private readonly mediaServer: MediaServerService,
     private readonly mediaCapabilities: MediaCapabilitiesService,
+    // 054-interrupted-encode-recovery: needed by the (not yet added, T005)
+    // boot reconciliation method to withdraw and re-add an orphaned job's
+    // queue entry.
+    private readonly encodeQueue: EncodeQueueService,
   ) {}
 
   async getEncodeJobDetails(id: number): Promise<EncodeJobDetails> {
@@ -427,14 +439,155 @@ export class ProcessJobsService {
     });
 
     if (!sourceDemoted) {
-      if (processJob.movieId) {
-        await this.prisma.movie.update({ where: { id: processJob.movieId }, data: { status: 'ERROR' } });
-      } else if (processJob.episodeId) {
-        await this.prisma.episode.update({ where: { id: processJob.episodeId }, data: { status: 'ERROR' } });
-      }
+      await this.propagateJobError(processJob.movieId, processJob.episodeId);
     }
 
     return true;
+  }
+
+  // Shared by encodeFailed and the recovery-exhaustion branch of
+  // reconcileOrphanedEncodes (054-interrupted-encode-recovery): both need to
+  // move the title to ERROR, and factoring this out is what "reuse the
+  // propagation rather than writing a second one" (api/plan.md § Steps 4d)
+  // actually means in code, not just in prose.
+  private async propagateJobError(movieId: number | null, episodeId: number | null): Promise<void> {
+    if (movieId) {
+      await this.prisma.movie.update({ where: { id: movieId }, data: { status: 'ERROR' } });
+    } else if (episodeId) {
+      await this.prisma.episode.update({ where: { id: episodeId }, data: { status: 'ERROR' } });
+    }
+  }
+
+  // REQ-1/NFR-2: called from encodeWorkerStarted (T006, not yet added) when
+  // the worker announces its own boot — never from api's onModuleInit, which
+  // would reset a live encode (NFR-2's whole argument). A ProcessJob still
+  // reading ENCODING at that moment can only be the residue of a run that
+  // died, because a worker that has just started is encoding nothing.
+  //
+  // Shape copied from SchedulerService.reconcileOrphanedRuns (035-scheduled-
+  // tasks): select the orphans, return early on an empty set (NFR-6), write
+  // in one pass rather than per-row round trips.
+  async reconcileOrphanedEncodes(): Promise<number> {
+    const orphaned = await this.prisma.processJob.findMany({
+      where: { status: 'ENCODING' },
+      select: {
+        id: true,
+        movieId: true,
+        episodeId: true,
+        recoveryCount: true,
+        movie: { select: { status: true } },
+        episode: { select: { status: true } },
+        sourceFile: { select: { mediaSource: { select: { status: true } } } },
+      },
+    });
+
+    if (orphaned.length === 0) return 0;
+
+    const failed: Array<{ id: number; movieId: number | null; episodeId: number | null }> = [];
+    const requeued: number[] = [];
+    let skipped = 0;
+
+    for (const job of orphaned) {
+      // REQ-5: never resurrect a dead target. Three independent reasons a
+      // resurrection would overwrite a good file with a stale one or crash
+      // against nothing:
+      //   - the source row is gone (defensive: a SourceFile's mediaSource
+      //     relation is required, so this should be unreachable via a real
+      //     cascade delete, but a job whose include failed to resolve one
+      //     must not be treated as recoverable);
+      //   - the source lost a race and was demoted to ERROR
+      //     (038-encode-report-durability REQ-8);
+      //   - the target already holds a COMPLETED file — which, since this
+      //     job is itself still ENCODING, can only have come from a
+      //     different, winning source.
+      const mediaSource = job.sourceFile?.mediaSource;
+      const targetStatus = job.movie?.status ?? job.episode?.status;
+      if (!mediaSource || mediaSource.status === 'ERROR' || targetStatus === 'COMPLETED') {
+        skipped += 1;
+        continue;
+      }
+
+      if (job.recoveryCount >= RECOVERY_ALLOWANCE) {
+        failed.push({ id: job.id, movieId: job.movieId, episodeId: job.episodeId });
+        continue;
+      }
+
+      requeued.push(job.id);
+    }
+
+    if (failed.length > 0) {
+      await this.failExhaustedEncodes(failed);
+    }
+
+    if (requeued.length > 0) {
+      await this.requeueOrphanedEncodes(requeued);
+    }
+
+    return skipped + failed.length + requeued.length;
+  }
+
+  // REQ-4: the allowance is spent. Same end state encodeFailed reaches
+  // (status/errorKey/errorMessage plus the Movie/Episode propagation), never
+  // a second write path to that state.
+  private async failExhaustedEncodes(
+    jobs: Array<{ id: number; movieId: number | null; episodeId: number | null }>,
+  ): Promise<void> {
+    await this.prisma.processJob.updateMany({
+      where: { id: { in: jobs.map((job) => job.id) } },
+      data: {
+        status: 'ERROR',
+        errorKey: ERROR_KEYS.PROCESS_JOB_RECOVERY_EXHAUSTED,
+        errorMessage: MESSAGES_EN[ERROR_KEYS.PROCESS_JOB_RECOVERY_EXHAUSTED],
+        encodeSpeed: null,
+      },
+    });
+
+    for (const job of jobs) {
+      await this.propagateJobError(job.movieId, job.episodeId);
+    }
+  }
+
+  // REQ-3: reproduces sourceScanned's exact enqueue ordering (media-sources.
+  // service.ts, the tail after its transaction) — commit the row write
+  // first, then removeEncode/addEncode per job, then flip only the
+  // successfully-enqueued set to QUEUED in one updateMany. A job whose
+  // addEncode throws stays WAITING, which is the truth and which the next
+  // worker boot recovers — never flip to QUEUED ahead of a confirmed add.
+  //
+  // removeEncode is called before addEncode for every job: both derive the
+  // same `job-<processJobId>` jobId, and BullMQ silently refuses to create a
+  // second entry under an id that still exists, so calling addEncode alone
+  // here would be a no-op that leaves the row reading QUEUED against a queue
+  // that never received it (../plan.md § Risks — the most likely bug in
+  // this feature).
+  private async requeueOrphanedEncodes(processJobIds: number[]): Promise<void> {
+    await this.prisma.processJob.updateMany({
+      where: { id: { in: processJobIds } },
+      data: {
+        status: 'WAITING',
+        progress: 0,
+        encodeSpeed: null,
+        recoveryCount: { increment: 1 },
+      },
+    });
+
+    const enqueued: number[] = [];
+    for (const processJobId of processJobIds) {
+      try {
+        await this.encodeQueue.removeEncode(processJobId);
+        await this.encodeQueue.addEncode({ processJobId });
+        enqueued.push(processJobId);
+      } catch (err) {
+        console.error(`[reconcileOrphanedEncodes] failed to re-enqueue processJob ${processJobId}:`, err);
+      }
+    }
+
+    if (enqueued.length > 0) {
+      await this.prisma.processJob.updateMany({
+        where: { id: { in: enqueued } },
+        data: { status: 'QUEUED' },
+      });
+    }
   }
 
   // `deleteFiles` defaults to `true` for backward compatibility with any

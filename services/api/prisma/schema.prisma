@@ -326,6 +326,10 @@ model ProcessJob {
   // Interpolation values for errorKey, a JSON object encoded as a string. Not exposed on any GraphQL type.
   errorParams  String?      @db.Text
 
+  // How many times this job has been automatically recovered from an interrupted encode
+  // (054-interrupted-encode-recovery). Bounded to one; 0 for every pre-feature row.
+  recoveryCount Int @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

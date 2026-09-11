@@ -110,6 +110,8 @@ export const MESSAGES_EN: Record<string, string> = {
     'Completed with no download path recorded — cannot enqueue',
   [ERROR_KEYS.SOURCE_REPLACED]: 'Replaced by a new download',
   [ERROR_KEYS.PROCESS_JOB_NOT_FOUND]: 'Process job {id} does not exist',
+  [ERROR_KEYS.PROCESS_JOB_RECOVERY_EXHAUSTED]:
+    'Automatic recovery for this encode has already been used once and failed again',
   [ERROR_KEYS.DOWNLOAD_NOT_A_TORRENT]:
     'This download has no associated torrent',
   [ERROR_KEYS.TORRENT_CLIENT_REJECTED]:

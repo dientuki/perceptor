@@ -1,4 +1,4 @@
-import type { Job } from 'bullmq';
+import { UnrecoverableError, type Job } from 'bullmq';
 import { fetchGraphQL } from '../api/graphql-client';
 import { deliverReport } from '../api/deliver-report';
 import { buildOutputPath } from '../paths/build-output-path';
@@ -232,7 +232,15 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       // below, since EncodeCancelledError is deliberately not one.
       if (error instanceof EncodeCancelledError) {
         console.log(`[encode] ${processJobId}: cancelled, reporting nothing`);
-        throw error;
+        // REQ-8 (054-interrupted-encode-recovery): a cancellation must never
+        // consume one of REQ-7's retry attempts — BullMQ retries any plain
+        // throw, which would restart the exact encode `047-source-deletion`
+        // cancelled the source to stop. UnrecoverableError is BullMQ's own
+        // signal to mark the job failed without retrying it, regardless of
+        // attempts remaining. The message is preserved; the "report nothing"
+        // decision above it is unchanged — this only changes what leaves the
+        // handler, never whether api hears about it.
+        throw new UnrecoverableError(error.message);
       }
 
       // encodeFailed's errorKey is required (REQ-11, docs/spec/graphql-contract.md):
@@ -266,6 +274,18 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
           },
         ),
       );
+
+      // REQ-9 (054-interrupted-encode-recovery): a KeyedError is a diagnosed
+      // failure that will recur identically (no video stream, an unreadable
+      // source, a probe failure) — retrying it under REQ-7's attempts would
+      // cost hours of CPU to reach the same diagnosis. encodeFailed has
+      // already been reported above with the error's own key; only what
+      // leaves the handler changes here, marking it non-retryable to BullMQ.
+      // An unclassified throw (neither this nor EncodeCancelledError) falls
+      // through unchanged and stays a plain, retryable throw (REQ-7).
+      if (keyed) {
+        throw new UnrecoverableError(error.message);
+      }
 
       throw error;
     }

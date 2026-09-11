@@ -355,6 +355,25 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   persists it as `ProcessJob.encodeSpeed`; a non-finite or negative value is coerced to `null`,
   never rejected (a bad speed must not fail a report). `encodeCompleted`/`encodeFailed` both null
   it out, belt-and-braces on top of `pipeline-status/`'s Rule-3-only derivation below.
+  Since `054-interrupted-encode-recovery`, this module also owns `encodeWorkerStarted` — the
+  **first service-only mutation in the schema** (`@AllowService()` plus an explicit
+  `principal.type !== 'service'` rejection, since `@AllowService()` alone widens the guard rather
+  than narrowing it) — and the reconciliation it triggers,
+  `ProcessJobsService.reconcileOrphanedEncodes()`. Called once by the worker's own boot, never by
+  `api`'s (an `api`-boot sweep would reset a live encode across a routine `docker compose restart
+  api`): every `ProcessJob` still `ENCODING` at that moment is either skipped (its `MediaSource` is
+  gone, demoted to `ERROR`, or its target already holds a `COMPLETED` file from a different,
+  winning source), failed with `error.processJob.recovery_exhausted` (its one-time
+  `ProcessJob.recoveryCount` allowance is already spent — a constant, `RECOVERY_ALLOWANCE = 1`, not
+  a Setting), or requeued (`recoveryCount` incremented, `progress`/`encodeSpeed` reset, `WAITING`
+  committed, then `removeEncode` **before** `addEncode` — reusing the exact ordering, and the exact
+  reason, `sourceScanned`'s tail below already established: `addEncode` derives the same
+  `job-<processJobId>` id `removeEncode` does, so skipping the withdrawal makes the re-add a silent
+  BullMQ no-op). `EncodeQueueService.addEncode` also carries a small retry policy since `054`
+  (`attempts: 2`, a 5-minute `backoff`) for the narrower case of a stall BullMQ's own heartbeat
+  detects while the worker's container survives — see `docs/spec/graphql-contract.md` for why that
+  policy depends on the worker classifying cancellation and diagnosed failures as non-retryable
+  first.
   `getEncodeJobDetails` resolves four fields, an audio pair and a subtitle pair — since
   `039-per-title-language-split` this is no longer one merged list: `allowedAudioLanguagesIso3`/
   `allowedAudioLanguageTags` and `allowedSubtitleLanguagesIso3`/`allowedSubtitleLanguageTags`. Each
@@ -641,8 +660,8 @@ its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — a web-side typ
 A movie/show discriminator in `api` would have to be added to `schema.prisma` and migrated first.
 
 There are 20 models and 31 migrations (counted 2026-09-11, after
-`053-downloads-panel-repair`, which added no model — only `ProcessJob.encodeSpeed Float?` and a
-data-only `infoHash` lowercase backfill) — verify with
+`054-interrupted-encode-recovery`, which added no model — only `ProcessJob.recoveryCount Int
+@default(0)` and its migration) — verify with
 `grep -c "^model " prisma/schema.prisma` rather than trusting the number. Worth knowing: the three
 `*Language` join tables reference `UserMovie`/`UserShow` through their composite FK rather than
 `User`+`Movie`/`Show` separately, so a language preference disappears automatically when the title
@@ -679,12 +698,12 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-09-11 (`053-downloads-panel-repair`): `bin/cli api npx --no tsc --noEmit`
-reports **0 errors**, `bin/npm api test` is green at **460** tests across **42** suites, and
+As of 2026-09-11 (`054-interrupted-encode-recovery`): `bin/cli api npx --no tsc --noEmit`
+reports **0 errors**, `bin/npm api test` is green at **471** tests across **43** suites, and
 `git status --short services/api/prisma` shows a modified `schema.prisma` plus one new migration
-directory (`ProcessJob.encodeSpeed Float?` and the `infoHash` lowercase data backfill — see root
-`CLAUDE.md`). **Re-run both rather than trusting these numbers** — they exist so an agent can
-prove a change added nothing, not as a fact to cite.
+directory (`ProcessJob.recoveryCount Int @default(0)` — see root `CLAUDE.md`). **Re-run both rather
+than trusting these numbers** — they exist so an agent can prove a change added nothing, not as a
+fact to cite.
 
 ## Known debt
 

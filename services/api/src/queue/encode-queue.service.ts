@@ -16,9 +16,18 @@ export class EncodeQueueService implements OnModuleDestroy {
   // encola el mismo encode dos veces. Prefijado porque BullMQ rechaza jobIds
   // puramente numéricos ("1"), reservados para su contador interno
   // autogenerado (ver `Job.validateOptions`).
+  //
+  // attempts/backoff (REQ-7, NFR-8): a small retry budget for the narrow case
+  // of "the worker process died but Redis survived" (a stall BullMQ detects
+  // on its own), not a general-purpose retry policy — one retry here is
+  // potentially hours of re-encoded CPU time. `UnrecoverableError` (thrown by
+  // the worker for a cancelled or deterministically-failed encode, REQ-8/
+  // REQ-9) bypasses this budget entirely regardless of the count set here.
   async addEncode(payload: EncodeJob) {
     return this.queue.add(ENCODE_JOB, payload, {
       jobId: `job-${payload.processJobId}`,
+      attempts: 2,
+      backoff: { type: 'fixed', delay: 5 * 60 * 1000 },
     });
   }
 

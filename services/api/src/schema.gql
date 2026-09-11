@@ -422,6 +422,11 @@ type Mutation {
   """El worker avisa que un encode falló"""
   encodeFailed(processJobId: Int!, errorKey: String!, errorParams: String, errorMessage: String!): Boolean!
 
+  """
+  El worker avisa que acaba de arrancar; api reconcilia los ProcessJob huérfanos
+  """
+  encodeWorkerStarted: Int!
+
   """El worker pide borrar el torrent del cliente tras un encode exitoso"""
   downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!
   createUploadTicket(movieId: Int, episodeId: Int, force: Boolean = false): UploadTicket!

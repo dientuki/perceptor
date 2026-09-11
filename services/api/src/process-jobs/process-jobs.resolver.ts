@@ -3,6 +3,10 @@ import { ProcessJobsService } from './process-jobs.service';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
 import { EncodeCompletedResult } from './entities/encode-completed-result.entity';
 import { AllowService } from '@/auth/decorators/allow-service.decorator';
+import { CurrentUser } from '@/auth/decorators/current-user.decorator';
+import type { AuthPrincipal } from '@/auth/auth.types';
+import { i18nError } from '@/i18n/i18n-error';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // Canal de comunicación worker <-> api para el paso 3 del pipeline (encode).
 // Todo lo que el worker necesita para armar el comando y la ruta de salida
@@ -70,6 +74,22 @@ export class ProcessJobsResolver {
     @Args('errorMessage') errorMessage: string,
   ) {
     return this.processJobsService.encodeFailed(processJobId, errorKey, errorParams, errorMessage);
+  }
+
+  // 054-interrupted-encode-recovery, NFR-3: @AllowService() alone widens
+  // access to service principals, it does not narrow it away from users —
+  // this is the first service-only operation in the schema, so the
+  // user-rejection below is load-bearing, not defensive boilerplate.
+  @AllowService()
+  @Mutation(() => Int, {
+    name: 'encodeWorkerStarted',
+    description: 'El worker avisa que acaba de arrancar; api reconcilia los ProcessJob huérfanos',
+  })
+  async encodeWorkerStarted(@CurrentUser() principal: AuthPrincipal): Promise<number> {
+    if (principal.type !== 'service') {
+      throw i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED);
+    }
+    return this.processJobsService.reconcileOrphanedEncodes();
   }
 
   @AllowService()

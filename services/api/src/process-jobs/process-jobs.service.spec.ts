@@ -6,6 +6,7 @@ import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
+import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // This suite exists because getEncodeJobDetails's REQ-3 merge is the only
@@ -18,7 +19,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 describe('ProcessJobsService', () => {
   let service: ProcessJobsService;
   let prisma: {
-    processJob: { findUnique: jest.Mock; update: jest.Mock; findMany: jest.Mock };
+    processJob: { findUnique: jest.Mock; update: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
     language: { findUnique: jest.Mock; findMany: jest.Mock };
     userMovie: { findMany: jest.Mock };
     userShow: { findMany: jest.Mock };
@@ -31,10 +32,16 @@ describe('ProcessJobsService', () => {
   let mediaServer: { notifyCreated: jest.Mock };
   let torrentClient: { remove: jest.Mock };
   let mediaCapabilities: { isShortsEnabled: jest.Mock };
+  let encodeQueue: { addEncode: jest.Mock; removeEncode: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
-      processJob: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
+      processJob: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        findMany: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       language: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       userMovie: { findMany: jest.fn() },
       userShow: { findMany: jest.fn() },
@@ -47,6 +54,7 @@ describe('ProcessJobsService', () => {
     mediaServer = { notifyCreated: jest.fn().mockResolvedValue(undefined) };
     torrentClient = { remove: jest.fn().mockResolvedValue(undefined) };
     mediaCapabilities = { isShortsEnabled: jest.fn().mockResolvedValue(false) };
+    encodeQueue = { addEncode: jest.fn().mockResolvedValue(undefined), removeEncode: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,6 +65,7 @@ describe('ProcessJobsService', () => {
         { provide: MediaRootsService, useValue: mediaRoots },
         { provide: MediaServerService, useValue: mediaServer },
         { provide: MediaCapabilitiesService, useValue: mediaCapabilities },
+        { provide: EncodeQueueService, useValue: encodeQueue },
       ],
     }).compile();
 
@@ -1017,6 +1026,177 @@ describe('ProcessJobsService', () => {
       // NFR-6: an unacknowledged delete must not delete the row either —
       // that would leave the file on disk with nothing tracking it.
       expect(prisma.mediaSource.delete).not.toHaveBeenCalledWith({ where: { id: 11 } });
+    });
+  });
+
+  // 054-interrupted-encode-recovery: reconcileOrphanedEncodes is the boot
+  // reconciliation for a ProcessJob a dead worker left in ENCODING. Every
+  // case below defends against a failure that leaves the row looking healthy
+  // (QUEUED, or just ENCODING) while nothing ever runs it again, since
+  // NFR-6/REQ-2 mean this method is the only place that ever touches these
+  // rows and there is no watchdog behind it.
+  describe('reconcileOrphanedEncodes', () => {
+    const orphan = (overrides: Partial<Record<string, unknown>> = {}) => ({
+      id: 1,
+      movieId: 1,
+      episodeId: null,
+      recoveryCount: 0,
+      movie: { status: 'ENCODING' },
+      episode: null,
+      sourceFile: { mediaSource: { status: 'DOWNLOADING' } },
+      ...overrides,
+    });
+
+    it('writes nothing and returns 0 when there is no orphaned job (NFR-6)', async () => {
+      prisma.processJob.findMany.mockResolvedValue([]);
+
+      const result = await service.reconcileOrphanedEncodes();
+
+      expect(result).toBe(0);
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+      expect(encodeQueue.removeEncode).not.toHaveBeenCalled();
+      expect(encodeQueue.addEncode).not.toHaveBeenCalled();
+    });
+
+    // The single most likely bug in the feature (../plan.md § Risks):
+    // addEncode without a preceding removeEncode is a silent no-op against
+    // BullMQ's existing `job-<id>` entry, so a job flipped to QUEUED
+    // afterwards never actually runs again — nothing anywhere errors.
+    it('withdraws the old queue entry before re-adding it, for a requeued job', async () => {
+      prisma.processJob.findMany.mockResolvedValue([orphan({ id: 42 })]);
+
+      await service.reconcileOrphanedEncodes();
+
+      expect(encodeQueue.removeEncode).toHaveBeenCalledWith(42);
+      expect(encodeQueue.addEncode).toHaveBeenCalledWith({ processJobId: 42 });
+      const removeOrder = encodeQueue.removeEncode.mock.invocationCallOrder[0];
+      const addOrder = encodeQueue.addEncode.mock.invocationCallOrder[0];
+      expect(removeOrder).toBeLessThan(addOrder);
+    });
+
+    // Reproduces sourceScanned's ordering: QUEUED must only be reached after
+    // a confirmed enqueue. Flipping the row first would claim the job is
+    // queued against a queue that never received it.
+    it('leaves a job WAITING, never QUEUED, when addEncode throws', async () => {
+      prisma.processJob.findMany.mockResolvedValue([orphan({ id: 7 })]);
+      encodeQueue.addEncode.mockRejectedValueOnce(new Error('redis unreachable'));
+
+      await service.reconcileOrphanedEncodes();
+
+      const waitingCall = prisma.processJob.updateMany.mock.calls.find(
+        (call) => call[0].data.status === 'WAITING',
+      );
+      expect(waitingCall).toBeDefined();
+      expect(waitingCall![0].where.id.in).toContain(7);
+
+      const queuedCall = prisma.processJob.updateMany.mock.calls.find(
+        (call) => call[0].data.status === 'QUEUED',
+      );
+      expect(queuedCall).toBeUndefined();
+    });
+
+    it('resets progress/encodeSpeed and increments recoveryCount for a requeued job (REQ-3)', async () => {
+      prisma.processJob.findMany.mockResolvedValue([orphan({ id: 5, recoveryCount: 0 })]);
+
+      await service.reconcileOrphanedEncodes();
+
+      const waitingCall = prisma.processJob.updateMany.mock.calls.find(
+        (call) => call[0].data.status === 'WAITING',
+      );
+      expect(waitingCall![0].data).toMatchObject({
+        status: 'WAITING',
+        progress: 0,
+        encodeSpeed: null,
+        recoveryCount: { increment: 1 },
+      });
+    });
+
+    // REQ-4: the allowance is exactly one. A job that has already used it
+    // must fail outright rather than be re-armed — an off-by-one here is a
+    // reboot loop on a host the encode itself is killing.
+    it('fails a job at the allowance with the exhaustion key instead of requeuing it, and does not grow its counter', async () => {
+      prisma.processJob.findMany.mockResolvedValue([orphan({ id: 9, recoveryCount: 1, movieId: 3, movie: { status: 'ENCODING' } })]);
+
+      const result = await service.reconcileOrphanedEncodes();
+
+      expect(result).toBe(1);
+      expect(encodeQueue.removeEncode).not.toHaveBeenCalled();
+      expect(encodeQueue.addEncode).not.toHaveBeenCalled();
+      expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: [9] } },
+        data: {
+          status: 'ERROR',
+          errorKey: ERROR_KEYS.PROCESS_JOB_RECOVERY_EXHAUSTED,
+          errorMessage: expect.any(String),
+          encodeSpeed: null,
+        },
+      });
+      // Same propagation encodeFailed performs — the title must not sit at
+      // "encoding" once its ProcessJob is a permanent ERROR.
+      expect(prisma.movie.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { status: 'ERROR' } });
+      // No call anywhere touches recoveryCount for this job.
+      for (const call of prisma.processJob.updateMany.mock.calls) {
+        if (call[0].where.id.in.includes(9)) {
+          expect(call[0].data.recoveryCount).toBeUndefined();
+        }
+      }
+    });
+
+    // REQ-5, case 1: the source row is gone. A defensive case — a real
+    // cascade delete would take the ProcessJob down with it — but an
+    // include that resolves no mediaSource must never be read as
+    // recoverable.
+    it('skips a job whose source row is missing, without consuming the allowance', async () => {
+      prisma.processJob.findMany.mockResolvedValue([
+        orphan({ id: 1, sourceFile: { mediaSource: null } }),
+      ]);
+
+      const result = await service.reconcileOrphanedEncodes();
+
+      expect(result).toBe(1);
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+      expect(encodeQueue.addEncode).not.toHaveBeenCalled();
+    });
+
+    // REQ-5, case 2: the source lost a race and was demoted to ERROR
+    // (038-encode-report-durability). Resurrecting it would overwrite the
+    // winner's file with the loser's stale one.
+    it('skips a job whose source has been demoted to ERROR, without consuming the allowance', async () => {
+      prisma.processJob.findMany.mockResolvedValue([
+        orphan({ id: 2, sourceFile: { mediaSource: { status: 'ERROR' } } }),
+      ]);
+
+      const result = await service.reconcileOrphanedEncodes();
+
+      expect(result).toBe(1);
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+      expect(encodeQueue.addEncode).not.toHaveBeenCalled();
+    });
+
+    // REQ-5, case 3: the target already holds a COMPLETED file — since this
+    // job is itself still ENCODING, that completion can only have come from
+    // a different, winning source.
+    it('skips a job whose target already reads COMPLETED, without consuming the allowance', async () => {
+      prisma.processJob.findMany.mockResolvedValue([
+        orphan({ id: 3, movie: { status: 'COMPLETED' } }),
+      ]);
+
+      const result = await service.reconcileOrphanedEncodes();
+
+      expect(result).toBe(1);
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+      expect(encodeQueue.addEncode).not.toHaveBeenCalled();
+    });
+
+    it('skips an episode-owned job whose show target already reads COMPLETED', async () => {
+      prisma.processJob.findMany.mockResolvedValue([
+        orphan({ id: 4, movieId: null, movie: null, episodeId: 8, episode: { status: 'COMPLETED' } }),
+      ]);
+
+      const result = await service.reconcileOrphanedEncodes();
+
+      expect(result).toBe(1);
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
     });
   });
 });
