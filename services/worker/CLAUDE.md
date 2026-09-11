@@ -200,8 +200,17 @@ from the environment and would append `-t N` to every expectation. `ffmpeg/` is 
 
 **`src/ffmpeg/` and `ffmpeg/` are owned by the `ffmpeg` agent** (`.claude/agents/ffmpeg.md`), not by
 the `worker` agent. That file is also the **rule document**: what is kept and dropped for video,
-audio and subtitles, the regional-Spanish vocabulary, and the table of track titles written to the
-output. A rule change goes there and arrives with the case that proves it.
+audio and subtitles, and the regional-Spanish vocabulary. A rule change goes there and arrives with
+the case that proves it.
+
+As of `051-language-track-titles`, the track title written to the output is no longer worker-owned
+data: `src/api/track-titles.ts` fetches `Language.trackTitle` from `api` once per encode job (a
+`trackTitles` query, folded into a `Record<string, string>` and threaded through `EncodeInput`), and
+`src/ffmpeg/params.ts` reads it as a parameter rather than a module constant. Only the four
+regional-Spanish variant titles (`Latino`, `Español (España)`) stay worker-local, in
+`src/ffmpeg/variants.ts`. An unreachable `api` or an unseeded language degrades to the bare ISO code
+rather than failing the encode — adding a language's title is now a seed row on `api`, not a
+`params.ts` edit.
 
 ## Post-encode cleanup, and where deleting a source lives (`012-post-download-processing`)
 

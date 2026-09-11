@@ -140,10 +140,11 @@ model UserShow {
 }
 
 model Language {
-  id   Int    @id @default(autoincrement())
-  tag  String @unique
-  iso2 String
-  iso3 String
+  id         Int     @id @default(autoincrement())
+  tag        String  @unique
+  iso2       String
+  iso3       String
+  trackTitle String?
 
   userMoviePreferences UserMovieLanguage[]
   userShowPreferences  UserShowLanguage[]

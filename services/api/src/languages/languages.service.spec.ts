@@ -350,3 +350,116 @@ describe('LanguagesService — findAll (pickable catalog)', () => {
     expect(result.map((row) => row.tag).sort()).toEqual(['en', 'ja']);
   });
 });
+
+// This suite exists because `findTrackTitles()` collapses three rows sharing
+// one `iso3` (a base language plus its regional variants) down to a single
+// entry, and the rule for which row survives is easy to get backwards: if a
+// variant row won instead of the base row, the worker would still get one
+// entry per `iso3` — nothing would throw, the count would still look right —
+// but a title using `es-419`'s or `es-ES`'s bare row would render whichever
+// variant happened to be seeded last instead of the intended `Español`, with
+// no error anywhere to catch it.
+describe('LanguagesService — findTrackTitles (worker track-title catalog)', () => {
+  let service: LanguagesService;
+  let languageFindMany: jest.Mock;
+
+  const spanish = { tag: 'es', iso2: 'es', iso3: 'spa', trackTitle: 'Español' };
+  const spanishLatam = { tag: 'es-419', iso2: 'es', iso3: 'spa', trackTitle: null };
+  const spanishSpain = { tag: 'es-ES', iso2: 'es', iso3: 'spa', trackTitle: null };
+  const english = { tag: 'en', iso2: 'en', iso3: 'eng', trackTitle: 'English' };
+  const japanese = { tag: 'ja', iso2: 'ja', iso3: 'jpn', trackTitle: '日本語' };
+  const korean = { tag: 'ko', iso2: 'ko', iso3: 'kor', trackTitle: '한국어' };
+  const french = { tag: 'fr', iso2: 'fr', iso3: 'fre', trackTitle: 'Français' };
+
+  beforeEach(async () => {
+    languageFindMany = jest.fn();
+    const prisma = { language: { findMany: languageFindMany } };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [LanguagesService, { provide: PrismaService, useValue: prisma }],
+    }).compile();
+    service = module.get<LanguagesService>(LanguagesService);
+  });
+
+  it('collapses three rows sharing iso3 "spa" into one entry carrying the base row\'s title (fault-injection target)', async () => {
+    // Both variant rows are given a (hypothetical) non-null trackTitle here,
+    // unlike the real seed — if they carried `null` like the seed does, the
+    // existing `if (!row.trackTitle) continue` filter would already exclude
+    // them and this case would pass even with the tie-break rule inverted,
+    // proving nothing. Giving them a title forces the assertion to actually
+    // exercise "prefer the base row", not "prefer whichever row has a
+    // title". Seeded in reverse of the seed-file order on top of that — a
+    // rule that picked "whichever row was seen last" rather than "the base
+    // row" would still pass if the base row happened to be last.
+    const spanishLatamWithTitle = { ...spanishLatam, trackTitle: 'Español (LatAm)' };
+    const spanishSpainWithTitle = { ...spanishSpain, trackTitle: 'Español (España)' };
+    languageFindMany.mockResolvedValue([
+      spanishSpainWithTitle,
+      spanishLatamWithTitle,
+      spanish,
+    ]);
+
+    const result = await service.findTrackTitles();
+
+    expect(result).toEqual([{ iso3: 'spa', title: 'Español' }]);
+  });
+
+  it('never produces an entry of its own for es-419 or es-ES', async () => {
+    languageFindMany.mockResolvedValue([spanish, spanishLatam, spanishSpain]);
+
+    const result = await service.findTrackTitles();
+    const iso3s = result.map((row) => row.iso3);
+
+    expect(iso3s).toEqual(['spa']);
+    expect(iso3s.filter((iso3) => iso3 === 'spa')).toHaveLength(1);
+  });
+
+  it('a null trackTitle produces no entry rather than an empty one', async () => {
+    languageFindMany.mockResolvedValue([spanishLatam, spanishSpain]);
+
+    const result = await service.findTrackTitles();
+
+    expect(result).toEqual([]);
+  });
+
+  it('the seeded set yields 20 entries, including jpn/kor/fre with their native titles', async () => {
+    // Mirrors prisma/seeds/languages.ts row-for-row (22 rows: `es` plus its
+    // two variants, which carry no `trackTitle`, plus 19 other languages) —
+    // this is the actual shape `LanguagesService` sees against a freshly
+    // seeded database, not a hand-picked subset.
+    languageFindMany.mockResolvedValue([
+      spanish,
+      spanishLatam,
+      spanishSpain,
+      english,
+      { tag: 'pt', iso2: 'pt', iso3: 'por', trackTitle: 'Português' },
+      japanese,
+      korean,
+      french,
+      { tag: 'de', iso2: 'de', iso3: 'ger', trackTitle: 'Deutsch' },
+      { tag: 'it', iso2: 'it', iso3: 'ita', trackTitle: 'Italiano' },
+      { tag: 'zh', iso2: 'zh', iso3: 'chi', trackTitle: '中文' },
+      { tag: 'ru', iso2: 'ru', iso3: 'rus', trackTitle: 'Русский' },
+      { tag: 'hi', iso2: 'hi', iso3: 'hin', trackTitle: 'हिन्दी' },
+      { tag: 'ar', iso2: 'ar', iso3: 'ara', trackTitle: 'العربية' },
+      { tag: 'sv', iso2: 'sv', iso3: 'swe', trackTitle: 'Svenska' },
+      { tag: 'da', iso2: 'da', iso3: 'dan', trackTitle: 'Dansk' },
+      { tag: 'nl', iso2: 'nl', iso3: 'dut', trackTitle: 'Nederlands' },
+      { tag: 'nb', iso2: 'nb', iso3: 'nor', trackTitle: 'Norsk' },
+      { tag: 'pl', iso2: 'pl', iso3: 'pol', trackTitle: 'Polski' },
+      { tag: 'tr', iso2: 'tr', iso3: 'tur', trackTitle: 'Türkçe' },
+      { tag: 'th', iso2: 'th', iso3: 'tha', trackTitle: 'ไทย' },
+      { tag: 'cs', iso2: 'cs', iso3: 'cze', trackTitle: 'Čeština' },
+    ]);
+
+    const result = await service.findTrackTitles();
+
+    expect(result).toHaveLength(20);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        { iso3: 'jpn', title: '日本語' },
+        { iso3: 'kor', title: '한국어' },
+        { iso3: 'fre', title: 'Français' },
+      ]),
+    );
+  });
+});

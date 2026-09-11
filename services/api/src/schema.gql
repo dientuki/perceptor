@@ -90,6 +90,11 @@ type MediaRoot {
   available: Boolean!
 }
 
+type LanguageTrackTitle {
+  iso3: String!
+  title: String!
+}
+
 type MediaServerOption {
   id: ID!
   label: String!
@@ -306,6 +311,11 @@ type Query {
   The full seeded catalog of languages the web pickers read from — never a hard-coded list.
   """
   languages: [Language!]!
+
+  """
+  The native-script track title per ISO-639-2/B code, for the worker to burn into a track display name.
+  """
+  trackTitles: [LanguageTrackTitle!]!
 
   """List every registered scheduled task and its current status"""
   scheduledTasks: [ScheduledTask!]!

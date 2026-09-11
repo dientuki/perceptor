@@ -18,6 +18,29 @@ import { KeyedError } from '../i18n/keyed-error';
 
 const CASES_DIR = join(__dirname, '..', '..', 'ffmpeg');
 
+const SEEDED_TRACK_TITLES: Record<string, string> = {
+  spa: 'Español',
+  eng: 'English',
+  por: 'Português',
+  jpn: '日本語',
+  kor: '한국어',
+  fre: 'Français',
+  ger: 'Deutsch',
+  ita: 'Italiano',
+  chi: '中文',
+  rus: 'Русский',
+  hin: 'हिन्दी',
+  ara: 'العربية',
+  swe: 'Svenska',
+  dan: 'Dansk',
+  dut: 'Nederlands',
+  nor: 'Norsk',
+  pol: 'Polski',
+  tur: 'Türkçe',
+  tha: 'ไทย',
+  cze: 'Čeština',
+};
+
 type CaseInput = {
   file: string;
   output: string;
@@ -29,6 +52,7 @@ type CaseInput = {
   isLiveAction: boolean;
   containerTitle: string;
   sourceTag: string;
+  trackTitles?: Record<string, string>;
 };
 
 type Case = {
@@ -72,6 +96,7 @@ function validate(fileName: string, raw: unknown): Case {
     isLiveAction,
     containerTitle,
     sourceTag,
+    trackTitles,
   } = input as Record<string, unknown>;
 
   if (typeof file !== 'string') fail(fileName, 'input.file must be a string');
@@ -108,6 +133,15 @@ function validate(fileName: string, raw: unknown): Case {
   if (typeof isLiveAction !== 'boolean') fail(fileName, 'input.isLiveAction must be a boolean');
   if (typeof containerTitle !== 'string') fail(fileName, 'input.containerTitle must be a string');
   if (typeof sourceTag !== 'string') fail(fileName, 'input.sourceTag must be a string');
+  if (
+    trackTitles !== undefined &&
+    (typeof trackTitles !== 'object' ||
+      trackTitles === null ||
+      Array.isArray(trackTitles) ||
+      Object.values(trackTitles as Record<string, unknown>).some((title) => typeof title !== 'string'))
+  ) {
+    fail(fileName, 'input.trackTitles must be an object of strings when present');
+  }
 
   const probe = value.ffprobe;
   if (typeof probe !== 'object' || probe === null || !Array.isArray((probe as any).streams)) {
@@ -197,6 +231,7 @@ describe('ffmpeg cases', () => {
       isLiveAction: input.isLiveAction,
       containerTitle: input.containerTitle,
       sourceTag: input.sourceTag,
+      trackTitles: input.trackTitles ?? SEEDED_TRACK_TITLES,
     };
 
     const build = () =>

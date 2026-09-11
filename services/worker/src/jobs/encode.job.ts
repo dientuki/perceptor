@@ -8,6 +8,7 @@ import { withSourceExtension } from '../paths/with-source-extension';
 import { isInsideRoot } from '../paths/is-inside-root';
 import { cleanupSource } from './cleanup-source';
 import { buildContainerTitle, buildSourceTag } from '../metadata/container-tags';
+import { fetchTrackTitles } from '../api/track-titles';
 import type { EncodeJob } from '../queue/types';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
@@ -97,6 +98,8 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3}`,
   );
 
+  const trackTitles = await fetchTrackTitles();
+
   const signal = registerEncode(processJobId);
 
   try {
@@ -181,6 +184,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             isLiveAction: details.isLiveAction,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
+            trackTitles: trackTitles,
           },
           onProgress,
           onProbe,
@@ -200,6 +204,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             isLiveAction: details.isLiveAction,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
+            trackTitles: trackTitles,
           },
           onProgress,
           onProbe,

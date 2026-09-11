@@ -554,6 +554,37 @@ carries flat lists and not the tag→`iso3` association — only `api` holds the
 links them. Moving `{ tag, iso3 }` pairs onto the wire would remove that duplication and is the right
 move the day a third language grows variants; it stayed out of scope here too.
 
+**Track titles are a separate query, keyed by `iso3` (`051-language-track-titles`).**
+
+```graphql
+type LanguageTrackTitle {
+  iso3: String!
+  title: String!
+}
+
+type Query {
+  trackTitles: [LanguageTrackTitle!]!
+}
+```
+
+`Language` itself gains no field — `trackTitle` exists as a nullable column on the `languages`
+table, but `languages` stays exactly the pickable catalog `web` renders. `trackTitles` is a
+separate query for the same reason `languages` cannot answer this need directly: `languages` hides
+the base-language row whenever variant rows of it exist (see above), and the base row is precisely
+the one carrying the native-script title (`es` → `Español`) — `es-419`/`es-ES` carry no title of
+their own, since their display strings (`Latino`, `Español (España)`) come from the worker-local
+`variants.ts`, not from the database. `findTrackTitles()` in
+`services/api/src/languages/languages.service.ts` reads every row, keeps only the ones with a
+non-empty `trackTitle`, and where several rows share an `iso3` (a base language plus its regional
+variants), picks the base row (`tag === iso2`) — the collapse happens here, once, so no consumer
+ever has to reproduce it. A row with no title contributes no entry; there is no
+present-but-null-title case. The worker (`services/worker/src/api/track-titles.ts`) calls this
+once per encode job, folds the (unordered) list into a `Record<string, string>` keyed by `iso3`,
+and passes it down as `EncodeInput.trackTitles` to `trackLanguageTitle` in `src/ffmpeg/params.ts`,
+which still checks the variant override first and falls back to the bare ISO code when a key is
+missing — unreachable `api`, a thrown GraphQL error, or an unseeded language all degrade to that
+same fallback rather than failing the encode.
+
 **The *Audio mandatory* flag is inert by design (`039-per-title-language-split`, `0.2.0`).**
 `UserPreferences.audioMandatory`, `Movie.audioMandatory` and `Show.audioMandatory` are three
 independent booleans (`User.audioMandatory`, `UserMovie.audioMandatory`, `UserShow.audioMandatory` —

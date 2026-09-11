@@ -187,10 +187,17 @@ random and silently lose the right one.
   language-less `Surround 5.1 (Opus)`. The `language` metadata stays the ISO-639-2 code from the
   source; the name lives in the title, because `spa` is all a player reads off the former.
 
-  The table is endonym-style and **incomplete on purpose** — it holds what the corpus has forced so
-  far. When a case brings a language that is not here, ask the user for its title rather than
-  guessing; the string is baked into the output file and cannot be changed per viewer afterwards
-  (`018-ui-i18n` covers UI copy, not file metadata).
+  As of `051-language-track-titles`, the four *variant* rows above (Latin American and Castilian
+  Spanish) are the only ones still worker-local, in `src/ffmpeg/variants.ts` — everything else comes
+  from `api`'s `Language.trackTitle` column, fetched once per encode job
+  (`services/worker/src/api/track-titles.ts`) into a `Record<string, string>` and passed into
+  `trackLanguageTitle` as a parameter. This table is no longer the source of truth and no longer
+  edited here: a language missing a title is not a `params.ts` change, it is a seed row
+  (`services/api/prisma/seeds/languages.ts`) plus a migration backfill. When a case brings a language
+  with no native title yet, that is now an `api`-side gap, not a worker one — ask the user for the
+  title and add it to the seed. A `trackTitles` GraphQL failure or an unseeded language both degrade
+  to the bare ISO code (`map[iso3] ?? iso3`) rather than failing the encode; that fallback, not this
+  table, is what stays permanently incomplete-on-purpose.
 
 ## The corpus
 

@@ -55,11 +55,13 @@ export function buildFfmpegCommand(
       details.allowedAudioLanguagesIso3,
       details.originalLanguageIso3,
       details.allowedAudioLanguageTags,
+      details.trackTitles,
     ),
     ...getSubtitleParams(
       sStreams,
       details.allowedSubtitleLanguagesIso3,
       details.allowedSubtitleLanguageTags,
+      details.trackTitles,
     ),
     "-map_metadata:g",
     "-1",

@@ -51,6 +51,8 @@ function mapArgCount(params: string[]): number {
   return params.filter((arg) => arg === '-map').length;
 }
 
+const TRACK_TITLES: Record<string, string> = { eng: 'English', spa: 'Español' };
+
 describe('getAudioParams', () => {
   it('emits exactly one -map per allowed language when a track exists for each', () => {
     const streams = [
@@ -59,7 +61,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 3, tags: { language: 'eng' } }),
     ];
 
-    const params = getAudioParams(streams, ['jpn', 'spa', 'eng'], 'jpn', []);
+    const params = getAudioParams(streams, ['jpn', 'spa', 'eng'], 'jpn', [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(3);
   });
@@ -70,7 +72,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, tags: { language: 'eng' } }),
     ];
 
-    const params = getAudioParams(streams, ['jpn', 'spa', 'eng'], 'jpn', []);
+    const params = getAudioParams(streams, ['jpn', 'spa', 'eng'], 'jpn', [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params).toContain('0:1');
@@ -83,7 +85,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, tags: { language: 'eng', title: 'Original' } }),
     ];
 
-    const params = getAudioParams(streams, ['eng'], 'eng', []);
+    const params = getAudioParams(streams, ['eng'], 'eng', [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:2');
@@ -96,7 +98,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, codec_name: 'truehd', channels: 6, tags: { language: 'eng' } }),
     ];
 
-    const params = getAudioParams(streams, ['eng'], 'eng', []);
+    const params = getAudioParams(streams, ['eng'], 'eng', [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:2');
@@ -112,7 +114,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'Spanish (Spain)' } }),
     ];
 
-    const params = getAudioParams(streams, ['spa'], 'spa', []);
+    const params = getAudioParams(streams, ['spa'], 'spa', [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:2');
@@ -129,7 +131,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'BTM' } }),
     ];
 
-    const params = getAudioParams(streams, ['spa'], 'spa', ['es']);
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:2');
@@ -142,7 +144,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'BTM' } }),
     ];
 
-    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419']);
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:1');
@@ -155,7 +157,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'Castellano' } }),
     ];
 
-    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419']);
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:1');
@@ -168,7 +170,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, channels: 2, tags: { language: 'spa', title: 'Latino' } }),
     ];
 
-    const params = getAudioParams(streams, ['spa'], 'spa', ['es-ES']);
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-ES'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params).toContain('0:1');
@@ -181,7 +183,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, channels: 2, tags: { language: 'spa', title: 'Castellano' } }),
     ];
 
-    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419', 'es-ES']);
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419', 'es-ES'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params).toContain('0:1');
@@ -197,9 +199,25 @@ describe('getAudioParams', () => {
   it('falls back to the ISO-639-2 code for a language the title table does not cover (AC-3b)', () => {
     const streams = [audioStream({ index: 1, channels: 2, tags: { language: 'jpn' } })];
 
-    const params = getAudioParams(streams, ['jpn'], 'jpn', []);
+    const params = getAudioParams(streams, ['jpn'], 'jpn', [], {});
 
     expect(params).toContain('title=jpn Stereo (Opus)');
+  });
+
+  it('titles a Japanese track from the injected map (051 AC-3)', () => {
+    const streams = [audioStream({ index: 1, channels: 2, tags: { language: 'jpn' } })];
+
+    const params = getAudioParams(streams, ['jpn'], 'jpn', [], { jpn: '日本語' });
+
+    expect(params).toContain('title=日本語 Stereo (Opus)');
+  });
+
+  it('resolves a track tagged "fra" against a map keyed by the /B form "fre" (051 AC-4)', () => {
+    const streams = [audioStream({ index: 1, channels: 2, tags: { language: 'fra' } })];
+
+    const params = getAudioParams(streams, ['fre'], 'fre', [], { fre: 'Français' });
+
+    expect(params).toContain('title=Français Stereo (Opus)');
   });
 
   it('never lets a Latin-American-marked commentary track win a variant match (REQ-11 before REQ-4, AC-8)', () => {
@@ -208,7 +226,7 @@ describe('getAudioParams', () => {
       audioStream({ index: 2, channels: 6, tags: { language: 'spa', title: 'BTM' } }),
     ];
 
-    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419']);
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:2');
@@ -220,13 +238,13 @@ describe('getAudioParams', () => {
       audioStream({ index: 1, tags: { language: 'spa', title: 'Latino' } }),
     ];
 
-    expect(() => getAudioParams(streams, ['jpn', 'spa'], 'jpn', ['es-419'])).toThrow(/jpn/);
+    expect(() => getAudioParams(streams, ['jpn', 'spa'], 'jpn', ['es-419'], TRACK_TITLES)).toThrow(/jpn/);
   });
 
   it('matches an allowed "fre" against a track tagged "fra" (ISO-639-2/T)', () => {
     const streams = [audioStream({ index: 1, tags: { language: 'fra' } })];
 
-    const params = getAudioParams(streams, ['fre'], 'fre', []);
+    const params = getAudioParams(streams, ['fre'], 'fre', [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:1');
@@ -235,7 +253,7 @@ describe('getAudioParams', () => {
   it('matches an allowed "fra" against a track tagged "fre" (the reverse pairing)', () => {
     const streams = [audioStream({ index: 1, tags: { language: 'fre' } })];
 
-    const params = getAudioParams(streams, ['fra'], 'fra', []);
+    const params = getAudioParams(streams, ['fra'], 'fra', [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:1');
@@ -248,7 +266,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, codec_name: 'hdmv_pgs_subtitle', tags: { language: 'eng' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], []);
+    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
 
     expect(params).toEqual([]);
   });
@@ -258,7 +276,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, tags: { language: 'eng', BPS: '1' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], []);
+    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
 
     expect(params).toEqual([]);
   });
@@ -268,7 +286,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, tags: { language: 'eng', title: 'FORCED' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], []);
+    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
 
     expect(params).toContain('title=English');
   });
@@ -284,7 +302,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'eng', title: 'English' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], []);
+    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:5');
@@ -295,7 +313,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, tags: { language: 'eng', title: 'SDH' }, disposition: { hearing_impaired: 1 } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], []);
+    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:4');
@@ -307,7 +325,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'BTM' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], []);
+    const params = getSubtitleParams(streams, ['spa'], [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params.filter((arg) => arg === 'title=Español')).toHaveLength(2);
@@ -325,7 +343,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'Español LA' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], []);
+    const params = getSubtitleParams(streams, ['spa'], [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params).toContain('0:4');
@@ -338,7 +356,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'Español LA' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], ['es-419']);
+    const params = getSubtitleParams(streams, ['spa'], ['es-419'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:5');
@@ -351,7 +369,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'Latino' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], ['es-ES']);
+    const params = getSubtitleParams(streams, ['spa'], ['es-ES'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:4');
@@ -365,7 +383,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'Latino' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], ['es-419']);
+    const params = getSubtitleParams(streams, ['spa'], ['es-419'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:5');
@@ -381,7 +399,7 @@ describe('getSubtitleParams', () => {
       }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], ['es-419']);
+    const params = getSubtitleParams(streams, ['spa'], ['es-419'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:4');
@@ -393,7 +411,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'BTM' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng', 'spa'], ['es-ES']);
+    const params = getSubtitleParams(streams, ['eng', 'spa'], ['es-ES'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params).toContain('0:4');
@@ -401,7 +419,7 @@ describe('getSubtitleParams', () => {
   });
 
   it('builds a valid, empty subtitle argument list when the file has no subtitle stream at all (REQ-13, AC-13)', () => {
-    const params = getSubtitleParams([], ['eng'], []);
+    const params = getSubtitleParams([], ['eng'], [], TRACK_TITLES);
 
     expect(params).toEqual([]);
   });

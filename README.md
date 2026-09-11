@@ -101,6 +101,50 @@ Perceptor is the whole path as a single product:
   immediately, not just the next login), with `bin/reset-password` as the recovery path when nobody
   can sign in.
 
+## Install
+
+You need Docker with the Compose plugin. Nothing else — no Node, no git checkout, no clone.
+
+Make an empty directory and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dientuki/perceptor/master/install.sh | bash
+```
+
+It downloads `docker-compose.yaml` and `.env`, asks five questions — download folder, library
+folder, admin user, admin password, Traefik yes/no (plus the domain if yes) and optionally your
+TMDB key — and derives everything else itself: `PUID`/`PGID`, the group that owns your library, your
+timezone, free host ports, and the secrets (`JWT_SECRET`, `SERVICE_TOKEN`, `INDEXER_API_KEY`, the
+database password). Then it pulls the published images from GHCR and starts the stack.
+
+When it finishes, the directory holds `docker-compose.yaml`, `.env` and — once the stack has run
+once — `./backups`. No source, no `bin/`, no `services/`. Sign in with the admin credentials you
+chose; if you skipped the TMDB key, paste it in **Settings** before searching, since a missing key
+answers `401`.
+
+Two things it does for you on every start, not just the first:
+
+- **`api` applies its own pending migrations and production seed before it starts listening.** `web`
+  and `worker` wait on its health check, so neither ever observes a half-migrated database. Set
+  `PERCEPTOR_AUTO_MIGRATE=false` in `.env` to opt out and run them yourself.
+- **The database is dumped first.** A one-shot `backup` service writes to `./backups` and keeps the
+  five most recent; `api` will not start if the dump fails.
+
+Re-running the installer over a live installation repairs rather than replaces: it fills in what's
+missing and leaves every title, setting, user and password alone.
+
+### Updating
+
+Versions are pinned in `.env` as `PERCEPTOR_TAG`, which applies to all five images at once — there
+is no per-service tag, and a mixed set fails at runtime. Name the version you want, then:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Migrations and the backup run on the way up, as above. Rolling back is naming the previous tag and
+repeating the same two commands.  
+
 ## Technical summary
 
 | Service | Stack | Role |
@@ -113,6 +157,7 @@ Perceptor is the whole path as a single product:
 | `torrent` | qBittorrent | Download client |
 | `indexer` | Prowlarr | Release search across your trackers |
 | `flaresolverr` | FlareSolverr | Cloudflare challenge solver for `indexer` |
+| `backup` | MariaDB 12 (one-shot) | Dumps the database before `api` starts, keeping the five most recent |
 | `traefik` | Traefik v3.7 | Optional domain-based routing |
 
 ```
@@ -144,9 +189,10 @@ Design rules the codebase actually holds itself to:
   implementation — with the GraphQL contract frozen before anyone writes code, since there's no
   codegen between services. `docs/constitution.md` holds the rules that outrank everything else.
 
-## Getting started
+## Running from source
 
-You only need Docker and Docker Compose.
+For working on Perceptor rather than using it. This path builds every image locally and bind-mounts
+your working copy, so edits hot-reload.
 
 1. **Clone**
    ```bash
@@ -158,12 +204,18 @@ You only need Docker and Docker Compose.
    ```bash
    bin/install
    ```
-   Creates `.env` from `.env.example`, asks whether to route through Traefik, and generates the
-   secrets that matter (`JWT_SECRET`, `SERVICE_TOKEN`, `INDEXER_API_KEY`). Say no to Traefik unless
-   you want domain-based routing — it needs a resolvable hostname for `web`/`api`/`torrent`/
-   `indexer`. Then fill in the rest: ports, DB credentials, admin user, download and library paths.
+   Creates `.env` from `.env.example`, asks whether to route through Traefik, generates the secrets
+   that matter (`JWT_SECRET`, `SERVICE_TOKEN`, `INDEXER_API_KEY`) and grants Prisma the privileges
+   its shadow database needs. Say no to Traefik unless you want domain-based routing — it needs a
+   resolvable hostname for `web`/`api`/`torrent`/`indexer`. Then fill in the rest: ports, DB
+   credentials, admin user, download and library paths.
 
-3. **Bring the stack up**
+3. **Build the dev images**
+   ```bash
+   bin/build dev
+   ```
+
+4. **Bring the stack up**
    ```bash
    bin/dev
    ```
@@ -172,19 +224,20 @@ You only need Docker and Docker Compose.
    `http://localhost:${API_PORT}/graphql`. First boot installs each service's `node_modules` into
    your working copy — that's intentional, and it's what your editor's TypeScript server reads.
 
-4. **Grant Prisma its privileges** (once, on a fresh `db` volume — the shadow database needs broader
-   grants than the app user has):
-   ```bash
-   bin/dbinit
-   ```
+   `bin/dev` starts the images that already exist and does **not** build. Re-run `bin/build dev`
+   whenever a `Dockerfile` or a dependency changes; source edits alone don't need it.
 
-5. **Apply the schema**
-   ```bash
-   bin/cli api npx prisma migrate deploy
-   ```
+5. **Sign in** as `ADMIN_USER` / `ADMIN_PASSWORD` and open **Settings** to paste your TMDB API key —
+   a fresh checkout ships it empty, so search returns `401` until you do.
 
-6. **Sign in** as `ADMIN_USER` / `ADMIN_PASSWORD` and open **Settings** to paste your TMDB API key —
-   a fresh install ships it empty, so search returns `401` until you do.
+The schema is applied for you: `api` runs its pending migrations at boot here too. `bin/dbinit` is
+the one thing you may still need by hand, on a fresh `db` volume, before `prisma migrate dev` can
+create its shadow database.
+
+Local builds are tagged `perceptor-<svc>:local-dev` and `perceptor-<svc>:local-prod` — a name that
+exists in no registry and records the stage it came from, so a `dev` and a `prod` build of the same
+service can never shadow each other. `torrent` and `indexer` are single-stage and keep a plain
+`perceptor-<svc>:local`.
 
 > **Upgrading an existing checkout?** Run `bin/install` again and answer *no* to regenerating `.env`.
 > It fills in any missing secrets without touching what you already configured. `api` will not boot
@@ -192,18 +245,21 @@ You only need Docker and Docker Compose.
 
 ## Day-to-day commands
 
-Nothing runs on the host — always go through the wrappers in `bin/`:
+These are for a source checkout — an installation made with `install.sh` has no `bin/` and uses
+`docker compose` directly. Nothing runs on the host, so always go through the wrappers:
 
 | Command | What it does |
 | :-- | :-- |
-| `bin/install` | Generate `.env`, configure Traefik/domain, mint secrets |
-| `bin/dev` | Bring the stack up in dev mode |
-| `bin/prod` | Bring the stack up in prod mode (`prod` stage, rebuilds images) |
+| `bin/install` | Generate `.env`, configure Traefik/domain, mint secrets, grant Prisma its privileges |
+| `bin/build <dev\|prod> [service]` | Build images without starting anything; no service builds all five |
+| `bin/dev [args…]` | Bring the stack up in dev mode from the existing `local-dev` images; extra arguments go to `docker compose up` (pass `-d` yourself to detach) |
+| `bin/prod` | Bring the stack up in prod mode (`prod` stage, rebuilds first) |
 | `bin/cli <service> <cmd…>` | Run any command inside a running container |
 | `bin/npm [service] <args…>` | npm inside a service (defaults to `web`) |
 | `bin/bash <service>` | Interactive shell in a container |
 | `bin/mysql [args…]` | MariaDB client against `db` |
 | `bin/dbinit` | Grant Prisma its privileges (once, per fresh `db` volume) |
+| `bin/dbreset` | Reset the schema, reseed, and flush Redis — dev state only |
 | `bin/reset-password <user>` | Reset a user's password — the recovery path when no admin can log in |
 
 Common Prisma tasks:
@@ -223,7 +279,7 @@ bin/cli api npx prisma studio
 ## Status and known limitations
 
 The pipeline runs end to end for both films and series — search, register, find a release, download,
-scan, transcode, file, notify, browse. Forty-six feature specs (`001` through `046`) are implemented;
+scan, transcode, file, notify, browse. Fifty feature specs (`001` through `050`) are implemented;
 `docs/spec/features/` has each one, and the root `CLAUDE.md` has a stage-by-stage table plus the
 current test and build numbers.
 
@@ -245,3 +301,8 @@ Rough edges, stated plainly:
   library.
 - **No quality profiles, no upgrade loop.** Perceptor normalizes what it gets rather than chasing a
   better release later — a deliberate omission, not a backlog item.
+- **The installer only knows how to repair a *finished* installation.** Re-running `install.sh`
+  treats "there is a `.env`" as "the previous run completed", so an install interrupted partway
+  leaves a `.env` it will skip rather than finish. Delete the directory and start over.
+- **`linux/amd64` only.** The published images are built for one platform; an ARM host has to build
+  from source.

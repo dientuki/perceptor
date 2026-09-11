@@ -19,6 +19,7 @@ function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
     isLiveAction: true,
     containerTitle: 'Some Title',
     sourceTag: 'some/source.mkv',
+    trackTitles: { eng: 'English', spa: 'Español' },
     ...overrides,
   };
 }

@@ -12,6 +12,7 @@ export type EncodeInput = {
   isLiveAction: boolean;
   containerTitle: string;
   sourceTag: string;
+  trackTitles: Record<string, string>;
 };
 
 // Contrato común entre drivers de encode (mock hoy, ffmpeg real después). En

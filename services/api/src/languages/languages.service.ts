@@ -4,6 +4,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { LanguageTrackKind } from '@prisma/client';
 import { Language } from './entities/language.entity';
+import { LanguageTrackTitle } from './entities/language-track-title.entity';
 import { languageNameFor } from './language-names';
 
 // The single place that turns a `languages` row into the shape `web`'s
@@ -44,6 +45,22 @@ export class LanguagesService {
         name: languageNameFor(row.tag),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async findTrackTitles(): Promise<LanguageTrackTitle[]> {
+    const rows = await this.prisma.language.findMany();
+    const byIso3 = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      if (!row.trackTitle) continue;
+      const existing = byIso3.get(row.iso3);
+      if (!existing || row.tag === row.iso2) {
+        byIso3.set(row.iso3, row);
+      }
+    }
+    return Array.from(byIso3.values()).map((row) => ({
+      iso3: row.iso3,
+      title: row.trackTitle as string,
+    }));
   }
 
   // Validates a list of BCP-47 tags and resolves each to its Language row,

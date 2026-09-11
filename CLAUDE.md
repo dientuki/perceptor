@@ -18,8 +18,12 @@ implementation detail.
 | Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K downscaled to 1080p preserving HDR (Dolby Vision/HDR10 keep their colour tags rather than flattening to SDR), Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode. Optional per installation — an administrator can turn compression off from Settings, in which case the file is still renamed and moved to its destination, just never touched by FFmpeg. Since `046`, every transcoded output also carries two container-level tags — `-metadata title=<film title or "Series SNN-ENN Episode title">` (verbatim from TMDB, decorative) and `-metadata PERCEPTOR_SOURCE=<release path relative to the downloads root>` (a provenance record of the exact source release); neither is written when compression is off. Since `047`, an encode can be abandoned mid-flight — a required `AbortSignal` on the `EncodeFn` driver seam, triggered by the api's `encode:cancel` publish when the source that requested it is deleted; the worker terminates whichever process it has running and reports no outcome. The destination
 itself is unconditionally an `api` decision the worker consumes blindly: since `048`, a film flagged
 `isShort` files under the `path_shorts` folder instead of `path_movies` (resolved once, at the moment
-the worker asks for the job's details — reclassifying a film never moves a file already written) |
-`011`, `013`, `024`, `031`, `032`, `042`, `046`, `047`, `048` |
+the worker asks for the job's details — reclassifying a film never moves a file already written).
+Since `051`, the native-script track title burned into each audio/subtitle track (`English`, `日本語`,
+`한국어`, …) is read from `api`'s `Language.trackTitle` column once per job rather than hard-coded in
+the worker — an unreachable `api` or an unseeded language degrades to the bare ISO code, never fails
+the encode; only the regional-Spanish variant titles (`Latino`, `Español (España)`) stay worker-local |
+`011`, `013`, `024`, `031`, `032`, `042`, `046`, `047`, `048`, `051` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`); no longer write-only — a local index (`src/media-server-index/`) lets a client with no native provider-id lookup answer "does this title exist" too, rebuilt on demand from Settings or a "Re-sincronizar" button in `web` | `034` |
 | Browse library | `api` — the three resolvers; `web` — `/`, the billboard, plus `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010`, `033` |
 
@@ -281,7 +285,12 @@ string above, plus a CRF mismatch in `src/ffmpeg/buildCommand.spec.ts`, both con
 and again 2026-09-09 after `048-shorts-category`: `api` 436/40 suites, `web` typechecks at 0 errors
 and `bin/npm web run build` exits 0 (`worker` untouched by that feature, deliberately — NFR-2 makes
 an untouched worker the mechanism by which `outputRoot` stays a resolved string the worker cannot
-tell a short from a feature film by).
+tell a short from a feature film by) — and again 2026-09-10 after `051-language-track-titles`: `api`
+447/42 suites, `worker` typechecks at 0 errors, `bin/npm worker run build` exits 0, and
+`bin/npm worker test` runs 168 tests across 19 suites, 166 passing (the 2 failures are the same
+pre-existing, unrelated ones recorded above under `047-source-deletion` — the stale `ffmpeg/2.json`
+track-title string and the `buildCommand.spec.ts` CRF mismatch — confirmed still exactly those two
+and no others).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

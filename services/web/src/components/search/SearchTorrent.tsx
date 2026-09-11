@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Download, Loader2, Search, Sparkles } from "lucide-react";
+import { Download, Loader2, Search, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -349,49 +349,6 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                     <span className="font-medium line-clamp-2">
                       {res.title || t("unknownRelease")}
                     </span>
-                    {showBest && "ranking" in res && (
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        {(
-                          [
-                            ["resolution", res.ranking.resolutionLabel],
-                            ["group", res.ranking.groupLabel],
-                            ["source", res.ranking.sourceLabel],
-                            ["codec", res.ranking.codecLabel],
-                            ["range", res.ranking.dynamicRangeLabel],
-                            ["audio", res.ranking.audioLabel],
-                            // REQ-14 (0.5.0) — the matched mandatory audio language, one more chip
-                            // in the same row. `null` whenever the requirement is absent/unarmed
-                            // or this release matched none of it, so nothing renders in that case.
-                            ["language", res.ranking.matchedLanguage],
-                          ] as [string, string | null][]
-                        )
-                          .filter(
-                            (entry): entry is [string, string] =>
-                              entry[1] !== null,
-                          )
-                          .map(([criterion, label]) => (
-                            <span
-                              key={criterion}
-                              className="inline-flex items-center gap-0.5 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400"
-                            >
-                              {label}
-                              {/* REQ-14 (0.5.0) — the source chip's promotion marker: a promoted
-                                  `BluRay Remux` must not be indistinguishable from a genuine one at
-                                  the same adjusted rank. Visual + an accessible label, no new
-                                  format-identifier chip. */}
-                              {criterion === "source" &&
-                                res.ranking.sourcePromoted && (
-                                  <span title={t("sourcePromoted")}>
-                                    <ArrowUp
-                                      className="h-2.5 w-2.5"
-                                      aria-label={t("sourcePromoted")}
-                                    />
-                                  </span>
-                                )}
-                            </span>
-                          ))}
-                      </div>
-                    )}
                     <div className="mt-1 flex flex-col gap-0.5 overflow-hidden">
                       {res.infoUrl.map(
                         (indexerItem, idx) =>

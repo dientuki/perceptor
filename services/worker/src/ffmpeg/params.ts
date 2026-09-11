@@ -179,6 +179,7 @@ export function getAudioParams(
   allowedLanguagesIso3: string[],
   originalLanguageIso3: string,
   allowedLanguageTags: string[],
+  trackTitles: Record<string, string>,
 ) {
   // Both sides of every comparison go through normalizeIso3: ffprobe may tag
   // a track with the ISO-639-2/T form (e.g. "fra") while the allow-list
@@ -287,7 +288,7 @@ export function getAudioParams(
     const channels = Number(s.channels || 0);
     // REQ-12: the same resolver the subtitle titles use, prefixed onto the
     // channel-layout label below — see trackLanguageTitle.
-    const languageTitle = trackLanguageTitle(s);
+    const languageTitle = trackLanguageTitle(s, trackTitles);
 
     params.push("-map", `0:${s.index}`);
     params.push(`-c:a:${index}`, "libopus");
@@ -331,15 +332,6 @@ const MIN_SUBTITLE_CUES = 100;
 const HEARING_IMPAIRED_MARKERS = ['sdh', 'cc'];
 const HEARING_IMPAIRED_PHRASES = ['hearing impaired', 'hearing-impaired'];
 
-// REQ-12/REQ-18: L2 in .claude/agents/ffmpeg.md — endonym-style and
-// incomplete on purpose. A language not covered here falls back to its
-// ISO-639-2 code (see trackLanguageTitle below); filling it in is a
-// question for the user, never a guess.
-const languageTitles: Record<string, string> = {
-  eng: 'English',
-  spa: 'Español',
-};
-
 function isTextSubtitle(stream: any): boolean {
   return TEXT_SUBTITLE_CODECS.includes((stream.codec_name || '').toLowerCase());
 }
@@ -371,20 +363,21 @@ function isHearingImpaired(stream: any): boolean {
 // with this, getSubtitleParams uses it as the whole title. Detection is
 // unconditional (REQ-3): the same track reads the same way regardless of
 // who triggered the encode, never gated on what was requested.
-function trackLanguageTitle(stream: any): string {
+function trackLanguageTitle(stream: any, trackTitles: Record<string, string>): string {
   const lang = normalizeIso3(stream.tags?.language || 'und');
   const variant = detectVariant(stream);
   if (variant) {
     const title = variantTitle(variant);
     if (title) return title;
   }
-  return languageTitles[lang] ?? lang;
+  return trackTitles[lang] ?? lang;
 }
 
 export function getSubtitleParams(
   subtitleStreams: any[],
   allowedLanguagesIso3: string[],
   allowedLanguageTags: string[],
+  trackTitles: Record<string, string>,
 ) {
   // Same list the caller resolved for getAudioParams (REQ-8 shares the one
   // allow-list with REQ-4 — see the assumption at the top of spec.md). Both
@@ -436,7 +429,7 @@ export function getSubtitleParams(
   selected.forEach((s, index) => {
     params.push('-map', `0:${s.index}`);
     params.push(`-c:s:${index}`, 'srt');
-    params.push(`-metadata:s:s:${index}`, `title=${trackLanguageTitle(s)}`);
+    params.push(`-metadata:s:s:${index}`, `title=${trackLanguageTitle(s, trackTitles)}`);
   });
 
   return params;
