@@ -606,6 +606,104 @@ describe('handleEncode — encodeCompleted delivered through deliverReport (038-
   });
 });
 
+// Defends the EncodeFn seam widened by 053-downloads-panel-repair (worker/plan.md
+// § Tests): onProgress's second parameter must ride the existing encodeProgress
+// mutation as the new `speed` argument, sent explicitly rather than omitted, and
+// `0` — a legitimate multiplier at the start of an encode — must never be
+// laundered into "no speed" by a falsy check.
+describe('handleEncode — encode speed forwarded to encodeProgress (053-downloads-panel-repair)', () => {
+  function mockSuccessfulGraphQL() {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob: PROCESS_JOB_DETAILS });
+      }
+      if (query.includes('encodeCompleted')) {
+        return Promise.resolve({
+          encodeCompleted: {
+            message: 'ok',
+            removeTorrent: false,
+            deleteInputFile: false,
+            deleteDownloadPath: false,
+          },
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  it('a driver reporting a speed produces an encodeProgress call carrying that value', async () => {
+    mockSuccessfulGraphQL();
+    encodeMock.mockImplementation(async (...args: unknown[]) => {
+      const [, , , onProgress] = args as [
+        string,
+        string,
+        unknown,
+        (p: number, speed: number | null) => Promise<void>,
+      ];
+      await onProgress(50, 1.23);
+      return { ffmpegCommand: 'ffmpeg -i ...' };
+    });
+
+    await handleEncode(makeJob());
+
+    const progressCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeProgress'),
+    );
+    expect(progressCall).toBeDefined();
+    const [query, variables] = progressCall as [string, Record<string, unknown>];
+    expect(query).toContain('$s: Float');
+    expect(query).toContain('speed: $s');
+    expect(variables.s).toBe(1.23);
+  });
+
+  it('a driver reporting null produces an encodeProgress call carrying null, not an omitted variable', async () => {
+    mockSuccessfulGraphQL();
+    encodeMock.mockImplementation(async (...args: unknown[]) => {
+      const [, , , onProgress] = args as [
+        string,
+        string,
+        unknown,
+        (p: number, speed: number | null) => Promise<void>,
+      ];
+      await onProgress(50, null);
+      return { ffmpegCommand: 'ffmpeg -i ...' };
+    });
+
+    await handleEncode(makeJob());
+
+    const progressCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeProgress'),
+    );
+    expect(progressCall).toBeDefined();
+    const [, variables] = progressCall as [string, Record<string, unknown>];
+    expect('s' in variables).toBe(true);
+    expect(variables.s).toBeNull();
+  });
+
+  it('a speed of 0 is forwarded as 0, never laundered into "no speed" by a falsy check', async () => {
+    mockSuccessfulGraphQL();
+    encodeMock.mockImplementation(async (...args: unknown[]) => {
+      const [, , , onProgress] = args as [
+        string,
+        string,
+        unknown,
+        (p: number, speed: number | null) => Promise<void>,
+      ];
+      await onProgress(50, 0);
+      return { ffmpegCommand: 'ffmpeg -i ...' };
+    });
+
+    await handleEncode(makeJob());
+
+    const progressCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('encodeProgress'),
+    );
+    expect(progressCall).toBeDefined();
+    const [, variables] = progressCall as [string, Record<string, unknown>];
+    expect(variables.s).toBe(0);
+  });
+});
+
 // Defends REQ-6 of 047-source-deletion (worker/plan.md § Tests): a job
 // abandoned because its source was deleted must report nothing at all — no
 // encodeCompleted, no encodeFailed — and must never run cleanupSource, since

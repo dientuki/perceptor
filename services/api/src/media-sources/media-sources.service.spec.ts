@@ -403,12 +403,12 @@ describe('MediaSourcesService — downloadedFiles', () => {
     expect(result).toEqual(['A.mkv']);
   });
 
-  it('lowercases an uppercase-stored infoHash before calling the client', async () => {
+  it('passes the stored infoHash through unchanged to the client', async () => {
     torrentClient.files.mockResolvedValue([]);
 
     await service.downloadedFiles({ infoHash: 'D8AE740F029C118B43F6C7A87F4F3D6325E94249' });
 
-    expect(torrentClient.files).toHaveBeenCalledWith('d8ae740f029c118b43f6c7a87f4f3d6325e94249');
+    expect(torrentClient.files).toHaveBeenCalledWith('D8AE740F029C118B43F6C7A87F4F3D6325E94249');
   });
 });
 

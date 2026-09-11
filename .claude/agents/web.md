@@ -66,6 +66,14 @@ hopefully.
   the user reads: UI strings and the fallback error messages in server actions stay Spanish, because
   the app is Spanish. Existing files carry Spanish comments from before this rule; leave them,
   don't copy them.
+- **One renderable component per file** (`053-downloads-panel-repair`). A `.tsx` under
+  `src/components/`, `src/layout/` or `src/app/` exports exactly one thing that renders. Its own
+  prop types, module constants and a pure helper used only by it may stay beside it; a helper a
+  second file would want goes to `src/lib/`. `src/components/{common,form,ui,header}` is vendored
+  TailAdmin scaffolding that *does* stack components per file — it is the counter-example, not the
+  convention, so "follow the neighbours" there reproduces the defect. `services/web/CLAUDE.md`'s §
+  "One renderable component per file" names the files that still violate this rule; do not split
+  one as a side effect of an unrelated task.
 
 ## Tests
 

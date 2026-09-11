@@ -65,11 +65,24 @@ export class DownloadsService {
   private async liveInfoByHash(tag: string): Promise<Map<string, TorrentClientInfo>> {
     try {
       const rows = await this.qbittorrent.info(tag);
-      return new Map(rows.map((row) => [row.hash, row]));
+      return new Map(rows.map((row) => [row.hash.toLowerCase(), row]));
     } catch (err) {
       console.error(`[DownloadsService] no se pudo leer el estado del cliente de torrents (tag "${tag}"):`, err);
       return new Map();
     }
+  }
+
+  // REQ-2/../plan.md § Approach: the single join point every reader of the
+  // live map must go through — an indexer-sourced row's infoHash is stored
+  // uppercase (until the migration and the write-path fix land), while
+  // qBittorrent reports and is keyed here lowercase. A raw `live.get(source
+  // .infoHash)` at a call site is exactly the bug this feature exists to
+  // fix (../plan.md § Risks: "one call site keeps its raw live.get(...)").
+  private liveFor(
+    source: { infoHash: string | null },
+    live: Map<string, TorrentClientInfo>,
+  ): TorrentClientInfo | undefined {
+    return source.infoHash ? live.get(source.infoHash.toLowerCase()) : undefined;
   }
 
   // REQ-3: one query per page/mutation, never one per row — see
@@ -79,14 +92,19 @@ export class DownloadsService {
   private async jobsBySourceId(mediaSourceIds: number[]): Promise<Map<number, SourceAltitudeJob[]>> {
     const rows = await this.prisma.processJob.findMany({
       where: { sourceFile: { mediaSourceId: { in: mediaSourceIds } } },
-      select: { status: true, progress: true, sourceFile: { select: { mediaSourceId: true } } },
+      select: {
+        status: true,
+        progress: true,
+        encodeSpeed: true,
+        sourceFile: { select: { mediaSourceId: true } },
+      },
     });
 
     const grouped = new Map<number, SourceAltitudeJob[]>();
     for (const row of rows) {
       const mediaSourceId = row.sourceFile.mediaSourceId;
       const jobs = grouped.get(mediaSourceId) ?? [];
-      jobs.push({ status: row.status as EncodeStatus, progress: row.progress });
+      jobs.push({ status: row.status as EncodeStatus, progress: row.progress, encodeSpeed: row.encodeSpeed });
       grouped.set(mediaSourceId, jobs);
     }
     return grouped;
@@ -125,6 +143,7 @@ export class DownloadsService {
       encodeProgress: derived.encodeProgress ?? undefined,
       compressionEnabled,
       downloadSpeed: live?.dlspeed,
+      encodeSpeed: derived.encodeSpeed ?? undefined,
       readAt: new Date(),
     };
   }
@@ -158,7 +177,7 @@ export class DownloadsService {
       this.toDownload(
         source,
         movie.title,
-        source.infoHash ? live.get(source.infoHash) : undefined,
+        this.liveFor(source, live),
         jobsBySourceId.get(source.id) ?? [],
         compressionEnabled,
       ),
@@ -202,7 +221,7 @@ export class DownloadsService {
       return this.toDownload(
         source,
         label,
-        source.infoHash ? live.get(source.infoHash) : undefined,
+        this.liveFor(source, live),
         jobsBySourceId.get(source.id) ?? [],
         compressionEnabled,
       );
@@ -491,7 +510,8 @@ export class DownloadsService {
   private async liveInfoForHash(infoHash: string): Promise<TorrentClientInfo | undefined> {
     try {
       const rows = await this.qbittorrent.info();
-      return rows.find((row) => row.hash === infoHash);
+      const wanted = infoHash.toLowerCase();
+      return rows.find((row) => row.hash.toLowerCase() === wanted);
     } catch (err) {
       console.error(`[DownloadsService] no se pudo releer el estado de mediaSource tras la mutación:`, err);
       return undefined;

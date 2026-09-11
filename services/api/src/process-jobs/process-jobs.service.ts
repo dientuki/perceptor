@@ -301,10 +301,15 @@ export class ProcessJobsService {
     return `encoding: processJob ${processJobId}`;
   }
 
-  async encodeProgress(processJobId: number, progress: number) {
+  async encodeProgress(processJobId: number, progress: number, speed?: number | null) {
+    // NFR-3: a bad speed reading must never fail or slow a report — coerce
+    // anything unusable (missing, non-finite, negative) to null rather than
+    // rejecting it. The contract's error table says so explicitly.
+    const encodeSpeed = speed === null || speed === undefined || !Number.isFinite(speed) || speed < 0 ? null : speed;
+
     await this.prisma.processJob.update({
       where: { id: processJobId },
-      data: { progress },
+      data: { progress, encodeSpeed },
     });
 
     return `progreso: processJob ${processJobId} ${progress}%`;
@@ -335,7 +340,7 @@ export class ProcessJobsService {
 
     const processJob = await this.prisma.processJob.update({
       where: { id: processJobId },
-      data: { status: 'COMPLETED', progress: 100, outputFilePath, ffmpegCommand, errorMessage: null },
+      data: { status: 'COMPLETED', progress: 100, outputFilePath, ffmpegCommand, errorMessage: null, encodeSpeed: null },
       include: { sourceFile: { select: { mediaSourceId: true } } },
     });
 
@@ -418,7 +423,7 @@ export class ProcessJobsService {
 
     const processJob = await this.prisma.processJob.update({
       where: { id: processJobId },
-      data: { status: 'ERROR', errorKey, errorParams: errorParams ?? null, errorMessage },
+      data: { status: 'ERROR', errorKey, errorParams: errorParams ?? null, errorMessage, encodeSpeed: null },
     });
 
     if (!sourceDemoted) {

@@ -13,11 +13,16 @@ describe('deriveSourceStatus', () => {
     // still has a job, so it would instead fall into rule 6 territory. Either mutation breaks it.
     const result = deriveSourceStatus({
       sourceStatus: 'SCANNED',
-      jobs: [{ status: 'COMPLETED', progress: 100 }],
+      jobs: [{ status: 'COMPLETED', progress: 100, encodeSpeed: null }],
       live: null,
     });
 
-    expect(result).toEqual({ status: 'COMPLETED', downloadProgress: 100, encodeProgress: 100 });
+    expect(result).toEqual({
+      status: 'COMPLETED',
+      downloadProgress: 100,
+      encodeProgress: 100,
+      encodeSpeed: null,
+    });
   });
 
   it('resolves a QUEUED source with a live downloading reading to DOWNLOADING with a percentage (AC-2)', () => {
@@ -30,7 +35,12 @@ describe('deriveSourceStatus', () => {
       live: { state: 'DOWNLOADING', progress: 0.37 },
     });
 
-    expect(result).toEqual({ status: 'DOWNLOADING', downloadProgress: 37, encodeProgress: null });
+    expect(result).toEqual({
+      status: 'DOWNLOADING',
+      downloadProgress: 37,
+      encodeProgress: null,
+      encodeSpeed: null,
+    });
   });
 
   it('falls back to the column with null progress when no live reading exists (AC-6)', () => {
@@ -43,7 +53,12 @@ describe('deriveSourceStatus', () => {
       live: null,
     });
 
-    expect(result).toEqual({ status: 'QUEUED', downloadProgress: null, encodeProgress: null });
+    expect(result).toEqual({
+      status: 'QUEUED',
+      downloadProgress: null,
+      encodeProgress: null,
+      encodeSpeed: null,
+    });
   });
 
   it('never throws for any combination — the derivation is total', () => {
@@ -59,14 +74,65 @@ describe('deriveSourceStatus', () => {
     const result = deriveSourceStatus({
       sourceStatus: 'SCANNED',
       jobs: [
-        { status: 'COMPLETED', progress: 100 },
-        { status: 'ENCODING', progress: 50 },
-        { status: 'WAITING', progress: 0 },
+        { status: 'COMPLETED', progress: 100, encodeSpeed: null },
+        { status: 'ENCODING', progress: 50, encodeSpeed: 1.5 },
+        { status: 'WAITING', progress: 0, encodeSpeed: null },
       ],
       live: null,
     });
 
-    expect(result).toEqual({ status: 'ENCODING', downloadProgress: 100, encodeProgress: 50 });
+    expect(result).toEqual({
+      status: 'ENCODING',
+      downloadProgress: 100,
+      encodeProgress: 50,
+      encodeSpeed: 1.5,
+    });
+  });
+
+  it('surfaces the ENCODING job\'s own speed (REQ-10)', () => {
+    // Rule 3, the only rule allowed to return a non-null encodeSpeed. If the field were computed
+    // from the whole ACTIVE_ENCODE_STATUSES set (including WAITING/QUEUED jobs with no speed of
+    // their own) rather than only jobs actually ENCODING, this would still pass here — the next
+    // case is what catches that mutation.
+    const result = deriveSourceStatus({
+      sourceStatus: 'SCANNED',
+      jobs: [{ status: 'ENCODING', progress: 30, encodeSpeed: 1.23 }],
+      live: null,
+    });
+
+    expect(result.encodeSpeed).toBe(1.23);
+  });
+
+  it('never surfaces a COMPLETED job\'s stale stored speed (REQ-10)', () => {
+    // The same job, now COMPLETED, with the exact stored encodeSpeed value untouched — a job that
+    // finished still carries whatever multiplier it last wrote. If Rule 2 (or any rule outside
+    // Rule 3) read encodeSpeed off the jobs instead of hardcoding null, this would wrongly surface
+    // 1.23 forever, even though nothing is encoding any more.
+    const result = deriveSourceStatus({
+      sourceStatus: 'SCANNED',
+      jobs: [{ status: 'COMPLETED', progress: 100, encodeSpeed: 1.23 }],
+      live: null,
+    });
+
+    expect(result.encodeSpeed).toBeNull();
+  });
+
+  it('never surfaces a stale COMPLETED speed beside a WAITING job with none (REQ-10)', () => {
+    // A season pack where one episode finished (carrying a stale stored speed) and the next
+    // hasn't started encoding yet. The source is still ENCODING overall (Rule 3), but nothing is
+    // actively running, so meanEncodeSpeed's filter to job.status === 'ENCODING' must find no
+    // candidates and return null, not the completed job's leftover 1.23.
+    const result = deriveSourceStatus({
+      sourceStatus: 'SCANNED',
+      jobs: [
+        { status: 'COMPLETED', progress: 100, encodeSpeed: 1.23 },
+        { status: 'WAITING', progress: 0, encodeSpeed: null },
+      ],
+      live: null,
+    });
+
+    expect(result.status).toBe('ENCODING');
+    expect(result.encodeSpeed).toBeNull();
   });
 
   it('converts a live progress of 0.42 to 42, not 0.42 and not 4200 (the double-multiply guard)', () => {
@@ -85,7 +151,7 @@ describe('deriveSourceStatus', () => {
   it('resolves to ERROR when the source itself is ERROR, ignoring a COMPLETED job (AC-7 building block)', () => {
     const result = deriveSourceStatus({
       sourceStatus: 'ERROR',
-      jobs: [{ status: 'COMPLETED', progress: 100 }],
+      jobs: [{ status: 'COMPLETED', progress: 100, encodeSpeed: null }],
       live: null,
     });
 
@@ -96,8 +162,8 @@ describe('deriveSourceStatus', () => {
     const result = deriveSourceStatus({
       sourceStatus: 'SCANNED',
       jobs: [
-        { status: 'COMPLETED', progress: 100 },
-        { status: 'ERROR', progress: 0 },
+        { status: 'COMPLETED', progress: 100, encodeSpeed: null },
+        { status: 'ERROR', progress: 0, encodeSpeed: null },
       ],
       live: null,
     });

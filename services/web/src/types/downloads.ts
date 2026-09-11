@@ -27,5 +27,7 @@ export interface Download {
   compressionEnabled: boolean;
   // Bytes per second; null when the torrent is not in the client.
   downloadSpeed: number | null;
+  // FFmpeg's realtime multiplier (1.23 means 1.23x); null unless an encode is running right now.
+  encodeSpeed: number | null;
   readAt: string;
 }

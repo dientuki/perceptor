@@ -72,6 +72,7 @@ export function translateMediaStatus(status: MediaStatus): PipelineStatus {
 export type SourceAltitudeJob = {
   status: EncodeStatus;
   progress: number; // 0..100, as stored on ProcessJob
+  encodeSpeed: number | null; // FFmpeg's realtime multiplier, as stored on ProcessJob
 };
 
 export type LiveTorrentReading = {
@@ -89,6 +90,7 @@ export type DerivedProgress = {
   status: PipelineStatus;
   downloadProgress: number | null; // 0..100 or null
   encodeProgress: number | null; // 0..100 or null
+  encodeSpeed: number | null; // FFmpeg's realtime multiplier, non-null only from Rule 3 (REQ-10)
 };
 
 const ACTIVE_ENCODE_STATUSES: EncodeStatus[] = ['WAITING', 'QUEUED', 'ENCODING'];
@@ -96,6 +98,21 @@ const ACTIVE_ENCODE_STATUSES: EncodeStatus[] = ['WAITING', 'QUEUED', 'ENCODING']
 function meanProgress(jobs: SourceAltitudeJob[]): number {
   const sum = jobs.reduce((acc, job) => acc + job.progress, 0);
   return Math.round(sum / jobs.length);
+}
+
+// Rule 3 only (REQ-10): the mean of the non-null speeds of jobs *currently* ENCODING — a
+// WAITING/QUEUED job is not running and has nothing to report, and a COMPLETED/ERROR job's
+// stored value is stale by construction. Null when no job is actively encoding.
+function meanEncodeSpeed(jobs: SourceAltitudeJob[]): number | null {
+  const running = jobs.filter(
+    (job): job is SourceAltitudeJob & { encodeSpeed: number } =>
+      job.status === 'ENCODING' && job.encodeSpeed !== null,
+  );
+  if (running.length === 0) {
+    return null;
+  }
+  const sum = running.reduce((acc, job) => acc + job.encodeSpeed, 0);
+  return sum / running.length;
 }
 
 // The only place the 0..1 -> 0..100 conversion happens (REQ-3). The adapter boundary
@@ -119,22 +136,28 @@ export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress 
       status: 'ERROR',
       downloadProgress: live ? liveProgressToPercent(live) : null,
       encodeProgress: jobs.length > 0 ? meanProgress(jobs) : null,
+      encodeSpeed: null,
     };
   }
 
   // Rule 2: jobs exist and every one is COMPLETED.
   if (jobs.length > 0 && jobs.every((job) => job.status === 'COMPLETED')) {
-    return { status: 'COMPLETED', downloadProgress: 100, encodeProgress: 100 };
+    return { status: 'COMPLETED', downloadProgress: 100, encodeProgress: 100, encodeSpeed: null };
   }
 
   // Rule 3: jobs exist, some WAITING/QUEUED/ENCODING.
   if (jobs.length > 0 && jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status))) {
-    return { status: 'ENCODING', downloadProgress: 100, encodeProgress: meanProgress(jobs) };
+    return {
+      status: 'ENCODING',
+      downloadProgress: 100,
+      encodeProgress: meanProgress(jobs),
+      encodeSpeed: meanEncodeSpeed(jobs),
+    };
   }
 
   // Rule 4: no jobs, source is READY or SCANNED.
   if (jobs.length === 0 && (sourceStatus === 'READY' || sourceStatus === 'SCANNED')) {
-    return { status: 'DOWNLOADED', downloadProgress: 100, encodeProgress: null };
+    return { status: 'DOWNLOADED', downloadProgress: 100, encodeProgress: null, encodeSpeed: null };
   }
 
   // Rule 5: no jobs, a live torrent reading exists.
@@ -143,6 +166,7 @@ export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress 
       status: translateSourceStatus(live.state),
       downloadProgress: liveProgressToPercent(live),
       encodeProgress: null,
+      encodeSpeed: null,
     };
   }
 
@@ -151,6 +175,7 @@ export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress 
     status: translateSourceStatus(sourceStatus),
     downloadProgress: null,
     encodeProgress: null,
+    encodeSpeed: null,
   };
 }
 

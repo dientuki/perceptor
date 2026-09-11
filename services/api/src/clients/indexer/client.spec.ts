@@ -204,6 +204,56 @@ describe('ProwlarrClient.search — releases with no infoHash and no hash-bearin
     expect(titles).toContain(limeTorrentsItem.title);
     expect(titles).toContain(otherItem.title);
     const otherResult = result.find((r) => r.title === otherItem.title);
-    expect(otherResult?.infoHash).toBe('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    expect(otherResult?.infoHash).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+  });
+});
+
+// This suite exists because `MediaSource.infoHash` is compared against qBittorrent's own hash,
+// which is always lowercase — an indexer that reports (or embeds in its `guid`) an uppercase hash
+// used to survive into `TorrentResult.infoHash` uppercase, and from there into a stored row that
+// silently never joined to its live torrent (`053-downloads-panel-repair`). Fails if either
+// `.toLowerCase()` in `client.ts` reverts to `.toUpperCase()`.
+describe('ProwlarrClient.search — hash casing', () => {
+  const settings = {
+    getMap: jest.fn().mockResolvedValue({
+      tracker_host: 'indexer',
+      tracker_port: '9696',
+      tracker_api_key: 'a-key',
+    }),
+  } as unknown as SettingsService;
+
+  let client: ProwlarrClient;
+  let fetchSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    client = new ProwlarrClient(settings);
+    fetchSpy = jest.spyOn(global, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('lowercases an indexer-supplied uppercase infoHash in both the result and its group key', async () => {
+    const upperHashItem = {
+      title: 'Dune Part Two 2024 2160p UHD BluRay REMUX',
+      size: 60_000_000_000,
+      seeders: 42,
+      leechers: 3,
+      infoHash: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+    };
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [upperHashItem],
+    } as Response);
+
+    const result = await client.search('dune part two');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].infoHash).toBe(
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    );
+    expect(result[0].id).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
   });
 });

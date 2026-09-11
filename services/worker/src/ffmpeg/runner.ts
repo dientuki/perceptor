@@ -58,7 +58,7 @@ export function runFfmpeg(
   partPath: string,
   output: string,
   durationSeconds: number,
-  onProgress: (progress: number) => Promise<void>,
+  onProgress: (progress: number, speed: number | null) => Promise<void>,
   signal: AbortSignal,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -67,6 +67,13 @@ export function runFfmpeg(
 
     const stderrTail: string[] = [];
     let progressInFlight = false;
+    // Last speed= FFmpeg reported, read at report time rather than required
+    // in the same stdout chunk as out_time_us= — a -progress block can split
+    // across chunk boundaries, and requiring both in one chunk would drop
+    // most reports (053-downloads-panel-repair). null until a value has
+    // actually been parsed, and again whenever a chunk carries speed=N/A or
+    // something unparseable.
+    let lastSpeed: number | null = null;
     let settled = false;
     // Set the moment the abort listener below fires, so the close handlers
     // of whichever child (ffmpeg or mkvmerge) is running reject with
@@ -174,7 +181,24 @@ export function runFfmpeg(
     // ProcessJob — es la misma condición que ya rompió con error 1020 de
     // MariaDB en encode.mock.ts/encode.job.ts.
     child.stdout.on('data', (data: Buffer) => {
-      const match = data.toString().match(/out_time_us=(\d+)/);
+      const chunk = data.toString();
+
+      // speed= can land in a different chunk than out_time_us= (the
+      // -progress block splits across chunk boundaries), so it is parsed
+      // independently and remembered in `lastSpeed` rather than required
+      // alongside out_time_us= in the same match (053-downloads-panel-repair).
+      // FFmpeg emits `speed=N/A` during startup buffering, and possibly a
+      // leading space (`speed= 1.02x`) — both fall through to null, never
+      // throwing (NFR-3).
+      const speedMatch = chunk.match(/speed=\s*([\d.]+)x/);
+      if (speedMatch) {
+        const parsedSpeed = Number(speedMatch[1]);
+        lastSpeed = Number.isFinite(parsedSpeed) ? parsedSpeed : null;
+      } else if (chunk.includes('speed=N/A')) {
+        lastSpeed = null;
+      }
+
+      const match = chunk.match(/out_time_us=(\d+)/);
       if (!match || progressInFlight || durationSeconds <= 0) return;
 
       const outTimeSeconds = Number(match[1]) / 1_000_000;
@@ -184,7 +208,7 @@ export function runFfmpeg(
       // final, cuando el archivo ya está de verdad en su ruta definitiva.
       const progress = Math.min(99, Math.max(0, Math.round((outTimeSeconds / durationSeconds) * 100)));
       progressInFlight = true;
-      onProgress(progress)
+      onProgress(progress, lastSpeed)
         .catch((err) => console.error('[ffmpeg] no se pudo reportar progreso:', err))
         .finally(() => {
           progressInFlight = false;

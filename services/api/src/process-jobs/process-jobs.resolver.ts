@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Int, Float } from '@nestjs/graphql';
 import { ProcessJobsService } from './process-jobs.service';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
 import { EncodeCompletedResult } from './entities/encode-completed-result.entity';
@@ -40,8 +40,9 @@ export class ProcessJobsResolver {
   async encodeProgress(
     @Args('processJobId', { type: () => Int }) processJobId: number,
     @Args('progress', { type: () => Int }) progress: number,
+    @Args('speed', { type: () => Float, nullable: true }) speed?: number,
   ) {
-    return this.processJobsService.encodeProgress(processJobId, progress);
+    return this.processJobsService.encodeProgress(processJobId, progress, speed);
   }
 
   @AllowService()

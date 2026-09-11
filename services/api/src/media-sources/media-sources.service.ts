@@ -26,10 +26,7 @@ export class MediaSourcesService {
     if (!source.infoHash) return null;
 
     try {
-      // Lowercased here too, redundantly with client.ts's own normalisation:
-      // an indexer-sourced infoHash is stored uppercase, and qBittorrent
-      // answers 404 for it otherwise (../plan.md § Risks).
-      const files = await this.torrentClient.files(source.infoHash.toLowerCase());
+      const files = await this.torrentClient.files(source.infoHash);
       return files
         .filter((file) => file.priority !== 0 && file.progress >= 1)
         .map((file) => file.name);

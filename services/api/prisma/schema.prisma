@@ -317,6 +317,7 @@ model ProcessJob {
   outputFilePath String? @db.VarChar(500)
   ffmpegCommand  String? @db.Text
   progress       Int     @default(0) // 0-100, para la UI de encoding
+  encodeSpeed    Float? // FFmpeg's realtime multiplier while ENCODING; null otherwise (REQ-10)
 
   status       EncodeStatus @default(WAITING)
   errorMessage String?      @db.Text

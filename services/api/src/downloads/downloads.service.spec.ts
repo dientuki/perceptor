@@ -42,6 +42,7 @@ describe('DownloadsService', () => {
       delete: jest.Mock;
     };
     movie: { update: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock };
+    show: { findFirst: jest.Mock };
     episode: { update: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
     processJob: { findMany: jest.Mock };
     setting: { findMany: jest.Mock };
@@ -63,6 +64,7 @@ describe('DownloadsService', () => {
         delete: jest.fn(),
       },
       movie: { update: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
+      show: { findFirst: jest.fn() },
       episode: { update: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
       processJob: { findMany: jest.fn().mockResolvedValue([]) },
       setting: { findMany: jest.fn().mockResolvedValue([]) },
@@ -396,6 +398,85 @@ describe('DownloadsService', () => {
       expect(first!.encodeProgress).toBe(100);
       expect(second!.status).toBe('ENCODING');
       expect(second!.encodeProgress).toBe(30);
+    });
+  });
+
+  // 053-downloads-panel-repair: this suite exists because an indexer-sourced
+  // MediaSource.infoHash is stored uppercase while qBittorrent reports (and
+  // is keyed here) lowercase — a raw `live.get(source.infoHash)` misses the
+  // join silently: no error anywhere, the row just renders with
+  // downloadProgress/downloadSpeed null and its last-written status, next to
+  // a magnet-sourced row that joins fine. MariaDB's case-insensitive
+  // collation hides this from every SQL check, which is why it has to be
+  // pinned here, in-memory. Both movieDownloads and showDownloads are
+  // covered — they are structural twins, and fixing one without the other
+  // is the named risk in ../plan.md. Fault injection: revert liveFor's
+  // `.toLowerCase()` (on either side) and both cases below start asserting
+  // a null downloadProgress/downloadSpeed and the stale DB status.
+  describe('movieDownloads/showDownloads — case-insensitive infoHash join (REQ-2/REQ-4)', () => {
+    it('movieDownloads joins an uppercase-stored infoHash to qBittorrent\'s lowercase report', async () => {
+      prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Mayúscula' });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        {
+          id: 1,
+          kind: 'TORRENT_SEARCH',
+          status: 'QUEUED',
+          infoHash: 'ABCDEF0123456789ABCDEF0123456789ABCDEF01',
+          releaseTitle: null,
+          movieId: 7,
+          seasonId: null,
+          episodeId: null,
+        },
+      ]);
+      qbittorrent.info.mockResolvedValue([
+        {
+          hash: 'abcdef0123456789abcdef0123456789abcdef01',
+          state: 'DOWNLOADING',
+          rawState: 'downloading',
+          progress: 0.42,
+          dlspeed: 1234,
+        },
+      ]);
+
+      const [download] = await service.movieDownloads(7, 'user-1');
+
+      expect(download.downloadProgress).toBe(42);
+      expect(download.downloadSpeed).toBe(1234);
+      expect(download.status).toBe('DOWNLOADING');
+    });
+
+    it('showDownloads joins an uppercase-stored infoHash to qBittorrent\'s lowercase report', async () => {
+      const show = { id: 9, title: 'Serie Mayúscula' };
+      prisma.show.findFirst.mockResolvedValue(show);
+      prisma.mediaSource.findMany.mockResolvedValue([
+        {
+          id: 2,
+          kind: 'TORRENT_SEARCH',
+          status: 'QUEUED',
+          infoHash: 'FEDCBA9876543210FEDCBA9876543210FEDCBA98',
+          releaseTitle: null,
+          movieId: null,
+          seasonId: null,
+          episodeId: 55,
+          episode: { episodeNumber: 3, season: { seasonNumber: 1, show } },
+          season: null,
+        },
+      ]);
+      qbittorrent.info.mockResolvedValue([
+        {
+          hash: 'fedcba9876543210fedcba9876543210fedcba98',
+          state: 'DOWNLOADING',
+          rawState: 'downloading',
+          progress: 0.75,
+          dlspeed: 5678,
+        },
+      ]);
+
+      const [download] = await service.showDownloads(9, 'user-1');
+
+      expect(download.downloadProgress).toBe(75);
+      expect(download.downloadSpeed).toBe(5678);
+      expect(download.status).toBe('DOWNLOADING');
     });
   });
 

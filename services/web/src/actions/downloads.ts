@@ -23,6 +23,7 @@ const DOWNLOAD_FIELDS = `
   encodeProgress
   compressionEnabled
   downloadSpeed
+  encodeSpeed
   readAt
 `;
 

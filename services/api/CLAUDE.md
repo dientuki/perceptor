@@ -263,7 +263,12 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   every status a user reads: a plain exported function, no Nest module, no injection.
   `deriveSourceStatus` decides one `MediaSource`'s status from its column, its `ProcessJob` rows
   (reached via `sourceFile → processJob`, since `MediaSource` has no direct job relation) and an
-  optional live torrent reading, by REQ-3's six ordered rules — used by `downloads/`.
+  optional live torrent reading, by REQ-3's six ordered rules — used by `downloads/`. Since
+  `053-downloads-panel-repair`, `SourceAltitudeJob`/`DerivedProgress` also carry `encodeSpeed:
+  number | null`, surfaced **only** from Rule 3 (mean of the non-null speeds of jobs whose own
+  `status === 'ENCODING'`) and `null` from every other rule — so a completed, failed, cancelled or
+  not-yet-started job's stored speed is never read, by construction, not by a consumer remembering
+  to clear it (REQ-10).
   `deriveTitleStatus` decides one `Movie`/`Episode`'s status as the maximum, over an eight-value
   rank ladder, of its own stored `MediaStatus` and each non-`ERROR` source's derived status — `ERROR`
   surfaces **only** from the stored column, never from a raw job/source read, so a demoted
@@ -310,7 +315,13 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   already-finished download can never regress it. `Movie.status`/`Episode.status` are mapped through
   `deriveTitleStatus` in `movies.service.ts`/`shows.service.ts`, with no extra query — both queries
   already include the `mediaSources`/`processJobs` the derivation needs. `Show.status` and
-  `MediaSource.status` are unchanged (see `pipeline-status/` above).
+  `MediaSource.status` are unchanged (see `pipeline-status/` above). Since
+  `053-downloads-panel-repair`, `liveFor`/`liveInfoForHash` lowercase both sides of every join
+  against the torrent client's reported hash — `MediaSource.infoHash` can be stored either case
+  (an indexer-sourced row used to be written uppercase; a legacy row may still be), qBittorrent
+  reports and accepts lowercase only, and MariaDB's case-insensitive collation hid the mismatch
+  from every SQL check while the in-memory join kept missing. `clients/indexer/client.ts` and
+  `clients/torrent/client.ts`'s `normalizeHashes` now also write/compare lowercase at the source.
 - **`process-jobs/`** — the `ProcessJob` lifecycle: `sourceScanned` → encode queued →
   `encodeCompleted`. Resolves `outputRoot` and `downloadsRoot` for the worker; `downloadsRoot` is
   `resolveFromRoot('downloads', '.')` — the **root itself**, not `path_downloads`, because a torrent's
@@ -339,6 +350,11 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   writes the `ProcessJob` row as normal but skips the `movie`/`episode` update entirely on **both**
   mutations — a demoted source's late outcome, success or failure, must not move the title the
   winner is still encoding.
+  Since `053-downloads-panel-repair`, `encodeProgress` also takes an optional `speed: Float` —
+  FFmpeg's own realtime multiplier, forwarded by the worker on the same throttled report — and
+  persists it as `ProcessJob.encodeSpeed`; a non-finite or negative value is coerced to `null`,
+  never rejected (a bad speed must not fail a report). `encodeCompleted`/`encodeFailed` both null
+  it out, belt-and-braces on top of `pipeline-status/`'s Rule-3-only derivation below.
   `getEncodeJobDetails` resolves four fields, an audio pair and a subtitle pair — since
   `039-per-title-language-split` this is no longer one merged list: `allowedAudioLanguagesIso3`/
   `allowedAudioLanguageTags` and `allowedSubtitleLanguagesIso3`/`allowedSubtitleLanguageTags`. Each
@@ -624,8 +640,9 @@ rather than trusting this list:
 its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — a web-side type, not a database one.
 A movie/show discriminator in `api` would have to be added to `schema.prisma` and migrated first.
 
-There are 19 models and 24 migrations (counted 2026-09-02, after
-`021-user-preferences`) — verify with
+There are 20 models and 31 migrations (counted 2026-09-11, after
+`053-downloads-panel-repair`, which added no model — only `ProcessJob.encodeSpeed Float?` and a
+data-only `infoHash` lowercase backfill) — verify with
 `grep -c "^model " prisma/schema.prisma` rather than trusting the number. Worth knowing: the three
 `*Language` join tables reference `UserMovie`/`UserShow` through their composite FK rather than
 `User`+`Movie`/`Show` separately, so a language preference disappears automatically when the title
@@ -662,11 +679,12 @@ Do **not** extend or imitate `users.resolver.spec.ts` or `app.controller.spec.ts
 
 ## Current state
 
-As of 2026-09-04 (`045-media-type-availability`): `bin/cli api npx --no tsc --noEmit`
-reports **0 errors**, `bin/npm api test` is green at **390** tests across **39** suites, and
-`git status --short services/api/prisma` prints nothing (no migration — this feature reads two
-existing Setting rows, it does not add any). **Re-run both rather than trusting these numbers** —
-they exist so an agent can prove a change added nothing, not as a fact to cite.
+As of 2026-09-11 (`053-downloads-panel-repair`): `bin/cli api npx --no tsc --noEmit`
+reports **0 errors**, `bin/npm api test` is green at **460** tests across **42** suites, and
+`git status --short services/api/prisma` shows a modified `schema.prisma` plus one new migration
+directory (`ProcessJob.encodeSpeed Float?` and the `infoHash` lowercase data backfill — see root
+`CLAUDE.md`). **Re-run both rather than trusting these numbers** — they exist so an agent can
+prove a change added nothing, not as a fact to cite.
 
 ## Known debt
 

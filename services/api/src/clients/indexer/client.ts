@@ -23,7 +23,7 @@ function extractInfoHashFromGuid(guid?: string): string | null {
   if (!guid) return null;
 
   const match = guid.match(/\b([A-Fa-f0-9]{40})\b/);
-  return match ? match[1].toUpperCase() : null;
+  return match ? match[1].toLowerCase() : null;
 }
 
 // A derived group key for a release with no infoHash and no hash embedded in its guid. Built
@@ -48,7 +48,7 @@ async function filterData(items: Item[]): Promise<TorrentResult[]> {
 
   for (const item of items) {
     const hash =
-      item.infoHash?.toUpperCase() ||
+      item.infoHash?.toLowerCase() ||
       extractInfoHashFromGuid(item.guid) ||
       deriveGroupKey(item);
 

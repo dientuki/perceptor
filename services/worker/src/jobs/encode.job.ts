@@ -122,14 +122,19 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       // PrismaMariaDb) con "Record has changed since last read" (MariaDB 1020).
       // Esperar cada mutation antes de seguir el loop del encode lo evita del
       // todo. Un progreso perdido sí se traga (no debe frenar el encode).
-      const onProgress = async (progress: number) => {
+      const onProgress = async (progress: number, speed: number | null) => {
         if (progress !== 100 && progress - lastReported < PROGRESS_STEP) return;
         lastReported = progress;
 
         try {
+          // $s: Float, not Float! — the mutation's own optional argument
+          // (053-downloads-panel-repair). speed is sent explicitly, including
+          // explicit null, rather than omitted: an omitted variable against a
+          // declared $s is a different wire shape than an explicit null, and
+          // the two must stay distinguishable in api's log.
           await fetchGraphQL(
-            `mutation ($id: Int!, $p: Int!) { encodeProgress(processJobId: $id, progress: $p) }`,
-            { id: processJobId, p: progress },
+            `mutation ($id: Int!, $p: Int!, $s: Float) { encodeProgress(processJobId: $id, progress: $p, speed: $s) }`,
+            { id: processJobId, p: progress, s: speed },
           );
         } catch (err) {
           console.error(`[encode] no se pudo reportar progreso de ${processJobId}:`, err);

@@ -103,8 +103,13 @@ export class QbittorrentClient implements TorrentClient {
     return `http://${config.torrent_host}:${config.torrent_port}/api/v2/torrents/`;
   }
 
+  // Lowercases every entry before joining: an indexer-sourced infoHash is
+  // stored uppercase, and qBittorrent silently no-ops start/stop/remove
+  // against a hash it does not recognise rather than 404ing, so a mismatch
+  // here used to fail with no error anywhere.
   private normalizeHashes(hashes: string | string[]): string {
-    return Array.isArray(hashes) ? hashes.join("|") : hashes;
+    const list = Array.isArray(hashes) ? hashes : [hashes];
+    return list.map((hash) => hash.toLowerCase()).join("|");
   }
 
   /**

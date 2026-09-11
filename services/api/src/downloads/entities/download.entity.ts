@@ -59,6 +59,9 @@ export class Download {
   @Field(() => Float, { nullable: true })
   downloadSpeed?: number;
 
+  @Field(() => Float, { nullable: true })
+  encodeSpeed?: number;
+
   @Field()
   readAt: Date;
 }

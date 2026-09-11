@@ -334,20 +334,40 @@ scope) are gated on `infoHash != null`, never on `kind`: `SourceKind` has two to
 show's torrents renders with no buttons at all rather than a wrong one. No polling — a refresh
 control re-reads via `router.refresh()`.
 
+Since `053-downloads-panel-repair`, `DownloadsPanel.tsx` is the table shell only (headers, the
+per-row map, the fixed-width `w-[14rem]` progress `<th>` that pins the column across every row
+regardless of content — REQ-7's cross-row half). The row itself moved to
+`src/components/downloads/DownloadRow.tsx` (the panel's only import from that directory) and the
+progress bar to `src/components/downloads/DownloadProgressBar.tsx`, a `grid grid-cols-[1fr_auto]`
+component the row instantiates twice per row (download, encode) — REQ-7's within-row half: the
+track's column always gets whatever width is left after the label's own `auto` column, so the
+label can never shrink it, and both instances measure identically by construction. `formatSpeed`,
+`formatProgress` and `formatEncodeSpeed` live in `src/lib/format.ts`, not in either component — see
+§ "One renderable component per file" below for the rule this split exists to satisfy.
+
 Since `043-pipeline-status-normalization`, `Download.status` (and `Movie.status`/`Episode.status`)
 is one of eight normalized values — `MISSING`/`QUEUED`/`DOWNLOADING`/`PAUSED`/`DOWNLOADED`/
 `ENCODING`/`COMPLETED`/`ERROR` — derived server-side, never decided in `web`. `src/components/
-status/StatusBadge.tsx` is the **single** status pill: `DownloadsPanel.tsx` and
+status/StatusBadge.tsx` is the **single** status pill: `DownloadRow.tsx` and
 `SeasonAccordion.tsx` both render it rather than each carrying its own `statusBadgeClass`, and
 `Movie.tsx`/`Show.tsx` render it for the title-level status too. It maps a value to a color
 (`COMPLETED` green, `ERROR` red, `MISSING` gray, everything else the pulsing in-progress blue) and
 to its label via `useTranslations("status")` — the eight keys live in a `status` namespace in
 `messages/{en,es}.json`, not under `errors` (they are display copy, not a keyed error). An
-unrecognised value renders the raw string rather than crashing. `DownloadsPanel.tsx` draws two
-progress bars per row from `download.downloadProgress`/`download.encodeProgress` (0..100, `null`
-renders an empty track and `—`, never a spinner), the second only when
-`download.compressionEnabled` is `true`. `Download.progress` was renamed to `downloadProgress` in
-the same change — there is no back-compat alias.
+unrecognised value renders the raw string rather than crashing. `DownloadRow.tsx` draws two
+progress bars per row (via `DownloadProgressBar`) from `download.downloadProgress`/
+`download.encodeProgress` (0..100, `null` renders an empty track and `—`, never a spinner), the
+second only when `download.compressionEnabled` is `true`. `Download.progress` was renamed to
+`downloadProgress` in `043` — there is no back-compat alias.
+
+**The Speed column, since `053-downloads-panel-repair`**: `DownloadRow.tsx` branches on the
+derived `download.status === "ENCODING"` — never on `download.encodeSpeed != null` alone, since
+that condition would silently change meaning the day `api` has any reason to populate both fields
+at once — rendering `formatEncodeSpeed(download.encodeSpeed)` (FFmpeg's realtime multiplier,
+`1.23x`) while encoding, `formatSpeed(download.downloadSpeed)` (bytes per second) otherwise. The
+two formatters must never substitute for each other; see `docs/spec/graphql-contract.md`'s
+`053-downloads-panel-repair` section for the full reasoning. `0` renders `0.00x`, never `—` — it is
+a real multiplier at the start of an encode.
 
 ## The `AcquisitionTarget` union
 
@@ -590,6 +610,38 @@ the login screen, so don't delete it while cleaning up header remnants. Since `0
 the search input navigates to `/search?q=…` on submit (see § Multi-catalog search above) — it is no
 longer inert.
 
+## One renderable component per file (`053-downloads-panel-repair`)
+
+A `.tsx` file under `src/components/`, `src/layout/` or `src/app/` exports exactly one thing that
+renders. `DownloadsPanel.tsx` used to declare two (`DownloadRow` alongside the default export) —
+not a style preference, but how a component nobody can find gets reimplemented by the next screen
+instead of reused. It was split into `DownloadRow.tsx` and `DownloadProgressBar.tsx`.
+
+What may still live beside the one component in its file: its own prop types, module-level
+constants it alone uses, and a pure helper used only by it. A helper a second file would want goes
+to `src/lib/`, not to a sibling component's file — that is why `formatSpeed`/`formatProgress`/
+`formatEncodeSpeed` live in `src/lib/format.ts`, not in `DownloadRow.tsx`.
+
+**The cause, so "follow the neighbours" stops reproducing the defect**: `src/components/{common,
+form,ui,header}` (and `src/layout/`, `src/context/`) are vendored TailAdmin template scaffolding —
+see § UI origin above — and that template *does* stack several components in one file. It is the
+counter-example, not the convention to copy. When in doubt, a new component under
+`src/components/downloads/`, `src/components/users/`, etc. gets its own file even if a template
+neighbour doesn't.
+
+**Files that still violate this rule**, left untouched by `053` (each is a behaviour-carrying
+screen and a blind split risks a regression this service has no test suite to catch — splitting
+one is its own task, not a side effect of touching it for something else):
+
+- `src/components/users/UsersManager.tsx` (3 components)
+- `src/components/shows/SeasonAccordion.tsx`
+- `src/components/settings/SchedulingPanel.tsx`
+- `src/components/settings/MediaServerFields.tsx`
+- `src/app/perceptor/page.tsx`
+
+Re-run `grep -cE "^(export default )?function [A-Z]" <file>` before trusting this list — it
+decays as files change.
+
 ## Tests: there are none
 
 No test file, no runner, no `test` script. This is the largest maturity gap of the three services.
@@ -633,7 +685,7 @@ parity check with an exit code.
 
 ## Current state
 
-As of 2026-09-04 (`045-media-type-availability`): `bin/cli web npx --no tsc --noEmit` reports
+As of 2026-09-11 (`053-downloads-panel-repair`): `bin/cli web npx --no tsc --noEmit` reports
 **0 errors** and `bin/npm web run build` exits 0. Re-run both rather than trusting this — report the
 numbers before and after a change to prove you added nothing.
 

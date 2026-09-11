@@ -49,7 +49,9 @@ export const encodeMock: EncodeFn = async (input, output, _details, onProgress, 
     // await, no fire-and-forget: serializa los reportes de progreso para que
     // ninguno pueda seguir en vuelo cuando el caller dispare encodeCompleted
     // (ver comentario en encode.job.ts sobre el error 1020 de MariaDB).
-    await onProgress(Math.round((step / STEPS) * 100));
+    // null speed: the mock simulates time, not an encoder — it has none to
+    // report and must not invent one (053-downloads-panel-repair).
+    await onProgress(Math.round((step / STEPS) * 100), null);
   }
 
   // Comentado a propósito mientras se prueba el workflow a mano: el rename es

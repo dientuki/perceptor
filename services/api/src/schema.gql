@@ -136,6 +136,7 @@ type Download {
   encodeProgress: Float
   compressionEnabled: Boolean!
   downloadSpeed: Float
+  encodeSpeed: Float
   readAt: DateTime!
 }
 
@@ -413,7 +414,7 @@ type Mutation {
   encodeStarted(processJobId: Int!): String!
 
   """El worker reporta el progreso (0-100) de un encode en curso"""
-  encodeProgress(processJobId: Int!, progress: Int!): String!
+  encodeProgress(processJobId: Int!, progress: Int!, speed: Float): String!
 
   """El worker avisa que un encode terminó bien"""
   encodeCompleted(processJobId: Int!, outputFilePath: String!, ffmpegCommand: String!): EncodeCompletedResult!

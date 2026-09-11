@@ -1436,6 +1436,57 @@ error anywhere, the standing hazard of a hand-retyped contract with no codegen. 
 selection rule runs, and the same flags ride along on every file object sent back to
 `sourceScanned`. `web`: none.
 
+### `Download.encodeSpeed` is a multiplier, not a rate (`053-downloads-panel-repair`)
+
+```graphql
+type Download {
+  # ...unchanged fields...
+  downloadSpeed: Float
+  encodeSpeed: Float          # FFmpeg's realtime multiplier (1.23 means 1.23x).
+                              # null unless an encode is running right now.
+  readAt: DateTime!
+}
+
+type Mutation {
+  encodeProgress(processJobId: Int!, progress: Int!, speed: Float): String!
+}
+```
+
+Two things the schema itself cannot express, both load-bearing:
+
+- **`encodeSpeed` and `downloadSpeed` are different units on the same type, and must never share a
+  formatter.** `downloadSpeed` is bytes per second (the torrent client's read); `encodeSpeed` is a
+  dimensionless multiplier (FFmpeg's own `speed=` from the `-progress pipe:1` stream — `1.0` means
+  the encode is keeping pace with realtime). A consumer that formatted them through the same
+  function would render `1.23 B/s`. `web`'s `formatSpeed`/`formatEncodeSpeed` are two functions in
+  `src/lib/format.ts` for exactly this reason — see `services/web/CLAUDE.md`.
+- **`encodeSpeed` is non-null only while a job is actually `ENCODING`.** It is derived server-side
+  in `api`'s `pipeline-status/` (`043-pipeline-status-normalization`'s `deriveSourceStatus`), Rule 3
+  only, from the mean of the non-null speeds of jobs whose own `status === 'ENCODING'` — not the
+  whole `ACTIVE_ENCODE_STATUSES` set, since a `WAITING`/`QUEUED` job has nothing to report. A
+  completed, failed, cancelled or not-yet-started job's stored `ProcessJob.encodeSpeed` is never
+  read by any other rule, so a speed reading can never outlive the encode that produced it — this
+  holds by construction, not by a consumer remembering to clear a field.
+
+`speed` on `encodeProgress` is **optional**, deliberately — not a convenience. A `worker` image
+that predates this feature keeps calling the two-argument form and keeps working; `api` accepts an
+omitted, `null`, negative or non-finite `speed` and stores `null`, never rejecting the report
+(a bad or missing speed must never fail or slow an encode — the reading is decoration on top of a
+report that already works). `worker` sends `null` explicitly rather than omitting the variable when
+FFmpeg reported nothing parseable, so the two cases stay distinguishable in the log
+(`src/jobs/encode.job.ts`).
+
+`0` is a real multiplier — the start of an encode, before FFmpeg has ramped up — and must reach the
+UI as `0.00x`, never as `—`; a falsy check anywhere on this path (worker, api, or web) launders a
+real reading into "no speed" and is a bug, not a simplification.
+
+Consumer obligations — `web`: retypes both fields in `src/types/downloads.ts` and re-selects
+`encodeSpeed` in `DOWNLOAD_FIELDS` (`src/actions/downloads.ts`); branches its Speed cell on the
+derived `download.status === "ENCODING"`, never on `encodeSpeed != null` alone, since that
+condition would silently change meaning the day `api` has any reason to send both fields non-null
+at once. `worker`: passes `speed` on every `encodeProgress` call it already makes, riding the
+existing `PROGRESS_STEP` throttle — no new network call, no new cadence.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

@@ -54,8 +54,8 @@ name). New encode behaviour goes behind that interface, never inline in a job ha
 is what makes the surrounding workflow testable without FFmpeg.
 
 `EncodeFn` takes two callbacks, and both exist for the same reason: the driver reports outward
-rather than reaching for the network itself. `onProgress(progress)` is the long-standing one;
-`023-ffprobe-log` added `onProbe(file, ffprobe)`, invoked by `encode.ffmpeg.ts` right after
+rather than reaching for the network itself. `onProgress(progress, speed)` is the long-standing
+one; `023-ffprobe-log` added `onProbe(file, ffprobe)`, invoked by `encode.ffmpeg.ts` right after
 `getMetadata` returns and **before** `buildFfmpegCommand`, carrying the raw `ffprobe` stdout
 (which is why `ffmpeg/metadata.ts` returns `{ metadata, raw }` instead of only the parsed object).
 `jobs/encode.job.ts` owns the `recordFfprobe` GraphQL call behind it. Putting that call inside the
@@ -63,6 +63,21 @@ driver would have been shorter and wrong twice over — it would break the no-Gr
 the mock could not exercise it, so no test could reach it without FFmpeg. It is a **required**
 parameter on purpose: an optional callback a call site forgets to pass compiles clean and records
 nothing forever, with no error anywhere.
+
+Since `053-downloads-panel-repair`, `onProgress`'s second parameter, `speed: number | null`, is
+**required** for the identical reason `onProbe` is. `ffmpeg/runner.ts` parses FFmpeg's own
+`speed=1.23x` off the same `-progress pipe:1` stdout stream it already reads `out_time_us=` from,
+keeping the last successfully parsed value beside `progressInFlight` and passing that at report
+time rather than requiring both fields to land in the same stdout chunk (a `-progress` block can
+split across chunk boundaries). `speed=N/A` (the encoder's startup buffering) and anything
+unparseable resolve to `null`, never throwing — a missing speed must never fail or slow an encode.
+`encode.mock.ts` and `passthrough.ts` both pass explicit `null`: neither runs FFmpeg, so neither
+has a speed to report, and inventing one would be worse than reporting none. `jobs/encode.job.ts`
+forwards the value as `speed` on the same throttled `encodeProgress` call it already makes — no new
+network call, no new cadence — sending `null` explicitly rather than omitting the GraphQL variable,
+so the two cases (nothing parsed vs. nothing sent) stay distinguishable in `api`'s log. `0` is a
+real multiplier at the start of an encode and is forwarded as `0`, never laundered into "no speed"
+by a falsy check.
 
 Since `047-source-deletion`, `EncodeFn` also takes a required `signal: AbortSignal`, added for the
 same stated reason and wired through all three implementations (`encode.ffmpeg.ts` forwards it to
@@ -328,7 +343,7 @@ leaves a half-written file at the destination.
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate, against `tsconfig.json` (covers `src/**/*`, including `*.spec.ts`) |
 | `bin/npm worker run build` | `tsc -p tsconfig.build.json` — the `prod` image's `builder` stage runs this; `tsconfig.build.json` extends `tsconfig.json` but excludes `**/*.spec.ts`, so `dist/` ships no test code (`015-reproducible-image-builds`) |
-| `bin/npm worker test` | `vitest run` — 13 suites, 124 tests, green as of spec `031`, which added `src/ffmpeg/variants.spec.ts` and took `src/ffmpeg/params.spec.ts` from 15 cases to 28 for the regional-variant rules (spec `024` before it deleted a startup-probe module's spec outright and reset the case corpus to one file — `ffmpeg/cases.spec.ts` still runs 1 case, and that case is now authored by the user and read as the requirement); `023-ffprobe-log` added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
+| `bin/npm worker test` | `vitest run` — as of `053-downloads-panel-repair` (2026-09-11, re-run rather than trusted): 20 suites, 178 tests, 176 passing — the 2 failures are pre-existing and unrelated (`src/ffmpeg/cases.spec.ts`'s stale `2.json` track-title fixture, `src/ffmpeg/buildCommand.spec.ts`'s CRF mismatch), both in `src/ffmpeg/` territory owned by a different agent. `053` added the `encodeProgress` seam cases to `src/jobs/encode.job.spec.ts` (a driver reporting a speed, one reporting `null`, and `0` forwarded as `0` rather than laundered by a falsy check). Earlier history: spec `031` added `src/ffmpeg/variants.spec.ts` and took `src/ffmpeg/params.spec.ts` from 15 cases to 28 for the regional-variant rules (spec `024` before it deleted a startup-probe module's spec outright and reset the case corpus to one file — `ffmpeg/cases.spec.ts` still runs 1 case, authored by the user and read as the requirement); `023-ffprobe-log` added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 
 ## Known debt
