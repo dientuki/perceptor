@@ -199,6 +199,34 @@ if [ "$fresh_install" = true ]; then
     default="${pair##*:}"
     set_env_var "$var" "$(pick_free_port "$default")"
   done
+
+  # PUBLIC_UPLOAD_URL: el navegador pega ahí directo (POST /uploads, tus), no por la red
+  # docker interna que usa INTERNAL_GRAPHQL_URL, así que .env.example no puede traer un
+  # default útil — quedaba hardcodeado a "perceptor.local" sin importar el DOMAIN elegido,
+  # rompiendo la subida en silencio en cualquier instalación con un dominio distinto. Recién
+  # acá abajo porque el valor sin Traefik necesita el API_PORT ya definitivo (recién asignado
+  # arriba, puede no ser el default si estaba ocupado).
+  api_port=$(grep '^API_PORT=' .env | cut -d= -f2-)
+  if [ "$(grep '^USE_TRAEFIK=' .env | cut -d= -f2-)" = "true" ]; then
+    upload_domain=$(grep '^DOMAIN=' .env | cut -d= -f2-)
+    set_env_var PUBLIC_UPLOAD_URL "http://api.${upload_domain}/uploads"
+  else
+    # IP de la interfaz con ruta a internet, no localhost: HOST_DOWNLOADS_DIR aparte, éste es
+    # el único valor que el navegador (no el host) tiene que poder resolver, y "localhost"
+    # sólo funciona si accedés desde la misma máquina. macOS no tiene `ip`, de ahí el fallback.
+    if command -v ip >/dev/null 2>&1; then
+      host_ip=$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+    fi
+    if [ -z "$host_ip" ] && command -v ipconfig >/dev/null 2>&1; then
+      host_ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+    fi
+    host_ip="${host_ip:-localhost}"
+    set_env_var PUBLIC_UPLOAD_URL "http://${host_ip}:${api_port}/uploads"
+    echo
+    echo "PUBLIC_UPLOAD_URL quedó en http://${host_ip}:${api_port}/uploads. Si vas a subir"
+    echo "archivos desde otra PC o celular de la red y esa no es la IP correcta, corregila"
+    echo "a mano en .env."
+  fi
 fi
 
 # Secretos generados por instalación (REQ-6): nunca en un archivo versionado, nunca un default.
