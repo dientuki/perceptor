@@ -31,10 +31,13 @@ services:
   web:
     image: ghcr.io/dientuki/perceptor-web:${PERCEPTOR_TAG:-latest}
     restart: unless-stopped
-    # Mismo criterio que api/worker: no root, para que node_modules/.next que
-    # el CMD de dev escribe en el bind mount queden con el dueño del host en
-    # vez de con el uid de la imagen.
-    user: "${PUID}:${PGID}"
+    # No `user:` here, unlike api/worker. Those two write into host bind mounts
+    # and have to match the host's ownership; web writes nothing outside its own
+    # container, so it runs as the `nextjs` user the prod image was built for —
+    # which owns /app/.next and can therefore create Next's own .next/cache.
+    # Forcing PUID:PGID on it made the standalone server fail with
+    # `EACCES: permission denied, mkdir '/app/.next/cache'` on every request.
+    # The dev overlay puts `user:` back, where the bind mount does need it.
     ports:
       - "${WEB_PORT}:3000"
     dns:

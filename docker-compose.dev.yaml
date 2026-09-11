@@ -10,6 +10,12 @@
 # sobreviven junto al mount de código.
 services:
   web:
+    # Only dev needs this: the dev CMD installs node_modules and writes .next
+    # into the bind mount below, and those have to end up owned by the host user
+    # rather than by the image's uid. The runtime image writes nothing to the
+    # host, so docker-compose.yaml deliberately leaves web as the image's own
+    # user — see the comment there.
+    user: "${PUID}:${PGID}"
     volumes:
       - ./services/web:/app
     environment:

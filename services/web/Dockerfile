@@ -43,6 +43,12 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Next writes its fetch/ISR cache under .next/cache at runtime, and the parent
+# .next that the COPY above creates implicitly belongs to root. Without this the
+# server logs `EACCES: permission denied, mkdir '/app/.next/cache'` on the first
+# request that tries to cache anything.
+RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next
+
 USER nextjs
 
 EXPOSE 3000
