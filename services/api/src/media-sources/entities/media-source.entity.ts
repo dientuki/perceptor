@@ -34,4 +34,10 @@ export class MediaSource {
 
   @Field()
   hasUnmatchedFiles: boolean;
+
+  // Resolved on demand against the source's torrent client, never stored —
+  // see MediaSourcesResolver's @ResolveField. `[String]` with nullable: true
+  // yields `[String!]` in SDL: nullable list, non-null items.
+  @Field(() => [String], { nullable: true })
+  downloadedFiles: string[] | null;
 }

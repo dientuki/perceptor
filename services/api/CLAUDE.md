@@ -230,7 +230,18 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   the **video entries only** (`SourceFileInput.isVideo` — the extension list lives once, in the
   worker, on purpose). The `ERROR` branch is reached by `matches: []` **or** by every match resolving
   to nothing. The transaction, the never-reset-a-`ProcessJob`-past-`WAITING` rule and the
-  enqueue-after-commit block are load-bearing.
+  enqueue-after-commit block are load-bearing. Since `052-deselected-torrent-files`,
+  `hasUnmatchedFiles` also requires `SourceFileInput.isDownloaded` — a video file the torrent client
+  never wrote (deselected in qBittorrent, full announced size, no real content) must not count as
+  unmatched, or the cleanup verdict withholds `deleteDownloadPath` forever — and the empty-match
+  `ERROR` branch picks `error.source.scan_no_downloaded_video` instead of `error.source.scan_no_video`
+  when at least one reported video file was not downloaded. `downloadedFiles(source)` is a
+  `@ResolveField`, not eager in `findOne` (NFR-1: one torrent-client call only for a caller that
+  asks) — `null` whenever the answer isn't knowable (no `infoHash`, unknown hash, client unreachable
+  or rejecting, degraded via the same try/log/return-`null` shape as `downloads/`'s
+  `liveInfoForHash()`), otherwise the torrent's selected-and-complete files as paths relative to
+  `downloadPath`. `api` never re-derives `isDownloaded` itself and never filters the `files` array it
+  receives — the worker owns both the narrowing and the join.
 - **`episodes/`** — `MoviesService`'s structural twin one level deeper: `findOneFromDb` scoped through
   `season.show.users`, plus `addTorrentToEpisode`/`addMagnetToEpisode` mirroring
   `attachTorrentSource`'s ownership lookup, a `COMPLETED`-only conflict (`force`), demote-then-replace
@@ -548,7 +559,11 @@ it throws `error.indexer.no_infohash` rather than ever returning a falsy string,
 `attachTorrentSource`'s own `infoHash` parameter stays non-null by design), `clients/torrent/`
 (qBittorrent client + `magnet.ts` parser —
 since `022-download-status-tags` also `start()`, tag-aware `add()`/`info()`, and state sets brought
-to qBittorrent 5.0; deliberately **no** `setForceStart`, a member with no caller), `clients/media-server/`
+to qBittorrent 5.0; deliberately **no** `setForceStart`, a member with no caller; since
+`052-deselected-torrent-files` also `files(hash)` — `GET torrents/files?hash=<lowercased>`, a sibling
+of `info()` read the same way, throwing `TorrentClientError` on any non-2xx including a 404 for an
+unknown hash — lowercasing is load-bearing, since an indexer-sourced `infoHash` is stored uppercase
+and qBittorrent 404s on the mismatch), `clients/media-server/`
 (with a `registry.ts`), plus the shared `clients/types.ts`.
 `clients/tmdb/multi.ts` is the pure mapper for `search/multi` rows (film/series discriminated by
 `media_type`, everything else dropped), used by `TmdbClient.searchMulti()`.

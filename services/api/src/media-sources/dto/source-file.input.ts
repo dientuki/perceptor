@@ -25,4 +25,14 @@ export class SourceFileInput {
   @Field()
   @IsBoolean()
   isVideo: boolean;
+
+  // The narrowing rule — whether the torrent client actually downloaded this
+  // file — lives in the worker (mark-downloaded.ts), not here. Same
+  // precedent as isVideo above: api trusts the flag rather than re-deriving
+  // it, so the rule lives in one place. Required, no default (052-deselected
+  // -torrent-files): a worker that forgot to send it must fail validation
+  // loudly, not silently reinstate the bug this feature fixes.
+  @Field()
+  @IsBoolean()
+  isDownloaded: boolean;
 }

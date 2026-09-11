@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MediaSourcesService } from './media-sources.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
+import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { SourceFileInput } from './dto/source-file.input';
 import { ScannedMatchInput } from './dto/scanned-match.input';
 
@@ -41,11 +42,16 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
     processJob: { findUnique: jest.Mock; create: jest.Mock };
   };
   let encodeQueue: { addEncode: jest.Mock };
+  let torrentClient: { files: jest.Mock };
 
-  const videoFile = (filePath: string): SourceFileInput =>
-    ({ filePath, fileName: filePath, isVideo: true }) as SourceFileInput;
+  // isDownloaded defaults to true everywhere except the tests exercising
+  // REQ-6/REQ-7 directly — the same default the worker reports for a null
+  // downloadedFiles list (REQ-4), so every pre-existing case above keeps
+  // meaning exactly what it meant before this feature.
+  const videoFile = (filePath: string, isDownloaded = true): SourceFileInput =>
+    ({ filePath, fileName: filePath, isVideo: true, isDownloaded }) as SourceFileInput;
   const sidecarFile = (filePath: string): SourceFileInput =>
-    ({ filePath, fileName: filePath, isVideo: false }) as SourceFileInput;
+    ({ filePath, fileName: filePath, isVideo: false, isDownloaded: true }) as SourceFileInput;
   const match = (
     filePath: string,
     seasonNumber: number | null = null,
@@ -68,12 +74,14 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
     };
 
     encodeQueue = { addEncode: jest.fn() };
+    torrentClient = { files: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MediaSourcesService,
         { provide: PrismaService, useValue: prisma },
         { provide: EncodeQueueService, useValue: encodeQueue },
+        { provide: QbittorrentClient, useValue: torrentClient },
       ],
     }).compile();
 
@@ -341,5 +349,187 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
         create: expect.objectContaining({ filePath: 'Show.S01E01.sample.mkv', episodeId: 401 }),
       }),
     );
+  });
+});
+
+// This suite exists because 052-deselected-torrent-files hinges on a single
+// contract nobody else checks: `[]` and `null` from downloadedFiles() must
+// never be confused with each other. Collapsing an outage or an unknown hash
+// into `[]` would make REQ-7 fail a scan that should have succeeded (a stopped
+// qBittorrent container turning every in-flight torrent scan into a hard
+// error); collapsing an upload's real `null` into `[]` would make REQ-4 treat
+// a tus import as an empty torrent, again failing it with no error anywhere.
+describe('MediaSourcesService — downloadedFiles', () => {
+  let service: MediaSourcesService;
+  let torrentClient: { files: jest.Mock };
+
+  beforeEach(async () => {
+    torrentClient = { files: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MediaSourcesService,
+        { provide: PrismaService, useValue: {} },
+        { provide: EncodeQueueService, useValue: {} },
+        { provide: QbittorrentClient, useValue: torrentClient },
+      ],
+    }).compile();
+
+    service = module.get<MediaSourcesService>(MediaSourcesService);
+  });
+
+  it('returns null for a source with no infoHash, without calling the client', async () => {
+    const result = await service.downloadedFiles({ infoHash: null });
+
+    expect(result).toBeNull();
+    expect(torrentClient.files).not.toHaveBeenCalled();
+  });
+
+  it('returns null, not a rethrow, when the client throws (a stopped torrent container)', async () => {
+    torrentClient.files.mockRejectedValue(new TorrentClientError('offline', 0));
+
+    await expect(service.downloadedFiles({ infoHash: 'ABCDEF' })).resolves.toBeNull();
+  });
+
+  it('drops a deselected (priority 0) file and an incomplete one, keeping the rest', async () => {
+    torrentClient.files.mockResolvedValue([
+      { name: 'A.mkv', priority: 1, progress: 1 },
+      { name: 'B.mkv', priority: 0, progress: 1 }, // deselected in the client
+      { name: 'C.mkv', priority: 1, progress: 0.4 }, // selected but not finished
+    ]);
+
+    const result = await service.downloadedFiles({ infoHash: 'ABCDEF' });
+
+    expect(result).toEqual(['A.mkv']);
+  });
+
+  it('lowercases an uppercase-stored infoHash before calling the client', async () => {
+    torrentClient.files.mockResolvedValue([]);
+
+    await service.downloadedFiles({ infoHash: 'D8AE740F029C118B43F6C7A87F4F3D6325E94249' });
+
+    expect(torrentClient.files).toHaveBeenCalledWith('d8ae740f029c118b43f6c7a87f4f3d6325e94249');
+  });
+});
+
+// This suite exists because both REQ-6 and REQ-7 hinge on `isDownloaded`
+// actually gating the two rules it was added for — a wrong wiring here either
+// suppresses download-folder cleanup forever (REQ-6) or fails a scan for the
+// wrong stated reason, indistinguishable downstream from a genuinely corrupt
+// file (REQ-7).
+describe('MediaSourcesService — sourceScanned narrowing by isDownloaded', () => {
+  let service: MediaSourcesService;
+  let prisma: { mediaSource: { findUnique: jest.Mock }; processJob: { updateMany: jest.Mock }; $transaction: jest.Mock };
+  let tx: {
+    mediaSource: { findUnique: jest.Mock; update: jest.Mock };
+    movie: { update: jest.Mock };
+    episode: { update: jest.Mock };
+    sourceFile: { upsert: jest.Mock };
+    processJob: { findUnique: jest.Mock; create: jest.Mock };
+  };
+  let encodeQueue: { addEncode: jest.Mock };
+
+  beforeEach(async () => {
+    tx = {
+      mediaSource: { findUnique: jest.fn(), update: jest.fn() },
+      movie: { update: jest.fn() },
+      episode: { update: jest.fn() },
+      sourceFile: { upsert: jest.fn().mockResolvedValue({ id: 900 }) },
+      processJob: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 9000 }) },
+    };
+    prisma = {
+      mediaSource: { findUnique: jest.fn().mockResolvedValue({ id: 0, movie: null }) },
+      processJob: { updateMany: jest.fn() },
+      $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) => callback(tx)),
+    };
+    encodeQueue = { addEncode: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MediaSourcesService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: EncodeQueueService, useValue: encodeQueue },
+        { provide: QbittorrentClient, useValue: { files: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get<MediaSourcesService>(MediaSourcesService);
+  });
+
+  const file = (filePath: string, isVideo: boolean, isDownloaded: boolean): SourceFileInput =>
+    ({ filePath, fileName: filePath, isVideo, isDownloaded }) as SourceFileInput;
+  const match = (filePath: string, seasonNumber: number | null = null, episodeNumber: number | null = null): ScannedMatchInput =>
+    ({ filePath, seasonNumber, episodeNumber }) as ScannedMatchInput;
+
+  it('a matched video with a deselected sibling still writes hasUnmatchedFiles: false (REQ-6)', async () => {
+    tx.mediaSource.findUnique.mockResolvedValue({
+      id: 90,
+      status: 'ENCODING',
+      episodeId: null,
+      movie: { id: 111 },
+      season: null,
+    });
+
+    const files = [file('A.mkv', true, true), file('B.mkv', true, false)];
+    const matches = [match('A.mkv')];
+
+    await service.sourceScanned(90, files, matches);
+
+    expect(tx.mediaSource.update).toHaveBeenCalledWith({
+      where: { id: 90 },
+      data: { status: 'SCANNED', errorMessage: null, errorKey: null, errorParams: null, hasUnmatchedFiles: false },
+    });
+  });
+
+  it('zero matches with a not-downloaded video writes scan_no_downloaded_video (REQ-7)', async () => {
+    tx.mediaSource.findUnique.mockResolvedValue({
+      id: 91,
+      status: 'ENCODING',
+      episodeId: null,
+      movie: { id: 112 },
+      season: null,
+    });
+
+    const files = [file('B.mkv', true, false)];
+
+    await service.sourceScanned(91, files, []);
+
+    expect(tx.mediaSource.update).toHaveBeenCalledWith({
+      where: { id: 91 },
+      data: {
+        status: 'ERROR',
+        errorMessage: 'No video file in this download has any content — check which files are selected in the torrent client',
+        errorKey: 'error.source.scan_no_downloaded_video',
+        errorParams: null,
+        hasUnmatchedFiles: false,
+      },
+    });
+  });
+
+  it('zero matches with every video downloaded still writes the generic scan_no_video key', async () => {
+    tx.mediaSource.findUnique.mockResolvedValue({
+      id: 92,
+      status: 'ENCODING',
+      episodeId: null,
+      movie: { id: 113 },
+      season: null,
+    });
+
+    // No match resolved even though the video was downloaded — e.g. a season
+    // source whose parsed episodeNumber matched nothing in the season.
+    const files = [file('B.mkv', true, true)];
+
+    await service.sourceScanned(92, files, []);
+
+    expect(tx.mediaSource.update).toHaveBeenCalledWith({
+      where: { id: 92 },
+      data: {
+        status: 'ERROR',
+        errorMessage: 'Scan found no main video file: empty folder or no video',
+        errorKey: 'error.source.scan_no_video',
+        errorParams: null,
+        hasUnmatchedFiles: true,
+      },
+    });
   });
 });

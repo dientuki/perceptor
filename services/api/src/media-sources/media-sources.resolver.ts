@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Int, ResolveField, Parent } from '@nestjs/graphql';
 import { MediaSourcesService } from './media-sources.service';
 import { MediaSource } from './entities/media-source.entity';
 import { SourceFileInput } from './dto/source-file.input';
@@ -13,6 +13,16 @@ export class MediaSourcesResolver {
   @Query(() => MediaSource, { name: 'mediaSource', nullable: true })
   async mediaSource(@Args('id', { type: () => Int }) id: number) {
     return this.mediaSourcesService.findOne(id);
+  }
+
+  // Resolved on demand (NFR-1): one torrent-client call per caller that asks
+  // for this field, never eagerly inside findOne/sourceScanned. The parent is
+  // the Prisma row findOneFlat returns, so infoHash is already in hand — no
+  // second query. Typed locally against what the service actually needs, not
+  // against the MediaSource @ObjectType, which does not expose infoHash.
+  @ResolveField(() => [String], { nullable: true })
+  async downloadedFiles(@Parent() source: { infoHash: string | null }) {
+    return this.mediaSourcesService.downloadedFiles(source);
   }
 
   @AllowService()

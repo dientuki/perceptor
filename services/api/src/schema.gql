@@ -151,6 +151,7 @@ type MediaSource {
   errorKey: String
   errorParams: String
   hasUnmatchedFiles: Boolean!
+  downloadedFiles: [String!]
 }
 
 type EncodeJobDetails {
@@ -503,6 +504,7 @@ input SourceFileInput {
   fileName: String!
   size: Float
   isVideo: Boolean!
+  isDownloaded: Boolean!
 }
 
 input ScannedMatchInput {

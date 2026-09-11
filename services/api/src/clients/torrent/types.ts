@@ -18,6 +18,12 @@ export type TorrentClientInfo = {
   tags: string[]; // split from qBittorrent's comma-concatenated string
 };
 
+export type TorrentClientFile = {
+  name: string; // path relative to the torrent's save path, as qBittorrent reports it
+  priority: number; // 0 = do not download
+  progress: number; // 0..1, per-file completion
+};
+
 export type TorrentClient = {
   info: (tag?: string) => Promise<TorrentClientInfo[]>;
   add: (urls: string[], tags?: string[]) => Promise<string>;
@@ -25,4 +31,5 @@ export type TorrentClient = {
   stop: (hashes: string | string[]) => Promise<void>;
   remove: (hashes: string | string[], deleteFiles?: boolean) => Promise<void>;
   setSavePath: (path: string) => Promise<void>;
+  files: (hash: string) => Promise<TorrentClientFile[]>;
 };

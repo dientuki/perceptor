@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq';
 import { fetchGraphQL } from '../api/graphql-client';
 import { scanFolder } from '../scan/scan-folder';
+import { markDownloaded } from '../scan/mark-downloaded';
 import { selectMatches, type Match, type SelectMatchesMode } from '../scan/select-matches';
 import type { SourceReadyJob } from '../queue/types';
 import { KeyedError } from '../i18n/keyed-error';
@@ -16,6 +17,7 @@ type MediaSourceQueryResult = {
     movieId: number | null;
     episodeId: number | null;
     seasonId: number | null;
+    downloadedFiles: string[] | null;
   } | null;
 };
 
@@ -51,7 +53,9 @@ export async function handleSourceReady(job: Job<SourceReadyJob>): Promise<void>
 
   const { mediaSource } = await fetchGraphQL<MediaSourceQueryResult>(
     `query ($id: Int!) {
-      mediaSource(id: $id) { id status downloadPath releaseTitle movieId episodeId seasonId }
+      mediaSource(id: $id) {
+        id status downloadPath releaseTitle movieId episodeId seasonId downloadedFiles
+      }
     }`,
     { id: mediaSourceId },
   );
@@ -73,8 +77,19 @@ export async function handleSourceReady(job: Job<SourceReadyJob>): Promise<void>
 
   const mode = selectMode(mediaSource);
 
-  const { files } = await scanFolder(mediaSource.downloadPath);
+  const { files: scannedFiles } = await scanFolder(mediaSource.downloadPath);
+  const files = markDownloaded(scannedFiles, mediaSource.downloadedFiles, mediaSource.downloadPath);
   const matches: Match[] = selectMatches(files, mode);
+
+  if (mediaSource.downloadedFiles === null) {
+    console.log(
+      `[source-ready] ${mediaSourceId}: sin información de archivos bajados — se consideran todos`,
+    );
+  } else {
+    console.log(
+      `[source-ready] ${mediaSourceId}: el cliente de torrents reportó ${mediaSource.downloadedFiles.length} archivo(s) bajado(s)`,
+    );
+  }
 
   const matchedPaths = new Set(matches.map((match) => match.filePath));
   const skipped = files.filter((file) => file.isVideo && !matchedPaths.has(file.filePath));
@@ -83,7 +98,11 @@ export async function handleSourceReady(job: Job<SourceReadyJob>): Promise<void>
     `[source-ready] ${mediaSourceId}: ${files.length} archivo(s), ${matches.length} match(es)`,
   );
   for (const file of skipped) {
-    console.log(`[source-ready] ${mediaSourceId}: archivo de video no resuelto — ${file.fileName}`);
+    if (!file.isDownloaded) {
+      console.log(`[source-ready] ${mediaSourceId}: archivo de video no bajado — ${file.fileName}`);
+    } else {
+      console.log(`[source-ready] ${mediaSourceId}: archivo de video no resuelto — ${file.fileName}`);
+    }
   }
 
   await fetchGraphQL<SourceScannedMutationResult>(

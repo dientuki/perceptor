@@ -6,13 +6,41 @@ import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { MESSAGES_EN } from '@/i18n/messages.en';
+import { QbittorrentClient } from '@/clients/torrent/client';
 
 @Injectable()
 export class MediaSourcesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly encodeQueue: EncodeQueueService,
+    private readonly torrentClient: QbittorrentClient,
   ) {}
+
+  // Resolved on demand (@ResolveField), never eagerly — NFR-1: one torrent-
+  // client call per asking caller, zero for everyone else. `null` means
+  // "nobody knows" (no infoHash, unknown hash, client unreachable), which the
+  // worker reads as "fall back to today's behaviour" (REQ-2/REQ-4/REQ-8) —
+  // never `[]`, which would instead mean "the client answered, nothing was
+  // downloaded" and fail the scan under REQ-7.
+  async downloadedFiles(source: { infoHash: string | null }): Promise<string[] | null> {
+    if (!source.infoHash) return null;
+
+    try {
+      // Lowercased here too, redundantly with client.ts's own normalisation:
+      // an indexer-sourced infoHash is stored uppercase, and qBittorrent
+      // answers 404 for it otherwise (../plan.md § Risks).
+      const files = await this.torrentClient.files(source.infoHash.toLowerCase());
+      return files
+        .filter((file) => file.priority !== 0 && file.progress >= 1)
+        .map((file) => file.name);
+    } catch (error) {
+      console.error(
+        `[MediaSourcesService] no se pudo resolver downloadedFiles para infoHash ${source.infoHash}:`,
+        error,
+      );
+      return null;
+    }
+  }
 
   // MediaSource.movieId is now a real column (022-download-status-tags), no
   // longer derived from Movie's side of a 1:1. Kept as a private wrapper so
@@ -115,23 +143,33 @@ export class MediaSourcesService {
         }
       }
 
-      // hasUnmatchedFiles: sólo cuenta lo que el worker marcó como video y que
-      // no terminó resuelto — un .nfo/.srt nunca lo activa (ver dto isVideo).
+      // hasUnmatchedFiles: sólo cuenta lo que el worker marcó como video, que
+      // efectivamente se descargó (052-deselected-torrent-files, REQ-6) y que
+      // no terminó resuelto — un .nfo/.srt nunca lo activa (ver dto isVideo),
+      // y un .mkv deseleccionado en el cliente de torrents tampoco.
       const resolvedPaths = new Set(resolvedMatches.map((m) => m.filePath));
-      const hasUnmatchedFiles = files.some((file) => file.isVideo && !resolvedPaths.has(file.filePath));
+      const hasUnmatchedFiles = files.some(
+        (file) => file.isVideo && file.isDownloaded && !resolvedPaths.has(file.filePath),
+      );
 
       if (resolvedMatches.length === 0) {
-        // Carpeta vacía, sin video, o (para una temporada) ningún video se pudo
-        // resolver a un episodio: única rama de error que maneja la api. No se
-        // crea ningún SourceFile ni ProcessJob.
-        const errorMessage = MESSAGES_EN[ERROR_KEYS.SOURCE_SCAN_NO_VIDEO];
+        // Empty folder, no video, or (for a season) no video could be resolved
+        // to an episode: the only error branch this service handles. No
+        // SourceFile or ProcessJob is created. If video was reported but none
+        // of it was downloaded (REQ-7), the message must say that instead of
+        // the generic "no video found" — otherwise the downstream ffprobe
+        // failure surfaces with a message that names the wrong cause.
+        const errorKey = files.some((file) => file.isVideo && !file.isDownloaded)
+          ? ERROR_KEYS.SOURCE_SCAN_NO_DOWNLOADED_VIDEO
+          : ERROR_KEYS.SOURCE_SCAN_NO_VIDEO;
+        const errorMessage = MESSAGES_EN[errorKey];
 
         await tx.mediaSource.update({
           where: { id: mediaSourceId },
           data: {
             status: 'ERROR',
             errorMessage,
-            errorKey: ERROR_KEYS.SOURCE_SCAN_NO_VIDEO,
+            errorKey,
             errorParams: null,
             hasUnmatchedFiles,
           },

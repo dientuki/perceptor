@@ -37,7 +37,8 @@ src/i18n/                error-keys.ts · messages.en.ts · keyed-error.ts (see 
 src/jobs/                the two handlers, plus cleanup-source.ts (post-encode source deletion)
 src/scan/scan-folder.ts  enumerates a download's files, flags each isVideo — no longer selects a winner
 src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly one pair
-src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode
+src/scan/mark-downloaded.ts  flags each enumerated file isDownloaded against api's torrent-client answer (052)
+src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode, over InventoriedFile[] (052) — isDownloaded: false is excluded before either rule runs
 src/encode/              the driver seam (see below)
 src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639
 src/paths/build-output-path.ts   composes the final library path

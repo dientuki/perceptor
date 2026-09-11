@@ -1,4 +1,4 @@
-import type { ScannedFile } from './scan-folder';
+import type { InventoriedFile } from './mark-downloaded';
 import { parseEpisode } from './parse-episode';
 
 export type SelectMatchesMode = { kind: 'single' } | { kind: 'season' };
@@ -17,8 +17,12 @@ export type Match = {
 // per resolved episode; anything unparseable, or a duplicate loser, is
 // simply absent from the result — the caller logs the gap and `api` derives
 // `hasUnmatchedFiles` from the difference against `files`.
-export function selectMatches(files: ScannedFile[], mode: SelectMatchesMode): Match[] {
-  const videos = files.filter((file) => file.isVideo);
+//
+// The candidate set is narrowed to `isDownloaded` files before either rule
+// runs (REQ-3) — a deselected torrent file reports its full announced size
+// on disk with no real content, and would otherwise win the "largest" race.
+export function selectMatches(files: InventoriedFile[], mode: SelectMatchesMode): Match[] {
+  const videos = files.filter((file) => file.isVideo && file.isDownloaded);
 
   if (mode.kind === 'single') {
     if (videos.length === 0) return [];
@@ -28,7 +32,7 @@ export function selectMatches(files: ScannedFile[], mode: SelectMatchesMode): Ma
     return [{ filePath: largest.filePath, seasonNumber: null, episodeNumber: null }];
   }
 
-  const bestByEpisode = new Map<string, ScannedFile & { seasonNumber: number; episodeNumber: number }>();
+  const bestByEpisode = new Map<string, InventoriedFile & { seasonNumber: number; episodeNumber: number }>();
 
   for (const file of videos) {
     const parsed = parseEpisode(file.fileName);

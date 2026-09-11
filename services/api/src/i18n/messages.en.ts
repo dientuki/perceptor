@@ -104,6 +104,8 @@ export const MESSAGES_EN: Record<string, string> = {
     'matchedFilePath {filePath} is not in the reported file list',
   [ERROR_KEYS.SOURCE_SCAN_NO_VIDEO]:
     'Scan found no main video file: empty folder or no video',
+  [ERROR_KEYS.SOURCE_SCAN_NO_DOWNLOADED_VIDEO]:
+    'No video file in this download has any content — check which files are selected in the torrent client',
   [ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH]:
     'Completed with no download path recorded — cannot enqueue',
   [ERROR_KEYS.SOURCE_REPLACED]: 'Replaced by a new download',

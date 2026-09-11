@@ -1380,6 +1380,62 @@ Note: `mediaCapabilities`/`MediaCapabilities` itself was introduced by `045-medi
 which has no section of its own in this document — that gap predates this feature and is not closed
 here.
 
+### Deselected torrent files are excluded before selection, not after (`052-deselected-torrent-files`)
+
+```graphql
+type MediaSource {
+  # …existing…
+  downloadedFiles: [String!]
+}
+
+input SourceFileInput {
+  # …existing…
+  isDownloaded: Boolean!
+}
+```
+
+**`MediaSource.downloadedFiles` is resolved on demand, never stored.** A `null`/non-null list means
+two different things and must never collapse into each other: `null` is "nobody knows" — no
+`infoHash` (a tus upload, a local folder), the client doesn't recognise the hash, or it is
+unreachable or rejecting; `[]` is "the client answered, and nothing was downloaded". Entries are
+paths **relative to `MediaSource.downloadPath`** (Constitution, Article V) — the worker owns the
+join against the `downloadPath` it already has. It is a `worker`-facing field only: `web` has no
+obligation and must not add it to any query, since asking for it costs one torrent-client round
+trip per source (`movieDownloads`/`showDownloads` already issue their own `torrents/info?tag=` read
+and must not gain a second).
+
+**`SourceFileInput.isDownloaded` is required, not optional with a default.** The worker reports it
+for *every* enumerated file, following the `isVideo` precedent exactly: `api` trusts the flag rather
+than re-deriving it. `true` when `downloadedFiles` was `null` (nothing to narrow by — a non-torrent
+source behaves exactly as it did before this feature) or when the file's path appears in the list;
+`false` otherwise. Making it required and non-null means a `worker` image older than this feature
+fails `sourceScanned`'s validation loudly instead of silently reinstating the bug this feature fixes
+— an accepted breaking change, since `PERCEPTOR_TAG` is one version for all five images (root
+`CLAUDE.md`).
+
+The inventory the worker sends never shrinks because of narrowing (REQ-5): every file it found on
+disk is still reported, each carrying its own `isDownloaded` verdict, so
+`MediaSource.hasUnmatchedFiles` and a human reading the source afterwards both see the whole
+picture.
+
+| Condition | HTTP / GraphQL error | Message the user sees |
+| :-- | :-- | :-- |
+| Scan resolved no match and at least one reported video file has `isDownloaded: false` | stored on the row: `MediaSource.status = ERROR`, `errorKey = error.source.scan_no_downloaded_video` | `Ninguno de los archivos de video de esta descarga tiene contenido — revisá qué archivos seleccionaste en el cliente de torrents.` |
+| Scan resolved no match and every reported video file has `isDownloaded: true` | unchanged — `error.source.scan_no_video` | unchanged |
+| Torrent client unreachable or rejecting while resolving `downloadedFiles` | **no error** — the field resolves to `null` and one line is logged | none |
+
+Neither key is rendered by `web` yet — `services/web/messages/*.json` carries no `errors.source.*`
+entries at all, and no `web` screen reads `MediaSource.errorMessage`. The Spanish copy above is
+fixed here so that work, when it happens, does not reinvent it.
+
+Consumer obligations — `worker`: add `downloadedFiles` to the existing `mediaSource(id)` query in
+`src/jobs/source-ready.job.ts` **and** to its local `MediaSourceQueryResult` type, in the same edit
+— a field added to one and not the other arrives `undefined` and reads as "no narrowing" with no
+error anywhere, the standing hazard of a hand-retyped contract with no codegen. `markDownloaded`
+(`src/scan/mark-downloaded.ts`) narrows the candidate set `select-matches.ts` sees before either
+selection rule runs, and the same flags ride along on every file object sent back to
+`sourceScanned`. `web`: none.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

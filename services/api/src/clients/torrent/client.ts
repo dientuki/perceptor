@@ -85,6 +85,12 @@ interface QbittorrentTorrent {
   tags: string;
 }
 
+interface QbittorrentTorrentFile {
+  name: string;
+  priority: number;
+  progress: number;
+}
+
 @Injectable()
 export class QbittorrentClient implements TorrentClient {
   constructor(
@@ -131,6 +137,39 @@ export class QbittorrentClient implements TorrentClient {
       progress: t.progress,
       dlspeed: t.dlspeed,
       tags: t.tags ? t.tags.split(",").map((tagName) => tagName.trim()).filter(Boolean) : [],
+    }));
+  }
+
+  /**
+   * Lists the per-file state of a torrent — priority and progress, the two
+   * facts needed to tell a file the user deselected from one that actually
+   * downloaded (052-deselected-torrent-files). The hash is lowercased before
+   * the request: an indexer-sourced infoHash is stored uppercase, and
+   * qBittorrent answers 404 for it otherwise.
+   * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-contents
+   * @param {string} hash The torrent's info hash
+   */
+  async files(hash: string) {
+    const endpoint = new URL("files", await this.baseUrl());
+    endpoint.searchParams.set("hash", hash.toLowerCase());
+
+    const response = await fetch(endpoint, {
+      method: HTTP_METHOD.GET,
+    });
+
+    // Same reasoning as info(): the caller must never mistake "qBittorrent
+    // does not know this hash" for "nothing was downloaded" — both must
+    // surface as a thrown error here, never as an empty array.
+    if (!response.ok) {
+      throw new TorrentClientError(`qBittorrent rechazó la consulta de archivos (${response.status}): ${await response.text()}`, response.status);
+    }
+
+    const files = await response.json();
+
+    return files.map((f: QbittorrentTorrentFile) => ({
+      name: f.name,
+      priority: f.priority,
+      progress: f.progress,
     }));
   }
 
