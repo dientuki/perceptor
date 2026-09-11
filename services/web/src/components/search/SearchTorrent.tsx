@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Loader2, Search, Sparkles } from "lucide-react";
+import { ArrowUp, Download, Loader2, Search, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -365,6 +365,42 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                           ),
                       )}
                     </div>
+                    {showBest && "ranking" in res && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {(
+                          [
+                            ["resolution", res.ranking.resolutionLabel],
+                            ["group", res.ranking.groupLabel],
+                            ["source", res.ranking.sourceLabel],
+                            ["codec", res.ranking.codecLabel],
+                            ["range", res.ranking.dynamicRangeLabel],
+                            ["audio", res.ranking.audioLabel],
+                            ["language", res.ranking.matchedLanguage],
+                          ] as [string, string | null][]
+                        )
+                          .filter(
+                            (entry): entry is [string, string] =>
+                              entry[1] !== null,
+                          )
+                          .map(([criterion, label]) => (
+                            <span
+                              key={criterion}
+                              className="inline-flex items-center gap-0.5 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400"
+                            >
+                              {label}
+                              {criterion === "source" &&
+                                res.ranking.sourcePromoted && (
+                                  <span title={t("sourcePromoted")}>
+                                    <ArrowUp
+                                      className="h-2.5 w-2.5"
+                                      aria-label={t("sourcePromoted")}
+                                    />
+                                  </span>
+                                )}
+                            </span>
+                          ))}
+                      </div>
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-gray-500 dark:text-gray-400">
                     {formatBytes(res.size)}

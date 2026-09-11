@@ -13,6 +13,7 @@ import { getPreferences } from "@/actions/preferences";
 import Switch from "@/components/form/switch/Switch";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
+import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
 import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
@@ -20,10 +21,6 @@ import { useModal } from "@/hooks/useModal";
 import type { Language } from "@/types/languages";
 import type { AcquisitionTarget } from "@/types/media";
 import type { UserPreferences } from "@/types/preferences";
-
-// Debug: the resolution tiers `torrent-ranking.ts`'s `resolution()` recognises, best first —
-// static, so it never needs fetching, but it's the first line of "what are we filtering by".
-const RESOLUTION_ORDER = ["4K", "1080p", "720p", "480p", "360p"];
 
 export default function Movie({
   movie,
@@ -179,69 +176,19 @@ export default function Movie({
           </p>
         </div>
 
-        <div className="space-y-1 rounded-lg border border-dashed border-gray-300 p-3 font-mono text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
-          <p className="font-semibold text-gray-600 dark:text-gray-300">
-            Debug — filtros de ranking, en orden
-          </p>
-          <p>resolución (orden): {RESOLUTION_ORDER.join(" > ")}</p>
-          <p>
-            grupos preferidos (scope MOVIE
-            {preferences ? "" : ", cargando…"}):{" "}
-            {effectiveGroups.join(", ") || "— (usa defaults hardcodeados)"}
-          </p>
-          <p>
-            idiomas de audio — efectivo (
-            {usingGlobalLanguages
-              ? "fallback: preferencias globales"
-              : "título"}
-            ):{" "}
-            {effectiveAudioLanguages
-              .map((l) => `${l.tag}/${l.iso3}`)
-              .join(", ") || "—"}
-          </p>
-          <p>audio obligatorio — efectivo: {String(effectiveAudioMandatory)}</p>
-          <p>
-            idiomas de subtítulos — efectivo (
-            {usingGlobalSubtitles
-              ? "fallback: preferencias globales"
-              : "título"}
-            ):{" "}
-            {effectiveSubtitleLanguages
-              .map((l) => `${l.tag}/${l.iso3}`)
-              .join(", ") || "—"}
-          </p>
-          <p className="pt-1 text-gray-400 dark:text-gray-500">
-            título: audioMandatory={String(movie.audioMandatory)},
-            audioLanguages=
-            {movie.audioLanguages.map((l) => `${l.tag}/${l.iso3}`).join(", ") ||
-              "—"}
-            , subtitleLanguages=
-            {movie.subtitleLanguages
-              .map((l) => `${l.tag}/${l.iso3}`)
-              .join(", ") || "—"}
-          </p>
-          <p className="text-gray-400 dark:text-gray-500">
-            global (/preferences): audioMandatory=
-            {preferences ? String(preferences.audioMandatory) : "…"},
-            audioLanguages=
-            {preferences
-              ? preferences.audioLanguages
-                  .map((l) => `${l.tag}/${l.iso3}`)
-                  .join(", ") || "—"
-              : "…"}
-            , subtitleLanguages=
-            {preferences
-              ? preferences.subtitleLanguages
-                  .map((l) => `${l.tag}/${l.iso3}`)
-                  .join(", ") || "—"
-              : "…"}
-            , grupos(movie)=
-            {preferences
-              ? preferences.movieTorrentGroups.map((g) => g.name).join(", ") ||
-                "—"
-              : "…"}
-          </p>
-        </div>
+        <RankingDebugPanel
+          scopeLabel="MOVIE"
+          preferences={preferences}
+          effectiveGroups={effectiveGroups}
+          usingGlobalLanguages={usingGlobalLanguages}
+          effectiveAudioLanguages={effectiveAudioLanguages}
+          effectiveAudioMandatory={effectiveAudioMandatory}
+          usingGlobalSubtitles={usingGlobalSubtitles}
+          effectiveSubtitleLanguages={effectiveSubtitleLanguages}
+          titleAudioMandatory={movie.audioMandatory}
+          titleAudioLanguages={movie.audioLanguages}
+          titleSubtitleLanguages={movie.subtitleLanguages}
+        />
 
         <div className="space-y-2 max-w-lg">
           <h4 className="font-semibold uppercase tracking-wider text-gray-400">
