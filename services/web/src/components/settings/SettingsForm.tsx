@@ -4,6 +4,7 @@ import {
   Cast,
   Clock,
   Cloud,
+  Container,
   FileVideoCamera,
   Globe,
   Library,
@@ -13,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import { updateSettingsAction } from "@/actions/settings";
 import CompressionPanel from "@/components/settings/CompressionPanel";
+import EnvironmentPanel from "@/components/settings/EnvironmentPanel";
 import GeneralPanel from "@/components/settings/GeneralPanel";
 import MediaManagerPanel from "@/components/settings/MediaManagerPanel";
 import MediaServerFields from "@/components/settings/MediaServerFields";
@@ -20,6 +22,7 @@ import SchedulingPanel from "@/components/settings/SchedulingPanel";
 import TorrentManagerPanel from "@/components/settings/TorrentManagerPanel";
 import Button from "@/components/ui/button/Button";
 import TabNav, { type TabNavItem } from "@/components/ui/tabs/TabNav";
+import type { EnvironmentInfo } from "@/types/environment";
 import type { MediaRoot } from "@/types/media-roots";
 import type {
   MediaServerIndexStatus,
@@ -36,6 +39,9 @@ interface SettingsFormProps {
   mediaServerIndexStatus: MediaServerIndexStatus;
   scheduledTasks: ScheduledTask[];
   torrentGroups: TorrentGroup[];
+  environment: EnvironmentInfo;
+  uploadEndpoint: string | null;
+  webDomain: string | null;
 }
 
 const TABS = [
@@ -45,6 +51,7 @@ const TABS = [
   "torrentManager",
   "compression",
   "scheduling",
+  "environment",
 ] as const;
 type TabKey = (typeof TABS)[number];
 
@@ -61,6 +68,9 @@ export default function SettingsForm({
   mediaServerIndexStatus,
   scheduledTasks,
   torrentGroups,
+  environment,
+  uploadEndpoint,
+  webDomain,
 }: SettingsFormProps) {
   const t = useTranslations("settings.form");
   const tTabs = useTranslations("settings.tabs");
@@ -113,6 +123,7 @@ export default function SettingsForm({
       icon: FileVideoCamera,
     },
     { key: "scheduling", label: tTabs("scheduling"), icon: Clock },
+    { key: "environment", label: tTabs("environment"), icon: Container },
   ];
 
   const panelClass = (key: TabKey) => (key === activeTab ? "" : "hidden");
@@ -126,7 +137,23 @@ export default function SettingsForm({
     <div>
       <TabNav items={tabItems} active={activeTab} onChange={handleTabChange} />
 
-      <form action={formAction}>
+      {/* The Environment tab is read-only (REQ-10) and rendered as a
+          sibling of the main <form>, never a child — see EnvironmentPanel's
+          own comment. The form below stays mounted at all times, just
+          hidden, so switching to this tab and back never drops an unsaved
+          edit on any of the other six panels. */}
+      <div className={activeTab === "environment" ? "mt-6" : "hidden"}>
+        <EnvironmentPanel
+          environment={environment}
+          uploadEndpoint={uploadEndpoint}
+          webDomain={webDomain}
+        />
+      </div>
+
+      <form
+        action={formAction}
+        className={activeTab === "environment" ? "hidden" : ""}
+      >
         <div className="mt-6 space-y-6">
           <div className={panelClass("general")}>
             <GeneralPanel uiLocale={getSettingValue("ui_locale")} />

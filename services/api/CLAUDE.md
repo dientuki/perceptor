@@ -464,6 +464,15 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   the per-title pairs, narrowed to `{ userId, kind }` for the same reason. Imports `LanguagesModule`
   and `UsersModule` (which now `exports: [UsersService]` for this).
 - **`media-roots/`** — the two declared roots and every path translation. See below.
+- **`environment/`** (`055-environment-panel`) — a leaf module reporting how this installation is
+  reachable, read-only, admin-only. Copies `media-roots/`'s factory-behind-a-token shape
+  (`ENVIRONMENT_CONFIG`) so the spec can inject a fixture without mutating `process.env`, and the
+  `ffprobe-logs.resolver.ts` per-method `@UseGuards(AdminGuard)` split. The allowlist read from
+  `process.env` is exactly `USE_TRAEFIK`, `DOMAIN`, `WEB_PORT`, `PORT`, `QBITTORRENT_WEBUI_PORT`,
+  `INDEXER_PORT` — never a wholesale `process.env` dump. `EnvironmentEndpoint` carries no `label`
+  (unlike `MediaRoot`, whose one predates `018-ui-i18n`); `web` maps `id` to a display name. Every
+  URL field is `null`, not a guessed host, unless `useTraefik && domain !== null` — see
+  `docs/spec/graphql-contract.md`'s `055` section for why.
 - **`media-server/`** — post-encode notification (Jellyfin today), opt-in from Settings, **plus**
   (`034-jellyfin-library-reconciliation`) reflecting what that server already holds back onto a newly
   registered title. `MediaServerReconcileService.reconcileMovie`/`reconcileShow` resolve a title's
@@ -704,6 +713,11 @@ reports **0 errors**, `bin/npm api test` is green at **471** tests across **43**
 directory (`ProcessJob.recoveryCount Int @default(0)` — see root `CLAUDE.md`). **Re-run both rather
 than trusting these numbers** — they exist so an agent can prove a change added nothing, not as a
 fact to cite.
+
+As of 2026-09-14 (`055-environment-panel`): `bin/cli api npx --no tsc --noEmit` reports **0
+errors**, `bin/npm api test` is green at **477** tests across **44** suites (the new
+`environment/environment.service.spec.ts`), and `git status --short services/api/prisma` is
+**empty** — this feature added no Prisma model and no migration.
 
 ## Known debt
 

@@ -507,6 +507,21 @@ enable toggle and cron field, each saved through the same `updateSettings` as ev
 (`schedule_<id>_enabled`/`schedule_<id>_cron` in `EDITABLE_KEYS`/`BOOLEAN_KEYS`), plus a
 `useTransition` "Ejecutar ahora" per task calling `runScheduledTaskAction` outside the form.
 
+**A seventh tab, *Environment* (`055-environment-panel`), is read-only and structurally different
+from the other six**: it renders `EnvironmentPanel.tsx` as a **sibling of `SettingsForm`'s
+`<form>`, not a child**, and the tab-switch logic gives the `<form>` itself `hidden` while
+Environment is active — it never conditionally *renders* the form. The other six panels are all
+mounted at once inside one shared `<form>` and switched with `hidden` for exactly the reason this
+extends to the form itself: `FormData` reads the DOM, so unmounting the form would silently drop
+every unsaved edit on the other six tabs the moment a user visits a tab that isn't one of them.
+Hiding the form on this tab is also what removes the *Guardar* button from a screen with nothing to
+save — that button is the form's last child. `EnvironmentPanel` takes the `environmentInfo` query
+result plus two values the query deliberately does not carry — `process.env.PUBLIC_UPLOAD_URL` and
+`process.env.DOMAIN`, both read directly in `page.tsx`'s Server Component — since comparing this
+container's own `PUBLIC_UPLOAD_URL` against `api`'s `expectedUploadEndpoint` is the entire point of
+the tab and `api` must not be given that variable (see `docs/spec/graphql-contract.md`'s `055`
+section).
+
 **`Movie`/`Show`'s `audioLanguages`/`subtitleLanguages` replace the single `preferredLanguages`
 field** `039-per-title-language-split` removed (not deprecated) — see
 `docs/spec/graphql-contract.md` for the full contract delta.
@@ -688,6 +703,10 @@ parity check with an exit code.
 As of 2026-09-11 (`053-downloads-panel-repair`): `bin/cli web npx --no tsc --noEmit` reports
 **0 errors** and `bin/npm web run build` exits 0. Re-run both rather than trusting this — report the
 numbers before and after a change to prove you added nothing.
+
+As of 2026-09-14 (`055-environment-panel`): `bin/cli web npx --no tsc --noEmit` reports **0
+errors**, `bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs`
+confirms `en.json`/`es.json` match exactly (420 keys).
 
 `bin/npm web run lint` is **not** a usable gate: `biome check` reports ~1519 errors and ~65 warnings
 across the pre-existing template, with or without any given change. Judge a new file by running Biome

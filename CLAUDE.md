@@ -333,6 +333,11 @@ services/api/prisma` shows a modified `schema.prisma` and one new migration dire
 passing — same 2 pre-existing `src/ffmpeg/` failures as above, confirmed unchanged; `worker`
 typecheck reports the same 2 pre-existing `src/metadata/container-tags.spec.ts` errors noted under
 `052` above and no others (`web` untouched by this feature).
+— and again 2026-09-14 after `055-environment-panel`: `api` 477/44 suites, 0 typecheck errors,
+`git status --short services/api/prisma` empty (no Prisma model, no migration). `web` typechecks at
+0 errors, `bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs`
+confirms no `en`/`es` drift (`worker` untouched by this feature — no pipeline stage changed, only
+the admin Settings screen's new read-only tab).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

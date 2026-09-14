@@ -398,7 +398,36 @@
       "torrentManager": "Torrent Manager",
       "download": "Download",
       "compression": "Compression",
-      "scheduling": "Scheduling"
+      "scheduling": "Scheduling",
+      "environment": "Environment"
+    },
+    "environment": {
+      "routingModeLabel": "Routing mode",
+      "routingEnabled": "Enabled (domain routing)",
+      "routingDisabled": "Disabled (port mode)",
+      "domainLabel": "Domain",
+      "domainNotSet": "Not set",
+      "domainNotInEffect": "(not in effect — routing is disabled)",
+      "endpointsLabel": "Access endpoints",
+      "portLabel": "Port",
+      "urlNotDerivable": "not derivable",
+      "serviceNames": {
+        "web": "Web",
+        "api": "API",
+        "torrent": "Torrent client",
+        "indexer": "Indexer"
+      },
+      "uploadEndpointLabel": "Upload endpoint",
+      "uploadEndpointNotConfigured": "Not configured",
+      "uploadConsistent": "Consistent",
+      "uploadInconsistent": "Inconsistent",
+      "uploadExpectedValue": "Expected: {value}",
+      "domainDisagreement": "The api container has loaded domain \"{apiDomain}\" while web has loaded \"{webDomain}\". Recreate both containers so they agree:",
+      "howToChangeLabel": "How to change it",
+      "howToChangeDescription": "Edit these variables in the host's .env:",
+      "howToChangeRecreate": "The edit takes effect only after the affected containers are recreated:",
+      "hostGuidanceLabel": "Port mode host address",
+      "hostGuidanceDescription": "The upload endpoint must carry an address the browser itself can reach — the host's own LAN address, never \"localhost\", since the browser opening this app may be a different machine than the one running the stack. No container can determine that address on its own, so PUBLIC_UPLOAD_URL is set by hand in .env."
     },
     "scheduling": {
       "timezoneNote": "Schedules are evaluated in the API container's timezone (UTC unless the host sets TZ). \"03:00\" refers to that timezone, not yours.",

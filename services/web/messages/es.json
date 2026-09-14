@@ -398,7 +398,36 @@
       "torrentManager": "Gestor de torrents",
       "download": "Descarga",
       "compression": "Compresión",
-      "scheduling": "Programación"
+      "scheduling": "Programación",
+      "environment": "Entorno"
+    },
+    "environment": {
+      "routingModeLabel": "Modo de enrutamiento",
+      "routingEnabled": "Habilitado (enrutamiento por dominio)",
+      "routingDisabled": "Deshabilitado (modo puerto)",
+      "domainLabel": "Dominio",
+      "domainNotSet": "Sin configurar",
+      "domainNotInEffect": "(no está en efecto — el enrutamiento está deshabilitado)",
+      "endpointsLabel": "Endpoints de acceso",
+      "portLabel": "Puerto",
+      "urlNotDerivable": "no derivable",
+      "serviceNames": {
+        "web": "Web",
+        "api": "API",
+        "torrent": "Cliente de torrents",
+        "indexer": "Indexer"
+      },
+      "uploadEndpointLabel": "Endpoint de subida",
+      "uploadEndpointNotConfigured": "Sin configurar",
+      "uploadConsistent": "Consistente",
+      "uploadInconsistent": "Inconsistente",
+      "uploadExpectedValue": "Esperado: {value}",
+      "domainDisagreement": "El contenedor api tiene cargado el dominio \"{apiDomain}\" mientras que web tiene cargado \"{webDomain}\". Recreá ambos contenedores para que coincidan:",
+      "howToChangeLabel": "Cómo cambiarlo",
+      "howToChangeDescription": "Editá estas variables en el .env del host:",
+      "howToChangeRecreate": "El cambio recién toma efecto después de recrear los contenedores afectados:",
+      "hostGuidanceLabel": "Dirección del host en modo puerto",
+      "hostGuidanceDescription": "El endpoint de subida tiene que llevar una dirección a la que el navegador pueda llegar — la dirección LAN del host, nunca \"localhost\", ya que el navegador que abre esta app puede ser otra máquina distinta a la que corre el stack. Ningún contenedor puede determinar esa dirección por sí solo, así que PUBLIC_UPLOAD_URL se configura a mano en el .env."
     },
     "general": {
       "uiLocaleLabel": "Idioma de la aplicación"

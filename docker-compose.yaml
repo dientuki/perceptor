@@ -116,6 +116,11 @@ services:
       - CONTAINER_DOWNLOADS_DIR=${CONTAINER_DOWNLOADS_DIR}
       - HOST_DESTINATIONS_DIR=${HOST_DESTINATIONS_DIR}
       - CONTAINER_DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
+      # Read only by environmentInfo, the Settings screen's Environment tab — they drive no
+      # behaviour inside api itself (Traefik/qBittorrent/Prowlarr act on them, not this container).
+      - USE_TRAEFIK=${USE_TRAEFIK}
+      - QBITTORRENT_WEBUI_PORT=${QBITTORRENT_WEBUI_PORT}
+      - INDEXER_PORT=${INDEXER_PORT}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/graphql', (res) => process.exit(res.statusCode < 500 ? 0 : 1))"]
       #test: ["CMD-SHELL", "true"]

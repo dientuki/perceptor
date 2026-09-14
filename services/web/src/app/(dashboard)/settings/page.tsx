@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
+import { getEnvironmentInfo } from "@/actions/environment";
 import { getMediaRoots } from "@/actions/media-roots";
 import {
   getMediaServerIndexStatus,
@@ -42,6 +43,7 @@ export default async function SettingsPage() {
     mediaServerIndexStatus,
     scheduledTasks,
     torrentGroups,
+    environment,
   ] = await Promise.all([
     getSettings(),
     getMediaRoots(),
@@ -49,7 +51,14 @@ export default async function SettingsPage() {
     getMediaServerIndexStatus(),
     getScheduledTasks(),
     getTorrentGroups(),
+    getEnvironmentInfo(),
   ]);
+
+  // web's own values, never fetched from api — see 055-environment-panel's
+  // web/plan.md step 3. Read directly here since this component is already
+  // server-side; no server action round trip needed for either.
+  const uploadEndpoint = process.env.PUBLIC_UPLOAD_URL || null;
+  const webDomain = process.env.DOMAIN || null;
 
   return (
     <div>
@@ -64,6 +73,9 @@ export default async function SettingsPage() {
               mediaServerIndexStatus={mediaServerIndexStatus}
               scheduledTasks={scheduledTasks}
               torrentGroups={torrentGroups}
+              environment={environment}
+              uploadEndpoint={uploadEndpoint}
+              webDomain={webDomain}
             />
           </div>
         </div>

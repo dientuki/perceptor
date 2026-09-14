@@ -1,9 +1,9 @@
 ---
 title: The GraphQL Contract
-spec_version: 1.10.0
+spec_version: 1.11.0
 author: Juan Farias
 created_at: 2026-08-09
-last_updated: 2026-09-11
+last_updated: 2026-09-14
 status: Approved
 target_service: api, web, worker
 ---
@@ -1516,6 +1516,51 @@ unreachable `api` is retried rather than treated as a bootstrap failure — anyt
 answers (including the unauthorized case, which cannot actually occur with `SERVICE_TOKEN`) fails
 the bootstrap loudly. See `services/worker/CLAUDE.md` and `services/api/CLAUDE.md` for the
 reconciliation this triggers.
+
+### The environment panel is read-only (`055-environment-panel`)
+
+```graphql
+type EnvironmentEndpoint {
+  id: String!
+  port: Int
+  url: String
+}
+
+type EnvironmentInfo {
+  useTraefik: Boolean!
+  domain: String
+  endpoints: [EnvironmentEndpoint!]!
+  expectedUploadEndpoint: String
+}
+
+type Query {
+  environmentInfo: EnvironmentInfo!
+}
+```
+
+Carries its own `@UseGuards(AdminGuard)`, the `ffprobe-logs.resolver.ts` per-method precedent — there
+is only one method on this resolver, but class-level would still be the wrong habit to start.
+
+Every URL-shaped field is nullable, and `null` is the specified answer, not a placeholder for one:
+without Traefik there is no domain-based routing to derive a URL from, and no container can know
+which address a browser can actually reach it at — the host's LAN address is chosen by whoever
+installed the stack, not detectable from inside a container. A `?? 'localhost'` (or any other
+guessed host) would make the panel confidently recommend a value that breaks uploads for every
+device that is not the host itself, which is the exact bug `055` exists to make visible instead of
+hidden. `endpoints[].url` and `expectedUploadEndpoint` are `null` together, in the same condition
+(`useTraefik && domain !== null`) — never one without the other.
+
+`EnvironmentEndpoint` carries no `label`. Its neighbour `MediaRoot` has one, but that field predates
+`018-ui-i18n` and is a hardcoded Spanish string — adding a label here would put user-facing copy back
+into a service that produces English-plus-a-key and nothing else. `web` maps each endpoint's `id`
+(`web`/`api`/`torrent`/`indexer`, always in that order) to a catalog entry.
+
+`PUBLIC_UPLOAD_URL` is deliberately absent from this query. `api` does not have it, must not be
+given it, and does not compare against it — `expectedUploadEndpoint` is what `api` computes it
+*should* be from its own `DOMAIN`; `web` already has the real value as its own environment variable
+and is the one that compares the two and renders a consistency verdict. Giving `api` a second copy
+of the same setting would create two sources for one value, able to disagree with each other the
+same way `DOMAIN` already can between containers — precisely the class of bug this feature reports.
 
 ### The one non-GraphQL route
 
