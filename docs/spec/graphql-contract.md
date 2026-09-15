@@ -1317,10 +1317,12 @@ type Query {
 }
 
 type Mutation {
-  addMedia(tmdbId: Int!, type: String!, asShort: Boolean): MediaRef!
+  addMedia(tmdbId: Int!, type: String!): MediaRef!
   setMovieShort(movieId: Int!, isShort: Boolean!): Movie!
 }
 ```
+
+**Amended by `056-shorts-runtime-classification`**: `addMedia` lost its `asShort` argument.
 
 **`MediaCapabilities.shortsEnabled` is the effective capability, never the raw stored row.** `api`
 computes `movies_enabled && shorts_enabled` once, in `MediaCapabilitiesService.read()`, and ships one
@@ -1344,11 +1346,16 @@ owns" — the value `web`'s `/movies` sends while shorts are disabled, so a libr
 shrink just because an administrator turned the category off. `true`/`false` are real filters, not a
 client-side `.filter()` over the full list.
 
-**`addMedia(asShort:)` keeps registration atomic.** One optional argument, defaulting to `false`, so
-an unpatched consumer keeps working. Guard order in the resolver, before any per-type service runs:
-`assertEnabled(type)` → `error.media.shorts_not_a_movie` when `asShort` is set for a non-movie type →
-`assertShortsEnabled()`. Re-registering an already-registered film never rewrites its `isShort` flag —
-the detail-page toggle (`setMovieShort`) is the only way to reclassify one already in the library.
+**`isShort` at registration is derived, not chosen (`056-shorts-runtime-classification`).**
+`addMedia` no longer takes an `asShort` argument at all — the caller has no say in it. Instead
+`MoviesService.register()` asks `MediaCapabilitiesService.isShortsEnabled()` first, and only when
+that is true does it read (or, on a cache miss, fetch and cache) the film's TMDB runtime and
+classify anything under 40 minutes as a short; a `runtime` that is absent, `null` or `0` is never a
+short. With shorts disabled, registration sets `isShort: false` outright and makes no TMDB detail
+call at all — the cost of the derivation is paid only by installations that turned the category on.
+Re-registering an already-registered film never rewrites its `isShort` flag — the detail-page toggle
+(`setMovieShort`) is the only way to reclassify one already in the library, before or after this
+change.
 
 **`setMovieShort` reuses the existing ownership gate.** It runs through `MoviesService.findOneFromDb`
 the same as every other per-title mutation, so an unowned or nonexistent film id both return
@@ -1364,16 +1371,17 @@ copies or gets deleted (Constitution, Article XII).
 
 | Condition | HTTP / GraphQL error |
 | :-- | :-- |
-| `addMedia(asShort: true)` or `setMovieShort` while shorts are not effectively enabled | `error.media.shorts_disabled` (403) |
-| `addMedia(asShort: true, type: "show")` | `error.media.shorts_not_a_movie` (400) |
+| `setMovieShort` while shorts are not effectively enabled | `error.media.shorts_disabled` (403) |
 | `movies(isShort: …)` / `setMovieShort` while movies are disabled | `error.media.type_disabled` (403, existing) |
 | `setMovieShort` for a film id the caller does not own, or that does not exist | `error.movie.not_found` (404, existing) |
 | `getEncodeJobDetails` for a short while `path_shorts` is missing from Settings | `error.setting.missing` (404, existing) |
 
 Consumer obligations: `web` reads `capabilities.shortsEnabled` once per render (the existing
 `cache()`-wrapped `getMediaCapabilities()`) and threads it down — the sidebar entry, the `/movies`
-↔ `/shorts` split, the search badge, the "add as short" affordance and the detail toggle all gate on
-that one value. `worker` has no obligation at all: `EncodeJobDetails.outputRoot` is already a resolved
+↔ `/shorts` split, the search badge and the detail toggle all gate on that one value. There is no
+"add as short" affordance any more (`056-shorts-runtime-classification`) — the search-results add
+button is a single action, and the badge is the only thing `shortsEnabled` still gates on that
+screen. `worker` has no obligation at all: `EncodeJobDetails.outputRoot` is already a resolved
 string by the time the worker sees it, and the worker cannot tell a short from a feature film.
 
 Note: `mediaCapabilities`/`MediaCapabilities` itself was introduced by `045-media-type-availability`,
