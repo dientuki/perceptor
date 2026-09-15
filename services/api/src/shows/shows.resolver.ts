@@ -9,12 +9,16 @@ import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
+import { MEDIA_TYPE } from '@/types/media';
+import { ContentKind } from '@/media/entities/content-kind.enum';
 
 @Resolver(() => Show)
 export class ShowsResolver {
   constructor(
     private readonly showsService: ShowsService,
     private readonly languagesService: LanguagesService,
+    private readonly mediaCapabilitiesService: MediaCapabilitiesService,
   ) {}
 
   // Direct query against the DB (MariaDB / Prisma), scoped to the caller's
@@ -115,5 +119,30 @@ export class ShowsResolver {
     const show = await this.showsService.findOneFromDb(showId, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
     return this.showsService.setAudioMandatoryFor(userId, showId, mandatory);
+  }
+
+  @Mutation(() => Show, {
+    name: 'setShowContentKind',
+    description: 'Reclasifica el estilo de animación de una serie (057-content-kind-classification)',
+  })
+  async setShowContentKind(
+    @Args('showId', { type: () => Int }) showId: number,
+    @Args('contentKind', { type: () => ContentKind }) contentKind: ContentKind,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    // 057-content-kind-classification: assertEnabled first, before the
+    // ownership read below — a caller with series off must see
+    // error.media.type_disabled rather than learning whether showId exists.
+    // No assertShortsEnabled-style capability check — content kind has no
+    // installation-wide on/off switch.
+    await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.SHOW);
+    const userId = principal.type === 'user' ? principal.id : '';
+    // Ownership gate lives in the resolver, ShowsResolver's own template
+    // (setShowAudioMandatory above), unlike MoviesResolver.setMovieContentKind
+    // where it lives inside the service (that asymmetry is deliberate, see
+    // api/plan.md's "Existing code to reuse").
+    const show = await this.showsService.findOneFromDb(showId, userId);
+    if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
+    return this.showsService.setContentKind(showId, contentKind);
   }
 }

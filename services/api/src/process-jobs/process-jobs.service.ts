@@ -11,6 +11,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
+import { ContentKind } from '@/media/entities/content-kind.enum';
 
 // REQ-4: one automatic recovery per ProcessJob, ever — a constant, not a
 // Setting (Article X). A job found orphaned in ENCODING a second time is
@@ -89,7 +90,11 @@ export class ProcessJobsService {
         year: movie.releaseDate?.getFullYear() ?? null,
         originalLanguage: movie.originalLanguage,
         originalLanguageIso3: original.iso3,
-        isLiveAction: movie.isLiveAction,
+        // Prisma's generated `$Enums.ContentKind` is a string-literal union,
+        // not the nominal TS enum `registerEnumType` needs for the GraphQL
+        // field — same cross-boundary cast `preferences.resolver.ts` uses for
+        // `LanguageTrackKind`, just in the opposite (read) direction.
+        contentKind: movie.contentKind as unknown as ContentKind,
         seasonNumber: null,
         episodeNumber: null,
         episodeTitle: null,
@@ -119,7 +124,7 @@ export class ProcessJobsService {
         year: show.releaseDate?.getFullYear() ?? null,
         originalLanguage: show.originalLanguage,
         originalLanguageIso3: original.iso3,
-        isLiveAction: show.isLiveAction,
+        contentKind: show.contentKind as unknown as ContentKind,
         seasonNumber: episode.season.seasonNumber,
         episodeNumber: episode.episodeNumber,
         episodeTitle: episode.title,

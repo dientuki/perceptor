@@ -14,6 +14,7 @@ import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED } from '../i18n/error-keys';
 import { EncodeCancelledError, registerEncode, releaseEncode } from '../encode/cancellation';
+import { normalizeContentKind } from '../encode/content-kind';
 
 export type EncodeJobDetails = {
   id: number;
@@ -29,7 +30,7 @@ export type EncodeJobDetails = {
   allowedAudioLanguageTags: string[];
   allowedSubtitleLanguagesIso3: string[];
   allowedSubtitleLanguageTags: string[];
-  isLiveAction: boolean;
+  contentKind: string;
   seasonNumber: number | null;
   episodeNumber: number | null;
   episodeTitle: string | null;
@@ -77,7 +78,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags isLiveAction
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags contentKind
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
         compressionEnabled
@@ -94,8 +95,9 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   // branch taken rather than paraphrasing it — an `undefined` here reads as
   // "compressing", which is the safe default and must be visible as such.
   const compressing = details.compressionEnabled !== false;
+  const contentKind = normalizeContentKind(details.contentKind);
   console.log(
-    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3}`,
+    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind}`,
   );
 
   const trackTitles = await fetchTrackTitles();
@@ -186,7 +188,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             allowedAudioLanguageTags: details.allowedAudioLanguageTags ?? [],
             allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
             allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
-            isLiveAction: details.isLiveAction,
+            contentKind,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
             trackTitles: trackTitles,
@@ -206,7 +208,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             allowedAudioLanguageTags: details.allowedAudioLanguageTags ?? [],
             allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
             allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
-            isLiveAction: details.isLiveAction,
+            contentKind,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
             trackTitles: trackTitles,

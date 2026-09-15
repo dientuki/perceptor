@@ -10,6 +10,8 @@ import { MediaSearchResult as MediaSearchResultEntity } from '@/media/entities/m
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
+import { ContentKind as PrismaContentKind } from '@prisma/client';
+import { classifyContentKind } from '@/media/content-kind';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
@@ -18,6 +20,7 @@ import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
@@ -52,6 +55,29 @@ function movieTags(movie: { id: number; title: string }): string[] {
   return [sanitizeTag(movie.title, movie.id)];
 }
 
+// 056-shorts-runtime-classification NFR-3: the boundary is a constant, never
+// a Settings row. Strictly under this many minutes is a short.
+const SHORT_MAX_RUNTIME_MINUTES = 40;
+
+// REQ-5: `0`, `null` and `undefined` all mean "TMDB has no duration for this
+// title" and must never classify as a short — a truthiness check would treat
+// `0` as falsy-but-still-"a duration", which is the wrong silent failure.
+function isShortRuntime(runtime: number | null | undefined): boolean {
+  return (
+    typeof runtime === 'number' &&
+    runtime > 0 &&
+    runtime < SHORT_MAX_RUNTIME_MINUTES
+  );
+}
+
+// 057-content-kind-classification REQ-2: the same TMDB genre id
+// `content-kind.ts` uses to decide "is this title animated at all" — kept
+// here too (not exported from there) only so this service can decide
+// *whether a keywords call is worth making* before delegating the actual
+// genre-then-keywords precedence rule to `classifyContentKind`, which owns
+// REQ-2..REQ-5 exclusively.
+const ANIMATION_GENRE_ID = 16;
+
 @Injectable()
 export class MoviesService implements MediaTypeService {
   constructor(
@@ -60,6 +86,7 @@ export class MoviesService implements MediaTypeService {
     private readonly tmdb: TmdbClient,
     private readonly qbittorrent: QbittorrentClient,
     private readonly mediaServerReconcile: MediaServerReconcileService,
+    private readonly mediaCapabilities: MediaCapabilitiesService,
   ) {}
 
   async create(createMovieDto: CreateMovieDto) {
@@ -154,11 +181,7 @@ export class MoviesService implements MediaTypeService {
   // existente sin reescribir nada. En ambas ramas nos aseguramos de que exista
   // el vínculo con el usuario que llama (REQ-3): la fila de la película es
   // compartida, pero cada usuario necesita su propio user_movies.
-  async register(
-    tmdbId: number,
-    userId: string,
-    options?: { asShort?: boolean },
-  ): Promise<MediaRef> {
+  async register(tmdbId: number, userId: string): Promise<MediaRef> {
     const existing = await this.prisma.movie.findUnique({ where: { tmdbId } });
     if (existing) {
       // 048-shorts-category REQ-6: an already-registered film keeps its
@@ -174,19 +197,31 @@ export class MoviesService implements MediaTypeService {
     }
 
     const cached = await this.getCachedMovie(tmdbId);
+    // 057-content-kind-classification: the single shared top-up — one
+    // `tmdb.details()` call, at most, feeds both derivations below, so a
+    // cold registration never pays for two (plan.md § Risks).
+    const topped = await this.topUpCatalogFacts(cached);
+    const isShort = await this.deriveIsShort(topped);
+    const contentKind = await this.deriveContentKind(topped);
 
-    // isLiveAction y status quedan en sus defaults de Prisma (true / MISSING):
-    // es lo correcto para una película recién registrada y sin archivo todavía.
-    const movie = await this.create({
-      tmdbId: cached.id,
-      title: cached.title,
-      overview: cached.overview,
-      posterUrl: cached.posterUrl ?? undefined,
-      releaseDate: cached.releaseDate
-        ? new Date(cached.releaseDate)
-        : undefined,
-      originalLanguage: cached.originalLanguage,
-      isShort: options?.asShort === true,
+    // status queda en su default de Prisma (MISSING): es lo correcto para una
+    // película recién registrada y sin archivo todavía. Not routed through
+    // this.create()/CreateMovieDto — that DTO does not yet carry
+    // `contentKind` (out of this task's scope) and a plain Prisma call needs
+    // no cast for the type-check to stay clean.
+    const movie = await this.prisma.movie.create({
+      data: {
+        tmdbId: cached.id,
+        title: cached.title,
+        overview: cached.overview,
+        posterUrl: cached.posterUrl ?? undefined,
+        releaseDate: cached.releaseDate
+          ? new Date(cached.releaseDate)
+          : undefined,
+        originalLanguage: cached.originalLanguage,
+        isShort,
+        contentKind,
+      },
     });
 
     await this.linkUserToMovie(userId, movie.id);
@@ -241,6 +276,27 @@ export class MoviesService implements MediaTypeService {
     return this.withDerivedStatus(updated);
   }
 
+  // 057-content-kind-classification REQ-8: the only way an already-registered
+  // film gets reclassified, following setShort's exact template — ownership
+  // check first (findOneFromDb returns null both for a missing id and for a
+  // film the caller does not own), then a plain `movie.update` since
+  // contentKind is a property of the title itself (REQ-1), not scoped
+  // through UserMovie.
+  async setContentKind(id: number, userId: string, contentKind: PrismaContentKind) {
+    const movie = await this.findOneFromDb(id, userId);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
+
+    const updated = await this.prisma.movie.update({
+      where: { id },
+      data: { contentKind },
+      include: {
+        mediaSources: true,
+        processJobs: true,
+      },
+    });
+    return this.withDerivedStatus(updated);
+  }
+
   // upsert en vez de create: un segundo addMovie del mismo usuario para la misma
   // película no debe explotar con un P2002 sobre la primary key compuesta — el
   // botón que dispara esto en el UI puede volver a llamarse antes de que
@@ -262,7 +318,12 @@ export class MoviesService implements MediaTypeService {
     const raw = await this.redis.get(this.cacheKey(tmdbId));
     if (raw) return JSON.parse(raw) as MediaSearchResult;
 
-    return this.fetchMovieFromTMDB(tmdbId);
+    const fetched = await this.fetchMovieFromTMDB(tmdbId);
+    // REQ-6: a cold registration leaves the cache populated with the
+    // runtime included, so a later registration of the same film within the
+    // TTL never has to ask TMDB for it again.
+    void this.cacheMovies([fetched]);
+    return fetched;
   }
 
   // Falls back to the catalog itself when the Redis cache has expired,
@@ -292,7 +353,94 @@ export class MoviesService implements MediaTypeService {
       originalLanguage: detail.originalLanguage,
       overview: detail.overview,
       type: MEDIA_TYPE.MOVIE,
+      runtime: detail.runtime ?? null,
     };
+  }
+
+  // 057-content-kind-classification: the single top-up `register()` shares
+  // between `deriveIsShort` and `deriveContentKind` — one `tmdb.details()`
+  // call, at most, whenever either `runtime` or `genreIds` is missing from
+  // the cached entry (both come back on the same TMDB response, so one call
+  // always suffices). A failure here (TMDB unreachable, rate-limited,
+  // missing a field) must never fail the registration (NFR-2): the caller
+  // gets the cache entry back exactly as it was, and nothing is written to
+  // Redis — caching a partial/null answer produced by an outage would pin it
+  // for the full 24h TTL.
+  private async topUpCatalogFacts(
+    cached: MediaSearchResult,
+  ): Promise<MediaSearchResult> {
+    const hasRuntime = typeof cached.runtime === 'number';
+    const hasGenreIds = Array.isArray(cached.genreIds);
+    if (hasRuntime && hasGenreIds) return cached;
+
+    try {
+      const detail = (await this.tmdb.details(
+        MEDIA_TYPE.MOVIE,
+        cached.id,
+      )) as MovieDetail;
+      const topped: MediaSearchResult = {
+        ...cached,
+        runtime: detail.runtime ?? null,
+        genreIds: detail.genreIds ?? [],
+      };
+      void this.cacheMovies([topped]);
+      return topped;
+    } catch {
+      return cached;
+    }
+  }
+
+  // 056-shorts-runtime-classification: the initial value for a film's
+  // isShort, derived once at registration (REQ-4) and never again (REQ-7 —
+  // the early-return branch in register() never calls this). The capability
+  // is still checked before reading `runtime` (REQ-8) — the top-up itself no
+  // longer gates on it (057's contentKind derivation needs the same catalog
+  // facts unconditionally), but a disabled installation must still never
+  // classify anything as a short.
+  private async deriveIsShort(topped: MediaSearchResult): Promise<boolean> {
+    if (!(await this.mediaCapabilities.isShortsEnabled())) return false;
+    return isShortRuntime(topped.runtime);
+  }
+
+  // 057-content-kind-classification REQ-2..REQ-5: derived once at
+  // registration, from the same top-up `deriveIsShort` uses. No capability
+  // gate — content kind has no installation-wide on/off switch. A film whose
+  // genres are not (yet) known classifies as LIVE_ACTION (NFR-2's first
+  // case); an animated film whose keywords cannot be read classifies as CGI
+  // (NFR-2's second case, same fallback REQ-5 gives an empty keyword list).
+  private async deriveContentKind(
+    topped: MediaSearchResult,
+  ): Promise<PrismaContentKind> {
+    try {
+      const isAnimated = (topped.genreIds ?? []).includes(
+        ANIMATION_GENRE_ID,
+      );
+      if (!isAnimated) {
+        return classifyContentKind({
+          genreIds: topped.genreIds,
+          keywordIds: undefined,
+        }) as unknown as PrismaContentKind;
+      }
+
+      let keywordIds = topped.keywordIds;
+      if (keywordIds === undefined) {
+        try {
+          keywordIds = await this.tmdb.keywords(MEDIA_TYPE.MOVIE, topped.id);
+          void this.cacheMovies([{ ...topped, keywordIds }]);
+        } catch {
+          // NFR-2: genres say animated, keywords could not be read -> CGI.
+          return 'CGI' as PrismaContentKind;
+        }
+      }
+
+      return classifyContentKind({
+        genreIds: topped.genreIds,
+        keywordIds,
+      }) as unknown as PrismaContentKind;
+    } catch {
+      // NFR-2: genres could not be established at all -> LIVE_ACTION.
+      return 'LIVE_ACTION' as PrismaContentKind;
+    }
   }
 
   async search(
@@ -313,6 +461,7 @@ export class MoviesService implements MediaTypeService {
       originalLanguage: item.original_language,
       overview: item.overview,
       type: MEDIA_TYPE.MOVIE,
+      genreIds: item.genre_ids,
     }));
 
     return this.cacheAndEnrich(results, userId);

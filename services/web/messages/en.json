@@ -35,8 +35,7 @@
       "unsupported_type": "Unsupported media type: {type}",
       "type_disabled": "{type, select, movie {Movies are disabled on this system} show {Series are disabled on this system} other {This media type is disabled on this system}}",
       "search_unavailable": "Search is disabled on this system",
-      "shorts_disabled": "Shorts are disabled on this system",
-      "shorts_not_a_movie": "Only a movie can be registered as a short"
+      "shorts_disabled": "Shorts are disabled on this system"
     },
     "episode": {
       "already_completed": "This episode is already downloaded. Confirm to replace the current file."
@@ -259,8 +258,6 @@
       "go": "Go",
       "addButton": "Add",
       "adding": "Adding...",
-      "addShortButton": "Add as short",
-      "addingShort": "Adding as short...",
       "errorSearch": "Could not complete the search. Try again.",
       "errorAdd": "Could not add the {noun}. Try again.",
       "unavailable": "Search is disabled on this system."
@@ -338,7 +335,8 @@
       "synopsisTitle": "Synopsis",
       "noOverview": "No overview available.",
       "languagesTitle": "Languages",
-      "shortLabel": "Registered as a short"
+      "shortLabel": "Registered as a short",
+      "contentKindLabel": "Content kind"
     }
   },
   "shows": {
@@ -346,7 +344,8 @@
       "noPoster": "No poster available",
       "unknownYear": "Unknown Year",
       "synopsisTitle": "Synopsis",
-      "noOverview": "No overview available."
+      "noOverview": "No overview available.",
+      "contentKindLabel": "Content kind"
     },
     "seasonAccordion": {
       "seasonLabel": "Season {number}",
@@ -566,6 +565,11 @@
     "encoding": "Encoding",
     "completed": "Completed",
     "error": "Error"
+  },
+  "contentKind": {
+    "LIVE_ACTION": "Live action",
+    "ANIME": "Anime",
+    "CGI": "CGI / 3D animation"
   },
   "users": {
     "add": {

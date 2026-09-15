@@ -2,7 +2,7 @@
 title: Content kind classification — web slice
 service: web
 last_updated: 2026-09-14
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Content kind classification — `web` (`web/plan.md`)

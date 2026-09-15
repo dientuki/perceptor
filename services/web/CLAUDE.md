@@ -325,6 +325,15 @@ buttons — a series has none at that level), then one `SeasonAccordion.tsx` per
 Each episode row carries the same three buttons `Movie.tsx` uses (buscar / importar archivo / añadir
 torrent).
 
+Since `057-content-kind-classification`, both pages also render
+`src/components/media/ContentKindSelect.tsx` — a controlled `<select>` (built on
+`src/components/form/Select.tsx`, options ordered from `src/types/media.ts`'s `CONTENT_KINDS`) that
+reclassifies a title's `contentKind` (`LIVE_ACTION`/`ANIME`/`CGI`) via
+`setMovieContentKindAction`/`setShowContentKindAction`. Unlike the shorts `Switch`, this control does
+**not** use the `key`-remount-on-refusal trick (`shortSwitchKey`) — `Select` takes a controlled
+`value`, so reverting on a refusal is just setting state back to the previous value; copying the
+remount trick onto a controlled component would be dead code from day one.
+
 Since `022-download-status-tags` both pages also render `src/components/downloads/DownloadsPanel.tsx`
 (rows from `getMovieDownloads`/`getShowDownloads` in `src/actions/downloads.ts`, joined into each
 page's existing `Promise.all`), with `src/components/downloads/DeleteDownloadModal.tsx` on the
@@ -707,6 +716,11 @@ numbers before and after a change to prove you added nothing.
 As of 2026-09-14 (`055-environment-panel`): `bin/cli web npx --no tsc --noEmit` reports **0
 errors**, `bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs`
 confirms `en.json`/`es.json` match exactly (420 keys).
+
+As of 2026-09-15 (`057-content-kind-classification`): `bin/cli web npx --no tsc --noEmit` reports
+**0 errors**, `bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs`
+confirms `en.json`/`es.json` match exactly (422 keys — the new `contentKind` namespace plus
+`contentKindLabel` under `movies.detail`/`shows.detail`).
 
 `bin/npm web run lint` is **not** a usable gate: `biome check` reports ~1519 errors and ~65 warnings
 across the pre-existing template, with or without any given change. Judge a new file by running Biome

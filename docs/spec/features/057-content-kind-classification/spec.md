@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-14
 last_updated: 2026-09-14
-status: Approved
+status: Implemented
 services: [api, web, worker]
 ---
 
@@ -52,39 +52,39 @@ plus two mutations.
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Three-valued kind on both models)**: A film and a series must each carry exactly one
+- [x] **REQ-1 (Three-valued kind on both models)**: A film and a series must each carry exactly one
       content kind, one of `LIVE_ACTION`, `ANIME` or `CGI`. It is a property of the title, shared by
       every user who has it registered — never a per-user value. `isLiveAction` must be gone from
       both models, from the GraphQL schema and from the worker.
-- [ ] **REQ-2 (Live action is the default and the terminal case)**: A title registered from TMDB
+- [x] **REQ-2 (Live action is the default and the terminal case)**: A title registered from TMDB
       whose genres do not include animation (genre id `16`) must be stored as `LIVE_ACTION`, and no
       keyword lookup may be performed for it.
-- [ ] **REQ-3 (Anime keywords)**: An animated title whose TMDB keywords include `210024` (`anime`)
+- [x] **REQ-3 (Anime keywords)**: An animated title whose TMDB keywords include `210024` (`anime`)
       or `6513` (`cartoon`), and do **not** include `278823` (`3d-animation`), must be stored as
       `ANIME`.
-- [ ] **REQ-4 (3D animation wins)**: An animated title whose TMDB keywords include `278823`
+- [x] **REQ-4 (3D animation wins)**: An animated title whose TMDB keywords include `278823`
       (`3d-animation`) must be stored as `CGI`, whether or not `210024`/`6513` are also present.
       `3d-animation` is checked first.
-- [ ] **REQ-5 (Animated with no usable keyword is CGI)**: An animated title whose keywords include
+- [x] **REQ-5 (Animated with no usable keyword is CGI)**: An animated title whose keywords include
       none of the three ids — including the case where the keyword list is empty, or could not be
       retrieved at all — must be stored as `CGI`. Animation is established by the genre; only the
       style is in doubt, and `CGI` is where that doubt lands.
-- [ ] **REQ-6 (Series classify identically)**: A series must be classified by the same genre-then-
+- [x] **REQ-6 (Series classify identically)**: A series must be classified by the same genre-then-
       keywords rule as a film, reading the series' own TMDB genres and keywords. Every episode of a
       series encodes with its series' kind; an episode never carries or derives one of its own.
-- [ ] **REQ-7 (Derived once, at registration)**: The derivation runs only when a title is first
+- [x] **REQ-7 (Derived once, at registration)**: The derivation runs only when a title is first
       written to the database. Registering a title that is already there must leave its stored kind
       exactly as it is — this is `048`'s REQ-6 and `056`'s REQ-7 restated for a third flag.
-- [ ] **REQ-8 (Manual reclassification, films)**: A film's detail page must let its owner set the
+- [x] **REQ-8 (Manual reclassification, films)**: A film's detail page must let its owner set the
       film's content kind to any of the three values and see the change reflected without a reload.
       The new value is authoritative and is never re-derived afterwards.
-- [ ] **REQ-9 (Manual reclassification, series)**: A series' detail page must offer the same control
+- [x] **REQ-9 (Manual reclassification, series)**: A series' detail page must offer the same control
       with the same three values, scoped and refused the same way.
-- [ ] **REQ-10 (Kind reaches the encoder)**: `EncodeJobDetails` must carry the title's content kind
+- [x] **REQ-10 (Kind reaches the encoder)**: `EncodeJobDetails` must carry the title's content kind
       in place of `isLiveAction`, resolved at the moment the worker asks for the job's details (from
       the film, or from the episode's series). A title reclassified after a job's details were
       handed out keeps the kind that job received — no job is re-read or restarted.
-- [ ] **REQ-11 (Three parameter sets, separately addressable)**: The worker's SVT-AV1 video
+- [x] **REQ-11 (Three parameter sets, separately addressable)**: The worker's SVT-AV1 video
       parameters must be selected by content kind, in three branches that can be edited
       independently even while two of them produce identical output today:
       | Kind | Parameters |
@@ -95,48 +95,48 @@ plus two mutations.
       Everything already common to both current branches (`keyint`, `scd`, `enable-overlays`,
       `tune`, `input-depth`) stays common and unchanged, in every codec path that builds these
       parameters (H264, 4K HEVC HDR/SDR downscale, VC-1).
-- [ ] **REQ-12 (Passthrough is unaffected)**: With compression disabled (`032`) the file is still
+- [x] **REQ-12 (Passthrough is unaffected)**: With compression disabled (`032`) the file is still
       renamed and moved without FFmpeg touching it, regardless of content kind. The kind is present
       in the payload of such a job and simply decides nothing.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (No TMDB call per search result)**: Classification must add no TMDB request to any
+- [x] **NFR-1 (No TMDB call per search result)**: Classification must add no TMDB request to any
       search, multi-search, popular-list or billboard render. The cost is bounded to the title
       actually being registered: at most one catalog-details request (shared with `056`'s runtime
       resolution for a film, not a second one) plus, only for an animated title, at most one
       keywords request.
-- [ ] **NFR-2 (A failed classification never fails a registration)**: If TMDB is unreachable,
+- [x] **NFR-2 (A failed classification never fails a registration)**: If TMDB is unreachable,
       rate-limited or answering without the fields, registration must still succeed — as
       `LIVE_ACTION` when the genres could not be established at all, and as `CGI` when the genres
       say animated but the keywords could not be read (REQ-5). The pre-existing failure where the
       catalog knows nothing about the `tmdbId` is unchanged and still surfaces
       `error.movie.not_in_catalog` / `error.show.not_in_catalog`.
-- [ ] **NFR-3 (Cache holds catalog facts, never the derived kind)**: The raw catalog inputs (a
+- [x] **NFR-3 (Cache holds catalog facts, never the derived kind)**: The raw catalog inputs (a
       title's TMDB genre ids and keyword ids) may be written into that title's existing
       `tmdb:movie:<id>` / `tmdb:show:<id>` Redis entry, under its existing 24h TTL, so a second
       registration of the same title inside the TTL re-derives without new requests. The derived
       `contentKind` must **not** enter that shared entry — same rule `048`/`056` set for `isShort`,
       for the same reason: the cache is shared by every user and every installation, the flag is
       not.
-- [ ] **NFR-4 (Worker degrades, never fails)**: A payload arriving without a recognisable content
+- [x] **NFR-4 (Worker degrades, never fails)**: A payload arriving without a recognisable content
       kind — an older `api`, a dropped field, a value the worker does not know — must encode as
       `LIVE_ACTION` and log which branch it took. An unknown kind is never a reason to fail an
       encode. This mirrors `051`'s degradation stance for track titles.
-- [ ] **NFR-5 (No retroactive pass)**: Nothing re-classifies titles already in the database. The
+- [x] **NFR-5 (No retroactive pass)**: Nothing re-classifies titles already in the database. The
       column is replaced without preserving the old boolean (see § Data Model Changes) — every
       existing row lands on the `LIVE_ACTION` default and is corrected, if needed, from its own
       detail page (REQ-8/REQ-9).
-- [ ] **NFR-6 (Contract, not codegen)**: `web` and `worker` both retype this delta by hand. Removing
+- [x] **NFR-6 (Contract, not codegen)**: `web` and `worker` both retype this delta by hand. Removing
       `isLiveAction` while a consumer still selects it is a GraphQL validation error at runtime with
       no compile error anywhere, so every query in `services/web/src/actions/{movies,shows}.ts` and
       `services/worker/src/jobs/encode.job.ts` that names the old field must move in the same
       feature.
-- [ ] **NFR-7 (Worker corpus moves with the field)**: The `ffmpeg/*.json` case corpus
+- [x] **NFR-7 (Worker corpus moves with the field)**: The `ffmpeg/*.json` case corpus
       (`services/worker/ffmpeg/`) encodes `isLiveAction` in each fixture's `input`. Each fixture and
       the validation in `src/ffmpeg/cases.spec.ts` must move to the enum; a fixture still carrying
       the boolean must fail loudly rather than be silently defaulted.
-- [ ] **NFR-8 (User-facing copy is catalogued)**: Every new string — the three kind labels and the
+- [x] **NFR-8 (User-facing copy is catalogued)**: Every new string — the three kind labels and the
       control's label on both detail pages — goes through `services/web/messages/{en,es}.json`
       (`018-ui-i18n`), with no `en`/`es` drift. No new error key is introduced; the refusals below
       reuse existing ones.
@@ -220,40 +220,40 @@ One migration, generated through `bin/npm api run prisma:migrate` (Constitution,
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Registering a live-action film (e.g. TMDB `27205`, *Inception*) stores
+- [x] **AC-1**: Registering a live-action film (e.g. TMDB `27205`, *Inception*) stores
       `contentKind = 'LIVE_ACTION'`, verifiable with
       `bin/mysql -e 'select title, contentKind from movies where tmdbId = 27205'` (columns are
       camelCase — only table names are mapped).
-- [ ] **AC-2**: Registering an animated film whose TMDB keywords include `210024`/`6513` and not
+- [x] **AC-2**: Registering an animated film whose TMDB keywords include `210024`/`6513` and not
       `278823` (e.g. a Studio Ghibli title) stores `contentKind = 'ANIME'`.
-- [ ] **AC-3**: Registering an animated film whose TMDB keywords include `278823` stores
+- [x] **AC-3**: Registering an animated film whose TMDB keywords include `278823` stores
       `contentKind = 'CGI'`, including when `210024` is present on the same title (REQ-4).
-- [ ] **AC-4**: Registering an animated film TMDB lists no keywords for stores
+- [x] **AC-4**: Registering an animated film TMDB lists no keywords for stores
       `contentKind = 'CGI'` (REQ-5), and the registration returns normally.
-- [ ] **AC-5**: Registering a series follows AC-1..AC-4 on the `shows` table, and
+- [x] **AC-5**: Registering a series follows AC-1..AC-4 on the `shows` table, and
       `processJob(id)` for one of its episodes returns the series' `contentKind`.
-- [ ] **AC-6 (failure path)**: With an invalid `movie_db_api_key` — every TMDB request answering
+- [x] **AC-6 (failure path)**: With an invalid `movie_db_api_key` — every TMDB request answering
       `401` — registering a title that is already in the Redis catalog cache still succeeds. A title
       whose cached genres say animated stores `CGI`; a title whose genres could not be read at all
       stores `LIVE_ACTION`. No registration returns an error about classification.
-- [ ] **AC-7 (failure path)**: `setShowContentKind` for a series id owned by another user returns
+- [x] **AC-7 (failure path)**: `setShowContentKind` for a series id owned by another user returns
       `error.show.not_available` and the stored value is unchanged; the same mutation run with
       `shows_enabled` off returns `error.media.type_disabled`; a `contentKind: "MANGA"` argument is
       rejected by GraphQL itself.
-- [ ] **AC-8**: Changing the kind on a film's detail page and reloading shows the new value; the
+- [x] **AC-8**: Changing the kind on a film's detail page and reloading shows the new value; the
       film's next encode's FFmpeg command (the one recorded on the job) carries that kind's
       parameters. Changing it while an encode is already running does not change that encode's
       command (REQ-10).
-- [ ] **AC-9**: `bin/npm worker test` passes with the migrated `ffmpeg/*.json` corpus, and a fixture
+- [x] **AC-9**: `bin/npm worker test` passes with the migrated `ffmpeg/*.json` corpus, and a fixture
       whose `input` still carries `isLiveAction` fails with a named validation error rather than
       being defaulted (NFR-7).
-- [ ] **AC-10 (failure path)**: A `processJob` payload whose `contentKind` is absent or unrecognised
+- [x] **AC-10 (failure path)**: A `processJob` payload whose `contentKind` is absent or unrecognised
       encodes as `LIVE_ACTION`, logs the branch it took, and completes — it does not fail the job
       (NFR-4).
-- [ ] **AC-11**: `grep -rn "isLiveAction" services/*/src services/api/prisma/schema.prisma services/worker/ffmpeg docs/spec/graphql-contract.md`
+- [x] **AC-11**: `grep -rn "isLiveAction" services/*/src services/api/prisma/schema.prisma services/worker/ffmpeg docs/spec/graphql-contract.md`
       returns nothing. Historic migration SQL under `prisma/migrations/` still names the dropped
       column and is deliberately not rewritten.
-- [ ] **AC-12**: `bin/npm api run test` and `bin/npm worker test` pass; `bin/npm web run build`
+- [x] **AC-12**: `bin/npm api run test` and `bin/npm worker test` pass; `bin/npm web run build`
       exits 0; `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift.
 
 ## Out of Scope

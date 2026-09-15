@@ -9,6 +9,16 @@ export const MEDIA_TYPE = {
 
 export type MediaType = (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
 
+// Order here is the single source of `<select>` option order and must stay in
+// sync with `api`'s `ContentKind` enum declaration order.
+export type ContentKind = "LIVE_ACTION" | "ANIME" | "CGI";
+
+export const CONTENT_KINDS: readonly ContentKind[] = [
+  "LIVE_ACTION",
+  "ANIME",
+  "CGI",
+] as const;
+
 // System-wide capability flags — identical for every user, read from the
 // `movies_enabled` / `shows_enabled` Settings rows (045-media-type-availability).
 export interface MediaCapabilities {

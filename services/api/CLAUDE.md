@@ -150,11 +150,13 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   **opposite** of the `!== 'false'` idiom two lines above it, so an install predating this feature
   reads the absent row as *off* rather than growing a category nobody enabled.
   `isShortsEnabled()`/`assertShortsEnabled()` are `shortsEnabled`'s single-purpose twins of
-  `isEnabled`/`assertEnabled`, throwing `error.media.shorts_disabled`. `addMedia` gained an optional
-  `asShort` argument: guarded, in order, by `assertEnabled(type)`, then
-  `error.media.shorts_not_a_movie` when `asShort` is set for a non-movie type, then
-  `assertShortsEnabled()` — before `MediaTypeService.register`'s new optional third parameter
-  (`options?: { asShort?: boolean }`) is even reached.
+  `isEnabled`/`assertEnabled`, throwing `error.media.shorts_disabled`. Since
+  `056-shorts-runtime-classification`, `addMedia` takes no `asShort` argument at all —
+  `MoviesService.register()` calls `isShortsEnabled()` before any HTTP and, only when true, reads
+  (or tops up and caches) the film's TMDB runtime, classifying anything under
+  `SHORT_MAX_RUNTIME_MINUTES` (40) as a short; an absent/`null`/`0` runtime is never a short, and a
+  disabled capability sets `isShort: false` with no TMDB call made. `MediaTypeService.register` is
+  back to its original two-parameter signature.
 - **`movies/`** — CRUD over `Movie`, plus `search`/`register` (implementing `MediaTypeService`) and
   `addTorrentToMovie`/`addMagnetToMovie`, the two entry points into the download pipeline. `Movie` is
   a **shared catalog row** (`tmdbId @unique`, never duplicated) joined to `User` through `UserMovie`.
@@ -174,7 +176,17 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   means "every film the caller owns", which is what `/movies` sends while the category is disabled.
   `setShort(id, userId, isShort)` is a single-column update behind the same `findOneFromDb` ownership
   gate every per-title mutation already runs, exposed as `setMovieShort`, guarded by
-  `assertEnabled('movie')` then `assertShortsEnabled()` in that order.
+  `assertEnabled('movie')` then `assertShortsEnabled()` in that order. Since
+  `057-content-kind-classification`, `register()` derives `Movie.contentKind` (`ContentKind
+  @default(LIVE_ACTION)`) the same top-up-once way it derives `isShort`: the shared cache entry is
+  topped up with a single `TmdbClient.details()` call when either `runtime` or `genreIds` is missing
+  (one call feeds both derivations), `classifyContentKind()` (`src/media/content-kind.ts`, a plain
+  function with no Nest module — the `pipeline-status/` precedent) reads the genre ids, and only for
+  an animated title (genre `16`) a second `TmdbClient.keywords()` call disambiguates `ANIME` vs `CGI`.
+  Every failure in this path degrades to `LIVE_ACTION` (unreadable genres) or `CGI` (animated but
+  unreadable keywords) and never fails registration. `contentKind` never enters the cached object,
+  same rule as `isShort`. `setContentKind(id, userId, kind)` follows `setShort`'s exact shape, exposed
+  as `setMovieContentKind`.
 - **`shows/`** — `ShowsService`, `MoviesService`'s structural twin, **deliberately not factored into
   a shared base class** (see `006-media-search/spec.md` § Out of Scope). Same cache-before-enrich
   ordering, same upsert-based idempotent linking, scoped through `UserShow`. `shows` is a per-user
@@ -185,7 +197,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   one request for the season list, then one **sequential** request per season (never `Promise.all` —
   TMDB rate-limits), claimed via a Redis `SET … NX` so concurrent registrations fetch once.
   `Show.seasonsSyncedAt` is set only once every season and episode is written; it stays `null` on any
-  failure, and the next `register()` retries whenever it is `null`.
+  failure, and the next `register()` retries whenever it is `null`. Since
+  `057-content-kind-classification`, `register()` also derives `Show.contentKind` — the same rule as
+  the film side, minus a runtime top-up (a series has none): `getCachedShow()`'s fallback fetch is
+  topped up with `genreIds` when missing and, unlike its pre-`057` behaviour, cached back
+  best-effort (never awaited into the caller's path); `setContentKind` is a plain update with no
+  ownership gate of its own — that gate lives in the resolver (`ShowsResolver.setShowContentKind`),
+  not the service, following `setShowAudioMandatory`'s existing asymmetry with the film side rather
+  than unifying it.
 - **`languages/`** — the `languages` query (reads the seeded `Language` table, deriving an English
   `name` per `tag` from `language-names.ts`, not stored — `web` renders the localized display name
   via `Intl.DisplayNames` since `018-ui-i18n`; this map is an internal English label, not the UI
@@ -374,6 +393,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   detects while the worker's container survives — see `docs/spec/graphql-contract.md` for why that
   policy depends on the worker classifying cancellation and diagnosed failures as non-retryable
   first.
+  Since `057-content-kind-classification`, `getEncodeJobDetails` also resolves `contentKind`
+  (`ContentKind!`, replacing a write-only `isLiveAction` boolean): the film arm reads
+  `movie.contentKind` directly, the episode arm reads its **series'** `contentKind` — an episode is
+  never classified on its own.
   `getEncodeJobDetails` resolves four fields, an audio pair and a subtitle pair — since
   `039-per-title-language-split` this is no longer one merged list: `allowedAudioLanguagesIso3`/
   `allowedAudioLanguageTags` and `allowedSubtitleLanguagesIso3`/`allowedSubtitleLanguageTags`. Each
@@ -652,8 +675,9 @@ refuse every path on a default install.
 
 ## Schema/enum reality check
 
-`prisma/schema.prisma` defines exactly six enums — verify with `grep -n '^enum' prisma/schema.prisma`
-rather than trusting this list:
+`prisma/schema.prisma` defines exactly eight enums (this list previously undercounted — it had missed
+`ScheduledTaskOutcome`) — verify with `grep -n '^enum' prisma/schema.prisma` rather than trusting this
+list:
 
 | Enum | Values |
 | :-- | :-- |
@@ -663,14 +687,17 @@ rather than trusting this list:
 | `MediaStatus` | `MISSING`, `DOWNLOADING`, `ENCODING`, `COMPLETED`, `ERROR` |
 | `LanguageTrackKind` | `AUDIO`, `SUBTITLE` (`021-user-preferences`) |
 | `TorrentGroupScope` | `MOVIE`, `SHOW` (`021-user-preferences`) |
+| `ScheduledTaskOutcome` | see `src/scheduler/` (`035-scheduled-tasks`) |
+| `ContentKind` | `LIVE_ACTION`, `ANIME`, `CGI` — replaces `Movie.isLiveAction`/`Show.isLiveAction`, a boolean no code path had ever written (`057-content-kind-classification`) |
 
 **There is no `MEDIA_TYPE` or `MediaType` enum**, here or anywhere in Prisma. `services/web` declares
 its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — a web-side type, not a database one.
 A movie/show discriminator in `api` would have to be added to `schema.prisma` and migrated first.
 
-There are 20 models and 31 migrations (counted 2026-09-11, after
-`054-interrupted-encode-recovery`, which added no model — only `ProcessJob.recoveryCount Int
-@default(0)` and its migration) — verify with
+There are 20 models and 32 migrations (counted 2026-09-15, after
+`057-content-kind-classification`, which added no model — only `Movie.contentKind`/
+`Show.contentKind ContentKind @default(LIVE_ACTION)` replacing `isLiveAction`, and its migration) —
+verify with
 `grep -c "^model " prisma/schema.prisma` rather than trusting the number. Worth knowing: the three
 `*Language` join tables reference `UserMovie`/`UserShow` through their composite FK rather than
 `User`+`Movie`/`Show` separately, so a language preference disappears automatically when the title
@@ -718,6 +745,23 @@ As of 2026-09-14 (`055-environment-panel`): `bin/cli api npx --no tsc --noEmit` 
 errors**, `bin/npm api test` is green at **477** tests across **44** suites (the new
 `environment/environment.service.spec.ts`), and `git status --short services/api/prisma` is
 **empty** — this feature added no Prisma model and no migration.
+
+As of 2026-09-14 (`056-shorts-runtime-classification`): `bin/cli api npx --no tsc --noEmit`
+reports **0 errors**, `bin/npm api test` is green at **483** tests across the same **44** suites
+(4 removed with the retired `addMedia(asShort:)` guard suite, 10 added covering the runtime
+derivation), and `git status --short services/api/prisma` is **empty** — no migration, as
+`Movie.isShort` already existed. `git diff services/api/src/schema.gql` shows exactly one hunk,
+`addMedia` losing `asShort: Boolean`.
+
+As of 2026-09-15 (`057-content-kind-classification`): `bin/cli api npx --no tsc --noEmit` reports
+**0 errors**, `bin/npm api test` is green at **506** tests across **46** suites, up from 44 (the new
+`src/media/content-kind.spec.ts` and `src/clients/tmdb/client.spec.ts`, plus derivation/mutation
+cases added to `movies.service.spec.ts`, `shows.service.spec.ts`, `movies.resolver.spec.ts` and
+`process-jobs.service.spec.ts`), and `git status --short services/api/prisma` shows a modified
+`schema.prisma` plus one new migration directory (`enum ContentKind`; both `isLiveAction` columns
+dropped, `contentKind ContentKind @default(LIVE_ACTION)` added, no backfill). `git diff
+services/api/src/schema.gql` matches `docs/spec/features/057-content-kind-classification/spec.md`
+§ GraphQL Contract Delta exactly.
 
 ## Known debt
 

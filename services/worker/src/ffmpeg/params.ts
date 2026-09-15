@@ -4,6 +4,7 @@ import { normalizeIso3 } from './iso639';
 import { detectVariant, narrowToVariants, preferring, requestedVariants, titleWords, variantTitle } from './variants';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
+import type { ContentKind } from '../encode/content-kind';
 import {
   ERROR_ENCODE_NO_ORIGINAL_AUDIO,
   ERROR_ENCODE_NO_VIDEO_STREAM,
@@ -11,11 +12,7 @@ import {
 
 type quality = 'remux' | 'web';
 
-function getQuality(isLiveAction: boolean, quality: quality) {
-  //anime 20, remux 22, para amz/web 24
-
-  //if (!isLiveAction) return "20";
-
+function getQuality(contentKind: ContentKind, quality: quality) {
   if (quality === "remux") return "22";
 
   return "24";
@@ -24,9 +21,24 @@ function getQuality(isLiveAction: boolean, quality: quality) {
 const HDR_DOWNSCALE_VF =
   'scale=1920:1080:force_original_aspect_ratio=decrease';
 
+// REQ-11: the SVT-AV1 tuning that differs per content kind. LIVE_ACTION,
+// ANIME and CGI are each a full, independently editable list — ANIME and CGI
+// produce equal values today but must not collapse into one shared branch,
+// since the author intends to tune them apart from each other later.
+function svtav1KindParams(contentKind: ContentKind): string[] {
+  switch (contentKind) {
+    case 'LIVE_ACTION':
+      return ["scm=0", "aq-mode=2", "sharpness=0", "film-grain=0"];
+    case 'ANIME':
+      return ["scm=2", "aq-mode=2", "enable-qm=1", "qm-min=4", "sharpness=2", "film-grain=0"];
+    case 'CGI':
+      return ["scm=2", "aq-mode=2", "enable-qm=1", "qm-min=4", "sharpness=2", "film-grain=0"];
+  }
+}
+
 export function getVideoParams(
   videoStream: any,
-  isLiveAction: boolean,
+  contentKind: ContentKind,
   quality: quality = 'web',
 ) {
   // Sin stream de video no hay nada que codificar (archivo corrupto o sólo
@@ -50,45 +62,17 @@ export function getVideoParams(
     "enable-overlays=1",
     "tune=0",
     "input-depth=10",
-
-    ...(isLiveAction
-      ? [
-          "scm=0",
-        ]
-      : [
-          "aq-mode=2",
-          "enable-qm=1",
-          "qm-min=4",
-          // params cgi
-          "sharpness=2",
-          "film-grain=0",
-        ]),
+    ...svtav1KindParams(contentKind),
   ].join(":");
-  /*
 
-// Optimización para Animación Digital 3D (Transformers One)
-          "aq-mode=2",      // Excelente para evitar macrobloques en fondos oscuros/espacio
-          "enable-qm=1",    // Habilita matrices de cuantización (clave para conservar texturas)
-          "qm-min=4",       // Evita que sea demasiado agresivo en zonas planas
-          "sharpness=2",    // ¡NUEVO! Crucial para que los bordes metálicos no se vean borrosos
-          "film-grain=0",   // ¡NUEVO! A menos que la fuente tenga ruido estético, en 3D digital ponlo en 0
-        ]),
-*/
-  // REGLA: Si es h264, convertir. 
   if (codec === 'h264') {
     return [
       "-map", "0:v:0",
       "-c:v", "libsvtav1",
-      //anime 20, remux 22, para amz/web 24
-      "-crf", getQuality(isLiveAction, quality), // 22peli 24 seriAjusta este valor para controlar la calidad (menor es mejor calidad, pero más peso)
+      "-crf", getQuality(contentKind, quality),
       "-preset", "4",
-      "-pix_fmt", "yuv420p10le", //10bit, sacar para 8
+      "-pix_fmt", "yuv420p10le",
       "-svtav1-params", svtav1,
-      //"-svtav1-params", "keyint=10s:scd=1:enable-overlays=1:tune=0:scm=0",//live-action
-      //"-svtav1-params", "keyint=10s:scd=1:enable-overlays=1:tune=0:aq-mode=2:enable-qm=1:qm-min=4",//anime
-      //"-svtav1-params", "aq-mode=2:aq-strength=1.2:loop-restoration=2",
-      //"-svtav1-params", "film-grain=8:film-grain-denoise=0",
-      //"-svtav1-params", "rc=1:tune=1:film-grain=8:film-grain-denoise=0:enable-overlays=1:scd=1",
       "-metadata:s:v:0", 'title=AV1 (Converted from H264)'
     ];
   }
@@ -114,7 +98,7 @@ export function getVideoParams(
           "-map", "0:v:0",
           "-vf", HDR_DOWNSCALE_VF,
           "-c:v", "libsvtav1",
-          "-crf", getQuality(isLiveAction, quality),
+          "-crf", getQuality(contentKind, quality),
           "-preset", "4",
           "-pix_fmt", "yuv420p10le",
           "-svtav1-params", svtav1,
@@ -130,7 +114,7 @@ export function getVideoParams(
       "-map", "0:v:0",
       "-vf", HDR_DOWNSCALE_VF,
       "-c:v", "libsvtav1",
-      "-crf", getQuality(isLiveAction, quality),
+      "-crf", getQuality(contentKind, quality),
       "-preset", "4",
       "-pix_fmt", "yuv420p10le",
       "-color_range", "tv",
@@ -146,7 +130,7 @@ export function getVideoParams(
     return [
       "-map", "0:v:0",
       "-c:v", "libsvtav1",
-      "-crf", getQuality(isLiveAction, quality),
+      "-crf", getQuality(contentKind, quality),
       "-preset", "4",
       // Convertimos de 8-bit (yuv420p) a 10-bit para evitar banding en AV1
       "-pix_fmt", "yuv420p10le",

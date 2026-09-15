@@ -2,7 +2,7 @@
 title: Content kind classification (live action / anime / CGI) — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-09-14
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Content kind classification (live action / anime / CGI) (`plan.md`)

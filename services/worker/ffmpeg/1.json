@@ -20,7 +20,7 @@
       "es-419"
     ],
     "originalLanguageIso3": "eng",
-    "isLiveAction": true,
+    "contentKind": "LIVE_ACTION",
     "containerTitle": "Widows Bay - S01E01",
     "sourceTag": "Widows Bay S01E01.mkv"
   },
@@ -721,7 +721,7 @@
     "-pix_fmt",
     "yuv420p10le",
     "-svtav1-params",
-    "keyint=10s:scd=1:enable-overlays=1:tune=0:input-depth=10:scm=0",
+    "keyint=10s:scd=1:enable-overlays=1:tune=0:input-depth=10:scm=0:aq-mode=2:sharpness=0:film-grain=0",
     "-metadata:s:v:0",
     "title=AV1 (Converted from H264)",
     "-map",

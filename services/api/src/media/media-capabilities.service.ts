@@ -57,8 +57,11 @@ export class MediaCapabilitiesService {
     return capabilities.shortsEnabled;
   }
 
-  // REQ-14: enforcement, not just hiding. Thrown by both addMedia(asShort:)
-  // and setMovieShort before either touches a row.
+  // REQ-14: enforcement, not just hiding. Thrown by setMovieShort before it
+  // touches a row (048-shorts-category; the sibling call site this used to
+  // guard on addMedia's registration-time argument was removed by
+  // 056-shorts-runtime-classification, which replaced that argument with a
+  // derivation).
   async assertShortsEnabled(): Promise<void> {
     const enabled = await this.isShortsEnabled();
     if (!enabled) {

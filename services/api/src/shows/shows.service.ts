@@ -12,6 +12,8 @@ import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
+import { ContentKind } from '@/media/entities/content-kind.enum';
+import { classifyContentKind } from '@/media/content-kind';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs) — same value as
 // MoviesService, kept as its own constant here on purpose (see class doc
@@ -24,6 +26,16 @@ const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
 // only the backstop for the one exit path that skips `finally`: the process
 // dying mid-hydrate).
 const HYDRATE_CLAIM_TTL_SECONDS = 60 * 10;
+
+// 057-content-kind-classification: TMDB genre id for "Animation" — a local
+// copy of content-kind.ts's own private constant, needed here only to
+// decide *whether* a keywords lookup is worth making before handing the
+// facts to classifyContentKind (which re-checks it itself). MoviesService
+// and ShowsService are deliberate structural twins (006-media-search § Out
+// of Scope) that each hold their own copy of small gating constants like
+// this one, exactly as SHORT_MAX_RUNTIME_MINUTES/isShortRuntime are
+// movies-only.
+const SHOW_ANIMATION_GENRE_ID = 16;
 
 // Structural twin of MoviesService, scoped to Show for this task: catalog
 // search + registration, plus the background season/episode hydration
@@ -130,9 +142,8 @@ export class ShowsService implements MediaTypeService {
     }
 
     const cached = await this.getCachedShow(tmdbId);
+    const contentKind = await this.deriveContentKind(cached);
 
-    // isLiveAction queda en su default de Prisma (true): es lo correcto para
-    // una serie recién registrada y sin archivos todavía.
     const show = await this.prisma.show.create({
       data: {
         tmdbId: cached.id,
@@ -143,6 +154,7 @@ export class ShowsService implements MediaTypeService {
           ? new Date(cached.releaseDate)
           : undefined,
         originalLanguage: cached.originalLanguage,
+        contentKind,
       },
     });
 
@@ -294,6 +306,46 @@ export class ShowsService implements MediaTypeService {
     return mandatory;
   }
 
+  // 057-content-kind-classification REQ-9: the plain update + return, shaped
+  // exactly like `show(id)`'s own resolution (seasons/episodes included,
+  // each episode's status re-derived) — unlike setShort's film-side
+  // template, the ownership gate lives in the resolver here
+  // (ShowsResolver.setShowAudioMandatory's pattern), not in this method; the
+  // caller already ran findOneFromDb before this is reached, so the row is
+  // guaranteed to exist and `update` (not `upsert`) is safe.
+  async setContentKind(id: number, contentKind: ContentKind) {
+    const show = await this.prisma.show.update({
+      where: { id },
+      data: { contentKind },
+      include: {
+        seasons: {
+          orderBy: { seasonNumber: 'asc' },
+          include: {
+            episodes: {
+              orderBy: { episodeNumber: 'asc' },
+              include: { mediaSources: true, processJobs: true },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      ...show,
+      seasons: show.seasons.map((season) => ({
+        ...season,
+        episodes: season.episodes.map((episode) => ({
+          ...episode,
+          status: deriveTitleStatus({
+            status: episode.status,
+            sources: episode.mediaSources,
+            jobs: episode.processJobs,
+          }),
+        })),
+      })),
+    };
+  }
+
   // upsert en vez de create: un segundo addMedia del mismo usuario para la misma
   // serie no debe explotar con un P2002 sobre la primary key compuesta — el
   // botón que dispara esto en el UI puede volver a llamarse antes de que
@@ -338,7 +390,73 @@ export class ShowsService implements MediaTypeService {
       originalLanguage: detail.originalLanguage,
       overview: detail.overview,
       type: MEDIA_TYPE.SHOW,
+      // 057-content-kind-classification: this details() call already
+      // carries genres — forwarding them here is what lets a fully-cold
+      // cache (no Redis entry at all) satisfy deriveContentKind's genre
+      // check without a second, redundant details() request for the same
+      // tmdbId (NFR-1).
+      genreIds: detail.genreIds,
     };
+  }
+
+  // 057-content-kind-classification REQ-6: the same genre-then-keywords rule
+  // MoviesService applies, minus a runtime top-up (a series has none). A
+  // cache entry written by search() already carries genreIds — TMDB's
+  // search/tv rows include genre_ids — so most cold registrations need no
+  // extra request at all (NFR-1). Only a warm entry missing genreIds (e.g.
+  // one seeded by fetchShowFromTMDB's own not-in-catalog fallback path, or a
+  // future caller of this cache that never populated it) tops up with one
+  // details() call. Every failure below degrades to
+  // classifyContentKind's own fallback rather than rethrowing (NFR-2):
+  // unreadable genres -> LIVE_ACTION, genres known-animated but unreadable
+  // keywords -> CGI (REQ-5) — a registration must never fail because TMDB
+  // could not answer one of these two requests.
+  private async deriveContentKind(
+    cached: MediaSearchResult,
+  ): Promise<ContentKind> {
+    let genreIds = cached.genreIds;
+
+    if (genreIds === undefined) {
+      try {
+        const detail = (await this.tmdb.details(
+          MEDIA_TYPE.SHOW,
+          cached.id,
+        )) as ShowDetail;
+        genreIds = detail.genreIds ?? [];
+        // Best-effort, never awaited into the caller's path: getCachedShow(),
+        // unlike MoviesService's getCachedMovie(), does not write its own
+        // fallback fetch back to Redis, so without this the same cold title
+        // would re-ask TMDB for its genres on every registration inside the
+        // TTL. cacheShows() already logs and swallows its own failures.
+        void this.cacheShows([{ ...cached, genreIds }]);
+      } catch {
+        // NFR-2: genres could not be established at all. Per REQ-2 no
+        // keyword lookup is attempted below, and classifyContentKind reads
+        // an undefined genreIds list as LIVE_ACTION.
+        genreIds = undefined;
+      }
+    }
+
+    const isAnimated = (genreIds ?? []).includes(SHOW_ANIMATION_GENRE_ID);
+    if (!isAnimated) {
+      return classifyContentKind({ genreIds, keywordIds: undefined });
+    }
+
+    let keywordIds = cached.keywordIds;
+    if (keywordIds === undefined) {
+      try {
+        keywordIds = await this.tmdb.keywords(MEDIA_TYPE.SHOW, cached.id);
+        void this.cacheShows([{ ...cached, genreIds, keywordIds }]);
+      } catch {
+        // NFR-2 / REQ-5: the genre already says animated — only the style
+        // lookup failed, so this must land on CGI (classifyContentKind's own
+        // fallback for an animated title with no usable keyword data), not
+        // on the generic LIVE_ACTION default.
+        keywordIds = undefined;
+      }
+    }
+
+    return classifyContentKind({ genreIds, keywordIds });
   }
 
   async search(
@@ -359,6 +477,7 @@ export class ShowsService implements MediaTypeService {
       originalLanguage: item.original_language,
       overview: item.overview,
       type: MEDIA_TYPE.SHOW,
+      genreIds: item.genre_ids,
     }));
 
     return this.cacheAndEnrich(results, userId);

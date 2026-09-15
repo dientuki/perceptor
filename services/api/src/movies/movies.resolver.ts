@@ -1,6 +1,7 @@
 import { Resolver, Query, Mutation, Args, Int, ResolveField, Parent } from '@nestjs/graphql';
-import { LanguageTrackKind as PrismaLanguageTrackKind } from '@prisma/client';
+import { LanguageTrackKind as PrismaLanguageTrackKind, ContentKind as PrismaContentKind } from '@prisma/client';
 import { MoviesService } from './movies.service';
+import { ContentKind } from '@/media/entities/content-kind.enum';
 import { Movie } from './entities/movies.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { LanguagesService } from '@/languages/languages.service';
@@ -174,5 +175,25 @@ export class MoviesResolver {
     await this.mediaCapabilitiesService.assertShortsEnabled();
     const userId = principal.type === 'user' ? principal.id : '';
     return this.moviesService.setShort(movieId, userId, isShort);
+  }
+
+  @Mutation(() => Movie, {
+    name: 'setMovieContentKind',
+    description: 'Reclasifica el estilo de animación de una película (057-content-kind-classification)',
+  })
+  async setMovieContentKind(
+    @Args('movieId', { type: () => Int }) movieId: number,
+    @Args('contentKind', { type: () => ContentKind }) contentKind: ContentKind,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    // No assertShortsEnabled-style capability check here — content kind has
+    // no installation-wide on/off switch (spec.md's frozen contract).
+    await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.MOVIE);
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.setContentKind(
+      movieId,
+      userId,
+      contentKind as unknown as PrismaContentKind,
+    );
   }
 }

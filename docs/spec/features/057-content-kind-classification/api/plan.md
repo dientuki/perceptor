@@ -2,7 +2,7 @@
 title: Content kind classification — api slice
 service: api
 last_updated: 2026-09-14
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Content kind classification — `api` (`api/plan.md`)

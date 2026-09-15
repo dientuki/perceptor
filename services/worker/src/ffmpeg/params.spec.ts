@@ -53,6 +53,52 @@ function mapArgCount(params: string[]): number {
 
 const TRACK_TITLES: Record<string, string> = { eng: 'English', spa: 'Español' };
 
+function svtav1ParamsOf(args: string[]): string | undefined {
+  const i = args.indexOf('-svtav1-params');
+  return i === -1 ? undefined : args[i + 1];
+}
+
+// REQ-11: three separately editable SVT-AV1 branches. ANIME and CGI produce
+// equal output today by requirement, but each gets its own case here so a
+// future divergence between them is caught by two independent expectations
+// rather than one shared one.
+describe('getVideoParams', () => {
+  it('builds LIVE_ACTION svtav1 params: scm=0, aq-mode=2, sharpness=0, film-grain=0, no enable-qm', () => {
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION');
+
+    const svtav1 = svtav1ParamsOf(args);
+    expect(svtav1).toContain('scm=0');
+    expect(svtav1).toContain('aq-mode=2');
+    expect(svtav1).toContain('sharpness=0');
+    expect(svtav1).toContain('film-grain=0');
+    expect(svtav1).not.toContain('enable-qm');
+  });
+
+  it('builds ANIME svtav1 params: scm=2, aq-mode=2, enable-qm=1, qm-min=4, sharpness=2, film-grain=0', () => {
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'ANIME');
+
+    const svtav1 = svtav1ParamsOf(args);
+    expect(svtav1).toContain('scm=2');
+    expect(svtav1).toContain('aq-mode=2');
+    expect(svtav1).toContain('enable-qm=1');
+    expect(svtav1).toContain('qm-min=4');
+    expect(svtav1).toContain('sharpness=2');
+    expect(svtav1).toContain('film-grain=0');
+  });
+
+  it('builds CGI svtav1 params identical to ANIME today, as its own separately editable case', () => {
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'CGI');
+
+    const svtav1 = svtav1ParamsOf(args);
+    expect(svtav1).toContain('scm=2');
+    expect(svtav1).toContain('aq-mode=2');
+    expect(svtav1).toContain('enable-qm=1');
+    expect(svtav1).toContain('qm-min=4');
+    expect(svtav1).toContain('sharpness=2');
+    expect(svtav1).toContain('film-grain=0');
+  });
+});
+
 describe('getAudioParams', () => {
   it('emits exactly one -map per allowed language when a track exists for each', () => {
     const streams = [

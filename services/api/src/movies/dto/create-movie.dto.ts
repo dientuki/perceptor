@@ -1,12 +1,13 @@
-import { 
-  IsInt, 
-  IsString, 
-  IsOptional, 
-  IsBoolean, 
-  IsEnum, 
-  IsDateString 
+import {
+  IsInt,
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsEnum,
+  IsDateString
 } from 'class-validator';
 import { MediaStatus } from '@prisma/client';
+import { ContentKind } from '@/media/entities/content-kind.enum';
 
 export class CreateMovieDto {
   @IsInt()
@@ -31,8 +32,8 @@ export class CreateMovieDto {
   originalLanguage: string;
 
   @IsOptional()
-  @IsBoolean()
-  isLiveAction?: boolean;
+  @IsEnum(ContentKind)
+  contentKind?: ContentKind;
 
   @IsOptional()
   @IsBoolean()

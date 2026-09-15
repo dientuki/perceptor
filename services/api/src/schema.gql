@@ -37,7 +37,7 @@ type Movie {
   posterUrl: String
   releaseDate: DateTime
   originalLanguage: String!
-  isLiveAction: Boolean!
+  contentKind: ContentKind!
   isShort: Boolean!
   status: String!
   filePath: String
@@ -52,6 +52,15 @@ type Movie {
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
 scalar DateTime
+
+"""
+The animation style of a film or series, driving the encoder's parameter set.
+"""
+enum ContentKind {
+  LIVE_ACTION
+  ANIME
+  CGI
+}
 
 type Setting {
   key: String!
@@ -169,7 +178,7 @@ type EncodeJobDetails {
   allowedAudioLanguageTags: [String!]!
   allowedSubtitleLanguagesIso3: [String!]!
   allowedSubtitleLanguageTags: [String!]!
-  isLiveAction: Boolean!
+  contentKind: ContentKind!
   seasonNumber: Int
   episodeNumber: Int
   episodeTitle: String
@@ -243,7 +252,7 @@ type Show {
   posterUrl: String
   releaseDate: DateTime
   originalLanguage: String!
-  isLiveAction: Boolean!
+  contentKind: ContentKind!
   status: String!
   seasonsSyncedAt: DateTime
   createdAt: DateTime!
@@ -401,6 +410,11 @@ type Mutation {
 
   """Marca o desmarca una película como corto (048-shorts-category)"""
   setMovieShort(movieId: Int!, isShort: Boolean!): Movie!
+
+  """
+  Reclasifica el estilo de animación de una película (057-content-kind-classification)
+  """
+  setMovieContentKind(movieId: Int!, contentKind: ContentKind!): Movie!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
 
   """
@@ -456,7 +470,7 @@ type Mutation {
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia al episodio
   """
   addMagnetToEpisode(episodeId: Int!, magnet: String!, force: Boolean = false): Episode!
-  addMedia(tmdbId: Int!, type: String!, asShort: Boolean): MediaRef!
+  addMedia(tmdbId: Int!, type: String!): MediaRef!
 
   """
   Reemplaza la preferencia de idiomas del usuario para una serie puntual, para un tipo de pista
@@ -467,6 +481,11 @@ type Mutation {
   Marca si el audio en el idioma preferido es obligatorio para esta serie
   """
   setShowAudioMandatory(showId: Int!, mandatory: Boolean!): Boolean!
+
+  """
+  Reclasifica el estilo de animación de una serie (057-content-kind-classification)
+  """
+  setShowContentKind(showId: Int!, contentKind: ContentKind!): Show!
 
   """
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la temporada

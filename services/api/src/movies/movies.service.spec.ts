@@ -6,6 +6,7 @@ import { RedisService } from '@/redis/redis.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { MEDIA_TYPE } from '@/types/media';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
@@ -36,7 +37,12 @@ const MAGNET =
 //    would resolve a film for any authenticated caller, not just the one
 //    linked to it — the query still succeeds, `movie(id)` still returns a
 //    real record with a real poster, and the page renders correctly; the
-//    only wrong thing is whose library it came from (008-movie-detail).
+//    only wrong thing is whose library it came from (008-movie-detail);
+//  - `register`'s runtime-derived `isShort` (056-shorts-runtime-classification)
+//    silently misclassifying a film costs nothing visible either: the film
+//    registers fine either way, it just files under the wrong category
+//    forever (048 guarantees nothing ever moves it back), or pays a TMDB
+//    call it should never have made when shorts are disabled.
 describe('MoviesService', () => {
   let service: MoviesService;
   let prisma: {
@@ -63,12 +69,16 @@ describe('MoviesService', () => {
   let tmdb: {
     search: jest.Mock;
     details: jest.Mock;
+    keywords: jest.Mock;
   };
   let qbittorrent: {
     add: jest.Mock;
   };
   let mediaServerReconcile: {
     reconcileMovie: jest.Mock;
+  };
+  let mediaCapabilities: {
+    isShortsEnabled: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -96,12 +106,16 @@ describe('MoviesService', () => {
     tmdb = {
       search: jest.fn(),
       details: jest.fn(),
+      keywords: jest.fn(),
     };
     qbittorrent = {
       add: jest.fn(),
     };
     mediaServerReconcile = {
       reconcileMovie: jest.fn().mockResolvedValue(undefined),
+    };
+    mediaCapabilities = {
+      isShortsEnabled: jest.fn().mockResolvedValue(true),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -115,6 +129,7 @@ describe('MoviesService', () => {
           provide: MediaServerReconcileService,
           useValue: mediaServerReconcile,
         },
+        { provide: MediaCapabilitiesService, useValue: mediaCapabilities },
       ],
     }).compile();
 
@@ -359,12 +374,278 @@ describe('MoviesService', () => {
         create: { userId: 'user-1', movieId: 5 },
       });
     });
+
+    // REQ-7: a derivation that overrode a user's manual reclassification on
+    // every other user's add would be silent — the film simply flips back
+    // and forth depending on who registers it last.
+    it('never reaches deriveIsShort for an already-registered film', async () => {
+      const existing = { id: 5, tmdbId: 42, title: 'Dune' };
+      prisma.movie.findUnique.mockResolvedValue(existing);
+      prisma.userMovie.upsert.mockResolvedValue({
+        userId: 'user-1',
+        movieId: 5,
+      });
+
+      await service.register(42, 'user-1');
+
+      expect(mediaCapabilities.isShortsEnabled).not.toHaveBeenCalled();
+      expect(tmdb.details).not.toHaveBeenCalled();
+      expect(prisma.movie.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // 056-shorts-runtime-classification: the initial value for a newly
+  // registered film's isShort, derived from the runtime TMDB reports. Each
+  // case here is owed because the failure is otherwise invisible —
+  // registration always succeeds; only the stored flag (and therefore which
+  // folder the file ends up in, forever — 048 never moves it back) is wrong.
+  describe('register (short classification)', () => {
+    // genreIds defaults to a non-animated, already-known list: 057 added a
+    // second catalog fact (`genreIds`) to the same top-up `isShort` shares,
+    // so a case here that only cares about runtime must supply it too, or an
+    // incidental top-up call (made for contentKind's sake) muddies what the
+    // case is actually asserting. Pass `undefined` explicitly to simulate a
+    // cache entry that is missing it (forcing the shared top-up).
+    function warmCacheEntry(
+      runtime?: number | null,
+      genreIds: number[] | undefined = [35],
+    ): void {
+      const entry: Record<string, unknown> = {
+        id: 42,
+        title: 'Dune',
+        releaseDate: '2021-10-21',
+        posterUrl: null,
+        originalLanguage: 'en',
+        overview: 'Sand.',
+        type: MEDIA_TYPE.MOVIE,
+      };
+      if (runtime !== undefined) entry.runtime = runtime;
+      if (genreIds !== undefined) entry.genreIds = genreIds;
+      redis.get.mockResolvedValue(JSON.stringify(entry));
+    }
+
+    beforeEach(() => {
+      prisma.movie.findUnique.mockResolvedValue(null); // not registered yet
+      prisma.movie.create.mockResolvedValue({ id: 9, tmdbId: 42, title: 'Dune' });
+      prisma.userMovie.upsert.mockResolvedValue({ userId: 'user-1', movieId: 9 });
+      const pipelineSet = jest.fn().mockReturnThis();
+      const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
+      redis.pipeline.mockReturnValue({ set: pipelineSet, exec: pipelineExec });
+    });
+
+    it('registers a runtime strictly under 40 minutes as a short', async () => {
+      warmCacheEntry(39);
+
+      await service.register(42, 'user-1');
+
+      expect(prisma.movie.create.mock.calls[0][0].data.isShort).toBe(true);
+    });
+
+    // The boundary itself: an off-by-one here files a feature film under
+    // path_shorts forever, with nothing failing anywhere.
+    it('registers a runtime of exactly 40 minutes as not a short', async () => {
+      warmCacheEntry(40);
+
+      await service.register(42, 'user-1');
+
+      expect(prisma.movie.create.mock.calls[0][0].data.isShort).toBe(false);
+    });
+
+    it.each([
+      ['a runtime of 0', 0],
+      ['a null runtime', null],
+      ['an absent runtime', undefined],
+    ])('registers %s as not a short', async (_label, runtime) => {
+      warmCacheEntry(runtime as number | null | undefined);
+
+      await service.register(42, 'user-1');
+
+      expect(prisma.movie.create.mock.calls[0][0].data.isShort).toBe(false);
+    });
+
+    // 057 unbundled the top-up from the shorts capability: it is now shared
+    // with content-kind classification and fires whenever either catalog
+    // fact is missing, regardless of whether shorts are enabled. A fully
+    // warm entry (both facts already cached) is the only case that still
+    // skips the call outright.
+    it('registers as not a short and skips the TMDB call entirely when shorts are disabled and the cache is already warm', async () => {
+      mediaCapabilities.isShortsEnabled.mockResolvedValue(false);
+      warmCacheEntry(148, [35]);
+
+      await service.register(42, 'user-1');
+
+      expect(prisma.movie.create.mock.calls[0][0].data.isShort).toBe(false);
+      expect(tmdb.details).not.toHaveBeenCalled();
+    });
+
+    it('tops up a warm cache entry with no runtime via exactly one tmdb.details call, and writes the result back', async () => {
+      warmCacheEntry(undefined);
+      tmdb.details.mockResolvedValue({
+        type: MEDIA_TYPE.MOVIE,
+        id: 42,
+        runtime: 25,
+      });
+      const pipelineSet = jest.fn().mockReturnThis();
+      const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
+      redis.pipeline.mockReturnValue({ set: pipelineSet, exec: pipelineExec });
+
+      await service.register(42, 'user-1');
+
+      expect(tmdb.details).toHaveBeenCalledTimes(1);
+      expect(prisma.movie.create.mock.calls[0][0].data.isShort).toBe(true);
+      expect(pipelineSet).toHaveBeenCalledTimes(1);
+      const [, cachedJson] = pipelineSet.mock.calls[0];
+      expect(JSON.parse(cachedJson)).toMatchObject({ id: 42, runtime: 25 });
+    });
+
+    it('never calls tmdb.details when the cached runtime is already a number', async () => {
+      warmCacheEntry(148);
+
+      await service.register(42, 'user-1');
+
+      expect(tmdb.details).not.toHaveBeenCalled();
+      expect(prisma.movie.create.mock.calls[0][0].data.isShort).toBe(false);
+    });
+
+    // NFR-2 plus the cache-poisoning guard: a registration must never fail
+    // over a decoration, and a transient failure must never be written back
+    // — that would pin "not a short" for the film for the full 24h TTL.
+    it('still registers the film as not a short, writing nothing to Redis, when the top-up rejects', async () => {
+      warmCacheEntry(undefined);
+      tmdb.details.mockRejectedValue(new Error('TMDB unreachable'));
+      const pipelineSet = jest.fn().mockReturnThis();
+      const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
+      redis.pipeline.mockReturnValue({ set: pipelineSet, exec: pipelineExec });
+
+      await expect(service.register(42, 'user-1')).resolves.toEqual({
+        id: 9,
+        type: MEDIA_TYPE.MOVIE,
+      });
+
+      expect(prisma.movie.create.mock.calls[0][0].data.isShort).toBe(false);
+      expect(pipelineSet).not.toHaveBeenCalled();
+    });
+  });
+
+  // 057-content-kind-classification: three distinct silent failures — a
+  // registration always succeeds either way, so nothing but the stored
+  // `contentKind` (and, for (a), a doubled TMDB bill) shows the mistake.
+  describe('register (content kind classification)', () => {
+    function baseEntry(
+      overrides: Record<string, unknown> = {},
+    ): Record<string, unknown> {
+      return {
+        id: 42,
+        title: 'Dune',
+        releaseDate: '2021-10-21',
+        posterUrl: null,
+        originalLanguage: 'en',
+        overview: 'Sand.',
+        type: MEDIA_TYPE.MOVIE,
+        runtime: 155, // present so isShort's own top-up never interferes here
+        ...overrides,
+      };
+    }
+
+    beforeEach(() => {
+      prisma.movie.findUnique.mockResolvedValue(null); // not registered yet
+      prisma.movie.create.mockResolvedValue({ id: 9, tmdbId: 42, title: 'Dune' });
+      prisma.userMovie.upsert.mockResolvedValue({ userId: 'user-1', movieId: 9 });
+      const pipelineSet = jest.fn().mockReturnThis();
+      const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
+      redis.pipeline.mockReturnValue({ set: pipelineSet, exec: pipelineExec });
+    });
+
+    // (a) A cache entry missing both `runtime` and `genreIds` must cost
+    // exactly one `tmdb.details` call: the same shared top-up serves
+    // `isShort` and `contentKind`. A second, independent call is free of any
+    // error and simply doubles TMDB cost per cold registration — the exact
+    // regression plan.md's § Risks names first. `toHaveBeenCalledTimes(1)`
+    // fails immediately if a second, separate top-up call is ever added.
+    it('tops up a cache entry missing both runtime and genreIds via exactly one tmdb.details call', async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify(baseEntry({ runtime: undefined })),
+      );
+      tmdb.details.mockResolvedValue({
+        type: MEDIA_TYPE.MOVIE,
+        id: 42,
+        runtime: 155,
+        genreIds: [18],
+      });
+
+      await service.register(42, 'user-1');
+
+      expect(tmdb.details).toHaveBeenCalledTimes(1);
+      expect(prisma.movie.create.mock.calls[0][0].data.contentKind).toBe(
+        'LIVE_ACTION',
+      );
+    });
+
+    // (b) NFR-2, first case: the genres could not be established at all
+    // (details() itself failed) — the film still registers, as LIVE_ACTION.
+    it('still registers the film, as LIVE_ACTION, when the genre top-up rejects', async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify(baseEntry({ runtime: undefined, genreIds: undefined })),
+      );
+      tmdb.details.mockRejectedValue(new Error('TMDB unreachable'));
+
+      await expect(service.register(42, 'user-1')).resolves.toEqual({
+        id: 9,
+        type: MEDIA_TYPE.MOVIE,
+      });
+      expect(prisma.movie.create.mock.calls[0][0].data.contentKind).toBe(
+        'LIVE_ACTION',
+      );
+    });
+
+    // (b) NFR-2, second case: the genres say animated but the keywords call
+    // fails — the film still registers, as CGI (REQ-5's fallback).
+    it('still registers the film, as CGI, when an animated title\'s keywords call rejects', async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify(baseEntry({ genreIds: [16] })), // 16 = Animation
+      );
+      tmdb.keywords.mockRejectedValue(new Error('TMDB unreachable'));
+
+      await expect(service.register(42, 'user-1')).resolves.toEqual({
+        id: 9,
+        type: MEDIA_TYPE.MOVIE,
+      });
+      expect(prisma.movie.create.mock.calls[0][0].data.contentKind).toBe(
+        'CGI',
+      );
+      expect(tmdb.details).not.toHaveBeenCalled(); // genreIds was already warm
+    });
+
+    // (c) The derived `contentKind` must never enter the shared Redis entry
+    // — that cache is read by every user and every installation, and the
+    // flag is a per-title one. Provoke the write this feature actually adds
+    // (the keywords top-up) and inspect exactly what reaches `pipeline.set`.
+    it('never hands cacheMovies an object carrying contentKind', async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify(baseEntry({ genreIds: [16] })), // animated -> keywords fetched
+      );
+      tmdb.keywords.mockResolvedValue([210024]); // anime
+
+      await service.register(42, 'user-1');
+
+      const pipelineSet = redis.pipeline.mock.results[0].value.set as jest.Mock;
+      expect(pipelineSet).toHaveBeenCalled();
+      for (const [, cachedJson] of pipelineSet.mock.calls) {
+        expect(JSON.parse(cachedJson)).not.toHaveProperty('contentKind');
+      }
+    });
   });
 
   describe('TMDB fallback (cold Redis cache)', () => {
     it('maps MovieDetail.posterPath to the same absolute posterUrl the search path uses', async () => {
       prisma.movie.findUnique.mockResolvedValue(null); // not registered yet
       redis.get.mockResolvedValue(null); // expired/evicted — REQ-2
+      // getCachedMovie's cold branch now writes the fetched object back
+      // through cacheMovies() (REQ-6) — give the pipeline mock a shape to
+      // write into rather than letting it throw into cacheMovies' own catch.
+      const pipelineSet = jest.fn().mockReturnThis();
+      const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
+      redis.pipeline.mockReturnValue({ set: pipelineSet, exec: pipelineExec });
       tmdb.details.mockResolvedValue({
         type: MEDIA_TYPE.MOVIE,
         id: 42,

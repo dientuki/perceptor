@@ -13,6 +13,7 @@ export function mapPopularMovies(rows: TmdbMovie[]): MediaSearchResult[] {
     originalLanguage: item.original_language,
     overview: item.overview,
     type: MEDIA_TYPE.MOVIE,
+    genreIds: item.genre_ids,
   }));
 }
 
@@ -26,5 +27,6 @@ export function mapPopularShows(rows: TmdbShow[]): MediaSearchResult[] {
     originalLanguage: item.original_language,
     overview: item.overview,
     type: MEDIA_TYPE.SHOW,
+    genreIds: item.genre_ids,
   }));
 }

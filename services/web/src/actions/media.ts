@@ -191,8 +191,8 @@ export async function getPopularMedia(
 }
 
 const ADD_MEDIA_MUTATION = `
-  mutation AddMedia($tmdbId: Int!, $type: String!, $asShort: Boolean) {
-    addMedia(tmdbId: $tmdbId, type: $type, asShort: $asShort) {
+  mutation AddMedia($tmdbId: Int!, $type: String!) {
+    addMedia(tmdbId: $tmdbId, type: $type) {
       id
       type
     }
@@ -202,11 +202,10 @@ const ADD_MEDIA_MUTATION = `
 export async function addMedia(
   tmdbId: number,
   type: MediaType,
-  asShort?: boolean,
 ): Promise<string> {
   const { data, errors } = await fetchGraphQL<{
     addMedia: { id: number; type: string };
-  }>(ADD_MEDIA_MUTATION, { tmdbId, type, asShort });
+  }>(ADD_MEDIA_MUTATION, { tmdbId, type });
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);

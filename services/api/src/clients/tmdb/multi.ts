@@ -17,6 +17,7 @@ export function mapMultiSearchResults(rows: TmdbMultiSearchResult[]): MediaSearc
         originalLanguage: row.original_language,
         overview: row.overview,
         type: MEDIA_TYPE.MOVIE,
+        genreIds: row.genre_ids,
       });
       continue;
     }
@@ -30,6 +31,7 @@ export function mapMultiSearchResults(rows: TmdbMultiSearchResult[]): MediaSearc
         originalLanguage: row.original_language,
         overview: row.overview,
         type: MEDIA_TYPE.SHOW,
+        genreIds: row.genre_ids,
       });
       continue;
     }

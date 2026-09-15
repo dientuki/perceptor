@@ -8,6 +8,7 @@ import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
+import { ContentKind } from '@/media/entities/content-kind.enum';
 
 // This suite exists because getEncodeJobDetails's REQ-3 merge is the only
 // place that decides which audio/subtitle languages an encode is allowed to
@@ -91,7 +92,7 @@ describe('ProcessJobsService', () => {
       title: 'A Japanese Film',
       releaseDate: new Date('2020-01-01'),
       originalLanguage: 'ja',
-      isLiveAction: true,
+      contentKind: ContentKind.LIVE_ACTION,
       isShort: false,
     },
     episode: null,
@@ -117,7 +118,7 @@ describe('ProcessJobsService', () => {
           title: 'A Japanese Show',
           releaseDate: new Date('2019-01-01'),
           originalLanguage: 'ja',
-          isLiveAction: true,
+          contentKind: ContentKind.LIVE_ACTION,
         },
       },
     },
@@ -277,7 +278,7 @@ describe('ProcessJobsService', () => {
             title: 'A Japanese Film',
             releaseDate: new Date('2020-01-01'),
             originalLanguage: 'ja',
-            isLiveAction: true,
+            contentKind: ContentKind.LIVE_ACTION,
             isShort: false,
           },
         }),
@@ -301,7 +302,7 @@ describe('ProcessJobsService', () => {
             title: 'A Japanese Film',
             releaseDate: new Date('2020-01-01'),
             originalLanguage: 'ja',
-            isLiveAction: true,
+            contentKind: ContentKind.LIVE_ACTION,
             isShort: true,
           },
         }),
@@ -337,7 +338,7 @@ describe('ProcessJobsService', () => {
             title: 'A Japanese Film',
             releaseDate: new Date('2020-01-01'),
             originalLanguage: 'ja',
-            isLiveAction: true,
+            contentKind: ContentKind.LIVE_ACTION,
             isShort: true,
           },
         }),
@@ -362,7 +363,7 @@ describe('ProcessJobsService', () => {
             title: 'A Japanese Film',
             releaseDate: new Date('2020-01-01'),
             originalLanguage: 'ja',
-            isLiveAction: true,
+            contentKind: ContentKind.LIVE_ACTION,
             isShort: true,
           },
         }),

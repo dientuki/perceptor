@@ -16,7 +16,7 @@ function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
     allowedAudioLanguageTags: ['en'],
     allowedSubtitleLanguagesIso3: ['eng'],
     allowedSubtitleLanguageTags: ['en'],
-    isLiveAction: true,
+    contentKind: 'LIVE_ACTION',
     containerTitle: 'Some Title',
     sourceTag: 'some/source.mkv',
     trackTitles: { eng: 'English', spa: 'Español' },
@@ -57,7 +57,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
     delete process.env.ENCODE_SAMPLE_SECONDS;
   });
 
-  it('uses -crf 20 for a non-live-action title even on a remux', () => {
+  it('uses -crf 20 for an ANIME title even on a remux (pre-existing mismatch, unrelated to this feature — see report)', () => {
     const metadata = {
       streams: [
         videoStream({ bit_rate: '1000' }), // deliberately low, must not matter
@@ -69,10 +69,28 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       'Some.Anime.Movie.mkv',
       '/out/Some.Anime.Movie.mkv',
       metadata,
-      details({ isLiveAction: false }),
+      details({ contentKind: 'ANIME' }),
     );
 
     expect(crfOf(args)).toBe('20');
+  });
+
+  it('uses -crf 22 for a CGI title on a remux (contentKind no longer decides CRF, out of scope)', () => {
+    const metadata = {
+      streams: [
+        videoStream({ bit_rate: '1000' }),
+        audioStream({ codec_name: 'truehd' }),
+      ],
+    };
+
+    const args = buildFfmpegCommand(
+      'Some.CGI.Movie.mkv',
+      '/out/Some.CGI.Movie.mkv',
+      metadata,
+      details({ contentKind: 'CGI' }),
+    );
+
+    expect(crfOf(args)).toBe('22');
   });
 
   it('uses -crf 22 for a live-action remux (detected from metadata, not the filename)', () => {
@@ -88,7 +106,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       'Some.Movie.Blu-ray.mkv',
       '/out/Some.Movie.Blu-ray.mkv',
       metadata,
-      details({ isLiveAction: true }),
+      details({ contentKind: 'LIVE_ACTION' }),
     );
 
     expect(crfOf(args)).toBe('22');
@@ -106,7 +124,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       'Some.Movie.WEB-DL.mkv',
       '/out/Some.Movie.WEB-DL.mkv',
       metadata,
-      details({ isLiveAction: true }),
+      details({ contentKind: 'LIVE_ACTION' }),
     );
 
     expect(crfOf(args)).toBe('24');
@@ -126,7 +144,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       'Some.Movie.WEB-DL.mkv',
       '/out/Some.Movie.WEB-DL.mkv',
       metadata,
-      details({ isLiveAction: true }),
+      details({ contentKind: 'LIVE_ACTION' }),
     );
 
     const i = args.indexOf('-t');

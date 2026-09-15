@@ -1,4 +1,5 @@
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
+import { ContentKind } from '@/media/entities/content-kind.enum';
 
 // Todo lo que el worker necesita para encodear un ProcessJob en un solo round
 // trip: input físico + los datos de la media (película o episodio, aplanados
@@ -69,8 +70,8 @@ export class EncodeJobDetails {
   @Field(() => [String])
   allowedSubtitleLanguageTags: string[];
 
-  @Field()
-  isLiveAction: boolean;
+  @Field(() => ContentKind)
+  contentKind: ContentKind;
 
   @Field(() => Int, { nullable: true })
   seasonNumber: number | null;

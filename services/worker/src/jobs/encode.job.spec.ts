@@ -66,7 +66,7 @@ const PROCESS_JOB_DETAILS = {
   allowedAudioLanguageTags: ['en'],
   allowedSubtitleLanguagesIso3: ['eng'],
   allowedSubtitleLanguageTags: ['en'],
-  isLiveAction: true,
+  contentKind: 'LIVE_ACTION',
   seasonNumber: null,
   episodeNumber: null,
   episodeTitle: null,

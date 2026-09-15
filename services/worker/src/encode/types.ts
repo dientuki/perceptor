@@ -1,15 +1,17 @@
 // Subconjunto de EncodeJobDetails (jobs/encode.job.ts) que el driver real
 // necesita para armar el comando de ffmpeg (selección de audio/subtítulo
-// original, CRF de animación vs. live-action — ver src/ffmpeg/params.ts).
+// original, CRF por tipo de contenido — ver src/ffmpeg/params.ts).
 // Tipado acá en vez de importado para no atar este módulo a la forma completa
 // de la query, mismo criterio que paths/build-output-path.ts.
+import type { ContentKind } from './content-kind';
+
 export type EncodeInput = {
   originalLanguageIso3: string;
   allowedAudioLanguagesIso3: string[];
   allowedAudioLanguageTags: string[];
   allowedSubtitleLanguagesIso3: string[];
   allowedSubtitleLanguageTags: string[];
-  isLiveAction: boolean;
+  contentKind: ContentKind;
   containerTitle: string;
   sourceTag: string;
   trackTitles: Record<string, string>;

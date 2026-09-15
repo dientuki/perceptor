@@ -89,4 +89,17 @@ export interface TmdbMultiSearchResult {
   poster_path: string | null;
   original_language: string;
   overview: string;
+  genre_ids?: number[];
+}
+
+// https://developer.themoviedb.org/reference/movie-keywords
+export interface TmdbMovieKeywords {
+  id: number;
+  keywords: { id: number; name: string }[];
+}
+
+// https://developer.themoviedb.org/reference/tv-series-keywords
+export interface TmdbShowKeywords {
+  id: number;
+  results: { id: number; name: string }[];
 }

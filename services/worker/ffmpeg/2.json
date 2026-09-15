@@ -20,7 +20,7 @@
       "es-419"
     ],
     "originalLanguageIso3": "eng",
-    "isLiveAction": true,
+    "contentKind": "LIVE_ACTION",
     "containerTitle": "Starship Troopers (1997)",
     "sourceTag": "Starship.Troopers.1997.Eng.Fre.Ger.Ita.Spa.2160p.BluRay.Remux.DV.HDR.HEVC.Atmos-SGF.mkv"
   },
@@ -1438,7 +1438,7 @@
     "-pix_fmt",
     "yuv420p10le",
     "-svtav1-params",
-    "keyint=10s:scd=1:enable-overlays=1:tune=0:input-depth=10:scm=0",
+    "keyint=10s:scd=1:enable-overlays=1:tune=0:input-depth=10:scm=0:aq-mode=2:sharpness=0:film-grain=0",
     "-metadata:s:v:0",
     "title=AV1 1080p (Downscaled from 4K DoVi)",
     "-color_range",

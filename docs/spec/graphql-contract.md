@@ -278,6 +278,9 @@ type Show {
 }
 ```
 
+**Amended by `057-content-kind-classification`**: `isLiveAction` is replaced by `contentKind:
+ContentKind!`, a three-valued enum — see that feature's own section below.
+
 Four things a consumer needs that the SDL does not say:
 
 - **`status` crosses as `String!` although Prisma has it as an enum.** `007-library-listing`
@@ -327,7 +330,7 @@ Neither operation gained `@AllowService()`. A `SERVICE_TOKEN` principal is rejec
 guard on both with `No autenticado`, exactly as it always was — this feature did not add or remove
 that rejection. That rejection is also not a gap for the machine credential: the `worker` never
 called `movie(id)` before this feature and still does not. Its actual need for film metadata —
-`tmdbId`, `title`, `year`, `originalLanguage`, `isLiveAction`, `outputRoot` — is served by
+`tmdbId`, `title`, `year`, `originalLanguage`, `contentKind`, `outputRoot` — is served by
 `processJob(id)`, which does carry `@AllowService()` and returns those fields pre-joined from
 `Movie` (`services/api/src/process-jobs/process-jobs.service.ts`). If a future worker code path
 genuinely needs to read a film by internal id, that grant is added then, with its own
@@ -1569,6 +1572,96 @@ given it, and does not compare against it — `expectedUploadEndpoint` is what `
 and is the one that compares the two and renders a consistency verdict. Giving `api` a second copy
 of the same setting would create two sources for one value, able to disagree with each other the
 same way `DOMAIN` already can between containers — precisely the class of bug this feature reports.
+
+### `contentKind` replaces `isLiveAction` as a three-valued enum (`057-content-kind-classification`)
+
+```graphql
+enum ContentKind {
+  LIVE_ACTION
+  ANIME
+  CGI
+}
+
+type Movie {
+  contentKind: ContentKind!
+}
+
+type Show {
+  contentKind: ContentKind!
+}
+
+type EncodeJobDetails {
+  contentKind: ContentKind!
+}
+
+type Mutation {
+  setMovieContentKind(movieId: Int!, contentKind: ContentKind!): Movie!
+  setShowContentKind(showId: Int!, contentKind: ContentKind!): Show!
+}
+```
+
+`isLiveAction: Boolean!` is gone from all three types above — it was never write-only in name but was
+in practice: no code path ever wrote it, so the encoder's animated branch had never run. `contentKind`
+replaces it with a real, TMDB-derived classification and a reclassification path.
+
+**Derived once, at registration, from TMDB catalog facts already fetched for another reason.**
+`MoviesService.register()`/`ShowsService.register()` read the title's genre ids (piggybacked on the
+same `details()` call `056-shorts-runtime-classification` already makes for `runtime`, so an
+animated-or-not answer costs nothing extra on the common path) and, only when genre id `16`
+("Animation") is present, a second TMDB `keywords` call to disambiguate: keyword `210024` (`anime`) or
+`6513` (`cartoon`) → `ANIME`; keyword `278823` (`3d-animation`) → `CGI`, checked **before** the
+anime/cartoon check, so a title tagged with both lands on `CGI`; animated with no matching keyword
+(including a lookup that fails) also lands on `CGI`. A non-animated title is `LIVE_ACTION` with no
+keyword lookup at all. None of this touches the shared `tmdb:<type>:<tmdbId>` Redis cache's shape —
+`genreIds`/`keywordIds` are cached (catalog facts, safe to share across users), the derived
+`contentKind` itself never is, exactly as `056` already treats `isShort`.
+
+**Existing rows before this feature carry no signal to convert** — the Prisma migration drops
+`isLiveAction` and adds `contentKind ContentKind @default(LIVE_ACTION)` with no backfill logic; every
+pre-existing film and series lands on `LIVE_ACTION` regardless of what it actually is, correctable
+only through the manual reclassification below.
+
+**`ANIME` and `CGI` are two mutations' worth of encoder tuning that happen to agree today.** The SVT-AV1
+parameter branch each drives in `services/worker/src/ffmpeg/params.ts` is written as two independent
+`switch` cases with identical bodies, not one shared `ANIME`/`CGI` arm — the two are expected to
+diverge as encoder tuning is tested against each other, and collapsing them now would make that future
+edit touch a shared branch instead of one arm.
+
+**Manual reclassification is a mutation, not an admin-only escape hatch.** `setMovieContentKind`/
+`setShowContentKind` follow each side's own existing neighbour rather than a new shared shape: the film
+mutation gates ownership *inside the service* (`MoviesService.findOneFromDb`, `error.movie.not_found`),
+matching `setMovieShort`; the series mutation gates *in the resolver*
+(`ShowsResolver.setShowContentKind`, `error.show.not_available`), matching `setShowAudioMandatory`.
+Both call `assertEnabled` for the relevant type first — there is no shorts-style capability flag for
+content kind, since it is never disabled, only ever wrong.
+
+| Condition | HTTP / GraphQL error |
+| :-- | :-- |
+| `setMovieContentKind`/`setShowContentKind` while the type is disabled | `error.media.type_disabled` (403, existing) |
+| `setMovieContentKind` for a film id the caller does not own, or that does not exist | `error.movie.not_found` (404, existing) |
+| `setShowContentKind` for a series id the caller does not own, or that does not exist | `error.show.not_available` (404, existing) |
+| no session | `error.auth.unauthenticated` (401, existing) |
+| `contentKind` argument outside the three enum values | GraphQL's own argument validation, no `api` error key |
+
+No new error key was added anywhere in this feature.
+
+**An episode inherits its series' classification, never its own.** `processJob(id)` for an episode
+resolves `contentKind` from `Episode.show.contentKind`, not a per-episode value — there is no
+per-episode override anywhere in this feature.
+
+**The worker trusts nothing it reads off the payload.** `normalizeContentKind()` in
+`services/worker/src/encode/content-kind.ts` maps an absent, `null`, or unrecognised `contentKind` to
+`LIVE_ACTION` and logs, rather than throwing — the one place in the worker's encode path where a
+missing contract field is deliberately defended instead of left to fail loudly, because an older `api`
+or a malformed payload must never turn a routine encode into a failed job.
+
+Consumer obligations: `web`'s two detail queries (`src/actions/movies.ts`, `src/actions/shows.ts`) both
+select `contentKind` instead of `isLiveAction` — selecting the removed field fails the whole query at
+runtime, with no compile error, since neither service has codegen against `api`'s schema. A
+`ContentKindSelect` control on both detail pages calls the two mutations above, sending the enum
+argument as an unquoted `ContentKind!` variable, never a quoted string. `worker` never calls either
+mutation and never reports a kind back — the classification and its correction are entirely `api`'s
+and `web`'s.
 
 ### The one non-GraphQL route
 

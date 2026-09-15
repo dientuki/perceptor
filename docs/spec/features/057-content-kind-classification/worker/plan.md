@@ -2,7 +2,7 @@
 title: Content kind classification — worker slice
 service: worker
 last_updated: 2026-09-14
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Content kind classification — `worker` (`worker/plan.md`)

@@ -1,5 +1,6 @@
 "use server";
 
+import { getTranslations } from "next-intl/server";
 import {
   redirectIfUnauthenticated,
   redirectToClearSession,
@@ -7,7 +8,7 @@ import {
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { toActionError, translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
-import type { AcquisitionResult } from "@/types/media";
+import type { AcquisitionResult, ContentKind } from "@/types/media";
 
 export interface Episode {
   id: string;
@@ -33,7 +34,7 @@ export interface Show {
   posterUrl?: string;
   releaseDate?: string;
   originalLanguage: string;
-  isLiveAction: boolean;
+  contentKind: ContentKind;
   status: string;
   seasonsSyncedAt?: string;
   // Only present when fetched via getShowById — getShows() doesn't request it
@@ -89,7 +90,7 @@ const GET_SHOW_QUERY = `
       posterUrl
       releaseDate
       originalLanguage
-      isLiveAction
+      contentKind
       status
       seasonsSyncedAt
       audioLanguages {
@@ -141,6 +142,41 @@ export async function getShowById(id: number): Promise<Show | null> {
   // El API devuelve null cuando el id no existe o no pertenece al usuario;
   // la página lo traduce a notFound()
   return data?.show ?? null;
+}
+
+const SET_SHOW_CONTENT_KIND_MUTATION = `
+  mutation SetShowContentKind($showId: Int!, $contentKind: ContentKind!) {
+    setShowContentKind(showId: $showId, contentKind: $contentKind) {
+      id
+    }
+  }
+`;
+
+// Same shape as setMovieContentKindAction: the enum argument is sent as a
+// plain variable typed `ContentKind!`, never a quoted string.
+export async function setShowContentKindAction(
+  showId: number,
+  contentKind: ContentKind,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_SHOW_CONTENT_KIND_MUTATION, {
+      showId,
+      contentKind,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
 }
 
 const ADD_TORRENT_TO_EPISODE_MUTATION = `

@@ -1,4 +1,4 @@
-import { PrismaClient, MediaStatus } from '@prisma/client';
+import { PrismaClient, MediaStatus, ContentKind } from '@prisma/client';
 
 export async function seedMovies(prisma: PrismaClient) {
   console.log('Seeding movies...');
@@ -11,7 +11,7 @@ export async function seedMovies(prisma: PrismaClient) {
       posterUrl: 'https://image.tmdb.org/t/p/w500/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
       releaseDate: new Date('2010-07-16'),
       originalLanguage: 'en',
-      isLiveAction: true,
+      contentKind: ContentKind.LIVE_ACTION,
 
       // La película solo está registrada en el sistema, lista para solicitar la descarga más adelante
       status: MediaStatus.MISSING,

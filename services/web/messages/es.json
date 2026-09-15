@@ -35,8 +35,7 @@
       "unsupported_type": "Tipo de medio no soportado: {type}",
       "type_disabled": "{type, select, movie {Las películas están deshabilitadas en este sistema} show {Las series están deshabilitadas en este sistema} other {Este tipo de medio está deshabilitado en este sistema}}",
       "search_unavailable": "La búsqueda está deshabilitada en este sistema",
-      "shorts_disabled": "Los cortos están deshabilitados en este sistema",
-      "shorts_not_a_movie": "Sólo una película puede registrarse como corto"
+      "shorts_disabled": "Los cortos están deshabilitados en este sistema"
     },
     "episode": {
       "already_completed": "Este episodio ya está descargado. Confirmá para reemplazar el archivo actual."
@@ -259,8 +258,6 @@
       "go": "Ir",
       "addButton": "Agregar",
       "adding": "Agregando...",
-      "addShortButton": "Agregar como corto",
-      "addingShort": "Agregando como corto...",
       "errorSearch": "No se pudo completar la búsqueda. Intentá de nuevo.",
       "errorAdd": "No se pudo agregar la {noun}. Intentá de nuevo.",
       "unavailable": "La búsqueda está deshabilitada en este sistema."
@@ -338,7 +335,8 @@
       "synopsisTitle": "Sinopsis",
       "noOverview": "Sin sinopsis disponible.",
       "languagesTitle": "Idiomas",
-      "shortLabel": "Registrado como corto"
+      "shortLabel": "Registrado como corto",
+      "contentKindLabel": "Tipo de contenido"
     }
   },
   "shows": {
@@ -346,7 +344,8 @@
       "noPoster": "No hay póster disponible",
       "unknownYear": "Año desconocido",
       "synopsisTitle": "Sinopsis",
-      "noOverview": "Sin sinopsis disponible."
+      "noOverview": "Sin sinopsis disponible.",
+      "contentKindLabel": "Tipo de contenido"
     },
     "seasonAccordion": {
       "seasonLabel": "Temporada {number}",
@@ -566,6 +565,11 @@
     "encoding": "Comprimiendo",
     "completed": "Completado",
     "error": "Error"
+  },
+  "contentKind": {
+    "LIVE_ACTION": "Live action",
+    "ANIME": "Anime",
+    "CGI": "CGI / Animación 3D"
   },
   "users": {
     "add": {

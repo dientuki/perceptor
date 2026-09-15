@@ -67,6 +67,7 @@ describe('ShowsService', () => {
     search: jest.Mock;
     details: jest.Mock;
     seasonDetails: jest.Mock;
+    keywords: jest.Mock;
   };
   let mediaServerReconcile: {
     reconcileShow: jest.Mock;
@@ -95,6 +96,7 @@ describe('ShowsService', () => {
       search: jest.fn(),
       details: jest.fn(),
       seasonDetails: jest.fn(),
+      keywords: jest.fn(),
     };
     mediaServerReconcile = {
       reconcileShow: jest.fn().mockResolvedValue(undefined),
@@ -365,6 +367,150 @@ describe('ShowsService', () => {
         update: {},
         create: { userId: 'user-1', showId: 5 },
       });
+    });
+  });
+
+  // 057-content-kind-classification REQ-6: ShowsService.register() derives a
+  // fresh series' contentKind by the same genre-then-keywords rule as
+  // MoviesService. Every case here defends against a class of bug that
+  // produces a perfectly valid ContentKind and a wrongly-tuned encode nobody
+  // notices until they watch the file — a mistuned precedence, a stray
+  // second TMDB request, or a leaked contentKind in the shared cache all
+  // look identical to a passing registration unless asserted on directly.
+  describe('register (fresh series) — content kind derivation', () => {
+    const pipelineSet = jest.fn().mockReturnThis();
+    const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
+
+    beforeEach(() => {
+      prisma.show.findUnique.mockResolvedValue(null); // not registered yet
+      prisma.userShow.upsert.mockResolvedValue({ userId: 'user-1', showId: 9 });
+      prisma.show.create.mockResolvedValue({
+        id: 9,
+        tmdbId: 42,
+        title: 'Some Series',
+      });
+      // hydrate() is fired detached and must not affect any assertion here —
+      // losing the claim makes it return immediately without touching tmdb
+      // or prisma any further.
+      redis.set.mockResolvedValue(null);
+      pipelineSet.mockClear();
+      pipelineExec.mockClear();
+      redis.pipeline.mockReturnValue({ set: pipelineSet, exec: pipelineExec });
+    });
+
+    function cachedEntry(overrides: Record<string, unknown> = {}) {
+      return JSON.stringify({
+        id: 42,
+        title: 'Some Series',
+        releaseDate: '2020-01-01',
+        posterUrl: null,
+        originalLanguage: 'en',
+        overview: '...',
+        type: MEDIA_TYPE.SHOW,
+        ...overrides,
+      });
+    }
+
+    it('derives LIVE_ACTION for a non-animated series and never requests keywords (REQ-2)', async () => {
+      redis.get.mockResolvedValue(cachedEntry({ genreIds: [18] })); // Drama
+
+      await service.register(42, 'user-1');
+
+      expect(prisma.show.create).toHaveBeenCalledTimes(1);
+      const [{ data }] = prisma.show.create.mock.calls[0];
+      expect(data.contentKind).toBe('LIVE_ACTION');
+      expect(tmdb.keywords).not.toHaveBeenCalled();
+      expect(tmdb.details).not.toHaveBeenCalled();
+    });
+
+    it('derives ANIME for an animated series whose keywords include the anime id (REQ-3)', async () => {
+      redis.get.mockResolvedValue(cachedEntry({ genreIds: [16] })); // Animation
+      tmdb.keywords.mockResolvedValue([210024]);
+
+      await service.register(42, 'user-1');
+
+      const [{ data }] = prisma.show.create.mock.calls[0];
+      expect(data.contentKind).toBe('ANIME');
+      expect(tmdb.keywords).toHaveBeenCalledWith(MEDIA_TYPE.SHOW, 42);
+    });
+
+    it('derives CGI when both 3d-animation and anime keywords are present (REQ-4 precedence)', async () => {
+      redis.get.mockResolvedValue(cachedEntry({ genreIds: [16] }));
+      tmdb.keywords.mockResolvedValue([210024, 278823]);
+
+      await service.register(42, 'user-1');
+
+      const [{ data }] = prisma.show.create.mock.calls[0];
+      expect(data.contentKind).toBe('CGI');
+    });
+
+    it('derives CGI for an animated series with an already-cached, empty keyword list, without a fresh request (REQ-5)', async () => {
+      redis.get.mockResolvedValue(
+        cachedEntry({ genreIds: [16], keywordIds: [] }),
+      );
+
+      await service.register(42, 'user-1');
+
+      const [{ data }] = prisma.show.create.mock.calls[0];
+      expect(data.contentKind).toBe('CGI');
+      expect(tmdb.keywords).not.toHaveBeenCalled();
+    });
+
+    // NFR-2 + REQ-5: the genre already established the series as animated —
+    // only the style lookup failed. Landing on LIVE_ACTION here (the
+    // generic degrade-to-default) would be wrong: only a title whose
+    // *genre* could not be read falls back that far. This is the one case
+    // that is easy to get backwards, since both outcomes look like a
+    // perfectly ordinary, successful registration.
+    it('still registers when the keywords request fails, deriving CGI rather than LIVE_ACTION (NFR-2)', async () => {
+      redis.get.mockResolvedValue(cachedEntry({ genreIds: [16] }));
+      tmdb.keywords.mockRejectedValue(new Error('TMDB unreachable'));
+
+      const result = await service.register(42, 'user-1');
+
+      expect(result).toEqual({ id: 9, type: MEDIA_TYPE.SHOW });
+      const [{ data }] = prisma.show.create.mock.calls[0];
+      expect(data.contentKind).toBe('CGI');
+    });
+
+    it('tops a fully cold cache up with exactly one details() call, never a second one for the same registration (NFR-1)', async () => {
+      redis.get.mockResolvedValue(null); // no Redis entry at all
+      tmdb.details.mockResolvedValue({
+        type: MEDIA_TYPE.SHOW,
+        id: 42,
+        title: 'Some Series',
+        originalTitle: 'Some Series',
+        overview: '...',
+        posterPath: null,
+        backdropPath: '',
+        originalLanguage: 'en',
+        voteAverage: 8,
+        status: 'Ended',
+        firstAirDate: '2020-01-01',
+        numberOfSeasons: 1,
+        numberOfEpisodes: 10,
+        seasons: [],
+        genreIds: [18], // Drama — not animated
+      });
+
+      await service.register(42, 'user-1');
+
+      expect(tmdb.details).toHaveBeenCalledTimes(1);
+      const [{ data }] = prisma.show.create.mock.calls[0];
+      expect(data.contentKind).toBe('LIVE_ACTION');
+    });
+
+    it('never writes the derived contentKind into the shared Redis cache entry (NFR-3)', async () => {
+      redis.get.mockResolvedValue(cachedEntry({ genreIds: [16] }));
+      tmdb.keywords.mockResolvedValue([210024]);
+
+      await service.register(42, 'user-1');
+
+      expect(pipelineSet).toHaveBeenCalled();
+      for (const [, cachedJson] of pipelineSet.mock.calls) {
+        const cached = JSON.parse(cachedJson);
+        expect(cached).not.toHaveProperty('contentKind');
+      }
     });
   });
 

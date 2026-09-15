@@ -5,6 +5,8 @@ import {
   setShowPreferredTrackLanguagesAction,
 } from "@/actions/languages";
 import type { Show as ShowRecord } from "@/actions/shows";
+import { setShowContentKindAction } from "@/actions/shows";
+import ContentKindSelect from "@/components/media/ContentKindSelect";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
 import StatusBadge from "@/components/status/StatusBadge";
 import type { Language } from "@/types/languages";
@@ -28,6 +30,10 @@ export default async function Show({
     "SUBTITLE",
   );
   const setShowAudioMandatory = setShowAudioMandatoryAction.bind(null, show.id);
+  const setShowContentKind = setShowContentKindAction.bind(
+    null,
+    Number(show.id),
+  );
 
   return (
     <div className="flex flex-col gap-8 md:flex-row">
@@ -73,6 +79,12 @@ export default async function Show({
             {show.overview || t("noOverview")}
           </p>
         </div>
+
+        <ContentKindSelect
+          value={show.contentKind}
+          onSave={setShowContentKind}
+          label={t("contentKindLabel")}
+        />
 
         <div className="space-y-2">
           <TitleLanguagesForm

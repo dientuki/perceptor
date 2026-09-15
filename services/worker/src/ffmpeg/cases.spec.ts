@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildFfmpegCommand } from './buildCommand';
 import { KeyedError } from '../i18n/keyed-error';
+import { CONTENT_KIND_VALUES, type ContentKind } from '../encode/content-kind';
 
 const CASES_DIR = join(__dirname, '..', '..', 'ffmpeg');
 
@@ -49,7 +50,7 @@ type CaseInput = {
   allowedSubtitleLanguagesIso3: string[];
   allowedSubtitleLanguageTags?: string[];
   originalLanguageIso3: string;
-  isLiveAction: boolean;
+  contentKind: ContentKind;
   containerTitle: string;
   sourceTag: string;
   trackTitles?: Record<string, string>;
@@ -93,7 +94,7 @@ function validate(fileName: string, raw: unknown): Case {
     allowedSubtitleLanguagesIso3,
     allowedSubtitleLanguageTags,
     originalLanguageIso3,
-    isLiveAction,
+    contentKind,
     containerTitle,
     sourceTag,
     trackTitles,
@@ -130,7 +131,18 @@ function validate(fileName: string, raw: unknown): Case {
   if (typeof originalLanguageIso3 !== 'string') {
     fail(fileName, 'input.originalLanguageIso3 must be a string');
   }
-  if (typeof isLiveAction !== 'boolean') fail(fileName, 'input.isLiveAction must be a boolean');
+  // NFR-7: a fixture that regressed to the retired `isLiveAction` boolean (or
+  // any other non-member string) must fail collection loudly, naming this
+  // file — never silently default to a content kind nobody wrote down.
+  if (
+    typeof contentKind !== 'string' ||
+    !(CONTENT_KIND_VALUES as readonly string[]).includes(contentKind)
+  ) {
+    fail(
+      fileName,
+      `input.contentKind must be one of ${CONTENT_KIND_VALUES.join(', ')} (got ${JSON.stringify(contentKind)})`,
+    );
+  }
   if (typeof containerTitle !== 'string') fail(fileName, 'input.containerTitle must be a string');
   if (typeof sourceTag !== 'string') fail(fileName, 'input.sourceTag must be a string');
   if (
@@ -228,7 +240,7 @@ describe('ffmpeg cases', () => {
       allowedSubtitleLanguagesIso3: input.allowedSubtitleLanguagesIso3,
       allowedSubtitleLanguageTags: input.allowedSubtitleLanguageTags ?? [],
       originalLanguageIso3: input.originalLanguageIso3,
-      isLiveAction: input.isLiveAction,
+      contentKind: input.contentKind,
       containerTitle: input.containerTitle,
       sourceTag: input.sourceTag,
       trackTitles: input.trackTitles ?? SEEDED_TRACK_TITLES,

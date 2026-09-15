@@ -10,11 +10,7 @@ import { SearchInput } from "./SearchInput";
 
 interface SearchContainerProps {
   type: MediaType;
-  addAction: (
-    id: number,
-    type: MediaType,
-    asShort?: boolean,
-  ) => Promise<string>;
+  addAction: (id: number, type: MediaType) => Promise<string>;
   searchAction: (
     query: string,
     type: MediaType,
@@ -35,7 +31,6 @@ export default function SearchContainer({
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [addingId, setAddingId] = useState<number | null>(null);
-  const [addingShortId, setAddingShortId] = useState<number | null>(null);
   // TMDB id -> registered row id, for results added this session (before `inLibrary` would reflect it on a fresh search)
   const [addedMediaIds, setAddedMediaIds] = useState<Record<number, string>>(
     {},
@@ -59,30 +54,17 @@ export default function SearchContainer({
     }
   };
 
-  const addItem = async (item: MediaSearchResult, asShort: boolean) => {
-    try {
-      const mediaId = await addAction(item.id, type, asShort);
-      setAddedMediaIds((prev) => ({ ...prev, [item.id]: mediaId }));
-    } catch (err) {
-      console.error("Error al agregar:", err);
-      setError(
-        err instanceof Error && asShort ? err.message : t("errorAdd", { noun }),
-      );
-    }
-  };
-
   const handleAdd = async (item: MediaSearchResult) => {
     setAddingId(item.id);
     setError(null);
-    await addItem(item, false);
+    try {
+      const mediaId = await addAction(item.id, type);
+      setAddedMediaIds((prev) => ({ ...prev, [item.id]: mediaId }));
+    } catch (err) {
+      console.error("Error al agregar:", err);
+      setError(t("errorAdd", { noun }));
+    }
     setAddingId(null);
-  };
-
-  const handleAddAsShort = async (item: MediaSearchResult) => {
-    setAddingShortId(item.id);
-    setError(null);
-    await addItem(item, true);
-    setAddingShortId(null);
   };
 
   return (
@@ -116,9 +98,6 @@ export default function SearchContainer({
               ownedMediaId={ownedMediaId}
               adding={addingId === item.id}
               onAdd={handleAdd}
-              shortsEnabled={shortsEnabled}
-              addingShort={addingShortId === item.id}
-              onAddAsShort={handleAddAsShort}
             />
           );
         }}

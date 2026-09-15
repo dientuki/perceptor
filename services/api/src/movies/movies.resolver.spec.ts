@@ -71,3 +71,53 @@ describe('MoviesResolver.setMovieShort guard order', () => {
     expect(result).toEqual({ id: 7, isShort: true });
   });
 });
+
+// This suite exists for the same reason as setMovieShort's above: a resolver
+// that read the film before checking assertEnabled(MOVIE) would leak whether
+// movieId exists to a caller in an installation with movies turned off, even
+// though content kind itself has no capability flag of its own
+// (057-content-kind-classification's frozen contract has no
+// assertShortsEnabled-style analogue here).
+describe('MoviesResolver.setMovieContentKind guard order', () => {
+  const principal: AuthPrincipal = { type: 'user', id: 'u1', username: 'alice', jti: 'session-1' };
+
+  const buildResolver = () => {
+    const moviesService = {
+      setContentKind: jest.fn(),
+    } as unknown as MoviesService;
+    const languagesService = {} as unknown as LanguagesService;
+    const mediaCapabilitiesService = {
+      assertEnabled: jest.fn(),
+    } as unknown as MediaCapabilitiesService;
+
+    const resolver = new MoviesResolver(moviesService, languagesService, mediaCapabilitiesService);
+
+    return { resolver, moviesService, mediaCapabilitiesService };
+  };
+
+  it('refuses with error.media.type_disabled before the service is ever called, when movies are disabled', async () => {
+    const { resolver, moviesService, mediaCapabilitiesService } = buildResolver();
+    (mediaCapabilitiesService.assertEnabled as jest.Mock).mockRejectedValue(
+      new ForbiddenException({ i18n: { key: ERROR_KEYS.MEDIA_TYPE_DISABLED, params: { type: MEDIA_TYPE.MOVIE } } }),
+    );
+
+    await expect(
+      resolver.setMovieContentKind(7, 'ANIME' as never, principal),
+    ).rejects.toMatchObject({
+      response: { i18n: { key: ERROR_KEYS.MEDIA_TYPE_DISABLED } },
+    });
+    expect(moviesService.setContentKind).not.toHaveBeenCalled();
+  });
+
+  it('dispatches to the service once the capability guard passes', async () => {
+    const { resolver, moviesService, mediaCapabilitiesService } = buildResolver();
+    (mediaCapabilitiesService.assertEnabled as jest.Mock).mockResolvedValue(undefined);
+    (moviesService.setContentKind as jest.Mock).mockResolvedValue({ id: 7, contentKind: 'ANIME' });
+
+    const result = await resolver.setMovieContentKind(7, 'ANIME' as never, principal);
+
+    expect(mediaCapabilitiesService.assertEnabled).toHaveBeenCalledWith(MEDIA_TYPE.MOVIE);
+    expect(moviesService.setContentKind).toHaveBeenCalledWith(7, 'u1', 'ANIME');
+    expect(result).toEqual({ id: 7, contentKind: 'ANIME' });
+  });
+});

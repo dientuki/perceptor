@@ -196,6 +196,27 @@ with `Number(...)` silently misclassifies every file as non-remux, forever, with
 `remux-detection.spec.ts` proves this by asserting the naive implementation gets the case wrong. The
 filename substring is the last resort only, reached when no bitrate at all can be computed.
 
+## Video quality branches on `contentKind`, not a boolean (`057-content-kind-classification`)
+
+`src/ffmpeg/params.ts`'s `getVideoParams`/`getQuality` take `contentKind: ContentKind`
+(`'LIVE_ACTION' | 'ANIME' | 'CGI'`, `src/encode/content-kind.ts`) instead of the old `isLiveAction`
+boolean, which nothing on the `api` side had ever actually set. The SVT-AV1 parameter string is built
+from three `switch` cases — `LIVE_ACTION`: `scm=0`, `aq-mode=2`, no `enable-qm`/`qm-min`,
+`sharpness=0`, `film-grain=0`; `ANIME` and `CGI`: `scm=2`, `aq-mode=2`, `enable-qm=1`, `qm-min=4`,
+`sharpness=2`, `film-grain=0`. **`ANIME` and `CGI` are written as two independent case bodies, not a
+shared fallthrough arm**, even though they produce identical output today — the two are meant to be
+tuned against each other, and the spec explicitly forbids collapsing them just because they currently
+agree (Article X does not apply here; REQ-11 overrides it). `getQuality` keeps returning exactly the
+values it always has — retyping its parameter changed nothing about CRF, which stays out of scope.
+
+`src/jobs/encode.job.ts` resolves the payload's `contentKind` through
+`normalizeContentKind()` **once**, before the compression branch: an absent, `null` or unrecognised
+value degrades to `LIVE_ACTION` and logs a warning, never throws — the one place in this service's
+encode path where a missing contract field is deliberately defended rather than left to fail loudly,
+because an older `api` must never turn a routine encode into a failed job. The resolved kind is
+never re-derived or re-validated anywhere else in the pipeline; it rides through `EncodeInput`
+unchanged and shows up in the existing `[encode] <id>:` log line alongside the language lists.
+
 ## The rules in `src/ffmpeg/` have their own agent and their own corpus
 
 `services/worker/ffmpeg/` — outside `src/`, one JSON per case — holds the **verbatim `ffprobe`
@@ -373,7 +394,7 @@ leaves a half-written file at the destination.
 | `bin/npm worker run dev` | `tsx watch src/index.ts` |
 | `bin/cli worker npx --no tsc --noEmit` | typecheck — today the only real gate, against `tsconfig.json` (covers `src/**/*`, including `*.spec.ts`) |
 | `bin/npm worker run build` | `tsc -p tsconfig.build.json` — the `prod` image's `builder` stage runs this; `tsconfig.build.json` extends `tsconfig.json` but excludes `**/*.spec.ts`, so `dist/` ships no test code (`015-reproducible-image-builds`) |
-| `bin/npm worker test` | `vitest run` — as of `053-downloads-panel-repair` (2026-09-11, re-run rather than trusted): 20 suites, 178 tests, 176 passing — the 2 failures are pre-existing and unrelated (`src/ffmpeg/cases.spec.ts`'s stale `2.json` track-title fixture, `src/ffmpeg/buildCommand.spec.ts`'s CRF mismatch), both in `src/ffmpeg/` territory owned by a different agent. `053` added the `encodeProgress` seam cases to `src/jobs/encode.job.spec.ts` (a driver reporting a speed, one reporting `null`, and `0` forwarded as `0` rather than laundered by a falsy check). Earlier history: spec `031` added `src/ffmpeg/variants.spec.ts` and took `src/ffmpeg/params.spec.ts` from 15 cases to 28 for the regional-variant rules (spec `024` before it deleted a startup-probe module's spec outright and reset the case corpus to one file — `ffmpeg/cases.spec.ts` still runs 1 case, authored by the user and read as the requirement); `023-ffprobe-log` added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
+| `bin/npm worker test` | `vitest run` — as of `057-content-kind-classification` (2026-09-15, re-run rather than trusted): 21 suites, 192 tests, 190 passing — the 2 failures are the same pre-existing, unrelated ones (`src/ffmpeg/cases.spec.ts`'s stale `2.json` track-title fixture, `src/ffmpeg/buildCommand.spec.ts`'s CRF mismatch), confirmed unchanged. `057` added `src/encode/content-kind.spec.ts` (the `normalizeContentKind` degradation cases) and extended `src/ffmpeg/params.spec.ts`/`buildCommand.spec.ts`/`cases.spec.ts` for the three `contentKind` branches, moving both `ffmpeg/1.json` and `ffmpeg/2.json` off the retired `isLiveAction` boolean. Earlier history — as of `053-downloads-panel-repair` (2026-09-11): 20 suites, 178 tests, 176 passing — the 2 failures are pre-existing and unrelated (`src/ffmpeg/cases.spec.ts`'s stale `2.json` track-title fixture, `src/ffmpeg/buildCommand.spec.ts`'s CRF mismatch), both in `src/ffmpeg/` territory owned by a different agent. `053` added the `encodeProgress` seam cases to `src/jobs/encode.job.spec.ts` (a driver reporting a speed, one reporting `null`, and `0` forwarded as `0` rather than laundered by a falsy check). Earlier history: spec `031` added `src/ffmpeg/variants.spec.ts` and took `src/ffmpeg/params.spec.ts` from 15 cases to 28 for the regional-variant rules (spec `024` before it deleted a startup-probe module's spec outright and reset the case corpus to one file — `ffmpeg/cases.spec.ts` still runs 1 case, authored by the user and read as the requirement); `023-ffprobe-log` added three cases to `src/jobs/encode.job.spec.ts` for the probe-recording order and its swallowed failure (`018-ui-i18n` added `src/i18n/messages.en.spec.ts` and extended `src/jobs/encode.job.spec.ts`/`src/api/graphql-client.spec.ts` for the keyed-error path; `013-season-pack-processing` added `scan/parse-episode.spec.ts` and `scan/select-matches.spec.ts`, and extended `cleanup-source.spec.ts` for the three gated flags; `011-av1-transcode` added the first three real specs; `012-post-download-processing` added `is-inside-root.spec.ts`, `cleanup-source.spec.ts` and `scan-folder.spec.ts`) |
 | `docker compose logs -f worker` | the job loop |
 
 ## Known debt

@@ -63,6 +63,12 @@ enum ScheduledTaskOutcome {
   SKIPPED
 }
 
+enum ContentKind {
+  LIVE_ACTION
+  ANIME
+  CGI
+}
+
 model Setting {
   id    Int    @id @default(autoincrement())
   key   String @unique
@@ -345,7 +351,7 @@ model Movie {
   posterUrl        String?
   releaseDate      DateTime?
   originalLanguage String
-  isLiveAction     Boolean   @default(true)
+  contentKind      ContentKind @default(LIVE_ACTION)
   isShort          Boolean   @default(false)
 
   // Estado consolidado para mostrar rápido en tarjetas/listados de la App
@@ -372,7 +378,7 @@ model Show {
   overview         String?     @db.Text // Los sinopsis de TMDB pasan el varchar(191) por default
   posterUrl        String?
   status           MediaStatus @default(MISSING)
-  isLiveAction     Boolean     @default(true)
+  contentKind      ContentKind @default(LIVE_ACTION)
   originalLanguage String
   releaseDate      DateTime?
   seasonsSyncedAt  DateTime?

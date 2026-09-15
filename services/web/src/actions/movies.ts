@@ -8,6 +8,7 @@ import {
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
+import type { ContentKind } from "@/types/media";
 
 export interface Movie {
   id: string;
@@ -17,7 +18,7 @@ export interface Movie {
   posterUrl?: string;
   releaseDate?: string;
   originalLanguage: string;
-  isLiveAction: boolean;
+  contentKind: ContentKind;
   isShort: boolean;
   status: string;
   audioLanguages: Language[];
@@ -73,7 +74,7 @@ const GET_MOVIE_QUERY = `
       posterUrl
       releaseDate
       originalLanguage
-      isLiveAction
+      contentKind
       isShort
       status
       audioLanguages {
@@ -126,6 +127,42 @@ const SET_MOVIE_SHORT_MUTATION = `
 // unauthenticated redirect and the refusals of the GraphQL Contract Delta
 // (shorts disabled, movies disabled, not owned) — a plain server function,
 // not a useActionState form action.
+const SET_MOVIE_CONTENT_KIND_MUTATION = `
+  mutation SetMovieContentKind($movieId: Int!, $contentKind: ContentKind!) {
+    setMovieContentKind(movieId: $movieId, contentKind: $contentKind) {
+      id
+    }
+  }
+`;
+
+// Same shape as setMovieShortAction: the enum argument must reach fetchGraphQL
+// as a plain variable typed `ContentKind!`, never a quoted string — the
+// server's own argument validation rejects a quoted enum value.
+export async function setMovieContentKindAction(
+  movieId: number,
+  contentKind: ContentKind,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_MOVIE_CONTENT_KIND_MUTATION, {
+      movieId,
+      contentKind,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
+}
+
 export async function setMovieShortAction(
   movieId: string,
   isShort: boolean,

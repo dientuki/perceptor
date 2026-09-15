@@ -8,18 +8,22 @@ import {
   setMoviePreferredTrackLanguagesAction,
 } from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
-import { setMovieShortAction } from "@/actions/movies";
+import {
+  setMovieContentKindAction,
+  setMovieShortAction,
+} from "@/actions/movies";
 import { getPreferences } from "@/actions/preferences";
 import Switch from "@/components/form/switch/Switch";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
+import ContentKindSelect from "@/components/media/ContentKindSelect";
 import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
 import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import type { Language } from "@/types/languages";
-import type { AcquisitionTarget } from "@/types/media";
+import type { AcquisitionTarget, ContentKind } from "@/types/media";
 import type { UserPreferences } from "@/types/preferences";
 
 export default function Movie({
@@ -88,6 +92,8 @@ export default function Movie({
     null,
     movie.id,
   );
+  const handleContentKindSave = (kind: ContentKind) =>
+    setMovieContentKindAction(Number(movie.id), kind);
 
   // The Switch component owns its own display state internally
   // (defaultChecked, not a controlled `checked`), so reverting it on a
@@ -166,6 +172,12 @@ export default function Movie({
             {shortError && <p className="text-error-500">{shortError}</p>}
           </div>
         )}
+
+        <ContentKindSelect
+          value={movie.contentKind}
+          onSave={handleContentKindSave}
+          label={t("contentKindLabel")}
+        />
 
         <div className="space-y-2">
           <h4 className="font-semibold uppercase tracking-wider text-gray-400">

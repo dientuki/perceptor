@@ -7,6 +7,8 @@ import {
   TmdbShowDetails,
   TmdbSeasonDetails,
   TmdbMultiSearchResult,
+  TmdbMovieKeywords,
+  TmdbShowKeywords,
 } from './types';
 import { mapMultiSearchResults } from './multi';
 import { mapPopularMovies, mapPopularShows } from './popular';
@@ -50,6 +52,7 @@ const mappers = {
     voteAverage: data.vote_average,
     releaseDate: data.release_date,
     runtime: data.runtime,
+    genreIds: data.genre_ids,
     status: data.status,
   }),
   [MEDIA_TYPE.SHOW]: (data: TmdbShowDetails): ShowDetail => ({
@@ -74,6 +77,7 @@ const mappers = {
       overview: s.overview,
       posterPath: s.poster_path
     })) || [],
+    genreIds: data.genre_ids,
     status: data.status,
   }),
 };
@@ -165,6 +169,23 @@ export class TmdbClient implements MovieDBClient {
 
     // Ejecutamos la transformación
     return transform(data as any);
+  }
+
+  // https://developer.themoviedb.org/reference/movie-keywords
+  // https://developer.themoviedb.org/reference/tv-series-keywords
+  // TMDB nests the list under a different key per media type — a film body
+  // carries `keywords`, a series body carries `results`. Absorbed here so
+  // every caller gets a flat id list, or [] for a body with neither key.
+  async keywords(thing: MediaType, id: number): Promise<number[]> {
+    const endpoint = TMDB_ENDPOINT[thing];
+
+    if (thing === MEDIA_TYPE.MOVIE) {
+      const data = await this.fetchOne<TmdbMovieKeywords>(`${endpoint}/${id}/keywords`);
+      return (data.keywords ?? []).map((keyword) => keyword.id);
+    }
+
+    const data = await this.fetchOne<TmdbShowKeywords>(`${endpoint}/${id}/keywords`);
+    return (data.results ?? []).map((keyword) => keyword.id);
   }
 
   async seasonDetails(id: number, seasonNumber: number): Promise<EpisodeDetail[]> {

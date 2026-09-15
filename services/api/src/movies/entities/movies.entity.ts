@@ -1,5 +1,6 @@
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 import { Language } from '@/languages/entities/language.entity';
+import { ContentKind } from '@/media/entities/content-kind.enum';
 
 @ObjectType()
 export class Movie {
@@ -24,8 +25,8 @@ export class Movie {
   @Field()
   originalLanguage: string;
 
-  @Field()
-  isLiveAction: boolean;
+  @Field(() => ContentKind)
+  contentKind: ContentKind;
 
   // 048-shorts-category REQ-1: a property of the film, shared by every user
   // who has it in their library — straight off the Prisma row, no

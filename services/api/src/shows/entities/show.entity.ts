@@ -1,6 +1,7 @@
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 import { Season } from './season.entity';
 import { Language } from '@/languages/entities/language.entity';
+import { ContentKind } from '@/media/entities/content-kind.enum';
 
 // Field-for-field twin of Movie (movies/entities/movies.entity.ts), minus the
 // film-only file/source fields and plus seasonsSyncedAt — with one exception:
@@ -32,8 +33,8 @@ export class Show {
   @Field()
   originalLanguage: string;
 
-  @Field()
-  isLiveAction: boolean;
+  @Field(() => ContentKind)
+  contentKind: ContentKind;
 
   @Field()
   status: string;
