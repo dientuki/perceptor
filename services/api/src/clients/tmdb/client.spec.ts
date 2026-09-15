@@ -69,3 +69,39 @@ describe('TmdbClient.keywords', () => {
     expect(ids).toEqual([]);
   });
 });
+
+describe('TmdbClient.details', () => {
+  let client: TmdbClient;
+
+  beforeEach(() => {
+    client = new TmdbClient(settingsStub());
+    global.fetch = jest.fn();
+  });
+
+  // A detail response never carries `genre_ids` (that's search/discover-only)
+  // — it carries `genres: {id, name}[]`. Reading the wrong field silently
+  // yields `undefined`/`[]`, which classifyContentKind then reads as
+  // "not animated" for every title that has to fall back to details() for
+  // its content-kind top-up, never actually classifying ANIME/CGI.
+  it('derives genreIds from the "genres" array, not a "genre_ids" field', async () => {
+    mockFetchOnce({
+      id: 1185806,
+      title: 'PAW Patrol: The Dino Movie',
+      genres: [{ id: 16, name: 'Animation' }, { id: 12, name: 'Adventure' }],
+      runtime: 90,
+      status: 'Released',
+    });
+
+    const detail = await client.details(MEDIA_TYPE.MOVIE, 1185806);
+
+    expect(detail.genreIds).toEqual([16, 12]);
+  });
+
+  it('returns [] when a detail response has no genres at all', async () => {
+    mockFetchOnce({ id: 1, title: 'x', runtime: 10, status: 'Released' });
+
+    const detail = await client.details(MEDIA_TYPE.MOVIE, 1);
+
+    expect(detail.genreIds).toEqual([]);
+  });
+});

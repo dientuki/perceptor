@@ -52,7 +52,7 @@ const mappers = {
     voteAverage: data.vote_average,
     releaseDate: data.release_date,
     runtime: data.runtime,
-    genreIds: data.genre_ids,
+    genreIds: data.genres?.map((g) => g.id) ?? [],
     status: data.status,
   }),
   [MEDIA_TYPE.SHOW]: (data: TmdbShowDetails): ShowDetail => ({
@@ -77,7 +77,7 @@ const mappers = {
       overview: s.overview,
       posterPath: s.poster_path
     })) || [],
-    genreIds: data.genre_ids,
+    genreIds: data.genres?.map((g) => g.id) ?? [],
     status: data.status,
   }),
 };

@@ -29,9 +29,14 @@ export interface TmdbMovie extends TmdbBase {
 }
 
 // Interfaces Específicas de Detalles (TMDB devuelve campos extra en endpoints de detalle)
+// A detail response never carries `genre_ids` (that's a search/discover-only
+// field, inherited here from TmdbBase/TmdbMovie but not actually sent) — it
+// carries `genres: {id, name}[]` instead. The mapper in client.ts derives
+// genreIds from this field for detail endpoints.
 export interface TmdbMovieDetails extends TmdbMovie {
   runtime: number;
   status: string;
+  genres: { id: number; name: string }[];
 }
 
 export interface TmdbShow extends TmdbBase {
@@ -57,6 +62,7 @@ export interface TmdbShowDetails extends TmdbShow {
   number_of_seasons: number;
   status: string;
   seasons: TmdbSeason[];
+  genres: { id: number; name: string }[];
 }
 
 export interface TmdbEpisode {
