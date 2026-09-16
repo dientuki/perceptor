@@ -36,6 +36,20 @@ no users besides its author. The published images are release candidates (`v0.1.
 Fifty-seven feature specs (`001` through `057`) live in `docs/spec/features/`. The root `CLAUDE.md`
 has a stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
+## Stack
+
+- **Frontend:** Next.js 16 (App Router), React 19, Tailwind CSS 4, next-intl (English/Spanish),
+  tus-js-client, Biome
+- **API:** NestJS 11, Apollo Server 5 with code-first GraphQL, Prisma 7, `@tus/server`, JWT auth,
+  Jest
+- **Worker:** Node.js 24, BullMQ, FFmpeg (SVT-AV1, Opus), MKVToolNix, Vitest
+- **Data:** MariaDB 12, Redis 7 (BullMQ queues, pub/sub, search cache)
+- **Infrastructure:** Docker Compose (runtime, build and dev overlays), multi-stage Dockerfiles,
+  Traefik v3.7 (optional), GitHub Actions release workflow publishing to GHCR
+- **Integrations:** qBittorrent (download client), Prowlarr (indexer aggregation), FlareSolverr
+  (Cloudflare challenge proxy for Prowlarr), TMDB API v3 (catalog), Jellyfin (media server, runs
+  outside the stack)
+
 ## What it does today
 
 ### Find and add
@@ -171,20 +185,32 @@ docker compose pull && docker compose up -d
 Migrations and the backup run on the way up, as above. Rolling back is naming the previous tag and
 repeating the same two commands.  
 
-## Technical summary
+## Working method
 
-| Service | Stack | Role |
-| :-- | :-- | :-- |
-| `web` | Next.js 16, React 19, Tailwind 4 | UI. Talks to `api` over GraphQL only |
-| `api` | NestJS 11, Apollo (code-first), Prisma 7 | Source of truth: DB, business logic, GraphQL API |
-| `worker` | BullMQ, FFmpeg, mkvmerge | Scans downloads, transcodes, files the output |
-| `db` | MariaDB 12 | Persistence |
-| `redis` | Redis 7 | Job queue between `api` (producer) and `worker` (consumer) |
-| `torrent` | qBittorrent | Download client |
-| `indexer` | Prowlarr | Release search across your trackers |
-| `flaresolverr` | FlareSolverr | Cloudflare challenge solver for `indexer` |
-| `backup` | MariaDB 12 (one-shot) | Dumps the database before `api` starts, keeping the five most recent |
-| `traefik` | Traefik v3.7 | Optional domain-based routing |
+Perceptor follows **spec-driven development**. `docs/spec/features/` holds one directory per
+feature, each with a `spec.md`: requirements, the GraphQL contract delta and acceptance criteria.
+Most also have a cross-service `plan.md`, one plan per service and a `tasks.md`. A spec is required
+whenever a change touches more than one service, the Prisma schema, the GraphQL contract or a
+pipeline stage. Several specs open with the real incident that motivated them.
+
+- **The GraphQL contract is frozen before implementation.** There is no codegen between `api` and
+  its consumers: `web` and `worker` retype the schema by hand, so an unannounced change fails at
+  runtime, not at compile time. Each spec's contract delta is approved first and stays read-only
+  while services implement it ([`docs/spec/graphql-contract.md`](docs/spec/graphql-contract.md)).
+  On the `api` side, the schema is generated code-first from decorators and never edited by hand.
+- **A versioned constitution.** [`docs/constitution.md`](docs/constitution.md) holds twelve articles
+  that outrank every other document, such as "GraphQL is the only contract", "no spec, no code" and
+  "the library is never deleted". Each article ends with a **Check** line saying how to verify it.
+  The document is versioned with semver and keeps a changelog.
+- **Development with Claude Code, scoped per service.** The root [`CLAUDE.md`](CLAUDE.md) and one
+  `CLAUDE.md` per service (`api`, `web`, `worker`) document the codebase. [`.claude/commands/`](.claude/commands/)
+  implements the `/specify` → `/plan-feature` → `/tasks` → `/implement` flow, and
+  [`.claude/agents/`](.claude/agents/) defines one implementer per service that writes only inside
+  its own service. `/implement` dispatches the tasks and verifies the diff after each batch.
+- **Docker-first.** Nothing runs on the host — no host Node, no local MariaDB or Redis. Every
+  command goes through a wrapper in `bin/`, and source is bind-mounted so every service hot-reloads.
+
+## Design decisions
 
 ```
                        :80 / :443
@@ -204,19 +230,65 @@ repeating the same two commands.
 
 A one-shot `backup` service dumps the database before `api` starts.
 
-Design rules the codebase actually holds itself to:
-
-- **GraphQL is the only contract.** `web` and `worker` never touch the database — everything goes
-  through `api`. The one deliberate exception is the resumable [tus](https://tus.io) upload
-  endpoint, because a 40 GB file doesn't fit in a GraphQL mutation.
-- **The worker has no ingress.** It listens on Redis and calls back into `api`.
+- **`api` is the only source of truth.** `web` and `worker` never touch the database — everything
+  goes through `api`'s GraphQL endpoint, so Prisma, business rules and authorization live in one
+  place. The one deliberate exception is the resumable [tus](https://tus.io) upload endpoint,
+  because a 40 GB file doesn't fit in a GraphQL mutation.
+- **The worker has no ingress.** It publishes no ports and consumes two BullMQ queues, `process`
+  (scan) and `encode`, each with its own `Worker`, so an encode that runs for hours never holds up a
+  scan. Results go back to `api` as GraphQL mutations; cancellation arrives on a Redis pub/sub
+  channel.
 - **JWT auth with a machine credential.** The worker and qBittorrent's completion hook authenticate
   with a non-expiring service token minted from `JWT_SECRET`; `api` refuses to boot without one.
-- **Docker-first.** Nothing runs on the host — no host Node, no local MariaDB or Redis. Source is
-  bind-mounted, so every service hot-reloads.
-- **Spec-driven.** Features start as a spec in `docs/spec/features/`, get a plan, then tasks, then
-  implementation — with the GraphQL contract frozen before anyone writes code, since there's no
-  codegen between services. `docs/constitution.md` holds the rules that outrank everything else.
+- **Download completion is an event, not polling.** qBittorrent's AutoRun hook runs
+  `services/torrent/commands/on-torrent-completed.sh`, which calls the `torrentCompleted`
+  mutation. Apollo answers an auth failure with HTTP 200 and an `errors` array, so the script checks
+  both the status code and the body.
+- **Reports survive an `api` restart.** The worker retries an outcome report with backoff (5 s, up to
+  60 s) only while `api` is unreachable; a rejection `api` actually answered is final. Both outcome
+  mutations are safe to receive twice.
+- **Media servers are a registry, not a conditional.** Adding one is a module exporting a factory
+  plus one line in `services/api/src/clients/media-server/registry.ts`. The Settings options,
+  server-side validation and UI selector all derive from that map.
+- **Reproducible images.** Each Node service has a multi-stage Dockerfile (`base` / `dev` /
+  `builder` / `prod`) and a deny-list `.dockerignore` that keeps `.env*` and host build artifacts out
+  of the build context, so images build from a clean checkout with no secrets inside.
+- **Compose overlays separate runtime from development.** `docker-compose.yaml` is the runtime and
+  only pulls published images. `docker-compose.build.yaml` adds build contexts and stage-qualified
+  local tags, and `docker-compose.dev.yaml` adds the source bind mounts.
+- **No `NEXT_PUBLIC_*` in the browser bundle.** The upload endpoint is read by a Server Action at
+  request time instead of being inlined at build time, so the same `web` image works in any
+  deployment.
+
+## Pipeline
+
+1. **Search.** `web` asks `api`, which searches TMDB for films and series in a single list.
+2. **Decision: choose the title.** A user registers it. `api` fetches a series' seasons and
+   episodes, classifies the title (short, live action / anime / CGI) and checks the media server,
+   so anything already there comes in as complete.
+3. **Release search.** `api` queries Prowlarr (through FlareSolverr for Cloudflare-fronted
+   trackers), groups rows by info hash and caches repeat queries in Redis for ten minutes.
+4. **Decision: choose the release.** The user picks a result — or pastes a magnet, or uploads a file.
+5. **Download.** `api` adds the torrent to qBittorrent with a per-title save path. A title can race
+   several sources; the first to finish wins.
+6. **Completion.** The AutoRun hook calls `torrentCompleted`; `api` settles the race and enqueues a
+   `process` job.
+7. **Scan.** The worker enumerates the files, keeps only what was actually downloaded, matches
+   episodes by `SxxEyy` and reports back; `api` enqueues one `encode` job per file.
+8. **Transcode.** Driven by `ffprobe`, not the filename: H.264 / VC-1 to AV1, 4K HEVC downscaled to
+   1080p with HDR preserved, audio to Opus, tracks selected by language preference. With compression
+   off, the file is only renamed and moved.
+9. **File and notify.** The output lands in the library, the worker reports `encodeCompleted`, and
+   `api` notifies Jellyfin with the host-side path.
+
+The two decisions stay with a person on purpose:
+
+- **The title**, because libraries are per user and nothing downstream runs — indexer queries, disk,
+  hours of encoding — until someone decides the title belongs in theirs.
+- **The release**, because automatic selection is the goal but not yet trusted to act unattended.
+  "Best candidates" shows the set the picker would choose from, so its behaviour can be checked
+  against real result lists first. Since the output is re-encoded anyway, the question is which
+  release is the best input to the transcoder, not the best file to watch.
 
 ## Running from source
 
