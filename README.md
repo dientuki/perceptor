@@ -26,6 +26,16 @@ Perceptor is the whole path as a single product:
   UI is relative to them, and container paths never leak into the interface.
 - **Files that play.** The transcode isn't an afterthought bolted onto a downloader — it's the point.
 
+## Status
+
+Perceptor is an MVP. The pipeline runs end to end for both films and series: search, register, find
+a release, download, scan, transcode, file, notify and browse. It has no production deployment and
+no users besides its author. The published images are release candidates (`v0.1.0-rc1` through
+`v0.2.0-rc1`); there is no stable release yet.
+
+Fifty-seven feature specs (`001` through `057`) live in `docs/spec/features/`. The root `CLAUDE.md`
+has a stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
+
 ## What it does today
 
 ### Find and add
@@ -42,6 +52,10 @@ Perceptor is the whole path as a single product:
 - 🪞 **A title you already own isn't re-downloaded.** Registering something reconciles it against
   your media server first: if Jellyfin already has the film — or some of the episodes — they come
   in as complete, not missing.
+- 🎬 **Shorts are sorted for you.** A film under 40 minutes on TMDB is registered as a short and
+  filed in its own library folder; you can reclassify it from its detail page.
+- 🎨 **Live action, anime or CGI** is worked out from TMDB genres and keywords when a title is
+  registered, and you can correct it per title. The encoder tunes itself to it.
 
 ### Acquire
 - 🌐 **Indexer search through Prowlarr**, for a full film or one specific episode, with a
@@ -54,6 +68,8 @@ Perceptor is the whole path as a single product:
 - ⬇️ **Downloads through qBittorrent**, each with its own save path, with live progress and speed in
   the UI and start/stop/delete from Perceptor itself. A title can race several sources at once —
   the first one to finish wins, the losers are demoted.
+- 🗑️ **Deleting a source deletes it everywhere.** A running encode is cancelled, its queue entries
+  are withdrawn and the download is cleaned up. The finished library is never touched.
 - ♻️ **A finished title can be replaced.** A bad cut, a broken encode or the wrong language isn't a
   dead end: point a new torrent or a new upload at it and it supersedes what's there.
 - 🔑 **No API-key copy-paste on a fresh checkout.** The installer generates Prowlarr's key and the
@@ -73,6 +89,10 @@ Perceptor is the whole path as a single product:
 - 📦 **Season packs fan out correctly**: every file is enumerated, matched to its episode by
   `SxxEyy`, and each becomes its own job — cleanup waits for the whole pack, not the first episode
   to finish.
+- ☑️ **Files you deselected in qBittorrent are ignored.** A skipped file still takes its full size on
+  disk, but it is never mistaken for the release.
+- 🔤 **Track titles in their own script.** Audio and subtitle tracks are labelled `English`,
+  `日本語`, `한국어` and so on, so any player shows a readable name.
 - 🔕 **Compression is optional.** Turn it off from Settings and the pipeline still renames, moves
   and files the release — it just never invokes FFmpeg.
 - 🏷️ **Every transcoded file records where it came from.** A `title` tag for players, and a
@@ -80,6 +100,9 @@ Perceptor is the whole path as a single product:
   months after the download was cleaned up.
 - 📮 **A finished encode is never lost.** If the api is restarting when the worker reports back, the
   worker keeps retrying until it's acknowledged; both outcome mutations are safe to receive twice.
+- 🩹 **A crashed encode picks itself back up.** If the worker container dies mid-encode, the job is
+  requeued from scratch when the worker boots again. A second crash on the same job marks it as
+  failed instead of looping forever.
 
 ### Enjoy
 - 🗂️ **Automatic filing** into your library layout.
@@ -88,11 +111,14 @@ Perceptor is the whole path as a single product:
 - 🖥️ **Library browsing** for films and series, with a billboard home, a per-series season accordion
   and per-episode actions (search, import a file, add a torrent).
 - 📊 **One status vocabulary.** Queued, downloading, encoding, done — the same words everywhere, so
-  two screens never disagree about the same title.
+  two screens never disagree about the same title. The downloads panel shows live progress and
+  speed for every torrent, plus how fast FFmpeg is encoding.
 - ⏰ **Scheduled tasks** an admin can enable and pace from Settings, for the work that has to happen
   after registration rather than during it.
 - ⚙️ **Settings in the UI**, split into tabs: paths, TMDB key, indexer key, media server,
-  compression, scheduling, and which media types are enabled. **Disabling films or series actually
+  compression, scheduling, and which media types are enabled. A read-only **Environment** tab
+  shows how the installation is reachable and flags an upload URL that doesn't match your domain.
+  **Disabling films or series actually
   disables them** — sidebar, billboard, search and routes all follow, while anything already in the
   pipeline is allowed to finish.
 - 🙋 **Per-user preferences** at `/preferences`: interface language, audio and subtitle languages,
@@ -169,11 +195,14 @@ repeating the same two commands.
         |                  |                     |                      |
    web  :3000  --GraphQL-->  api  :${API_PORT}   torrent (qBittorrent)  indexer (Prowlarr)
                               |        \                 ^                |
-                        db (MariaDB) redis (queue)       | AutoRun hook   v
-                                       |                 |          flaresolverr
-                                    worker (no ingress; Redis queue in,
-                                     GraphQL back into api)
+                        db (MariaDB) redis (queue)       | AutoRun hook   | proxy for Cloudflare-
+                                       |                    on completion | fronted trackers
+                       worker (no ingress, Redis queue                   v
+                        only, calls back into api over    flaresolverr (no ingress, perceptor-net only)
+                        GraphQL)
 ```
+
+A one-shot `backup` service dumps the database before `api` starts.
 
 Design rules the codebase actually holds itself to:
 
@@ -276,12 +305,7 @@ bin/cli api npx prisma migrate dev --name your_migration_name
 bin/cli api npx prisma studio
 ```
 
-## Status and known limitations
-
-The pipeline runs end to end for both films and series — search, register, find a release, download,
-scan, transcode, file, notify, browse. Fifty feature specs (`001` through `050`) are implemented;
-`docs/spec/features/` has each one, and the root `CLAUDE.md` has a stage-by-stage table plus the
-current test and build numbers.
+## Known limitations
 
 Rough edges, stated plainly:
 
