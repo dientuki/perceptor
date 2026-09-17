@@ -108,6 +108,17 @@ pure module following the same local-type pattern) and populated at both `Encode
 after the existing `-map_metadata:g -1` strip so they survive it. `passthrough.ts` still ignores
 `details` entirely and writes neither tag, by design.
 
+`buildSourceTag(downloadsRoot, inputFilePath, downloadPath)` picks `sourceTag` from three branches,
+in order: **loose file** — `downloadPath` resolves (`node:path`'s `resolve`, so a non-normalized
+path still matches) to the same path as `inputFilePath`, meaning the source is an uploaded file
+under `imports/<uploadId>/` rather than a release folder — returns `basename(inputFilePath)`, never
+the empty string a naive relative-path computation produced before `058-compression-resolution`'s
+REQ-17 fix; **folder** — `downloadPath` is a folder containing the input (a torrent) — returns the
+input's path relative to that folder, unchanged since `046`; otherwise the existing
+`downloadsRoot`-relative or base-name fallback applies. The fix lives entirely in `buildSourceTag`,
+not in `src/paths/is-inside-root.ts`, which stays exactly as `047-source-deletion` left it for its
+other caller, `jobs/cleanup-source.ts`'s deletion guard.
+
 **A third `EncodeFn` exists that is never reachable through `ENCODE_DRIVER`.**
 `src/encode/passthrough.ts` (`032-optional-compression`) implements the same interface — `mkdir`,
 then move the input to the output (a same-filesystem `rename`, falling back to a copy + atomic

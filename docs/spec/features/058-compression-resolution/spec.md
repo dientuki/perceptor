@@ -1,6 +1,6 @@
 ---
 title: Compression resolution
-spec_version: 0.4.0
+spec_version: 0.5.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-16
 last_updated: 2026-09-16
@@ -41,6 +41,17 @@ downscaled to 1080p" becomes "every recognized codec to AV1, downscaled to the a
 chosen ceiling, stream copy only for AV1 that already fits or an unrecognized codec". `web` changes
 only to offer the fifth tier; `api` adds it to the catalog and hands the value to the worker on the
 `processJob` payload beside `compressionEnabled`. Register, Download, Scan and filing are untouched.
+
+**Added after the first implementation pass (0.5.0).** Real encodes of uploaded files showed
+`-metadata PERCEPTOR_SOURCE=` written empty. It is not caused by the resolution rule — `058` never
+touched `src/metadata/` — but it surfaced while validating this feature against real files, so the
+fix rides here (REQ-17) rather than waiting for its own spec. The cause: commit `805084e` made
+`buildSourceTag` prefer a path relative to the source's `downloadPath`, and for an uploaded file
+(`LOCAL_FILE`, under `imports/<uploadId>/`) `downloadPath` is the file itself, not a folder — so
+`inputFilePath` equals `downloadPath` and the relative path is the empty string. A torrent source is
+unaffected, since its `downloadPath` is a folder. The same commit left
+`src/metadata/container-tags.spec.ts` calling the old two-argument signature, which is both the two
+long-standing `TS2554` typecheck errors and the reason the new branch never had a test.
 
 ## Requirements
 
@@ -110,6 +121,13 @@ only to offer the fifth tier; `api` adds it to the catalog and hands the value t
       in `057`.
 - [ ] **REQ-16 (Compression off wins)**: With `compressionEnabled` false the resolution is ignored
       entirely — the file is moved, never encoded or scaled, exactly as `032` defines.
+- [ ] **REQ-17 (Source tag never empty)**: `PERCEPTOR_SOURCE` must never be written empty. When the
+      source's `downloadPath` is the input file itself (an uploaded file), the tag is the file's base
+      name — never the `imports/<uploadId>/` prefix, which identifies an upload, not a release. When
+      `downloadPath` is a folder containing the input (a torrent), the tag stays the input's path
+      relative to that folder, exactly as today. When `downloadPath` is null or does not contain the
+      input, the existing `downloadsRoot`-relative and base-name fallbacks apply unchanged. The
+      containment predicate shared with source cleanup (`isInsideRoot`, `047` REQ-12) is not changed.
 
 ### Non-Functional & Operational Requirements
 
@@ -128,6 +146,10 @@ only to offer the fifth tier; `api` adds it to the catalog and hands the value t
       for every user and every title; there is no per-user or per-title override.
 - [ ] **NFR-4 (No migration)**: The setting already exists as a `settings` row; no Prisma change.
       An installation already storing one of the four previous values keeps it.
+- [ ] **NFR-5 (Source tag tested)**: Every branch of `buildSourceTag` is owed a test (Article IX) — a
+      wrong tag is a silent metadata loss. `src/metadata/container-tags.spec.ts` is brought up to the
+      current three-argument signature, which also clears the two pre-existing `TS2554` errors the
+      `worker` typecheck has reported since `051`/`052`.
 
 ## GraphQL Contract Delta
 
@@ -220,6 +242,18 @@ new accepted value, not a new row.
       and the stale `cases.spec.ts` corpus, both explicitly excluded); `bin/npm api run test` 517/46
       suites, including the new `compressionResolution` describe block covering REQ-4's fallback
       (missing row, `'garbage'`, `'4K'` → `1080p`); `check-messages.mjs` reports no drift at 423 keys.
+- [x] **AC-15 (REQ-17)**: Given a file uploaded through the import flow (stored under
+      `/media/downloads/imports/<uploadId>/<name>.mkv`), when it is encoded, the logged FFmpeg command
+      carries `-metadata PERCEPTOR_SOURCE=<name>.mkv` — non-empty, no `imports/` prefix, no slash. A
+      torrent source whose `downloadPath` is its release folder still carries the path relative to that
+      folder. `bin/cli worker npx --no tsc --noEmit` reports 0 errors (the `container-tags.spec.ts`
+      `TS2554` pair is gone), and `container-tags.spec.ts` covers the loose-file, folder, null
+      `downloadPath` and outside-`downloadsRoot` cases. Confirmed live in this session:
+      `bin/cli worker npx --no tsc --noEmit` reports 0 errors, and
+      `bin/npm worker test -- src/metadata/container-tags.spec.ts` passes 9/9, covering all four
+      branches plus the non-normalized-path variant. The end-to-end piece (an actual upload encoded
+      through the running stack, log inspected for the literal `-metadata PERCEPTOR_SOURCE=` value) was
+      not run this session — see § Blocked.
 
 ## Out of Scope
 

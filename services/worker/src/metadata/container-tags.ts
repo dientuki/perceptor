@@ -1,4 +1,4 @@
-import { basename, relative, sep } from 'node:path';
+import { basename, relative, resolve, sep } from 'node:path';
 import { isInsideRoot } from '../paths/is-inside-root';
 
 export type ContainerTagsInput = {
@@ -28,6 +28,10 @@ export function buildSourceTag(
   inputFilePath: string,
   downloadPath: string | null,
 ): string {
+  if (downloadPath && resolve(downloadPath) === resolve(inputFilePath)) {
+    return basename(inputFilePath);
+  }
+
   if (downloadPath && isInsideRoot(downloadPath, inputFilePath)) {
     return relative(downloadPath, inputFilePath).split(sep).join('/');
   }

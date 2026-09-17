@@ -370,6 +370,13 @@ failures are the pre-existing `buildCommand.spec.ts` CRF mismatch plus the stale
 `2.json` corpus cases in `cases.spec.ts`, both confirmed unrelated and explicitly out of scope for
 this feature (spec § Out of Scope; the corpus predates the rule this feature replaced and is not a
 reference for it).
+— and again 2026-09-16 after `058-compression-resolution` spec 0.5.0's REQ-17 (empty
+`PERCEPTOR_SOURCE` on uploaded files, found validating the feature against real logs): `worker`
+typecheck (`bin/cli worker npx --no tsc --noEmit`) now reports **0 errors** — the two
+`src/metadata/container-tags.spec.ts` `TS2554` errors recorded under `052` above are resolved, not
+merely unchanged. `bin/npm worker run build` exits 0; `bin/npm worker test` runs 248 tests across
+22 suites, 245 passing — the same 3 pre-existing, unrelated `src/ffmpeg/` failures noted just above,
+confirmed unchanged; `git diff --stat services/worker/src/paths services/worker/src/ffmpeg` empty.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

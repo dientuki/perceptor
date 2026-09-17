@@ -45,19 +45,62 @@ describe('buildContainerTitle', () => {
 });
 
 describe('buildSourceTag', () => {
-  it('returns the path relative to downloadsRoot with a nested folder (AC-4)', () => {
+  it('returns the path relative to downloadsRoot when downloadPath is null and the input is inside it (AC-4)', () => {
     expect(
       buildSourceTag(
         '/downloads',
         '/downloads/Some.Release-GRP/Some.Release-GRP.mkv',
+        null,
       ),
     ).toBe('Some.Release-GRP/Some.Release-GRP.mkv');
   });
 
-  it('falls back to the base name with no slash when the input lies outside downloadsRoot (AC-5)', () => {
-    const result = buildSourceTag('/downloads', '/elsewhere/Some.Release-GRP.mkv');
+  it('falls back to the base name with no slash when the input lies outside downloadsRoot and downloadPath is null (AC-5)', () => {
+    const result = buildSourceTag('/downloads', '/elsewhere/Some.Release-GRP.mkv', null);
 
     expect(result).toBe('Some.Release-GRP.mkv');
     expect(result).not.toContain('/');
+  });
+
+  it('returns the base name, never empty, when downloadPath resolves to the input file itself (REQ-17, uploaded file)', () => {
+    const result = buildSourceTag(
+      '/downloads',
+      '/downloads/imports/abc/Some.Release-GRP.mkv',
+      '/downloads/imports/abc/Some.Release-GRP.mkv',
+    );
+
+    expect(result).toBe('Some.Release-GRP.mkv');
+    expect(result).not.toBe('');
+    expect(result).not.toContain('imports/');
+  });
+
+  it('treats a non-normalized but equivalent downloadPath as the same loose file (REQ-17)', () => {
+    const result = buildSourceTag(
+      '/downloads',
+      '/downloads/imports/abc/Some.Release-GRP.mkv',
+      '/downloads/imports/./abc/Some.Release-GRP.mkv',
+    );
+
+    expect(result).toBe('Some.Release-GRP.mkv');
+  });
+
+  it('returns the path relative to downloadPath when it is a folder containing the input (torrent, unchanged)', () => {
+    expect(
+      buildSourceTag(
+        '/downloads',
+        '/downloads/Some.Release-GRP/Some.Release-GRP.mkv',
+        '/downloads/Some.Release-GRP',
+      ),
+    ).toBe('Some.Release-GRP.mkv');
+  });
+
+  it('falls back to the downloadsRoot-relative path when downloadPath does not contain the input', () => {
+    expect(
+      buildSourceTag(
+        '/downloads',
+        '/downloads/Some.Release-GRP/Some.Release-GRP.mkv',
+        '/downloads/Another.Release-GRP',
+      ),
+    ).toBe('Some.Release-GRP/Some.Release-GRP.mkv');
   });
 });

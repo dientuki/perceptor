@@ -16,9 +16,13 @@ copy only for AV1 that fits and for unrecognized codecs; HDR colour tags preserv
 It does not read settings, choose defaults for anything but a malformed payload, or touch
 `passthrough.ts`'s behaviour (compression off ignores the value — REQ-16).
 
-**This slice is two agents.** Part A is the `worker` agent (`src/jobs/`, `src/encode/`). Part B is the
-**`ffmpeg` agent** (`src/ffmpeg/`), which owns that directory —
-the `worker` agent stops and reports rather than editing them. Part A lands first.
+Since 0.5.0 the slice also fixes the empty `PERCEPTOR_SOURCE` tag on uploaded files (REQ-17), in
+`src/metadata/` — Part C below, `worker` agent.
+
+**This slice is two agents.** Parts A and C are the `worker` agent (`src/jobs/`, `src/encode/`,
+`src/metadata/`). Part B is the **`ffmpeg` agent** (`src/ffmpeg/`), which owns that directory —
+the `worker` agent stops and reports rather than editing them. Part A lands first; Part C is
+independent of both and touches neither `src/ffmpeg/` nor the contract.
 
 Writes are confined to `services/worker/` and this directory.
 
@@ -44,6 +48,19 @@ Writes are confined to `services/worker/` and this directory.
 | `src/ffmpeg/params.spec.ts` | Modified | The tier matrix (see Tests); existing video cases updated to the new signature and to explicit SDR tags / new titles |
 | `src/ffmpeg/buildCommand.spec.ts` | Modified | Fixture gains `compressionResolution` |
 | `src/ffmpeg/cases.spec.ts` | Modified | Compile-only: whatever the new required `EncodeInput` field needs to typecheck (e.g. passing `'1080p'`). No corpus JSON under `ffmpeg/` is edited, and its results are not a done signal |
+
+### Part C — `worker` agent (REQ-17, added in 0.5.0)
+
+| File | New / Modified | What changes |
+| :-- | :-- | :-- |
+| `src/metadata/container-tags.ts` | Modified | `buildSourceTag`: when `downloadPath` resolves to the same path as `inputFilePath`, return `basename(inputFilePath)` before the folder-relative branch. Every other branch unchanged |
+| `src/metadata/container-tags.spec.ts` | Modified | Existing `buildSourceTag` cases moved to the three-argument signature (clears the two `TS2554` errors); new cases per § Tests |
+| `services/worker/CLAUDE.md` | Modified | The `046` `sourceTag` paragraph names the three branches — loose file → base name, folder → relative to `downloadPath`, else `downloadsRoot`-relative or base name |
+
+Not touched: `src/paths/is-inside-root.ts` and its spec (shared with `jobs/cleanup-source.ts`'s
+deletion guard), `jobs/encode.job.ts` (the call site already passes all three arguments),
+`src/ffmpeg/buildCommand.ts`, and `api`'s `uploads.service.ts` (storing the file as `downloadPath` is
+what `scan-folder.ts` relies on for `LOCAL_FILE`; the tag adapts to it, not the other way round).
 
 ## Existing code to reuse
 
@@ -101,6 +118,16 @@ Writes are confined to `services/worker/` and this directory.
 7. Report which rules changed so the orchestrator can rewrite `.claude/agents/ffmpeg.md` § Rules V2–V6
    (outside this agent's write scope).
 
+### Part C — `worker` agent
+
+1. Tests first, red: update `container-tags.spec.ts` to the three-argument signature and add the loose-file
+   case, which must fail against today's code (it returns `''`).
+2. `container-tags.ts`: add the loose-file check, reusing `resolve` from `node:path` for the equality —
+   the same normalization `isInsideRoot` applies — so `/a/./b.mkv` and `/a/b.mkv` compare equal.
+   No comment (Article XI).
+3. Update `services/worker/CLAUDE.md`'s `sourceTag` paragraph.
+4. Report the real typecheck output — it should now be 0 errors.
+
 ## Contract obligations
 
 Consumes, from `../spec.md` § GraphQL Contract Delta:
@@ -141,6 +168,15 @@ type EncodeJobDetails { compressionResolution: String! }
   real-file validation happens later, separately.
 - `src/ffmpeg/buildCommand.spec.ts` — fixture update only; its pre-existing CRF mismatch is not this
   feature's.
+- `src/metadata/container-tags.spec.ts` — **owed** (NFR-5). An empty or wrong provenance tag fails
+  nothing and is only noticed when someone needs it. Cases, all with explicit three arguments:
+  - loose file: `downloadPath` === `inputFilePath` (`/downloads/imports/abc/Some.Release-GRP.mkv`) →
+    `Some.Release-GRP.mkv`, non-empty, no slash;
+  - same, with a non-normalized but equivalent `downloadPath` → same base name;
+  - folder: `downloadPath` `/downloads/Some.Release-GRP`, input inside it → path relative to that folder;
+  - `downloadPath` null, input inside `downloadsRoot` → `downloadsRoot`-relative (046 AC-4);
+  - `downloadPath` not containing the input → `downloadsRoot`-relative;
+  - input outside `downloadsRoot`, `downloadPath` null → base name, no slash (046 AC-5).
 
 ## Done when
 
@@ -150,6 +186,7 @@ bin/npm worker run build
 bin/npm worker test
 ```
 
-After Part B: typecheck shows only the 2 pre-existing `src/metadata/container-tags.spec.ts` errors;
+After Part B: typecheck shows only the 2 pre-existing `src/metadata/container-tags.spec.ts` errors.
+After Part C: typecheck shows 0 errors, and `git diff --stat services/worker/src/paths` is empty;
 build exits 0; `bin/npm worker test` passes except the pre-existing `buildCommand.spec.ts` CRF
 mismatch and `src/ffmpeg/cases.spec.ts`, whose result is ignored. Report real suite and test counts.

@@ -24,6 +24,9 @@ vocabulary has no way to say this; the task text does.
 stale: no task reads their expectations, runs them as a guard, or edits them, and
 `src/ffmpeg/cases.spec.ts` results are never a done signal. Real-file validation happens later.
 
+**Group 5 was added in spec 0.5.0** (REQ-17, NFR-5, AC-15), after Groups 1–4 shipped: real encodes of
+uploaded files wrote an empty `PERCEPTOR_SOURCE`. Groups 1–4 stay ticked; only Group 5 is open.
+
 ## Tasks
 
 ### Group 1 — the contract (`api`) and the fifth option (`web`)
@@ -158,6 +161,36 @@ lands — that is Group 3's work, not this group's.
       `grep -n "^status" docs/spec/features/058-compression-resolution/**/*.md docs/spec/features/058-compression-resolution/*.md`
       shows `Implemented`/`Done` throughout.
 
+### Group 5 — empty `PERCEPTOR_SOURCE` on uploaded files (added in 0.5.0)
+
+Independent of Groups 1–4: no contract, no `src/ffmpeg/`, no `api`. Dispatch T013 to the **`worker`**
+agent — `src/metadata/` is its directory, not the `ffmpeg` agent's.
+
+- [x] **T013** `[worker]` Fix `buildSourceTag` in `src/metadata/container-tags.ts` per
+      `worker/plan.md` Part C: when `downloadPath` resolves to the same path as `inputFilePath` (an
+      uploaded file under `imports/<uploadId>/`), return `basename(inputFilePath)` before the
+      folder-relative branch; every other branch keeps its output. Tests first: bring
+      `src/metadata/container-tags.spec.ts` to the three-argument signature and add the cases in
+      `worker/plan.md` § Tests (loose file, non-normalized equal path, folder, null `downloadPath`,
+      `downloadPath` not containing the input, outside `downloadsRoot`). Do not edit
+      `src/paths/is-inside-root.ts`, `jobs/encode.job.ts` or anything under `src/ffmpeg/`.
+      *Done when:* `bin/npm worker test -- src/metadata/container-tags.spec.ts` passes with the new
+      cases counted; `bin/cli worker npx --no tsc --noEmit` reports **0 errors**;
+      `git diff --stat services/worker/src/paths services/worker/src/ffmpeg` is empty.
+- [x] **T014** `[docs]` Update `services/worker/CLAUDE.md`'s `046` `sourceTag` paragraph with the three
+      branches (loose file → base name; folder → relative to `downloadPath`; else `downloadsRoot`-relative
+      or base name). In the root `CLAUDE.md` Current state, record the `058` re-measure with the worker
+      typecheck at 0 errors and the `container-tags.spec.ts` `TS2554` pair noted as resolved by
+      `058` (REQ-17). → T013
+      *Done when:* `grep -n "base name" services/worker/CLAUDE.md` matches in the `sourceTag` paragraph,
+      and the root `CLAUDE.md`'s latest `058` entry reports 0 worker typecheck errors.
+- [x] **T015** `[docs]` Re-run `plan.md` § Verification, walk AC-15 (manual pass step 6 — an uploaded
+      file's logged command carries a non-empty `PERCEPTOR_SOURCE=<file name>`), tick it or add a
+      § Blocked row, and set `status: Implemented` again on `spec.md`, `plan.md`, `worker/plan.md` and
+      `status: Done` here. → T014
+      *Done when:* AC-15 is ticked or in § Blocked, and every feature file's `status` reads
+      `Implemented`/`Done`.
+
 ## Acceptance criteria coverage
 
 | AC | Reached by |
@@ -170,6 +203,7 @@ lands — that is Group 3's work, not this group's.
 | AC-12 (compression off ignores it) | T006 (passthrough literal carries it, unused), T012 manual |
 | AC-13 (changed before pickup) | T002 (query-time read), T012 manual |
 | AC-14 (test suites, message parity) | T003, T004, T005, T006, T009, T012 |
+| AC-15 (source tag on uploaded files, typecheck 0 errors) | T013, T015 manual |
 
 ## Blocked
 
@@ -177,3 +211,4 @@ lands — that is Group 3's work, not this group's.
 | :-- | :-- | :-- | :-- |
 | T012 (AC-2, AC-10) | `orch` | No `ProcessJob` row exists in this dev database (never been through the full download pipeline), so `processJob(id)` cannot be queried live. AC-1 and AC-11 (settings save/reject) were verified live against the running stack; these two need a real job row instead of a settings row. | An administrator to run the manual pass in `plan.md` § Verification step 2 against a real (or fixture-seeded) `ProcessJob`. Indirectly covered now: the `schema.gql` diff (T002) proves the field's shape, and `process-jobs.service.spec.ts`'s `compressionResolution` describe block (T003) exercises `getEncodeJobDetails` directly with a mocked settings map, including the `'garbage'` → `'1080p'` fallback AC-10 describes. |
 | T012 (AC-3…AC-9, AC-12, AC-13) | `orch` | These require an actual FFmpeg encode against a real (or synthetic-but-real-file) media source — no torrent/upload pipeline was run in this session. | The manual pass in `plan.md` § Verification steps 3–5, with real files at each tier/codec/HDR combination. Indirectly covered now: `src/ffmpeg/params.spec.ts`'s full synthetic-stream matrix (T009, 71 tests) asserts the exact FFmpeg arguments spec.md describes for every one of these scenarios; AC-12's passthrough behaviour is untouched by this feature and unit-tested in `encode.job.spec.ts`. |
+| T015 (AC-15 end-to-end) | `orch` | AC-15's live half needs a file uploaded through the import flow and actually encoded, with the worker log inspected for the literal `-metadata PERCEPTOR_SOURCE=<name>.mkv` value — no upload/encode pipeline was run in this session. | The manual pass in `plan.md` § Verification step 6, with a real uploaded file. Indirectly covered now: `container-tags.spec.ts`'s 9 cases (T013) directly test `buildSourceTag` against the exact loose-file/folder/null/outside-root inputs AC-15 describes, and `bin/cli worker npx --no tsc --noEmit` confirms 0 errors live. |
