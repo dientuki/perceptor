@@ -386,14 +386,16 @@ confirmed AC-1, AC-2, AC-6 and AC-8 live against a running stack (season header 
 magnet lifting aired episodes to `QUEUED` while future ones stayed `MISSING`, the "already attached"
 refusal naming the film, and episodes reverting on delete); AC-3/AC-5/AC-7 rely on the same
 unchanged `attachTorrentSource`/scan pipeline already covered by `013`'s and this feature's own
-unit tests rather than a live end-to-end run. **AC-9 surfaced a pre-existing, unrelated bug**:
-`services/web/src/lib/graphql-error.ts`'s `translateGraphQLError` does `JSON.parse` on
-`extensions.i18n.params`, but `api` sends `params` as a raw object, never `JSON.stringify`'d — every
-keyed error with params (`error.season.not_found`, `error.magnet.already_attached`, and any
-pre-`059` error carrying params, e.g. `addMagnetToMovie`'s) silently falls back to English regardless
-of UI locale; a param-less key translates correctly. Confirmed present on the pre-`059` movie path
-too, so not a regression this feature introduced — tracked in this feature's `tasks.md` § Blocked,
-not fixed here.
+unit tests rather than a live end-to-end run. **AC-9 surfaced, and this pass fixed, a pre-existing,
+unrelated bug**: `services/web/src/lib/graphql-error.ts`'s `translateGraphQLError` did `JSON.parse`
+on `extensions.i18n.params`, but `api` sends `params` as a plain object, never `JSON.stringify`'d —
+every keyed error with params (`error.season.not_found`, `error.magnet.already_attached`, and any
+pre-`059` error carrying params, e.g. `addMagnetToMovie`'s) silently fell back to English regardless
+of UI locale; a param-less key already translated correctly. Confirmed present on the pre-`059`
+movie path too, so not a regression this feature introduced — fixed as a direct one-file change (no
+spec needed, Article VII: single service, no schema/contract change) rather than left as debt:
+`GraphQLErrorLike.params` retyped to `Record<string, unknown>`, the `JSON.parse` removed. Re-verified
+live in `es` afterward.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

@@ -209,17 +209,21 @@ None.
       panel, then after refresh every episode of that season reads the status it had before the pack
       was requested. Observed live (2026-09-17): deleting the AC-2 magnet's in-flight row returned
       every episode of Season 1 to `MISSING`, its pre-pack status.
-- [ ] **AC-9**: With the UI locale set to `es`, each refusal in the error table above renders its
-      Spanish message; `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift. The
-      catalog half holds (`check-messages.mjs`: 428 keys, no drift) and a param-less key translates
-      correctly live (`error.magnet.not_a_magnet` → "Eso no parece un enlace magnet" in `es`), but a
-      keyed error **with params** does not: `error.season.not_found` (`{id}`) and
-      `error.magnet.already_attached` (`{title}`) both render their English `message` even under the
-      `es` locale. Root cause and scope: `tasks.md` § Blocked — a pre-existing bug in
-      `services/web/src/lib/graphql-error.ts` (`JSON.parse` on an `extensions.i18n.params` that `api`
-      never `JSON.stringify`s), reproduced identically on the pre-`059` `addMagnetToMovie` path, so
-      not a regression this feature introduced. Left unchecked rather than papered over; not fixed
-      here since no file either service plan names owns it.
+- [x] **AC-9**: With the UI locale set to `es`, each refusal in the error table above renders its
+      Spanish message; `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift.
+      First verification (2026-09-17) found a keyed error **with params** did not translate —
+      `error.season.not_found`/`error.magnet.already_attached` rendered English under `es` — a
+      pre-existing bug in `services/web/src/lib/graphql-error.ts` (`JSON.parse` on an
+      `extensions.i18n.params` that `api` sends as a plain object, never `JSON.stringify`'d),
+      reproduced identically on the pre-`059` `addMagnetToMovie` path, so not a regression this
+      feature introduced. Fixed the same day, still under `059` since it was found validating this
+      feature (`docs/spec/graphql-contract.md`'s error envelope example and `importFileModal.tsx`'s
+      REST-path reading of the same shape both already treated `params` as a plain object —
+      `graphql-error.ts` was the one outlier): `GraphQLErrorLike.params` retyped to
+      `Record<string, unknown>`, the `JSON.parse` call removed. Re-verified live: "Ese magnet ya está
+      asociado a «Inception»" now renders correctly under `es`; `bin/cli web npx --no tsc --noEmit`
+      0 errors, `bin/npm web run lint -- src/lib/graphql-error.ts` clean, `bin/npm web run build`
+      exits 0.
 - [x] **AC-10**: `bin/npm api run test` passes, and the api suite covers REQ-7's edges: a
       non-scanned season source lifts an aired `MISSING` episode to `QUEUED`; it does not lift an
       episode with a future or null `releaseDate`; it does not lower an episode already more

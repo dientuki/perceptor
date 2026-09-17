@@ -11,8 +11,8 @@ export interface GraphQLErrorLike {
   extensions?: {
     i18n?: {
       key?: string;
-      /** A JSON-encoded object, not a JSON scalar — both sides `JSON.parse` it. */
-      params?: string;
+      /** A plain object, exactly as `api` attaches it — never a JSON-encoded string. */
+      params?: Record<string, unknown>;
     };
   };
 }
@@ -26,13 +26,15 @@ const ERROR_KEY_PREFIX = "error.";
  * `extensions.i18n.key` (e.g. `error.auth.unauthenticated`) is looked up in the
  * `errors` namespace of the active locale's catalog, dropping the leading
  * `error.` — so `error.auth.unauthenticated` resolves to `errors.auth.unauthenticated`
- * in `messages/<locale>.json`. `extensions.i18n.params`, when present, is a
- * JSON-encoded object interpolated into the translation.
+ * in `messages/<locale>.json`. `extensions.i18n.params`, when present, is interpolated
+ * into the translation as-is — it arrives as a plain object, not a JSON-encoded
+ * string (`docs/spec/graphql-contract.md`'s error envelope example, and
+ * `importFileModal.tsx`'s REST-path reading of the same shape, agree on this).
  *
  * Falls back to the English `message` api always sends (REQ-8) whenever there is
- * no key, the key has no catalog entry (a key `web`'s catalogs have not caught up
- * with yet — see `018-ui-i18n/plan.md`'s "Key drift" risk), or `params` fails to
- * parse. This function must never return the raw key string.
+ * no key or the key has no catalog entry (a key `web`'s catalogs have not caught up
+ * with yet — see `018-ui-i18n/plan.md`'s "Key drift" risk). This function must never
+ * return the raw key string.
  */
 export async function translateGraphQLError(
   error: GraphQLErrorLike,
@@ -43,16 +45,7 @@ export async function translateGraphQLError(
   }
 
   const path = key.slice(ERROR_KEY_PREFIX.length);
-
-  let values: Record<string, unknown> | undefined;
-  const rawParams = error.extensions?.i18n?.params;
-  if (rawParams) {
-    try {
-      values = JSON.parse(rawParams);
-    } catch {
-      return error.message;
-    }
-  }
+  const values = error.extensions?.i18n?.params;
 
   const t = await getTranslations("errors");
   if (!t.has(path)) {
