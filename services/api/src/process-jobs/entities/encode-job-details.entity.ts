@@ -116,4 +116,7 @@ export class EncodeJobDetails {
   // place instead.
   @Field()
   compressionEnabled: boolean;
+
+  @Field()
+  compressionResolution: string;
 }

@@ -189,6 +189,7 @@ type EncodeJobDetails {
   outputRoot: String!
   downloadsRoot: String!
   compressionEnabled: Boolean!
+  compressionResolution: String!
 }
 
 type EncodeCompletedResult {

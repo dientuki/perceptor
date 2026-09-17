@@ -5,6 +5,7 @@ import { detectVariant, narrowToVariants, preferring, requestedVariants, titleWo
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import type { ContentKind } from '../encode/content-kind';
+import type { CompressionResolution } from '../encode/compression-resolution';
 import {
   ERROR_ENCODE_NO_ORIGINAL_AUDIO,
   ERROR_ENCODE_NO_VIDEO_STREAM,
@@ -17,9 +18,6 @@ function getQuality(contentKind: ContentKind, quality: quality) {
 
   return "24";
 }
-
-const HDR_DOWNSCALE_VF =
-  'scale=1920:1080:force_original_aspect_ratio=decrease';
 
 // REQ-11: the SVT-AV1 tuning that differs per content kind. LIVE_ACTION,
 // ANIME and CGI are each a full, independently editable list — ANIME and CGI
@@ -36,9 +34,173 @@ function svtav1KindParams(contentKind: ContentKind): string[] {
   }
 }
 
+type Av1EncodeOptions = {
+  vf?: string;
+  colorTags?: string[];
+  title: string;
+};
+
+function buildAv1EncodeArgs(
+  contentKind: ContentKind,
+  quality: quality,
+  options: Av1EncodeOptions,
+): string[] {
+  const svtav1 = [
+    "keyint=10s",
+    "scd=1",
+    "enable-overlays=1",
+    "tune=0",
+    "input-depth=10",
+    ...svtav1KindParams(contentKind),
+  ].join(":");
+
+  const args: string[] = ["-map", "0:v:0"];
+
+  if (options.vf) {
+    args.push("-vf", options.vf);
+  }
+
+  args.push(
+    "-c:v", "libsvtav1",
+    "-crf", getQuality(contentKind, quality),
+    "-preset", "4",
+    "-pix_fmt", "yuv420p10le",
+  );
+
+  if (options.colorTags) {
+    args.push(...options.colorTags);
+  }
+
+  args.push("-svtav1-params", svtav1, "-metadata:s:v:0", `title=${options.title}`);
+
+  return args;
+}
+
+const SDR_BT709_COLOR_TAGS = [
+  "-color_range", "tv",
+  "-colorspace", "bt709",
+  "-color_primaries", "bt709",
+  "-color_trc", "bt709",
+];
+
+const HDR_BT2020_COLOR_TAGS = [
+  "-color_range", "tv",
+  "-colorspace", "bt2020nc",
+  "-color_primaries", "bt2020",
+  "-color_trc", "smpte2084",
+];
+
+const HLG_BT2020_COLOR_TAGS = [
+  "-color_range", "tv",
+  "-colorspace", "bt2020nc",
+  "-color_primaries", "bt2020",
+  "-color_trc", "arib-std-b67",
+];
+
+// REQ-10: recognized codecs always become AV1 — everything else falls back
+// to copy (REQ-12).
+const RECOGNIZED_VIDEO_CODECS = ['h264', 'hevc', 'h265', 'vc1', 'av1'];
+
+type ResolutionBox = { width: number; height: number; label: string };
+
+// REQ-6: the bounding box each tier names. '4k' imposes no ceiling at all.
+const RESOLUTION_BOXES: Record<CompressionResolution, ResolutionBox | null> = {
+  '4k': null,
+  '1080p': { width: 1920, height: 1080, label: '1080p' },
+  '720p': { width: 1280, height: 720, label: '720p' },
+  '480p': { width: 854, height: 480, label: '480p' },
+  '360p': { width: 640, height: 360, label: '360p' },
+};
+
+// REQ-14: ordered smallest to largest, used only to label a downscaled
+// source by the smallest tier it fits within tolerance — never to decide
+// whether to scale, which is RESOLUTION_BOXES[compressionResolution] alone.
+const SOURCE_TIER_BOXES: ResolutionBox[] = [
+  { width: 640, height: 360, label: '360p' },
+  { width: 854, height: 480, label: '480p' },
+  { width: 1280, height: 720, label: '720p' },
+  { width: 1920, height: 1080, label: '1080p' },
+];
+
+// REQ-7: width and height compared independently, 2% tolerance, against
+// ffprobe's coded dimensions.
+const BOX_TOLERANCE = 1.02;
+
+function exceedsBox(width: number, height: number, box: ResolutionBox | null): boolean {
+  if (!box) return false;
+  return width > box.width * BOX_TOLERANCE || height > box.height * BOX_TOLERANCE;
+}
+
+function sourceTierLabel(width: number, height: number): string {
+  const fit = SOURCE_TIER_BOXES.find((box) => !exceedsBox(width, height, box));
+  return fit ? fit.label : '4K';
+}
+
+function codecLabel(codec: string): string {
+  switch (codec) {
+    case 'h264': return 'H264';
+    case 'hevc':
+    case 'h265': return 'HEVC';
+    case 'vc1': return 'VC-1';
+    case 'av1': return 'AV1';
+    default: return codec.toUpperCase();
+  }
+}
+
+type HdrForm = 'DoVi' | 'HDR10' | 'HLG' | 'SDR';
+
+// REQ-13: Dolby Vision and HDR10 keep smpte2084; HLG (arib-std-b67) is its
+// own form so it is never mislabelled with HDR10's transfer.
+function hdrFormOf(videoStream: any): HdrForm {
+  const hasDolbyVision = Array.isArray(videoStream.side_data_list) &&
+    videoStream.side_data_list.some((sideData: any) => sideData.side_data_type === "DOVI configuration record");
+  if (hasDolbyVision) return 'DoVi';
+
+  if (videoStream.color_transfer === 'arib-std-b67') return 'HLG';
+
+  const hasHDR10 =
+    videoStream.color_transfer === 'smpte2084' ||
+    videoStream.color_primaries === 'bt2020' ||
+    (Array.isArray(videoStream.side_data_list) && videoStream.side_data_list.some((s: any) =>
+      s.side_data_type === "Mastering display metadata" ||
+      s.side_data_type === "Content light level metadata"
+    ));
+  if (hasHDR10) return 'HDR10';
+
+  return 'SDR';
+}
+
+function colorTagsFor(form: HdrForm): string[] {
+  switch (form) {
+    case 'DoVi':
+    case 'HDR10':
+      return HDR_BT2020_COLOR_TAGS;
+    case 'HLG':
+      return HLG_BT2020_COLOR_TAGS;
+    case 'SDR':
+      return SDR_BT709_COLOR_TAGS;
+  }
+}
+
+// REQ-14: always plain "AV1", never the target tier.
+function videoTitle(codec: string, form: HdrForm, scaled: boolean, sourceLabel: string): string {
+  const codec_ = codecLabel(codec);
+  if (!scaled) return `AV1 (Converted from ${codec_} ${form})`;
+  return `AV1 (Downscaled from ${sourceLabel} ${codec_} ${form})`;
+}
+
+function copyVideoArgs(): string[] {
+  return [
+    "-map", "0:v:0",
+    "-c:v", "copy",
+    "-metadata:s:v:0", 'title=Video (Direct Copy)',
+  ];
+}
+
 export function getVideoParams(
   videoStream: any,
   contentKind: ContentKind,
+  compressionResolution: CompressionResolution,
   quality: quality = 'web',
 ) {
   // Sin stream de video no hay nada que codificar (archivo corrupto o sólo
@@ -50,105 +212,40 @@ export function getVideoParams(
     );
   }
 
-  const codec = videoStream.codec_name;
+  const codec = (videoStream.codec_name || '').toLowerCase();
   const width = Number(videoStream.width ?? 0);
   const height = Number(videoStream.height ?? 0);
-  const is4K =
-    width >= 3800 || height >= 2100;
+  const box = RESOLUTION_BOXES[compressionResolution] ?? null;
+  const exceeds = exceedsBox(width, height, box);
 
-  const svtav1 = [
-    "keyint=10s",
-    "scd=1",
-    "enable-overlays=1",
-    "tune=0",
-    "input-depth=10",
-    ...svtav1KindParams(contentKind),
-  ].join(":");
-
-  if (codec === 'h264') {
-    return [
-      "-map", "0:v:0",
-      "-c:v", "libsvtav1",
-      "-crf", getQuality(contentKind, quality),
-      "-preset", "4",
-      "-pix_fmt", "yuv420p10le",
-      "-svtav1-params", svtav1,
-      "-metadata:s:v:0", 'title=AV1 (Converted from H264)'
-    ];
+  // REQ-12: an unrecognized codec is always copied at its own resolution.
+  // The ceiling is never applied to it — only worth a warning when it
+  // actually would have mattered.
+  if (!RECOGNIZED_VIDEO_CODECS.includes(codec)) {
+    console.warn(
+      exceeds
+        ? `[ffmpeg] unrecognized video codec "${codec}"; copying at its own resolution, compression ceiling "${compressionResolution}" not applied.`
+        : `[ffmpeg] unrecognized video codec "${codec}"; copying at its own resolution.`,
+    );
+    return copyVideoArgs();
   }
 
-    // HEVC/H265 4K -> 1080p AV1
-  if ((codec === 'hevc' || codec === 'h265') && is4K) {
-
-    const hasDolbyVision = Array.isArray(videoStream.side_data_list) && 
-      videoStream.side_data_list.some((sideData: any) => sideData.side_data_type === "DOVI configuration record");
-
-    const hasHDR10 = 
-      videoStream.color_transfer === 'smpte2084' || 
-      videoStream.color_transfer === 'arib-std-b67' || 
-      videoStream.color_primaries === 'bt2020' ||
-      (Array.isArray(videoStream.side_data_list) && videoStream.side_data_list.some((s: any) => 
-        s.side_data_type === "Mastering display metadata" ||
-        s.side_data_type === "Content light level metadata"
-      ));
-
-    if (hasDolbyVision || hasHDR10) {
-        const from = hasDolbyVision ? "DoVi" : "HDR10";
-        return [
-          "-map", "0:v:0",
-          "-vf", HDR_DOWNSCALE_VF,
-          "-c:v", "libsvtav1",
-          "-crf", getQuality(contentKind, quality),
-          "-preset", "4",
-          "-pix_fmt", "yuv420p10le",
-          "-svtav1-params", svtav1,
-          "-metadata:s:v:0", `title=AV1 (Downscaled from 4K ${from})`,
-          "-color_range", "tv",
-          "-colorspace", "bt2020nc",
-          "-color_primaries", "bt2020",
-          "-color_trc", "smpte2084",
-        ];
-    }
-
-    return [
-      "-map", "0:v:0",
-      "-vf", HDR_DOWNSCALE_VF,
-      "-c:v", "libsvtav1",
-      "-crf", getQuality(contentKind, quality),
-      "-preset", "4",
-      "-pix_fmt", "yuv420p10le",
-      "-color_range", "tv",
-      "-colorspace", "bt709",
-      "-color_primaries", "bt709",
-      "-color_trc", "bt709",
-      "-svtav1-params", svtav1,
-      "-metadata:s:v:0", 'title=AV1 (Downscaled from 4K SDR)'
-    ];
+  // REQ-11: an AV1 source that already fits the box is copied, never
+  // re-encoded — re-encoding AV1 to AV1 only loses quality.
+  if (codec === 'av1' && !exceeds) {
+    return copyVideoArgs();
   }
 
-  if (codec === 'vc1') {
-    return [
-      "-map", "0:v:0",
-      "-c:v", "libsvtav1",
-      "-crf", getQuality(contentKind, quality),
-      "-preset", "4",
-      // Convertimos de 8-bit (yuv420p) a 10-bit para evitar banding en AV1
-      "-pix_fmt", "yuv420p10le",
-      "-color_range", "tv",
-      "-colorspace", "bt709",
-      "-color_primaries", "bt709",
-      "-color_trc", "bt709",
-      "-svtav1-params", `${svtav1}:tune=0`,
-      "-metadata:s:v:0", "title=AV1 (SDR from VC-1)"
-    ];
-  }
+  const form = hdrFormOf(videoStream);
+  const vf = exceeds && box
+    ? `scale=${box.width}:${box.height}:force_original_aspect_ratio=decrease:force_divisible_by=2`
+    : undefined;
 
-  // REGLA: Para cualquier otra cosa (AV1, HEVC, VC1, etc.), solo copiar.
-  return [
-    "-map", "0:v:0",
-    "-c:v", "copy",
-    "-metadata:s:v:0", 'title=Video (Direct Copy)'
-  ];
+  return buildAv1EncodeArgs(contentKind, quality, {
+    vf,
+    colorTags: colorTagsFor(form),
+    title: videoTitle(codec, form, exceeds, sourceTierLabel(width, height)),
+  });
 }
 
 // src/core/ffmpeg/params.ts

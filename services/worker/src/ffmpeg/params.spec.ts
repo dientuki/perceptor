@@ -10,7 +10,7 @@
 // or (031-worker-language-variants) a regional Spanish preference applied
 // when nobody asked for it, or ignored when somebody did.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getAudioParams, getSubtitleParams, getVideoParams } from './params';
 
 function audioStream(overrides: Record<string, any>) {
@@ -62,9 +62,24 @@ function svtav1ParamsOf(args: string[]): string | undefined {
 // equal output today by requirement, but each gets its own case here so a
 // future divergence between them is caught by two independent expectations
 // rather than one shared one.
+function vfOf(args: string[]): string | undefined {
+  const i = args.indexOf('-vf');
+  return i === -1 ? undefined : args[i + 1];
+}
+
+function titleOf(args: string[]): string | undefined {
+  const i = args.indexOf('-metadata:s:v:0');
+  return i === -1 ? undefined : args[i + 1]?.replace(/^title=/, '');
+}
+
+function colorTrcOf(args: string[]): string | undefined {
+  const i = args.indexOf('-color_trc');
+  return i === -1 ? undefined : args[i + 1];
+}
+
 describe('getVideoParams', () => {
   it('builds LIVE_ACTION svtav1 params: scm=0, aq-mode=2, sharpness=0, film-grain=0, no enable-qm', () => {
-    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION');
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p');
 
     const svtav1 = svtav1ParamsOf(args);
     expect(svtav1).toContain('scm=0');
@@ -75,7 +90,7 @@ describe('getVideoParams', () => {
   });
 
   it('builds ANIME svtav1 params: scm=2, aq-mode=2, enable-qm=1, qm-min=4, sharpness=2, film-grain=0', () => {
-    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'ANIME');
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'ANIME', '1080p');
 
     const svtav1 = svtav1ParamsOf(args);
     expect(svtav1).toContain('scm=2');
@@ -87,7 +102,7 @@ describe('getVideoParams', () => {
   });
 
   it('builds CGI svtav1 params identical to ANIME today, as its own separately editable case', () => {
-    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'CGI');
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'CGI', '1080p');
 
     const svtav1 = svtav1ParamsOf(args);
     expect(svtav1).toContain('scm=2');
@@ -96,6 +111,195 @@ describe('getVideoParams', () => {
     expect(svtav1).toContain('qm-min=4');
     expect(svtav1).toContain('sharpness=2');
     expect(svtav1).toContain('film-grain=0');
+  });
+
+  // REQ-7/NFR-2: every tier's box, exercised against a source below it,
+  // exactly at it, within the 2% tolerance, and 1px past tolerance on each
+  // dimension independently.
+  describe('exceeds-box tolerance, per tier', () => {
+    const tiers: Array<{ resolution: '1080p' | '720p' | '480p' | '360p'; w: number; h: number }> = [
+      { resolution: '1080p', w: 1920, h: 1080 },
+      { resolution: '720p', w: 1280, h: 720 },
+      { resolution: '480p', w: 854, h: 480 },
+      { resolution: '360p', w: 640, h: 360 },
+    ];
+
+    tiers.forEach(({ resolution, w, h }) => {
+      it(`${resolution}: a source below the box is not scaled`, () => {
+        const args = getVideoParams(videoStream({ codec_name: 'h264', width: w - 100, height: h - 100 }), 'LIVE_ACTION', resolution);
+        expect(vfOf(args)).toBeUndefined();
+      });
+
+      it(`${resolution}: a source exactly at the box is not scaled`, () => {
+        const args = getVideoParams(videoStream({ codec_name: 'h264', width: w, height: h }), 'LIVE_ACTION', resolution);
+        expect(vfOf(args)).toBeUndefined();
+      });
+
+      it(`${resolution}: a source at the box +2% fits and is not scaled`, () => {
+        const args = getVideoParams(
+          videoStream({ codec_name: 'h264', width: Math.floor(w * 1.02), height: Math.floor(h * 1.02) }),
+          'LIVE_ACTION',
+          resolution,
+        );
+        expect(vfOf(args)).toBeUndefined();
+      });
+
+      it(`${resolution}: a source at the box +2% +1px on width only exceeds and is scaled`, () => {
+        const args = getVideoParams(
+          videoStream({ codec_name: 'h264', width: Math.ceil(w * 1.02) + 1, height: h }),
+          'LIVE_ACTION',
+          resolution,
+        );
+        expect(vfOf(args)).toBe(`scale=${w}:${h}:force_original_aspect_ratio=decrease:force_divisible_by=2`);
+      });
+
+      it(`${resolution}: a source at the box +2% +1px on height only exceeds and is scaled`, () => {
+        const args = getVideoParams(
+          videoStream({ codec_name: 'h264', width: w, height: Math.ceil(h * 1.02) + 1 }),
+          'LIVE_ACTION',
+          resolution,
+        );
+        expect(vfOf(args)).toBe(`scale=${w}:${h}:force_original_aspect_ratio=decrease:force_divisible_by=2`);
+      });
+    });
+
+    // REQ-6: '4k' imposes no ceiling at all, whatever the source's size.
+    it('4k never scales a 4096x2160 DCI source', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'hevc', width: 4096, height: 2160 }), 'LIVE_ACTION', '4k');
+      expect(vfOf(args)).toBeUndefined();
+    });
+
+    it('4k never scales a 7680x4320 8K source', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'hevc', width: 7680, height: 4320 }), 'LIVE_ACTION', '4k');
+      expect(vfOf(args)).toBeUndefined();
+    });
+
+    // REQ-7: width and height are compared independently.
+    it('a 1920x800 scope film fits 1080p (height well under, width at the box)', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 800 }), 'LIVE_ACTION', '1080p');
+      expect(vfOf(args)).toBeUndefined();
+    });
+
+    it('a 2560x1440 source exceeds 1080p', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'h264', width: 2560, height: 1440 }), 'LIVE_ACTION', '1080p');
+      expect(vfOf(args)).toBe('scale=1920:1080:force_original_aspect_ratio=decrease:force_divisible_by=2');
+    });
+
+    it('a 720x480 DVD fits 480p', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'h264', width: 720, height: 480 }), 'LIVE_ACTION', '480p');
+      expect(vfOf(args)).toBeUndefined();
+    });
+  });
+
+  describe('codec recognition and copy fallback', () => {
+    it('encodes h264 fitting the box with no -vf', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p');
+      expect(args).toContain('-c:v');
+      expect(args[args.indexOf('-c:v') + 1]).toBe('libsvtav1');
+      expect(vfOf(args)).toBeUndefined();
+    });
+
+    it('encodes hevc fitting the box with no -vf (REQ-10: HEVC below 4K is now re-encoded, not copied)', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'hevc', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p');
+      expect(args[args.indexOf('-c:v') + 1]).toBe('libsvtav1');
+      expect(vfOf(args)).toBeUndefined();
+    });
+
+    it('encodes vc1 fitting the box with no -vf', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'vc1', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p');
+      expect(args[args.indexOf('-c:v') + 1]).toBe('libsvtav1');
+      expect(vfOf(args)).toBeUndefined();
+    });
+
+    it('copies an av1 source that fits the box (REQ-11)', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'av1', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p');
+      expect(args).toEqual(['-map', '0:v:0', '-c:v', 'copy', '-metadata:s:v:0', 'title=Video (Direct Copy)']);
+    });
+
+    it('re-encodes an av1 source that exceeds the box, with scale (REQ-11)', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'av1', width: 3840, height: 2160 }), 'LIVE_ACTION', '1080p');
+      expect(args[args.indexOf('-c:v') + 1]).toBe('libsvtav1');
+      expect(vfOf(args)).toBe('scale=1920:1080:force_original_aspect_ratio=decrease:force_divisible_by=2');
+    });
+
+    it('copies an unrecognized codec exceeding the box and logs the codec and that the ceiling was not applied (REQ-12, AC-9)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const args = getVideoParams(videoStream({ codec_name: 'mpeg2video', width: 1920, height: 1080 }), 'LIVE_ACTION', '720p');
+
+      expect(args).toEqual(['-map', '0:v:0', '-c:v', 'copy', '-metadata:s:v:0', 'title=Video (Direct Copy)']);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('mpeg2video'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('not applied'));
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('HDR colour tags', () => {
+    it('tags Dolby Vision as bt2020/smpte2084', () => {
+      const args = getVideoParams(
+        videoStream({ codec_name: 'hevc', width: 1920, height: 1080, side_data_list: [{ side_data_type: 'DOVI configuration record' }] }),
+        'LIVE_ACTION',
+        '1080p',
+      );
+      expect(colorTrcOf(args)).toBe('smpte2084');
+      expect(args).toContain('bt2020nc');
+      expect(args).toContain('bt2020');
+    });
+
+    it('tags HDR10 (color_transfer smpte2084) as bt2020/smpte2084', () => {
+      const args = getVideoParams(
+        videoStream({ codec_name: 'hevc', width: 1920, height: 1080, color_transfer: 'smpte2084' }),
+        'LIVE_ACTION',
+        '1080p',
+      );
+      expect(colorTrcOf(args)).toBe('smpte2084');
+      expect(args).toContain('bt2020nc');
+    });
+
+    it('tags HLG (color_transfer arib-std-b67) with its own transfer, not smpte2084 (REQ-13)', () => {
+      const args = getVideoParams(
+        videoStream({ codec_name: 'hevc', width: 1920, height: 1080, color_transfer: 'arib-std-b67' }),
+        'LIVE_ACTION',
+        '1080p',
+      );
+      expect(colorTrcOf(args)).toBe('arib-std-b67');
+      expect(args).toContain('bt2020nc');
+    });
+
+    it('tags SDR explicitly as bt709 on every AV1 encode', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p');
+      expect(colorTrcOf(args)).toBe('bt709');
+      expect(args).toContain('bt709');
+    });
+
+    it('re-encodes and preserves HDR tags on an av1 HDR source that exceeds the box', () => {
+      const args = getVideoParams(
+        videoStream({ codec_name: 'av1', width: 3840, height: 2160, color_transfer: 'smpte2084' }),
+        'LIVE_ACTION',
+        '1080p',
+      );
+      expect(args[args.indexOf('-c:v') + 1]).toBe('libsvtav1');
+      expect(colorTrcOf(args)).toBe('smpte2084');
+      expect(vfOf(args)).toBe('scale=1920:1080:force_original_aspect_ratio=decrease:force_divisible_by=2');
+    });
+  });
+
+  describe('titles (REQ-14)', () => {
+    it('titles a converted (non-scaled) H264 SDR encode', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p');
+      expect(titleOf(args)).toBe('AV1 (Converted from H264 SDR)');
+    });
+
+    it('titles a downscaled 4K HEVC DoVi encode, starting with plain AV1 and naming the source tier', () => {
+      const args = getVideoParams(
+        videoStream({ codec_name: 'hevc', width: 3840, height: 2160, side_data_list: [{ side_data_type: 'DOVI configuration record' }] }),
+        'LIVE_ACTION',
+        '360p',
+      );
+      const title = titleOf(args)!;
+      expect(title).toBe('AV1 (Downscaled from 4K HEVC DoVi)');
+      expect(title.startsWith('AV1 (')).toBe(true);
+      expect(title).not.toMatch(/360p|480p|720p|1080p/);
+    });
   });
 });
 

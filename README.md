@@ -402,3 +402,7 @@ Rough edges, stated plainly:
   leaves a `.env` it will skip rather than finish. Delete the directory and start over.
 - **`linux/amd64` only.** The published images are built for one platform; an ARM host has to build
   from source.
+
+## Responsible use
+
+Perceptor is intended for managing media you have the rights to download, store and transcode.

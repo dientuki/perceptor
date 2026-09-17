@@ -12,6 +12,7 @@ import { i18nError } from '@/i18n/i18n-error';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
 import { ContentKind } from '@/media/entities/content-kind.enum';
+import { COMPRESSION_RESOLUTIONS, DEFAULT_COMPRESSION_RESOLUTION } from '@/settings/settings.catalog';
 
 // REQ-4: one automatic recovery per ProcessJob, ever — a constant, not a
 // Setting (Article X). A job found orphaned in ENCODING a second time is
@@ -55,6 +56,13 @@ export class ProcessJobsService {
     // Never write this as `=== 'true'` — that reads absence as "off", which
     // is the silent-library-left-uncompressed failure REQ-7 exists to forbid.
     const compressionEnabled = settingsMap['compression_enabled'] !== 'false';
+    // REQ-4: a missing row or a value outside the catalog (only reachable by
+    // hand-editing the database) resolves to the safe default rather than
+    // failing the query or handing the worker a raw, unrecognised string.
+    const storedResolution = settingsMap['compression_resolution'];
+    const compressionResolution = (COMPRESSION_RESOLUTIONS as readonly string[]).includes(storedResolution)
+      ? storedResolution
+      : DEFAULT_COMPRESSION_RESOLUTION;
     const base = {
       id: processJob.id,
       status: processJob.status,
@@ -65,6 +73,7 @@ export class ProcessJobsService {
       downloadPath: mediaSource.downloadPath,
       downloadsRoot: await this.mediaRoots.resolveFromRoot('downloads', '.'),
       compressionEnabled,
+      compressionResolution,
     };
 
     if (processJob.movie) {

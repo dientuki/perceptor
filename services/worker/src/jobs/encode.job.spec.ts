@@ -67,6 +67,7 @@ const PROCESS_JOB_DETAILS = {
   allowedSubtitleLanguagesIso3: ['eng'],
   allowedSubtitleLanguageTags: ['en'],
   contentKind: 'LIVE_ACTION',
+  compressionResolution: '1080p',
   seasonNumber: null,
   episodeNumber: null,
   episodeTitle: null,
@@ -241,6 +242,68 @@ describe('handleEncode — allowed*Language* payload seam (031-worker-language-v
     const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
     expect(details.allowedAudioLanguageTags).toEqual([]);
     expect(details.allowedSubtitleLanguageTags).toEqual([]);
+  });
+});
+
+// Defends the payload seam of 058-compression-resolution (worker/plan.md
+// § Tests): the field dropped from the selection set or one EncodeInput
+// literal compiles clean and encodes at 1080p forever, with no error
+// anywhere. These cases pin that the query text actually selects the field,
+// that a valid value reaches the driver verbatim, and that a missing one
+// degrades to '1080p' rather than throwing or reaching the driver undefined.
+describe('handleEncode — compressionResolution payload seam (058-compression-resolution)', () => {
+  function mockSuccessfulGraphQL(processJob: Record<string, unknown>) {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob });
+      }
+      if (query.includes('encodeCompleted')) {
+        return Promise.resolve({
+          encodeCompleted: {
+            message: 'ok',
+            removeTorrent: false,
+            deleteInputFile: false,
+            deleteDownloadPath: false,
+          },
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  it('selects compressionResolution in the processJob query', async () => {
+    mockSuccessfulGraphQL(PROCESS_JOB_DETAILS);
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+
+    await handleEncode(makeJob());
+
+    const processJobCall = fetchGraphQLMock.mock.calls.find(([query]) =>
+      (query as string).includes('processJob(id:'),
+    );
+    expect(processJobCall).toBeDefined();
+    const [query] = processJobCall as [string];
+    expect(query).toContain('compressionResolution');
+  });
+
+  it('a compressionResolution of "480p" reaches the encode() call unchanged', async () => {
+    mockSuccessfulGraphQL({ ...PROCESS_JOB_DETAILS, compressionResolution: '480p' });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+
+    await handleEncode(makeJob());
+
+    const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(details.compressionResolution).toBe('480p');
+  });
+
+  it('an absent compressionResolution reaches the encode() call as "1080p"', async () => {
+    const { compressionResolution: _omit, ...withoutResolution } = PROCESS_JOB_DETAILS;
+    mockSuccessfulGraphQL(withoutResolution);
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+
+    await handleEncode(makeJob());
+
+    const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(details.compressionResolution).toBe('1080p');
   });
 });
 

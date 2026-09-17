@@ -3,6 +3,7 @@
 // original, CRF por tipo de contenido — ver src/ffmpeg/params.ts).
 // Tipado acá en vez de importado para no atar este módulo a la forma completa
 // de la query, mismo criterio que paths/build-output-path.ts.
+import type { CompressionResolution } from './compression-resolution';
 import type { ContentKind } from './content-kind';
 
 export type EncodeInput = {
@@ -12,6 +13,7 @@ export type EncodeInput = {
   allowedSubtitleLanguagesIso3: string[];
   allowedSubtitleLanguageTags: string[];
   contentKind: ContentKind;
+  compressionResolution: CompressionResolution;
   containerTitle: string;
   sourceTag: string;
   trackTitles: Record<string, string>;

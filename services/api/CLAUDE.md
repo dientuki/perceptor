@@ -450,7 +450,12 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   rows use — see `scheduler/` below for what reads them. It is not read by any resolver directly: `ProcessJobsService`
   reads it off `SettingsService.getMap()` and flattens it onto `EncodeJobDetails.compressionEnabled`
   at query time, since the worker authenticates as a service principal and cannot call the
-  admin-only `settings` query itself. Three more rows — `media_server_index_state`,
+  admin-only `settings` query itself. Since `058-compression-resolution`, `compression_resolution`
+  (`kind: 'enum'` over `COMPRESSION_RESOLUTIONS` — `4k`/`1080p`/`720p`/`480p`/`360p`) rides the same
+  `getMap()` call onto `EncodeJobDetails.compressionResolution`, resolved at the same query-time
+  moment as `compressionEnabled`: the raw row if it is one of the five values, else
+  `DEFAULT_COMPRESSION_RESOLUTION` (`'1080p'`) — a missing or hand-edited-invalid row never fails the
+  query. Three more rows — `media_server_index_state`,
   `media_server_index_synced_at`, `media_server_index_count` (`034-jellyfin-library-reconciliation`)
   — are seeded but **absent from `settings.catalog.ts`**, the same non-editable treatment as
   `torrent_port`: they are state the system writes about the media-server index rebuild, not

@@ -15,7 +15,7 @@ implementation detail.
 | Download | qBittorrent (`torrent`), `api` — `src/clients/torrent/client.ts`, per-torrent save path; no longer fire-and-forget — `api` reads live progress/speed back and starts, stops and deletes torrents on the user's behalf, and a title may race several sources at once. Since `047`, one delete means one delete for the whole pipeline, not just the torrent: `downloadDelete` accepts an uploaded file too (no longer torrent-only), cancels a running encode over a dedicated Redis channel (`encode:cancel`), withdraws every queue entry, and removes the source's downloads-side residue — confined to the downloads root, never the library (constitution Article XII) | `010`, `022`, `047` |
 | Detect completion, enqueue | `api` — `src/downloads/` (`torrentCompleted` mutation, BullMQ producer); a shared race arbiter also runs from the tus upload path, since an uploaded file competes in the same race as any torrent of its target — an upload always demotes a `READY`/`SCANNED` sibling of its own target rather than deferring to it, and a losing upload gets a `409` instead of being silently ignored; both outcome mutations the worker reports back through (`encodeCompleted`/`encodeFailed`) are safe to receive more than once, which is what lets the worker retry a lost report until `api` acknowledges it. Since `052`, `sourceScanned`'s empty-match branch distinguishes two causes with two distinct keys: `error.source.scan_no_video` (no video found or resolved, unchanged) versus `error.source.scan_no_downloaded_video` (video was found but none of it has content — every candidate was deselected in the torrent client) | `022`, `038`, `052` |
 | Scan files, inventory | `worker` — enumerates every file, resolves episodes by parsing `SxxEyy`; episode names come from the api, never the filename. Since `052`, a torrent-sourced scan also takes the list of files the torrent client actually downloaded (`api`'s `MediaSource.downloadedFiles`, `null` for a non-torrent source) as an extra input, narrowing the candidate set to files with real content before either selection rule runs — a file deselected in qBittorrent keeps its full announced size on disk with none of its bytes, and would otherwise win the "largest file" race | `013`, `052` |
-| Transcode | `worker` (FFmpeg) — H264/VC-1 to AV1, HEVC 4K downscaled to 1080p preserving HDR (Dolby Vision/HDR10 keep their colour tags rather than flattening to SDR), Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode. Optional per installation — an administrator can turn compression off from Settings, in which case the file is still renamed and moved to its destination, just never touched by FFmpeg. Since `046`, every transcoded output also carries two container-level tags — `-metadata title=<film title or "Series SNN-ENN Episode title">` (verbatim from TMDB, decorative) and `-metadata PERCEPTOR_SOURCE=<release path relative to the downloads root>` (a provenance record of the exact source release); neither is written when compression is off. Since `047`, an encode can be abandoned mid-flight — a required `AbortSignal` on the `EncodeFn` driver seam, triggered by the api's `encode:cancel` publish when the source that requested it is deleted; the worker terminates whichever process it has running and reports no outcome. The destination
+| Transcode | `worker` (FFmpeg) — every recognized video codec (`h264`, `hevc`/`h265`, `vc1`, `av1`) to AV1, downscaled to the administrator's chosen ceiling and never upscaled, stream copy only for AV1 that already fits the ceiling or a codec the worker does not recognize; HDR colour tags (Dolby Vision/HDR10, HLG) are preserved rather than flattened to SDR on every AV1 output, scaled or not; Opus audio; decided from `ffprobe`, not the filename. One code path, on CPU, on every host. A season pack fans out into one `ProcessJob` per episode. Optional per installation — an administrator can turn compression off from Settings, in which case the file is still renamed and moved to its destination, just never touched by FFmpeg. Since `046`, every transcoded output also carries two container-level tags — `-metadata title=<film title or "Series SNN-ENN Episode title">` (verbatim from TMDB, decorative) and `-metadata PERCEPTOR_SOURCE=<release path relative to the downloads root>` (a provenance record of the exact source release); neither is written when compression is off. Since `047`, an encode can be abandoned mid-flight — a required `AbortSignal` on the `EncodeFn` driver seam, triggered by the api's `encode:cancel` publish when the source that requested it is deleted; the worker terminates whichever process it has running and reports no outcome. The destination
 itself is unconditionally an `api` decision the worker consumes blindly: since `048`, a film flagged
 `isShort` files under the `path_shorts` folder instead of `path_movies` (resolved once, at the moment
 the worker asks for the job's details — reclassifying a film never moves a file already written).
@@ -45,8 +45,18 @@ guarantee is unaffected. Since `057`, the SVT-AV1 parameters themselves branch o
 `ProcessJob`) instead of a boolean nobody had ever set — `ANIME` and `CGI` tune identically today but
 stay two independently editable branches, not one shared arm, since they are expected to diverge; the
 worker trusts nothing about the value it reads off the payload, defaulting an absent or unrecognised
-kind to `LIVE_ACTION` and logging rather than failing the encode |
-`011`, `013`, `024`, `031`, `032`, `042`, `046`, `047`, `048`, `051`, `053`, `054`, `057` |
+kind to `LIVE_ACTION` and logging rather than failing the encode. Since `058`, the video rule itself
+changed: the installation-wide `compression_resolution` Setting (already stored since `044`, now
+resolved at query time onto `EncodeJobDetails.compressionResolution` beside `compressionEnabled`) is
+a ceiling a source is downscaled to fit — a fifth tier, `480p`, joins `4k`/`1080p`/`720p`/`360p` —
+never a target every source is forced to. HEVC below 4K, previously copied, is now re-encoded; H264
+and VC-1 above the ceiling, previously encoded at native size, are now downscaled; an AV1 source
+above the ceiling, previously always copied, is now re-encoded; every AV1 encode now writes explicit
+colour tags (bt709 for SDR, not only HDR); the AV1 video track title always starts with plain `AV1`,
+never a target resolution. The worker defaults an absent or unrecognised `compressionResolution` to
+`1080p` and logs, the same posture as `contentKind`; `compressionEnabled` false still skips FFmpeg
+entirely regardless of the resolution setting (`032`) |
+`011`, `013`, `024`, `031`, `032`, `042`, `046`, `047`, `048`, `051`, `053`, `054`, `057`, `058` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`); no longer write-only — a local index (`src/media-server-index/`) lets a client with no native provider-id lookup answer "does this title exist" too, rebuilt on demand from Settings or a "Re-sincronizar" button in `web` | `034` |
 | Browse library | `api` — the three resolvers; `web` — `/`, the billboard, plus `/movies`, `/shows` and their detail pages, all per-user | `007`, `008`, `009`, `010`, `033` |
 
@@ -349,6 +359,17 @@ existed). `web` typechecks at 0 errors, `bin/npm web run build` exits 0, and
 `bin/cli web node scripts/check-messages.mjs` confirms no `en`/`es` drift (`worker` untouched by
 this feature, deliberately — no pipeline stage changed, only who/what decides `Movie.isShort` at
 registration).
+— and again 2026-09-16 after `058-compression-resolution`: `api` 517/46 suites, 0 typecheck errors,
+`git status --short services/api/prisma` shows only `prisma/seeds/settings.ts` modified (no
+migration — NFR-4, `compression_resolution` already existed). `web` typechecks at 0 errors,
+`bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs` confirms no
+`en`/`es` drift at 423 keys. `worker` typecheck reports the same 2 pre-existing
+`src/metadata/container-tags.spec.ts` errors noted under `052` above and no others; `bin/npm worker
+run build` exits 0; `bin/npm worker test` runs 244 tests across 22 suites, 241 passing — the 3
+failures are the pre-existing `buildCommand.spec.ts` CRF mismatch plus the stale `ffmpeg/1.json`/
+`2.json` corpus cases in `cases.spec.ts`, both confirmed unrelated and explicitly out of scope for
+this feature (spec § Out of Scope; the corpus predates the rule this feature replaced and is not a
+reference for it).
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

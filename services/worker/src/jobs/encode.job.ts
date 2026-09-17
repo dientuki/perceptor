@@ -15,6 +15,7 @@ import { renderMessage } from '../i18n/messages.en';
 import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED } from '../i18n/error-keys';
 import { EncodeCancelledError, registerEncode, releaseEncode } from '../encode/cancellation';
 import { normalizeContentKind } from '../encode/content-kind';
+import { normalizeCompressionResolution } from '../encode/compression-resolution';
 
 export type EncodeJobDetails = {
   id: number;
@@ -31,6 +32,7 @@ export type EncodeJobDetails = {
   allowedSubtitleLanguagesIso3: string[];
   allowedSubtitleLanguageTags: string[];
   contentKind: string;
+  compressionResolution: string;
   seasonNumber: number | null;
   episodeNumber: number | null;
   episodeTitle: string | null;
@@ -78,7 +80,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags contentKind
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags contentKind compressionResolution
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
         compressionEnabled
@@ -96,8 +98,9 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   // "compressing", which is the safe default and must be visible as such.
   const compressing = details.compressionEnabled !== false;
   const contentKind = normalizeContentKind(details.contentKind);
+  const compressionResolution = normalizeCompressionResolution(details.compressionResolution);
   console.log(
-    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind}`,
+    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution}`,
   );
 
   const trackTitles = await fetchTrackTitles();
@@ -189,6 +192,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
             allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
             contentKind,
+            compressionResolution,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
             trackTitles: trackTitles,
@@ -209,6 +213,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
             allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
             contentKind,
+            compressionResolution,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
             trackTitles: trackTitles,

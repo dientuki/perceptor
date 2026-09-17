@@ -49,7 +49,7 @@ export function buildFfmpegCommand(
     "-nostats",
     "-loglevel",
     "error",
-    ...getVideoParams(vStream, details.contentKind, quality),
+    ...getVideoParams(vStream, details.contentKind, details.compressionResolution, quality),
     ...getAudioParams(
       aStreams,
       details.allowedAudioLanguagesIso3,

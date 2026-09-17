@@ -5,7 +5,7 @@ import { useState } from "react";
 import Radio from "@/components/form/input/Radio";
 import Switch from "@/components/form/switch/Switch";
 
-const RESOLUTIONS = ["4k", "1080p", "720p", "360p"] as const;
+const RESOLUTIONS = ["4k", "1080p", "720p", "480p", "360p"] as const;
 type Resolution = (typeof RESOLUTIONS)[number];
 const DEFAULT_RESOLUTION: Resolution = "1080p";
 

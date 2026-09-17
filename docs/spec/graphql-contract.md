@@ -1663,6 +1663,73 @@ argument as an unquoted `ContentKind!` variable, never a quoted string. `worker`
 mutation and never reports a kind back — the classification and its correction are entirely `api`'s
 and `web`'s.
 
+### `compressionResolution` is the worker's downscale ceiling, a string with a safe default (`058-compression-resolution`)
+
+```graphql
+type EncodeJobDetails {
+  compressionResolution: String!
+}
+```
+
+One field added to an existing type; `compressionEnabled`'s shape and behaviour are unchanged.
+`compression_resolution` already existed as a setting (`044-settings-screen-polish`) and already
+persisted through `updateSettings` — this feature only adds a fifth accepted value (`480p`, between
+`720p` and `360p`) and, for the first time, hands the stored value to the worker.
+
+**Deliberately `String!`, not a GraphQL enum**, unlike `contentKind` above. An enum would turn a
+hand-edited invalid row into a serialization error on the whole `processJob` query, failing an
+encode over a setting that has a perfectly safe fallback. Instead `api` normalizes the value itself
+before it ever reaches the resolver, and `worker` normalizes again defensively on the way in — the
+same belt-and-suspenders posture `contentKind` uses, applied to a field that cannot afford to be an
+enum.
+
+Valid values are exactly `"4k"`, `"1080p"`, `"720p"`, `"480p"`, `"360p"` — lowercase `k`, the stored
+setting values verbatim. `ProcessJobsService.getEncodeJobDetails` resolves
+`compressionResolution` from the same `SettingsService.getMap()` result it already reads
+`compressionEnabled` from — no second settings read — checking the raw value against the catalog and
+substituting `"1080p"` when the row is missing or holds anything else (only reachable by editing the
+database by hand). Resolved **at query time, not when the `ProcessJob` was enqueued** — the same
+timing `compressionEnabled` already uses — so a job enqueued under one resolution and picked up after
+an administrator changed the setting encodes at the new value, including a job requeued by `054`'s
+crash recovery or a BullMQ retry.
+
+**The worker decides everything about scaling and codecs from this one string** — `api` contributes
+nothing beyond handing it over. Every video stream in a recognized codec (`h264`, `hevc`/`h265`,
+`vc1`, `av1`) is re-encoded to AV1; the chosen resolution is a ceiling a source is downscaled to fit
+when it exceeds the box by more than 2% (independently on width and height, measured on ffprobe's
+coded dimensions) and never upscaled to. Stream copy is now a fallback with exactly two triggers: an
+AV1 source that already fits the ceiling, and a codec the worker does not recognize — both previously
+much larger categories (HEVC below 4K, VC-1, everything but H264/VC-1/HEVC-4K) are now encoded. HDR
+colour tags (Dolby Vision/HDR10 `smpte2084`, HLG `arib-std-b67`) are preserved on every AV1 output
+regardless of codec or scaling, and every AV1 encode now carries explicit colour tags, SDR included.
+The full decision table lives in `services/worker/src/ffmpeg/params.ts`, owned by the `ffmpeg` agent
+(`.claude/agents/ffmpeg.md`), not in this contract.
+
+**The worker trusts nothing it reads off the wire, same posture as `contentKind`.**
+`normalizeCompressionResolution()` (`services/worker/src/encode/compression-resolution.ts`) maps an
+absent, `null`, or unrecognised value to `"1080p"` and logs a warning, never throwing — an older
+`api` or a wire skew must never turn a routine encode into a failed job. `passthrough.ts` never reads
+the field at all: with `compressionEnabled` false the file is moved untouched, so there is nothing
+for a ceiling to apply to.
+
+No new error key. Any FFmpeg failure while encoding or scaling goes through the existing
+`encodeFailed` path exactly as today; a failed AV1 encode is not retried as a copy.
+
+| Condition | HTTP / GraphQL error |
+| :-- | :-- |
+| `compression_resolution` row missing or outside the five catalog values | none — resolves to `"1080p"` |
+| `compressionResolution` absent or unrecognised on the worker side | none — defaults to `"1080p"`, logged |
+| `updateSettings` with `compression_resolution` outside the five values (existing, `044`) | `BadRequestException`, `error.setting.expected_enum`, now listing `480p` |
+
+Consumer obligations:
+
+- `worker` retypes `compressionResolution` into its local `EncodeJobDetails` type
+  (`src/jobs/encode.job.ts`) and adds it to the `processJob` selection set; the normalized value rides
+  `EncodeInput` (`src/encode/types.ts`) into `getVideoParams`.
+- `web` does not select `EncodeJobDetails.compressionResolution` at all — it only ever reads and
+  writes the setting through `settings`/`updateSettings`, exactly as it did before this feature, with
+  one more radio option in Settings → Compression.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

@@ -261,6 +261,88 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // REQ-2/REQ-4 (058-compression-resolution): the worker never sees the raw
+  // `compression_resolution` row — it sees whatever this method resolves.
+  // A fallback that leaks an unrecognised or missing value through as-is
+  // produces no error anywhere: the encode still completes, just at the
+  // wrong (or an undefined) target size, discovered only by someone
+  // eyeballing the output file's resolution later.
+  describe('getEncodeJobDetails — compressionResolution', () => {
+    it.each(['4k', '1080p', '720p', '480p', '360p'])(
+      'passes the stored value %s through verbatim',
+      async (resolution) => {
+        prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+        prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+        prisma.userMovie.findMany.mockResolvedValue([]);
+        settings.getMap.mockResolvedValue({
+          path_movies: 'Movies',
+          path_shows: 'Shows',
+          compression_resolution: resolution,
+        });
+
+        const details = await service.getEncodeJobDetails(1);
+
+        expect(details.compressionResolution).toBe(resolution);
+      },
+    );
+
+    it('resolves to 1080p when the compression_resolution row is missing', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.compressionResolution).toBe('1080p');
+    });
+
+    it('resolves to 1080p for an unrecognised value', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        compression_resolution: 'garbage',
+      });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.compressionResolution).toBe('1080p');
+    });
+
+    it('resolves to 1080p when the stored value has the wrong case', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        compression_resolution: '4K',
+      });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.compressionResolution).toBe('1080p');
+    });
+
+    it('is present on the EPISODE branch too', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userShow.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        compression_resolution: '720p',
+      });
+
+      const details = await service.getEncodeJobDetails(2);
+
+      expect(details.compressionResolution).toBe('720p');
+    });
+  });
+
   // REQ-12/REQ-13 (048-shorts-category): a film flagged `isShort` must land
   // under `path_shorts` instead of `path_movies`, but only while the shorts
   // category is *effectively* enabled — a wrong branch here transcodes

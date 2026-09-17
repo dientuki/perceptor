@@ -78,19 +78,43 @@ add the spelling and name the case that forced it.
 ### Video
 
 - **V1.** No video stream is a hard failure: `error.encode.no_video_stream`.
-- **V2.** H264 is transcoded to AV1 at its source resolution.
-- **V3.** HEVC/H265 at 4K (`width ≥ 3800` or `height ≥ 2100`) is downscaled to 1080p. Dolby Vision
-  and HDR10 **preserve** their HDR through the downscale — `-colorspace bt2020nc`,
-  `-color_primaries bt2020`, `-color_trc smpte2084` — rather than flattening to bt709 SDR; the track
-  title reads `Downscaled from 4K …`. 4K SDR is a plain downscale to bt709. No GPU or Vulkan device
-  is involved in any of this — the worker has no tonemap filter and no device probe
-  (`024-retire-gpu-tonemap-strategy`). No case in the corpus currently exercises this branch; the
-  cases that did were retired along with the machinery they were written against (REQ-8 of `024`).
-- **V4.** VC-1 is transcoded to AV1 with explicit bt709 tags.
-- **V5.** Anything else is copied. An HEVC 1080p source is copied, not re-encoded. No case in the
-  corpus currently exercises this — the one that did (`5.json`) was retired (REQ-8 of `024`).
-- **V6.** Non-HEVC 4K is **not** downscaled today: a 4K H264 is transcoded at 4K, a 4K AV1 is copied
-  at 4K. Known and deliberate. Do not change it without the user asking.
+- **V2 (`058-compression-resolution`).** Every recognized codec — `h264`, `hevc`/`h265`, `vc1`,
+  `av1` — is transcoded to AV1, whether or not it is downscaled. The administrator's
+  `compression_resolution` setting (`EncodeJobDetails.compressionResolution`, one of `4k` / `1080p`
+  / `720p` / `480p` / `360p`) names a bounding box the output must fit — `4k` none, `1080p`
+  1920×1080, `720p` 1280×720, `480p` 854×480, `360p` 640×360 — and a source is downscaled only when
+  its width or height exceeds that box by more than 2%, compared independently per dimension against
+  ffprobe's *coded* `width`/`height`. A source at or within tolerance of the box keeps its own
+  resolution; nothing is ever upscaled. The scale filter is
+  `scale=<boxW>:<boxH>:force_original_aspect_ratio=decrease:force_divisible_by=2`. This replaces the
+  old H264/HEVC-4K/VC-1/copy-everything-else split below with one rule parametrized by the box; no
+  GPU or Vulkan device is involved (the worker has no tonemap filter and no device probe,
+  `024-retire-gpu-tonemap-strategy`).
+- **V3 (`058`).** HDR is preserved on **every** codec and every AV1 output, scaled or not — not just
+  the old HEVC-4K path. Dolby Vision and HDR10 write `-color_range tv -colorspace bt2020nc
+  -color_primaries bt2020 -color_trc smpte2084`; HLG writes the same `bt2020nc`/`bt2020` pair but
+  `-color_trc arib-std-b67` — its own form, no longer mislabelled as HDR10's `smpte2084`. SDR now
+  gets explicit `-color_range tv -colorspace bt709 -color_primaries bt709 -color_trc bt709` on
+  **every** AV1 encode, not only VC-1 and 4K SDR as before.
+- **V4 (copy fallback #1, `058`).** An AV1 source that fits its box (V2's tolerance) is stream-copied,
+  never re-encoded — re-encoding AV1 to AV1 only loses quality. An AV1 source that exceeds the box is
+  re-encoded and downscaled like any other recognized codec.
+- **V5 (copy fallback #2, `058`).** A codec outside V2's recognized list is stream-copied at its own
+  resolution, even when it exceeds the box, and the worker logs the codec and, only when the box
+  would have applied, that the ceiling was not applied. It never fails the encode. The copy title
+  stays `Video (Direct Copy)`.
+- **V6 (track title, `058`).** The AV1 track title always starts with plain `AV1`, never a target
+  tier: unscaled it is `AV1 (Converted from <CODEC> <HDR>)` (e.g. `AV1 (Converted from H264 SDR)`);
+  downscaled it is `AV1 (Downscaled from <SOURCE> <CODEC> <HDR>)` (e.g.
+  `AV1 (Downscaled from 4K HEVC DoVi)`), where `<SOURCE>` is the smallest tier box (`360p`…`1080p`,
+  else `4K`) the source fits within tolerance — a label of where it came from, never where it is
+  going. `<CODEC>` is `H264`/`HEVC`/`VC-1`/`AV1`; `<HDR>` is `DoVi`/`HDR10`/`HLG`/`SDR`.
+
+Proven by `src/ffmpeg/params.spec.ts`'s synthetic-stream matrix (every tier × below/at/+2%/+2%+1px
+per dimension, every recognized codec, HDR form, and both title shapes), not by the corpus: the
+corpus (`services/worker/ffmpeg/1.json`, `2.json`) predates `058` and is stale — do not read its
+expectations, run it as a guard for this rule, or update it. Real-file validation of this rule is a
+later, separate pass.
 
 ### Audio
 

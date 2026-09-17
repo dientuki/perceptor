@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildFfmpegCommand } from './buildCommand';
 import { KeyedError } from '../i18n/keyed-error';
 import { CONTENT_KIND_VALUES, type ContentKind } from '../encode/content-kind';
+import type { CompressionResolution } from '../encode/compression-resolution';
 
 const CASES_DIR = join(__dirname, '..', '..', 'ffmpeg');
 
@@ -51,6 +52,7 @@ type CaseInput = {
   allowedSubtitleLanguageTags?: string[];
   originalLanguageIso3: string;
   contentKind: ContentKind;
+  compressionResolution?: CompressionResolution;
   containerTitle: string;
   sourceTag: string;
   trackTitles?: Record<string, string>;
@@ -241,6 +243,7 @@ describe('ffmpeg cases', () => {
       allowedSubtitleLanguageTags: input.allowedSubtitleLanguageTags ?? [],
       originalLanguageIso3: input.originalLanguageIso3,
       contentKind: input.contentKind,
+      compressionResolution: input.compressionResolution ?? '1080p',
       containerTitle: input.containerTitle,
       sourceTag: input.sourceTag,
       trackTitles: input.trackTitles ?? SEEDED_TRACK_TITLES,

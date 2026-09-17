@@ -217,6 +217,25 @@ because an older `api` must never turn a routine encode into a failed job. The r
 never re-derived or re-validated anywhere else in the pipeline; it rides through `EncodeInput`
 unchanged and shows up in the existing `[encode] <id>:` log line alongside the language lists.
 
+## Video downscaling is bounded by `compressionResolution` (`058-compression-resolution`)
+
+`EncodeJobDetails.compressionResolution` (a `String!` on the wire, one of `'4k' | '1080p' | '720p'
+| '480p' | '360p'`) is the installation-wide resolution ceiling — resolved by `api` from the
+`compression_resolution` setting at query time, the same timing as `compressionEnabled`, never
+snapshotted onto the `ProcessJob`. `src/jobs/encode.job.ts` resolves it through
+`normalizeCompressionResolution()` (`src/encode/compression-resolution.ts`) **once**, right beside
+`normalizeContentKind`: an absent, `null` or unrecognised value degrades to `'1080p'` and logs a
+warning, never throws — the same defensive posture as `contentKind`, for the same reason (an older
+`api`, or a hand-edited row, must never turn a routine encode into a failed job). The resolved value
+rides through `EncodeInput` unchanged and shows up in the `[encode] <id>:` log line.
+
+`passthrough.ts` never reads it: with `compressionEnabled === false` the file is moved untouched, so
+the ceiling has nothing to apply to (REQ-16) — the field is still computed and logged in
+`handleEncode`, but only the compression branch's `EncodeInput` literal makes any decision from it.
+What that decision is — which box each tier names, when a source counts as exceeding it, which
+codecs get re-encoded to AV1 versus copied — lives in `src/ffmpeg/params.ts`, owned by the `ffmpeg`
+agent; see the section below.
+
 ## The rules in `src/ffmpeg/` have their own agent and their own corpus
 
 `services/worker/ffmpeg/` — outside `src/`, one JSON per case — holds the **verbatim `ffprobe`
