@@ -41,7 +41,14 @@
       "already_completed": "Este episodio ya está descargado. Confirmá para reemplazar el archivo actual."
     },
     "season": {
-      "already_completed": "Esta temporada ya tiene episodios descargados. Confirmá para reemplazar los archivos actuales."
+      "already_completed": "Esta temporada ya tiene episodios descargados. Confirmá para reemplazar los archivos actuales.",
+      "not_found": "La temporada {id} no existe"
+    },
+    "magnet": {
+      "already_attached": "Ese magnet ya está asociado a «{title}»",
+      "not_a_magnet": "Eso no parece un enlace magnet",
+      "invalid_infohash": "El magnet no tiene un infoHash válido",
+      "v2_unsupported": "Los magnets de BitTorrent v2 todavía no están soportados"
     },
     "indexer": {
       "unavailable": "No se pudo conectar con el indexer",

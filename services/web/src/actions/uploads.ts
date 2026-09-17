@@ -4,7 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { redirectIfUnauthenticated } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { toActionError } from "@/lib/graphql-error";
-import type { AcquisitionTarget } from "@/types/media";
+import type { FileAcquisitionTarget } from "@/types/media";
 
 export interface UploadTicket {
   token: string;
@@ -34,7 +34,7 @@ const CREATE_UPLOAD_TICKET_MUTATION = `
 `;
 
 export async function createUploadTicketAction(
-  target: AcquisitionTarget,
+  target: FileAcquisitionTarget,
   force = false,
 ): Promise<CreateUploadTicketResult> {
   const variables =

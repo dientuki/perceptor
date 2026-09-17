@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
+import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { SourceKind } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
@@ -42,6 +43,20 @@ export class SeasonsService {
       where: { id, show: { users: { some: { userId } } } },
       include: { show: true },
     });
+  }
+
+  // Release elegido desde la búsqueda del indexer — twin of
+  // EpisodesService.addTorrentToEpisode. Resolves the infoHash before ever
+  // reaching attachTorrentSource, so a release the indexer never returned a
+  // hash for (and cannot be resolved from its URLs either) never reaches
+  // qBittorrent and never creates a MediaSource row.
+  async addTorrentToSeason(
+    seasonId: number,
+    input: { infoHash: string | null; urls: string[]; releaseTitle: string | null; force: boolean },
+    userId: string,
+  ) {
+    const infoHash = input.infoHash ?? (await resolveInfoHash(input.urls));
+    return this.attachTorrentSource(seasonId, { kind: 'TORRENT_SEARCH', ...input, infoHash }, userId);
   }
 
   // Magnet pegado a mano por el usuario — mismo flujo que

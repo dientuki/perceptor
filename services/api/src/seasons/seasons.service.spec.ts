@@ -2,6 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SeasonsService } from './seasons.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
+import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
+
+jest.mock('@/clients/indexer/resolve-info-hash');
+const mockResolveInfoHash = resolveInfoHash as jest.MockedFunction<typeof resolveInfoHash>;
 
 // This suite mirrors episodes.service.spec.ts's central concern one relation
 // shallower: a season-pack acquisition is the entry point 013-season-pack-
@@ -75,6 +79,7 @@ describe('SeasonsService', () => {
     }).compile();
 
     service = module.get<SeasonsService>(SeasonsService);
+    mockResolveInfoHash.mockReset();
   });
 
   describe('findOneFromDb', () => {
@@ -95,6 +100,55 @@ describe('SeasonsService', () => {
       prisma.season.findFirst.mockResolvedValue(null);
 
       await expect(service.findOneFromDb(42, 'user-2')).resolves.toBeNull();
+    });
+  });
+
+  describe('addTorrentToSeason', () => {
+    const validInput = {
+      infoHash: 'abc123def456abc123def456abc123def456abc',
+      urls: ['https://indexer.example/download/123'],
+      releaseTitle: 'Reacher S02 1080p',
+      force: false,
+    };
+
+    // AC-4's silent-orphan failure: a search result with no infoHash whose
+    // URL cannot be resolved must reject before ever calling qBittorrent or
+    // writing a MediaSource — otherwise a release nobody could re-derive a
+    // hash for would download and dangle with no way to identify it later.
+    it('propagates a resolveInfoHash failure without calling qbittorrent.add or writing a MediaSource', async () => {
+      mockResolveInfoHash.mockRejectedValue(new Error('No se pudo determinar el infoHash de este release'));
+
+      await expect(
+        service.addTorrentToSeason(42, { ...validInput, infoHash: null }, 'user-1'),
+      ).rejects.toThrow('No se pudo determinar el infoHash de este release');
+
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+      expect(prisma.season.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('creates the source with the supplied infoHash, seasonId and kind TORRENT_SEARCH', async () => {
+      prisma.season.findFirst.mockResolvedValue(season);
+      prisma.mediaSource.findFirst.mockResolvedValue(null); // no active source
+      prisma.mediaSource.findUnique.mockResolvedValue(null); // infoHash unused
+      qbittorrent.add.mockResolvedValue('/downloads/reacher-s02');
+      prisma.mediaSource.create.mockResolvedValue({ id: 100, seasonId: 42 });
+      prisma.season.findUniqueOrThrow.mockResolvedValue({ ...season, episodes: [] });
+
+      await service.addTorrentToSeason(42, validInput, 'user-1');
+
+      // A supplied infoHash must not go through resolution at all.
+      expect(mockResolveInfoHash).not.toHaveBeenCalled();
+
+      expect(prisma.mediaSource.create).toHaveBeenCalledTimes(1);
+      const createData = prisma.mediaSource.create.mock.calls[0][0].data;
+      expect(createData).toMatchObject({
+        kind: 'TORRENT_SEARCH',
+        seasonId: 42,
+        infoHash: validInput.infoHash,
+      });
+      expect(createData).not.toHaveProperty('episodeId');
     });
   });
 

@@ -488,6 +488,9 @@ type Mutation {
   """
   setShowContentKind(showId: Int!, contentKind: ContentKind!): Show!
 
+  """Envía un release elegido a qBittorrent y lo asocia a la temporada"""
+  addTorrentToSeason(seasonId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Season!
+
   """
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la temporada
   """

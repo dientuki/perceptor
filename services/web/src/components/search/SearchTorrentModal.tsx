@@ -2,6 +2,7 @@
 import { Database } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Modal } from "@/components/ui/modal";
+import { buildAcquisitionTargetLabel } from "@/lib/acquisition-target";
 import type { AcquisitionTarget } from "@/types/media";
 import SearchTorrent from "./SearchTorrent";
 
@@ -17,12 +18,12 @@ export default function SearchTorrentModal({
   target,
 }: SearchTorrentModalProps) {
   const t = useTranslations("search.torrentModal");
+  const tSeasonAccordion = useTranslations("shows.seasonAccordion");
   if (!target) return null;
 
-  const titleText =
-    target.kind === "movie"
-      ? target.movie.title
-      : `${target.showTitle} S${String(target.seasonNumber).padStart(2, "0")}E${String(target.episode.episodeNumber).padStart(2, "0")}`;
+  const titleText = buildAcquisitionTargetLabel(target, (seasonNumber) =>
+    tSeasonAccordion("seasonLabel", { number: seasonNumber }),
+  );
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="max-w-[1200px] m-4">

@@ -10,12 +10,19 @@ import Label from "@/components/form/Label";
 import ReplaceWarning from "@/components/import/ReplaceWarning";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
-import type { AcquisitionTarget } from "@/types/media";
+import {
+  buildAcquisitionTargetLabel,
+  isAcquisitionTargetCompleted,
+} from "@/lib/acquisition-target";
+import type { FileAcquisitionTarget } from "@/types/media";
 
 interface ImportFileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  target: AcquisitionTarget | null;
+  // A season target has no upload entry point (REQ-2,
+  // 059-season-pack-acquisition-ui) — the type checker, not a runtime guard,
+  // is what keeps one from reaching this modal.
+  target: FileAcquisitionTarget | null;
 }
 
 type UploadStatus = "idle" | "uploading" | "paused" | "error" | "done";
@@ -87,11 +94,7 @@ export default function ImportFileModal({
 
   const title = t("title");
 
-  const isCompleted =
-    target !== null &&
-    (target.kind === "movie"
-      ? target.movie.status === "COMPLETED"
-      : target.episode.status === "COMPLETED");
+  const isCompleted = target !== null && isAcquisitionTargetCompleted(target);
 
   const reset = () => {
     uploadRef.current = null;
@@ -223,10 +226,9 @@ export default function ImportFileModal({
   const percent =
     progress.total > 0 ? Math.round((progress.sent / progress.total) * 100) : 0;
 
-  const targetLabel =
-    target.kind === "movie"
-      ? target.movie.title
-      : `${target.showTitle} S${String(target.seasonNumber).padStart(2, "0")}E${String(target.episode.episodeNumber).padStart(2, "0")}`;
+  // `target` can never be `{ kind: "season" }` here (`FileAcquisitionTarget`),
+  // so the season-label formatter is never actually invoked.
+  const targetLabel = buildAcquisitionTargetLabel(target, (n) => String(n));
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} className="max-w-[700px] m-4">

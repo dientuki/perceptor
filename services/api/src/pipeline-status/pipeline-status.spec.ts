@@ -1,4 +1,11 @@
-import { deriveSourceStatus, deriveTitleStatus, toMediaStatus, PIPELINE_STATUSES } from './pipeline-status';
+import {
+  deriveSourceStatus,
+  deriveTitleStatus,
+  isLiftedBySeasonPack,
+  toMediaStatus,
+  PIPELINE_STATUSES,
+} from './pipeline-status';
+import { SourceStatus } from '@prisma/client';
 
 // The bug class this defends against: four incompatible status vocabularies collapsing into one
 // derivation, wrong. A wrong status here renders as a confident, plausible word on screen — the
@@ -239,6 +246,51 @@ describe('deriveTitleStatus', () => {
     });
 
     expect(result).toBe('COMPLETED');
+  });
+});
+
+// 059-season-pack-acquisition-ui: this predicate is what lets an aired episode with no
+// MediaSource of its own read QUEUED/DOWNLOADING/etc. while a season pack targeting it is still
+// in flight, and drop back to MISSING once the pack either matches it (SCANNED) or fails
+// (ERROR). Get either exclusion wrong and one of two silent bugs ships: an in-flight pack stops
+// lifting (an aired episode regresses to MISSING mid-download) or a finished/failed pack keeps
+// lifting forever (an episode the pack never matched is stuck showing "in progress" with nothing
+// actually happening for it).
+describe('isLiftedBySeasonPack', () => {
+  const now = new Date('2026-09-16T00:00:00Z');
+  const aired = new Date('2026-09-01T00:00:00Z');
+  const future = new Date('2026-10-01T00:00:00Z');
+
+  const UNSCANNED_STATUSES: SourceStatus[] = ['PENDING', 'QUEUED', 'DOWNLOADING', 'PAUSED', 'READY'];
+
+  for (const status of UNSCANNED_STATUSES) {
+    it(`lifts an aired episode when a season source is ${status}`, () => {
+      expect(isLiftedBySeasonPack([{ status }], aired, now)).toBe(true);
+    });
+  }
+
+  it('does not lift when every season source is SCANNED', () => {
+    expect(isLiftedBySeasonPack([{ status: 'SCANNED' }], aired, now)).toBe(false);
+  });
+
+  it('does not lift when every season source is ERROR', () => {
+    expect(isLiftedBySeasonPack([{ status: 'ERROR' }], aired, now)).toBe(false);
+  });
+
+  it('does not lift when there are no season sources at all', () => {
+    expect(isLiftedBySeasonPack([], aired, now)).toBe(false);
+  });
+
+  it('does not lift an episode whose releaseDate is still in the future', () => {
+    expect(isLiftedBySeasonPack([{ status: 'DOWNLOADING' }], future, now)).toBe(false);
+  });
+
+  it('does not lift an episode with a null releaseDate', () => {
+    expect(isLiftedBySeasonPack([{ status: 'DOWNLOADING' }], null, now)).toBe(false);
+  });
+
+  it('lifts an episode whose releaseDate equals now exactly', () => {
+    expect(isLiftedBySeasonPack([{ status: 'DOWNLOADING' }], now, now)).toBe(true);
   });
 });
 

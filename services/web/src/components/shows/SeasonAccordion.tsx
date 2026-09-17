@@ -7,6 +7,7 @@ import type { Episode, Season } from "@/actions/shows";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
+import SeasonAcquisitionButtons from "@/components/shows/SeasonAcquisitionButtons";
 import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
@@ -97,7 +98,9 @@ export default function SeasonAccordion({
 }) {
   const t = useTranslations("shows.seasonAccordion");
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  const [activeEpisode, setActiveEpisode] = useState<Episode | null>(null);
+  const [activeTarget, setActiveTarget] = useState<AcquisitionTarget | null>(
+    null,
+  );
 
   const {
     isOpen: isFileModalOpen,
@@ -116,48 +119,88 @@ export default function SeasonAccordion({
   } = useModal();
 
   const handleOpenFileModal = (episode: Episode) => {
-    setActiveEpisode(episode);
+    setActiveTarget({
+      kind: "episode",
+      episode,
+      showTitle,
+      seasonNumber: season.seasonNumber,
+      audioMandatory,
+      audioLanguages,
+    });
     openFileModal();
   };
 
   const handleOpenMagnetModal = (episode: Episode) => {
-    setActiveEpisode(episode);
+    setActiveTarget({
+      kind: "episode",
+      episode,
+      showTitle,
+      seasonNumber: season.seasonNumber,
+      audioMandatory,
+      audioLanguages,
+    });
     openMagnetModal();
   };
 
   const handleOpenSearchModal = (episode: Episode) => {
-    setActiveEpisode(episode);
+    setActiveTarget({
+      kind: "episode",
+      episode,
+      showTitle,
+      seasonNumber: season.seasonNumber,
+      audioMandatory,
+      audioLanguages,
+    });
     openSearchModal();
   };
 
-  const target: AcquisitionTarget | null = activeEpisode
-    ? {
-        kind: "episode",
-        episode: activeEpisode,
-        showTitle,
-        seasonNumber: season.seasonNumber,
-        audioMandatory,
-        audioLanguages,
-      }
-    : null;
+  const handleOpenSeasonSearchModal = () => {
+    setActiveTarget({
+      kind: "season",
+      season,
+      showTitle,
+      audioMandatory,
+      audioLanguages,
+    });
+    openSearchModal();
+  };
+
+  const handleOpenSeasonMagnetModal = () => {
+    setActiveTarget({
+      kind: "season",
+      season,
+      showTitle,
+      audioMandatory,
+      audioLanguages,
+    });
+    openMagnetModal();
+  };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        className="flex w-full items-center justify-between px-5 py-4 text-left"
-      >
-        <h4 className="text-base font-semibold text-gray-800 dark:text-white/90">
-          {t("seasonLabel", { number: season.seasonNumber })}
-        </h4>
-        <ChevronDown
-          size={20}
-          className={`text-gray-400 transition-transform ${
-            isOpen ? "rotate-180" : ""
-          }`}
-        />
-      </button>
+      <div className="flex w-full items-center justify-between px-5 py-4">
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          className="flex flex-1 items-center justify-between text-left"
+        >
+          <h4 className="text-base font-semibold text-gray-800 dark:text-white/90">
+            {t("seasonLabel", { number: season.seasonNumber })}
+          </h4>
+          <ChevronDown
+            size={20}
+            className={`text-gray-400 transition-transform ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+        <div className="ml-4">
+          <SeasonAcquisitionButtons
+            onSearch={handleOpenSeasonSearchModal}
+            onMagnet={handleOpenSeasonMagnetModal}
+          />
+        </div>
+      </div>
 
       {isOpen && (
         <div className="overflow-x-auto border-t border-gray-200 dark:border-gray-800">
@@ -200,17 +243,17 @@ export default function SeasonAccordion({
       <ImportFileModal
         isOpen={isFileModalOpen}
         onClose={closeFileModal}
-        target={target}
+        target={activeTarget?.kind === "season" ? null : activeTarget}
       />
       <ImportMagnetModal
         isOpen={isMagnetModalOpen}
         onClose={closeMagnetModal}
-        target={target}
+        target={activeTarget}
       />
       <SearchTorrentModal
         isOpen={isSearchModalOpen}
         onClose={closeSearchModal}
-        target={target}
+        target={activeTarget}
       />
     </div>
   );

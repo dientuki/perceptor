@@ -13,6 +13,22 @@ export class SeasonsResolver {
   constructor(private readonly seasonsService: SeasonsService) {}
 
   @Mutation(() => Season, {
+    name: 'addTorrentToSeason',
+    description: 'Envía un release elegido a qBittorrent y lo asocia a la temporada',
+  })
+  async addTorrentToSeason(
+    @Args('seasonId', { type: () => Int }) seasonId: number,
+    @Args('infoHash', { type: () => String, nullable: true }) infoHash: string | null,
+    @Args('urls', { type: () => [String] }) urls: string[],
+    @Args('releaseTitle', { type: () => String, nullable: true }) releaseTitle: string | null,
+    @Args('force', { type: () => Boolean, nullable: true, defaultValue: false }) force: boolean,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.seasonsService.addTorrentToSeason(seasonId, { infoHash, urls, releaseTitle, force }, userId);
+  }
+
+  @Mutation(() => Season, {
     name: 'addMagnetToSeason',
     description: 'Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la temporada',
   })

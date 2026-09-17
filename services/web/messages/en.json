@@ -41,7 +41,14 @@
       "already_completed": "This episode is already downloaded. Confirm to replace the current file."
     },
     "season": {
-      "already_completed": "This season already has downloaded episodes. Confirm to replace the current files."
+      "already_completed": "This season already has downloaded episodes. Confirm to replace the current files.",
+      "not_found": "Season {id} does not exist"
+    },
+    "magnet": {
+      "already_attached": "That magnet is already attached to «{title}»",
+      "not_a_magnet": "That does not look like a magnet link",
+      "invalid_infohash": "The magnet has no valid infoHash",
+      "v2_unsupported": "BitTorrent v2 magnets are not supported yet"
     },
     "indexer": {
       "unavailable": "Could not reach the indexer",

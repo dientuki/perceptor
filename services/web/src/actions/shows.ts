@@ -238,3 +238,61 @@ export async function addMagnetToEpisodeAction(
 
   return { success: true, ...data!.addMagnetToEpisode };
 }
+
+const ADD_TORRENT_TO_SEASON_MUTATION = `
+  mutation AddTorrentToSeason($seasonId: Int!, $infoHash: String, $urls: [String!]!, $releaseTitle: String, $force: Boolean) {
+    addTorrentToSeason(seasonId: $seasonId, infoHash: $infoHash, urls: $urls, releaseTitle: $releaseTitle, force: $force) {
+      id
+    }
+  }
+`;
+
+export async function addTorrentToSeasonAction(
+  seasonId: number,
+  infoHash: string | null,
+  urls: string[],
+  releaseTitle: string | null,
+  force = false,
+): Promise<AcquisitionResult> {
+  const { data, errors } = await fetchGraphQL<{
+    addTorrentToSeason: { id: number };
+  }>(ADD_TORRENT_TO_SEASON_MUTATION, {
+    seasonId,
+    infoHash,
+    urls,
+    releaseTitle,
+    force,
+  });
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  return { success: true, ...data!.addTorrentToSeason };
+}
+
+const ADD_MAGNET_TO_SEASON_MUTATION = `
+  mutation AddMagnetToSeason($seasonId: Int!, $magnet: String!, $force: Boolean) {
+    addMagnetToSeason(seasonId: $seasonId, magnet: $magnet, force: $force) {
+      id
+    }
+  }
+`;
+
+export async function addMagnetToSeasonAction(
+  seasonId: number,
+  magnet: string,
+  force = false,
+): Promise<AcquisitionResult> {
+  const { data, errors } = await fetchGraphQL<{
+    addMagnetToSeason: { id: number };
+  }>(ADD_MAGNET_TO_SEASON_MUTATION, { seasonId, magnet, force });
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  return { success: true, ...data!.addMagnetToSeason };
+}

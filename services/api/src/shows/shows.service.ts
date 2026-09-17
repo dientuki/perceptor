@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EncodeStatus, MediaStatus, SourceStatus } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -11,7 +12,7 @@ import { MEDIA_TYPE } from '@/types/media';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
-import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
+import { deriveTitleStatus, isLiftedBySeasonPack } from '@/pipeline-status/pipeline-status';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { classifyContentKind } from '@/media/content-kind';
 
@@ -80,6 +81,7 @@ export class ShowsService implements MediaTypeService {
         seasons: {
           orderBy: { seasonNumber: 'asc' },
           include: {
+            mediaSources: { where: { status: { not: 'ERROR' } } },
             episodes: {
               orderBy: { episodeNumber: 'asc' },
               include: { mediaSources: true, processJobs: true },
@@ -92,18 +94,49 @@ export class ShowsService implements MediaTypeService {
 
     return {
       ...show,
-      seasons: show.seasons.map((season) => ({
-        ...season,
-        episodes: season.episodes.map((episode) => ({
+      seasons: this.deriveSeasonEpisodeStatuses(show.seasons),
+    };
+  }
+
+  // Shared by findOneFromDb and setContentKind (059-season-pack-acquisition-ui T003): per
+  // episode, feeds deriveTitleStatus its own sources/jobs plus one extra { status: 'QUEUED' }
+  // source when isLiftedBySeasonPack's predicate holds for the episode's season — an unscanned
+  // season-pack source in flight for an already-aired episode must not leave it reading MISSING
+  // just because no MediaSource targets the episode directly. `now` is computed once per call,
+  // not once per episode, so a slow request can't have some episodes lifted against an earlier
+  // instant than others. Never writes Episode.status anywhere.
+  private deriveSeasonEpisodeStatuses<
+    TSeason extends {
+      mediaSources: { status: SourceStatus }[];
+      episodes: {
+        status: MediaStatus;
+        releaseDate: Date | null;
+        mediaSources: { status: SourceStatus }[];
+        processJobs: { status: EncodeStatus }[];
+      }[];
+    },
+  >(seasons: TSeason[]) {
+    const now = new Date();
+    return seasons.map((season) => ({
+      ...season,
+      episodes: season.episodes.map((episode) => {
+        const lifted = isLiftedBySeasonPack(
+          season.mediaSources,
+          episode.releaseDate,
+          now,
+        );
+        return {
           ...episode,
           status: deriveTitleStatus({
             status: episode.status,
-            sources: episode.mediaSources,
+            sources: lifted
+              ? [...episode.mediaSources, { status: 'QUEUED' as const }]
+              : episode.mediaSources,
             jobs: episode.processJobs,
           }),
-        })),
-      })),
-    };
+        };
+      }),
+    }));
   }
 
   // Única definición de la clave de cache, compartida por el write de la búsqueda
@@ -321,6 +354,7 @@ export class ShowsService implements MediaTypeService {
         seasons: {
           orderBy: { seasonNumber: 'asc' },
           include: {
+            mediaSources: { where: { status: { not: 'ERROR' } } },
             episodes: {
               orderBy: { episodeNumber: 'asc' },
               include: { mediaSources: true, processJobs: true },
@@ -332,17 +366,7 @@ export class ShowsService implements MediaTypeService {
 
     return {
       ...show,
-      seasons: show.seasons.map((season) => ({
-        ...season,
-        episodes: season.episodes.map((episode) => ({
-          ...episode,
-          status: deriveTitleStatus({
-            status: episode.status,
-            sources: episode.mediaSources,
-            jobs: episode.processJobs,
-          }),
-        })),
-      })),
+      seasons: this.deriveSeasonEpisodeStatuses(show.seasons),
     };
   }
 

@@ -5,11 +5,18 @@ import { useTranslations } from "next-intl";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { importMagnetAction } from "@/actions/imports";
-import { addMagnetToEpisodeAction } from "@/actions/shows";
+import {
+  addMagnetToEpisodeAction,
+  addMagnetToSeasonAction,
+} from "@/actions/shows";
 import Label from "@/components/form/Label";
 import ReplaceWarning from "@/components/import/ReplaceWarning";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
+import {
+  buildAcquisitionTargetLabel,
+  isAcquisitionTargetCompleted,
+} from "@/lib/acquisition-target";
 import type { AcquisitionResult, AcquisitionTarget } from "@/types/media";
 
 interface ImportMagnetModalProps {
@@ -33,17 +40,14 @@ export default function ImportMagnetModal({
   target,
 }: ImportMagnetModalProps) {
   const t = useTranslations("import.magnet");
+  const tSeasonAccordion = useTranslations("shows.seasonAccordion");
   const [magnet, setMagnet] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const router = useRouter();
 
-  const isCompleted =
-    target !== null &&
-    (target.kind === "movie"
-      ? target.movie.status === "COMPLETED"
-      : target.episode.status === "COMPLETED");
+  const isCompleted = target !== null && isAcquisitionTargetCompleted(target);
 
   // Limpiar todo cuando cambia el target o se reabre el modal. A COMPLETED
   // target starts with the warning already shown and force already implied
@@ -67,9 +71,15 @@ export default function ImportMagnetModal({
     let result: AcquisitionResult;
     if (target.kind === "movie") {
       result = await importMagnetAction(Number(target.movie.id), magnet, force);
-    } else {
+    } else if (target.kind === "episode") {
       result = await addMagnetToEpisodeAction(
         Number(target.episode.id),
+        magnet,
+        force,
+      );
+    } else {
+      result = await addMagnetToSeasonAction(
+        Number(target.season.id),
         magnet,
         force,
       );
@@ -93,10 +103,9 @@ export default function ImportMagnetModal({
 
   if (!target) return null;
 
-  const targetLabel =
-    target.kind === "movie"
-      ? target.movie.title
-      : `${target.showTitle} S${String(target.seasonNumber).padStart(2, "0")}E${String(target.episode.episodeNumber).padStart(2, "0")}`;
+  const targetLabel = buildAcquisitionTargetLabel(target, (seasonNumber) =>
+    tSeasonAccordion("seasonLabel", { number: seasonNumber }),
+  );
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="max-w-[700px] m-4">

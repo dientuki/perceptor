@@ -215,6 +215,21 @@ describe('ShowsService', () => {
       });
     });
 
+    // 059-season-pack-acquisition-ui T003: dropping this filter would let a
+    // demoted (ERROR) season-pack source keep counting toward the lift
+    // forever — deriveSeasonEpisodeStatuses would have no way to tell a
+    // superseded pack from a live one, since it never sees the raw column.
+    it("filters the season's mediaSources include to non-ERROR", async () => {
+      prisma.show.findFirst.mockResolvedValue({ id: 7, title: 'Mine', seasons: [] });
+
+      await service.findOneFromDb(7, 'user-1');
+
+      const [args] = prisma.show.findFirst.mock.calls[0];
+      expect(args.include.seasons.include.mediaSources).toEqual({
+        where: { status: { not: 'ERROR' } },
+      });
+    });
+
     // AC-1 / 043-pipeline-status-normalization: this is the reported
     // Daredevil bug — an episode whose stored MediaStatus is still
     // DOWNLOADING (nothing writes it back to COMPLETED) but whose
@@ -229,11 +244,13 @@ describe('ShowsService', () => {
           {
             id: 1,
             seasonNumber: 1,
+            mediaSources: [],
             episodes: [
               {
                 id: 101,
                 episodeNumber: 1,
                 status: 'DOWNLOADING',
+                releaseDate: null,
                 mediaSources: [{ status: 'SCANNED' }],
                 processJobs: [{ status: 'COMPLETED' }],
               },
@@ -245,6 +262,119 @@ describe('ShowsService', () => {
       const result = await service.findOneFromDb(7, 'user-1');
 
       expect(result?.seasons[0].episodes[0].status).toBe('COMPLETED');
+    });
+
+    // 059-season-pack-acquisition-ui T003 / AC-7-AC-8: the season-pack lift.
+    // These defend against the silent failure the plan calls out — an
+    // unscanned pack that stops lifting mid-flight regresses an aired
+    // episode to MISSING with nothing wrong reported anywhere, and a
+    // SCANNED/ERROR pack that keeps lifting forever hides an unmatched
+    // episode as permanently "queued".
+    describe('season-pack lift', () => {
+      const baseEpisode: {
+        id: number;
+        episodeNumber: number;
+        status: 'MISSING' | 'COMPLETED' | 'ERROR';
+        releaseDate: Date | null;
+        mediaSources: { status: string }[];
+        processJobs: { status: string }[];
+      } = {
+        id: 101,
+        episodeNumber: 1,
+        status: 'MISSING',
+        releaseDate: null,
+        mediaSources: [],
+        processJobs: [],
+      };
+
+      function showWith(season: {
+        mediaSources: { status: string }[];
+        episodes: typeof baseEpisode[];
+      }) {
+        return {
+          id: 7,
+          title: 'Mine',
+          seasons: [{ id: 1, seasonNumber: 1, ...season }],
+        };
+      }
+
+      it('lifts an aired MISSING episode to QUEUED under a DOWNLOADING season source', async () => {
+        prisma.show.findFirst.mockResolvedValue(
+          showWith({
+            mediaSources: [{ status: 'DOWNLOADING' }],
+            episodes: [{ ...baseEpisode, releaseDate: new Date('2020-01-01') }],
+          }),
+        );
+
+        const result = await service.findOneFromDb(7, 'user-1');
+
+        expect(result?.seasons[0].episodes[0].status).toBe('QUEUED');
+      });
+
+      it('does not lift a future-dated episode', async () => {
+        const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        prisma.show.findFirst.mockResolvedValue(
+          showWith({
+            mediaSources: [{ status: 'DOWNLOADING' }],
+            episodes: [{ ...baseEpisode, releaseDate: future }],
+          }),
+        );
+
+        const result = await service.findOneFromDb(7, 'user-1');
+
+        expect(result?.seasons[0].episodes[0].status).toBe('MISSING');
+      });
+
+      it('leaves an already-COMPLETED episode COMPLETED under a lifting season source', async () => {
+        prisma.show.findFirst.mockResolvedValue(
+          showWith({
+            mediaSources: [{ status: 'DOWNLOADING' }],
+            episodes: [
+              {
+                ...baseEpisode,
+                status: 'COMPLETED' as const,
+                releaseDate: new Date('2020-01-01'),
+              },
+            ],
+          }),
+        );
+
+        const result = await service.findOneFromDb(7, 'user-1');
+
+        expect(result?.seasons[0].episodes[0].status).toBe('COMPLETED');
+      });
+
+      it('leaves a stored ERROR episode ERROR under a lifting season source', async () => {
+        prisma.show.findFirst.mockResolvedValue(
+          showWith({
+            mediaSources: [{ status: 'DOWNLOADING' }],
+            episodes: [
+              {
+                ...baseEpisode,
+                status: 'ERROR' as const,
+                releaseDate: new Date('2020-01-01'),
+              },
+            ],
+          }),
+        );
+
+        const result = await service.findOneFromDb(7, 'user-1');
+
+        expect(result?.seasons[0].episodes[0].status).toBe('ERROR');
+      });
+
+      it('does not lift from a SCANNED season source', async () => {
+        prisma.show.findFirst.mockResolvedValue(
+          showWith({
+            mediaSources: [{ status: 'SCANNED' }],
+            episodes: [{ ...baseEpisode, releaseDate: new Date('2020-01-01') }],
+          }),
+        );
+
+        const result = await service.findOneFromDb(7, 'user-1');
+
+        expect(result?.seasons[0].episodes[0].status).toBe('MISSING');
+      });
     });
   });
 

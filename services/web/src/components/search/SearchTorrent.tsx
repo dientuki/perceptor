@@ -9,9 +9,16 @@ import {
   searchTorrentsAction,
 } from "@/actions/indexer";
 import { getPreferences } from "@/actions/preferences";
-import { addTorrentToEpisodeAction } from "@/actions/shows";
+import {
+  addTorrentToEpisodeAction,
+  addTorrentToSeasonAction,
+} from "@/actions/shows";
 import ReplaceWarning from "@/components/import/ReplaceWarning";
 import Button from "@/components/ui/button/Button";
+import {
+  buildAcquisitionTargetLabel,
+  isAcquisitionTargetCompleted,
+} from "@/lib/acquisition-target";
 import type {
   LanguageRequirement,
   RankedTorrentResult,
@@ -37,6 +44,7 @@ const ALREADY_COMPLETED_KEYS = [
 
 export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   const t = useTranslations("search.torrent");
+  const tSeasonAccordion = useTranslations("shows.seasonAccordion");
 
   const formatBytes = (bytes: number | null) => {
     if (bytes === null) return "N/A";
@@ -72,7 +80,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
 
     if (target.kind === "movie") {
       setQuery(target.movie.title);
-    } else {
+    } else if (target.kind === "episode") {
       // Limpiar caracteres raros del nombre de la serie
       const cleanShowTitle = (target.showTitle || "")
         .replace(/[^a-zA-Z0-9 ]/g, "")
@@ -82,6 +90,15 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
       const s = String(target.seasonNumber ?? 0).padStart(2, "0");
       const e = String(target.episode.episodeNumber ?? 0).padStart(2, "0");
       setQuery(`${cleanShowTitle} S${s}E${e}`.trim());
+    } else {
+      // "season" — same title cleaning as the episode branch, no episode token.
+      const cleanShowTitle = (target.showTitle || "")
+        .replace(/[^a-zA-Z0-9 ]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const s = String(target.season.seasonNumber ?? 0).padStart(2, "0");
+      setQuery(`${cleanShowTitle} S${s}`.trim());
     }
   }, [target]);
 
@@ -158,16 +175,12 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     }
   };
 
-  const isCompleted =
-    target !== null &&
-    (target.kind === "movie"
-      ? target.movie.status === "COMPLETED"
-      : target.episode.status === "COMPLETED");
+  const isCompleted = target !== null && isAcquisitionTargetCompleted(target);
 
   const targetLabel = target
-    ? target.kind === "movie"
-      ? target.movie.title
-      : `${target.showTitle} S${String(target.seasonNumber).padStart(2, "0")}E${String(target.episode.episodeNumber).padStart(2, "0")}`
+    ? buildAcquisitionTargetLabel(target, (seasonNumber) =>
+        tSeasonAccordion("seasonLabel", { number: seasonNumber }),
+      )
     : "";
 
   const submitTorrent = async (
@@ -189,8 +202,17 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
         force,
       );
     }
-    return await addTorrentToEpisodeAction(
-      Number(target.episode.id),
+    if (target.kind === "episode") {
+      return await addTorrentToEpisodeAction(
+        Number(target.episode.id),
+        res.infoHash,
+        urls,
+        res.title,
+        force,
+      );
+    }
+    return await addTorrentToSeasonAction(
+      Number(target.season.id),
       res.infoHash,
       urls,
       res.title,

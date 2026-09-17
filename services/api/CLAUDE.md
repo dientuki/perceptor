@@ -271,10 +271,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   episode-owned hash falls through and gets silently re-pointed at a film. Reuses
   `shows/entities/episode.entity.ts` rather than declaring a second `Episode`.
 - **`seasons/`** — the **third** structural twin of `attachTorrentSource`, same deliberate
-  non-abstraction. Exactly one mutation, `addMagnetToSeason(seasonId, magnet, force)`, scoped through
+  non-abstraction. Two mutations as of `059-season-pack-acquisition-ui` —
+  `addMagnetToSeason(seasonId, magnet, force)` and `addTorrentToSeason(seasonId, infoHash, urls,
+  releaseTitle, force)` (twin of `EpisodesService.addTorrentToEpisode`: resolves a null `infoHash`
+  via `resolveInfoHash` before calling the same private `attachTorrentSource`) — both scoped through
   `season.show.users`, with a season-scoped conflict on `MediaSource.seasonId` and the same
-  demote-on-`force` ordering (qBittorrent accepts the magnet first, *then* the previous source is
-  demoted, *then* the replacement is created). No web UI by design. Its final read is a
+  demote-on-`force` ordering (qBittorrent accepts the release first, *then* the previous source is
+  demoted, *then* the replacement is created). `web` has a UI for both since `059` — see
+  `services/web/CLAUDE.md`'s `AcquisitionTarget` section. Its final read is a
   `season.findUniqueOrThrow` that **must `include` the episodes** — `Season.episodes` is non-null, so
   a bare row fails the mutation *after* qBittorrent already accepted the torrent, orphaning the
   download with no `MediaSource` tracking it.
@@ -298,6 +302,16 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `COMPLETED`/`ERROR`) is a read-time projection over `SourceStatus`/`EncodeStatus`/`MediaStatus`,
   which stay exactly as they were. `MediaSource.status` itself is **not** routed through this
   module — it stays the raw `SourceStatus` column, since the worker reads it.
+  Since `059-season-pack-acquisition-ui`, it also exports `isLiftedBySeasonPack(sources,
+  releaseDate, now)`: true iff some season source is neither `ERROR` nor `SCANNED` and the episode's
+  `releaseDate` is non-null and not after `now`. `ShowsService` (below) is the only caller, feeding
+  `deriveTitleStatus` one extra synthetic `{ status: 'QUEUED' }` source when it holds — never a
+  stored write, so a scanned or deleted pack stops lifting with no un-write anywhere. `now` is a
+  parameter rather than read internally, keeping the function pure and testable without fake timers.
+  `ShowsService.findOneFromDb` and `setContentKind` both build the `show → seasons → episodes`
+  include (the season level now also selects `mediaSources: { where: { status: { not: 'ERROR' } } }`)
+  and share one private method for the lift, so the two readers cannot drift — `setContentKind`
+  reclassifying a title never returns episodes without the projection the detail page just showed.
 - **`downloads/`** — `torrentCompleted`, called by qBittorrent's AutoRun hook. Matches **exclusively
   by infoHash** and silently ignores unknown hashes by design. An episode-owned source moves its
   `Episode` to `ENCODING` just as a movie-owned one does; a source already `ERROR` (superseded by a

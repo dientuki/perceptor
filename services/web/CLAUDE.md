@@ -325,6 +325,17 @@ buttons — a series has none at that level), then one `SeasonAccordion.tsx` per
 Each episode row carries the same three buttons `Movie.tsx` uses (buscar / importar archivo / añadir
 torrent).
 
+**Since `059-season-pack-acquisition-ui`, each season header carries its own three acquisition
+buttons beside "Temporada N"** — `src/components/shows/SeasonAcquisitionButtons.tsx`, a single
+exported component (search, a **disabled** import-file with no handler at all, magnet — same icons,
+sizes and title keys as `EpisodeRow`'s), rendered as a flex sibling of the toggle `<button>`, never
+nested inside it — nesting would make a click on any of the three bubble into the toggle and
+expand/collapse the accordion. `SeasonAccordion.tsx` builds the season target
+(`{ kind: "season", season, showTitle, audioMandatory, audioLanguages }`) the same way it already
+built an episode one, and feeds it to the same `SearchTorrentModal`/`ImportMagnetModal` instances —
+no second set of modals. No other component was added to this file, which already carries
+`EpisodeRow` as a known "one renderable component per file" exception (see that section below).
+
 Since `057-content-kind-classification`, both pages also render
 `src/components/media/ContentKindSelect.tsx` — a controlled `<select>` (built on
 `src/components/form/Select.tsx`, options ordered from `src/types/media.ts`'s `CONTENT_KINDS`) that
@@ -386,18 +397,37 @@ take a single `target: AcquisitionTarget | null` prop:
 ```ts
 export type AcquisitionTarget =
   | { kind: "movie"; movie: Movie }
-  | { kind: "episode"; episode: Episode; showTitle: string; seasonNumber: number };
+  | { kind: "episode"; episode: Episode; showTitle: string; seasonNumber: number;
+      audioMandatory: boolean; audioLanguages: Language[] }
+  | { kind: "season"; season: Season; showTitle: string;
+      audioMandatory: boolean; audioLanguages: Language[] };
 ```
 
 (`src/types/media.ts`.) This makes illegal states unrepresentable: the old `item`/`mediaType` pair
 could disagree — an episode paired with `MEDIA_TYPE.MOVIE` — which is exactly how an episode id
 reached a film mutation's `movieId` argument with no compile error. Each caller builds a `target`
-locally (`Movie.tsx` for a film, `SeasonAccordion.tsx` for an episode, setting `activeEpisode`
-**before** opening a modal — all three modals early-return `null` on a null target). Follow this for
-any new acquisition entry point rather than reintroducing a bare id/type pair.
+locally (`Movie.tsx` for a film, `SeasonAccordion.tsx` for an episode or a season, setting
+`activeTarget` **before** opening a modal — all three modals early-return `null` on a null target).
+Follow this for any new acquisition entry point rather than reintroducing a bare id/type pair.
 
 `Episode` is a single type, re-exported from `src/actions/shows.ts`. Import it from there, never
 redeclare it.
+
+**The `"season"` branch, `FileAcquisitionTarget`, and `src/lib/acquisition-target.ts`
+(`059-season-pack-acquisition-ui`).** A season has no upload entry point (REQ-2 — importing a whole
+season is a different upload shape, deferred to its own spec), so `importFileModal.tsx` and
+`createUploadTicketAction` (`src/actions/uploads.ts`) take `FileAcquisitionTarget =
+Exclude<AcquisitionTarget, { kind: "season" }>` instead of the full union — a season target reaching
+`movieId: undefined, episodeId: undefined` is a type error, not a runtime guard.
+`src/lib/acquisition-target.ts` holds the two helpers that used to be a three-way ternary copied
+across `SearchTorrent.tsx`/`SearchTorrentModal.tsx`/`importMagnetModal.tsx`/`importFileModal.tsx`:
+`isAcquisitionTargetCompleted(target)` (film/episode `status === "COMPLETED"`, season `some episode
+COMPLETED`) and a label builder taking a season-label formatter as an argument, since `src/lib`
+cannot call `useTranslations`. Both `switch` exhaustively on `kind` with no `default`, so a fourth
+kind fails to compile rather than silently falling through. `AcquisitionResult`'s success branch is
+`{ success: true }` with no payload — `addTorrentToSeason`/`addMagnetToSeason` return a `Season`,
+which has no `status`, and every caller already refreshes the page rather than reading `id`/`status`
+off a success.
 
 ## Torrent ranking heuristic (`036-torrent-ranking-heuristic`)
 

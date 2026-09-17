@@ -202,6 +202,31 @@ export function toMediaStatus(status: PipelineStatus): MediaStatus {
   }
 }
 
+/**
+ * Season-pack lift (`059-season-pack-acquisition-ui`): whether an episode still stored as
+ * `MISSING`/etc. should read at least `QUEUED` because an unscanned season-pack source is in
+ * flight for its season and the episode has already aired. A pack source is deliberately kept
+ * lifting until it reaches `SCANNED` (matched) or `ERROR` (failed) — dropping either exclusion
+ * would either stop lifting a still-downloading pack (an aired episode regresses to `MISSING`
+ * mid-flight) or keep lifting forever after the pack finishes (an episode the pack never matched
+ * never falls back to `MISSING`). An unaired episode is never lifted, regardless of the pack's
+ * state — the pack cannot contain content for an episode that hasn't aired yet.
+ */
+export type SeasonPackLiftSource = {
+  status: SourceStatus;
+};
+
+export function isLiftedBySeasonPack(
+  sources: SeasonPackLiftSource[],
+  releaseDate: Date | null,
+  now: Date,
+): boolean {
+  if (releaseDate === null || releaseDate > now) {
+    return false;
+  }
+  return sources.some((source) => source.status !== 'ERROR' && source.status !== 'SCANNED');
+}
+
 export type TitleAltitudeSource = {
   status: SourceStatus;
 };

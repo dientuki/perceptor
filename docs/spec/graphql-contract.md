@@ -715,8 +715,8 @@ qBittorrent, not touch its files.
 **`addMagnetToSeason`** is the minimal trigger this feature needed to create a season-scoped
 `MediaSource` at all — nothing else does, and without it the fan-out above would have been
 untestable without hand-written SQL (Constitution Article III forbids that as more than
-inspection). It has no web UI by design (`spec.md` § Out of Scope); a season-request screen is a
-later feature. `Season` itself gains no new field — its active-source conflict is resolved
+inspection). Its web UI followed later, in `059-season-pack-acquisition-ui`. `Season` itself gains
+no new field — its active-source conflict is resolved
 server-side in `SeasonsService.attachTorrentSource`, scoped by `MediaSource.seasonId` the same way
 `EpisodesService.attachTorrentSource` is scoped by `episodeId`.
 
@@ -725,8 +725,9 @@ Consumer obligations: `worker` adds `seasonId` to the `mediaSource(id)` query an
 with `isVideo` on every file, and reads all four fields of `encodeCompleted`'s result in
 `encode.job.ts` — reading a missing field as `false` (silently skipping a deletion) or as `true`
 (silently deleting something live) is exactly the bug this document exists to prevent, so a missing
-field there is a hard `console.error` and cleanup is skipped entirely, never guessed. `web` has no
-obligation; it queries neither `sourceScanned`, `encodeCompleted`, nor `addMagnetToSeason`.
+field there is a hard `console.error` and cleanup is skipped entirely, never guessed. `web` had no
+obligation as of this feature — it queried none of `sourceScanned`, `encodeCompleted`, or
+`addMagnetToSeason`; `059-season-pack-acquisition-ui` below is what gives it its first caller.
 
 ### UI internationalization (`018-ui-i18n`)
 
@@ -1729,6 +1730,51 @@ Consumer obligations:
 - `web` does not select `EncodeJobDetails.compressionResolution` at all — it only ever reads and
   writes the setting through `settings`/`updateSettings`, exactly as it did before this feature, with
   one more radio option in Settings → Compression.
+
+### A season pack reaches the web, and its episodes read `QUEUED` while it's in flight (`059-season-pack-acquisition-ui`)
+
+```graphql
+type Mutation {
+  """Envía un release elegido a qBittorrent y lo asocia a la temporada"""
+  addTorrentToSeason(seasonId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Season!
+}
+```
+
+`addTorrentToSeason` is the season twin of `addTorrentToEpisode`: the same lazy `infoHash`
+resolution (`resolveInfoHash` when the row supplied none), the same conflict/`force`/demotion rules
+and qBittorrent tagging that `addMagnetToSeason` already applies, via the existing private
+`SeasonsService.attachTorrentSource` — unchanged. `Season` gains no field; `web` selects only `id`
+and refreshes the page rather than patching state from the response.
+
+`013-season-pack-processing`'s `addMagnetToSeason` gets its first consumer here — `web`'s season
+accordion header now has search, import-file (rendered disabled — a season file import is a
+different upload shape and stays out of scope) and magnet buttons, wired the same way an episode
+row's three buttons already are.
+
+**`Episode.status` can now read `QUEUED` for an episode with no source or job of its own.** This is
+a read-time projection, never a stored value: `ShowsService` feeds `deriveTitleStatus`
+(`043-pipeline-status-normalization`) one extra synthetic `{ status: 'QUEUED' }` source, computed by
+`isLiftedBySeasonPack` (`src/pipeline-status/pipeline-status.ts`), whenever the episode's season has
+a non-`ERROR`, not-yet-`SCANNED` `MediaSource` and the episode's own `releaseDate` is non-null and
+not after now. A future or null `releaseDate` is never lifted; a stored `ERROR` still wins only from
+the column, unaffected by the lift; an episode already `DOWNLOADING`/`ENCODING`/`COMPLETED` through
+its own rows is never lowered — `deriveTitleStatus`'s existing max-ladder absorbs all of this
+unmodified. Nothing is written: once the season's source is `SCANNED` (or deleted, or `ERROR`), the
+lift stops and each episode reads only its own sources and jobs again, which is what makes deleting
+an in-flight pack (`047-source-deletion`) undo the lift with no un-write anywhere. `web` already
+renders every pipeline status through `StatusBadge`, so no consumer change follows from the new
+value alone.
+
+No new error key — every refusal from `addTorrentToSeason` (and, now that it has a `web` caller,
+`addMagnetToSeason`) surfaces through keys that already existed: `error.season.not_found` (`{ id }`,
+newly translated in `web`), `error.season.already_completed`, `error.magnet.already_attached`
+(`{ title }`), `error.magnet.not_a_magnet` / `invalid_infohash` / `v2_unsupported`,
+`error.download.torrent_client_rejected`, and `addTorrentToSeason`-only `error.indexer.no_infohash`.
+
+Consumer obligations: `web` sends `infoHash` as `string | null` with no `?? ''` coercion, exactly
+like the episode twin; on `error.season.already_completed` it switches to the replace flow and
+resends with `force: true`, the same pattern `error.episode.already_completed` already has. `worker`
+has no obligation — it calls neither mutation and reads no episode status.
 
 ### The one non-GraphQL route
 
