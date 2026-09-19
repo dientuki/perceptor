@@ -171,7 +171,7 @@ None.
 - [ ] **AC-9**: On `/movies/<id>` (a film and a short) the panel appears inside the detail card, above
       the torrent search; on `/shows/<id>` it appears inside the detail card, above the first season
       accordion.
-- [ ] **AC-10**: `bin/npm api run test` passes, including the NFR-5 ordering test;
+- [x] **AC-10**: `bin/npm api run test` passes, including the NFR-5 ordering test;
       `git status --short services/api/prisma` is empty; `bin/cli web node scripts/check-messages.mjs`
       reports no drift; `bin/npm web run build` exits 0.
 

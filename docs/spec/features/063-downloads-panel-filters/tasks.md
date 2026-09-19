@@ -87,7 +87,10 @@ field and can start immediately. T004 consumes `seasonNumber` and the new error 
       tests, `prisma/` untouched, `schema.gql` diff, web typecheck, build, `check-messages.mjs`)
       for AC-10. Record any failure in § Blocked rather than fixing across services. → T002, T003, T005, T006
       *Done when:* every AC has an observed result written next to it in this task's notes.
-- [ ] **T008** `[docs]` Update `docs/spec/graphql-contract.md`'s `Download` block (`seasonNumber`,
+      *Status:* AC-10 verified by the orchestrator (api 609/609, tsc 0, prisma untouched, schema.gql
+      diff = `seasonNumber`, check-messages OK at 446 keys, web build exit 0). AC-1 to AC-9 are
+      **pending manual validation by the user** in the running stack.
+- [x] **T008** `[docs]` Update `docs/spec/graphql-contract.md`'s `Download` block (`seasonNumber`,
       season `label` now `"Reacher S03"`, last-activity order) and add the
       `error.magnet.already_attached_season` key where the magnet errors are listed; update the root
       `CLAUDE.md` "Browse library"/"Download" pipeline row with a `063` note and a Current-state entry
