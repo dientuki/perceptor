@@ -29,7 +29,7 @@ ensure_env_var() {
 
 generate_env=true
 if [ -f .env ]; then
-  read -rp ".env ya existe. ¿Regenerarlo desde .env.example? [y/N] " overwrite
+  read -rp ".env already exists. Regenerate it from .env.example? [y/N] " overwrite
   case "$overwrite" in
     [yY]*) ;;
     *) generate_env=false ;;
@@ -39,15 +39,15 @@ fi
 if [ "$generate_env" = true ]; then
   cp .env.example .env
 
-  read -rp "¿Usar Traefik para rutear por dominio? [y/N] " use_traefik
+  read -rp "Use Traefik to route by domain? [y/N] " use_traefik
   case "$use_traefik" in
     [yY]*)
-      read -rp "Dominio a usar (ej: perceptor.local): " domain
+      read -rp "Domain to use (e.g. perceptor.local): " domain
       set_env_var USE_TRAEFIK true
       set_env_var DOMAIN "${domain}"
       set_env_var PUBLIC_UPLOAD_URL "http://api.${domain}/uploads"
       echo
-      echo "Listo. Agregá esto a /etc/hosts para que resuelva:"
+      echo "Done. Add this to /etc/hosts so it resolves:"
       echo "  127.0.0.1  ${domain} api.${domain} torrent.${domain} indexer.${domain}"
       ;;
     *)
@@ -65,25 +65,25 @@ if [ "$generate_env" = true ]; then
       host_ip="${host_ip:-localhost}"
       set_env_var PUBLIC_UPLOAD_URL "http://${host_ip}:${api_port}/uploads"
       echo
-      echo "Traefik desactivado. Vas a acceder a cada servicio por su puerto en localhost"
+      echo "Traefik disabled. You will reach each service on its own localhost port"
       echo "(WEB_PORT, API_PORT, INDEXER_PORT, QBITTORRENT_WEBUI_PORT)."
-      echo "PUBLIC_UPLOAD_URL quedó en http://${host_ip}:${api_port}/uploads. Si vas a subir"
-      echo "archivos desde otra PC o celular de la red y esa no es la IP correcta, corregila"
-      echo "a mano en .env."
+      echo "PUBLIC_UPLOAD_URL is set to http://${host_ip}:${api_port}/uploads. If you will upload"
+      echo "files from another computer or phone on the network and that is not the right IP, fix it"
+      echo "by hand in .env."
       ;;
   esac
 
-  read -rp "Ingrese la carpeta de descargas [./data/downloads]: " downloads_dir
+  read -rp "Enter the downloads folder [./data/downloads]: " downloads_dir
   set_env_var HOST_DOWNLOADS_DIR "${downloads_dir:-./data/downloads}"
 
-  read -rp "Ingrese la carpeta de tu media server [./data/library]: " destinations_dir
+  read -rp "Enter your media server folder [./data/library]: " destinations_dir
   set_env_var HOST_DESTINATIONS_DIR "${destinations_dir:-./data/library}"
 
   echo
-  echo ".env creado a partir de .env.example — completá el resto de las variables (puertos,"
-  echo "credenciales, rutas de descarga) antes de seguir si los defaults no te sirven."
+  echo ".env created from .env.example — fill in the remaining variables (ports,"
+  echo "credentials, download paths) before continuing if the defaults do not suit you."
 else
-  echo "Uso el .env existente."
+  echo "Using the existing .env."
 fi
 
 # JWT_SECRET tiene que existir ANTES de levantar api más abajo: sin él,
@@ -94,13 +94,13 @@ fi
 # puesto a mano en un .env reusado.
 current_jwt_secret=$(grep '^JWT_SECRET=' .env 2>/dev/null | cut -d= -f2-)
 if [ -z "$current_jwt_secret" ]; then
-  echo "Generando JWT_SECRET..."
+  echo "Generating JWT_SECRET..."
   ensure_env_var JWT_SECRET "$(openssl rand -hex 32)"
 fi
 
 current_indexer_api_key=$(grep '^INDEXER_API_KEY=' .env 2>/dev/null | cut -d= -f2-)
 if [ -z "$current_indexer_api_key" ]; then
-  echo "Buscando una INDEXER_API_KEY existente en el volumen de indexer..."
+  echo "Looking for an existing INDEXER_API_KEY in the indexer volume..."
   # Build aparte y silencioso: si se lo dejamos a "docker compose run", un build
   # necesario (imagen ausente) manda su log a stdout y se mezcla con el resultado
   # del sed de más abajo — ese log terminó una vez escrito en INDEXER_API_KEY.
@@ -112,17 +112,32 @@ if [ -z "$current_indexer_api_key" ]; then
   existing_key=$(docker compose -f docker-compose.yaml -f docker-compose.build.yaml run --rm --no-deps --entrypoint /bin/sh indexer \
     -c 'sed -n "s:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p" /config/config.xml 2>/dev/null' | tr -d '\r\n')
   if [ -n "$existing_key" ]; then
-    echo "Encontrada, adoptando la key existente del volumen de indexer (no invalida tu Prowlarr configurado)."
+    echo "Found it, adopting the existing key from the indexer volume (does not invalidate your configured Prowlarr)."
     ensure_env_var INDEXER_API_KEY "$existing_key"
   else
-    echo "No hay volumen previo, generando INDEXER_API_KEY..."
+    echo "No previous volume found, generating INDEXER_API_KEY..."
     ensure_env_var INDEXER_API_KEY "$(openssl rand -hex 16)"
   fi
-  echo "Nota: si tenías un FlareSolverr corriendo aparte con 'docker run', ya no hace falta —"
-  echo "ahora vive dentro del stack. Podés pararlo."
+  echo "Note: if you had a FlareSolverr running separately via 'docker run', it is no longer needed —"
+  echo "it now lives inside the stack. You can stop it."
 fi
 
 set -a; . ./.env; set +a
+
+while true; do
+  read -rsp "Password for ${ADMIN_USER} (minimum 6 characters): " admin_password; echo
+  if [ "${#admin_password}" -lt 6 ]; then
+    echo "The password must be at least 6 characters long." >&2
+    continue
+  fi
+  read -rsp "Repeat the password: " admin_password_confirm; echo
+  if [ "$admin_password" != "$admin_password_confirm" ]; then
+    echo "The passwords do not match." >&2
+    continue
+  fi
+  break
+done
+unset admin_password_confirm
 
 # Mismo overlay que bin/dev: sin docker-compose.dev.yaml no hay bind mount
 # ./services/<svc>:/app, así que /app queda como lo dejó el Dockerfile (root,
@@ -131,16 +146,16 @@ set -a; . ./.env; set +a
 COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml -f docker-compose.dev.yaml"
 
 echo
-echo "Levantando servicios... puede tardar un minuto si es la primera vez que los containers se crean."
+echo "Starting services... this can take a minute the first time the containers are created."
 if ! BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 180 db redis api web torrent indexer flaresolverr torrent worker; then
   # Sin este mensaje, `set -e` corta acá con sólo el error crudo de compose. `up -d` ya lanzó
   # los containers antes de fallar el --wait, así que pueden seguir corriendo de fondo; y este
   # script es reentrante (no pisa nada ya configurado), así que la salida es correrlo de nuevo.
   echo >&2
-  echo "ERROR: los servicios no llegaron a 'healthy' dentro de los 180 segundos de espera." >&2
-  echo "Los containers pueden haber quedado corriendo igual — revisá con:" >&2
+  echo "ERROR: the services did not become 'healthy' within the 180-second wait." >&2
+  echo "The containers may still be running — check with:" >&2
   echo "  docker compose ps" >&2
-  echo "Esperá un momento y volvé a correr bin/install: es reentrante." >&2
+  echo "Wait a moment and run bin/install again: it is re-entrant." >&2
   exit 1
 fi
 
@@ -150,19 +165,19 @@ fi
 # cargados en memoria. Sin este chequeo, npx se pondría a bajar prisma del
 # registry con un prompt interactivo en medio del script.
 if ! docker compose exec -T api test -x node_modules/.bin/prisma; then
-  echo "Faltan dependencias de node en api, instalando..."
+  echo "Missing node dependencies in api, installing..."
   docker compose exec -T api npm install
   # El nest --watch que quedó vivo entró en estado roto al desaparecer
   # typescript y no se recupera solo: reiniciar lo deja corriendo con las
   # dependencias nuevas.
-  echo "Reiniciando api para que levante con las dependencias nuevas..."
+  echo "Restarting api so it picks up the new dependencies..."
   docker compose restart api
   if ! BUILD_TARGET=dev docker compose $COMPOSE_FILES up -d --wait --wait-timeout 300 api; then
     echo >&2
-    echo "ERROR: api no volvió a 'healthy' dentro de los 300 segundos de espera tras el npm install." >&2
-    echo "Revisá con:" >&2
+    echo "ERROR: api did not become 'healthy' again within the 300-second wait after npm install." >&2
+    echo "Check with:" >&2
     echo "  docker compose logs api" >&2
-    echo "Esperá un momento y volvé a correr bin/install: es reentrante." >&2
+    echo "Wait a moment and run bin/install again: it is re-entrant." >&2
     exit 1
   fi
 fi
@@ -175,30 +190,38 @@ fi
 # con command substitution, mismo motivo que el chequeo de prisma más arriba.
 current_service_token=$(grep '^SERVICE_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
 if [ -z "$current_service_token" ]; then
-  echo "Minteando SERVICE_TOKEN..."
+  echo "Minting SERVICE_TOKEN..."
   service_token=$(docker compose exec -T api npm run --silent token:service)
   # Un SERVICE_TOKEN vacío en .env falla en silencio: torrent y worker arrancan igual,
   # pero no pueden autenticarse contra la api, y no hay ningún error visible en los
   # logs de api ni worker (sólo en el AutoRun hook de qBittorrent, que nadie mira).
   if [ -z "$service_token" ]; then
-    echo "ERROR: el minteo de SERVICE_TOKEN no devolvió nada. Reintentá manualmente con:" >&2
+    echo "ERROR: minting SERVICE_TOKEN returned nothing. Retry manually with:" >&2
     echo "  docker compose exec api npm run --silent token:service" >&2
-    echo "y pegá el resultado en SERVICE_TOKEN dentro de .env, luego corré:" >&2
+    echo "and paste the result into SERVICE_TOKEN in .env, then run:" >&2
     echo "  docker compose up -d torrent worker" >&2
     exit 1
   fi
   ensure_env_var SERVICE_TOKEN "$service_token"
 fi
 
-echo "Otorgando privilegios a ${DB_USER} en MariaDB..."
+echo "Granting privileges to ${DB_USER} in MariaDB..."
 bin/dbinit
 
-bin/dbreset
+PERCEPTOR_SKIP_PASSWORD_PROMPT=1 bin/dbreset
+
+echo "Setting the password for ${ADMIN_USER} in the app, qBittorrent and Prowlarr..."
+if ! printf '%s\n%s\n' "$admin_password" "$admin_password" | docker compose $COMPOSE_FILES exec -T api npx --no ts-node scripts/reset-password.ts "$ADMIN_USER"; then
+  echo "ERROR: could not set the password. Retry with:" >&2
+  echo "  bin/reset-password ${ADMIN_USER}" >&2
+  exit 1
+fi
+unset admin_password
 
 echo
-echo "Frenando los containers..."
+echo "Stopping the containers..."
 docker compose stop
 
 echo
-echo "Listo. Corré bin/dev para levantar el stack."
-echo "Recuerda que tu usuario es: ${ADMIN_USER} y la contraseña: ${ADMIN_PASSWORD}."
+echo "Done. Run bin/dev to bring the stack up."
+echo "Your username is: ${ADMIN_USER}. To change or recover the password, run: bin/reset-password ${ADMIN_USER}"

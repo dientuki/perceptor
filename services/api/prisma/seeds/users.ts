@@ -1,11 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 
 export async function seedUsers(prisma: PrismaClient) {
   console.log('Seeding users...');
 
   const username = process.env.ADMIN_USER || 'admin';
-  const password = process.env.ADMIN_PASSWORD || 'changeme';
+  const password = process.env.ADMIN_PASSWORD || randomBytes(32).toString('hex');
   const hashedPassword = await bcrypt.hash(password, 10);
 
   await prisma.user.upsert({

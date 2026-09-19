@@ -14,15 +14,15 @@ set -e
 
 REPO="dientuki/perceptor"
 
-echo "Instalando Perceptor..."
+echo "Installing Perceptor..."
 echo
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "No se encontró Docker. Instalá Docker (con el plugin de Compose) y volvé a correr este script."
+  echo "Docker not found. Install Docker (with the Compose plugin) and run this script again."
   exit 1
 fi
 if ! docker compose version >/dev/null 2>&1; then
-  echo "Docker está instalado pero falta el plugin de Compose (docker compose). Instalalo y volvé a intentar."
+  echo "Docker is installed but the Compose plugin (docker compose) is missing. Install it and try again."
   exit 1
 fi
 
@@ -68,28 +68,28 @@ env_var_is_empty() {
 # ---------------------------------------------------------------------------
 if [ "$fresh_install" = false ] && grep -q '^PERCEPTOR_TAG=.\+' .env; then
   PERCEPTOR_TAG=$(grep '^PERCEPTOR_TAG=' .env | cut -d= -f2-)
-  echo "Instalación existente: manteniendo la versión ya instalada (${PERCEPTOR_TAG})."
+  echo "Existing installation: keeping the version already installed (${PERCEPTOR_TAG})."
 else
-  echo "Buscando la última versión publicada..."
+  echo "Looking for the latest published version..."
   resolved_tag=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
     | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')
   PERCEPTOR_TAG="${resolved_tag:-latest}"
-  echo "Instalando ${PERCEPTOR_TAG}."
+  echo "Installing ${PERCEPTOR_TAG}."
 fi
 
 # docker-compose.yaml no es dato de usuario — se refresca siempre a lo que dice la versión
 # resuelta arriba, así una reinstalación con la misma versión no lo deja desactualizado.
 raw_ref="$PERCEPTOR_TAG"
 [ "$raw_ref" = "latest" ] && raw_ref="master"
-echo "Descargando docker-compose.yaml (${raw_ref})..."
+echo "Downloading docker-compose.yaml (${raw_ref})..."
 curl -fsSL "https://raw.githubusercontent.com/${REPO}/${raw_ref}/docker-compose.yaml" -o docker-compose.yaml
 
 if [ "$fresh_install" = true ]; then
-  echo "Descargando .env.example..."
+  echo "Downloading .env.example..."
   curl -fsSL "https://raw.githubusercontent.com/${REPO}/${raw_ref}/.env.example" -o .env
-  echo ".env creado."
+  echo ".env created."
 else
-  echo "Reparando la instalación existente en este directorio."
+  echo "Repairing the existing installation in this directory."
 fi
 
 ensure_env_var PERCEPTOR_TAG "$PERCEPTOR_TAG"
@@ -101,50 +101,56 @@ ensure_env_var PERCEPTOR_TAG "$PERCEPTOR_TAG"
 # ---------------------------------------------------------------------------
 
 if [ "$fresh_install" = true ]; then
-  read -rp "Carpeta de descargas [./data/downloads]: " downloads_dir </dev/tty
+  read -rp "Downloads folder [./data/downloads]: " downloads_dir </dev/tty
   downloads_dir="${downloads_dir:-./data/downloads}"
   set_env_var HOST_DOWNLOADS_DIR "$downloads_dir"
 
-  read -rp "Carpeta de tu biblioteca / media server [./data/library]: " destinations_dir </dev/tty
+  read -rp "Your library / media server folder [./data/library]: " destinations_dir </dev/tty
   destinations_dir="${destinations_dir:-./data/library}"
   set_env_var HOST_DESTINATIONS_DIR "$destinations_dir"
 
-  read -rp "Usuario administrador [admin]: " admin_user </dev/tty
+  read -rp "Administrator username [admin]: " admin_user </dev/tty
   set_env_var ADMIN_USER "${admin_user:-admin}"
 
-  read -rsp "Contraseña de administrador: " admin_password </dev/tty
-  echo
-  while [ -z "$admin_password" ]; do
-    read -rsp "No puede estar vacía. Contraseña de administrador: " admin_password </dev/tty
+  while true; do
+    read -rsp "Administrator password (minimum 6 characters): " admin_password </dev/tty
     echo
+    if [ "${#admin_password}" -lt 6 ]; then
+      echo "It must be at least 6 characters long."
+      continue
+    fi
+    read -rsp "Repeat the password: " admin_password_confirm </dev/tty
+    echo
+    [ "$admin_password" = "$admin_password_confirm" ] && break
+    echo "The passwords do not match."
   done
-  set_env_var ADMIN_PASSWORD "$admin_password"
+  unset admin_password_confirm
 
   # Misma pregunta y misma redacción que bin/install (docs/spec/features/049.../infra/plan.md
   # § Existing code to reuse). true habilita Traefik (Host() por dominio); false expone cada
   # servicio directo en su puerto. Desde T010, Traefik también necesita el profile encendido
   # (COMPOSE_PROFILES=traefik) — sin eso, `docker compose up -d` no lo arranca aunque
   # USE_TRAEFIK=true.
-  read -rp "¿Usar Traefik para rutear por dominio? [y/N] " use_traefik </dev/tty
+  read -rp "Use Traefik to route by domain? [y/N] " use_traefik </dev/tty
   case "$use_traefik" in
     [yY]*)
-      read -rp "Dominio a usar (ej: perceptor.local): " domain </dev/tty
+      read -rp "Domain to use (e.g. perceptor.local): " domain </dev/tty
       set_env_var USE_TRAEFIK true
       set_env_var DOMAIN "${domain}"
       set_env_var COMPOSE_PROFILES traefik
       echo
-      echo "Listo. Agregá esto a /etc/hosts para que resuelva:"
+      echo "Done. Add this to /etc/hosts so it resolves:"
       echo "  127.0.0.1  ${domain} api.${domain} torrent.${domain} indexer.${domain}"
       ;;
     *)
       set_env_var USE_TRAEFIK false
       echo
-      echo "Traefik desactivado. Vas a acceder a cada servicio por su puerto en localhost"
+      echo "Traefik disabled. You will reach each service on its own localhost port"
       echo "(WEB_PORT, API_PORT, INDEXER_PORT, QBITTORRENT_WEBUI_PORT)."
       ;;
   esac
 
-  read -rp "TMDB API key (opcional, Enter para saltear y cargarla después desde Ajustes): " tmdb_api_key </dev/tty
+  read -rp "TMDB API key (optional, press Enter to skip and set it later from Settings): " tmdb_api_key </dev/tty
   [ -n "$tmdb_api_key" ] && set_env_var TMDB_API_KEY "$tmdb_api_key"
 fi
 
@@ -223,21 +229,21 @@ if [ "$fresh_install" = true ]; then
     host_ip="${host_ip:-localhost}"
     set_env_var PUBLIC_UPLOAD_URL "http://${host_ip}:${api_port}/uploads"
     echo
-    echo "PUBLIC_UPLOAD_URL quedó en http://${host_ip}:${api_port}/uploads. Si vas a subir"
-    echo "archivos desde otra PC o celular de la red y esa no es la IP correcta, corregila"
-    echo "a mano en .env."
+    echo "PUBLIC_UPLOAD_URL is set to http://${host_ip}:${api_port}/uploads. If you will upload"
+    echo "files from another computer or phone on the network and that is not the right IP, fix it"
+    echo "by hand in .env."
   fi
 fi
 
 # Secretos generados por instalación (REQ-6): nunca en un archivo versionado, nunca un default.
 # Estos sí ship vacíos en .env.example, así que "sigue vacío" alcanza para decidir.
 if env_var_is_empty JWT_SECRET; then
-  echo "Generando JWT_SECRET..."
+  echo "Generating JWT_SECRET..."
   ensure_env_var JWT_SECRET "$(openssl rand -hex 32)"
 fi
 
 if env_var_is_empty INDEXER_API_KEY; then
-  echo "Buscando una INDEXER_API_KEY existente en el volumen de indexer..."
+  echo "Looking for an existing INDEXER_API_KEY in the indexer volume..."
   # --entrypoint /bin/sh evita la cadena /init de LinuxServer (no arranca nada) y --no-deps
   # evita arrastrar a flaresolverr sólo para leer un archivo. Mismo truco que bin/install; acá
   # corre contra la imagen publicada (docker-compose.yaml ya no tiene build:) en vez de construir.
@@ -248,10 +254,10 @@ if env_var_is_empty INDEXER_API_KEY; then
   existing_key=$(docker compose run --rm -T --no-deps --entrypoint /bin/sh indexer \
     -c 'sed -n "s:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p" /config/config.xml 2>/dev/null' </dev/null | tr -d '\r\n')
   if [ -n "$existing_key" ]; then
-    echo "Encontrada, adoptando la key existente del volumen de indexer."
+    echo "Found it, adopting the existing key from the indexer volume."
     ensure_env_var INDEXER_API_KEY "$existing_key"
   else
-    echo "No hay volumen previo, generando INDEXER_API_KEY..."
+    echo "No previous volume found, generating INDEXER_API_KEY..."
     ensure_env_var INDEXER_API_KEY "$(openssl rand -hex 16)"
   fi
 fi
@@ -262,12 +268,12 @@ fi
 if [ "$fresh_install" = true ]; then
   project="$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-')"
   if docker volume inspect "${project}_mariadb_data" >/dev/null 2>&1; then
-    echo "Aviso: existe un volumen de base de datos de una instalación anterior sin .env."
-    echo "No se pueden adivinar sus credenciales — restaurá el .env original o borrá el volumen"
-    echo "(docker volume rm ${project}_mariadb_data) antes de continuar con una instalación nueva."
+    echo "Warning: a database volume from a previous installation exists but there is no .env."
+    echo "Its credentials cannot be guessed — restore the original .env or delete the volume"
+    echo "(docker volume rm ${project}_mariadb_data) before continuing with a fresh installation."
     exit 1
   fi
-  echo "Generando credenciales de base de datos..."
+  echo "Generating database credentials..."
   db_password="$(openssl rand -hex 20)"
   db_root_password="$(openssl rand -hex 20)"
   set_env_var DB_USER "perceptor"
@@ -283,11 +289,11 @@ fi
 set -a; . ./.env; set +a
 
 echo
-echo "Descargando las imágenes (${PERCEPTOR_TAG})..."
+echo "Downloading images (${PERCEPTOR_TAG})..."
 docker compose pull
 
 echo
-echo "Levantando el stack... la primera vez puede tardar varios minutos (migración + seed de api)."
+echo "Starting the stack... the first time can take several minutes (api migration + seed)."
 if ! docker compose up -d --wait --wait-timeout 600; then
   # Sin este mensaje, `set -e` corta acá con sólo el error crudo de compose, y quien lo lea no
   # tiene forma de saber si el stack quedó a medio levantar o si hace falta empezar de cero.
@@ -295,16 +301,16 @@ if ! docker compose up -d --wait --wait-timeout 600; then
   # de fondo aunque el instalador se corte — y el propio script es reentrante (ver el comentario
   # sobre `fresh_install` al principio), así que la salida es simplemente correrlo de nuevo.
   echo >&2
-  echo "ERROR: el stack no llegó a 'healthy' dentro de los 600 segundos de espera." >&2
-  echo "Los containers pueden haber quedado corriendo igual — revisá con:" >&2
+  echo "ERROR: the stack did not become 'healthy' within the 600-second wait." >&2
+  echo "The containers may still be running — check with:" >&2
   echo "  docker compose ps" >&2
-  echo "Si api todavía está migrando/seedeando, esperá un momento y volvé a correr este mismo" >&2
-  echo "instalador: es reentrante y no pisa nada de lo que ya esté configurado." >&2
+  echo "If api is still migrating/seeding, wait a moment and run this same" >&2
+  echo "installer again: it is re-entrant and does not overwrite anything already configured." >&2
   exit 1
 fi
 
 if env_var_is_empty SERVICE_TOKEN; then
-  echo "Minteando SERVICE_TOKEN..."
+  echo "Minting SERVICE_TOKEN..."
   # </dev/null por el mismo motivo que el `docker compose run` de arriba: bajo `curl | bash` el
   # stdin de bash es el script mismo, y compose lo adjunta al contenedor aunque no lo lea nadie.
   service_token=$(docker compose exec -T api node dist/scripts/mint-service-token.js </dev/null)
@@ -313,25 +319,39 @@ if env_var_is_empty SERVICE_TOKEN; then
   # reciben el aviso de torrent completado, y no hay dónde loguear eso salvo el propio
   # AutoRun hook, que nadie mira). Mejor abortar fuerte, con la salida cruda para diagnosticar.
   if [ -z "$service_token" ]; then
-    echo "ERROR: el minteo de SERVICE_TOKEN no devolvió nada. La instalación quedó sin ese token:" >&2
-    echo "torrent y worker no van a poder autenticarse contra la api (avisos de descarga completa" >&2
-    echo "y reportes de encode van a fallar en silencio)." >&2
-    echo "Reintentá manualmente con:" >&2
+    echo "ERROR: minting SERVICE_TOKEN returned nothing. The installation is left without that token:" >&2
+    echo "torrent and worker will not be able to authenticate against the api (download-complete notices" >&2
+    echo "and encode reports will fail silently)." >&2
+    echo "Retry manually with:" >&2
     echo "  docker compose exec api node dist/scripts/mint-service-token.js" >&2
-    echo "y pegá el resultado en SERVICE_TOKEN dentro de .env, luego corré:" >&2
+    echo "and paste the result into SERVICE_TOKEN in .env, then run:" >&2
     echo "  docker compose up -d torrent worker" >&2
     exit 1
   fi
   ensure_env_var SERVICE_TOKEN "$service_token"
-  echo "Reiniciando torrent/worker para que tomen el SERVICE_TOKEN nuevo..."
+  echo "Restarting torrent/worker so they pick up the new SERVICE_TOKEN..."
   docker compose up -d torrent worker
 fi
 
+if [ "$fresh_install" = true ]; then
+  echo "Setting the administrator password..."
+  if ! printf '%s\n%s\n' "$admin_password" "$admin_password" \
+    | docker compose exec -T api node dist/scripts/reset-password.js "$ADMIN_USER"; then
+    echo "ERROR: could not set the administrator password." >&2
+    echo "Retry manually with:" >&2
+    echo "  docker compose exec api node dist/scripts/reset-password.js ${ADMIN_USER}" >&2
+    exit 1
+  fi
+  unset admin_password
+fi
+
 echo
-echo "Listo. Perceptor está corriendo."
+echo "Done. Perceptor is running."
 if [ "${USE_TRAEFIK}" = "true" ]; then
   echo "URL: http://${DOMAIN}"
 else
   echo "URL: http://localhost:${WEB_PORT}"
 fi
-echo "Usuario administrador: ${ADMIN_USER}"
+echo "Administrator username: ${ADMIN_USER}"
+echo "To change or recover the password, run:"
+echo "  docker compose exec api node dist/scripts/reset-password.js ${ADMIN_USER}"

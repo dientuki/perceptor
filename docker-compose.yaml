@@ -96,7 +96,6 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - ADMIN_USER=${ADMIN_USER}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - DOMAIN=${DOMAIN}
       - WEB_PORT=${WEB_PORT}
       # No default, ever (REQ-6) — auth.constants.ts's assertAuthEnv() fails boot loudly if unset.
@@ -301,7 +300,6 @@ services:
       - WEBUI_PORT=${QBITTORRENT_WEBUI_PORT}
       - TORRENTING_PORT=${QBITTORRENT_TORRENTING_PORT}
       - QBITTORRENT_USER=${QBITTORRENT_USER}
-      - QBITTORRENT_PASSWORD=${QBITTORRENT_PASSWORD}
       - INTERNAL_GRAPHQL_URL=http://api:${API_PORT}/graphql
       # Read by services/torrent/commands/on-torrent-completed.sh (AutoRun hook) to authenticate
       # the torrentCompleted call — same machine credential as the worker (REQ-5).
@@ -342,7 +340,6 @@ services:
       - PGID=${PGID}
       - TZ=${TZ}
       - INDEXER_USER=${INDEXER_USER}
-      - INDEXER_PASSWORD=${INDEXER_PASSWORD}
       # Prowlarr's API key — declared, not discovered (014-dev-stack-flaresolverr). Applied to
       # config.xml before Prowlarr starts by custom-cont-init.d/10-prowlarr-apikey, and read by
       # custom-services.d/20-prowlarr-flaresolverr to talk to Prowlarr's own API.

@@ -125,7 +125,7 @@ wrappers in `bin/`, which shell into the running containers.
 | `bin/mysql [args…]` | `mariadb` client against `db` using `.env` credentials | `bin/mysql -e 'show tables'` |
 | `bin/dbinit` | grants global privileges to `${DB_USER}` so Prisma can create its shadow database | once after a fresh `db` volume |
 | `bin/dbreset` | `prisma migrate reset --force` + seed + Redis `FLUSHALL` — resets dev state without rerunning `bin/install` | `bin/dbreset` |
-| `bin/reset-password <username>` | resets a user's password interactively | the recovery path when no admin can sign in |
+| `bin/reset-password <username>` | resets a user's password interactively; for `ADMIN_USER` also qBittorrent and Prowlarr (end users: `docker compose exec api node dist/scripts/reset-password.js <username>`) | the recovery path when no admin can sign in |
 
 Without Traefik, each service is still reachable directly on its published port (`WEB_PORT`,
 `API_PORT`, …) — Traefik only adds domain-based routing.
@@ -174,9 +174,12 @@ Rules that are not obvious from the variable names:
   them as the two roots the Settings UI is confined to. The `path_downloads`/`path_movies`/`path_shows`
   settings are **segments relative to those roots**, never absolute container paths. The UI only shows
   the host-side path; the container path never crosses the GraphQL boundary.
-- **`ADMIN_USER`/`ADMIN_PASSWORD` are canonical** — `QBITTORRENT_*` and `INDEXER_*` credentials
-  reference them via `.env` interpolation, and the api seed reads them directly, so app, qBittorrent
-  and Prowlarr share one login. The seeded admin is also the first app administrator; there is no
+- **`ADMIN_USER` is canonical; the password is never in `.env`** (`061`) — `QBITTORRENT_USER` and
+  `INDEXER_USER` reference it via `.env` interpolation. The password is set by
+  `scripts/reset-password.ts` (piped by both installers, or run by hand), which writes the app,
+  qBittorrent and Prowlarr logins together, so the three share one login. An install that predates
+  `061` may still carry `ADMIN_PASSWORD`/`QBITTORRENT_PASSWORD`/`INDEXER_PASSWORD`; they are optional
+  and honoured if present. The api seed with no `ADMIN_PASSWORD` stores an unusable hash. The seeded admin is also the first app administrator; there is no
   public registration, so an admin creates every other user from `/users`, and can disable rather than
   delete one (`isEnabled: false` revokes live sessions immediately, not just the next login).
 - **The TMDB bearer token is not in `.env`** — it comes from the `movie_db_api_key` Settings key,

@@ -138,8 +138,9 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
 - 🙋 **Per-user preferences** at `/preferences`: interface language, audio and subtitle languages,
   and the torrent groups you care about.
 - 👥 **User management**: create, edit and disable users (disabling revokes live sessions
-  immediately, not just the next login), with `bin/reset-password` as the recovery path when nobody
-  can sign in.
+  immediately, not just the next login), with `bin/reset-password` (or, from an install directory,
+  `docker compose exec api node dist/scripts/reset-password.js <user>`) as the recovery path when nobody
+  can sign in. For the admin it also resets the qBittorrent and Prowlarr logins.
 
 ## Install
 
@@ -328,7 +329,7 @@ your working copy, so edits hot-reload.
    `bin/dev` starts the images that already exist and does **not** build. Re-run `bin/build dev`
    whenever a `Dockerfile` or a dependency changes; source edits alone don't need it.
 
-5. **Sign in** as `ADMIN_USER` / `ADMIN_PASSWORD` and open **Settings** to paste your TMDB API key —
+5. **Sign in** as `ADMIN_USER` with the password you typed during install (it is never stored in `.env`) and open **Settings** to paste your TMDB API key —
    a fresh checkout ships it empty, so search returns `401` until you do.
 
 The schema is applied for you: `api` runs its pending migrations at boot here too. `bin/dbinit` is
@@ -361,7 +362,7 @@ These are for a source checkout — an installation made with `install.sh` has n
 | `bin/mysql [args…]` | MariaDB client against `db` |
 | `bin/dbinit` | Grant Prisma its privileges (once, per fresh `db` volume) |
 | `bin/dbreset` | Reset the schema, reseed, and flush Redis — dev state only |
-| `bin/reset-password <user>` | Reset a user's password — the recovery path when no admin can log in |
+| `bin/reset-password <user>` | Reset a user's password — the recovery path when no admin can log in; for `ADMIN_USER` it also resets qBittorrent and Prowlarr |
 
 Common Prisma tasks:
 

@@ -6,16 +6,21 @@
 set -e
 cd "$(dirname "$0")/.."
 
-echo "Reseteando la base y aplicando migraciones de Prisma..."
+echo "Resetting the database and applying Prisma migrations..."
 bin/cli api npx --no prisma migrate reset --force
 
 # migrate reset no siembra solo pese a que prisma.config.ts declara un
 # comando de seed (ver bin/install) — hay que correrlo aparte.
-echo "Sembrando datos iniciales..."
+echo "Seeding initial data..."
 bin/cli api npx --no ts-node prisma/seeds/index.ts
 
-echo "Limpiando Redis..."
+echo "Flushing Redis..."
 docker compose exec -T redis redis-cli FLUSHALL
 
+if [ -z "$PERCEPTOR_SKIP_PASSWORD_PROMPT" ]; then
+  echo
+  bin/reset-password "$(grep '^ADMIN_USER=' .env | cut -d= -f2-)"
+fi
+
 echo
-echo "Listo."
+echo "Done."

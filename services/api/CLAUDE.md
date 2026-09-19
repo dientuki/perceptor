@@ -101,7 +101,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   authenticates per-request by ticket. `guards/admin.guard.ts` is applied at class level on
   `UsersResolver` and **re-reads `isAdmin` from the DB on every call** rather than trusting the JWT,
   so a demoted admin stops working on the next request, not at token expiry.
-  `scripts/reset-password.ts` is the recovery path — run via `bin/reset-password`, never bare.
+  `scripts/reset-password.ts` is the recovery path — run via `bin/reset-password` in dev or
+  `node dist/scripts/reset-password.js <user>` in the prod image, never bare on the host. For `ADMIN_USER` it
+  also pushes the password to qBittorrent and Prowlarr through `src/shared-login/` (6-character minimum,
+  qBittorrent's limit) and exits 1 unless every target was updated.
 - **`users/`** — CRUD over `User`, entirely behind `AdminGuard`. `remove()` refuses self-delete and
   refuses deleting the last admin. `update()` refuses self-disable and refuses disabling the last
   *enabled* admin (`{ isAdmin: true, isEnabled: true }` — counting disabled admins would let someone
