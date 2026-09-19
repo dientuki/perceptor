@@ -33,7 +33,18 @@ function episodeLabel(show: { title: string }, season: { seasonNumber: number },
 }
 
 function seasonLabel(show: { title: string }, season: { seasonNumber: number }): string {
-  return `${show.title} Temporada ${season.seasonNumber}`;
+  return `${show.title} S${String(season.seasonNumber).padStart(2, '0')}`;
+}
+
+type JobsForSource = { jobs: SourceAltitudeJob[]; latestUpdatedAt: Date | null };
+
+function byLastActivity<T extends { id: number; updatedAt: Date }>(
+  sources: T[],
+  jobsBySourceId: Map<number, JobsForSource>,
+): T[] {
+  const activity = (source: T): number =>
+    Math.max(source.updatedAt.getTime(), jobsBySourceId.get(source.id)?.latestUpdatedAt?.getTime() ?? 0);
+  return [...sources].sort((a, b) => activity(b) - activity(a) || b.id - a.id);
 }
 
 type MediaSourceRow = {
@@ -89,23 +100,25 @@ export class DownloadsService {
   // movieDownloads/showDownloads/downloadStart/downloadStop/downloadStart
   // for the callers, each of which loads the jobs for its own set of
   // mediaSourceIds and passes the matching group in here.
-  private async jobsBySourceId(mediaSourceIds: number[]): Promise<Map<number, SourceAltitudeJob[]>> {
+  private async jobsBySourceId(mediaSourceIds: number[]): Promise<Map<number, JobsForSource>> {
     const rows = await this.prisma.processJob.findMany({
       where: { sourceFile: { mediaSourceId: { in: mediaSourceIds } } },
       select: {
         status: true,
         progress: true,
         encodeSpeed: true,
+        updatedAt: true,
         sourceFile: { select: { mediaSourceId: true } },
       },
     });
 
-    const grouped = new Map<number, SourceAltitudeJob[]>();
+    const grouped = new Map<number, JobsForSource>();
     for (const row of rows) {
       const mediaSourceId = row.sourceFile.mediaSourceId;
-      const jobs = grouped.get(mediaSourceId) ?? [];
-      jobs.push({ status: row.status as EncodeStatus, progress: row.progress, encodeSpeed: row.encodeSpeed });
-      grouped.set(mediaSourceId, jobs);
+      const entry = grouped.get(mediaSourceId) ?? { jobs: [], latestUpdatedAt: null };
+      entry.jobs.push({ status: row.status as EncodeStatus, progress: row.progress, encodeSpeed: row.encodeSpeed });
+      if (!entry.latestUpdatedAt || row.updatedAt > entry.latestUpdatedAt) entry.latestUpdatedAt = row.updatedAt;
+      grouped.set(mediaSourceId, entry);
     }
     return grouped;
   }
@@ -121,6 +134,7 @@ export class DownloadsService {
     live: TorrentClientInfo | undefined,
     jobs: SourceAltitudeJob[],
     compressionEnabled: boolean,
+    seasonNumber?: number,
   ): Download {
     const derived = deriveSourceStatus({
       sourceStatus: source.status,
@@ -136,6 +150,7 @@ export class DownloadsService {
       releaseTitle: source.releaseTitle ?? undefined,
       movieId: source.movieId ?? undefined,
       seasonId: source.seasonId ?? undefined,
+      seasonNumber,
       episodeId: source.episodeId ?? undefined,
       status: derived.status,
       torrentState: live?.rawState,
@@ -161,7 +176,6 @@ export class DownloadsService {
 
     const sources = await this.prisma.mediaSource.findMany({
       where: { movieId },
-      orderBy: { createdAt: 'asc' },
     });
 
     // REQ-4: every server-side lookup of a title's torrents uses the title
@@ -173,12 +187,12 @@ export class DownloadsService {
       this.compressionEnabled(),
     ]);
 
-    return sources.map((source) =>
+    return byLastActivity(sources, jobsBySourceId).map((source) =>
       this.toDownload(
         source,
         movie.title,
         this.liveFor(source, live),
-        jobsBySourceId.get(source.id) ?? [],
+        jobsBySourceId.get(source.id)?.jobs ?? [],
         compressionEnabled,
       ),
     );
@@ -203,7 +217,6 @@ export class DownloadsService {
         season: true,
         episode: { include: { season: true } },
       },
-      orderBy: { createdAt: 'asc' },
     });
 
     const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
@@ -212,7 +225,7 @@ export class DownloadsService {
       this.compressionEnabled(),
     ]);
 
-    return sources.map((source) => {
+    return byLastActivity(sources, jobsBySourceId).map((source) => {
       const label = source.episode
         ? episodeLabel(show, source.episode.season, source.episode)
         : source.season
@@ -222,8 +235,9 @@ export class DownloadsService {
         source,
         label,
         this.liveFor(source, live),
-        jobsBySourceId.get(source.id) ?? [],
+        jobsBySourceId.get(source.id)?.jobs ?? [],
         compressionEnabled,
+        source.season?.seasonNumber,
       );
     });
   }
@@ -276,26 +290,28 @@ export class DownloadsService {
     }
   }
 
-  private async labelFor(source: MediaSourceRow): Promise<string> {
+  private async labelFor(source: MediaSourceRow): Promise<{ label: string; seasonNumber?: number }> {
     if (source.movieId) {
       const movie = await this.prisma.movie.findUnique({ where: { id: source.movieId }, select: { title: true } });
-      return movie?.title ?? '';
+      return { label: movie?.title ?? '' };
     }
     if (source.episodeId) {
       const episode = await this.prisma.episode.findUnique({
         where: { id: source.episodeId },
         include: { season: { include: { show: true } } },
       });
-      return episode ? episodeLabel(episode.season.show, episode.season, episode) : '';
+      return { label: episode ? episodeLabel(episode.season.show, episode.season, episode) : '' };
     }
     if (source.seasonId) {
       const season = await this.prisma.season.findUnique({
         where: { id: source.seasonId },
         include: { show: true },
       });
-      return season ? seasonLabel(season.show, season) : '';
+      return season
+        ? { label: seasonLabel(season.show, season), seasonNumber: season.seasonNumber }
+        : { label: '' };
     }
-    return '';
+    return { label: '' };
   }
 
   // REQ-7/../plan.md § Approach decision 2: the write is a guarded
@@ -329,13 +345,13 @@ export class DownloadsService {
       source.status = 'QUEUED';
     }
 
-    const [label, live, jobsBySourceId, compressionEnabled] = await Promise.all([
+    const [{ label, seasonNumber }, live, jobsBySourceId, compressionEnabled] = await Promise.all([
       this.labelFor(source),
       this.liveInfoForHash(infoHash),
       this.jobsBySourceId([source.id]),
       this.compressionEnabled(),
     ]);
-    return this.toDownload(source, label, live, jobsBySourceId.get(source.id) ?? [], compressionEnabled);
+    return this.toDownload(source, label, live, jobsBySourceId.get(source.id)?.jobs ?? [], compressionEnabled, seasonNumber);
   }
 
   async downloadStop(mediaSourceId: number, userId: string): Promise<Download> {
@@ -347,13 +363,13 @@ export class DownloadsService {
       source.status = 'PAUSED';
     }
 
-    const [label, live, jobsBySourceId, compressionEnabled] = await Promise.all([
+    const [{ label, seasonNumber }, live, jobsBySourceId, compressionEnabled] = await Promise.all([
       this.labelFor(source),
       this.liveInfoForHash(infoHash),
       this.jobsBySourceId([source.id]),
       this.compressionEnabled(),
     ]);
-    return this.toDownload(source, label, live, jobsBySourceId.get(source.id) ?? [], compressionEnabled);
+    return this.toDownload(source, label, live, jobsBySourceId.get(source.id)?.jobs ?? [], compressionEnabled, seasonNumber);
   }
 
   // 047-source-deletion: the orchestrator for the whole unwind. Order is the

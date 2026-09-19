@@ -17,6 +17,7 @@ const DOWNLOAD_FIELDS = `
   movieId
   seasonId
   episodeId
+  seasonNumber
   status
   torrentState
   downloadProgress

@@ -14,13 +14,16 @@ import DownloadProgressBar from "./DownloadProgressBar";
 interface DownloadRowProps {
   download: Download;
   onDeleteRequest: (download: Download) => void;
+  showTitle?: string;
 }
 
 export default function DownloadRow({
   download,
   onDeleteRequest,
+  showTitle,
 }: DownloadRowProps) {
   const t = useTranslations("downloads.panel");
+  const tSeason = useTranslations("seasonAccordion");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [rowError, setRowError] = useState<string | null>(null);
@@ -55,10 +58,15 @@ export default function DownloadRow({
     });
   };
 
+  const displayName =
+    download.seasonNumber != null && showTitle
+      ? `${showTitle} ${tSeason("seasonLabel", { number: download.seasonNumber })}`
+      : download.label;
+
   return (
     <tr>
       <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-        <div className="font-medium">{download.label}</div>
+        <div className="font-medium">{displayName}</div>
         {download.releaseTitle && (
           <div className="mt-1 line-clamp-1 text-xs text-gray-500 dark:text-gray-400">
             {download.releaseTitle}

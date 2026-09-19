@@ -37,6 +37,7 @@ export const ERROR_KEYS = {
   EPISODE_NOT_FOUND: 'error.episode.not_found',
   EPISODE_ALREADY_COMPLETED: 'error.episode.already_completed',
   MAGNET_ALREADY_ATTACHED: 'error.magnet.already_attached',
+  MAGNET_ALREADY_ATTACHED_SEASON: 'error.magnet.already_attached_season',
   MEDIA_UNSUPPORTED_TYPE: 'error.media.unsupported_type',
   MEDIA_CATALOG_UNAVAILABLE: 'error.media.catalog_unavailable',
   MEDIA_TYPE_DISABLED: 'error.media.type_disabled',

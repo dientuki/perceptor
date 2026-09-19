@@ -123,6 +123,7 @@ type Download {
   releaseTitle: String
   movieId: Int
   seasonId: Int
+  seasonNumber: Int
   episodeId: Int
   status: String!
   torrentState: String

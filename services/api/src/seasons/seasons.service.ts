@@ -120,8 +120,9 @@ export class SeasonsService {
     }
 
     if (existingSource && existingSource.season && existingSource.season.id !== seasonId) {
-      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
-        title: this.seasonDisplayTitle(existingSource.season),
+      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED_SEASON, {
+        show: existingSource.season.show.title,
+        number: existingSource.season.seasonNumber,
       });
     }
 
@@ -254,11 +255,5 @@ export class SeasonsService {
     const season = String(episode.season.seasonNumber).padStart(2, '0');
     const ep = String(episode.episodeNumber).padStart(2, '0');
     return `${episode.season.show.title} S${season}E${ep}`;
-  }
-
-  // "<Show> Temporada <n>" rendering, matching the label
-  // SeasonAccordion.tsx already shows on the web side.
-  private seasonDisplayTitle(season: { seasonNumber: number; show: { title: string } }): string {
-    return `${season.show.title} Temporada ${season.seasonNumber}`;
   }
 }

@@ -369,6 +369,89 @@ describe('DownloadsService', () => {
     });
   });
 
+  // 063-downloads-panel-filters: this suite exists because a wrong order
+  // (or a dropped sort) renders a valid panel with no error anywhere — the
+  // row that just changed sits at the bottom. Fault injection: ignore the
+  // job timestamp in byLastActivity and the first case fails.
+  describe('movieDownloads/showDownloads — last-activity order', () => {
+    const row = (id: number, updatedAt: string) => ({
+      id,
+      kind: 'TORRENT_SEARCH',
+      status: 'SCANNED',
+      infoHash: `hash-${id}`,
+      releaseTitle: null,
+      movieId: 7,
+      seasonId: null,
+      episodeId: null,
+      updatedAt: new Date(updatedAt),
+    });
+
+    beforeEach(() => {
+      prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Orden' });
+    });
+
+    it('puts an older source whose encode job just changed above a newer idle source', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([row(2, '2026-09-19T10:00:00Z'), row(1, '2026-09-18T10:00:00Z')]);
+      prisma.processJob.findMany.mockResolvedValue([
+        { status: 'ENCODING', progress: 10, encodeSpeed: null, updatedAt: new Date('2026-09-19T11:00:00Z'), sourceFile: { mediaSourceId: 1 } },
+      ]);
+
+      const downloads = await service.movieDownloads(7, 'user-1');
+
+      expect(downloads.map((d) => d.mediaSourceId)).toEqual([1, 2]);
+    });
+
+    it('orders by the source updatedAt, newest first, when there are no jobs', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([row(1, '2026-09-18T10:00:00Z'), row(2, '2026-09-19T10:00:00Z')]);
+
+      const downloads = await service.movieDownloads(7, 'user-1');
+
+      expect(downloads.map((d) => d.mediaSourceId)).toEqual([2, 1]);
+    });
+
+    it('breaks an activity tie with the higher source id first', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([row(1, '2026-09-19T10:00:00Z'), row(2, '2026-09-19T10:00:00Z')]);
+
+      const downloads = await service.movieDownloads(7, 'user-1');
+
+      expect(downloads.map((d) => d.mediaSourceId)).toEqual([2, 1]);
+    });
+
+    it('showDownloads orders the same way and labels a season row with its number', async () => {
+      const show = { id: 9, title: 'Reacher' };
+      prisma.show.findFirst.mockResolvedValue(show);
+      const base = { kind: 'TORRENT_SEARCH', status: 'SCANNED', infoHash: null, releaseTitle: null, movieId: null };
+      prisma.mediaSource.findMany.mockResolvedValue([
+        {
+          ...base,
+          id: 2,
+          seasonId: 30,
+          episodeId: null,
+          updatedAt: new Date('2026-09-19T10:00:00Z'),
+          season: { id: 30, seasonNumber: 3 },
+          episode: null,
+        },
+        {
+          ...base,
+          id: 1,
+          seasonId: null,
+          episodeId: 55,
+          updatedAt: new Date('2026-09-19T11:00:00Z'),
+          season: null,
+          episode: { episodeNumber: 8, season: { seasonNumber: 3 } },
+        },
+      ]);
+
+      const downloads = await service.showDownloads(9, 'user-1');
+
+      expect(downloads.map((d) => d.mediaSourceId)).toEqual([1, 2]);
+      expect(downloads[0].label).toBe('Reacher S03E08');
+      expect(downloads[0].seasonNumber).toBeUndefined();
+      expect(downloads[1].label).toBe('Reacher S03');
+      expect(downloads[1].seasonNumber).toBe(3);
+    });
+  });
+
   describe('movieDownloads — job grouping', () => {
     // T003: two MediaSource rows on the same title must not pool each
     // other's ProcessJob rows into one derivation. Fault injection: group
@@ -378,8 +461,8 @@ describe('DownloadsService', () => {
     it('derives each source from only its own jobs, never a sibling source on the same title', async () => {
       prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Dos Fuentes' });
       prisma.mediaSource.findMany.mockResolvedValue([
-        { id: 1, kind: 'TORRENT_SEARCH', status: 'SCANNED', infoHash: 'hash-1', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null },
-        { id: 2, kind: 'TORRENT_SEARCH', status: 'SCANNED', infoHash: 'hash-2', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null },
+        { id: 1, kind: 'TORRENT_SEARCH', status: 'SCANNED', infoHash: 'hash-1', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+        { id: 2, kind: 'TORRENT_SEARCH', status: 'SCANNED', infoHash: 'hash-2', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
       ]);
       // Source 1's job is COMPLETED; source 2's job is still ENCODING.
       // Pooling them would make either row report the other's status.

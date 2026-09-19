@@ -91,11 +91,9 @@ export default async function MovieDetailsPage({ params }: PageProps) {
             languageOptions={languages}
             shortsEnabled={capabilities.shortsEnabled}
           />
+          <DownloadsPanel downloads={downloads} />
           <SearchTorrent target={target} />
         </div>
-      </div>
-      <div className="mt-6">
-        <DownloadsPanel downloads={downloads} />
       </div>
     </div>
   );

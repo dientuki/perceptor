@@ -88,10 +88,8 @@ export default async function ShowDetailsPage({ params }: PageProps) {
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
           <Show show={show} languageOptions={languageOptions} />
+          <DownloadsPanel downloads={downloads} showTitle={show.title} />
         </div>
-      </div>
-      <div className="mt-6">
-        <DownloadsPanel downloads={downloads} />
       </div>
       <div className="mt-6 space-y-4">
         {seasonsNewestFirst.map((season) => (

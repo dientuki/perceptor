@@ -318,7 +318,7 @@ describe('SeasonsService', () => {
       });
 
       await expect(service.addMagnetToSeason(42, { magnet, force: false }, 'user-1')).rejects.toThrow(
-        'That magnet is already attached to «Reacher Temporada 1»',
+        'That magnet is already attached to «Reacher Season 1»',
       );
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();

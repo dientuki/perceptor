@@ -13,6 +13,7 @@ interface ButtonProps {
   type?: "button" | "submit" | "reset";
   title?: string; // Tooltip text
   ariaLabel?: string; // aria-label for the element
+  ariaPressed?: boolean;
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -27,6 +28,7 @@ const Button: React.FC<ButtonProps> = ({
   type = "button",
   title,
   ariaLabel,
+  ariaPressed,
 }) => {
   // Size Classes
   const sizeClasses = {
@@ -56,6 +58,7 @@ const Button: React.FC<ButtonProps> = ({
       type={type}
       title={title}
       aria-label={ariaLabel}
+      aria-pressed={ariaPressed}
     >
       {startIcon && <span className="flex items-center">{startIcon}</span>}
       {children}

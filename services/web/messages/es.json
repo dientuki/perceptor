@@ -46,6 +46,7 @@
     },
     "magnet": {
       "already_attached": "Ese magnet ya está asociado a «{title}»",
+      "already_attached_season": "Ese magnet ya está asociado a «{show} Temporada {number}»",
       "not_a_magnet": "Eso no parece un enlace magnet",
       "invalid_infohash": "El magnet no tiene un infoHash válido",
       "v2_unsupported": "Los magnets de BitTorrent v2 todavía no están soportados"
@@ -379,6 +380,9 @@
   "downloads": {
     "panel": {
       "title": "Descargas",
+      "filterCompleted": "Completadas",
+      "filterWorking": "En curso",
+      "filterError": "Con error",
       "refresh": "Actualizar",
       "refreshing": "Actualizando...",
       "empty": "Todavía no hay descargas para este título.",
