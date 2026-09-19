@@ -31,7 +31,7 @@ export function MediaCard({
   const isShow = item.type === MEDIA_TYPE.SHOW;
   const isShort = showShortBadge && item.isShort === true;
   const year = item.releaseDate
-    ? new Date(item.releaseDate).getFullYear()
+    ? new Date(item.releaseDate).getUTCFullYear()
     : "N/A";
 
   const poster = item.posterUrl ? (

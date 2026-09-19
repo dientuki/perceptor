@@ -45,7 +45,7 @@ function EpisodeRow({
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-gray-700 dark:text-gray-300">
         {episode.releaseDate
-          ? new Date(episode.releaseDate).toLocaleDateString(activeLocale)
+          ? new Date(episode.releaseDate).toLocaleDateString(activeLocale, { timeZone: "UTC" })
           : "-"}
       </td>
       <td className="px-4 py-3">

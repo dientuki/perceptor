@@ -64,7 +64,7 @@ export default async function Show({
           </h3>
           <p className="text-gray-500 dark:text-gray-400">
             {show.releaseDate
-              ? new Date(show.releaseDate).getFullYear()
+              ? new Date(show.releaseDate).getUTCFullYear()
               : t("unknownYear")}{" "}
             • {show.originalLanguage.toUpperCase()} •{" "}
             <StatusBadge status={show.status} />

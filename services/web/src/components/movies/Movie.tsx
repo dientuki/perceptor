@@ -142,7 +142,7 @@ export default function Movie({
           </h3>
           <p className="text-gray-500 dark:text-gray-400">
             {movie.releaseDate
-              ? new Date(movie.releaseDate).getFullYear()
+              ? new Date(movie.releaseDate).getUTCFullYear()
               : t("unknownYear")}{" "}
             • {movie.originalLanguage.toUpperCase()} •{" "}
             <StatusBadge status={movie.status} />
