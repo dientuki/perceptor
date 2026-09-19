@@ -408,6 +408,7 @@ run.
 `calendar` query, `CalendarEntry` and `CalendarEntryKind`. `web` typechecks at 0 errors,
 `bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs` confirms no `en`/`es`
 drift at 442 keys. `worker` untouched. The live manual pass on `/calendar` has not been run.
+— and again 2026-09-19 after `063-downloads-panel-filters`: `api` 609/50 suites, 0 typecheck errors, `git status --short services/api/prisma` empty (no migration), `schema.gql` diff is exactly `seasonNumber: Int` on `Download`. `web` typechecks at 0 errors, `bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs` confirms no `en`/`es` drift at 446 keys. `worker` untouched. The downloads panel now has completed/working/error filters, orders by last activity and sits inside the detail card; a season-pack row's name is built by `web` from `seasonNumber`. The live manual pass (AC-1 to AC-9) has not been run.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

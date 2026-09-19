@@ -811,7 +811,7 @@ The full vocabulary, by owner:
 | :-- | :-- |
 | `api` — auth | `error.auth.unauthenticated`, `error.auth.session_expired`, `error.auth.invalid_credentials`, `error.auth.account_disabled`, `error.auth.admin_required` |
 | `api` — users | `error.user.username_taken`, `error.user.not_found`, `error.user.cannot_disable_self`, `error.user.cannot_disable_last_admin`, `error.user.cannot_delete_self`, `error.user.cannot_delete_last_admin`, `error.user.unsupported_locale` |
-| `api` — movies/shows/seasons/episodes | `error.movie.not_found`, `error.movie.not_in_catalog`, `error.movie.download_in_progress`, `error.show.not_available`, `error.show.not_in_catalog`, `error.season.not_found`, `error.season.download_in_progress`, `error.episode.not_found`, `error.episode.download_in_progress`, `error.magnet.already_attached`, `error.media.unsupported_type`, `error.media.catalog_unavailable` (`033-billboard-and-navigation`) |
+| `api` — movies/shows/seasons/episodes | `error.movie.not_found`, `error.movie.not_in_catalog`, `error.movie.download_in_progress`, `error.show.not_available`, `error.show.not_in_catalog`, `error.season.not_found`, `error.season.download_in_progress`, `error.episode.not_found`, `error.episode.download_in_progress`, `error.magnet.already_attached`, `error.magnet.already_attached_season` (`063`, params `{show, number}`), `error.media.unsupported_type`, `error.media.catalog_unavailable` (`033-billboard-and-navigation`) |
 | `api` — magnet parsing | `error.magnet.not_a_magnet`, `error.magnet.invalid_infohash`, `error.magnet.v2_unsupported` |
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
 | `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash` |
@@ -944,14 +944,16 @@ designed.
 ### Download status and torrent tags (`022-download-status-tags`)
 
 ```graphql
+# `movieDownloads`/`showDownloads` order by last activity, newest first (`063`)
 type Download {
   mediaSourceId: Int!
   infoHash: String          # null for a LOCAL_FILE upload racing alongside torrents
   kind: String!             # SourceKind, plain String! — for display, not for branching
-  label: String!            # "Transformers" | "Reacher S03E08" | "Reacher Temporada 3"
+  label: String!            # "Transformers" | "Reacher S03E08" | "Reacher S03" (language-neutral, `063`)
   releaseTitle: String
   movieId: Int
   seasonId: Int
+  seasonNumber: Int         # season packs only (`063`); web builds the localized label from it
   episodeId: Int
   status: String!           # SourceStatus, plain String! like every other status field
   torrentState: String      # raw qBittorrent state; null when the torrent is not in the client
