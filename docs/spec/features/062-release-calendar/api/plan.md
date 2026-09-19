@@ -2,7 +2,7 @@
 title: Release Calendar — api slice
 service: api
 last_updated: 2026-09-19
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Release Calendar — `api` (`api/plan.md`)

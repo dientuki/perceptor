@@ -1,4 +1,5 @@
 import {
+  deriveEpisodeStatus,
   deriveSourceStatus,
   deriveTitleStatus,
   isLiftedBySeasonPack,
@@ -291,6 +292,39 @@ describe('isLiftedBySeasonPack', () => {
 
   it('lifts an episode whose releaseDate equals now exactly', () => {
     expect(isLiftedBySeasonPack([{ status: 'DOWNLOADING' }], now, now)).toBe(true);
+  });
+});
+
+// The bug class this defends against: the calendar and the show detail page each deriving an
+// episode's status and drifting apart. A season-pack lift applied in one reader but not the other
+// renders an aired, queued episode as MISSING in one screen and QUEUED in the other, with no error.
+describe('deriveEpisodeStatus', () => {
+  const now = new Date('2026-09-16T00:00:00Z');
+  const aired = new Date('2026-09-01T00:00:00Z');
+  const future = new Date('2026-10-01T00:00:00Z');
+  const episode = (status: 'MISSING' | 'ERROR', releaseDate: Date | null) => ({
+    status,
+    releaseDate,
+    mediaSources: [],
+    processJobs: [],
+  });
+
+  it('lifts an aired episode to QUEUED while a season pack is in flight', () => {
+    expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode('MISSING', aired), now)).toBe('QUEUED');
+  });
+
+  it('leaves an unaired episode MISSING despite an in-flight season pack', () => {
+    expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode('MISSING', future), now)).toBe('MISSING');
+  });
+
+  it('lets a stored ERROR win over a lift', () => {
+    expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode('ERROR', aired), now)).toBe('ERROR');
+  });
+
+  it('lifts nothing when the season sources are SCANNED or ERROR', () => {
+    expect(deriveEpisodeStatus([{ status: 'SCANNED' }, { status: 'ERROR' }], episode('MISSING', aired), now)).toBe(
+      'MISSING',
+    );
   });
 });
 

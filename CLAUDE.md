@@ -58,7 +58,7 @@ never a target resolution. The worker defaults an absent or unrecognised `compre
 entirely regardless of the resolution setting (`032`) |
 `011`, `013`, `024`, `031`, `032`, `042`, `046`, `047`, `048`, `051`, `053`, `054`, `057`, `058` |
 | Notify media server | `api` — `src/media-server/`, `src/clients/media-server/` (Jellyfin, opt-in, default `none`); no longer write-only — a local index (`src/media-server-index/`) lets a client with no native provider-id lookup answer "does this title exist" too, rebuilt on demand from Settings or a "Re-sincronizar" button in `web` | `034` |
-| Browse library | `api` — the three resolvers; `web` — `/`, the billboard, plus `/movies`, `/shows` and their detail pages, all per-user. Since `059`, an episode can read `QUEUED` with no source or job of its own: while its season has a non-`ERROR`, not-yet-scanned pack in flight, every aired episode (`releaseDate` non-null and not after now) is lifted to at least `QUEUED` at read time (`ShowsService`, fed through the existing `deriveTitleStatus`, `043`) — never written, so deleting or scanning the pack un-does it with no un-write anywhere | `007`, `008`, `009`, `010`, `033`, `059` |
+| Browse library | `api` — the three resolvers; `web` — `/`, the billboard, plus `/movies`, `/shows` and their detail pages, all per-user. Since `059`, an episode can read `QUEUED` with no source or job of its own: while its season has a non-`ERROR`, not-yet-scanned pack in flight, every aired episode (`releaseDate` non-null and not after now) is lifted to at least `QUEUED` at read time (`ShowsService`, fed through the existing `deriveTitleStatus`, `043`) — never written, so deleting or scanning the pack un-does it with no un-write anywhere. Since `062`, `/calendar` is a month grid of releases (films, shorts, episodes grouped per series, season and day with a `completed/total` count), fed by `api`'s read-only `calendar(from, to)` query and coloured by status; month changes are fetched in place and the URL never changes | `007`, `008`, `009`, `010`, `033`, `059`, `062` |
 
 One gap worth knowing: every listing/detail route is scoped to the calling user — a title another
 user owns answers `Recurso no disponible para este usuario` rather than rendering.
@@ -403,6 +403,11 @@ live in `es` afterward.
 `git status --short services/api/prisma` empty (no migration), `schema.gql` not in the diff.
 `web`/`worker` untouched. The live manual pass (AC-1 to AC-7 against a running stack) has not been
 run.
+— and again 2026-09-19 after `062-release-calendar`: `api` 603/50 suites, 0 typecheck errors,
+`git status --short services/api/prisma` empty (no migration), `schema.gql` diff is exactly the
+`calendar` query, `CalendarEntry` and `CalendarEntryKind`. `web` typechecks at 0 errors,
+`bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs` confirms no `en`/`es`
+drift at 442 keys. `worker` untouched. The live manual pass on `/calendar` has not been run.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

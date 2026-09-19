@@ -12,7 +12,8 @@ import { MEDIA_TYPE } from '@/types/media';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
-import { deriveTitleStatus, isLiftedBySeasonPack } from '@/pipeline-status/pipeline-status';
+import { deriveEpisodeStatus } from '@/pipeline-status/pipeline-status';
+import { CalendarEpisodeRow } from '@/calendar/group-episodes';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { classifyContentKind } from '@/media/content-kind';
 
@@ -98,6 +99,39 @@ export class ShowsService implements MediaTypeService {
     };
   }
 
+  async findEpisodesReleasedBetween(
+    userId: string,
+    from: Date,
+    toExclusive: Date,
+  ): Promise<CalendarEpisodeRow[]> {
+    const episodes = await this.prisma.episode.findMany({
+      where: {
+        releaseDate: { gte: from, lt: toExclusive },
+        season: { show: { users: { some: { userId } } } },
+      },
+      include: {
+        mediaSources: true,
+        processJobs: true,
+        season: {
+          include: {
+            show: { select: { id: true, title: true } },
+            mediaSources: { where: { status: { not: 'ERROR' } } },
+          },
+        },
+      },
+    });
+    const now = new Date();
+    return episodes.map((episode) => ({
+      showId: episode.season.show.id,
+      showTitle: episode.season.show.title,
+      seasonNumber: episode.season.seasonNumber,
+      episodeNumber: episode.episodeNumber,
+      episodeTitle: episode.title,
+      releaseDate: episode.releaseDate as Date,
+      status: deriveEpisodeStatus(episode.season.mediaSources, episode, now),
+    }));
+  }
+
   // Shared by findOneFromDb and setContentKind (059-season-pack-acquisition-ui T003): per
   // episode, feeds deriveTitleStatus its own sources/jobs plus one extra { status: 'QUEUED' }
   // source when isLiftedBySeasonPack's predicate holds for the episode's season — an unscanned
@@ -119,23 +153,10 @@ export class ShowsService implements MediaTypeService {
     const now = new Date();
     return seasons.map((season) => ({
       ...season,
-      episodes: season.episodes.map((episode) => {
-        const lifted = isLiftedBySeasonPack(
-          season.mediaSources,
-          episode.releaseDate,
-          now,
-        );
-        return {
-          ...episode,
-          status: deriveTitleStatus({
-            status: episode.status,
-            sources: lifted
-              ? [...episode.mediaSources, { status: 'QUEUED' as const }]
-              : episode.mediaSources,
-            jobs: episode.processJobs,
-          }),
-        };
-      }),
+      episodes: season.episodes.map((episode) => ({
+        ...episode,
+        status: deriveEpisodeStatus(season.mediaSources, episode, now),
+      })),
     }));
   }
 

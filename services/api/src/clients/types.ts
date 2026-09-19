@@ -97,4 +97,5 @@ export interface MediaSearchResult {
   // written for a live-action one, so most cache entries never grow this.
   genreIds?: number[];
   keywordIds?: number[];
+  earliestReleaseDate?: string | null;
 }

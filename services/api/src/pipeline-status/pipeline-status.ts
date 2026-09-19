@@ -274,3 +274,23 @@ export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
 
   return best;
 }
+
+export type EpisodeStatusInput = {
+  status: MediaStatus;
+  releaseDate: Date | null;
+  mediaSources: TitleAltitudeSource[];
+  processJobs: TitleAltitudeJob[];
+};
+
+export function deriveEpisodeStatus(
+  seasonSources: SeasonPackLiftSource[],
+  episode: EpisodeStatusInput,
+  now: Date,
+): PipelineStatus {
+  const lifted = isLiftedBySeasonPack(seasonSources, episode.releaseDate, now);
+  return deriveTitleStatus({
+    status: episode.status,
+    sources: lifted ? [...episode.mediaSources, { status: 'QUEUED' as const }] : episode.mediaSources,
+    jobs: episode.processJobs,
+  });
+}

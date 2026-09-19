@@ -7,8 +7,8 @@ import {
   Film,
   Popcorn,
   Settings,
+  Tv,
   Users,
-  TvMinimal,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -67,7 +67,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     ...(capabilities.showsEnabled
       ? [
           {
-            icon: <TvMinimal />,
+            icon: <Tv />,
             name: t("shows"),
             path: "/shows",
           },

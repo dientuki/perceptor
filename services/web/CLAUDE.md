@@ -389,6 +389,16 @@ two formatters must never substitute for each other; see `docs/spec/graphql-cont
 `053-downloads-panel-repair` section for the full reasoning. `0` renders `0.00x`, never `—` — it is
 a real multiplier at the start of an encode.
 
+## The calendar (`/calendar`, `062-release-calendar`)
+
+`components/calendar/Calendar.tsx` is a read-only FullCalendar `dayGridMonth` (`@fullcalendar/core`,
+`react` and `daygrid` only, pinned to 6.x — `react` 7 wants a different `core` than `daygrid`). Month
+changes refetch through the `getCalendarEntries` server action via FullCalendar's function-valued
+`events`; the URL stays `/calendar` and nothing navigates. The action returns `{ entries } | { error }`
+rather than throwing, so the translated message survives a production build. Colours come from
+`lib/status-tone.ts`'s `statusTone`, shared with `StatusBadge`, mapped onto the template's `fc-bg-*`
+classes in `globals.css`. The page has no capability gate: a disabled media type is filtered by `api`.
+
 ## The `AcquisitionTarget` union
 
 `SearchTorrentModal.tsx`, `SearchTorrent.tsx`, `importMagnetModal.tsx` and `importFileModal.tsx` all

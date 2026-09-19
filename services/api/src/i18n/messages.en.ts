@@ -140,6 +140,9 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SCHEDULE_TASK_UNAVAILABLE]:
     'This task is not available: its content type is disabled',
 
+  [ERROR_KEYS.CALENDAR_INVALID_DATE]: 'Invalid date: {value}',
+  [ERROR_KEYS.CALENDAR_INVALID_RANGE]: 'Invalid calendar range',
+
   // class-validator DTO constraints
   [ERROR_KEYS.VALIDATION_SETTING_KEY_REQUIRED]: 'The key is required',
   [ERROR_KEYS.VALIDATION_SETTING_VALUE_REQUIRED]: 'The value is required',

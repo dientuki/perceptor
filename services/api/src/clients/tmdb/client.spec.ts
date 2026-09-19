@@ -105,3 +105,41 @@ describe('TmdbClient.details', () => {
     expect(detail.genreIds).toEqual([]);
   });
 });
+
+// This suite exists because otherwise a registration stores the wrong
+// release date with no error anywhere: picking the first entry instead of the
+// earliest, or comparing raw timestamps of mixed shape, still yields a valid
+// date, and an empty response yielding "" would overwrite the plain date.
+describe('TmdbClient.earliestMovieReleaseDate', () => {
+  let client: TmdbClient;
+
+  beforeEach(() => {
+    client = new TmdbClient(settingsStub());
+    global.fetch = jest.fn();
+  });
+
+  it('picks the earliest date across countries and release types', async () => {
+    mockFetchOnce({
+      results: [
+        { iso_3166_1: 'MX', release_dates: [{ release_date: '2026-02-19T00:00:00.000Z' }] },
+        {
+          iso_3166_1: 'EE',
+          release_dates: [
+            { release_date: '2026-01-10T00:00:00.000Z' },
+            { release_date: '2025-11-15T00:00:00.000Z' },
+          ],
+        },
+      ],
+    });
+
+    expect(await client.earliestMovieReleaseDate(1)).toBe('2025-11-15');
+  });
+
+  it('returns null when there are no usable dates', async () => {
+    mockFetchOnce({
+      results: [{ iso_3166_1: 'US', release_dates: [{ release_date: '' }] }],
+    });
+
+    expect(await client.earliestMovieReleaseDate(1)).toBeNull();
+  });
+});

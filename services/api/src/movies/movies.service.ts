@@ -116,6 +116,20 @@ export class MoviesService implements MediaTypeService {
     return movies.map((movie) => this.withDerivedStatus(movie));
   }
 
+  async findReleasedBetween(userId: string, from: Date, toExclusive: Date) {
+    const movies = await this.prisma.movie.findMany({
+      where: {
+        users: { some: { userId } },
+        releaseDate: { gte: from, lt: toExclusive },
+      },
+      include: {
+        mediaSources: true,
+        processJobs: true,
+      },
+    });
+    return movies.map((movie) => this.withDerivedStatus(movie));
+  }
+
   // Same ownership clause as attachTorrentSource: returns the film only when
   // the caller is linked to it via user_movies. Returns null both when the
   // id does not exist and when it exists but belongs to someone else — the
@@ -217,9 +231,10 @@ export class MoviesService implements MediaTypeService {
         title: cached.title,
         overview: cached.overview,
         posterUrl: cached.posterUrl ?? undefined,
-        releaseDate: cached.releaseDate
-          ? new Date(cached.releaseDate)
-          : undefined,
+        releaseDate:
+          topped.earliestReleaseDate || cached.releaseDate
+            ? new Date((topped.earliestReleaseDate || cached.releaseDate)!)
+            : undefined,
         originalLanguage: cached.originalLanguage,
         isShort,
         contentKind,
@@ -371,25 +386,39 @@ export class MoviesService implements MediaTypeService {
   private async topUpCatalogFacts(
     cached: MediaSearchResult,
   ): Promise<MediaSearchResult> {
-    const hasRuntime = typeof cached.runtime === 'number';
-    const hasGenreIds = Array.isArray(cached.genreIds);
-    if (hasRuntime && hasGenreIds) return cached;
+    const needsDetails =
+      typeof cached.runtime !== 'number' || !Array.isArray(cached.genreIds);
+    const needsRelease = cached.earliestReleaseDate === undefined;
+    if (!needsDetails && !needsRelease) return cached;
 
-    try {
-      const detail = (await this.tmdb.details(
-        MEDIA_TYPE.MOVIE,
-        cached.id,
-      )) as MovieDetail;
-      const topped: MediaSearchResult = {
-        ...cached,
-        runtime: detail.runtime ?? null,
-        genreIds: detail.genreIds ?? [],
-      };
-      void this.cacheMovies([topped]);
-      return topped;
-    } catch {
-      return cached;
+    let topped = cached;
+    if (needsDetails) {
+      try {
+        const detail = (await this.tmdb.details(
+          MEDIA_TYPE.MOVIE,
+          cached.id,
+        )) as MovieDetail;
+        topped = {
+          ...topped,
+          runtime: detail.runtime ?? null,
+          genreIds: detail.genreIds ?? [],
+        };
+      } catch {
+      }
     }
+    if (needsRelease) {
+      try {
+        topped = {
+          ...topped,
+          earliestReleaseDate: await this.tmdb.earliestMovieReleaseDate(
+            cached.id,
+          ),
+        };
+      } catch {
+      }
+    }
+    if (topped !== cached) void this.cacheMovies([topped]);
+    return topped;
   }
 
   // 056-shorts-runtime-classification: the initial value for a film's

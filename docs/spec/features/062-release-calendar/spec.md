@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan Farias
 created_at: 2026-09-19
 last_updated: 2026-09-19
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -220,3 +220,14 @@ None. `Movie.releaseDate`, `Episode.releaseDate`, `Movie.isShort` and the owners
 - **Live updates.** Statuses are read when the month is fetched; no polling, no push.
 - **Season-level entries.** A season pack in flight shows through its episodes' lifted `QUEUED`
   status (`059`), not as its own calendar entry.
+
+## Verification Record (2026-09-19)
+
+Run: `api` 603/50 suites green, 0 typecheck errors; `web` 0 typecheck errors, build exits 0, catalog check
+clean at 442 keys; `git status --short services/api/prisma services/worker` empty; `schema.gql` diff matches
+the Contract Delta. Covered by unit tests only: REQ-4, REQ-7, REQ-7b (incl. AC-5, AC-5b), REQ-9 (AC-7),
+NFR-2 and NFR-4's date handling (AC-9, AC-11 in `api`), the error keys.
+
+**Not run live** (no signed-in session was available to the implementing agent, and it does not enter
+credentials): AC-1 to AC-4, AC-6, AC-8, AC-10 to AC-13 and the direct HTTP query of AC-9. The acceptance
+boxes above are therefore left unticked until someone walks `/calendar` on a running stack.

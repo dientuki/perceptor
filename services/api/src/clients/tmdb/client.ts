@@ -188,6 +188,22 @@ export class TmdbClient implements MovieDBClient {
     return (data.results ?? []).map((keyword) => keyword.id);
   }
 
+  async earliestMovieReleaseDate(id: number): Promise<string | null> {
+    const data = await this.fetchOne<{
+      results?: { release_dates?: { release_date?: string }[] }[];
+    }>(`movie/${id}/release_dates`);
+
+    let earliest: string | null = null;
+    for (const country of data.results ?? []) {
+      for (const entry of country.release_dates ?? []) {
+        const day = (entry.release_date ?? '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+        if (earliest === null || day < earliest) earliest = day;
+      }
+    }
+    return earliest;
+  }
+
   async seasonDetails(id: number, seasonNumber: number): Promise<EpisodeDetail[]> {
     const data = await this.fetchOne<TmdbSeasonDetails>(`tv/${id}/season/${seasonNumber}`);
 

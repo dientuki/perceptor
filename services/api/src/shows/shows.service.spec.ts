@@ -127,6 +127,27 @@ describe('ShowsService', () => {
   // back whatever it was told regardless of the query it was actually
   // given, so the call arguments are the only observable that can catch the
   // filter going missing or being hardcoded to some other id.
+  describe('findEpisodesReleasedBetween', () => {
+    it('scopes to shows the caller owns and passes the date bounds to Prisma', async () => {
+      const findMany = jest.fn().mockResolvedValue([]);
+      (prisma.episode as unknown as { findMany: jest.Mock }).findMany = findMany;
+      const from = new Date('2026-09-01T00:00:00Z');
+      const toExclusive = new Date('2026-10-01T00:00:00Z');
+
+      await service.findEpisodesReleasedBetween('user-1', from, toExclusive);
+
+      expect(findMany).toHaveBeenCalledTimes(1);
+      const [args] = findMany.mock.calls[0];
+      expect(args.where).toEqual({
+        releaseDate: { gte: from, lt: toExclusive },
+        season: { show: { users: { some: { userId: 'user-1' } } } },
+      });
+      expect(args.include.season.include.mediaSources).toEqual({
+        where: { status: { not: 'ERROR' } },
+      });
+    });
+  });
+
   describe('findAll', () => {
     it('scopes the query to the caller through the user_shows join', async () => {
       prisma.show.findMany.mockResolvedValue([{ id: 1, title: 'Mine' }]);

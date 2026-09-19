@@ -106,6 +106,10 @@
     },
     "setting": {
       "expected_cron": "El valor de {key} tiene que ser una expresión cron válida"
+    },
+    "calendar": {
+      "invalid_date": "Fecha inválida: {value}",
+      "invalid_range": "Rango de calendario inválido"
     }
   },
   "landing": {
@@ -215,6 +219,11 @@
       "title": "Resultados de búsqueda",
       "metadataTitle": "Búsqueda | Perceptor",
       "metadataDescription": "Resultados de búsqueda entre películas y series"
+    },
+    "calendar": {
+      "title": "Calendario",
+      "metadataTitle": "Calendario | Perceptor",
+      "metadataDescription": "Calendario de estrenos de tu biblioteca"
     }
   },
   "notFound": {
@@ -618,5 +627,16 @@
       "enableTitle": "Habilitar usuario",
       "deleteTitle": "Eliminar usuario"
     }
+  },
+  "calendar": {
+    "legendCompleted": "En la biblioteca",
+    "legendProgress": "En curso",
+    "legendError": "Con error",
+    "legendMissing": "Todavía no",
+    "loading": "Cargando calendario…",
+    "loadError": "No se pudo cargar el calendario",
+    "kindMovie": "Película",
+    "kindShort": "Corto",
+    "kindEpisodes": "Episodios"
   }
 }

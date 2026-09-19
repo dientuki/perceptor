@@ -1,7 +1,7 @@
 ---
 title: Release Calendar — Tasks
 last_updated: 2026-09-19
-status: Draft
+status: Done
 ---
 
 # TASKS: Release Calendar (`tasks.md`)
@@ -22,7 +22,7 @@ Prisma migration: `git status --short services/api/prisma` must stay empty throu
 
 ### Group 1 — shared derivation, range and grouping (`api`, pure functions)
 
-- [ ] **T001** `[api] [P]` In `src/pipeline-status/pipeline-status.ts`, add a pure exported
+- [x] **T001** `[api] [P]` In `src/pipeline-status/pipeline-status.ts`, add a pure exported
       `deriveEpisodeStatus(seasonSources, episode, now)` holding exactly the per-episode body of
       `ShowsService.deriveSeasonEpisodeStatuses` (the `isLiftedBySeasonPack` check feeding
       `deriveTitleStatus` an extra `{ status: 'QUEUED' }` source). Make
@@ -32,7 +32,7 @@ Prisma migration: `git status --short services/api/prisma` must stay empty throu
       lifts nothing. See `api/plan.md` step 1.
       *Done when:* `bin/npm api test` passes with the new cases counted and
       `src/shows/shows.service.spec.ts` passes **unmodified** (`git diff --stat` on it is empty).
-- [ ] **T002** `[api] [P]` Add `CALENDAR_INVALID_DATE: 'error.calendar.invalid_date'` and
+- [x] **T002** `[api] [P]` Add `CALENDAR_INVALID_DATE: 'error.calendar.invalid_date'` and
       `CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range'` to `src/i18n/error-keys.ts`, with
       templates `Invalid date: {value}` / `Invalid calendar range` in `src/i18n/messages.en.ts`. Add
       `src/calendar/calendar-range.ts`: pure `parseCalendarRange(from, to)` → `{ from, toExclusive }`
@@ -43,7 +43,7 @@ Prisma migration: `git status --short services/api/prisma` must stay empty throu
       62-day accepted, 63 refused, reversed refused, both impossible dates refused naming the bad
       value, `toExclusive` exactly one day past `to`. See `api/plan.md` steps 2–3.
       *Done when:* `bin/npm api test` passes including `messages.en.spec.ts` and the new file.
-- [ ] **T003** `[api] [P]` Add `src/calendar/group-episodes.ts`: pure grouping of derived episode rows
+- [x] **T003** `[api] [P]` Add `src/calendar/group-episodes.ts`: pure grouping of derived episode rows
       by `(showId, seasonNumber, UTC day)` into entries with `firstEpisodeNumber`/`lastEpisodeNumber`
       (min/max), `episodeCount`, `completedCount`, `episodeTitle` (only when the group has one
       member), and group status per REQ-7 (any `ERROR` → `ERROR`; else the most advanced in-progress
@@ -57,7 +57,7 @@ Prisma migration: `git status --short services/api/prisma` must stay empty throu
 
 ### Group 2 — ranged reads and the query (`api`)
 
-- [ ] **T004** `[api]` Add `MoviesService.findReleasedBetween(userId, from, toExclusive)`
+- [x] **T004** `[api]` Add `MoviesService.findReleasedBetween(userId, from, toExclusive)`
       (`releaseDate: { gte, lt }`, `users: { some: { userId } }`, include `mediaSources`/`processJobs`,
       mapped through `withDerivedStatus`) and `ShowsService.findEpisodesReleasedBetween(userId, from,
       toExclusive)` (episodes in range of shows the user owns, with show id/title, season number, season
@@ -67,7 +67,7 @@ Prisma migration: `git status --short services/api/prisma` must stay empty throu
       bounds reach Prisma. See `api/plan.md` steps 4–5. → T001
       *Done when:* `bin/cli api npx --no tsc --noEmit` reports 0 errors; `bin/npm api test` passes
       with both cases counted.
-- [ ] **T005** `[api]` Add `src/calendar/` — `entities/calendar-entry-kind.enum.ts`
+- [x] **T005** `[api]` Add `src/calendar/` — `entities/calendar-entry-kind.enum.ts`
       (`registerEnumType`, same shape as `src/media/entities/content-kind.enum.ts`),
       `entities/calendar-entry.entity.ts`, `calendar.service.ts` (parse range; one
       `MediaCapabilitiesService.read()`; films only if `moviesEnabled`, `isShort` films only if
@@ -91,11 +91,11 @@ Prisma migration: `git status --short services/api/prisma` must stay empty throu
 T006–T008 need nothing from `api` and may start immediately; T009 consumes the contract and waits
 for T005.
 
-- [ ] **T006** `[web] [P]` `bin/npm web install @fullcalendar/core @fullcalendar/react
+- [x] **T006** `[web] [P]` `bin/npm web install @fullcalendar/core @fullcalendar/react
       @fullcalendar/daygrid` — no other package. See `web/plan.md` step 1.
       *Done when:* `package.json` lists exactly those three new dependencies and
       `bin/npm web run build` exits 0.
-- [ ] **T007** `[web] [P]` Add `src/lib/status-tone.ts` (`statusTone(status)` →
+- [x] **T007** `[web] [P]` Add `src/lib/status-tone.ts` (`statusTone(status)` →
       `"completed" | "progress" | "error" | "missing"`, unknown values → `"missing"`) and move
       `StatusBadge.tsx`'s colour switch onto it with no visual change. Add `src/lib/calendar-label.ts`
       (`calendarEntryLabel(entry)`: `Title`; `Show S01E03`; `Show S01E01–E03 · 1/3`, two-digit
@@ -103,12 +103,12 @@ for T005.
       contract). See `web/plan.md` steps 3–4.
       *Done when:* `bin/cli web npx --no tsc --noEmit` reports 0 errors; the downloads panel and a
       show's season accordion render the same badge colours as before.
-- [ ] **T008** `[web] [P]` Add catalog keys to both `messages/en.json` and `messages/es.json`:
+- [x] **T008** `[web] [P]` Add catalog keys to both `messages/en.json` and `messages/es.json`:
       `pages.calendar.{title,metadataTitle,metadataDescription}`, `calendar.*` (four legend labels,
       loading, generic load error, kind labels), `errors.calendar.invalid_date` (with `{value}`),
       `errors.calendar.invalid_range`. `es` in the existing Rioplatense register.
       *Done when:* `bin/cli web node scripts/check-messages.mjs` reports no drift.
-- [ ] **T009** `[web]` Add `src/actions/calendar.ts` (`getCalendarEntries(from, to)`, shape of
+- [x] **T009** `[web]` Add `src/actions/calendar.ts` (`getCalendarEntries(from, to)`, shape of
       `src/actions/media-server.ts`, all nine fields, `redirectIfUnauthenticated` then
       `translateGraphQLError` on errors). Replace the untracked template
       `src/components/calendar/Calendar.tsx` with a read-only `dayGridMonth` view (no modals, no
@@ -129,17 +129,17 @@ for T005.
 
 ### Group 4 — verification and docs
 
-- [ ] **T010** `[docs]` Append a `062` section to `docs/spec/graphql-contract.md`: the query, the
+- [x] **T010** `[docs]` Append a `062` section to `docs/spec/graphql-contract.md`: the query, the
       entry type, why `date`/`from`/`to` are `String` calendar days, that disabled types are filtered
       rather than refused, and the two error keys. → T005
       *Done when:* the section exists and its SDL matches the regenerated `schema.gql`.
-- [ ] **T011** `[docs]` Update the root `CLAUDE.md` "Browse library" row (`062` added, `/calendar`
+- [x] **T011** `[docs]` Update the root `CLAUDE.md` "Browse library" row (`062` added, `/calendar`
       described) and "Current state" with the measured counts; `services/api/CLAUDE.md` (the
       `calendar/` module, `deriveEpisodeStatus` as the one episode derivation);
       `services/web/CLAUDE.md` (FullCalendar dependency, `status-tone.ts` shared by `StatusBadge` and
       the calendar, the `fc-*` styles in `globals.css` now in use). → T009
       *Done when:* each file names `062` and no statement in them contradicts the diff.
-- [ ] **T012** `[docs]` Run the verification in `plan.md` § Verification (typechecks, `api` tests,
+- [x] **T012** `[docs]` Run the verification in `plan.md` § Verification (typechecks, `api` tests,
       `web` build, catalog check, empty `prisma` and `worker` diffs, `schema.gql` diff) and the manual
       pass for AC-1 → AC-13 (incl. AC-5b), tick each box in `spec.md`, record anything not run live,
       set `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md`, `web/plan.md` and

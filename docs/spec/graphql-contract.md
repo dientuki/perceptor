@@ -1776,6 +1776,42 @@ like the episode twin; on `error.season.already_completed` it switches to the re
 resends with `force: true`, the same pattern `error.episode.already_completed` already has. `worker`
 has no obligation — it calls neither mutation and reads no episode status.
 
+### The release calendar is one read-only query over calendar days (`062-release-calendar`)
+
+```graphql
+enum CalendarEntryKind { MOVIE SHORT EPISODES }
+
+type CalendarEntry {
+  kind: CalendarEntryKind!
+  mediaId: Int!
+  title: String!
+  date: String!
+  status: String!
+  seasonNumber: Int
+  firstEpisodeNumber: Int
+  lastEpisodeNumber: Int
+  episodeTitle: String
+  episodeCount: Int
+  completedCount: Int
+}
+
+type Query {
+  calendar(from: String!, to: String!): [CalendarEntry!]!
+}
+```
+
+- `from`, `to` and `date` are `String` calendar days (`YYYY-MM-DD`), not `DateTime`: a release date is
+  stored at UTC midnight, and a timestamp would let a viewer's timezone move a film to the neighbouring
+  day. `to` is inclusive; the range may span at most 62 days.
+- Episodes arrive already grouped by series, season and day. `episodeCount` and `completedCount` are
+  non-null on every `EPISODES` entry, including a group of one; hiding the count for a single episode is
+  `web`'s display rule. `completedCount` counts only the episodes of that day's group.
+- `status` is the same `String!` as everywhere else (`043`); a group's status is `ERROR` over any
+  in-progress value over all-`COMPLETED` over `MISSING`.
+- A disabled media type is filtered out of the result, never refused, unlike `searchMedia`.
+- Errors: `error.calendar.invalid_date` (params `{ value }`) and `error.calendar.invalid_range`.
+- `worker` does not consume this query.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

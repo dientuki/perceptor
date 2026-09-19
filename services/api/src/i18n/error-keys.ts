@@ -106,6 +106,9 @@ export const ERROR_KEYS = {
   SCHEDULE_TASK_ALREADY_RUNNING: 'error.schedule.task_already_running',
   SCHEDULE_TASK_UNAVAILABLE: 'error.schedule.task_unavailable',
 
+  CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
+  CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',
+
   // class-validator DTO constraints (018 REQ-9). Not part of `spec.md`'s error
   // tables — spec.md doesn't name these eight, so the keys are named here,
   // consistently with the rest of the vocabulary. `main.ts`'s

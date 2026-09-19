@@ -214,6 +214,27 @@ describe('MoviesService', () => {
     });
   });
 
+  describe('findReleasedBetween', () => {
+    it('scopes to the caller and passes the date bounds to Prisma', async () => {
+      prisma.movie.findMany.mockResolvedValue([
+        { id: 1, title: 'Mine', status: 'MISSING', mediaSources: [], processJobs: [] },
+      ]);
+      const from = new Date('2026-09-01T00:00:00Z');
+      const toExclusive = new Date('2026-10-01T00:00:00Z');
+
+      const result = await service.findReleasedBetween('user-1', from, toExclusive);
+
+      expect(prisma.movie.findMany).toHaveBeenCalledWith({
+        where: {
+          users: { some: { userId: 'user-1' } },
+          releaseDate: { gte: from, lt: toExclusive },
+        },
+        include: { mediaSources: true, processJobs: true },
+      });
+      expect(result[0].status).toBe('MISSING');
+    });
+  });
+
   describe('findAll', () => {
     it('scopes the query to the caller through the user_movies join', async () => {
       prisma.movie.findMany.mockResolvedValue([

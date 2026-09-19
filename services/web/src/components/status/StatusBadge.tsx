@@ -1,19 +1,20 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { statusTone } from "@/lib/status-tone";
 
 // The one status pill (REQ-10). Replaces the byte-identical
 // `statusBadgeClass` duplicates that used to live in
 // `downloads/DownloadsPanel.tsx` and `shows/SeasonAccordion.tsx`.
 function statusBadgeClass(status: string): string {
-  switch (status) {
-    case "COMPLETED":
+  switch (statusTone(status)) {
+    case "completed":
       return "bg-green-500/10 text-green-500";
-    case "ERROR":
+    case "error":
       return "bg-red-500/10 text-red-500";
-    case "MISSING":
+    case "missing":
       return "bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400";
-    default:
+    case "progress":
       return "animate-pulse bg-blue-500/10 text-blue-500";
   }
 }

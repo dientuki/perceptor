@@ -106,6 +106,10 @@
     },
     "setting": {
       "expected_cron": "The value of {key} must be a valid cron expression"
+    },
+    "calendar": {
+      "invalid_date": "Invalid date: {value}",
+      "invalid_range": "Invalid calendar range"
     }
   },
   "landing": {
@@ -215,6 +219,11 @@
       "title": "Search results",
       "metadataTitle": "Search | Perceptor",
       "metadataDescription": "Search results across movies and series"
+    },
+    "calendar": {
+      "title": "Calendar",
+      "metadataTitle": "Calendar | Perceptor",
+      "metadataDescription": "Release calendar for your library"
     }
   },
   "notFound": {
@@ -618,5 +627,16 @@
       "enableTitle": "Enable user",
       "deleteTitle": "Delete user"
     }
+  },
+  "calendar": {
+    "legendCompleted": "In library",
+    "legendProgress": "In progress",
+    "legendError": "Failed",
+    "legendMissing": "Not yet",
+    "loading": "Loading calendar…",
+    "loadError": "Could not load the calendar",
+    "kindMovie": "Film",
+    "kindShort": "Short",
+    "kindEpisodes": "Episodes"
   }
 }

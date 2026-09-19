@@ -324,6 +324,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   include (the season level now also selects `mediaSources: { where: { status: { not: 'ERROR' } } }`)
   and share one private method for the lift, so the two readers cannot drift — `setContentKind`
   reclassifying a title never returns episodes without the projection the detail page just showed.
+- **`calendar/`** — since `062-release-calendar`, the read-only `calendar(from, to)` query behind
+  `web`'s `/calendar`. `CalendarService` composes `MoviesService.findReleasedBetween` and
+  `ShowsService.findEpisodesReleasedBetween` (no Prisma of its own), filters by `MediaCapabilitiesService`
+  (a disabled type is dropped, never refused), and groups episodes per series, season and UTC day in
+  `group-episodes.ts`. `calendar-range.ts` owns the only date parsing: `YYYY-MM-DD` in, an inclusive
+  `to` turned into an exclusive UTC bound once, at most 62 days. The per-episode status comes from
+  `deriveEpisodeStatus` in `pipeline-status/`, extracted from `ShowsService.deriveSeasonEpisodeStatuses`
+  so the calendar and the detail page can never disagree on an episode.
 - **`downloads/`** — `torrentCompleted`, called by qBittorrent's AutoRun hook. Matches **exclusively
   by infoHash** and silently ignores unknown hashes by design. An episode-owned source moves its
   `Episode` to `ENCODING` just as a movie-owned one does; a source already `ERROR` (superseded by a
