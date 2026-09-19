@@ -191,7 +191,7 @@ export class EpisodesService {
     // descarga cae en su propia carpeta. Corre antes de cualquier escritura
     // en la DB: si qBittorrent rechaza el torrent no debe quedar ninguna
     // fila QUEUED colgada, ni la fila activa demovida sin reemplazo.
-    const downloadPath = await this.qbittorrent.add(input.urls, episodeTags(episode));
+    const downloadPath = await this.qbittorrent.add(input.urls, episodeTags(episode), 'show');
 
     // Demote *before* creating the replacement, and only after qBittorrent
     // has accepted the new torrent — so a rejected add() leaves the

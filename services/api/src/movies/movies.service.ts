@@ -679,6 +679,7 @@ export class MoviesService implements MediaTypeService {
     const downloadPath = await this.qbittorrent.add(
       input.urls,
       movieTags(movie),
+      movie.isShort ? 'short' : 'movie',
     );
 
     existingSource

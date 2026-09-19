@@ -68,6 +68,8 @@ function mapTorrentState(state: string, completion: number): SourceStatus {
 // `{status}` as an interpolation param, rather than parsing it back out of a
 // string. `status` is 0 for a fetch()-level failure — the client unreachable
 // entirely, not merely answering with a non-2xx.
+export type TorrentCategory = 'movie' | 'short' | 'show';
+
 export class TorrentClientError extends Error {
   constructor(message: string, public readonly status: number) {
     super(message);
@@ -183,8 +185,9 @@ export class QbittorrentClient implements TorrentClient {
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#add-new-torrent
    * @param {string[]} urls Array of URLs (magnet links or torrent HTTP URLs) to add
    * @param {string[]} tags Optional tags, applied inline on add — no second call, no untagged window.
+   * @param {string} category Optional qBittorrent category naming the content type (movie, short, show). qBittorrent creates an unknown category on add; the savepath stays explicit, so the category never decides where files land.
    */
-  async add(urls: string[], tags?: string[]): Promise<string> {
+  async add(urls: string[], tags?: string[], category?: TorrentCategory): Promise<string> {
     const config = await this.settings.getMap();
     // path_downloads se guarda relativo a la raíz "downloads" (ver
     // media-roots/): acá se resuelve a la ruta absoluta que qBittorrent
@@ -206,6 +209,7 @@ export class QbittorrentClient implements TorrentClient {
     // qBittorrent's tags param is comma-separated on the wire (REQ-5's
     // sanitisation exists because of this exact separator).
     if (tags && tags.length > 0) body.tags = tags.join(",");
+    if (category) body.category = category;
 
     const response = await fetch(endpoint, {
       method: HTTP_METHOD.POST,
