@@ -45,7 +45,7 @@ Writes are confined to `services/web/` and this directory.
 | `services/web/src/components/shows/Show.tsx` | Modified | Passes them down to `SeasonAccordion` from the `Show` it already holds. |
 | `services/web/src/components/search/SearchTorrent.tsx` | Modified | Derives the requirement from `target`, hands it to the module, renders the language chip and the promotion marker. |
 
-**`spec_version` 0.6.0 (pending — `../spec.md` § Post-Implementation Amendments, REQ-4b):**
+**`spec_version` 0.6.0 (`../spec.md` § Post-Implementation Amendments, REQ-4b):**
 
 | File | New / Modified | What changes |
 | :-- | :-- | :-- |

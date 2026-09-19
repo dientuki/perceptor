@@ -172,7 +172,7 @@ behaviour it has; `web` gains a view over its results.
       a worse source that merely happens to be alive at this moment. Like REQ-4 it runs before the
       tier pass, so a dead 2160p release cannot set the tier and evict every live 1080p one.
 
-- [ ] **REQ-4b (Upscale Veto)** *(pending, see § Post-Implementation Amendments)*: A release whose
+- [x] **REQ-4b (Upscale Veto)** *(see § Post-Implementation Amendments)*: A release whose
       name identifies it as an upscale — `upscaled`, `ai upscale`/`ai-upscale`/`aiupscale`,
       `upscale` — is discarded in pass 1 alongside REQ-4 and REQ-4a, whatever resolution it claims.
 
@@ -538,7 +538,7 @@ document or anything under `services/api/`, they have left scope and must stop a
       button is pressed the **larger** of the two leads — the terse title is not punished for
       being terse. Given the same pair as WEB-DLs, the one naming HEVC and Atmos leads instead.
 
-- [ ] **AC-4c** (upscale veto, pending): Given a list whose only 2160p release is tagged
+- [x] **AC-4c** (upscale veto): Given a list whose only 2160p release is tagged
       `Upscaled` or `AI Upscale`, when the button is pressed, that release is absent and the
       candidate set is drawn from the next tier down — same shape as AC-4, different trigger.
 
@@ -638,7 +638,7 @@ document or anything under `services/api/`, they have left scope and must stop a
   When the automatic pick moves this logic to `api`, that is the code it should replace.
 
 - **Handling bad rips (`CAM`, `TS`, `TELESYNC`, `SCREENER`) and specific groups (`YTS`, `RARBG`).**
-  Only the AV1/VP9 veto (and, pending, the upscale veto — REQ-4b) removes; nothing else does. An
+  Only the AV1/VP9 veto (and the upscale veto — REQ-4b) removes; nothing else does. An
   unrecognised source ranks last under REQ-7,
   which is a weak defence — and note a `CAM` tagged `1080p` not only survives but can *define* the
   tier, evicting every legitimate 720p release from the candidate set. REQ-3 makes this sharper
@@ -679,8 +679,7 @@ document or anything under `services/api/`, they have left scope and must stop a
 
 One follow-up requirement recorded ahead of implementation — flagged during a debug session on the
 movie detail page, once the language/group fallback (`spec_version` unrelated to this one) made the
-candidate set actually match what a user would search with. Not yet implemented; tracked here so
-`/tasks` has an approved requirement to dispatch against rather than a chat message.
+candidate set actually match what a user would search with. Implemented 2026-09-19 (T017–T019).
 
 - **REQ-4b (Upscale Veto), AC-4c.** Some indexer results advertise themselves as `Upscaled` or
   `AI Upscale` — a release whose reported resolution was never actually captured at that
@@ -689,4 +688,4 @@ candidate set actually match what a user would search with. Not yet implemented;
   every honest 1080p candidate from the set entirely, not just lose a tiebreak to one. This is the
   same failure mode REQ-4 (AV1/VP9) and REQ-4a (dead swarm) already exist to prevent, so the fix is
   the same shape — a third pass-1 veto, not a new comparator criterion. See `web/plan.md`'s
-  amendments table for the implementation detail once it lands.
+  amendments table for the implementation detail.

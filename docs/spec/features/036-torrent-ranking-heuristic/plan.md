@@ -12,7 +12,7 @@ status: Implemented
 > after the code had stopped computing one. `spec_version` 0.5.0 adds the mandatory-audio
 > promotion. Both are reflected below — the 0.4.0 text is a correction of documentation drift, not
 > new work, and nothing in § Order of Work for it remains to be done. `spec_version` 0.6.0
-> (REQ-4b, the upscale veto) is recorded but **not yet implemented** — step 9 below is pending.
+> (REQ-4b, the upscale veto) is implemented — step 9 below is done.
 
 ## Approach
 
@@ -92,8 +92,8 @@ module has to accept one before the component can pass it:
 | 7 | `web` | The plumbing (REQ-25) — `AcquisitionTarget`'s episode branch grows the series' two fields, `SeasonAccordion` passes them, `Movie.tsx`/`page.tsx` already hold theirs, and `SearchTorrent` derives the requirement and hands it to the module. Consumes steps 5 and 6. |
 | 8 | `web` | The chip on the row (REQ-14 as amended), then verification. |
 
-Steps 1–8 are **done**. `spec_version` 0.6.0 (`spec.md` § Post-Implementation Amendments,
-2026-09-05) adds one more, pending:
+Steps 1–9 are **done**. `spec_version` 0.6.0 (`spec.md` § Post-Implementation Amendments,
+2026-09-05) added the last one:
 
 | Step | Service | Why it must come here |
 | :-- | :-- | :-- |

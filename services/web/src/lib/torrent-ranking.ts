@@ -202,6 +202,23 @@ function isDeadSwarm(result: TorrentResult): boolean {
 }
 
 /**
+ * REQ-4b — upscale veto. A release that names itself an upscale (`upscaled`, `upscale`,
+ * `ai upscale`, `ai-upscale`, `ai.upscale`, `aiupscale`) did not originate at the resolution it
+ * advertises, so a "2160p" upscale is worse evidence than an honest 1080p one. The match is its
+ * own token (same boundary as the resolution regexes, so `upscaler` or `superupscaled` never
+ * match); `ai upscale` needs no separate alternative because the bare `upscale` already matches
+ * it, but the AI forms are listed for `aiupscale`, which has no boundary before `upscale`.
+ *
+ * Like REQ-4/REQ-4a this runs in pass 1, so an upscaled 2160p release never sets the tier and
+ * evicts every genuine 1080p one. `title` is expected already lowercased.
+ */
+function isUpscaled(title: string): boolean {
+  return /(?<![\dA-Za-z])(?:ai[\s._-]?)?upscal(?:ed|e)(?![\dA-Za-z])/.test(
+    title,
+  );
+}
+
+/**
  * REQ-5 — resolution, the first and only criterion that also *removes* candidates. The number is
  * matched as its own token: a boundary that excludes an adjacent letter as well as an adjacent
  * digit, so `10800`/`21600` never match, and `DS4K` (a "downscaled from 4K" scene tag on an actual
@@ -490,9 +507,12 @@ export function rankTorrentResults(
       ? preferredGroups.map((g) => g.toLowerCase())
       : DEFAULT_PREFERRED_GROUPS;
 
-  // Pass 1 — veto (REQ-4, REQ-4a). Runs first, so a vetoed release never sets the tier for pass 2.
+  // Pass 1 — veto (REQ-4, REQ-4a, REQ-4b). Runs first, so a vetoed release never sets the tier for pass 2.
   const notVetoed = results.filter(
-    (result) => !isVetoed(lowerTitle(result)) && !isDeadSwarm(result),
+    (result) =>
+      !isVetoed(lowerTitle(result)) &&
+      !isDeadSwarm(result) &&
+      !isUpscaled(lowerTitle(result)),
   );
 
   // Pass 2 — tier. Guard the empty-survivor case explicitly rather than letting Math.max

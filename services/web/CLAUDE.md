@@ -437,7 +437,8 @@ off a success.
 persists anything and never crosses the GraphQL boundary — it re-ranks the exact list the search
 button already fetched, client-side only. Three passes: veto (`av1`/`vp9`, boundary-anchored, **plus dead
 swarms** — zero seeders and under five leechers, since nothing will ever finish downloading from
-one), tier (keep only the highest surviving resolution tier — bare digits like `1080` match
+one, **plus upscales** — `Upscaled`/`AI Upscale`/`aiupscale`, boundary-anchored, since a fake 2160p
+release would otherwise set the tier and evict every genuine 1080p one), tier (keep only the highest surviving resolution tier — bare digits like `1080` match
 alongside `1080p`/`1080i`, `10800` must not), then order.
 
 **It is a lexicographic comparator, not a weighted score** — this is the one thing to understand

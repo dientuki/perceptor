@@ -1,7 +1,7 @@
 ---
 title: Torrent Ranking Heuristic — Tasks
 last_updated: 2026-09-05
-status: In Progress
+status: Done
 ---
 
 # TASKS: Torrent Ranking Heuristic (`tasks.md`)
@@ -36,7 +36,7 @@ holds for **T014** in Group 4.
 > tasks are written against the current `spec.md`, which is the authority.
 >
 > **Group 5 is the `spec_version` 0.6.0 amendment** — the upscale veto (REQ-4b) — added
-> 2026-09-05, not yet implemented. Its tasks (T017–T019) are unticked and AC-4c is unticked in
+> 2026-09-05, implemented 2026-09-19. Its tasks (T017–T019) are ticked and AC-4c is ticked in
 > `spec.md`.
 
 ## Tasks
@@ -309,7 +309,7 @@ parallel with them.
       exactly the "case that never occurred" this step is told not to tick.
       `spec.md`/`plan.md`/`web/plan.md` set to `status: Implemented`, this file to `status: Done`.
 
-### Group 5 — `spec_version` 0.6.0: the upscale veto (pending)
+### Group 5 — `spec_version` 0.6.0: the upscale veto
 
 One service, one file, no new caller. `spec.md` REQ-4b: a release identified as an upscale is
 discarded in pass 1 alongside REQ-4/REQ-4a, before the tier pass runs. This is a same-shape
@@ -318,7 +318,7 @@ service is touched.
 
 T017 and T018 are sequential; T019 is `[docs]` and closes the amendment.
 
-- [ ] **T017** `[web]` In `services/web/src/lib/torrent-ranking.ts`, add `isUpscaled(title)`
+- [x] **T017** `[web]` In `services/web/src/lib/torrent-ranking.ts`, add `isUpscaled(title)`
       alongside `isVetoed`/`isDeadSwarm` (`spec.md` REQ-4b): boundary-anchored match on
       `upscaled`, `upscale`, `ai upscale`, `ai-upscale`, `aiupscale`, case-insensitive, the same
       `\b…\b`-style anchoring REQ-4/REQ-5 use so a title merely containing the substring elsewhere
@@ -331,7 +331,7 @@ T017 and T018 are sequential; T019 is `[docs]` and closes the amendment.
       `Movie.2024.2160p.BluRay.Remux` and a title containing an unrelated `upscale`-adjacent word
       (if one is found in real indexer data) are not. Paste the harness output. Covers **AC-4c**.
 
-- [ ] **T018** `[web]` Run the `spec_version` 0.6.0 verification: `bin/cli web npx --no tsc
+- [x] **T018** `[web]` Run the `spec_version` 0.6.0 verification: `bin/cli web npx --no tsc
       --noEmit` and `bin/npm web run build`, plus a live pass against a real search list
       containing at least one `Upscaled`/`AI Upscale` release — confirm it is absent from the
       candidate view and does not set the tier, and that toggling "Best candidates" off still
@@ -339,7 +339,21 @@ T017 and T018 are sequential; T019 is `[docs]` and closes the amendment.
       *Done when:* both commands report their baseline counts and the live pass output is pasted,
       naming the exact release title that was excluded.
 
-- [ ] **T019** `[docs]` Update `services/web/CLAUDE.md`'s torrent-ranking section: pass 1 now
+      **Result.** tsc 0 errors (unchanged), Biome clean on `torrent-ranking.ts`, `bin/npm web run
+      build` exit 0 (T017's harness: the two upscaled titles discarded, the plain Remux kept, an
+      all-upscaled-2160p list falling to its 1080p set, `Upscaler` not vetoed).
+      **Live pass 1 — *Man on the Moon*** (45 releases): `...Remastered AIUpscaled 60FPS H265...
+      Marjenbo` absent from the 13-row candidate view. Weak evidence: that title names no resolution,
+      so the tier pass would have dropped it anyway.
+      **Live pass 2 — *Prey* (2022)** (155 releases), which isolates the veto: `Prey 2022 2160P Ai
+      Upscaled 60fps Web-Dl Ddp5.1 Atmos H265 SDR 10bit Marjenbo` is a genuine 2160p-tier name,
+      present in the full list and **absent** from the 7-row 4K candidate view (the other 2160p
+      releases, e.g. `Prey.2022.2160p.DSNP.WEB-DL...CMRG`, kept; the AV1 2160p one vetoed by REQ-4).
+      Toggling off restored all 155 rows, text byte-identical to before (AC-5). No console errors, no
+      new network requests on either toggle. Not observed live: an upscale being the *only* 2160p
+      release (that path rests on T017's harness).
+
+- [x] **T019** `[docs]` Update `services/web/CLAUDE.md`'s torrent-ranking section: pass 1 now
       vetoes three things, not two (`av1`/`vp9`, dead swarms, upscales). Walk **AC-4c** against
       T018's report, tick it in `spec.md` along with REQ-4b, and set `status: Implemented` back on
       `spec.md`, `plan.md` and `web/plan.md` (they never left it, but the pending markers added on
