@@ -42,6 +42,15 @@ export class Download {
   seasonNumber?: number;
 
   @Field(() => Int, { nullable: true })
+  showId?: number;
+
+  @Field({ nullable: true })
+  showTitle?: string;
+
+  @Field()
+  owned: boolean;
+
+  @Field(() => Int, { nullable: true })
   episodeId?: number;
 
   @Field()

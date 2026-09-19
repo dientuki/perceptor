@@ -14,13 +14,11 @@ import DownloadProgressBar from "./DownloadProgressBar";
 interface DownloadRowProps {
   download: Download;
   onDeleteRequest: (download: Download) => void;
-  showTitle?: string;
 }
 
 export default function DownloadRow({
   download,
   onDeleteRequest,
-  showTitle,
 }: DownloadRowProps) {
   const t = useTranslations("downloads.panel");
   const tSeason = useTranslations("seasonAccordion");
@@ -28,11 +26,7 @@ export default function DownloadRow({
   const [isPending, startTransition] = useTransition();
   const [rowError, setRowError] = useState<string | null>(null);
 
-  // The controllability test is `infoHash != null` — not `kind` (SourceKind
-  // has two torrent values and there is no codegen to catch a wrong
-  // literal) and not `progress` (a torrent missing from qBittorrent has
-  // null progress and still needs its delete button).
-  const isControllable = download.infoHash != null;
+  const isControllable = download.owned && download.infoHash != null;
 
   const handleStart = () => {
     setRowError(null);
@@ -59,8 +53,8 @@ export default function DownloadRow({
   };
 
   const displayName =
-    download.seasonNumber != null && showTitle
-      ? `${showTitle} ${tSeason("seasonLabel", { number: download.seasonNumber })}`
+    download.seasonNumber != null && download.showTitle
+      ? `${download.showTitle} ${tSeason("seasonLabel", { number: download.seasonNumber })}`
       : download.label;
 
   return (
@@ -116,15 +110,17 @@ export default function DownloadRow({
               </Button>
             </>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            title={t("deleteTitle")}
-            disabled={isPending}
-            onClick={() => onDeleteRequest(download)}
-          >
-            <Trash2 size={16} className="text-error-500" />
-          </Button>
+          {download.owned && (
+            <Button
+              size="sm"
+              variant="outline"
+              title={t("deleteTitle")}
+              disabled={isPending}
+              onClick={() => onDeleteRequest(download)}
+            >
+              <Trash2 size={16} className="text-error-500" />
+            </Button>
+          )}
         </div>
       </td>
     </tr>

@@ -124,6 +124,9 @@ type Download {
   movieId: Int
   seasonId: Int
   seasonNumber: Int
+  showId: Int
+  showTitle: String
+  owned: Boolean!
   episodeId: Int
   status: String!
   torrentState: String
@@ -406,6 +409,8 @@ type Query {
   mediaServerIndexStatus: MediaServerIndexStatus!
   movieDownloads(movieId: Int!): [Download!]!
   showDownloads(showId: Int!): [Download!]!
+  downloads: [Download!]!
+  activeDownloadCount: Int!
 
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!): [TorrentResult!]!

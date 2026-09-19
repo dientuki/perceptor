@@ -389,9 +389,13 @@ two formatters must never substitute for each other; see `docs/spec/graphql-cont
 `053-downloads-panel-repair` section for the full reasoning. `0` renders `0.00x`, never `—` — it is
 a real multiplier at the start of an encode.
 
+## Global downloads page and sidebar badge (`064-global-downloads-page`)
+
+`/downloads` is a server page over `getDownloads()` rendering `DownloadsPanel` with `grouped`: rows are filtered (`063`), partitioned by `groupByTitle` (`lib/download-groups.ts`, keyed on `movieId`/`showId`, order-preserving, never sorted), sliced by page (10/25/50, default 10, one title = one element, state not persisted, page clamped at render time), and a `DownloadGroupHeader` shows only for groups with 2+ visible rows. Without `grouped` (the detail pages) the panel renders as before. `DownloadRow` gates start/stop/delete on `download.owned` and builds the season label from `download.showTitle`, so no page passes `showTitle` to the panel any more. The Downloads sidebar badge takes `getActiveDownloadCount()` from `(dashboard)/layout.tsx` through `AdminShell` to `AppSidebar`; it returns `0` on a non-auth error so the layout never throws, and it refreshes on `router.refresh()`.
+
 ## Downloads panel filters and placement (`063-downloads-panel-filters`)
 
-`DownloadsPanel.tsx` carries three single-select toggles (completed, working, error) left of Refresh, bucketed by `statusTone()` (`progress` is working; `missing` has no bucket). Badge counts come from the full `downloads` prop; a toggle only filters, never sorts, since `api` already orders by last activity. Clicking the active toggle clears it, and the panel is not keyed on its data so the choice survives `router.refresh()`. A season-pack row renders `showTitle` plus `seasonAccordion.seasonLabel` from `seasonNumber`, never `download.label`; the show page passes `showTitle`. Both detail pages render the panel inside the card's `space-y-6`, before search (films) and before the seasons (series). `Button` takes an optional `ariaPressed`.
+`DownloadsPanel.tsx` carries three single-select toggles (completed, working, error) left of Refresh, bucketed by `statusTone()` (`progress` is working; `missing` has no bucket). Badge counts come from the full `downloads` prop; a toggle only filters, never sorts, since `api` already orders by last activity. Clicking the active toggle clears it, and the panel is not keyed on its data so the choice survives `router.refresh()`. A season-pack row renders `download.showTitle` (since `064`, off the row itself) plus `seasonAccordion.seasonLabel` from `seasonNumber`, never `download.label`. Both detail pages render the panel inside the card's `space-y-6`, before search (films) and before the seasons (series). `Button` takes an optional `ariaPressed`.
 
 ## The calendar (`/calendar`, `062-release-calendar`)
 

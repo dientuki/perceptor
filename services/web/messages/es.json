@@ -132,6 +132,7 @@
     "shows": "Mis series",
     "calendar": "Calendario",
     "downloads": "Descargas",
+    "downloadsBadge": "{count} descargas activas",
     "settings": "Configuración",
     "users": "Usuarios"
   },
@@ -225,6 +226,11 @@
       "title": "Calendario",
       "metadataTitle": "Calendario | Perceptor",
       "metadataDescription": "Calendario de estrenos de tu biblioteca"
+    },
+    "downloads": {
+      "title": "Descargas",
+      "metadataTitle": "Descargas | Perceptor",
+      "metadataDescription": "Todas las descargas de tu biblioteca"
     }
   },
   "notFound": {
@@ -386,6 +392,7 @@
       "refresh": "Actualizar",
       "refreshing": "Actualizando...",
       "empty": "Todavía no hay descargas para este título.",
+      "emptyAll": "Todavía no hay descargas.",
       "targetHeader": "Destino",
       "statusHeader": "Estado",
       "progressHeader": "Progreso",
@@ -397,6 +404,10 @@
       "deleteTitle": "Eliminar",
       "startErrorDefault": "No se pudo reanudar la descarga.",
       "stopErrorDefault": "No se pudo detener la descarga.",
+      "showing": "Mostrando {from}–{to} de {total}",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "perPage": "Por página",
       "deleteErrorDefault": "No se pudo eliminar la descarga."
     },
     "deleteModal": {

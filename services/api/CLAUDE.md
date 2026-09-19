@@ -349,7 +349,13 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   (confined to the downloads root via `MediaRootsService.isInsideRoot`), the row (Prisma cascades
   take `SourceFile`/`ProcessJob` with it), then the target's status recomputed from what remains —
   never walking a title with `filePath` already set backwards. The library itself is never touched
-  (constitution Article XII). `DownloadsService`
+  (constitution Article XII). Since `064-global-downloads-page`, `downloads` returns every source of
+  every title, unscoped and unpaginated, in one untagged `torrents/info` read, and
+  `activeDownloadCount` counts distinct titles (`movie:<id>`/`show:<id>`) over that same row list
+  whose derived status is in the module-level `ACTIVE_STATUSES` (`PAUSED` excluded), so the badge
+  cannot drift from the page. Every reader and the start/stop mutations build a row through one
+  `projectTarget()` (`label`, `seasonNumber`, `showId`, `showTitle`, `owned`), where `owned` is the
+  caller's presence in the title's `users`. `DownloadsService`
   also exposes the shared race arbiter, `resolveRace(mediaSourceId)`: called from
   `torrentCompleted` **and** from `uploads/uploads.service.ts`'s `onUploadFinish` — a tus upload
   competes in the same race as any torrent of its target and never passes through this module any

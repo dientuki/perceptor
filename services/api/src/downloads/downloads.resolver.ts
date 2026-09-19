@@ -46,6 +46,18 @@ export class DownloadsResolver {
     return this.downloadsService.showDownloads(showId, userId);
   }
 
+  @Query(() => [Download], { name: 'downloads' })
+  async downloads(@CurrentUser() principal: AuthPrincipal): Promise<Download[]> {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.downloadsService.downloads(userId);
+  }
+
+  @Query(() => Int, { name: 'activeDownloadCount' })
+  async activeDownloadCount(@CurrentUser() principal: AuthPrincipal): Promise<number> {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.downloadsService.activeDownloadCount(userId);
+  }
+
   @Mutation(() => Download, {
     name: 'downloadStart',
     description: 'Reanuda un torrent en el cliente de torrents (resume, no force start)',

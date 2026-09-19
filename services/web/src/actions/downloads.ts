@@ -1,5 +1,6 @@
 "use server";
 
+import { unstable_rethrow } from "next/navigation";
 import {
   redirectIfUnauthenticated,
   redirectToClearSession,
@@ -18,6 +19,9 @@ const DOWNLOAD_FIELDS = `
   seasonId
   episodeId
   seasonNumber
+  showId
+  showTitle
+  owned
   status
   torrentState
   downloadProgress
@@ -41,6 +45,20 @@ const SHOW_DOWNLOADS_QUERY = `
     showDownloads(showId: $showId) {
       ${DOWNLOAD_FIELDS}
     }
+  }
+`;
+
+const DOWNLOADS_QUERY = `
+  query Downloads {
+    downloads {
+      ${DOWNLOAD_FIELDS}
+    }
+  }
+`;
+
+const ACTIVE_DOWNLOAD_COUNT_QUERY = `
+  query ActiveDownloadCount {
+    activeDownloadCount
   }
 `;
 
@@ -104,6 +122,43 @@ export async function getShowDownloads(showId: number): Promise<Download[]> {
   }
 
   return data?.showDownloads ?? [];
+}
+
+export async function getDownloads(): Promise<Download[]> {
+  const { data, errors } = await fetchGraphQL<{ downloads: Download[] }>(
+    DOWNLOADS_QUERY,
+  );
+
+  if (errors && errors.length > 0) {
+    redirectToClearSession(errors);
+    console.error("Failed to fetch downloads:", errors[0]?.message);
+    return [];
+  }
+
+  return data?.downloads ?? [];
+}
+
+export async function getActiveDownloadCount(): Promise<number> {
+  try {
+    const { data, errors } = await fetchGraphQL<{
+      activeDownloadCount: number;
+    }>(ACTIVE_DOWNLOAD_COUNT_QUERY);
+
+    if (errors && errors.length > 0) {
+      redirectToClearSession(errors);
+      console.error(
+        "Failed to fetch active download count:",
+        errors[0]?.message,
+      );
+      return 0;
+    }
+
+    return data?.activeDownloadCount ?? 0;
+  } catch (error) {
+    unstable_rethrow(error);
+    console.error("Failed to fetch active download count:", error);
+    return 0;
+  }
 }
 
 export type DownloadActionResult =

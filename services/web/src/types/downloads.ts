@@ -15,6 +15,9 @@ export interface Download {
   seasonId: number | null;
   episodeId: number | null;
   seasonNumber: number | null;
+  showId: number | null;
+  showTitle: string | null;
+  owned: boolean;
   // Normalized: one of the eight status values, no longer the raw
   // SourceStatus column.
   status: string;

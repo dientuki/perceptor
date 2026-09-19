@@ -954,6 +954,9 @@ type Download {
   movieId: Int
   seasonId: Int
   seasonNumber: Int         # season packs only (`063`); web builds the localized label from it
+  showId: Int               # set for season and episode rows (`064`)
+  showTitle: String         # the series title, verbatim (`064`); web builds the season label from it
+  owned: Boolean!           # the caller holds the title (`064`); gates row controls, never `kind`
   episodeId: Int
   status: String!           # SourceStatus, plain String! like every other status field
   torrentState: String      # raw qBittorrent state; null when the torrent is not in the client
@@ -965,6 +968,8 @@ type Download {
 type Query {
   movieDownloads(movieId: Int!): [Download!]!
   showDownloads(showId: Int!): [Download!]!
+  downloads: [Download!]!            # installation-wide (`064`)
+  activeDownloadCount: Int!          # installation-wide (`064`)
 }
 
 type Mutation {
@@ -1877,6 +1882,36 @@ the budget on an unclassified error, the encode worker's own `failed` listener
 (`services/worker/src/index.ts`) reports `encodeFailed` with `error.encode.unexpected` — guarded so
 it never reports a job an `UnrecoverableError` already resolved, and never reports one BullMQ still
 plans to retry (`job.attemptsMade < job.opts.attempts`).
+
+### The downloads queue is installation-wide (`064-global-downloads-page`)
+
+```graphql
+type Download {
+  # ...unchanged fields...
+  showId: Int
+  showTitle: String
+  owned: Boolean!
+}
+
+type Query {
+  downloads: [Download!]!
+  activeDownloadCount: Int!
+}
+```
+
+Four things the schema itself cannot express, all load-bearing:
+
+- **`downloads` and `activeDownloadCount` are not scoped to the caller.** Any authenticated user
+  reads every source of every title. `movieDownloads`/`showDownloads` and the three mutations keep
+  their ownership refusal (`error.source.not_found` for a foreign source).
+- **`downloads` is unpaginated and takes no arguments.** Grouping, filtering and pagination are
+  `web`'s, over the full list, so the filter counts and the pages cannot disagree.
+- **`activeDownloadCount` counts titles, not rows.** A film counts once by `movieId`, a series once
+  by show, whatever the number of its sources, over rows in `QUEUED`/`DOWNLOADING`/`DOWNLOADED`/
+  `ENCODING` (`PAUSED` excluded). It is computed from the same row list as `downloads`, so the
+  badge cannot drift from the page.
+- **`owned` — not `kind`, not which query returned the row — gates controls.** It is non-null on
+  every `Download`, mutation results included.
 
 ### What never crosses the boundary
 

@@ -132,6 +132,7 @@
     "shows": "My series",
     "calendar": "Calendar",
     "downloads": "Downloads",
+    "downloadsBadge": "{count} active downloads",
     "settings": "Settings",
     "users": "Users"
   },
@@ -225,6 +226,11 @@
       "title": "Calendar",
       "metadataTitle": "Calendar | Perceptor",
       "metadataDescription": "Release calendar for your library"
+    },
+    "downloads": {
+      "title": "Downloads",
+      "metadataTitle": "Downloads | Perceptor",
+      "metadataDescription": "Every download across your library"
     }
   },
   "notFound": {
@@ -386,6 +392,7 @@
       "refresh": "Refresh",
       "refreshing": "Refreshing...",
       "empty": "No downloads for this title yet.",
+      "emptyAll": "No downloads yet.",
       "targetHeader": "Target",
       "statusHeader": "Status",
       "progressHeader": "Progress",
@@ -397,6 +404,10 @@
       "deleteTitle": "Delete",
       "startErrorDefault": "Could not resume the download.",
       "stopErrorDefault": "Could not stop the download.",
+      "showing": "Showing {from}–{to} of {total}",
+      "previous": "Previous",
+      "next": "Next",
+      "perPage": "Per page",
       "deleteErrorDefault": "Could not delete the download."
     },
     "deleteModal": {

@@ -17,23 +17,27 @@ import { useTranslations } from "next-intl";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSidebar } from "../context/SidebarContext";
+import Badge from "@/components/ui/badge/Badge";
 import type { MediaCapabilities } from "@/types/media";
 
 type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
+  badge?: number;
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
 interface AppSidebarProps {
   isAdmin?: boolean;
   capabilities: MediaCapabilities;
+  activeDownloadCount?: number;
 }
 
 const AppSidebar: React.FC<AppSidebarProps> = ({
   isAdmin = false,
   capabilities,
+  activeDownloadCount = 0,
 }) => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
@@ -82,6 +86,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
       icon: <CloudDownload />,
       name: t("downloads"),
       path: "/downloads",
+      badge: activeDownloadCount,
     },
   ];
 
@@ -152,17 +157,43 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                 }`}
               >
                 <span
-                  className={`${
+                  className={`relative ${
                     isActive(nav.path)
                       ? "menu-item-icon-active"
                       : "menu-item-icon-inactive"
                   }`}
                 >
                   {nav.icon}
+                  {nav.badge != null &&
+                    nav.badge > 0 &&
+                    !(isExpanded || isHovered || isMobileOpen) && (
+                      <span
+                        role="img"
+                        aria-label={t("downloadsBadge", { count: nav.badge })}
+                        className="absolute -top-2 -right-2"
+                      >
+                        <Badge color="primary" variant="solid" size="sm">
+                          {nav.badge}
+                        </Badge>
+                      </span>
+                    )}
                 </span>
                 {(isExpanded || isHovered || isMobileOpen) && (
                   <span className={`menu-item-text`}>{nav.name}</span>
                 )}
+                {nav.badge != null &&
+                  nav.badge > 0 &&
+                  (isExpanded || isHovered || isMobileOpen) && (
+                    <span
+                      role="img"
+                      aria-label={t("downloadsBadge", { count: nav.badge })}
+                      className="ml-auto"
+                    >
+                      <Badge color="primary" variant="solid" size="sm">
+                        {nav.badge}
+                      </Badge>
+                    </span>
+                  )}
               </Link>
             )
           )}

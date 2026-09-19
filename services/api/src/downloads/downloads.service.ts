@@ -47,6 +47,59 @@ function byLastActivity<T extends { id: number; updatedAt: Date }>(
   return [...sources].sort((a, b) => activity(b) - activity(a) || b.id - a.id);
 }
 
+type OwnedTitle = { id: number; title: string; users: unknown[] };
+
+type TargetSource = {
+  movie?: OwnedTitle | null;
+  season?: { seasonNumber: number; show: OwnedTitle } | null;
+  episode?: { episodeNumber: number; season: { seasonNumber: number; show: OwnedTitle } } | null;
+};
+
+type Target = {
+  label: string;
+  seasonNumber?: number;
+  showId?: number;
+  showTitle?: string;
+  owned: boolean;
+};
+
+function projectTarget(source: TargetSource): Target {
+  if (source.movie) {
+    return { label: source.movie.title, owned: source.movie.users.length > 0 };
+  }
+  if (source.episode) {
+    const { season } = source.episode;
+    return {
+      label: episodeLabel(season.show, season, source.episode),
+      showId: season.show.id,
+      showTitle: season.show.title,
+      owned: season.show.users.length > 0,
+    };
+  }
+  if (source.season) {
+    const { show } = source.season;
+    return {
+      label: seasonLabel(show, source.season),
+      seasonNumber: source.season.seasonNumber,
+      showId: show.id,
+      showTitle: show.title,
+      owned: show.users.length > 0,
+    };
+  }
+  return { label: '', owned: false };
+}
+
+function targetInclude(userId: string) {
+  const users = { where: { userId } };
+  return {
+    movie: { include: { users } },
+    episode: { include: { season: { include: { show: { include: { users } } } } } },
+    season: { include: { show: { include: { users } } } },
+  };
+}
+
+const ACTIVE_STATUSES: ReadonlySet<string> = new Set(['QUEUED', 'DOWNLOADING', 'DOWNLOADED', 'ENCODING']);
+
 type MediaSourceRow = {
   id: number;
   kind: string;
@@ -73,12 +126,12 @@ export class DownloadsService {
   // REQ-9/REQ-10: DB-first, joined to qBittorrent on infoHash. A torrent
   // client that is unreachable on a *query* is not an error (unlike on a
   // mutation) — the row still renders, with the three live fields null.
-  private async liveInfoByHash(tag: string): Promise<Map<string, TorrentClientInfo>> {
+  private async liveInfoByHash(tag?: string): Promise<Map<string, TorrentClientInfo>> {
     try {
       const rows = await this.qbittorrent.info(tag);
       return new Map(rows.map((row) => [row.hash.toLowerCase(), row]));
     } catch (err) {
-      console.error(`[DownloadsService] no se pudo leer el estado del cliente de torrents (tag "${tag}"):`, err);
+      console.error(`[DownloadsService] no se pudo leer el estado del cliente de torrents (tag "${tag ?? ''}"):`, err);
       return new Map();
     }
   }
@@ -130,11 +183,10 @@ export class DownloadsService {
 
   private toDownload(
     source: MediaSourceRow,
-    label: string,
+    target: Target,
     live: TorrentClientInfo | undefined,
     jobs: SourceAltitudeJob[],
     compressionEnabled: boolean,
-    seasonNumber?: number,
   ): Download {
     const derived = deriveSourceStatus({
       sourceStatus: source.status,
@@ -146,11 +198,14 @@ export class DownloadsService {
       mediaSourceId: source.id,
       infoHash: source.infoHash ?? undefined,
       kind: source.kind,
-      label,
+      label: target.label,
       releaseTitle: source.releaseTitle ?? undefined,
       movieId: source.movieId ?? undefined,
       seasonId: source.seasonId ?? undefined,
-      seasonNumber,
+      seasonNumber: target.seasonNumber,
+      showId: target.showId,
+      showTitle: target.showTitle,
+      owned: target.owned,
       episodeId: source.episodeId ?? undefined,
       status: derived.status,
       torrentState: live?.rawState,
@@ -176,6 +231,7 @@ export class DownloadsService {
 
     const sources = await this.prisma.mediaSource.findMany({
       where: { movieId },
+      include: targetInclude(userId),
     });
 
     // REQ-4: every server-side lookup of a title's torrents uses the title
@@ -190,12 +246,44 @@ export class DownloadsService {
     return byLastActivity(sources, jobsBySourceId).map((source) =>
       this.toDownload(
         source,
-        movie.title,
+        projectTarget(source),
         this.liveFor(source, live),
         jobsBySourceId.get(source.id)?.jobs ?? [],
         compressionEnabled,
       ),
     );
+  }
+
+  async downloads(userId: string): Promise<Download[]> {
+    const sources = await this.prisma.mediaSource.findMany({
+      include: targetInclude(userId),
+    });
+
+    const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
+      this.liveInfoByHash(),
+      this.jobsBySourceId(sources.map((source) => source.id)),
+      this.compressionEnabled(),
+    ]);
+
+    return byLastActivity(sources, jobsBySourceId).map((source) =>
+      this.toDownload(
+        source,
+        projectTarget(source),
+        this.liveFor(source, live),
+        jobsBySourceId.get(source.id)?.jobs ?? [],
+        compressionEnabled,
+      ),
+    );
+  }
+
+  async activeDownloadCount(userId: string): Promise<number> {
+    const rows = await this.downloads(userId);
+    const titles = new Set<string>();
+    for (const row of rows) {
+      if (!ACTIVE_STATUSES.has(row.status)) continue;
+      titles.add(row.showId != null ? `show:${row.showId}` : `movie:${row.movieId}`);
+    }
+    return titles.size;
   }
 
   // Same ownership clause ShowsResolver already uses for `show(id)`
@@ -213,10 +301,7 @@ export class DownloadsService {
       where: {
         OR: [{ season: { showId } }, { episode: { season: { showId } } }],
       },
-      include: {
-        season: true,
-        episode: { include: { season: true } },
-      },
+      include: targetInclude(userId),
     });
 
     const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
@@ -225,34 +310,24 @@ export class DownloadsService {
       this.compressionEnabled(),
     ]);
 
-    return byLastActivity(sources, jobsBySourceId).map((source) => {
-      const label = source.episode
-        ? episodeLabel(show, source.episode.season, source.episode)
-        : source.season
-          ? seasonLabel(show, source.season)
-          : show.title; // unreachable in practice — a show-scoped source always has one or the other
-      return this.toDownload(
+    return byLastActivity(sources, jobsBySourceId).map((source) =>
+      this.toDownload(
         source,
-        label,
+        projectTarget(source),
         this.liveFor(source, live),
         jobsBySourceId.get(source.id)?.jobs ?? [],
         compressionEnabled,
-        source.season?.seasonNumber,
-      );
-    });
+      ),
+    );
   }
 
   // REQ-17: the source exists but belongs to a title the caller does not
   // own answers identically to a missing id — same SOURCE_NOT_FOUND, same
   // message, indistinguishable, per 008-movie-detail's rule extended here.
-  private async findOwnedSource(mediaSourceId: number, userId: string): Promise<MediaSourceRow> {
+  private async findOwnedSource(mediaSourceId: number, userId: string): Promise<MediaSourceRow & TargetSource> {
     const source = await this.prisma.mediaSource.findUnique({
       where: { id: mediaSourceId },
-      include: {
-        movie: { include: { users: { where: { userId } } } },
-        episode: { include: { season: { include: { show: { include: { users: { where: { userId } } } } } } } },
-        season: { include: { show: { include: { users: { where: { userId } } } } } },
-      },
+      include: targetInclude(userId),
     });
 
     const owned =
@@ -290,30 +365,6 @@ export class DownloadsService {
     }
   }
 
-  private async labelFor(source: MediaSourceRow): Promise<{ label: string; seasonNumber?: number }> {
-    if (source.movieId) {
-      const movie = await this.prisma.movie.findUnique({ where: { id: source.movieId }, select: { title: true } });
-      return { label: movie?.title ?? '' };
-    }
-    if (source.episodeId) {
-      const episode = await this.prisma.episode.findUnique({
-        where: { id: source.episodeId },
-        include: { season: { include: { show: true } } },
-      });
-      return { label: episode ? episodeLabel(episode.season.show, episode.season, episode) : '' };
-    }
-    if (source.seasonId) {
-      const season = await this.prisma.season.findUnique({
-        where: { id: source.seasonId },
-        include: { show: true },
-      });
-      return season
-        ? { label: seasonLabel(season.show, season), seasonNumber: season.seasonNumber }
-        : { label: '' };
-    }
-    return { label: '' };
-  }
-
   // REQ-7/../plan.md § Approach decision 2: the write is a guarded
   // `updateMany`, never a read-then-write, so a concurrent transition (the
   // race arbiter, a completion notice) can't be clobbered by a stale read.
@@ -345,13 +396,12 @@ export class DownloadsService {
       source.status = 'QUEUED';
     }
 
-    const [{ label, seasonNumber }, live, jobsBySourceId, compressionEnabled] = await Promise.all([
-      this.labelFor(source),
+    const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
       this.liveInfoForHash(infoHash),
       this.jobsBySourceId([source.id]),
       this.compressionEnabled(),
     ]);
-    return this.toDownload(source, label, live, jobsBySourceId.get(source.id)?.jobs ?? [], compressionEnabled, seasonNumber);
+    return this.toDownload(source, projectTarget(source), live, jobsBySourceId.get(source.id)?.jobs ?? [], compressionEnabled);
   }
 
   async downloadStop(mediaSourceId: number, userId: string): Promise<Download> {
@@ -363,13 +413,12 @@ export class DownloadsService {
       source.status = 'PAUSED';
     }
 
-    const [{ label, seasonNumber }, live, jobsBySourceId, compressionEnabled] = await Promise.all([
-      this.labelFor(source),
+    const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
       this.liveInfoForHash(infoHash),
       this.jobsBySourceId([source.id]),
       this.compressionEnabled(),
     ]);
-    return this.toDownload(source, label, live, jobsBySourceId.get(source.id)?.jobs ?? [], compressionEnabled, seasonNumber);
+    return this.toDownload(source, projectTarget(source), live, jobsBySourceId.get(source.id)?.jobs ?? [], compressionEnabled);
   }
 
   // 047-source-deletion: the orchestrator for the whole unwind. Order is the

@@ -11,12 +11,14 @@ import type { MediaCapabilities } from "@/types/media";
 interface AdminShellProps {
   user: CurrentUser;
   capabilities: MediaCapabilities;
+  activeDownloadCount: number;
   children: React.ReactNode;
 }
 
 export default function AdminShell({
   user,
   capabilities,
+  activeDownloadCount,
   children,
 }: AdminShellProps) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
@@ -31,7 +33,11 @@ export default function AdminShell({
   return (
     <div className="min-h-screen xl:flex">
       {/* Sidebar and Backdrop */}
-      <AppSidebar isAdmin={user.isAdmin} capabilities={capabilities} />
+      <AppSidebar
+        isAdmin={user.isAdmin}
+        capabilities={capabilities}
+        activeDownloadCount={activeDownloadCount}
+      />
       <Backdrop />
       {/* Main Content Area */}
       <div

@@ -20,6 +20,10 @@ jest.mock('node:fs/promises', () => ({
 //    READY still marking that loser READY and enqueuing a second
 //    bull:process — the target ends up with two ProcessJobs writing the
 //    same output path, and nothing logs a problem (REQ-13);
+//  - the global downloads list reading `owned: true` for a title the caller
+//    never added, which makes the page offer controls the mutations then
+//    refuse, and the sidebar badge counting sources or paused work instead
+//    of titles in flight, so it silently disagrees with the page beside it;
 //  - the race arbiter stopping the *winner* along with its siblings, or
 //    writing a paused loser's status as ERROR instead of PAUSED — either
 //    would be silently read by this very function as "superseded, ignore"
@@ -428,7 +432,7 @@ describe('DownloadsService', () => {
           seasonId: 30,
           episodeId: null,
           updatedAt: new Date('2026-09-19T10:00:00Z'),
-          season: { id: 30, seasonNumber: 3 },
+          season: { id: 30, seasonNumber: 3, show: { ...show, users: [{ userId: 'user-1' }] } },
           episode: null,
         },
         {
@@ -438,7 +442,7 @@ describe('DownloadsService', () => {
           episodeId: 55,
           updatedAt: new Date('2026-09-19T11:00:00Z'),
           season: null,
-          episode: { episodeNumber: 8, season: { seasonNumber: 3 } },
+          episode: { episodeNumber: 8, season: { seasonNumber: 3, show: { ...show, users: [{ userId: 'user-1' }] } } },
         },
       ]);
 
@@ -449,6 +453,140 @@ describe('DownloadsService', () => {
       expect(downloads[0].seasonNumber).toBeUndefined();
       expect(downloads[1].label).toBe('Reacher S03');
       expect(downloads[1].seasonNumber).toBe(3);
+      expect(downloads.map((d) => d.showTitle)).toEqual(['Reacher', 'Reacher']);
+      expect(downloads.map((d) => d.showId)).toEqual([9, 9]);
+      expect(downloads.every((d) => d.owned)).toBe(true);
+    });
+  });
+
+  describe('movieDownloads — ownership fields', () => {
+    it('reports owned true and no show on a film row', async () => {
+      prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Peli' });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 1, kind: 'TORRENT_SEARCH', status: 'SCANNED', infoHash: null, releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0), movie: { id: 7, title: 'Peli', users: [{ userId: 'user-1' }] } },
+      ]);
+
+      const [download] = await service.movieDownloads(7, 'user-1');
+
+      expect(download.owned).toBe(true);
+      expect(download.showId).toBeUndefined();
+      expect(download.showTitle).toBeUndefined();
+    });
+  });
+
+  describe('downloads / activeDownloadCount — installation-wide', () => {
+    const mine = [{ userId: 'user-1' }];
+    const base = { kind: 'TORRENT_SEARCH', releaseTitle: null, updatedAt: new Date(0) };
+    const filmSource = (id: number, movieId: number, status: string, users = mine) => ({
+      ...base,
+      id,
+      status,
+      infoHash: `hash-${id}`,
+      movieId,
+      seasonId: null,
+      episodeId: null,
+      seasonNumber: undefined,
+      movie: { id: movieId, title: `Film ${movieId}`, users },
+      season: null,
+      episode: null,
+    });
+    const show = { id: 9, title: 'Reacher', users: mine };
+    const packSource = (id: number, status: string) => ({
+      ...base,
+      id,
+      status,
+      infoHash: `hash-${id}`,
+      movieId: null,
+      seasonId: 30,
+      episodeId: null,
+      movie: null,
+      season: { seasonNumber: 2, show },
+      episode: null,
+    });
+    const episodeSource = (id: number, status: string) => ({
+      ...base,
+      id,
+      status,
+      infoHash: `hash-${id}`,
+      movieId: null,
+      seasonId: null,
+      episodeId: 50 + id,
+      movie: null,
+      season: null,
+      episode: { episodeNumber: id, season: { seasonNumber: 1, show } },
+    });
+
+    it('reads owned per caller for the same source', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([filmSource(1, 7, 'DOWNLOADING', [])]);
+      const [foreign] = await service.downloads('user-2');
+      prisma.mediaSource.findMany.mockResolvedValue([filmSource(1, 7, 'DOWNLOADING', mine)]);
+      const [own] = await service.downloads('user-1');
+
+      expect(foreign.owned).toBe(false);
+      expect(own.owned).toBe(true);
+      expect(prisma.mediaSource.findMany).toHaveBeenCalledWith(expect.not.objectContaining({ where: expect.anything() }));
+    });
+
+    it('carries showId and showTitle on a season-pack row', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([packSource(1, 'DOWNLOADING')]);
+
+      const [download] = await service.downloads('user-1');
+
+      expect(download.showId).toBe(9);
+      expect(download.showTitle).toBe('Reacher');
+      expect(download.seasonNumber).toBe(2);
+    });
+
+    it('makes one untagged qbittorrent call and one job query across many titles', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([filmSource(1, 7, 'QUEUED'), filmSource(2, 8, 'QUEUED'), packSource(3, 'QUEUED')]);
+
+      await service.downloads('user-1');
+
+      expect(qbittorrent.info).toHaveBeenCalledTimes(1);
+      expect(qbittorrent.info).toHaveBeenCalledWith(undefined);
+      expect(prisma.processJob.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns rows with no live fields when the torrent client rejects', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([filmSource(1, 7, 'DOWNLOADING')]);
+      qbittorrent.info.mockRejectedValue(new Error('down'));
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      const [download] = await service.downloads('user-1');
+
+      expect(download.downloadSpeed).toBeUndefined();
+      expect(download.downloadProgress).toBeUndefined();
+    });
+
+    it('counts three films with two active sources each as 3', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([
+        filmSource(1, 1, 'DOWNLOADING'), filmSource(2, 1, 'QUEUED'),
+        filmSource(3, 2, 'DOWNLOADING'), filmSource(4, 2, 'QUEUED'),
+        filmSource(5, 3, 'DOWNLOADING'), filmSource(6, 3, 'QUEUED'),
+      ]);
+
+      expect(await service.activeDownloadCount('user-1')).toBe(3);
+    });
+
+    it('counts one show with an active pack and two active episodes as 1', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([packSource(1, 'DOWNLOADING'), episodeSource(2, 'QUEUED'), episodeSource(3, 'DOWNLOADING')]);
+
+      expect(await service.activeDownloadCount('user-1')).toBe(1);
+    });
+
+    it('does not count a film whose only source is paused', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([filmSource(1, 7, 'PAUSED')]);
+
+      expect(await service.activeDownloadCount('user-1')).toBe(0);
+    });
+
+    it('does not count titles whose sources are only COMPLETED or ERROR', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([filmSource(1, 7, 'SCANNED'), filmSource(2, 8, 'ERROR')]);
+      prisma.processJob.findMany.mockResolvedValue([
+        { status: 'COMPLETED', progress: 100, encodeSpeed: null, updatedAt: new Date(0), sourceFile: { mediaSourceId: 1 } },
+      ]);
+
+      expect(await service.activeDownloadCount('user-1')).toBe(0);
     });
   });
 
@@ -529,7 +667,7 @@ describe('DownloadsService', () => {
     });
 
     it('showDownloads joins an uppercase-stored infoHash to qBittorrent\'s lowercase report', async () => {
-      const show = { id: 9, title: 'Serie Mayúscula' };
+      const show = { id: 9, title: 'Serie Mayúscula', users: [{ userId: 'user-1' }] };
       prisma.show.findFirst.mockResolvedValue(show);
       prisma.mediaSource.findMany.mockResolvedValue([
         {

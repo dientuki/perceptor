@@ -3,14 +3,17 @@
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import Badge from "@/components/ui/badge/Badge";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
+import { groupByTitle } from "@/lib/download-groups";
 import { statusTone } from "@/lib/status-tone";
 import type { Download } from "@/types/downloads";
 import DeleteDownloadModal from "./DeleteDownloadModal";
+import DownloadGroupHeader from "./DownloadGroupHeader";
 import DownloadRow from "./DownloadRow";
+import DownloadsPagination from "./DownloadsPagination";
 
 type Bucket = "completed" | "working" | "error";
 
@@ -32,17 +35,25 @@ function bucketOf(download: Download): Bucket | undefined {
   return TONE_BUCKET[statusTone(download.status)];
 }
 
+const DEFAULT_PAGE_SIZE = 10;
+
+interface DownloadsPanelProps {
+  downloads: Download[];
+  grouped?: boolean;
+  emptyText?: string;
+}
+
 export default function DownloadsPanel({
   downloads,
-  showTitle,
-}: {
-  downloads: Download[];
-  showTitle?: string;
-}) {
+  grouped = false,
+  emptyText,
+}: DownloadsPanelProps) {
   const t = useTranslations("downloads.panel");
   const router = useRouter();
   const [isRefreshing, startRefresh] = useTransition();
   const [filter, setFilter] = useState<Bucket | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [deleteTarget, setDeleteTarget] = useState<Download | null>(null);
   const {
     isOpen: isDeleteModalOpen,
@@ -75,6 +86,30 @@ export default function DownloadsPanel({
       ? downloads
       : downloads.filter((download) => bucketOf(download) === filter);
 
+  const groups = grouped ? groupByTitle(visible) : [];
+  const pageCount = Math.max(1, Math.ceil(groups.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const startIndex = (currentPage - 1) * pageSize;
+  const pageGroups = groups.slice(startIndex, startIndex + pageSize);
+
+  const handleFilter = (bucket: Bucket) => {
+    setFilter(filter === bucket ? null : bucket);
+    setPage(1);
+  };
+
+  const handlePageSize = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+  };
+
+  const renderRow = (download: Download) => (
+    <DownloadRow
+      key={download.mediaSourceId}
+      download={download}
+      onDeleteRequest={handleDeleteRequest}
+    />
+  );
+
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
       <div className="flex items-center justify-between px-5 py-4">
@@ -88,7 +123,7 @@ export default function DownloadsPanel({
               size="sm"
               variant={filter === bucket ? "primary" : "outline"}
               ariaPressed={filter === bucket}
-              onClick={() => setFilter(filter === bucket ? null : bucket)}
+              onClick={() => handleFilter(bucket)}
             >
               {t(BUCKET_LABEL_KEY[bucket])}
               <Badge size="sm" color={filter === bucket ? "light" : "primary"}>
@@ -113,7 +148,7 @@ export default function DownloadsPanel({
 
       {visible.length === 0 ? (
         <div className="border-t border-gray-200 px-5 py-6 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-          {t("empty")}
+          {emptyText ?? t("empty")}
         </div>
       ) : (
         <div className="overflow-x-auto border-t border-gray-200 dark:border-gray-800">
@@ -138,16 +173,36 @@ export default function DownloadsPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-transparent">
-              {visible.map((download) => (
-                <DownloadRow
-                  key={download.mediaSourceId}
-                  download={download}
-                  showTitle={showTitle}
-                  onDeleteRequest={handleDeleteRequest}
-                />
-              ))}
+              {grouped
+                ? pageGroups.map((group) => (
+                    <Fragment key={group.key}>
+                      {group.downloads.length >= 2 && (
+                        <DownloadGroupHeader
+                          title={group.title}
+                          count={group.downloads.length}
+                        />
+                      )}
+                      {group.downloads.map(renderRow)}
+                    </Fragment>
+                  ))
+                : visible.map(renderRow)}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {grouped && groups.length >= 1 && (
+        <div className="border-t border-gray-200 px-5 py-4 dark:border-gray-800">
+          <DownloadsPagination
+            page={currentPage}
+            pageCount={pageCount}
+            from={startIndex + 1}
+            to={startIndex + pageGroups.length}
+            total={groups.length}
+            pageSize={pageSize}
+            onPage={setPage}
+            onPageSize={handlePageSize}
+          />
         </div>
       )}
 
