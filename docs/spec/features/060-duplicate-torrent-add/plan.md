@@ -1,8 +1,8 @@
 ---
 title: Duplicate Torrent Add — Implementation Plan
 spec_version: 0.1.0
-last_updated: 2026-09-18
-status: Approved         # Draft | Approved | Implemented
+last_updated: 2026-09-19
+status: Implemented
 ---
 
 # PLAN: Duplicate Torrent Add (`plan.md`)

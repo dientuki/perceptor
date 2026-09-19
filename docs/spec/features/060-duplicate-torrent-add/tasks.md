@@ -1,7 +1,7 @@
 ---
 title: Duplicate Torrent Add — Tasks
 last_updated: 2026-09-18
-status: Draft            # Draft | In Progress | Done
+status: Done
 ---
 
 # TASKS: Duplicate Torrent Add (`tasks.md`)
@@ -26,7 +26,7 @@ cases to its own spec file.
 The movie twin goes first. Its suite already has an `attachTorrentSource` describe block, and the
 branch it lands on (no-op → reactivate → genuine add) is the shape the other two copy.
 
-- [ ] **T001** `[api]` First, record the baseline: `bin/cli api npx --no tsc --noEmit` and
+- [x] **T001** `[api]` First, record the baseline: `bin/cli api npx --no tsc --noEmit` and
       `bin/npm api test` (tests/suites). Then, in `services/api/src/movies/movies.service.ts`, split
       `attachTorrentSource`'s same-target branch per `api/plan.md` § Steps 2–7:
       - move the different-target conflict checks above the `COMPLETED`/`force` check;
@@ -59,7 +59,7 @@ branch it lands on (no-op → reactivate → genuine add) is the shape the other
 Both copy T001's shape into their own file. They touch disjoint files, so they can run in
 parallel. Neither may edit `movies/`.
 
-- [ ] **T002** `[api] [P]` Same change in `services/api/src/episodes/episodes.service.ts`,
+- [x] **T002** `[api] [P]` Same change in `services/api/src/episodes/episodes.service.ts`,
       `episodes.module.ts` and `episodes.service.spec.ts`. The existing demote-on-`force` block
       stays where it is: after the qBittorrent calls, before the row write, and never reached by
       the no-op. The no-op returns `episode.findUniqueOrThrow`. Tests are the same six cases.
@@ -69,7 +69,7 @@ parallel. Neither may edit `movies/`.
       the fault-injection confirmation is reported as in T001; `git diff --stat` touches only
       `services/api/src/episodes/`.
 
-- [ ] **T003** `[api] [P]` Same change in `services/api/src/seasons/seasons.service.ts`,
+- [x] **T003** `[api] [P]` Same change in `services/api/src/seasons/seasons.service.ts`,
       `seasons.module.ts` and `seasons.service.spec.ts`. The no-op's final read is the same
       `season.findUniqueOrThrow` **with `episodes` included** that the method already ends with; a
       bare row fails the mutation. The demote block is handled as in T002. Tests are the same six
@@ -81,7 +81,7 @@ parallel. Neither may edit `movies/`.
 
 ### Group 3: verification and docs
 
-- [ ] **T004** `[api]` Run `plan.md` § Verification in full against the finished slice:
+- [x] **T004** `[api]` Run `plan.md` § Verification in full against the finished slice:
       - `bin/cli api npx --no tsc --noEmit`;
       - `bin/npm api test`;
       - `git status --short services/api/prisma` (expected empty);
@@ -95,7 +95,7 @@ parallel. Neither may edit `movies/`.
       is marked as either observed live (with the query output or UI observation) or pending
       manual. AC-8 is covered by the test run.
 
-- [ ] **T005** `[docs]` Update the docs:
+- [x] **T005** `[docs]` Update the docs:
       - `services/api/CLAUDE.md` § Module map: the `episodes/` and `seasons/` entries (and the
         `attachTorrentSource` description they share with `movies/`) now say that a same-target
         duplicate is a no-op unless the source is `ERROR`, and that an `ERROR` one is reactivated in
@@ -108,12 +108,19 @@ parallel. Neither may edit `movies/`.
       *Done when:* both files name `060`, the module-map text matches what T001–T003 shipped, and
       the counts match T004's report.
 
-- [ ] **T006** `[docs]` Walk AC-1 to AC-8 in `spec.md` against T004's report. Tick each one with a
+- [x] **T006** `[docs]` Walk AC-1 to AC-8 in `spec.md` against T004's report. Tick each one with a
       trace to the report line that proves it. Leave any AC that was only "pending manual" unticked
       and move it to § Blocked with what it needs. Tick REQ-1 to REQ-6 and NFR-1 to NFR-4. Set
       `status: Implemented` on `spec.md`, `plan.md` and `api/plan.md`, and `status: Done` here. → T005
       *Done when:* no box in `spec.md` is unticked without a matching § Blocked row, and the four
       files carry the new statuses.
+
+- [x] **T007** `[api]` Fix the typecheck-pollutes-`dist/` bug per `api/plan.md` § Addendum (the
+      original "watch race" hypothesis was wrong; T007 found the real cause).
+      *Done when:* after `bin/cli api npx --no tsc --noEmit`, `dist/` holds no `*.spec.js` and no
+      `require("@/`; a following edit keeps `api` `healthy`; typecheck 0 errors, tests 559/46.
+
+- [x] **T008** `[docs]` Record it in `services/api/CLAUDE.md`, tick NFR-5/AC-9, re-flip statuses. → T007
 
 ## Blocked
 
@@ -122,6 +129,7 @@ entry is a decision waiting for a human.
 
 | Task | Service | What blocked it | Needs |
 | :-- | :-- | :-- | :-- |
+| T004 | api | The live manual pass (`plan.md` § Verification steps 1–6) touches real torrents and the user's library, so it was not run by the agent | A human to run AC-1 to AC-7 against the stack; unit tests cover the same rules with fault injection |
 
 Contract problems always land here (Constitution, Article VIII): an agent that finds the GraphQL
 delta wrong stops and reports, it does not amend the delta from inside its slice.

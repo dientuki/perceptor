@@ -6,6 +6,7 @@ import { SettingsModule } from '@/settings/settings.module';
 import { LanguagesModule } from '@/languages/languages.module';
 import { MediaServerModule } from '@/media-server/media-server.module';
 import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
+import { DownloadsModule } from '@/downloads/downloads.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
     LanguagesModule,
     MediaServerModule,
     MediaCapabilitiesModule,
+    DownloadsModule,
   ],
   providers: [MoviesResolver, MoviesService],
   exports: [MoviesService],

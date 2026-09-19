@@ -1,10 +1,10 @@
 ---
 title: Duplicate Torrent Add
-spec_version: 0.1.0
+spec_version: 0.2.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-18
-last_updated: 2026-09-18
-status: Approved         # Draft | Approved | Implemented | Superseded
+last_updated: 2026-09-19
+status: Implemented
 services: [api]
 ---
 
@@ -47,56 +47,63 @@ depends on does.
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Active duplicate is a no-op)**: Adding a torrent or magnet whose `infoHash` is
+- [x] **REQ-1 (Active duplicate is a no-op)**: Adding a torrent or magnet whose `infoHash` is
       already attached to the **same** target (film, episode or season), when that source is in any
       status other than `ERROR` (`PENDING`, `QUEUED`, `DOWNLOADING`, `PAUSED`, `READY`, `SCANNED`),
       must change nothing: no call that adds a torrent to qBittorrent, no write to the
       `MediaSource` row (its `status`, `downloadPath`, `downloadUrl`, `releaseTitle` and `kind` stay
       as they were), and no change to the target's own status. The mutation succeeds and returns the
       target exactly as a fresh read would. The user sees no error and no notice.
-- [ ] **REQ-2 (`force` does not bypass REQ-1)**: REQ-1 holds even when the mutation carries
+- [x] **REQ-2 (`force` does not bypass REQ-1)**: REQ-1 holds even when the mutation carries
       `force: true`. Re-requesting a release that is already the target's own active source is not
       a replacement, so it must never demote that source or any sibling to `ERROR`
       (`error.source.replaced`).
-- [ ] **REQ-3 (Failed duplicate is reactivated in place)**: Adding a torrent or magnet whose
+- [x] **REQ-3 (Failed duplicate is reactivated in place)**: Adding a torrent or magnet whose
       `infoHash` is attached to the same target through a source in `ERROR` must reactivate that
       row rather than create a second one. If qBittorrent still holds the torrent, the row keeps its
       existing `downloadPath`, and the torrent is running in qBittorrent when the mutation returns.
       A torrent that the race arbiter or a user had stopped is started again, not merely
       re-requested. If qBittorrent no longer holds the torrent, it is a genuine new add, and the
       folder that add produces becomes the row's `downloadPath`.
-- [ ] **REQ-4 (Reactivated torrent that already finished)**: When REQ-3 reactivates an `ERROR`
+- [x] **REQ-4 (Reactivated torrent that already finished)**: When REQ-3 reactivates an `ERROR`
       source whose torrent qBittorrent reports as already fully downloaded, no new completion notice
       will ever arrive from qBittorrent. `api` must therefore treat the reactivation exactly as if
       `torrentCompleted` had just arrived for that `infoHash`, running the same race resolution
       (`022`) and enqueue path a real completion notice runs. It gets no separate shortcut to
       `READY`. If that path decides the source is a late loser because a sibling already won, the
       outcome is whatever a late `torrentCompleted` produces today.
-- [ ] **REQ-5 (Conflicts unchanged)**: An `infoHash` already attached to a **different** target
+- [x] **REQ-5 (Conflicts unchanged)**: An `infoHash` already attached to a **different** target
       keeps refusing exactly as it does today, with `error.magnet.already_attached` naming the other
       title. This spec changes only the same-target case.
-- [ ] **REQ-6 (One behaviour, three twins)**: REQ-1 to REQ-4 hold identically for films, episodes
+- [x] **REQ-6 (One behaviour, three twins)**: REQ-1 to REQ-4 hold identically for films, episodes
       and seasons, across all six mutations (`addTorrentTo*`, `addMagnetTo*`). The three
       `attachTorrentSource` twins stay separate (Constitution, Article X; `006-media-search`
       § Out of Scope). This spec asks them to agree, not to merge.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (qBittorrent unreachable fails before any write)**: If `api` cannot learn from
+- [x] **NFR-1 (qBittorrent unreachable fails before any write)**: If `api` cannot learn from
       qBittorrent whether it holds the torrent (REQ-3), or the add itself is rejected, the mutation
       fails with the same error an unreachable or rejecting torrent client produces today. No
       `MediaSource` row is created, updated or demoted, and the target's status is untouched.
       REQ-1's no-op needs no call to qBittorrent, so it must not fail when qBittorrent is down.
-- [ ] **NFR-2 (Existing rows are left alone)**: Sources whose `downloadPath` was already overwritten
+- [x] **NFR-2 (Existing rows are left alone)**: Sources whose `downloadPath` was already overwritten
       before this ships are not detected, corrected or migrated. No backfill, no boot-time
       reconciliation, and no correction at `torrentCompleted`. The user recovers one by deleting it
       and adding it again (see § Out of Scope for what that delete leaves behind).
-- [ ] **NFR-3 (Tested where silent)**: The whole failure class here produces no error anywhere: a
+- [x] **NFR-3 (Tested where silent)**: The whole failure class here produces no error anywhere: a
       row pointing at an empty folder, a row stuck in `QUEUED`, a stopped torrent under a `QUEUED`
       row. Each of REQ-1, REQ-2 and REQ-3 is owed a test (Constitution, Article IX), for each of the
       three twins, including a second add whose first URL differs from the first add's.
-- [ ] **NFR-4 (No schema change)**: `MediaSource.infoHash` is already `@unique` and
+- [x] **NFR-4 (No schema change)**: `MediaSource.infoHash` is already `@unique` and
       `downloadPath` already exists. No Prisma migration.
+- [x] **NFR-5 (Typecheck must not pollute the dev watcher's output)**: `bin/cli api npx --no tsc
+      --noEmit` did not pass `--noEmit` to tsc (npm swallowed it), so every documented typecheck
+      emitted the whole program, specs included, into `dist/` with `@/` aliases unrewritten. The next
+      watch recompile restarted node on that `dist` and crashed with `Cannot find module '@/…'`,
+      leaving `api` `unhealthy` until a restart. It predates 060 (same crash in the 2026-09-17 log).
+      A typecheck now emits nothing, and `nest build`/`nest start --watch` still emit. Confined to
+      `api`'s tsconfig files: no runtime, production-image or contract change.
 
 ## GraphQL Contract Delta
 
@@ -141,8 +148,12 @@ None.
       is untouched.
 - [ ] **AC-7**: AC-1 and AC-3 repeated through a season pack (`addTorrentToSeason`/
       `addMagnetToSeason`) behave identically.
-- [ ] **AC-8**: `bin/npm api run test` passes with new tests covering REQ-1, REQ-2 and REQ-3 for all
+- [x] **AC-8**: `bin/npm api run test` passes with new tests covering REQ-1, REQ-2 and REQ-3 for all
       three twins, each opening with the Article IX header.
+- [x] **AC-9** *(failure path)*: With `api` up under `bin/dev`, running
+      `bin/cli api npx --no tsc --noEmit` leaves `dist/` with no `*.spec.js` and no `require("@/`,
+      and a following source edit keeps the container `healthy` with no `Cannot find module '@/`
+      in its log. Before the fix the same sequence left 46 spec files and 121 aliased files in `dist/`.
 
 ## Out of Scope
 

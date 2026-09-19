@@ -21,6 +21,7 @@ import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
+import { DownloadsService } from '@/downloads/downloads.service';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
@@ -87,6 +88,7 @@ export class MoviesService implements MediaTypeService {
     private readonly qbittorrent: QbittorrentClient,
     private readonly mediaServerReconcile: MediaServerReconcileService,
     private readonly mediaCapabilities: MediaCapabilitiesService,
+    private readonly downloadsService: DownloadsService,
   ) {}
 
   async create(createMovieDto: CreateMovieDto) {
@@ -596,12 +598,6 @@ export class MoviesService implements MediaTypeService {
     if (!movie)
       throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
-    // REQ-7: only a COMPLETED target refuses. A merely-downloading film no
-    // longer conflicts at all — REQ-6 makes a second acquisition normal.
-    if (movie.status === 'COMPLETED' && !input.force) {
-      throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
-    }
-
     // infoHash es @unique: si ya existe una fila con este hash, no podemos
     // crear otra (P2002). De otra película es una colisión real que sólo
     // decide el usuario; de esta misma película es un reintento — se reusa
@@ -633,6 +629,48 @@ export class MoviesService implements MediaTypeService {
       throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
         title: episodeDisplayTitle(existingSource.episode),
       });
+    }
+
+ 
+    const sameTarget = existingSource?.movie?.id === movieId;
+
+    if (existingSource && sameTarget && existingSource.status !== 'ERROR') {
+      return this.prisma.movie.findUniqueOrThrow({ where: { id: movieId } });
+    }
+
+    // REQ-7: only a COMPLETED target refuses. A merely-downloading film no
+    // longer conflicts at all — REQ-6 makes a second acquisition normal.
+    if (movie.status === 'COMPLETED' && !input.force) {
+      throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
+    }
+
+    if (existingSource && sameTarget) {
+      const hash = input.infoHash.toLowerCase();
+      const held = (await this.qbittorrent.info()).find(
+        (torrent) => torrent.hash.toLowerCase() === hash,
+      );
+
+      if (held) {
+        const finished = held.state === 'READY';
+        if (!finished) await this.qbittorrent.start(hash);
+
+        await this.prisma.mediaSource.update({
+          where: { id: existingSource.id },
+          data: {
+            status: 'QUEUED',
+            errorMessage: null,
+            errorKey: null,
+            errorParams: null,
+          },
+        });
+        await this.prisma.movie.update({
+          where: { id: movieId },
+          data: { status: 'DOWNLOADING' },
+        });
+        if (finished) await this.downloadsService.handleTorrentCompleted(hash);
+
+        return this.prisma.movie.findUniqueOrThrow({ where: { id: movieId } });
+      }
     }
 
     // El savepath lo decide el client al agregar el torrent, así cada descarga cae

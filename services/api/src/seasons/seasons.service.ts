@@ -7,6 +7,7 @@ import { SourceKind } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
+import { DownloadsService } from '@/downloads/downloads.service';
 
 // REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw.
 // Fallback derived from the target row's id, not the MediaSource's — see
@@ -36,6 +37,7 @@ export class SeasonsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly qbittorrent: QbittorrentClient,
+    private readonly downloadsService: DownloadsService,
   ) {}
 
   async findOneFromDb(id: number, userId: string) {
@@ -93,22 +95,6 @@ export class SeasonsService {
     const season = await this.findOneFromDb(seasonId, userId);
     if (!season) throw i18nError.notFound(ERROR_KEYS.SEASON_NOT_FOUND, { id: seasonId });
 
-    const activeSource = await this.prisma.mediaSource.findFirst({
-      where: { seasonId, status: { not: 'ERROR' } },
-    });
-
-    // REQ-7: only a season with at least one COMPLETED episode refuses. A
-    // merely-downloading season no longer conflicts — REQ-6 makes a second
-    // acquisition normal. `activeSource` still drives the demote-on-force
-    // block below regardless of this check.
-    if (!input.force) {
-      const hasCompletedEpisode =
-        (await this.prisma.episode.count({ where: { seasonId, status: 'COMPLETED' } })) > 0;
-      if (hasCompletedEpisode) {
-        throw i18nError.conflict(ERROR_KEYS.SEASON_ALREADY_COMPLETED);
-      }
-    }
-
     // Symmetric with the checks MoviesService/EpisodesService.attachTorrentSource
     // already do: an infoHash already owned by a movie, an episode, or a
     // *different* season must not be silently re-pointed at this one.
@@ -139,6 +125,60 @@ export class SeasonsService {
       });
     }
 
+    const sameTarget = existingSource?.season?.id === seasonId;
+
+    if (existingSource && sameTarget && existingSource.status !== 'ERROR') {
+      return this.findSeasonWithEpisodes(seasonId);
+    }
+
+    const activeSource = await this.prisma.mediaSource.findFirst({
+      where: { seasonId, status: { not: 'ERROR' } },
+    });
+
+    // REQ-7: only a season with at least one COMPLETED episode refuses. A
+    // merely-downloading season no longer conflicts — REQ-6 makes a second
+    // acquisition normal. `activeSource` still drives the demote-on-force
+    // block below regardless of this check.
+    if (!input.force) {
+      const hasCompletedEpisode =
+        (await this.prisma.episode.count({ where: { seasonId, status: 'COMPLETED' } })) > 0;
+      if (hasCompletedEpisode) {
+        throw i18nError.conflict(ERROR_KEYS.SEASON_ALREADY_COMPLETED);
+      }
+    }
+
+    let reactivated = false;
+    if (existingSource && sameTarget) {
+      const hash = input.infoHash.toLowerCase();
+      const held = (await this.qbittorrent.info()).find(
+        (torrent) => torrent.hash.toLowerCase() === hash,
+      );
+
+      if (held) {
+        const finished = held.state === 'READY';
+        if (!finished) await this.qbittorrent.start(hash);
+
+        if (activeSource && input.force) {
+          await this.demoteActiveSources(seasonId);
+        }
+
+        await this.prisma.mediaSource.update({
+          where: { id: existingSource.id },
+          data: {
+            status: 'QUEUED',
+            errorMessage: null,
+            errorKey: null,
+            errorParams: null,
+          },
+        });
+        if (finished) await this.downloadsService.handleTorrentCompleted(hash);
+
+        reactivated = true;
+      }
+    }
+
+    if (reactivated) return this.findSeasonWithEpisodes(seasonId);
+
     // El savepath lo decide el client al agregar el torrent, así cada
     // descarga cae en su propia carpeta. Corre antes de cualquier escritura
     // en la DB: si qBittorrent rechaza el torrent no debe quedar ninguna
@@ -149,15 +189,7 @@ export class SeasonsService {
     // has accepted the new torrent — so a rejected add() leaves the
     // previously active source untouched.
     if (activeSource && input.force) {
-      await this.prisma.mediaSource.updateMany({
-        where: { seasonId, status: { not: 'ERROR' } },
-        data: {
-          status: 'ERROR',
-          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
-          errorKey: ERROR_KEYS.SOURCE_REPLACED,
-          errorParams: null,
-        },
-      });
+      await this.demoteActiveSources(seasonId);
     }
 
     const mediaSource = existingSource
@@ -191,9 +223,25 @@ export class SeasonsService {
     // — a bare row here would fail the mutation *after* the torrent was
     // already accepted, see api/plan.md's "Season returned without its
     // episodes" risk.
+    return this.findSeasonWithEpisodes(seasonId);
+  }
+
+  private findSeasonWithEpisodes(seasonId: number) {
     return this.prisma.season.findUniqueOrThrow({
       where: { id: seasonId },
       include: { episodes: { orderBy: { episodeNumber: 'asc' } } },
+    });
+  }
+
+  private async demoteActiveSources(seasonId: number) {
+    await this.prisma.mediaSource.updateMany({
+      where: { seasonId, status: { not: 'ERROR' } },
+      data: {
+        status: 'ERROR',
+        errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+        errorKey: ERROR_KEYS.SOURCE_REPLACED,
+        errorParams: null,
+      },
     });
   }
 

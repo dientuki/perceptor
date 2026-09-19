@@ -270,6 +270,15 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   recognises an `infoHash` owned by an **episode**, not just another movie — without that, an
   episode-owned hash falls through and gets silently re-pointed at a film. Reuses
   `shows/entities/episode.entity.ts` rather than declaring a second `Episode`.
+
+  Since `060-duplicate-torrent-add`, all three `attachTorrentSource` twins (`movies/`, `episodes/`,
+  `seasons/`) treat an `infoHash` already attached to the **same** target as a no-op unless that
+  source is `ERROR` — no qBittorrent call, no write, not even under `force`. An `ERROR` duplicate is
+  reactivated in place: `info()` (errors propagate, never swallowed) decides whether qBittorrent
+  still holds it; if so the row keeps its `downloadPath`, `start()` runs unless it finished, and only
+  `status` plus the error fields change; a finished torrent is handed to
+  `DownloadsService.handleTorrentCompleted` after the row update. If qBittorrent no longer holds it,
+  the old `add()` path runs. The three modules import `DownloadsModule` for that.
 - **`seasons/`** — the **third** structural twin of `attachTorrentSource`, same deliberate
   non-abstraction. Two mutations as of `059-season-pack-acquisition-ui` —
   `addMagnetToSeason(seasonId, magnet, force)` and `addTorrentToSeason(seasonId, infoHash, urls,
@@ -781,6 +790,11 @@ cases added to `movies.service.spec.ts`, `shows.service.spec.ts`, `movies.resolv
 dropped, `contentKind ContentKind @default(LIVE_ACTION)` added, no backfill). `git diff
 services/api/src/schema.gql` matches `docs/spec/features/057-content-kind-classification/spec.md`
 § GraphQL Contract Delta exactly.
+
+As of 2026-09-19 (`060-duplicate-torrent-add`): `bin/cli api npx --no tsc --noEmit` reports **0
+errors**, `bin/npm api test` is green at **559** tests across **46** suites (up from 536; 7 new cases
+for the movie twin, 8 for episodes, 8 for seasons), `git status --short services/api/prisma` is
+**empty**, and `src/schema.gql` differs only by type/field reordering from a regeneration (no contract change). The typecheck command now emits nothing: `noEmit: true` in `tsconfig.json`, overridden to `false` in `tsconfig.build.json`, because npm swallowed `--noEmit` and every typecheck used to write an alias-unrewritten build into `dist/`, crashing the dev watcher on its next recompile.
 
 ## Known debt
 

@@ -115,21 +115,6 @@ type MediaServerIndexStatus {
   syncedAt: DateTime
 }
 
-type TorrentLink {
-  downloadUrl: String
-}
-
-type TorrentResult {
-  id: String!
-  infoHash: String
-  title: String
-  size: Float
-  seeders: Int!
-  leechers: Int!
-  items: [TorrentLink!]!
-  infoUrl: [TorrentLink!]!
-}
-
 type Download {
   mediaSourceId: Int!
   infoHash: String
@@ -147,6 +132,21 @@ type Download {
   downloadSpeed: Float
   encodeSpeed: Float
   readAt: DateTime!
+}
+
+type TorrentLink {
+  downloadUrl: String
+}
+
+type TorrentResult {
+  id: String!
+  infoHash: String
+  title: String
+  size: Float
+  seeders: Int!
+  leechers: Int!
+  items: [TorrentLink!]!
+  infoUrl: [TorrentLink!]!
 }
 
 type MediaSource {
@@ -350,11 +350,11 @@ type Query {
   """
   mediaServerClients: [MediaServerOption!]!
   mediaServerIndexStatus: MediaServerIndexStatus!
+  movieDownloads(movieId: Int!): [Download!]!
+  showDownloads(showId: Int!): [Download!]!
 
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!): [TorrentResult!]!
-  movieDownloads(movieId: Int!): [Download!]!
-  showDownloads(showId: Int!): [Download!]!
   mediaSource(id: Int!): MediaSource
 
   """Datos que el worker necesita para encodear un ProcessJob"""

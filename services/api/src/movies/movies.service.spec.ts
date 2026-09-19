@@ -4,7 +4,8 @@ import { MoviesService } from './movies.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
-import { QbittorrentClient } from '@/clients/torrent/client';
+import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
+import { DownloadsService } from '@/downloads/downloads.service';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { MEDIA_TYPE } from '@/types/media';
@@ -42,7 +43,13 @@ const MAGNET =
 //    silently misclassifying a film costs nothing visible either: the film
 //    registers fine either way, it just files under the wrong category
 //    forever (048 guarantees nothing ever moves it back), or pays a TMDB
-//    call it should never have made when shorts are disabled.
+//    call it should never have made when shorts are disabled;
+//  - attaching a torrent whose infoHash is already this film's own source
+//    (060-duplicate-torrent-add) re-adds it through a different URL and
+//    silently re-points downloadPath at an empty folder, resets a finished
+//    torrent to QUEUED with no completion notice ever coming, or leaves a
+//    stopped torrent stopped under a QUEUED row — every one a success
+//    response with nothing in any log until the scan finds no video.
 describe('MoviesService', () => {
   let service: MoviesService;
   let prisma: {
@@ -52,6 +59,7 @@ describe('MoviesService', () => {
       findFirst: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
     };
     userMovie: {
       upsert: jest.Mock;
@@ -73,6 +81,11 @@ describe('MoviesService', () => {
   };
   let qbittorrent: {
     add: jest.Mock;
+    info: jest.Mock;
+    start: jest.Mock;
+  };
+  let downloads: {
+    handleTorrentCompleted: jest.Mock;
   };
   let mediaServerReconcile: {
     reconcileMovie: jest.Mock;
@@ -89,6 +102,7 @@ describe('MoviesService', () => {
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
       },
       userMovie: {
         upsert: jest.fn(),
@@ -110,6 +124,11 @@ describe('MoviesService', () => {
     };
     qbittorrent = {
       add: jest.fn(),
+      info: jest.fn(),
+      start: jest.fn(),
+    };
+    downloads = {
+      handleTorrentCompleted: jest.fn().mockResolvedValue('ok'),
     };
     mediaServerReconcile = {
       reconcileMovie: jest.fn().mockResolvedValue(undefined),
@@ -130,6 +149,7 @@ describe('MoviesService', () => {
           useValue: mediaServerReconcile,
         },
         { provide: MediaCapabilitiesService, useValue: mediaCapabilities },
+        { provide: DownloadsService, useValue: downloads },
       ],
     }).compile();
 
@@ -746,6 +766,138 @@ describe('MoviesService', () => {
 
       expect(qbittorrent.add).toHaveBeenCalled();
       expect(prisma.mediaSource.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('addMagnetToMovie (duplicate of the same film)', () => {
+    const HASH = '5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c';
+    const OTHER_URL_MAGNET = `${MAGNET}&tr=udp%3A%2F%2Fother.example%3A1337`;
+    const film = (status: string) => ({
+      id: 7,
+      title: 'Transformers',
+      status,
+      mediaSources: [],
+    });
+    const own = (status: string) => ({
+      id: 99,
+      status,
+      movie: { id: 7, title: 'Transformers' },
+      episode: null,
+    });
+
+    beforeEach(() => {
+      prisma.movie.findUniqueOrThrow.mockResolvedValue({ id: 7 });
+      prisma.movie.update.mockResolvedValue({ id: 7 });
+    });
+
+    function expectNoWrites() {
+      expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+      expect(prisma.movie.update).not.toHaveBeenCalled();
+    }
+
+    it('is a no-op for an active own source even when the second URL differs', async () => {
+      prisma.movie.findFirst.mockResolvedValue(film('DOWNLOADING'));
+      prisma.mediaSource.findUnique.mockResolvedValue(own('DOWNLOADING'));
+
+      await expect(
+        service.addMagnetToMovie(
+          7,
+          { magnet: OTHER_URL_MAGNET, force: false },
+          'user-1',
+        ),
+      ).resolves.toEqual({ id: 7 });
+
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(qbittorrent.info).not.toHaveBeenCalled();
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+      expectNoWrites();
+    });
+
+    it.each([true, false])('stays a no-op for a COMPLETED film with force=%s', async (force) => {
+      prisma.movie.findFirst.mockResolvedValue(film('COMPLETED'));
+      prisma.mediaSource.findUnique.mockResolvedValue(own('SCANNED'));
+
+      await expect(
+        service.addMagnetToMovie(7, { magnet: MAGNET, force }, 'user-1'),
+      ).resolves.toEqual({ id: 7 });
+
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(qbittorrent.info).not.toHaveBeenCalled();
+      expectNoWrites();
+    });
+
+    it('starts a held, unfinished ERROR duplicate and keeps its path and url', async () => {
+      prisma.movie.findFirst.mockResolvedValue(film('DOWNLOADING'));
+      prisma.mediaSource.findUnique.mockResolvedValue(own('ERROR'));
+      qbittorrent.info.mockResolvedValue([
+        { hash: HASH.toUpperCase(), state: 'PAUSED' },
+      ]);
+
+      await service.addMagnetToMovie(
+        7,
+        { magnet: OTHER_URL_MAGNET, force: false },
+        'user-1',
+      );
+
+      expect(qbittorrent.start).toHaveBeenCalledWith(HASH);
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      const data = prisma.mediaSource.update.mock.calls[0][0].data;
+      expect(data).toEqual({
+        status: 'QUEUED',
+        errorMessage: null,
+        errorKey: null,
+        errorParams: null,
+      });
+      expect(downloads.handleTorrentCompleted).not.toHaveBeenCalled();
+    });
+
+    it('runs the completion path after the row update for a held, finished ERROR duplicate', async () => {
+      prisma.movie.findFirst.mockResolvedValue(film('DOWNLOADING'));
+      prisma.mediaSource.findUnique.mockResolvedValue(own('ERROR'));
+      qbittorrent.info.mockResolvedValue([{ hash: HASH, state: 'READY' }]);
+
+      await service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1');
+
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+      expect(downloads.handleTorrentCompleted).toHaveBeenCalledWith(HASH);
+      expect(
+        prisma.mediaSource.update.mock.invocationCallOrder[0],
+      ).toBeLessThan(downloads.handleTorrentCompleted.mock.invocationCallOrder[0]);
+      expect(
+        downloads.handleTorrentCompleted.mock.invocationCallOrder[0],
+      ).toBeLessThan(prisma.movie.findUniqueOrThrow.mock.invocationCallOrder[0]);
+    });
+
+    it('performs a genuine add for an ERROR duplicate qBittorrent no longer holds', async () => {
+      prisma.movie.findFirst.mockResolvedValue(film('DOWNLOADING'));
+      prisma.mediaSource.findUnique.mockResolvedValue(own('ERROR'));
+      qbittorrent.info.mockResolvedValue([{ hash: 'f'.repeat(40), state: 'READY' }]);
+      qbittorrent.add.mockResolvedValue('/media/downloads/new');
+
+      await service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1');
+
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+      expect(qbittorrent.add).toHaveBeenCalled();
+      expect(prisma.mediaSource.update.mock.calls[0][0].data).toMatchObject({
+        status: 'QUEUED',
+        downloadPath: '/media/downloads/new',
+      });
+      expect(downloads.handleTorrentCompleted).not.toHaveBeenCalled();
+    });
+
+    it('propagates an unreachable client from an ERROR duplicate before any write', async () => {
+      prisma.movie.findFirst.mockResolvedValue(film('DOWNLOADING'));
+      prisma.mediaSource.findUnique.mockResolvedValue(own('ERROR'));
+      const failure = new TorrentClientError('down', 503);
+      qbittorrent.info.mockRejectedValue(failure);
+
+      await expect(
+        service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
+      ).rejects.toBe(failure);
+
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expectNoWrites();
     });
   });
 });

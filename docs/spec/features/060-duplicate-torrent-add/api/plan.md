@@ -1,8 +1,8 @@
 ---
 title: Duplicate Torrent Add — api slice
 service: api
-last_updated: 2026-09-18
-status: Approved         # Draft | Approved | Implemented
+last_updated: 2026-09-19
+status: Implemented
 ---
 
 # PLAN: Duplicate Torrent Add — `api` (`api/plan.md`)
@@ -135,6 +135,12 @@ Per twin:
 The different-target conflict (REQ-5) already has coverage in `movies.service.spec.ts`
 (`addMagnetToMovie (attachTorrentSource conflict key)`). Confirm it still passes; do not duplicate
 it.
+
+## Addendum (spec 0.2.0): typecheck polluting `dist/` (NFR-5, AC-9)
+
+Root cause found by T007: `npx --no tsc --noEmit` loses `--noEmit` to npm, so tsc emits into `dist/`.
+Fix: `"noEmit": true` in `tsconfig.json` and `"compilerOptions": { "noEmit": false }` in
+`tsconfig.build.json`. `paths`, imports and `nest-cli.json` are untouched.
 
 ## Done when
 

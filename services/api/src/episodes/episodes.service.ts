@@ -7,6 +7,7 @@ import { SourceKind } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
+import { DownloadsService } from '@/downloads/downloads.service';
 
 // REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw
 // since a comma is qBittorrent's tag separator. A title that sanitises to
@@ -43,6 +44,7 @@ export class EpisodesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly qbittorrent: QbittorrentClient,
+    private readonly downloadsService: DownloadsService,
   ) {}
 
   async findOneFromDb(id: number, userId: string) {
@@ -115,14 +117,6 @@ export class EpisodesService {
 
     const activeSource = await this.findActiveSource(episodeId);
 
-    // REQ-7: only a COMPLETED target refuses. A merely-downloading episode
-    // no longer conflicts — REQ-6 makes a second acquisition normal. The
-    // `activeSource` query stays: it still drives the demote-on-force block
-    // below regardless of the episode's status.
-    if (episode.status === 'COMPLETED' && !input.force) {
-      throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
-    }
-
     // Symmetric with the check MoviesService.attachTorrentSource now does:
     // an infoHash already owned by a movie, or by a *different* episode,
     // must not be silently re-pointed at this one.
@@ -143,16 +137,22 @@ export class EpisodesService {
       });
     }
 
-    // El savepath lo decide el client al agregar el torrent, así cada
-    // descarga cae en su propia carpeta. Corre antes de cualquier escritura
-    // en la DB: si qBittorrent rechaza el torrent no debe quedar ninguna
-    // fila QUEUED colgada, ni la fila activa demovida sin reemplazo.
-    const downloadPath = await this.qbittorrent.add(input.urls, episodeTags(episode));
+    const sameTarget = existingSource?.episodeId === episodeId;
 
-    // Demote *before* creating the replacement, and only after qBittorrent
-    // has accepted the new torrent — so a rejected add() leaves the
-    // previously active source untouched.
-    if (activeSource && input.force) {
+    if (existingSource && sameTarget && existingSource.status !== 'ERROR') {
+      return this.prisma.episode.findUniqueOrThrow({ where: { id: episodeId } });
+    }
+
+    // REQ-7: only a COMPLETED target refuses. A merely-downloading episode
+    // no longer conflicts — REQ-6 makes a second acquisition normal. The
+    // `activeSource` query stays: it still drives the demote-on-force block
+    // below regardless of the episode's status.
+    if (episode.status === 'COMPLETED' && !input.force) {
+      throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
+    }
+
+    const demoteActive = async () => {
+      if (!activeSource || !input.force) return;
       await this.prisma.mediaSource.updateMany({
         where: { episodeId, status: { not: 'ERROR' } },
         data: {
@@ -162,7 +162,41 @@ export class EpisodesService {
           errorParams: null,
         },
       });
+    };
+
+    if (existingSource && sameTarget) {
+      const hash = input.infoHash.toLowerCase();
+      const held = (await this.qbittorrent.info()).find((torrent) => torrent.hash.toLowerCase() === hash);
+
+      if (held) {
+        const finished = held.state === 'READY';
+        if (!finished) await this.qbittorrent.start(hash);
+
+        await demoteActive();
+        await this.prisma.mediaSource.update({
+          where: { id: existingSource.id },
+          data: { status: 'QUEUED', errorMessage: null, errorKey: null, errorParams: null },
+        });
+        await this.prisma.episode.update({
+          where: { id: episodeId },
+          data: { status: 'DOWNLOADING' },
+        });
+        if (finished) await this.downloadsService.handleTorrentCompleted(hash);
+
+        return this.prisma.episode.findUniqueOrThrow({ where: { id: episodeId } });
+      }
     }
+
+    // El savepath lo decide el client al agregar el torrent, así cada
+    // descarga cae en su propia carpeta. Corre antes de cualquier escritura
+    // en la DB: si qBittorrent rechaza el torrent no debe quedar ninguna
+    // fila QUEUED colgada, ni la fila activa demovida sin reemplazo.
+    const downloadPath = await this.qbittorrent.add(input.urls, episodeTags(episode));
+
+    // Demote *before* creating the replacement, and only after qBittorrent
+    // has accepted the new torrent — so a rejected add() leaves the
+    // previously active source untouched.
+    await demoteActive();
 
     const mediaSource = existingSource
       ? await this.prisma.mediaSource.update({

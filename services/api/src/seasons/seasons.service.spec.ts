@@ -1,7 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SeasonsService } from './seasons.service';
 import { PrismaService } from '@/prisma/prisma.service';
-import { QbittorrentClient } from '@/clients/torrent/client';
+import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
+import { DownloadsService } from '@/downloads/downloads.service';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 
 jest.mock('@/clients/indexer/resolve-info-hash');
@@ -24,7 +25,13 @@ const mockResolveInfoHash = resolveInfoHash as jest.MockedFunction<typeof resolv
 //    the superseded hash can move episodes on behalf of a source that lost.
 //  - `force` must demote only *after* qBittorrent accepts the new torrent:
 //    demoting first and having `add()` reject afterwards would leave the
-//    season with no active source and no replacement, silently.
+//    season with no active source and no replacement, silently;
+//  - attaching a torrent whose infoHash is already this season's own source
+//    (060-duplicate-torrent-add) re-adds it through a different URL and
+//    silently re-points downloadPath at an empty folder, resets a finished
+//    torrent to QUEUED with no completion notice ever coming, or leaves a
+//    stopped torrent stopped under a QUEUED row — every one a success
+//    response with nothing in any log until the scan finds no video.
 describe('SeasonsService', () => {
   let service: SeasonsService;
   let prisma: {
@@ -43,7 +50,8 @@ describe('SeasonsService', () => {
       count: jest.Mock;
     };
   };
-  let qbittorrent: { add: jest.Mock };
+  let qbittorrent: { add: jest.Mock; info: jest.Mock; start: jest.Mock };
+  let downloads: { handleTorrentCompleted: jest.Mock };
 
   const season = {
     id: 42,
@@ -68,13 +76,15 @@ describe('SeasonsService', () => {
         count: jest.fn(),
       },
     };
-    qbittorrent = { add: jest.fn() };
+    qbittorrent = { add: jest.fn(), info: jest.fn(), start: jest.fn() };
+    downloads = { handleTorrentCompleted: jest.fn().mockResolvedValue('ok') };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SeasonsService,
         { provide: PrismaService, useValue: prisma },
         { provide: QbittorrentClient, useValue: qbittorrent },
+        { provide: DownloadsService, useValue: downloads },
       ],
     }).compile();
 
@@ -319,10 +329,12 @@ describe('SeasonsService', () => {
       prisma.mediaSource.findFirst.mockResolvedValue(null);
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 5,
+        status: 'ERROR',
         movie: null,
         episode: null,
         season: { id: 42, seasonNumber: 2, show: { title: 'Reacher' } },
       });
+      qbittorrent.info.mockResolvedValue([]);
       qbittorrent.add.mockResolvedValue('/downloads/reacher-s02');
       prisma.mediaSource.update.mockResolvedValue({ id: 5, seasonId: 42 });
       prisma.season.findUniqueOrThrow.mockResolvedValue({ ...season, episodes: [] });
@@ -353,6 +365,149 @@ describe('SeasonsService', () => {
       );
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
       expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addMagnetToSeason (duplicate of the same season)', () => {
+    const HASH = 'abc123def456abc123def456abc123def456abc1';
+    const magnet = `magnet:?xt=urn:btih:${HASH}&dn=Reacher.S02.1080p`;
+    const otherUrlMagnet = `${magnet}&tr=udp%3A%2F%2Fother.example%3A1337`;
+    const withEpisodes = { ...season, episodes: [{ id: 1 }] };
+    const own = (status: string) => ({
+      id: 5,
+      status,
+      movie: null,
+      episode: null,
+      season: { id: 42, seasonNumber: 2, show: { title: 'Reacher' } },
+    });
+
+    beforeEach(() => {
+      prisma.season.findFirst.mockResolvedValue(season);
+      prisma.season.findUniqueOrThrow.mockResolvedValue(withEpisodes);
+      prisma.episode.count.mockResolvedValue(0);
+    });
+
+    function expectNoWrites() {
+      expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+    }
+
+    it('is a no-op for an active own source even when the second URL differs, returning the season with its episodes', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(own('DOWNLOADING'));
+
+      const result = await service.addMagnetToSeason(
+        42,
+        { magnet: otherUrlMagnet, force: false },
+        'user-1',
+      );
+
+      expect(result).toBe(withEpisodes);
+      expect(prisma.season.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { id: 42 },
+        include: { episodes: { orderBy: { episodeNumber: 'asc' } } },
+      });
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(qbittorrent.info).not.toHaveBeenCalled();
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+      expectNoWrites();
+    });
+
+    it.each([true, false])(
+      'stays a no-op with a COMPLETED episode and force=%s, demoting nothing',
+      async (force) => {
+        prisma.episode.count.mockResolvedValue(1);
+        prisma.mediaSource.findFirst.mockResolvedValue(own('SCANNED'));
+        prisma.mediaSource.findUnique.mockResolvedValue(own('SCANNED'));
+
+        await expect(
+          service.addMagnetToSeason(42, { magnet, force }, 'user-1'),
+        ).resolves.toBe(withEpisodes);
+
+        expect(qbittorrent.add).not.toHaveBeenCalled();
+        expect(qbittorrent.info).not.toHaveBeenCalled();
+        expectNoWrites();
+      },
+    );
+
+    it('starts a held, unfinished ERROR duplicate and keeps its path and url', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(own('ERROR'));
+      qbittorrent.info.mockResolvedValue([{ hash: HASH.toUpperCase(), state: 'PAUSED' }]);
+
+      const result = await service.addMagnetToSeason(
+        42,
+        { magnet: otherUrlMagnet, force: false },
+        'user-1',
+      );
+
+      expect(result).toBe(withEpisodes);
+      expect(qbittorrent.start).toHaveBeenCalledWith(HASH);
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.update.mock.calls[0][0].data).toEqual({
+        status: 'QUEUED',
+        errorMessage: null,
+        errorKey: null,
+        errorParams: null,
+      });
+      expect(downloads.handleTorrentCompleted).not.toHaveBeenCalled();
+    });
+
+    it('demotes an active sibling after start and before the row update when force reactivates', async () => {
+      prisma.mediaSource.findFirst.mockResolvedValue({ id: 6, seasonId: 42, status: 'DOWNLOADING' });
+      prisma.mediaSource.findUnique.mockResolvedValue(own('ERROR'));
+      qbittorrent.info.mockResolvedValue([{ hash: HASH, state: 'PAUSED' }]);
+
+      await service.addMagnetToSeason(42, { magnet, force: true }, 'user-1');
+
+      expect(qbittorrent.start.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.mediaSource.updateMany.mock.invocationCallOrder[0],
+      );
+      expect(prisma.mediaSource.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.mediaSource.update.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('runs the completion path after the row update for a held, finished ERROR duplicate', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(own('ERROR'));
+      qbittorrent.info.mockResolvedValue([{ hash: HASH, state: 'READY' }]);
+
+      await service.addMagnetToSeason(42, { magnet, force: false }, 'user-1');
+
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+      expect(downloads.handleTorrentCompleted).toHaveBeenCalledWith(HASH);
+      expect(prisma.mediaSource.update.mock.invocationCallOrder[0]).toBeLessThan(
+        downloads.handleTorrentCompleted.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('performs a genuine add for an ERROR duplicate qBittorrent no longer holds', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(own('ERROR'));
+      qbittorrent.info.mockResolvedValue([{ hash: 'f'.repeat(40), state: 'READY' }]);
+      qbittorrent.add.mockResolvedValue('/downloads/new');
+
+      await service.addMagnetToSeason(42, { magnet, force: false }, 'user-1');
+
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+      expect(qbittorrent.add).toHaveBeenCalled();
+      expect(prisma.mediaSource.update.mock.calls[0][0].data).toMatchObject({
+        status: 'QUEUED',
+        downloadPath: '/downloads/new',
+      });
+      expect(downloads.handleTorrentCompleted).not.toHaveBeenCalled();
+    });
+
+    it('propagates an unreachable client from an ERROR duplicate before any write', async () => {
+      prisma.mediaSource.findFirst.mockResolvedValue({ id: 6, seasonId: 42, status: 'DOWNLOADING' });
+      prisma.mediaSource.findUnique.mockResolvedValue(own('ERROR'));
+      const failure = new TorrentClientError('down', 503);
+      qbittorrent.info.mockRejectedValue(failure);
+
+      await expect(
+        service.addMagnetToSeason(42, { magnet, force: true }, 'user-1'),
+      ).rejects.toBe(failure);
+
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expectNoWrites();
     });
   });
 });
