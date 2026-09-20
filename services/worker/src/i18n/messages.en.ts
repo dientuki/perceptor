@@ -18,6 +18,7 @@ import {
   ERROR_PROCESS_JOB_NOT_FOUND,
   ERROR_SOURCE_NO_DOWNLOAD_PATH,
   ERROR_SOURCE_NO_TARGET,
+  ERROR_SOURCE_SCAN_FAILED,
 } from './error-keys';
 
 export const messagesEn: Record<string, string> = {
@@ -37,6 +38,7 @@ export const messagesEn: Record<string, string> = {
   [ERROR_SOURCE_NO_DOWNLOAD_PATH]:
     'Completed with no download path recorded — cannot enqueue',
   [ERROR_SOURCE_NO_TARGET]: 'Media source {id} points at no movie, episode or season',
+  [ERROR_SOURCE_SCAN_FAILED]: 'The download could not be read: {detail}',
 };
 
 // Fills `{param}` placeholders in a message template with the corresponding

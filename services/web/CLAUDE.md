@@ -393,6 +393,18 @@ a real multiplier at the start of an encode.
 
 `/downloads` is a server page over `getDownloads()` rendering `DownloadsPanel` with `grouped`: rows are filtered (`063`), partitioned by `groupByTitle` (`lib/download-groups.ts`, keyed on `movieId`/`showId`, order-preserving, never sorted), sliced by page (10/25/50, default 10, one title = one element, state not persisted, page clamped at render time), and a `DownloadGroupHeader` shows only for groups with 2+ visible rows. Without `grouped` (the detail pages) the panel renders as before. `DownloadRow` gates start/stop/delete on `download.owned` and builds the season label from `download.showTitle`, so no page passes `showTitle` to the panel any more. The Downloads sidebar badge takes `getActiveDownloadCount()` from `(dashboard)/layout.tsx` through `AdminShell` to `AppSidebar`; it returns `0` on a non-auth error so the layout never throws, and it refreshes on `router.refresh()`.
 
+## Last error and resume (`065-pipeline-error-resume`)
+
+`DownloadRow` renders `DownloadErrorLine` when `download.lastError` is set: the stage label
+(`downloads.panel.stage.*`) plus the message translated through `translateErrorKey`, the pure helper
+extracted from `translateGraphQLError` (`lib/graphql-error.ts`) so the server and the client share one
+key/params/fallback rule. `lastError.params` is a JSON string and is parsed inside a `try`, unlike
+`extensions.i18n.params`, which is an object. Play on an `ERROR` row shows when
+`owned && retryable` — `api`'s `retryable` is the only rule, never derived from `stage` or `key`. After
+`error.download.retry_replaced`/`retry_superseded`/`retry_unavailable` the row calls `router.refresh()`
+so it picks up `retryable: false`. The `errors` catalog now carries every `error.encode.*` key the
+worker exports plus the `source.*` and `processJob.*` keys.
+
 ## Downloads panel filters and placement (`063-downloads-panel-filters`)
 
 `DownloadsPanel.tsx` carries three single-select toggles (completed, working, error) left of Refresh, bucketed by `statusTone()` (`progress` is working; `missing` has no bucket). Badge counts come from the full `downloads` prop; a toggle only filters, never sorts, since `api` already orders by last activity. Clicking the active toggle clears it, and the panel is not keyed on its data so the choice survives `router.refresh()`. A season-pack row renders `download.showTitle` (since `064`, off the row itself) plus `seasonAccordion.seasonLabel` from `seasonNumber`, never `download.label`. Both detail pages render the panel inside the card's `space-y-6`, before search (films) and before the seasons (series). `Button` takes an optional `ariaPressed`.

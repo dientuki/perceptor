@@ -36,6 +36,36 @@ const ERROR_KEY_PREFIX = "error.";
  * with yet — see `018-ui-i18n/plan.md`'s "Key drift" risk). This function must never
  * return the raw key string.
  */
+export interface ErrorTranslator {
+  (path: string, values?: Record<string, string | number | Date>): string;
+  has(path: string): boolean;
+}
+
+export function translateErrorKey(
+  t: ErrorTranslator,
+  key: string | undefined,
+  params: Record<string, unknown> | undefined,
+  fallback: string,
+): string {
+  if (!key || !key.startsWith(ERROR_KEY_PREFIX)) {
+    return fallback;
+  }
+
+  const path = key.slice(ERROR_KEY_PREFIX.length);
+  if (!t.has(path)) {
+    return fallback;
+  }
+
+  try {
+    return t(
+      path,
+      params as Record<string, string | number | Date> | undefined,
+    );
+  } catch {
+    return fallback;
+  }
+}
+
 export async function translateGraphQLError(
   error: GraphQLErrorLike,
 ): Promise<string> {
@@ -44,22 +74,13 @@ export async function translateGraphQLError(
     return error.message;
   }
 
-  const path = key.slice(ERROR_KEY_PREFIX.length);
-  const values = error.extensions?.i18n?.params;
-
   const t = await getTranslations("errors");
-  if (!t.has(path)) {
-    return error.message;
-  }
-
-  try {
-    return t(
-      path,
-      values as Record<string, string | number | Date> | undefined,
-    );
-  } catch {
-    return error.message;
-  }
+  return translateErrorKey(
+    t,
+    key,
+    error.extensions?.i18n?.params,
+    error.message,
+  );
 }
 
 /**

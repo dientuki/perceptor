@@ -4,7 +4,7 @@ spec_version: 0.3.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-19
 last_updated: 2026-09-19
-status: Approved
+status: Implemented
 services: [api, web, worker]
 ---
 
@@ -263,44 +263,44 @@ None. Every column read or cleared already exists (NFR-6).
       failed (e.g. the destinations volume was full), the row in `/movies/<id>` reads `ERROR` with
       stage "encode" and the FFmpeg failure message, and Play is shown. After freeing space and
       pressing Play, the row reads `ENCODING`, the title badge reads `ENCODING`, qBittorrent's
-      download count for that torrent did not change, and the file lands in the library.
+      download count for that torrent did not change, and the file lands in the library. *Not run live: covered by downloads.service unit tests (encode resume order, guarded writes); live run needs a full destinations volume.*
 - [ ] **AC-2 (Download resumes)**: Given a torrent qBittorrent stopped with state `error` because
       the downloads disk filled, the row reads `ERROR`, stage "download", with the disk/permissions
       message. After freeing space and pressing Play, the torrent continues from its current
-      progress (not from 0%) and the row reads `DOWNLOADING`.
+      progress (not from 0%) and the row reads `DOWNLOADING`. *Not run live: covered by deriveResume/downloadStart unit cases; live run needs a full downloads volume.*
 - [ ] **AC-3 (Silent scan becomes visible)**: Given a completed torrent whose download folder is made
       unreadable before the worker scans it, the row reads `ERROR` with stage "scan" within one scan
       attempt — never `DOWNLOADED` indefinitely. After restoring permissions and pressing Play, the
-      scan runs and the encode is queued.
+      scan runs and the encode is queued. *Not run live: covered by source-ready.job and sourceScanFailed unit tests; live run needs a chmod on a completed folder.*
 - [ ] **AC-4 (Deselected files)**: Given `error.source.scan_no_downloaded_video`, re-selecting the
-      files in qBittorrent, letting them download, and pressing Play produces a successful scan.
+      files in qBittorrent, letting them download, and pressing Play produces a successful scan. *Not run live: not run: needs a torrent with deselected files.*
 - [ ] **AC-5 (Season pack, partial)**: Given a season pack where episodes 1–3 encoded and 4–5 failed,
       pressing Play re-queues exactly episodes 4 and 5; episodes 1–3 keep their library files and
-      `COMPLETED` status.
+      `COMPLETED` status. *Not run live: covered by deriveResume/isRaceWinner unit cases; live run needs a pack with forced failures.*
 - [ ] **AC-6 (Upload)**: Given an uploaded file whose encode failed, the row shows Play but no Stop;
-      pressing Play resumes the encode.
+      pressing Play resumes the encode. *Not run live: covered by canStart/retryable logic and typecheck; not exercised in the UI.*
 - [ ] **AC-7 (Replaced source refused)**: Given a source demoted by a forced replace, the row shows
       stage "replaced" and its message, and no Play; calling `downloadStart` on it directly through GraphQL
-      returns `error.download.retry_replaced` and changes nothing.
+      returns `error.download.retry_replaced` and changes nothing. *Not run live: covered by the retry_replaced unit case with zero writes; not exercised in the UI.*
 - [ ] **AC-8 (Race no longer wedged)**: Given a film whose only source failed to encode, adding a
       second torrent for it and letting it complete queues a scan and an encode for the new one. The
       first row stays `ERROR`; once the second has completed, the first shows no Play and
       `downloadStart` on it returns `error.download.retry_superseded` — until the second's own
       post-encode cleanup sweeps the losing sibling away (`022`'s `downloadRemove` sweep, unchanged),
-      at which point the first row disappears.
+      at which point the first row disappears. *Not run live: covered by the resolveRace unit case; live run not done.*
 - [ ] **AC-8b (Partial pack replaced)**: Given a season pack where episodes 1–3 encoded and 4–5
       failed, adding a new pack for the same season and letting it complete encodes all five
       episodes from the new pack; episodes 1–3's library files are replaced (new modification time),
-      and the old pack's row reads `ERROR` with no Play until the new pack's cleanup sweeps it.
+      and the old pack's row reads `ERROR` with no Play until the new pack's cleanup sweeps it. *Not run live: covered by isRaceWinner partial-pack cases; the mtime overwrite was not checked live.*
 - [ ] **AC-9 (Redis down)**: With `redis` stopped, pressing Play on a failed encode shows
       `error.download.retry_enqueue_failed` on the row; after restarting `redis`, the row still reads
-      `ERROR` with its original error, and Play then works.
+      `ERROR` with its original error, and Play then works. *Not run live: covered by the enqueue-failure unit cases; live run needs stopping redis.*
 - [ ] **AC-10 (Double Play)**: Pressing Play twice quickly on a failed encode results in one encode
-      of that file (`bin/cli worker` logs one `ENCODING` start per job), not two.
+      of that file (`bin/cli worker` logs one `ENCODING` start per job), not two. *Not run live: covered by the guarded-write idempotency unit case; no live double click.*
 - [ ] **AC-11 (User cannot fake a scan failure)**: Calling `sourceScanFailed` with a user JWT returns
-      `error.auth.unauthenticated` and leaves the source untouched.
+      `error.auth.unauthenticated` and leaves the source untouched. *Not run live: covered by the resolver principal check by inspection; not called with a user JWT.*
 - [ ] **AC-12 (Localized)**: With UI locale `es`, every error above renders in Spanish;
-      `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift.
+      `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift. *Not run live: catalog parity checked (484 keys, every worker and api key present); not viewed in the es UI.*
 
 ## Out of Scope
 

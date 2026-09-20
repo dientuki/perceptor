@@ -2,7 +2,7 @@
 title: Pipeline Error Visibility and Resume — worker slice
 service: worker
 last_updated: 2026-09-19
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Pipeline Error Visibility and Resume — `worker` (`worker/plan.md`)

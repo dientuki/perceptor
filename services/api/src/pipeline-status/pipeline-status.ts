@@ -1,4 +1,6 @@
 import { EncodeStatus, MediaStatus, SourceStatus } from '@prisma/client';
+import { ERROR_KEYS } from '@/i18n/error-keys';
+import { MESSAGES_EN } from '@/i18n/messages.en';
 
 /**
  * The one normalized vocabulary every status a consumer reads must reduce to (REQ-1/REQ-2).
@@ -293,4 +295,157 @@ export function deriveEpisodeStatus(
     sources: lifted ? [...episode.mediaSources, { status: 'QUEUED' as const }] : episode.mediaSources,
     jobs: episode.processJobs,
   });
+}
+
+export type RaceJob = {
+  status: EncodeStatus;
+};
+
+export function isRaceWinner(status: SourceStatus, jobs: RaceJob[]): boolean {
+  if (status === 'READY') {
+    return true;
+  }
+  if (status !== 'SCANNED') {
+    return false;
+  }
+  const failed = jobs.some((job) => job.status === 'ERROR');
+  const active = jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status));
+  return !(failed && !active);
+}
+
+export type ResumeStage = 'DOWNLOAD' | 'SCAN' | 'ENCODE' | 'REPLACED';
+
+export type ResumeJob = {
+  status: EncodeStatus;
+  errorKey: string | null;
+  errorParams: string | null;
+  errorMessage: string | null;
+  updatedAt: Date;
+};
+
+export type ResumeSource = {
+  status: SourceStatus;
+  infoHash: string | null;
+  downloadPath: string | null;
+  errorKey: string | null;
+  errorParams: string | null;
+  errorMessage: string | null;
+  updatedAt: Date;
+};
+
+export type ResumeSibling = {
+  status: SourceStatus;
+  jobs: RaceJob[];
+};
+
+export type ResumeInput = {
+  status: PipelineStatus;
+  source: ResumeSource;
+  jobs: ResumeJob[];
+  liveState: string | null;
+  siblings: ResumeSibling[];
+};
+
+export type LastError = {
+  stage: ResumeStage;
+  key: string;
+  params: string | null;
+  message: string;
+};
+
+export type ResumeVerdict = {
+  lastError: LastError | null;
+  retryable: boolean;
+  refusalKey: string | null;
+};
+
+type Candidate = {
+  fromJob: boolean;
+  errorKey: string | null;
+  errorParams: string | null;
+  errorMessage: string | null;
+  updatedAt: Date;
+};
+
+function stageOf(candidate: Candidate): ResumeStage {
+  if (candidate.errorKey === ERROR_KEYS.SOURCE_REPLACED) {
+    return 'REPLACED';
+  }
+  if (candidate.fromJob) {
+    return 'ENCODE';
+  }
+  if (candidate.errorKey === ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH) {
+    return 'DOWNLOAD';
+  }
+  return 'SCAN';
+}
+
+const NOT_RETRYABLE_STATES = ['error', 'missingFiles'];
+
+export function deriveResume(input: ResumeInput): ResumeVerdict {
+  const { status, source, jobs, liveState, siblings } = input;
+
+  if (status !== 'ERROR') {
+    return { lastError: null, retryable: false, refusalKey: null };
+  }
+
+  const candidates: Candidate[] = [];
+  if (source.status === 'ERROR') {
+    candidates.push({ fromJob: false, ...source });
+  }
+  for (const job of jobs) {
+    if (job.status === 'ERROR') {
+      candidates.push({ fromJob: true, ...job });
+    }
+  }
+
+  let lastError: LastError;
+  let stage: ResumeStage;
+
+  if (candidates.length > 0) {
+    const winner = candidates.reduce((best, next) =>
+      next.updatedAt.getTime() > best.updatedAt.getTime() ? next : best,
+    );
+    stage = stageOf(winner);
+    const nullKey = winner.errorKey === null;
+    const key = nullKey
+      ? winner.fromJob
+        ? 'error.encode.unexpected'
+        : ERROR_KEYS.SOURCE_SCAN_FAILED
+      : winner.errorKey!;
+    lastError = {
+      stage,
+      key,
+      params: nullKey
+        ? JSON.stringify({ detail: winner.errorMessage ?? '' })
+        : winner.errorParams,
+      message: winner.errorMessage ?? MESSAGES_EN[key] ?? key,
+    };
+  } else if (liveState !== null && NOT_RETRYABLE_STATES.includes(liveState)) {
+    stage = 'DOWNLOAD';
+    const key = ERROR_KEYS.DOWNLOAD_TORRENT_CLIENT_ERROR;
+    lastError = {
+      stage,
+      key,
+      params: JSON.stringify({ state: liveState }),
+      message: MESSAGES_EN[key].replace('{state}', liveState),
+    };
+  } else {
+    return { lastError: null, retryable: false, refusalKey: null };
+  }
+
+  let refusalKey: string | null = null;
+  if (stage === 'REPLACED') {
+    refusalKey = ERROR_KEYS.DOWNLOAD_RETRY_REPLACED;
+  } else if (siblings.some((sibling) => isRaceWinner(sibling.status, sibling.jobs))) {
+    refusalKey = ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED;
+  } else if (
+    lastError.key === ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH ||
+    (stage === 'SCAN' && !source.downloadPath) ||
+    (stage === 'DOWNLOAD' && !source.infoHash)
+  ) {
+    refusalKey = ERROR_KEYS.DOWNLOAD_RETRY_UNAVAILABLE;
+  }
+
+  return { lastError, retryable: refusalKey === null, refusalKey };
 }

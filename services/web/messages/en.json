@@ -57,7 +57,12 @@
     },
     "download": {
       "not_a_torrent": "This download has no associated torrent",
-      "torrent_client_rejected": "The torrent client rejected the request ({status})"
+      "torrent_client_rejected": "The torrent client rejected the request ({status})",
+      "torrent_client_error": "The torrent client stopped the download ({state}): check disk space and permissions",
+      "retry_replaced": "This item was replaced by another one and cannot be resumed",
+      "retry_superseded": "Another source of this title is already being processed",
+      "retry_unavailable": "Cannot resume: the download is missing on disk",
+      "retry_enqueue_failed": "The job could not be queued again, try again"
     },
     "upload": {
       "ticket_expired": "The upload ticket expired, try again",
@@ -111,6 +116,32 @@
     "calendar": {
       "invalid_date": "Invalid date: {value}",
       "invalid_range": "Invalid calendar range"
+    },
+    "source": {
+      "not_found": "Media source {id} does not exist",
+      "no_target": "Media source {id} points at no movie, episode or season",
+      "match_not_reported": "matchedFilePath {filePath} is not in the reported file list",
+      "scan_no_video": "Scan found no main video file: empty folder or no video",
+      "scan_no_downloaded_video": "No video file in this download has any content — check which files are selected in the torrent client",
+      "no_download_path": "Completed with no download path recorded — cannot enqueue",
+      "replaced": "Replaced by a new download",
+      "scan_failed": "The download could not be read: {detail}"
+    },
+    "processJob": {
+      "not_found": "Process job {id} does not exist",
+      "recovery_exhausted": "Automatic recovery for this encode has already been used once and failed again"
+    },
+    "encode": {
+      "no_video_stream": "The input file has no video stream",
+      "no_original_audio": "The file has no audio track in the original language ({iso3})",
+      "probe_failed": "Could not analyse the video file ({filePath}): {detail}",
+      "ffmpeg_failed": "ffmpeg exited with code {code}: {stderr}",
+      "no_output": "ffmpeg exited 0 but produced no {path}",
+      "mkvmerge_failed": "mkvmerge failed with code {code}: {stderr}",
+      "move_failed": "Could not move the file to its destination: {detail}",
+      "episode_numbers_missing": "Episode has no season/episode number: cannot build the output path",
+      "unknown_driver": "Unknown ENCODE_DRIVER: {driver}",
+      "unexpected": "Unexpected encode failure: {detail}"
     }
   },
   "landing": {
@@ -408,7 +439,13 @@
       "previous": "Previous",
       "next": "Next",
       "perPage": "Per page",
-      "deleteErrorDefault": "Could not delete the download."
+      "deleteErrorDefault": "Could not delete the download.",
+      "stage": {
+        "DOWNLOAD": "Download",
+        "SCAN": "Scan",
+        "ENCODE": "Encode",
+        "REPLACED": "Replaced"
+      }
     },
     "deleteModal": {
       "title": "Delete download",

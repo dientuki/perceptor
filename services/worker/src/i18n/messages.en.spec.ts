@@ -44,6 +44,7 @@ const KNOWN_PARAMS: Record<string, Record<string, string | number>> = {
   [errorKeys.ERROR_PROCESS_JOB_NOT_FOUND]: { id: 42 },
   [errorKeys.ERROR_SOURCE_NO_DOWNLOAD_PATH]: {},
   [errorKeys.ERROR_SOURCE_NO_TARGET]: { id: 7 },
+  [errorKeys.ERROR_SOURCE_SCAN_FAILED]: { detail: 'x' },
 };
 
 describe('messagesEn — every {placeholder} is satisfiable by the params a throw site passes', () => {

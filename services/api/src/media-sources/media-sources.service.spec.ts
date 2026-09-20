@@ -533,3 +533,81 @@ describe('MediaSourcesService — sourceScanned narrowing by isDownloaded', () =
     });
   });
 });
+
+// This suite exists because sourceScanFailed is a worker report that can arrive late or twice: an unguarded write
+// would flip a source that already reached SCANNED (and whose jobs are encoding) back to ERROR, and its movie or
+// episode with it, with no error anywhere.
+describe('MediaSourcesService — sourceScanFailed', () => {
+  let service: MediaSourcesService;
+  let tx: {
+    mediaSource: { findUnique: jest.Mock; update: jest.Mock };
+    movie: { update: jest.Mock };
+    episode: { update: jest.Mock };
+  };
+
+  beforeEach(async () => {
+    tx = {
+      mediaSource: { findUnique: jest.fn(), update: jest.fn() },
+      movie: { update: jest.fn() },
+      episode: { update: jest.fn() },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) => callback(tx)),
+    };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MediaSourcesService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: EncodeQueueService, useValue: {} },
+        { provide: QbittorrentClient, useValue: {} },
+      ],
+    }).compile();
+    service = module.get<MediaSourcesService>(MediaSourcesService);
+  });
+
+  it('a READY source becomes ERROR with the given key and its movie becomes ERROR', async () => {
+    tx.mediaSource.findUnique.mockResolvedValue({ id: 5, status: 'READY', episodeId: null, movie: { id: 40 } });
+
+    await expect(
+      service.sourceScanFailed(5, 'error.source.scan_failed', '{"detail":"boom"}', 'The download could not be read: boom'),
+    ).resolves.toBe(true);
+
+    expect(tx.mediaSource.update).toHaveBeenCalledWith({
+      where: { id: 5 },
+      data: {
+        status: 'ERROR',
+        errorMessage: 'The download could not be read: boom',
+        errorKey: 'error.source.scan_failed',
+        errorParams: '{"detail":"boom"}',
+      },
+    });
+    expect(tx.movie.update).toHaveBeenCalledWith({ where: { id: 40 }, data: { status: 'ERROR' } });
+    expect(tx.episode.update).not.toHaveBeenCalled();
+  });
+
+  it('a READY episode source marks its episode ERROR', async () => {
+    tx.mediaSource.findUnique.mockResolvedValue({ id: 6, status: 'READY', episodeId: 77, movie: null });
+
+    await service.sourceScanFailed(6, 'error.source.scan_failed', null, 'x');
+
+    expect(tx.episode.update).toHaveBeenCalledWith({ where: { id: 77 }, data: { status: 'ERROR' } });
+    expect(tx.movie.update).not.toHaveBeenCalled();
+  });
+
+  it('a SCANNED source is left unchanged and true is returned', async () => {
+    tx.mediaSource.findUnique.mockResolvedValue({ id: 5, status: 'SCANNED', episodeId: null, movie: { id: 40 } });
+
+    await expect(service.sourceScanFailed(5, 'k', null, 'm')).resolves.toBe(true);
+
+    expect(tx.mediaSource.update).not.toHaveBeenCalled();
+    expect(tx.movie.update).not.toHaveBeenCalled();
+  });
+
+  it('a missing source returns true and writes nothing', async () => {
+    tx.mediaSource.findUnique.mockResolvedValue(null);
+
+    await expect(service.sourceScanFailed(9, 'k', null, 'm')).resolves.toBe(true);
+
+    expect(tx.mediaSource.update).not.toHaveBeenCalled();
+  });
+});

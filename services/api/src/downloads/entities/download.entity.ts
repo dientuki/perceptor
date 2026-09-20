@@ -1,4 +1,5 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
+import { DownloadError } from './download-error.entity';
 
 // Read-only, DB-first projection of one MediaSource plus, when it has an
 // `infoHash`, the live fields DownloadsService joined in from a single
@@ -73,6 +74,12 @@ export class Download {
 
   @Field(() => Float, { nullable: true })
   encodeSpeed?: number;
+
+  @Field(() => DownloadError, { nullable: true })
+  lastError?: DownloadError;
+
+  @Field()
+  retryable: boolean;
 
   @Field()
   readAt: Date;

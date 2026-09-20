@@ -244,6 +244,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   (`UserMovieLanguage`/`UserShowLanguage`) changed shape for the tag rework — both still reference
   `Language.id`, so a preference for a variant is the same kind of row a preference for a language
   already was.
+- **`media-sources/` scan failure (`065-pipeline-error-resume`)** — `sourceScanFailed` is the second
+  service-only mutation: it moves a `READY` source and its film/episode to `ERROR` through the same
+  `markScanFailed` the empty-match branch of `sourceScanned` uses, and answers `true` for a source
+  that is missing or no longer `READY`.
 - **`media-sources/`** — the `MediaSource` row representing one acquisition attempt. `sourceScanned`
   takes `matches: [ScannedMatchInput!]!`, one entry per file the worker resolved (a film or single
   episode reports exactly one, both numbers `null`). The service loads the source with its season's
@@ -294,6 +298,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `season.findUniqueOrThrow` that **must `include` the episodes** — `Season.episodes` is non-null, so
   a bare row fails the mutation *after* qBittorrent already accepted the torrent, orphaning the
   download with no `MediaSource` tracking it.
+- **`downloads/` resume (`065-pipeline-error-resume`)** — `Download.lastError` and `Download.retryable`
+  are filled by `toDownload` from `pipeline-status/`'s `deriveResume`, the same result `downloadStart`
+  uses to refuse or dispatch, so the Play button and the mutation cannot disagree. `downloadStart` on
+  an `ERROR` source resumes its failed stage (`resumeEncodeStage`, `resumeScanStage`, or the torrent
+  restart); every resume calls `remove*` before `add*` (BullMQ keeps failed jobs under their id, so a
+  bare `add*` is a silent no-op) and guards each status write on the state it expects. `resolveRace`
+  asks `isRaceWinner`, so a `SCANNED` source whose encode failed no longer blocks a new torrent for
+  its title.
 - **`pipeline-status/`** — since `043-pipeline-status-normalization`, the single derivation behind
   every status a user reads: a plain exported function, no Nest module, no injection.
   `deriveSourceStatus` decides one `MediaSource`'s status from its column, its `ProcessJob` rows

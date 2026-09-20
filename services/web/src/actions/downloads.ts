@@ -29,6 +29,13 @@ const DOWNLOAD_FIELDS = `
   compressionEnabled
   downloadSpeed
   encodeSpeed
+  lastError {
+    stage
+    key
+    params
+    message
+  }
+  retryable
   readAt
 `;
 

@@ -107,6 +107,13 @@ export const ERROR_KEYS = {
   SCHEDULE_TASK_ALREADY_RUNNING: 'error.schedule.task_already_running',
   SCHEDULE_TASK_UNAVAILABLE: 'error.schedule.task_unavailable',
 
+  DOWNLOAD_TORRENT_CLIENT_ERROR: 'error.download.torrent_client_error',
+  SOURCE_SCAN_FAILED: 'error.source.scan_failed',
+  DOWNLOAD_RETRY_REPLACED: 'error.download.retry_replaced',
+  DOWNLOAD_RETRY_SUPERSEDED: 'error.download.retry_superseded',
+  DOWNLOAD_RETRY_UNAVAILABLE: 'error.download.retry_unavailable',
+  DOWNLOAD_RETRY_ENQUEUE_FAILED: 'error.download.retry_enqueue_failed',
+
   CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
   CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',
 

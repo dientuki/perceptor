@@ -1913,6 +1913,48 @@ Four things the schema itself cannot express, all load-bearing:
 - **`owned` — not `kind`, not which query returned the row — gates controls.** It is non-null on
   every `Download`, mutation results included.
 
+### A failed download shows its last error and Play resumes it (`065-pipeline-error-resume`)
+
+```graphql
+type DownloadError {
+  stage: String!     # DOWNLOAD | SCAN | ENCODE | REPLACED
+  key: String!
+  params: String     # JSON-encoded string, or null
+  message: String!   # English, as stored
+}
+
+type Download {
+  # ...unchanged fields...
+  lastError: DownloadError   # non-null iff status == "ERROR"
+  retryable: Boolean!        # false whenever status != "ERROR"
+}
+
+type Mutation {
+  downloadStart(mediaSourceId: Int!): Download!   # signature unchanged, behaviour widened
+  sourceScanFailed(mediaSourceId: Int!, errorKey: String!, errorParams: String, errorMessage: String!): Boolean!
+}
+```
+
+Things the schema cannot express, all load-bearing:
+
+- **`lastError.params` is a JSON-encoded string, unlike `extensions.i18n.params`, which is a plain
+  object.** It is the stored column passed through; `web` parses it, `api` never re-encodes it.
+- **`retryable` is the only rule for showing Play on an `ERROR` row.** `web` never derives it from
+  `stage` or `key`: a `SCAN` error can be non-retryable (superseded, no `downloadPath`).
+- **`downloadStart` on an `ERROR` source resumes from the stage that failed** (`ENCODE`: the failed
+  jobs are reset and re-enqueued; `SCAN`: the scan is re-enqueued; `DOWNLOAD`: the torrent is
+  resumed). On any other source it behaves exactly as before, including `error.download.not_a_torrent`
+  for an upload. Four keys are new, all raised before any write except the last:
+  `error.download.retry_replaced` (409), `error.download.retry_superseded` (409),
+  `error.download.retry_unavailable` (400), `error.download.retry_enqueue_failed` (503, the source
+  and jobs are left `ERROR` with their original error).
+- **`lastError.key` can also be** `error.download.torrent_client_error` (`{state}`, a live
+  qBittorrent `error`/`missingFiles` with nothing stored) and `error.source.scan_failed`
+  (`{detail}`, also used for a stored error with no key).
+- **`sourceScanFailed` is the second service-only operation** (after `encodeWorkerStarted`,
+  `054`): `@AllowService()` plus an explicit `principal.type === 'service'` check. It returns `true`
+  for a source that is missing or no longer `READY`: that is success, never something to retry.
+
 ### What never crosses the boundary
 
 - **Absolute container paths.** Constitution, Article V — `web` sees host paths, `worker` receives

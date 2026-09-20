@@ -380,6 +380,12 @@ on purpose — no user ever sees them. A rejecting `fetch` itself — `api` unre
 answering — is its own class, `ApiUnreachableError` (`038-encode-report-durability`), thrown only at
 that one site; every other failure below it stays terminal.
 
+**`jobs/source-ready.job.ts` reports a failed scan** (`065-pipeline-error-resume`): any failure
+before or at `sourceScanned` goes to `api` through `deliverReport` → `sourceScanFailed` (a
+`KeyedError` keeps its key, anything else becomes `error.source.scan_failed` with `{ detail }`) and is
+rethrown as `UnrecoverableError`. Before it, a throwing scan left the source `READY` and the row
+reading "downloaded" forever.
+
 **`jobs/encode.job.ts` no longer swallows a lost `encodeCompleted`/`encodeFailed`
 report** (`038-encode-report-durability`, the incident this feature exists for: an encode that
 succeeded got reported as failed, then that failure report itself was lost to

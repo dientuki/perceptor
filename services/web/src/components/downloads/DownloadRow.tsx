@@ -9,7 +9,14 @@ import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
 import { formatEncodeSpeed, formatSpeed } from "@/lib/format";
 import type { Download } from "@/types/downloads";
+import DownloadErrorLine from "./DownloadErrorLine";
 import DownloadProgressBar from "./DownloadProgressBar";
+
+const REFRESH_ON_KEYS = [
+  "error.download.retry_replaced",
+  "error.download.retry_superseded",
+  "error.download.retry_unavailable",
+];
 
 interface DownloadRowProps {
   download: Download;
@@ -28,12 +35,20 @@ export default function DownloadRow({
 
   const isControllable = download.owned && download.infoHash != null;
 
+  const canStart =
+    download.status === "ERROR"
+      ? download.owned && download.retryable
+      : isControllable;
+
   const handleStart = () => {
     setRowError(null);
     startTransition(async () => {
       const result = await startDownloadAction(download.mediaSourceId);
       if ("error" in result) {
         setRowError(result.error || t("startErrorDefault"));
+        if (result.errorKey && REFRESH_ON_KEYS.includes(result.errorKey)) {
+          router.refresh();
+        }
         return;
       }
       router.refresh();
@@ -66,6 +81,7 @@ export default function DownloadRow({
             {download.releaseTitle}
           </div>
         )}
+        {download.lastError && <DownloadErrorLine error={download.lastError} />}
         {rowError && (
           <div className="mt-1 text-xs text-error-500">{rowError}</div>
         )}
@@ -88,27 +104,27 @@ export default function DownloadRow({
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
+          {canStart && (
+            <Button
+              size="sm"
+              variant="outline"
+              title={t("startTitle")}
+              disabled={isPending}
+              onClick={handleStart}
+            >
+              <Play size={16} />
+            </Button>
+          )}
           {isControllable && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                title={t("startTitle")}
-                disabled={isPending}
-                onClick={handleStart}
-              >
-                <Play size={16} />
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                title={t("stopTitle")}
-                disabled={isPending}
-                onClick={handleStop}
-              >
-                <Square size={16} />
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="outline"
+              title={t("stopTitle")}
+              disabled={isPending}
+              onClick={handleStop}
+            >
+              <Square size={16} />
+            </Button>
           )}
           {download.owned && (
             <Button

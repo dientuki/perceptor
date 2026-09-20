@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SourceFileInput } from './dto/source-file.input';
 import { ScannedMatchInput } from './dto/scanned-match.input';
@@ -48,6 +49,48 @@ export class MediaSourcesService {
 
   async findOne(id: number) {
     return this.findOneFlat(id);
+  }
+
+  private async markScanFailed(
+    tx: Prisma.TransactionClient,
+    mediaSource: { id: number; episodeId: number | null; movie?: { id: number } | null },
+    errorKey: string,
+    errorParams: string | null,
+    errorMessage: string,
+    hasUnmatchedFiles?: boolean,
+  ) {
+    await tx.mediaSource.update({
+      where: { id: mediaSource.id },
+      data: { status: 'ERROR', errorMessage, errorKey, errorParams, hasUnmatchedFiles },
+    });
+
+    if (mediaSource.movie) {
+      await tx.movie.update({ where: { id: mediaSource.movie.id }, data: { status: 'ERROR' } });
+    }
+
+    if (mediaSource.episodeId) {
+      await tx.episode.update({ where: { id: mediaSource.episodeId }, data: { status: 'ERROR' } });
+    }
+  }
+
+  async sourceScanFailed(
+    mediaSourceId: number,
+    errorKey: string,
+    errorParams: string | null,
+    errorMessage: string,
+  ): Promise<boolean> {
+    await this.prisma.$transaction(async (tx) => {
+      const mediaSource = await tx.mediaSource.findUnique({
+        where: { id: mediaSourceId },
+        include: { movie: { select: { id: true } } },
+      });
+      if (!mediaSource || mediaSource.status !== 'READY') {
+        console.log(`[sourceScanFailed] mediaSource ${mediaSourceId} is missing or not READY, ignoring`);
+        return;
+      }
+      await this.markScanFailed(tx, mediaSource, errorKey, errorParams, errorMessage);
+    });
+    return true;
   }
 
   async sourceScanned(mediaSourceId: number, files: SourceFileInput[], matches: ScannedMatchInput[]) {
@@ -161,31 +204,7 @@ export class MediaSourcesService {
           : ERROR_KEYS.SOURCE_SCAN_NO_VIDEO;
         const errorMessage = MESSAGES_EN[errorKey];
 
-        await tx.mediaSource.update({
-          where: { id: mediaSourceId },
-          data: {
-            status: 'ERROR',
-            errorMessage,
-            errorKey,
-            errorParams: null,
-            hasUnmatchedFiles,
-          },
-        });
-
-        // Un paso más allá de lo pedido: si no se marca la película, queda en
-        // ENCODING para siempre esperando un encode que nunca se va a encolar.
-        if (movieId) {
-          await tx.movie.update({ where: { id: movieId }, data: { status: 'ERROR' } });
-        }
-
-        // Mismo razonamiento para el episodio: sin esto queda en ENCODING
-        // para siempre esperando un encode que nunca se va a encolar.
-        if (mediaSource.episodeId) {
-          await tx.episode.update({
-            where: { id: mediaSource.episodeId },
-            data: { status: 'ERROR' },
-          });
-        }
+        await this.markScanFailed(tx, mediaSource, errorKey, null, errorMessage, hasUnmatchedFiles);
 
         return;
       }

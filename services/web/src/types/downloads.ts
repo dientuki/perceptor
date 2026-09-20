@@ -2,6 +2,13 @@
 // docs/spec/features/043-pipeline-status-normalization/spec.md § GraphQL
 // Contract Delta. There is no codegen across the api/web boundary — this
 // type is exactly as wide as the schema, not guessed from usage.
+export interface DownloadError {
+  stage: string;
+  key: string;
+  params: string | null;
+  message: string;
+}
+
 export interface Download {
   mediaSourceId: number;
   // null for a LOCAL_FILE upload racing alongside torrents (REQ-18).
@@ -33,5 +40,7 @@ export interface Download {
   downloadSpeed: number | null;
   // FFmpeg's realtime multiplier (1.23 means 1.23x); null unless an encode is running right now.
   encodeSpeed: number | null;
+  lastError: DownloadError | null;
+  retryable: boolean;
   readAt: string;
 }

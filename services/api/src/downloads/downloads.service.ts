@@ -12,7 +12,16 @@ import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { i18nError } from '@/i18n/i18n-error';
-import { deriveSourceStatus, deriveTitleStatus, toMediaStatus, SourceAltitudeJob } from '@/pipeline-status/pipeline-status';
+import {
+  deriveSourceStatus,
+  deriveTitleStatus,
+  toMediaStatus,
+  deriveResume,
+  isRaceWinner,
+  SourceAltitudeJob,
+  ResumeJob,
+  ResumeSibling,
+} from '@/pipeline-status/pipeline-status';
 import { Download } from './entities/download.entity';
 
 // REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw.
@@ -36,7 +45,35 @@ function seasonLabel(show: { title: string }, season: { seasonNumber: number }):
   return `${show.title} S${String(season.seasonNumber).padStart(2, '0')}`;
 }
 
-type JobsForSource = { jobs: SourceAltitudeJob[]; latestUpdatedAt: Date | null };
+type DownloadJob = SourceAltitudeJob & ResumeJob & { id: number };
+
+type JobsForSource = { jobs: DownloadJob[]; latestUpdatedAt: Date | null };
+
+type SiblingSource = {
+  id: number;
+  status: SourceStatus;
+  movieId: number | null;
+  seasonId: number | null;
+  episodeId: number | null;
+};
+
+function targetKey(source: SiblingSource): string {
+  if (source.movieId) return `movie:${source.movieId}`;
+  if (source.episodeId) return `episode:${source.episodeId}`;
+  if (source.seasonId) return `season:${source.seasonId}`;
+  return `source:${source.id}`;
+}
+
+function siblingsIn(
+  source: SiblingSource,
+  all: SiblingSource[],
+  jobsBySourceId: Map<number, JobsForSource>,
+): ResumeSibling[] {
+  const key = targetKey(source);
+  return all
+    .filter((other) => other.id !== source.id && targetKey(other) === key)
+    .map((other) => ({ status: other.status, jobs: jobsBySourceId.get(other.id)?.jobs ?? [] }));
+}
 
 function byLastActivity<T extends { id: number; updatedAt: Date }>(
   sources: T[],
@@ -107,6 +144,10 @@ type MediaSourceRow = {
   infoHash: string | null;
   releaseTitle: string | null;
   downloadPath: string | null;
+  errorKey: string | null;
+  errorParams: string | null;
+  errorMessage: string | null;
+  updatedAt: Date;
   movieId: number | null;
   seasonId: number | null;
   episodeId: number | null;
@@ -157,9 +198,13 @@ export class DownloadsService {
     const rows = await this.prisma.processJob.findMany({
       where: { sourceFile: { mediaSourceId: { in: mediaSourceIds } } },
       select: {
+        id: true,
         status: true,
         progress: true,
         encodeSpeed: true,
+        errorKey: true,
+        errorParams: true,
+        errorMessage: true,
         updatedAt: true,
         sourceFile: { select: { mediaSourceId: true } },
       },
@@ -169,11 +214,37 @@ export class DownloadsService {
     for (const row of rows) {
       const mediaSourceId = row.sourceFile.mediaSourceId;
       const entry = grouped.get(mediaSourceId) ?? { jobs: [], latestUpdatedAt: null };
-      entry.jobs.push({ status: row.status as EncodeStatus, progress: row.progress, encodeSpeed: row.encodeSpeed });
+      entry.jobs.push({
+        id: row.id,
+        status: row.status as EncodeStatus,
+        progress: row.progress,
+        encodeSpeed: row.encodeSpeed,
+        errorKey: row.errorKey,
+        errorParams: row.errorParams,
+        errorMessage: row.errorMessage,
+        updatedAt: row.updatedAt,
+      });
       if (!entry.latestUpdatedAt || row.updatedAt > entry.latestUpdatedAt) entry.latestUpdatedAt = row.updatedAt;
       grouped.set(mediaSourceId, entry);
     }
     return grouped;
+  }
+
+  private async siblingsOf(source: SiblingSource): Promise<ResumeSibling[]> {
+    const targetWhere = source.movieId
+      ? { movieId: source.movieId }
+      : source.episodeId
+        ? { episodeId: source.episodeId }
+        : source.seasonId
+          ? { seasonId: source.seasonId }
+          : null;
+    if (!targetWhere) return [];
+    const rows = await this.prisma.mediaSource.findMany({
+      where: { ...targetWhere, id: { not: source.id } },
+      select: { id: true, status: true, movieId: true, seasonId: true, episodeId: true },
+    });
+    const jobs = await this.jobsBySourceId(rows.map((row) => row.id));
+    return siblingsIn(source, [source, ...rows], jobs);
   }
 
   private async compressionEnabled(): Promise<boolean> {
@@ -185,13 +256,22 @@ export class DownloadsService {
     source: MediaSourceRow,
     target: Target,
     live: TorrentClientInfo | undefined,
-    jobs: SourceAltitudeJob[],
+    jobs: DownloadJob[],
     compressionEnabled: boolean,
+    siblings: ResumeSibling[],
   ): Download {
     const derived = deriveSourceStatus({
       sourceStatus: source.status,
       jobs,
       live: live ? { state: live.state, progress: live.progress } : null,
+    });
+
+    const resume = deriveResume({
+      status: derived.status,
+      source,
+      jobs,
+      liveState: live?.rawState ?? null,
+      siblings,
     });
 
     return {
@@ -214,6 +294,8 @@ export class DownloadsService {
       compressionEnabled,
       downloadSpeed: live?.dlspeed,
       encodeSpeed: derived.encodeSpeed ?? undefined,
+      lastError: resume.lastError ?? undefined,
+      retryable: resume.retryable,
       readAt: new Date(),
     };
   }
@@ -250,6 +332,7 @@ export class DownloadsService {
         this.liveFor(source, live),
         jobsBySourceId.get(source.id)?.jobs ?? [],
         compressionEnabled,
+        siblingsIn(source, sources, jobsBySourceId),
       ),
     );
   }
@@ -272,6 +355,7 @@ export class DownloadsService {
         this.liveFor(source, live),
         jobsBySourceId.get(source.id)?.jobs ?? [],
         compressionEnabled,
+        siblingsIn(source, sources, jobsBySourceId),
       ),
     );
   }
@@ -317,6 +401,7 @@ export class DownloadsService {
         this.liveFor(source, live),
         jobsBySourceId.get(source.id)?.jobs ?? [],
         compressionEnabled,
+        siblingsIn(source, sources, jobsBySourceId),
       ),
     );
   }
@@ -389,6 +474,23 @@ export class DownloadsService {
 
   async downloadStart(mediaSourceId: number, userId: string): Promise<Download> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
+
+    const [live, jobsBySourceId, siblings] = await Promise.all([
+      source.infoHash ? this.liveInfoForHash(source.infoHash) : Promise.resolve(undefined),
+      this.jobsBySourceId([source.id]),
+      this.siblingsOf(source),
+    ]);
+    const jobs = jobsBySourceId.get(source.id)?.jobs ?? [];
+    const derived = deriveSourceStatus({
+      sourceStatus: source.status,
+      jobs,
+      live: live ? { state: live.state, progress: live.progress } : null,
+    });
+
+    if (derived.status === 'ERROR') {
+      return this.resumeErroredSource(source, userId, jobs, live, siblings);
+    }
+
     const infoHash = this.requireTorrent(source);
 
     await this.callTorrentClient(() => this.qbittorrent.start(infoHash));
@@ -396,12 +498,142 @@ export class DownloadsService {
       source.status = 'QUEUED';
     }
 
-    const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
+    const [liveAfter, jobsAfter, compressionEnabled, siblingsAfter] = await Promise.all([
       this.liveInfoForHash(infoHash),
       this.jobsBySourceId([source.id]),
       this.compressionEnabled(),
+      this.siblingsOf(source),
     ]);
-    return this.toDownload(source, projectTarget(source), live, jobsBySourceId.get(source.id)?.jobs ?? [], compressionEnabled);
+    return this.toDownload(
+      source,
+      projectTarget(source),
+      liveAfter,
+      jobsAfter.get(source.id)?.jobs ?? [],
+      compressionEnabled,
+      siblingsAfter,
+    );
+  }
+
+  private async resumeErroredSource(
+    source: MediaSourceRow & TargetSource,
+    userId: string,
+    jobs: DownloadJob[],
+    live: TorrentClientInfo | undefined,
+    siblings: ResumeSibling[],
+  ): Promise<Download> {
+    const verdict = deriveResume({
+      status: 'ERROR',
+      source,
+      jobs,
+      liveState: live?.rawState ?? null,
+      siblings,
+    });
+
+    if (verdict.refusalKey === ERROR_KEYS.DOWNLOAD_RETRY_REPLACED) {
+      throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_REPLACED);
+    }
+    if (verdict.refusalKey === ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED) {
+      throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED);
+    }
+    if (verdict.refusalKey) {
+      throw i18nError.badRequest(ERROR_KEYS.DOWNLOAD_RETRY_UNAVAILABLE);
+    }
+
+    const stage = verdict.lastError?.stage;
+    if (stage === 'ENCODE') {
+      await this.resumeEncodeStage(jobs);
+    } else if (stage === 'SCAN') {
+      await this.resumeScanStage(source.id);
+    } else if (stage === 'DOWNLOAD' && source.infoHash) {
+      const infoHash = source.infoHash;
+      await this.callTorrentClient(() => this.qbittorrent.start(infoHash));
+    }
+
+    await this.recomputeStatus(source);
+
+    const fresh = await this.findOwnedSource(source.id, userId);
+    const [liveAfter, jobsAfter, compressionEnabled, siblingsAfter] = await Promise.all([
+      fresh.infoHash ? this.liveInfoForHash(fresh.infoHash) : Promise.resolve(undefined),
+      this.jobsBySourceId([fresh.id]),
+      this.compressionEnabled(),
+      this.siblingsOf(fresh),
+    ]);
+    return this.toDownload(
+      fresh,
+      projectTarget(fresh),
+      liveAfter,
+      jobsAfter.get(fresh.id)?.jobs ?? [],
+      compressionEnabled,
+      siblingsAfter,
+    );
+  }
+
+  private async resumeEncodeStage(jobs: DownloadJob[]): Promise<void> {
+    const failed = jobs.filter((job) => job.status === 'ERROR');
+    const matched: DownloadJob[] = [];
+    for (const job of failed) {
+      const result = await this.prisma.processJob.updateMany({
+        where: { id: job.id, status: 'ERROR' },
+        data: {
+          status: 'WAITING',
+          progress: 0,
+          encodeSpeed: null,
+          recoveryCount: 0,
+          errorKey: null,
+          errorParams: null,
+          errorMessage: null,
+        },
+      });
+      if (result.count > 0) matched.push(job);
+    }
+    if (matched.length === 0) return;
+
+    try {
+      for (const job of matched) {
+        await this.encodeQueue.removeEncode(job.id);
+        await this.encodeQueue.addEncode({ processJobId: job.id });
+      }
+    } catch (err) {
+      console.error('[DownloadsService] failed to re-enqueue encode jobs on resume:', err);
+      for (const job of matched) {
+        await this.prisma.processJob.updateMany({
+          where: { id: job.id, status: 'WAITING' },
+          data: {
+            status: 'ERROR',
+            errorKey: job.errorKey,
+            errorParams: job.errorParams,
+            errorMessage: job.errorMessage,
+          },
+        });
+      }
+      throw i18nError.serviceUnavailable(ERROR_KEYS.DOWNLOAD_RETRY_ENQUEUE_FAILED);
+    }
+
+    await this.prisma.processJob.updateMany({
+      where: { id: { in: matched.map((job) => job.id) }, status: 'WAITING' },
+      data: { status: 'QUEUED' },
+    });
+  }
+
+  private async resumeScanStage(mediaSourceId: number): Promise<void> {
+    const result = await this.prisma.mediaSource.updateMany({
+      where: { id: mediaSourceId, status: 'ERROR' },
+      data: { status: 'READY' },
+    });
+    if (result.count === 0) return;
+
+    try {
+      await this.resolveRace(mediaSourceId);
+      await this.queue.removeSourceReady(mediaSourceId);
+      await this.queue.addSourceReady({ mediaSourceId });
+    } catch (err) {
+      console.error(`[DownloadsService] failed to re-enqueue scan for mediaSource ${mediaSourceId}:`, err);
+      await this.prisma.mediaSource.updateMany({
+        where: { id: mediaSourceId, status: 'READY' },
+        data: { status: 'ERROR' },
+      });
+      throw i18nError.serviceUnavailable(ERROR_KEYS.DOWNLOAD_RETRY_ENQUEUE_FAILED);
+    }
   }
 
   async downloadStop(mediaSourceId: number, userId: string): Promise<Download> {
@@ -413,12 +645,20 @@ export class DownloadsService {
       source.status = 'PAUSED';
     }
 
-    const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
+    const [live, jobsBySourceId, compressionEnabled, siblings] = await Promise.all([
       this.liveInfoForHash(infoHash),
       this.jobsBySourceId([source.id]),
       this.compressionEnabled(),
+      this.siblingsOf(source),
     ]);
-    return this.toDownload(source, projectTarget(source), live, jobsBySourceId.get(source.id)?.jobs ?? [], compressionEnabled);
+    return this.toDownload(
+      source,
+      projectTarget(source),
+      live,
+      jobsBySourceId.get(source.id)?.jobs ?? [],
+      compressionEnabled,
+      siblings,
+    );
   }
 
   // 047-source-deletion: the orchestrator for the whole unwind. Order is the
@@ -631,7 +871,10 @@ export class DownloadsService {
     // READY or SCANNED is ignored — this is what protects a loser that
     // finishes inside the window between the winner completing and the
     // pause taking effect, and what makes REQ-15's row deletion safe.
-    const alreadyWon = siblings.some((sibling) => sibling.status === 'READY' || sibling.status === 'SCANNED');
+    const siblingJobs = await this.jobsBySourceId(siblings.map((sibling) => sibling.id));
+    const alreadyWon = siblings.some((sibling) =>
+      isRaceWinner(sibling.status, siblingJobs.get(sibling.id)?.jobs ?? []),
+    );
     if (alreadyWon) {
       console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} superado, el target ya tiene un ganador`);
       return `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`;

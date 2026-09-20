@@ -1,5 +1,8 @@
 import {
   deriveEpisodeStatus,
+  deriveResume,
+  isRaceWinner,
+  ResumeInput,
   deriveSourceStatus,
   deriveTitleStatus,
   isLiftedBySeasonPack,
@@ -350,4 +353,242 @@ describe('toMediaStatus', () => {
       expect(toMediaStatus(status)).toBe(expected[status]);
     });
   }
+});
+
+// The bug class this defends against: the race arbiter and the Play button disagreeing about who
+// won, or a stale error being shown as the last one. Two encodes of one title, a resumable
+// replaced source, or a "last error" taken from a healthy job all render plausibly with no error
+// anywhere.
+describe('isRaceWinner', () => {
+  it('counts a READY source as the winner', () => {
+    expect(isRaceWinner('READY', [])).toBe(true);
+  });
+
+  it('counts a SCANNED source with no jobs as the winner', () => {
+    expect(isRaceWinner('SCANNED', [])).toBe(true);
+  });
+
+  it('does not count a SCANNED source whose every job failed', () => {
+    expect(isRaceWinner('SCANNED', [{ status: 'ERROR' }, { status: 'ERROR' }])).toBe(false);
+  });
+
+  it('counts a SCANNED source with a failed job but another still encoding', () => {
+    expect(isRaceWinner('SCANNED', [{ status: 'ERROR' }, { status: 'ENCODING' }])).toBe(true);
+  });
+
+  it('counts a partial pack with a failed job and a waiting job as the winner', () => {
+    expect(isRaceWinner('SCANNED', [{ status: 'ERROR' }, { status: 'WAITING' }])).toBe(true);
+  });
+
+  it('counts a SCANNED source with a failed job and a completed job as not the winner', () => {
+    expect(isRaceWinner('SCANNED', [{ status: 'ERROR' }, { status: 'COMPLETED' }])).toBe(false);
+  });
+
+  it.each(['PENDING', 'QUEUED', 'DOWNLOADING', 'PAUSED', 'ERROR'] as const)(
+    'does not count a %s source',
+    (status) => {
+      expect(isRaceWinner(status, [])).toBe(false);
+    },
+  );
+});
+
+describe('deriveResume', () => {
+  const t = (n: number) => new Date(2026, 0, 1, 0, 0, n);
+  const source = (over: Partial<ResumeInput['source']> = {}): ResumeInput['source'] => ({
+    status: 'SCANNED',
+    infoHash: 'abc',
+    downloadPath: '/d',
+    errorKey: null,
+    errorParams: null,
+    errorMessage: null,
+    updatedAt: t(0),
+    ...over,
+  });
+  const job = (over: Partial<ResumeInput['jobs'][number]> = {}): ResumeInput['jobs'][number] => ({
+    status: 'ERROR',
+    errorKey: 'error.encode.ffmpeg_failed',
+    errorParams: '{"a":1}',
+    errorMessage: 'boom',
+    updatedAt: t(1),
+    ...over,
+  });
+  const input = (over: Partial<ResumeInput> = {}): ResumeInput => ({
+    status: 'ERROR',
+    source: source(),
+    jobs: [job()],
+    liveState: null,
+    siblings: [],
+    ...over,
+  });
+
+  it('reports nothing and refuses retry when the derived status is not ERROR', () => {
+    expect(deriveResume(input({ status: 'COMPLETED' }))).toEqual({
+      lastError: null,
+      retryable: false,
+      refusalKey: null,
+    });
+  });
+
+  it('ignores a COMPLETED job and picks the ERROR job as the last error', () => {
+    const result = deriveResume(
+      input({
+        jobs: [
+          job({ status: 'COMPLETED', errorKey: 'error.stale', updatedAt: t(9) }),
+          job({ updatedAt: t(2) }),
+        ],
+      }),
+    );
+    expect(result.lastError).toEqual({
+      stage: 'ENCODE',
+      key: 'error.encode.ffmpeg_failed',
+      params: '{"a":1}',
+      message: 'boom',
+    });
+    expect(result.retryable).toBe(true);
+  });
+
+  it('picks the most recent of a source error and a job error', () => {
+    const result = deriveResume(
+      input({
+        source: source({
+          status: 'ERROR',
+          errorKey: 'error.source.scan_no_video',
+          errorMessage: 'none',
+          updatedAt: t(5),
+        }),
+        jobs: [job({ updatedAt: t(3) })],
+      }),
+    );
+    expect(result.lastError?.stage).toBe('SCAN');
+    expect(result.lastError?.key).toBe('error.source.scan_no_video');
+  });
+
+  it('maps a replaced source error to REPLACED and refuses it', () => {
+    const result = deriveResume(
+      input({
+        source: source({ status: 'ERROR', errorKey: 'error.source.replaced', errorMessage: 'r' }),
+        jobs: [],
+      }),
+    );
+    expect(result.lastError?.stage).toBe('REPLACED');
+    expect(result.retryable).toBe(false);
+    expect(result.refusalKey).toBe('error.download.retry_replaced');
+  });
+
+  it('maps a replaced key on a job to REPLACED', () => {
+    const result = deriveResume(input({ jobs: [job({ errorKey: 'error.source.replaced' })] }));
+    expect(result.lastError?.stage).toBe('REPLACED');
+    expect(result.refusalKey).toBe('error.download.retry_replaced');
+  });
+
+  it('maps no_download_path to DOWNLOAD and refuses it as unavailable', () => {
+    const result = deriveResume(
+      input({
+        source: source({
+          status: 'ERROR',
+          errorKey: 'error.source.no_download_path',
+          errorMessage: 'x',
+        }),
+        jobs: [],
+      }),
+    );
+    expect(result.lastError?.stage).toBe('DOWNLOAD');
+    expect(result.refusalKey).toBe('error.download.retry_unavailable');
+  });
+
+  it('refuses a SCAN-stage error when the source has no download path', () => {
+    const result = deriveResume(
+      input({
+        source: source({
+          status: 'ERROR',
+          errorKey: 'error.source.scan_no_video',
+          errorMessage: 'x',
+          downloadPath: null,
+        }),
+        jobs: [],
+      }),
+    );
+    expect(result.refusalKey).toBe('error.download.retry_unavailable');
+  });
+
+  it('falls back to scan_failed with the message as detail for a null source key', () => {
+    const result = deriveResume(
+      input({
+        source: source({ status: 'ERROR', errorMessage: 'legacy text' }),
+        jobs: [],
+      }),
+    );
+    expect(result.lastError).toEqual({
+      stage: 'SCAN',
+      key: 'error.source.scan_failed',
+      params: '{"detail":"legacy text"}',
+      message: 'legacy text',
+    });
+  });
+
+  it('falls back to encode.unexpected with the message as detail for a null job key', () => {
+    const result = deriveResume(
+      input({ jobs: [job({ errorKey: null, errorParams: null, errorMessage: 'old' })] }),
+    );
+    expect(result.lastError).toEqual({
+      stage: 'ENCODE',
+      key: 'error.encode.unexpected',
+      params: '{"detail":"old"}',
+      message: 'old',
+    });
+  });
+
+  it('synthesises a torrent_client_error from a live error state with no stored error', () => {
+    const result = deriveResume(
+      input({ source: source({ status: 'DOWNLOADING' }), jobs: [], liveState: 'missingFiles' }),
+    );
+    expect(result.lastError?.stage).toBe('DOWNLOAD');
+    expect(result.lastError?.key).toBe('error.download.torrent_client_error');
+    expect(result.lastError?.params).toBe('{"state":"missingFiles"}');
+    expect(result.lastError?.message).toContain('missingFiles');
+    expect(result.retryable).toBe(true);
+  });
+
+  it('refuses a DOWNLOAD-stage live error when the source has no infoHash', () => {
+    const result = deriveResume(
+      input({
+        source: source({ status: 'DOWNLOADING', infoHash: null }),
+        jobs: [],
+        liveState: 'error',
+      }),
+    );
+    expect(result.refusalKey).toBe('error.download.retry_unavailable');
+  });
+
+  it('refuses as superseded when a sibling is the race winner, before checking availability', () => {
+    const result = deriveResume(
+      input({
+        source: source({
+          status: 'ERROR',
+          errorKey: 'error.source.no_download_path',
+          errorMessage: 'x',
+        }),
+        jobs: [],
+        siblings: [{ status: 'READY', jobs: [] }],
+      }),
+    );
+    expect(result.refusalKey).toBe('error.download.retry_superseded');
+  });
+
+  it('refuses REPLACED before superseded when both apply', () => {
+    const result = deriveResume(
+      input({
+        jobs: [job({ errorKey: 'error.source.replaced' })],
+        siblings: [{ status: 'READY', jobs: [] }],
+      }),
+    );
+    expect(result.refusalKey).toBe('error.download.retry_replaced');
+  });
+
+  it('does not treat a sibling whose encodes all failed as a winner', () => {
+    const result = deriveResume(
+      input({ siblings: [{ status: 'SCANNED', jobs: [{ status: 'ERROR' }] }] }),
+    );
+    expect(result.retryable).toBe(true);
+  });
 });

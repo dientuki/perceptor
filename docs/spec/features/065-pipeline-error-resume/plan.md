@@ -2,7 +2,7 @@
 title: Pipeline Error Visibility and Resume — Implementation Plan
 spec_version: 0.3.0
 last_updated: 2026-09-19
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Pipeline Error Visibility and Resume (`plan.md`)

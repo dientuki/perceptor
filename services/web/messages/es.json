@@ -57,7 +57,12 @@
     },
     "download": {
       "not_a_torrent": "Esta descarga no tiene un torrent asociado",
-      "torrent_client_rejected": "El cliente de torrents rechazó la solicitud ({status})"
+      "torrent_client_rejected": "El cliente de torrents rechazó la solicitud ({status})",
+      "torrent_client_error": "El cliente de torrents detuvo la descarga ({state}): revisá espacio en disco y permisos",
+      "retry_replaced": "Este medio fue reemplazado por otro y no se puede retomar",
+      "retry_superseded": "Otra fuente de este título ya se está procesando",
+      "retry_unavailable": "No se puede retomar: falta la descarga en disco",
+      "retry_enqueue_failed": "No se pudo volver a encolar el trabajo, probá de nuevo"
     },
     "upload": {
       "ticket_expired": "El ticket de subida expiró, intentá de nuevo",
@@ -111,6 +116,32 @@
     "calendar": {
       "invalid_date": "Fecha inválida: {value}",
       "invalid_range": "Rango de calendario inválido"
+    },
+    "source": {
+      "not_found": "El medio {id} no existe",
+      "no_target": "El medio {id} no apunta a ninguna película, episodio o temporada",
+      "match_not_reported": "El archivo {filePath} no está en la lista de archivos informada",
+      "scan_no_video": "El escaneo no encontró un video principal: carpeta vacía o sin video",
+      "scan_no_downloaded_video": "Ningún video de esta descarga tiene contenido: revisá qué archivos están seleccionados en el cliente de torrents",
+      "no_download_path": "Se completó sin ruta de descarga registrada: no se puede encolar",
+      "replaced": "Reemplazado por una descarga nueva",
+      "scan_failed": "No se pudo leer la descarga: {detail}"
+    },
+    "processJob": {
+      "not_found": "El trabajo {id} no existe",
+      "recovery_exhausted": "La recuperación automática de esta codificación ya se usó una vez y volvió a fallar"
+    },
+    "encode": {
+      "no_video_stream": "El archivo de entrada no tiene pista de video",
+      "no_original_audio": "El archivo no tiene pista de audio en el idioma original ({iso3})",
+      "probe_failed": "No se pudo analizar el archivo de video ({filePath}): {detail}",
+      "ffmpeg_failed": "ffmpeg terminó con código {code}: {stderr}",
+      "no_output": "ffmpeg terminó en 0 pero no generó {path}",
+      "mkvmerge_failed": "mkvmerge falló con código {code}: {stderr}",
+      "move_failed": "No se pudo mover el archivo a su destino: {detail}",
+      "episode_numbers_missing": "El episodio no tiene número de temporada/episodio: no se puede armar la ruta de salida",
+      "unknown_driver": "ENCODE_DRIVER desconocido: {driver}",
+      "unexpected": "Falla inesperada de codificación: {detail}"
     }
   },
   "landing": {
@@ -408,7 +439,13 @@
       "previous": "Anterior",
       "next": "Siguiente",
       "perPage": "Por página",
-      "deleteErrorDefault": "No se pudo eliminar la descarga."
+      "deleteErrorDefault": "No se pudo eliminar la descarga.",
+      "stage": {
+        "DOWNLOAD": "Descarga",
+        "SCAN": "Escaneo",
+        "ENCODE": "Codificación",
+        "REPLACED": "Reemplazado"
+      }
     },
     "deleteModal": {
       "title": "Eliminar descarga",

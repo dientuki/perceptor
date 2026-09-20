@@ -39,3 +39,4 @@ export const ERROR_ENCODE_UNEXPECTED = 'error.encode.unexpected';
 export const ERROR_PROCESS_JOB_NOT_FOUND = 'error.processJob.not_found';
 export const ERROR_SOURCE_NO_TARGET = 'error.source.no_target';
 export const ERROR_SOURCE_NO_DOWNLOAD_PATH = 'error.source.no_download_path';
+export const ERROR_SOURCE_SCAN_FAILED = 'error.source.scan_failed';

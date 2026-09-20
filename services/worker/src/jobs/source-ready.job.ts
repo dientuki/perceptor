@@ -1,4 +1,5 @@
-import type { Job } from 'bullmq';
+import { UnrecoverableError, type Job } from 'bullmq';
+import { deliverReport } from '../api/deliver-report';
 import { fetchGraphQL } from '../api/graphql-client';
 import { scanFolder } from '../scan/scan-folder';
 import { markDownloaded } from '../scan/mark-downloaded';
@@ -6,7 +7,11 @@ import { selectMatches, type Match, type SelectMatchesMode } from '../scan/selec
 import type { SourceReadyJob } from '../queue/types';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
-import { ERROR_SOURCE_NO_DOWNLOAD_PATH, ERROR_SOURCE_NO_TARGET } from '../i18n/error-keys';
+import {
+  ERROR_SOURCE_NO_DOWNLOAD_PATH,
+  ERROR_SOURCE_NO_TARGET,
+  ERROR_SOURCE_SCAN_FAILED,
+} from '../i18n/error-keys';
 
 type MediaSourceQueryResult = {
   mediaSource: {
@@ -50,6 +55,38 @@ function selectMode(mediaSource: NonNullable<MediaSourceQueryResult['mediaSource
 
 export async function handleSourceReady(job: Job<SourceReadyJob>): Promise<void> {
   const { mediaSourceId } = job.data;
+
+  try {
+    await scanSource(mediaSourceId);
+  } catch (error) {
+    const keyed = error instanceof KeyedError;
+    const errorKey = keyed ? error.key : ERROR_SOURCE_SCAN_FAILED;
+    const errorParams = keyed
+      ? error.params
+      : { detail: error instanceof Error ? error.message : String(error) };
+    const errorMessage = keyed
+      ? error.message
+      : renderMessage(errorKey, errorParams);
+
+    await deliverReport(`sourceScanFailed(${mediaSourceId})`, () =>
+      fetchGraphQL<{ sourceScanFailed: boolean }>(
+        `mutation ($id: Int!, $key: String!, $params: String, $msg: String!) {
+          sourceScanFailed(mediaSourceId: $id, errorKey: $key, errorParams: $params, errorMessage: $msg)
+        }`,
+        {
+          id: mediaSourceId,
+          key: errorKey,
+          params: errorParams ? JSON.stringify(errorParams) : undefined,
+          msg: errorMessage,
+        },
+      ),
+    );
+
+    throw new UnrecoverableError(errorMessage);
+  }
+}
+
+async function scanSource(mediaSourceId: number): Promise<void> {
 
   const { mediaSource } = await fetchGraphQL<MediaSourceQueryResult>(
     `query ($id: Int!) {

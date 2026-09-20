@@ -48,12 +48,12 @@ describe('DownloadsService', () => {
     movie: { update: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock };
     show: { findFirst: jest.Mock };
     episode: { update: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
-    processJob: { findMany: jest.Mock };
+    processJob: { findMany: jest.Mock; updateMany: jest.Mock };
     setting: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
   let queue: { addSourceReady: jest.Mock; removeSourceReady: jest.Mock };
-  let encodeQueue: { publishCancel: jest.Mock; removeEncode: jest.Mock };
+  let encodeQueue: { publishCancel: jest.Mock; removeEncode: jest.Mock; addEncode: jest.Mock };
   let qbittorrent: { stop: jest.Mock; start: jest.Mock; info: jest.Mock; remove: jest.Mock };
   let settings: { getMap: jest.Mock };
   let mediaRoots: { resolveFromRoot: jest.Mock; isInsideRoot: jest.Mock };
@@ -62,7 +62,7 @@ describe('DownloadsService', () => {
     prisma = {
       mediaSource: {
         findUnique: jest.fn(),
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         delete: jest.fn(),
@@ -70,12 +70,12 @@ describe('DownloadsService', () => {
       movie: { update: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
       show: { findFirst: jest.fn() },
       episode: { update: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
-      processJob: { findMany: jest.fn().mockResolvedValue([]) },
+      processJob: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       setting: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (cb: (tx: unknown) => Promise<void>) => cb(prisma)),
     };
     queue = { addSourceReady: jest.fn(), removeSourceReady: jest.fn() };
-    encodeQueue = { publishCancel: jest.fn(), removeEncode: jest.fn() };
+    encodeQueue = { publishCancel: jest.fn(), removeEncode: jest.fn(), addEncode: jest.fn() };
     qbittorrent = {
       stop: jest.fn().mockResolvedValue(undefined),
       start: jest.fn().mockResolvedValue(undefined),
@@ -158,6 +158,37 @@ describe('DownloadsService', () => {
       expect(result).toMatch(/^ignorado/);
       expect(qbittorrent.stop).not.toHaveBeenCalled();
       expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+    });
+
+    // 065 REQ-13: a SCANNED sibling whose only job failed must not count as
+    // the target's winner; otherwise a second source is ignored with no error
+    // anywhere and the title is wedged.
+    it('does not let a SCANNED sibling whose only job is ERROR block the race', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 2,
+        status: 'DOWNLOADING',
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([{ id: 1, status: 'SCANNED', infoHash: 'failed-hash' }]);
+      prisma.processJob.findMany.mockResolvedValue([
+        {
+          id: 10,
+          status: 'ERROR',
+          progress: 0,
+          encodeSpeed: null,
+          errorKey: 'error.encode.unexpected',
+          errorParams: null,
+          errorMessage: 'boom',
+          updatedAt: new Date(),
+          sourceFile: { mediaSourceId: 1 },
+        },
+      ]);
+
+      const result = await service.resolveRace(2);
+
+      expect(result).toMatch(/^ganador/);
     });
 
     it('does not treat an already-ERROR source as a valid winner', async () => {
@@ -833,6 +864,167 @@ describe('DownloadsService', () => {
       expect(rm).not.toHaveBeenCalled();
       expect(rmdir).not.toHaveBeenCalled();
       expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+    });
+  });
+  // 065-pipeline-error-resume: this suite exists because a resume that
+  // enqueues without first withdrawing the retained BullMQ id is a silent
+  // no-op (the job never runs again, nothing logs it), and one that flips a
+  // row out of ERROR before the enqueue succeeds leaves it wedged in
+  // WAITING/READY forever. Fault injection: swap removeEncode/addEncode and
+  // the ordering cases fail; drop the restore in the catch and the
+  // enqueue-failure cases fail.
+  describe('downloadStart on an ERROR source — resume', () => {
+    const at = new Date('2026-09-19T10:00:00Z');
+    const sourceRow = (over: Record<string, unknown> = {}) => ({
+      id: 1,
+      kind: 'TORRENT_SEARCH',
+      status: 'SCANNED',
+      infoHash: 'hash-1',
+      releaseTitle: null,
+      downloadPath: '/downloads/x',
+      errorKey: null,
+      errorParams: null,
+      errorMessage: null,
+      updatedAt: at,
+      movieId: 7,
+      seasonId: null,
+      episodeId: null,
+      movie: { id: 7, title: 'Film', users: [{ userId: 'user-1' }] },
+      episode: null,
+      season: null,
+      ...over,
+    });
+    const jobRow = (id: number, over: Record<string, unknown> = {}) => ({
+      id,
+      status: 'ERROR',
+      progress: 40,
+      encodeSpeed: 1.2,
+      errorKey: 'error.encode.unexpected',
+      errorParams: '{"detail":"boom"}',
+      errorMessage: 'boom',
+      updatedAt: at,
+      sourceFile: { mediaSourceId: 1 },
+      ...over,
+    });
+    const jobWrites = () => prisma.processJob.updateMany.mock.calls.map((c) => c[0]);
+
+    beforeEach(() => {
+      prisma.processJob.updateMany.mockResolvedValue({ count: 1 });
+      prisma.movie.findUnique.mockResolvedValue({ filePath: null, mediaSources: [], processJobs: [] });
+    });
+
+    it('withdraws each encode before re-adding it and ends QUEUED', async () => {
+      const order: string[] = [];
+      encodeQueue.removeEncode.mockImplementation(async (id: number) => void order.push(`remove:${id}`));
+      encodeQueue.addEncode.mockImplementation(async ({ processJobId }: { processJobId: number }) => {
+        order.push(`add:${processJobId}`);
+      });
+      prisma.mediaSource.findUnique.mockResolvedValue(sourceRow());
+      prisma.processJob.findMany.mockResolvedValue([jobRow(11), jobRow(12)]);
+
+      await service.downloadStart(1, 'user-1');
+
+      expect(order).toEqual(['remove:11', 'add:11', 'remove:12', 'add:12']);
+      const writes = jobWrites();
+      expect(writes[0].data).toMatchObject({ status: 'WAITING', progress: 0, encodeSpeed: null, recoveryCount: 0, errorKey: null });
+      expect(writes[writes.length - 1]).toEqual({ where: { id: { in: [11, 12] }, status: 'WAITING' }, data: { status: 'QUEUED' } });
+    });
+
+    it('withdraws the scan entry before re-adding it', async () => {
+      const order: string[] = [];
+      queue.removeSourceReady.mockImplementation(async () => void order.push('remove'));
+      queue.addSourceReady.mockImplementation(async () => void order.push('add'));
+      prisma.mediaSource.findUnique.mockResolvedValue(
+        sourceRow({ status: 'ERROR', errorKey: 'error.source.scan_no_video', errorMessage: 'none' }),
+      );
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.downloadStart(1, 'user-1');
+
+      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({ where: { id: 1, status: 'ERROR' }, data: { status: 'READY' } });
+      expect(order).toEqual(['remove', 'add']);
+    });
+
+    it('restores the jobs to ERROR with their original error when the encode enqueue fails', async () => {
+      encodeQueue.addEncode.mockRejectedValue(new Error('redis down'));
+      prisma.mediaSource.findUnique.mockResolvedValue(sourceRow());
+      prisma.processJob.findMany.mockResolvedValue([jobRow(11)]);
+
+      await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+        response: { i18n: { key: 'error.download.retry_enqueue_failed' } },
+      });
+
+      expect(jobWrites()).toContainEqual({
+        where: { id: 11, status: 'WAITING' },
+        data: { status: 'ERROR', errorKey: 'error.encode.unexpected', errorParams: '{"detail":"boom"}', errorMessage: 'boom' },
+      });
+      expect(jobWrites()).not.toContainEqual(expect.objectContaining({ data: { status: 'QUEUED' } }));
+    });
+
+    it('restores the source to ERROR when the scan enqueue fails', async () => {
+      queue.addSourceReady.mockRejectedValue(new Error('redis down'));
+      prisma.mediaSource.findUnique.mockResolvedValue(
+        sourceRow({ status: 'ERROR', errorKey: 'error.source.scan_no_video', errorMessage: 'none' }),
+      );
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+        response: { i18n: { key: 'error.download.retry_enqueue_failed' } },
+      });
+
+      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({ where: { id: 1, status: 'READY' }, data: { status: 'ERROR' } });
+    });
+
+    it('enqueues nothing when the guarded write matched no row', async () => {
+      prisma.processJob.updateMany.mockResolvedValue({ count: 0 });
+      prisma.mediaSource.findUnique.mockResolvedValue(sourceRow());
+      prisma.processJob.findMany.mockResolvedValue([jobRow(11)]);
+
+      await service.downloadStart(1, 'user-1');
+
+      expect(encodeQueue.removeEncode).not.toHaveBeenCalled();
+      expect(encodeQueue.addEncode).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['error.source.replaced', 'error.download.retry_replaced', 409],
+      ['error.source.no_download_path', 'error.download.retry_unavailable', 400],
+    ])('refuses a %s source with %s before any write', async (errorKey, expected, status) => {
+      prisma.mediaSource.findUnique.mockResolvedValue(sourceRow({ status: 'ERROR', errorKey, errorMessage: 'x' }));
+
+      await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+        response: { i18n: { key: expected } },
+        status,
+      });
+
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+    });
+
+    it('refuses with retry_superseded when a sibling already won, before any write', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(
+        sourceRow({ status: 'ERROR', errorKey: 'error.source.scan_no_video', errorMessage: 'none' }),
+      );
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 2, status: 'READY', movieId: 7, seasonId: null, episodeId: null },
+      ]);
+
+      await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+        response: { i18n: { key: 'error.download.retry_superseded' } },
+        status: 409,
+      });
+
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('still refuses a non-ERROR upload with not_a_torrent', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(sourceRow({ kind: 'LOCAL_FILE', infoHash: null, status: 'READY' }));
+
+      await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+        response: { i18n: { key: 'error.download.not_a_torrent' } },
+      });
+      expect(qbittorrent.start).not.toHaveBeenCalled();
     });
   });
 });

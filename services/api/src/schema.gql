@@ -115,6 +115,13 @@ type MediaServerIndexStatus {
   syncedAt: DateTime
 }
 
+type DownloadError {
+  stage: String!
+  key: String!
+  params: String
+  message: String!
+}
+
 type Download {
   mediaSourceId: Int!
   infoHash: String
@@ -135,6 +142,8 @@ type Download {
   compressionEnabled: Boolean!
   downloadSpeed: Float
   encodeSpeed: Float
+  lastError: DownloadError
+  retryable: Boolean!
   readAt: DateTime!
 }
 
@@ -506,6 +515,9 @@ type Mutation {
   El worker reporta el inventario de archivos de un MediaSource ya descargado
   """
   sourceScanned(mediaSourceId: Int!, files: [SourceFileInput!]!, matches: [ScannedMatchInput!]!): MediaSource!
+
+  """The worker reports that scanning a downloaded MediaSource failed"""
+  sourceScanFailed(mediaSourceId: Int!, errorKey: String!, errorParams: String, errorMessage: String!): Boolean!
 
   """El worker avisa que arrancó a encodear un ProcessJob"""
   encodeStarted(processJobId: Int!): String!

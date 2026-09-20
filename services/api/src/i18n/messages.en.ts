@@ -142,6 +142,18 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SCHEDULE_TASK_UNAVAILABLE]:
     'This task is not available: its content type is disabled',
 
+  [ERROR_KEYS.DOWNLOAD_TORRENT_CLIENT_ERROR]:
+    'The torrent client stopped the download ({state}): check disk space and permissions',
+  [ERROR_KEYS.SOURCE_SCAN_FAILED]: 'The download could not be read: {detail}',
+  [ERROR_KEYS.DOWNLOAD_RETRY_REPLACED]:
+    'This item was replaced by another one and cannot be resumed',
+  [ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED]:
+    'Another source of this title is already being processed',
+  [ERROR_KEYS.DOWNLOAD_RETRY_UNAVAILABLE]:
+    'Cannot resume: the download is missing on disk',
+  [ERROR_KEYS.DOWNLOAD_RETRY_ENQUEUE_FAILED]:
+    'The job could not be queued again, try again',
+
   [ERROR_KEYS.CALENDAR_INVALID_DATE]: 'Invalid date: {value}',
   [ERROR_KEYS.CALENDAR_INVALID_RANGE]: 'Invalid calendar range',
 
