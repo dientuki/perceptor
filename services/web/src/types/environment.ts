@@ -10,6 +10,7 @@ export type EnvironmentEndpoint = {
 
 export type EnvironmentInfo = {
   useTraefik: boolean;
+  useHttps: boolean;
   domain: string | null;
   endpoints: EnvironmentEndpoint[];
   expectedUploadEndpoint: string | null;

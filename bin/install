@@ -45,7 +45,17 @@ if [ "$generate_env" = true ]; then
       read -rp "Domain to use (e.g. perceptor.local): " domain
       set_env_var USE_TRAEFIK true
       set_env_var DOMAIN "${domain}"
-      set_env_var PUBLIC_UPLOAD_URL "http://api.${domain}/uploads"
+      read -rp "Serve HTTPS with a local certificate authority? [y/N] " use_https
+      case "$use_https" in
+        [yY]*)
+          set_env_var USE_HTTPS true
+          set_env_var PUBLIC_UPLOAD_URL "https://api.${domain}/uploads"
+          ;;
+        *)
+          set_env_var USE_HTTPS false
+          set_env_var PUBLIC_UPLOAD_URL "http://api.${domain}/uploads"
+          ;;
+      esac
       echo
       echo "Done. Add this to /etc/hosts so it resolves:"
       echo "  127.0.0.1  ${domain} api.${domain} torrent.${domain} indexer.${domain}"

@@ -15,27 +15,31 @@ export class EnvironmentService {
     const { useTraefik, domain } = this.config;
     const canDeriveUrls = useTraefik && domain !== null;
 
+    const useHttps = canDeriveUrls && this.config.useHttps;
+    const scheme = useHttps ? 'https' : 'http';
+
     const endpoints: EnvironmentEndpoint[] = ENDPOINT_IDS.map((id) => ({
       id,
       port: this.config.ports[id],
-      url: canDeriveUrls ? this.buildUrl(id, domain) : null,
+      url: canDeriveUrls ? this.buildUrl(scheme, id, domain) : null,
     }));
 
     return {
       useTraefik,
+      useHttps,
       domain,
       endpoints,
-      // http://api.<domain>/uploads — what REQ-6 compares the loaded
+      // <scheme>://api.<domain>/uploads — what REQ-6 compares the loaded
       // PUBLIC_UPLOAD_URL (web-only) against. No fallback host, ever: null
       // is the specified answer in port mode or with no domain (NFR-1).
-      expectedUploadEndpoint: canDeriveUrls ? `http://api.${domain}/uploads` : null,
+      expectedUploadEndpoint: canDeriveUrls ? `${scheme}://api.${domain}/uploads` : null,
     };
   }
 
   // http://<domain> for web, http://<id>.<domain> for the other three.
   // Only called once canDeriveUrls is already true, so `domain` here is
   // guaranteed non-null.
-  private buildUrl(id: EnvironmentEndpointId, domain: string): string {
-    return id === 'web' ? `http://${domain}` : `http://${id}.${domain}`;
+  private buildUrl(scheme: 'http' | 'https', id: EnvironmentEndpointId, domain: string): string {
+    return id === 'web' ? `${scheme}://${domain}` : `${scheme}://${id}.${domain}`;
   }
 }

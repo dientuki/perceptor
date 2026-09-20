@@ -14,6 +14,7 @@ export type EnvironmentEndpointId = 'web' | 'api' | 'torrent' | 'indexer';
 // never sees a raw process.env string.
 export type EnvironmentConfig = {
   useTraefik: boolean;
+  useHttps: boolean;
   domain: string | null;
   ports: Record<EnvironmentEndpointId, number | null>;
 };

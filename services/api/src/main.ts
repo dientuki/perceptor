@@ -106,7 +106,10 @@ async function bootstrap() {
   // necesita CORS. exposedHeaders es lo que le permite a tus-js-client leer
   // Upload-Offset/Location y poder reanudar una subida cortada.
   app.enableCors({
-    origin: [`http://${process.env.DOMAIN}`, `http://localhost:${process.env.WEB_PORT}`],
+    origin: [
+      `http://${process.env.DOMAIN}`,
+      `https://${process.env.DOMAIN}`,
+      `http://localhost:${process.env.WEB_PORT}`],
     credentials: true,
     exposedHeaders: [
       'Upload-Offset',

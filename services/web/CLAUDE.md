@@ -125,6 +125,8 @@ The cookie name is never a literal at call sites — it comes from `CONFIG.authC
 and forwards it as `Authorization: Bearer …` on every server-action call; a server action that has a
 session and skips this is a defect, not a style choice.
 
+`src/lib/request-scheme.ts` is the one detector of the scheme the browser used (`isSecureRequest()`, from `Origin`, falling back to `x-forwarded-proto`); the login cookie's `Secure` attribute and the upload endpoint's scheme (`withRequestScheme`, `066`) both read it. It is not in a `"use server"` file, since every export of one becomes a callable endpoint.
+
 `src/lib/auth-session.ts`'s `isAuthError(errors)` matches on `error.extensions.i18n.key` against
 `error.auth.unauthenticated`/`error.auth.session_expired` — **not** on `error.message` text. Before
 `018-ui-i18n` it string-matched the literal Spanish sentences `api` returned, which meant

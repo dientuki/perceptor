@@ -1547,6 +1547,7 @@ type EnvironmentEndpoint {
 
 type EnvironmentInfo {
   useTraefik: Boolean!
+  useHttps: Boolean!
   domain: String
   endpoints: [EnvironmentEndpoint!]!
   expectedUploadEndpoint: String
@@ -1568,6 +1569,12 @@ guessed host) would make the panel confidently recommend a value that breaks upl
 device that is not the host itself, which is the exact bug `055` exists to make visible instead of
 hidden. `endpoints[].url` and `expectedUploadEndpoint` are `null` together, in the same condition
 (`useTraefik && domain !== null`) — never one without the other.
+
+`066-https-local-ca` adds `useHttps: Boolean!`. It reports whether HTTPS is **in effect**, never the raw
+`USE_HTTPS` variable: true only when `USE_HTTPS=true` and `useTraefik` and `domain !== null`. Under that
+same condition the non-null `endpoints[].url` and `expectedUploadEndpoint` use `https://`; nullability is
+unchanged. `web` never reads `USE_HTTPS` and compares the upload endpoint ignoring its scheme, because the
+endpoint it hands the browser takes the scheme of the page (`src/lib/request-scheme.ts`).
 
 `EnvironmentEndpoint` carries no `label`. Its neighbour `MediaRoot` has one, but that field predates
 `018-ui-i18n` and is a hardcoded Spanish string — adding a label here would put user-facing copy back

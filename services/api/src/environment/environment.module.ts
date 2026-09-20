@@ -7,10 +7,11 @@ import { ENVIRONMENT_CONFIG, EnvironmentConfig } from './environment.types';
 // media-roots.module.ts's buildMediaRoots: so a spec can inject a fixture
 // config instead of mutating process.env. This function's env var list is
 // the allowlist NFR-2 requires (055-environment-panel) — it must never grow
-// beyond these six names.
+// beyond these seven names.
 function buildEnvironmentConfig(): EnvironmentConfig {
   return {
     useTraefik: process.env.USE_TRAEFIK === 'true',
+    useHttps: process.env.USE_HTTPS === 'true',
     domain: process.env.DOMAIN || null,
     ports: {
       web: parsePort(process.env.WEB_PORT),

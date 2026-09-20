@@ -1,7 +1,8 @@
 #!/bin/bash
 # Levanta el stack en modo producción (stage prod de cada Dockerfile, sin
 # bind mounts de código). Lee USE_TRAEFIK de .env para decidir si el servicio
-# traefik entra en el docker compose up.
+# traefik entra en el docker compose up (y USE_HTTPS para sumar el one-shot
+# certs, solo con USE_TRAEFIK=true).
 set -e
 cd "$(dirname "$0")/.."
 
@@ -18,5 +19,12 @@ if [ "${USE_TRAEFIK}" = "true" ]; then
 fi
 
 COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml"
+
+# certs is a one-shot that writes the local CA and the Traefik leaf certificate. It runs to
+# completion first and aborts the script on failure: traefik's depends_on on it is optional
+# (required: false), which compose treats as "skip" when certs fails, not as "do not start".
+if [ "${USE_TRAEFIK}" = "true" ] && [ "${USE_HTTPS}" = "true" ]; then
+  BUILD_TARGET=prod docker compose $COMPOSE_FILES run --rm --no-deps certs
+fi
 
 BUILD_TARGET=prod docker compose $COMPOSE_FILES up -d --build $SERVICES

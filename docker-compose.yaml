@@ -12,6 +12,23 @@ services:
       - "80:80"
       - "443:443"
       # - "8080:8080" # Descomentar si querés ver el Dashboard de Traefik
+    # Wrapper (066): adds the file provider only when USE_HTTPS=true, so the flags below stay
+    # identical to the HTTP-only setup otherwise. $0 is "traefik", "$@" is `command:`.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ "$${USE_HTTPS:-false}" = "true" ]; then
+          set -- "$$@" --providers.file.directory=/tls --providers.file.watch=true
+        fi
+        exec traefik "$$@"
+      - traefik
+    environment:
+      - USE_HTTPS=${USE_HTTPS:-false}
+    depends_on:
+      certs:
+        condition: service_completed_successfully
+        required: false
     command:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
@@ -20,6 +37,7 @@ services:
       # - "--api.insecure=true" # Descomentar si querés habilitar el Dashboard en el puerto 8080
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - traefik_tls:/tls:ro
     networks:
       - perceptor-net
     healthcheck:
@@ -117,7 +135,9 @@ services:
       - CONTAINER_DESTINATIONS_DIR=${CONTAINER_DESTINATIONS_DIR}
       # Read only by environmentInfo, the Settings screen's Environment tab — they drive no
       # behaviour inside api itself (Traefik/qBittorrent/Prowlarr act on them, not this container).
+      # CORS is not gated by USE_HTTPS.
       - USE_TRAEFIK=${USE_TRAEFIK}
+      - USE_HTTPS=${USE_HTTPS:-false}
       - QBITTORRENT_WEBUI_PORT=${QBITTORRENT_WEBUI_PORT}
       - INDEXER_PORT=${INDEXER_PORT}
     healthcheck:
@@ -225,6 +245,117 @@ services:
         cd /backups
         ls -1t "${DB_NAME}"-*.sql.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
         echo "Done."
+
+  # One-shot local certificate authority (066): creates ./certs/ca.{key,crt} once, issues the leaf
+  # into the traefik_tls volume and rewrites Traefik's dynamic config. Only started with the
+  # `https` profile (or named explicitly by bin/dev/bin/prod). Reuses the mariadb image for openssl.
+  certs:
+    image: mariadb:12.3.2
+    restart: "no"
+    profiles: [https]
+    network_mode: none
+    environment:
+      DOMAIN: ${DOMAIN}
+      PUID: ${PUID}
+      PGID: ${PGID}
+    volumes:
+      - ./certs:/certs
+      - traefik_tls:/tls
+    command:
+      - /bin/bash
+      - -c
+      - |
+        set -euo pipefail
+        umask 077
+        fail() { echo "certs: $$*" >&2; exit 1; }
+        [ -n "$${DOMAIN:-}" ] || fail "DOMAIN is empty"
+        new_ca=false
+        if [ -f /certs/ca.key ] && [ -f /certs/ca.crt ]; then
+          nc=$$(openssl x509 -in /certs/ca.crt -noout -ext nameConstraints 2>/dev/null | tr -d ' \n' || true)
+          case "$$nc" in
+            *"Permitted:DNS:$${DOMAIN}") ;;
+            *) fail "DOMAIN changed outside what the existing CA in ./certs may sign. Delete ./certs and re-trust the new ca.crt on every device." ;;
+          esac
+        elif [ -e /certs/ca.key ] || [ -e /certs/ca.crt ]; then
+          fail "./certs holds only one of ca.key/ca.crt. Delete ./certs and re-trust the new ca.crt on every device."
+        else
+          openssl genrsa -out /certs/ca.key 2048
+          openssl req -x509 -new -key /certs/ca.key -sha256 -days 3650 \
+            -subj "/CN=Perceptor local CA ($${DOMAIN})" \
+            -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign" \
+            -addext "subjectKeyIdentifier=hash" \
+            -addext "nameConstraints=critical,permitted;DNS:$${DOMAIN}" \
+            -out /certs/ca.crt
+          new_ca=true
+        fi
+        reissue=false
+        if [ ! -f /tls/cert.pem ] || [ ! -f /tls/key.pem ]; then
+          reissue=true
+        elif ! openssl x509 -in /tls/cert.pem -noout -checkend 2592000 >/dev/null; then
+          reissue=true
+        elif ! openssl verify -CAfile /certs/ca.crt /tls/cert.pem >/dev/null 2>&1; then
+          reissue=true
+        else
+          san=$$(openssl x509 -in /tls/cert.pem -noout -ext subjectAltName | tail -n 1 | tr -d ' ')
+          [ "$$san" = "DNS:$${DOMAIN},DNS:*.$${DOMAIN}" ] || reissue=true
+        fi
+        if [ "$$reissue" = true ]; then
+          openssl genrsa -out /tls/key.pem.tmp 2048
+          openssl req -new -key /tls/key.pem.tmp -subj "/CN=$${DOMAIN}" -out /tmp/leaf.csr
+          printf '%s\n' \
+            "subjectAltName=DNS:$${DOMAIN},DNS:*.$${DOMAIN}" \
+            "basicConstraints=critical,CA:FALSE" \
+            "keyUsage=critical,digitalSignature,keyEncipherment" \
+            "extendedKeyUsage=serverAuth" \
+            "authorityKeyIdentifier=keyid" > /tmp/leaf.ext
+          openssl x509 -req -in /tmp/leaf.csr -CA /certs/ca.crt -CAkey /certs/ca.key -CAcreateserial \
+            -CAserial /tmp/ca.srl -days 800 -sha256 -extfile /tmp/leaf.ext -out /tls/cert.pem.tmp
+          mv /tls/key.pem.tmp /tls/key.pem
+          mv /tls/cert.pem.tmp /tls/cert.pem
+        fi
+        cat > /tls/dynamic.yml <<YML
+        tls:
+          stores:
+            default:
+              defaultCertificate:
+                certFile: /tls/cert.pem
+                keyFile: /tls/key.pem
+          certificates:
+            - certFile: /tls/cert.pem
+              keyFile: /tls/key.pem
+        http:
+          routers:
+            web-secure:
+              entryPoints: [websecure]
+              rule: Host(\`$${DOMAIN}\`)
+              service: web@docker
+              tls: {}
+            api-secure:
+              entryPoints: [websecure]
+              rule: Host(\`api.$${DOMAIN}\`)
+              service: api@docker
+              tls: {}
+            torrent-secure:
+              entryPoints: [websecure]
+              rule: Host(\`torrent.$${DOMAIN}\`)
+              service: torrent@docker
+              tls: {}
+            indexer-secure:
+              entryPoints: [websecure]
+              rule: Host(\`indexer.$${DOMAIN}\`)
+              service: indexer@docker
+              tls: {}
+        YML
+        chown -R "$${PUID}:$${PGID}" /certs
+        chmod 700 /certs
+        chmod 600 /certs/ca.key
+        chmod 644 /certs/ca.crt
+        if [ "$$new_ca" = true ]; then
+          echo "A new local CA was created: ./certs/ca.crt (next to docker-compose.yaml)."
+          echo "Install it as a trusted root certificate on every device that will open Perceptor over HTTPS."
+          echo "HTTP keeps working on devices that have not."
+        fi
 
   worker:
     image: ghcr.io/dientuki/perceptor-worker:${PERCEPTOR_TAG:-latest}
@@ -391,6 +522,7 @@ volumes:
   redis_data:
   qbittorrent_config: # Nuevo volumen para la config de qBittorrent
   indexer_config: # Nuevo volumen para la config de Prowlarr
+  traefik_tls: # Leaf certificate + dynamic config written by certs, read by traefik (066)
 
 networks:
   perceptor-net:

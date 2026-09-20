@@ -1,7 +1,7 @@
 ---
 title: HTTPS Through Traefik With a Local Certificate Authority — Tasks
 last_updated: 2026-09-19
-status: Draft
+status: In Progress
 ---
 
 # TASKS: HTTPS Through Traefik With a Local Certificate Authority (`tasks.md`)
@@ -26,12 +26,12 @@ without also doing something in another service, it is scoped wrong — split it
 The contract delta is one additive field, frozen in `spec.md`. `api`, `infra` and the part of `web`
 that does not consume it can start together.
 
-- [ ] **T001** `[docs] [P]` Add `certs/` to the root `.gitignore`, under the "Environment &
+- [x] **T001** `[docs] [P]` Add `certs/` to the root `.gitignore`, under the "Environment &
       Sensitive configs" block, with a one-line note that it holds the local CA's private key
       (`066`, NFR-2). Must land before anyone runs `certs` in this checkout.
       *Done when:* `mkdir -p certs && touch certs/ca.key && git status --short --ignored certs` shows
       `!! certs/`; the scratch file is removed afterwards.
-- [ ] **T002** `[api] [P]` Implement `api/plan.md` Steps 1–6: `useHttps` in
+- [x] **T002** `[api] [P]` Implement `api/plan.md` Steps 1–6: `useHttps` in
       `environment.types.ts`, the factory in `environment.module.ts` (`USE_HTTPS === 'true'`,
       allowlist comment → seven names), `@Field() useHttps: boolean` after `useTraefik` in
       `entities/environment-info.entity.ts`, the in-effect rule and the scheme in
@@ -42,7 +42,7 @@ that does not consume it can start together.
       `git diff services/api/src/schema.gql` shows exactly one added line, `useHttps: Boolean!`,
       inside `type EnvironmentInfo`, after `useTraefik`; `git status --short services/api/prisma`
       is empty.
-- [ ] **T003** `[api]` Extend `src/environment/environment.service.spec.ts` per `api/plan.md` §
+- [x] **T003** `[api]` Extend `src/environment/environment.service.spec.ts` per `api/plan.md` §
       Tests: one added sentence in the Article IX header (the raw-flag `useHttps` failure), the four
       new cases, the allowlist key set gaining exactly `useHttps`, and `useHttps: false` added to the
       existing fixtures. Fault-inject: make the service return `this.config.useHttps` raw and watch
@@ -51,7 +51,7 @@ that does not consume it can start together.
       reported against the 603 tests / 50 suites baseline (`062`); the fault-injected run's failing
       case names are pasted and the injection reverted (`git diff` of the service shows only T002's
       change).
-- [ ] **T004** `[infra] [P]` Implement `infra/plan.md` Steps 1–5 in `docker-compose.yaml` and
+- [x] **T004** `[infra] [P]` Implement `infra/plan.md` Steps 1–5 in `docker-compose.yaml` and
       `.env.example`: the `certs` service (`mariadb:12.3.2`, `profiles: [https]`, `restart: "no"`,
       inline script — CA create-or-verify with the name-constraint check and its loud failure, leaf
       reissue on missing / < 30 days / SAN mismatch / not signed by the current CA, atomic `mv`,
@@ -65,14 +65,14 @@ that does not consume it can start together.
       `providers.file` flag; `docker compose config | grep -A40 '^  api:' | grep USE_HTTPS` prints one
       line and the same grep on `web:` prints none; `git diff docker-compose.yaml | grep '^[-+].*traefik\.http\.routers'`
       prints nothing.
-- [ ] **T005** `[infra]` Implement `infra/plan.md` Step 8 in `bin/dev` and `bin/prod`: prepend
+- [x] **T005** `[infra]` Implement `infra/plan.md` Step 8 in `bin/dev` and `bin/prod`: prepend
       `certs` to `SERVICES` when `USE_TRAEFIK=true` and `USE_HTTPS=true`; update the header comments.
       → T004
       *Done when:* with `USE_TRAEFIK=true`, `USE_HTTPS=true`, `DOMAIN=perceptor.local` in `.env`,
       `bin/dev -d` then `docker compose ps -a certs traefik` shows `certs` exited `(0)` and `traefik`
       running; `docker compose logs certs` prints the REQ-7 handoff on the first run and not on a
       second `bin/dev -d`; `stat -c '%a %U' certs/ca.key` prints `600` and the host user.
-- [ ] **T006** `[infra]` Implement `infra/plan.md` Steps 6–7 in `install.sh` and `bin/install`: the
+- [x] **T006** `[infra]` Implement `infra/plan.md` Steps 6–7 in `install.sh` and `bin/install`: the
       HTTPS question inside the Traefik arm only, `USE_HTTPS`, `COMPOSE_PROFILES=traefik,https` (in
       `install.sh` only), `PUBLIC_UPLOAD_URL` scheme, and `install.sh`'s closing summary (https URL
       plus the absolute `certs/ca.crt` path and trust instruction). → T004
@@ -82,7 +82,7 @@ that does not consume it can start together.
       writes `USE_HTTPS=false` and `http://…`; answering `n` to Traefik asks no HTTPS question.
       `install.sh`'s new branch is shown in the report as a diff (it downloads `docker-compose.yaml`
       from GitHub, so a full live run is only possible after release — see T010).
-- [ ] **T007** `[web] [P]` Implement `web/plan.md` Steps 1–3: create
+- [x] **T007** `[web] [P]` Implement `web/plan.md` Steps 1–3: create
       `src/lib/request-scheme.ts` with `isSecureRequest()` moved verbatim from
       `src/actions/auth.ts` plus `withRequestScheme(url)`; `auth.ts` imports it and loses its local
       copy; `createUploadTicketAction` in `src/actions/uploads.ts` returns
@@ -93,19 +93,19 @@ that does not consume it can start together.
 
 ### Group 2 — consumer of the contract
 
-- [ ] **T008** `[web]` Implement `web/plan.md` Steps 4–6: `useHttps` in
+- [x] **T008** `[web]` Implement `web/plan.md` Steps 4–6: `useHttps` in
       `src/types/environment.ts`, the `ENVIRONMENT_INFO_QUERY` selection and its fallback in
       `src/actions/environment.ts`; the HTTPS row, `<li>USE_HTTPS</li>` and the scheme-agnostic
       `uploadConsistent` in `src/components/settings/EnvironmentPanel.tsx`; `httpsLabel`,
       `httpsEnabled`, `httpsDisabled` in `messages/en.json` and `messages/es.json`. → T002, T007
       *Done when:* `bin/cli web npx --no tsc --noEmit` reports 0 errors; `bin/npm web run build`
-      exits 0; `bin/cli web node scripts/check-messages.mjs` reports no drift at 445 keys (442 + 3);
+      exits 0; `bin/cli web node scripts/check-messages.mjs` reports no drift (the three new keys added to the current count);
       Settings → Environment on the dev stack (HTTPS off) renders the HTTPS row reading "Disabled"
       with no GraphQL error.
 
 ### Group 3 — verification and docs
 
-- [ ] **T009** `[infra]` Run the certificate-step blocks of `plan.md` § Verification against the
+- [x] **T009** `[infra]` Run the certificate-step blocks of `plan.md` § Verification against the
       live stack and paste their output: AC-1's file checks (only `ca.crt` + `ca.key` in `./certs`,
       mode `600`), AC-3 (`curl -sI http://perceptor.local` — no `3xx`), AC-5 (`nameConstraints` on the
       CA, `subjectAltName` on the leaf), the `curl --cacert certs/ca.crt https://…` check on all four
@@ -127,12 +127,12 @@ that does not consume it can start together.
       is checked through `bin/install` (T006); the `install.sh` end-to-end run happens on the first
       release that carries this feature, and is recorded here as pending until then. → T009
       *Done when:* each AC's outcome is written into this task's report, pass or fail.
-- [ ] **T011** `[docs] [P]` `docs/spec/graphql-contract.md`: in the `055` section, add
+- [x] **T011** `[docs] [P]` `docs/spec/graphql-contract.md`: in the `055` section, add
       `useHttps: Boolean!` to the `EnvironmentInfo` SDL and a `066` paragraph — in-effect semantics
       (never the raw variable), scheme flip on non-null URLs only, `web` never reads `USE_HTTPS` and
       compares the upload endpoint scheme-agnostically. → T002
       *Done when:* the SDL in that file matches `schema.gql`'s `type EnvironmentInfo` field for field.
-- [ ] **T012** `[docs] [P]` Update the `CLAUDE.md` files. Root: § Topology (`:443` now routed when
+- [x] **T012** `[docs] [P]` Update the `CLAUDE.md` files. Root: § Topology (`:443` now routed when
       `USE_HTTPS=true`, the `certs` one-shot), § Environment (a `USE_HTTPS` bullet: local CA in
       `./certs`, trust per device, HTTP kept, `COMPOSE_PROFILES=traefik,https`, the NFR-3 domain
       constraint and how to rotate), and § Current state (the T003/T008 measurements). No pipeline

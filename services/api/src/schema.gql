@@ -323,6 +323,7 @@ type EnvironmentEndpoint {
 
 type EnvironmentInfo {
   useTraefik: Boolean!
+  useHttps: Boolean!
   domain: String
   endpoints: [EnvironmentEndpoint!]!
   expectedUploadEndpoint: String

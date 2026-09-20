@@ -9,6 +9,7 @@ const ENVIRONMENT_INFO_QUERY = `
   query EnvironmentInfo {
     environmentInfo {
       useTraefik
+      useHttps
       domain
       endpoints {
         id
@@ -35,6 +36,7 @@ export async function getEnvironmentInfo(): Promise<EnvironmentInfo> {
   return (
     data?.environmentInfo ?? {
       useTraefik: false,
+      useHttps: false,
       domain: null,
       endpoints: [],
       expectedUploadEndpoint: null,

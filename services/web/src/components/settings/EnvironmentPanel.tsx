@@ -13,6 +13,12 @@ interface EnvironmentPanelProps {
 
 const EM_DASH = "—";
 
+// Scheme-agnostic on purpose: the page's scheme decides the upload endpoint's
+// scheme at request time, so only host, port and path are comparable.
+function stripScheme(url: string): string {
+  return url.replace(/^https?:\/\//, "");
+}
+
 const RECREATE_COMMAND = "docker compose up -d --force-recreate";
 const RECREATE_API_WEB_COMMAND = `${RECREATE_COMMAND} api web`;
 
@@ -26,13 +32,14 @@ export default function EnvironmentPanel({
   webDomain,
 }: EnvironmentPanelProps) {
   const t = useTranslations("settings.environment");
-  const { useTraefik, domain, endpoints, expectedUploadEndpoint } = environment;
+  const { useTraefik, useHttps, domain, endpoints, expectedUploadEndpoint } = environment;
 
   // REQ-6: only meaningful with routing on and a derivable expected value.
   // Comparison is exact — no trailing-slash or case normalization.
   const uploadConsistent =
     useTraefik && expectedUploadEndpoint !== null
-      ? expectedUploadEndpoint === uploadEndpoint
+      ? uploadEndpoint !== null &&
+        stripScheme(expectedUploadEndpoint) === stripScheme(uploadEndpoint)
       : null;
 
   // REQ-7: the observable signature of an .env edit applied to one
@@ -47,6 +54,15 @@ export default function EnvironmentPanel({
         <div>
           <Badge color={useTraefik ? "success" : "light"}>
             {useTraefik ? t("routingEnabled") : t("routingDisabled")}
+          </Badge>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>{t("httpsLabel")}</Label>
+        <div>
+          <Badge color={useHttps ? "success" : "light"}>
+            {useHttps ? t("httpsEnabled") : t("httpsDisabled")}
           </Badge>
         </div>
       </div>
@@ -125,6 +141,7 @@ export default function EnvironmentPanel({
         <ul className="list-inside list-disc text-gray-700 dark:text-gray-300">
           <li>USE_TRAEFIK</li>
           <li>DOMAIN</li>
+          <li>USE_HTTPS</li>
           <li>COMPOSE_PROFILES</li>
           <li>PUBLIC_UPLOAD_URL</li>
         </ul>

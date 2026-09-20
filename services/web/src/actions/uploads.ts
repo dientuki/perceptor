@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { redirectIfUnauthenticated } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { toActionError } from "@/lib/graphql-error";
+import { withRequestScheme } from "@/lib/request-scheme";
 import type { FileAcquisitionTarget } from "@/types/media";
 
 export interface UploadTicket {
@@ -62,5 +63,11 @@ export async function createUploadTicketAction(
     return { error: t("upload.endpointNotConfigured") };
   }
 
-  return { success: true, ticket: { ...data.createUploadTicket, endpoint } };
+  return {
+    success: true,
+    ticket: {
+      ...data.createUploadTicket,
+      endpoint: await withRequestScheme(endpoint),
+    },
+  };
 }

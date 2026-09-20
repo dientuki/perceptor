@@ -137,7 +137,18 @@ if [ "$fresh_install" = true ]; then
       read -rp "Domain to use (e.g. perceptor.local): " domain </dev/tty
       set_env_var USE_TRAEFIK true
       set_env_var DOMAIN "${domain}"
-      set_env_var COMPOSE_PROFILES traefik
+      # HTTPS is only offered inside this arm (REQ-2): port mode has no hostname to certify.
+      read -rp "Serve HTTPS with a local certificate authority? [y/N] " use_https </dev/tty
+      case "$use_https" in
+        [yY]*)
+          set_env_var USE_HTTPS true
+          set_env_var COMPOSE_PROFILES traefik,https
+          ;;
+        *)
+          set_env_var USE_HTTPS false
+          set_env_var COMPOSE_PROFILES traefik
+          ;;
+      esac
       echo
       echo "Done. Add this to /etc/hosts so it resolves:"
       echo "  127.0.0.1  ${domain} api.${domain} torrent.${domain} indexer.${domain}"
@@ -215,7 +226,11 @@ if [ "$fresh_install" = true ]; then
   api_port=$(grep '^API_PORT=' .env | cut -d= -f2-)
   if [ "$(grep '^USE_TRAEFIK=' .env | cut -d= -f2-)" = "true" ]; then
     upload_domain=$(grep '^DOMAIN=' .env | cut -d= -f2-)
-    set_env_var PUBLIC_UPLOAD_URL "http://api.${upload_domain}/uploads"
+    if [ "$(grep '^USE_HTTPS=' .env | cut -d= -f2-)" = "true" ]; then
+      set_env_var PUBLIC_UPLOAD_URL "https://api.${upload_domain}/uploads"
+    else
+      set_env_var PUBLIC_UPLOAD_URL "http://api.${upload_domain}/uploads"
+    fi
   else
     # IP de la interfaz con ruta a internet, no localhost: HOST_DOWNLOADS_DIR aparte, éste es
     # el único valor que el navegador (no el host) tiene que poder resolver, y "localhost"
@@ -348,7 +363,16 @@ fi
 echo
 echo "Done. Perceptor is running."
 if [ "${USE_TRAEFIK}" = "true" ]; then
-  echo "URL: http://${DOMAIN}"
+  if [ "${USE_HTTPS:-false}" = "true" ]; then
+    echo "URL: https://${DOMAIN}  (http://${DOMAIN} keeps working)"
+    echo
+    echo "HTTPS uses a local certificate authority. Install this file as a trusted root"
+    echo "certificate on every device that will open Perceptor over HTTPS:"
+    echo "  $(pwd)/certs/ca.crt"
+    echo "Devices that have not trusted it can keep using http://${DOMAIN}."
+  else
+    echo "URL: http://${DOMAIN}"
+  fi
 else
   echo "URL: http://localhost:${WEB_PORT}"
 fi

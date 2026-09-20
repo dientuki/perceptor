@@ -548,10 +548,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   reachable, read-only, admin-only. Copies `media-roots/`'s factory-behind-a-token shape
   (`ENVIRONMENT_CONFIG`) so the spec can inject a fixture without mutating `process.env`, and the
   `ffprobe-logs.resolver.ts` per-method `@UseGuards(AdminGuard)` split. The allowlist read from
-  `process.env` is exactly `USE_TRAEFIK`, `DOMAIN`, `WEB_PORT`, `PORT`, `QBITTORRENT_WEBUI_PORT`,
-  `INDEXER_PORT` — never a wholesale `process.env` dump. `EnvironmentEndpoint` carries no `label`
+  `process.env` is exactly `USE_TRAEFIK`, `USE_HTTPS`, `DOMAIN`, `WEB_PORT`, `PORT`,
+  `QBITTORRENT_WEBUI_PORT`, `INDEXER_PORT` — never a wholesale `process.env` dump. `EnvironmentEndpoint` carries no `label`
   (unlike `MediaRoot`, whose one predates `018-ui-i18n`); `web` maps `id` to a display name. Every
-  URL field is `null`, not a guessed host, unless `useTraefik && domain !== null` — see
+  URL field is `null`, not a guessed host, unless `useTraefik && domain !== null`, and `useHttps` is that same condition plus `USE_HTTPS=true` (`066`) — see
   `docs/spec/graphql-contract.md`'s `055` section for why.
 - **`media-server/`** — post-encode notification (Jellyfin today), opt-in from Settings, **plus**
   (`034-jellyfin-library-reconciliation`) reflecting what that server already holds back onto a newly

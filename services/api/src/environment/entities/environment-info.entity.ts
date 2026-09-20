@@ -27,6 +27,10 @@ export class EnvironmentInfo {
   @Field()
   useTraefik: boolean;
 
+  // True only when USE_HTTPS, USE_TRAEFIK and a domain are all present.
+  @Field()
+  useHttps: boolean;
+
   // Reported in both modes (REQ-3) — null only when the variable is unset
   // or empty, never filtered by useTraefik.
   @Field(() => String, { nullable: true })

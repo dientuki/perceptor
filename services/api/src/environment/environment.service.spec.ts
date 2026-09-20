@@ -16,6 +16,10 @@ import { ENVIRONMENT_CONFIG, EnvironmentConfig } from './environment.types';
 //    dump is this service returning exactly the allowlisted keys. A
 //    convenient extra field (a `databaseUrl`, a raw port-0 instead of null)
 //    would be invisible on an admin-only screen with no test to catch it.
+// 3. A raw-flag `useHttps`. Reporting `true`, or emitting `https://` URLs, on
+//    an installation that serves no HTTPS (port mode, or no domain) would make
+//    the Environment tab recommend an upload endpoint that cannot connect,
+//    with no error anywhere; the flag only counts when URLs can be derived.
 describe('EnvironmentService', () => {
   async function build(config: EnvironmentConfig): Promise<EnvironmentService> {
     const module: TestingModule = await Test.createTestingModule({
@@ -28,6 +32,7 @@ describe('EnvironmentService', () => {
     it('never derives a URL for any endpoint, even with a domain set', async () => {
       const service = await build({
         useTraefik: false,
+        useHttps: false,
         domain: 'perceptor.local',
         ports: { web: 3000, api: 4000, torrent: 8080, indexer: 9696 },
       });
@@ -41,6 +46,7 @@ describe('EnvironmentService', () => {
     it('still reports the domain and ports as-is', async () => {
       const service = await build({
         useTraefik: false,
+        useHttps: false,
         domain: 'perceptor.local',
         ports: { web: 3000, api: 4000, torrent: 8080, indexer: 9696 },
       });
@@ -56,6 +62,7 @@ describe('EnvironmentService', () => {
     it('returns exactly the contract keys at the top level and per endpoint', async () => {
       const service = await build({
         useTraefik: true,
+        useHttps: false,
         domain: 'perceptor.local',
         ports: { web: 3000, api: 4000, torrent: 8080, indexer: 9696 },
       });
@@ -63,7 +70,7 @@ describe('EnvironmentService', () => {
       const info = service.getInfo() as unknown as Record<string, unknown>;
 
       expect(Object.keys(info).sort()).toEqual(
-        ['domain', 'endpoints', 'expectedUploadEndpoint', 'useTraefik'].sort(),
+        ['domain', 'endpoints', 'expectedUploadEndpoint', 'useHttps', 'useTraefik'].sort(),
       );
 
       for (const endpoint of info.endpoints as Record<string, unknown>[]) {
@@ -76,6 +83,7 @@ describe('EnvironmentService', () => {
     it('derives all four URLs and expectedUploadEndpoint from the domain', async () => {
       const service = await build({
         useTraefik: true,
+        useHttps: false,
         domain: 'perceptor.local',
         ports: { web: 3000, api: 4000, torrent: 8080, indexer: 9696 },
       });
@@ -94,6 +102,7 @@ describe('EnvironmentService', () => {
     it('still yields null URLs when the domain is null — never http://api.null/uploads', async () => {
       const service = await build({
         useTraefik: true,
+        useHttps: false,
         domain: null,
         ports: { web: 3000, api: 4000, torrent: 8080, indexer: 9696 },
       });
@@ -109,10 +118,60 @@ describe('EnvironmentService', () => {
     });
   });
 
+  describe('HTTPS (useHttps)', () => {
+    const ports = { web: 3000, api: 4000, torrent: 8080, indexer: 9696 };
+
+    it('emits https:// for every URL and the upload endpoint when Traefik, HTTPS and a domain are all set', async () => {
+      const service = await build({ useTraefik: true, useHttps: true, domain: 'perceptor.local', ports });
+
+      const info = service.getInfo();
+
+      expect(info.useHttps).toBe(true);
+      expect(info.endpoints.map((e) => e.url)).toEqual([
+        'https://perceptor.local',
+        'https://api.perceptor.local',
+        'https://torrent.perceptor.local',
+        'https://indexer.perceptor.local',
+      ]);
+      expect(info.expectedUploadEndpoint).toBe('https://api.perceptor.local/uploads');
+    });
+
+    it('stays on http:// and reports useHttps false when the flag is off', async () => {
+      const service = await build({ useTraefik: true, useHttps: false, domain: 'perceptor.local', ports });
+
+      const info = service.getInfo();
+
+      expect(info.useHttps).toBe(false);
+      expect(info.endpoints.every((e) => e.url?.startsWith('http://'))).toBe(true);
+      expect(info.expectedUploadEndpoint).toBe('http://api.perceptor.local/uploads');
+    });
+
+    it('reports useHttps false with null URLs in port mode even when the flag is set', async () => {
+      const service = await build({ useTraefik: false, useHttps: true, domain: 'perceptor.local', ports });
+
+      const info = service.getInfo();
+
+      expect(info.useHttps).toBe(false);
+      expect(info.endpoints.every((e) => e.url === null)).toBe(true);
+      expect(info.expectedUploadEndpoint).toBeNull();
+    });
+
+    it('reports useHttps false with null URLs when the domain is null even with Traefik and the flag set', async () => {
+      const service = await build({ useTraefik: true, useHttps: true, domain: null, ports });
+
+      const info = service.getInfo();
+
+      expect(info.useHttps).toBe(false);
+      expect(info.endpoints.every((e) => e.url === null)).toBe(true);
+      expect(info.expectedUploadEndpoint).toBeNull();
+    });
+  });
+
   describe('ports', () => {
     it('reads an unset port as null, not 0', async () => {
       const service = await build({
         useTraefik: true,
+        useHttps: false,
         domain: 'perceptor.local',
         ports: { web: 3000, api: 4000, torrent: null, indexer: 9696 },
       });
