@@ -69,6 +69,8 @@ services:
       # stack, no la interna de Docker de arriba (esa sólo la ven los containers
       # entre sí).
       - PUBLIC_UPLOAD_URL=${PUBLIC_UPLOAD_URL}
+    volumes:
+      - ca_public:/ca:ro
     depends_on:
       api:
         condition: service_healthy      
@@ -261,6 +263,7 @@ services:
     volumes:
       - ./certs:/certs
       - traefik_tls:/tls
+      - ca_public:/ca-public
     command:
       - /bin/bash
       - -c
@@ -351,6 +354,9 @@ services:
         chmod 700 /certs
         chmod 600 /certs/ca.key
         chmod 644 /certs/ca.crt
+        # Public half only: web serves /ca.crt from this volume and never sees ca.key.
+        cp /certs/ca.crt /ca-public/ca.crt
+        chmod 644 /ca-public/ca.crt
         if [ "$$new_ca" = true ]; then
           echo "A new local CA was created: ./certs/ca.crt (next to docker-compose.yaml)."
           echo "Install it as a trusted root certificate on every device that will open Perceptor over HTTPS."
@@ -522,6 +528,7 @@ volumes:
   redis_data:
   qbittorrent_config: # Nuevo volumen para la config de qBittorrent
   indexer_config: # Nuevo volumen para la config de Prowlarr
+  ca_public: # Public CA certificate only (ca.crt), written by certs, served by web at /ca.crt (066)
   traefik_tls: # Leaf certificate + dynamic config written by certs, read by traefik (066)
 
 networks:

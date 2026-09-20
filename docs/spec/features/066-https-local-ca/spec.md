@@ -1,9 +1,9 @@
 ---
 title: HTTPS Through Traefik With a Local Certificate Authority
-spec_version: 0.3.0
+spec_version: 0.4.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-19
-last_updated: 2026-09-19
+last_updated: 2026-09-20
 status: Approved
 services: [infra, api, web]
 ---
@@ -66,8 +66,15 @@ changes.
       today, with no redirect to HTTPS.
 - [ ] **REQ-7 (CA handoff)**: When the installer enables HTTPS, and whenever the CA is first
       generated, the operator must be told the host path of the CA's public certificate file and
-      that it has to be installed as a trusted root on every device that will use Perceptor. No
-      download link is offered from the web app.
+      that it has to be installed as a trusted root on every device that will use Perceptor. The
+      web app also offers the file for download (REQ-11).
+- [ ] **REQ-11 (CA download)**: With HTTPS in effect, `web` serves the CA's public certificate at
+      `/ca.crt` on every host and scheme that serves `web` (so a device that has not trusted the CA
+      can fetch it over plain `http://DOMAIN/ca.crt`). The route needs no login — a new device has no
+      session, and the file is public by design. It answers with a certificate content type and a
+      download filename, and `404` when HTTPS is not in effect. `web`'s Environment tab links to it
+      when HTTPS is enabled. Only the certificate is ever exposed to `web`: the CA key and the leaf
+      key stay unreachable from it (NFR-2).
 - [ ] **REQ-8 (CORS)**: `api` must accept cross-origin requests (the tus upload) from
       `https://DOMAIN` as well as the origins it accepts today, when HTTPS is in effect.
 - [ ] **REQ-9 (Upload endpoint scheme)**: The upload endpoint handed to the browser must use the
@@ -96,7 +103,8 @@ changes.
       nothing on the host beyond Docker — `install.sh`'s end user has no `openssl`, no `mkcert`.
 - [ ] **NFR-2 (Key secrecy)**: The CA private key is the one secret here that can impersonate
       *other* sites on every device that trusts the CA. It must be written with owner-only
-      permissions, never be mounted into any container other than the one step that signs with it,
+      permissions, never be mounted into any container other than the one step that signs with it (a copy of the
+      *public* certificate alone is what `web` gets, REQ-11),
       never be served over any port, and the certificate directory must be git-ignored.
 - [ ] **NFR-3 (Blast radius)**: The CA must carry an X.509 name constraint limiting it to `DOMAIN`
       and its subdomains, so a leaked key cannot be used to impersonate any other site to a device
@@ -184,6 +192,10 @@ None.
       upload-endpoint badge reads consistent. Editing `PUBLIC_UPLOAD_URL` to
       `http://api.perceptor.local/uploads` and recreating `web` keeps it consistent; editing it to
       `https://api.perceptor.lan/uploads` turns it inconsistent (failure path of REQ-9b).
+- [ ] **AC-11**: With HTTPS in effect, `curl -s http://perceptor.local/ca.crt` (no cookie) returns
+      the same bytes as `certs/ca.crt`, with a certificate content type, and Settings → Environment
+      shows a download link to it. `web` cannot read `ca.key` or the leaf key (no such file in its
+      container). On an installation without `USE_HTTPS`, `/ca.crt` answers `404` (failure path).
 - [ ] **AC-10**: An existing installation whose `.env` has no `USE_HTTPS`, after pulling this version
       and `docker compose up -d`: no certificate directory is created, `curl -skI
       https://perceptor.local` behaves as before this feature, and the Environment tab shows HTTPS
@@ -199,8 +211,8 @@ None.
   a certificate, which is what Traefik mode is for.
 - **Redirecting HTTP to HTTPS, HSTS.** Explicitly declined: HTTP stays available for devices that
   have not trusted the CA. HSTS would make that impossible once a browser saw it.
-- **Serving the CA certificate from the app.** Declined; the operator carries the file to each
-  device. Per-platform trust instructions are documentation, not product.
+- **Per-platform trust instructions in the app.** The download (REQ-11) is offered; how to install a
+  root certificate on each OS is documentation, not product.
 - **Sharing a session across schemes.** A login over HTTPS sets a `Secure` cookie
   (`services/web/src/actions/auth.ts`), which the browser never sends over HTTP; the same user on
   `http://` appears logged out and logs in again. Expected, not a bug.

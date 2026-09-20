@@ -139,3 +139,12 @@ docker compose logs certs
 
 plus the certificate-step commands, AC-6, AC-7 and AC-10 blocks in `../plan.md` § Verification, with
 their real output pasted into the report.
+
+## Amendment — CA download (spec 0.4.0, REQ-11)
+
+9. `docker-compose.yaml`: new named volume `ca_public`. `certs` mounts it at `/ca-public` and, at the end of
+   its script (after the `chmod`s, every run), does `cp /certs/ca.crt /ca-public/ca.crt && chmod 644
+   /ca-public/ca.crt`. `web` mounts `ca_public:/ca:ro`. Nothing else is added to `web` (no `USE_HTTPS`, no
+   `./certs`). Done when: `docker compose config` shows `web` with exactly that one new mount and no
+   `./certs`; after `bin/dev -d`, `docker compose exec web ls /ca` lists only `ca.crt`, and
+   `docker compose exec web ls /certs /tls` fails.

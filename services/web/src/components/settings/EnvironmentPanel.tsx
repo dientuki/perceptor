@@ -64,6 +64,15 @@ export default function EnvironmentPanel({
           <Badge color={useHttps ? "success" : "light"}>
             {useHttps ? t("httpsEnabled") : t("httpsDisabled")}
           </Badge>
+          {useHttps && (
+            <a
+              href="/ca.crt"
+              download
+              className="ml-3 text-brand-500 hover:underline"
+            >
+              {t("caDownload")}
+            </a>
+          )}
         </div>
       </div>
 

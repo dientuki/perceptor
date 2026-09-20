@@ -1,7 +1,7 @@
 ---
 title: HTTPS Through Traefik With a Local Certificate Authority — Implementation Plan
 spec_version: 0.3.0
-last_updated: 2026-09-19
+last_updated: 2026-09-20
 status: Approved
 ---
 
@@ -172,3 +172,13 @@ second browser profile without the CA, over `http://` (AC-4b — network tab sho
 `http://api.perceptor.local/uploads`); Settings → Environment as admin (AC-9, including both
 `PUBLIC_UPLOAD_URL` edits); a device without the CA over `https://` shows the certificate error
 while `http://` works (AC-8).
+
+## Amendment — CA download (spec 0.4.0, REQ-11)
+
+`certs` also copies only `ca.crt` into a second named volume, `ca_public`. It is mounted read-only into
+`web` at `/ca`, and `web` serves it at `/ca.crt` (public in `proxy.ts`, `404` when the file is absent, which
+is every installation without HTTPS — the volume exists but stays empty, so NFR-5 holds). A named volume
+rather than a bind of `./certs/ca.crt`: Docker creates a missing bind-mount source as a *directory*, which
+would break installations that never enabled HTTPS. Not `traefik_tls`: it also holds the leaf's private key.
+No GraphQL change. Order: `infra` (volume + copy + `web` mount) and `web` (route, link, messages) are
+independent; the live check runs after both.

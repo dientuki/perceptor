@@ -144,10 +144,19 @@ that does not consume it can start together.
 - [ ] **T013** `[docs]` Walk every acceptance criterion in `spec.md` against T009/T010's reports,
       tick each box that passed (leave AC-1's `install.sh` half noted as pending release if still
       so), and set `status: Implemented` on `spec.md`, `plan.md`, `infra/plan.md`, `api/plan.md`,
-      `web/plan.md`, and `status: Done` here. → T010, T011, T012
+      `web/plan.md`, and `status: Done` here. → T010, T011, T012, T016
       *Done when:* `grep -c '\- \[ \]' docs/spec/features/066-https-local-ca/spec.md` equals the
       number of criteria explicitly recorded as pending, and every plan file reads
       `status: Implemented`.
+
+- [x] **T014** `[infra]` Implement `infra/plan.md` Step 9 (`ca_public` volume, `certs` copy, `web` read-only
+      mount). → T009
+      *Done when:* the Step 9 checks pass on the live stack and `.env` without `USE_HTTPS` still creates no
+      `./certs`.
+- [x] **T015** `[web]` Implement `web/plan.md` Steps 7-8 (`/ca.crt` route, `proxy.ts`, panel link, messages). → T008
+      *Done when:* `bin/cli web npx --no tsc --noEmit` 0 errors, `bin/npm web run build` exits 0, `check-messages.mjs` no drift.
+- [x] **T016** `[docs]` Walk AC-11 live after T014 and T015: `curl -s http://perceptor.local/ca.crt | cmp - certs/ca.crt`,
+      the panel link, `404` with HTTPS off. Add the download to `CLAUDE.md`'s `USE_HTTPS` bullet. → T014, T015
 
 ## Blocked
 

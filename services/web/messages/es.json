@@ -475,6 +475,7 @@
       "httpsLabel": "HTTPS",
       "httpsEnabled": "Activado (autoridad certificante local)",
       "httpsDisabled": "Desactivado",
+      "caDownload": "Descargar la autoridad certificante",
       "domainLabel": "Dominio",
       "domainNotSet": "Sin configurar",
       "domainNotInEffect": "(no está en efecto — el enrutamiento está deshabilitado)",

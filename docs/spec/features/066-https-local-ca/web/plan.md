@@ -93,3 +93,14 @@ bin/cli web node scripts/check-messages.mjs    # no en/es drift
 ```
 
 plus AC-4, AC-4b and AC-9 from `../spec.md`, run live.
+
+## Amendment — CA download (spec 0.4.0, REQ-11)
+
+7. `src/app/ca.crt/route.ts`: `GET` reads `/ca/ca.crt`; on success returns the bytes with
+   `Content-Type: application/x-x509-ca-cert` and `Content-Disposition: attachment; filename="perceptor-ca.crt"`;
+   a missing file is `404`. Add `/ca.crt` to `PUBLIC_ROUTES` in `src/proxy.ts` (exact match). The path is a
+   constant, never derived from the request.
+8. `EnvironmentPanel.tsx`: when `useHttps`, a link to `/ca.crt` next to the HTTPS row. Messages
+   `settings.environment.caDownload` — en "Download the certificate authority", es "Descargar la autoridad
+   certificante" — in both catalogs. Done when: typecheck 0, build 0, `check-messages.mjs` no drift, and the
+   AC-11 `curl` returns the file with no cookie.
