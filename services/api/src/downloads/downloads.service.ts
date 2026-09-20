@@ -669,12 +669,25 @@ export class DownloadsService {
   async downloadDelete(mediaSourceId: number, userId: string): Promise<boolean> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
 
+    await this.unwindSource(source, { removeTorrent: true });
+
+    await this.recomputeStatus(source);
+
+    return true;
+  }
+
+  // Per-source steps of the unwind, shared by downloadDelete and
+  // unwindSourcesForTitle (067). Order is the contract: torrent client first
+  // (skipped when the caller already batched it), then queued/running work
+  // withdrawn, then disk, then the row.
+  private async unwindSource(source: MediaSourceRow, opts: { removeTorrent: boolean }): Promise<void> {
+    const mediaSourceId = source.id;
     const jobs = await this.prisma.processJob.findMany({
       where: { sourceFile: { mediaSourceId } },
       select: { id: true },
     });
 
-    if (source.infoHash) {
+    if (opts.removeTorrent && source.infoHash) {
       const infoHash = source.infoHash;
       // REQ-2/REQ-11: always with its files — this is the user-facing
       // sibling of downloadRemove, which is @AllowService()-only and always
@@ -695,10 +708,33 @@ export class DownloadsService {
 
     // Cascades remove SourceFile/ProcessJob — never deleted by hand.
     await this.prisma.mediaSource.delete({ where: { id: mediaSourceId } });
+  }
 
-    await this.recomputeStatus(source);
+  // 067-title-removal: unwinds every source of a title. ALL torrents leave
+  // the client in ONE call before anything else moves, so a rejection
+  // aborts with nothing removed (NFR-2). No recomputeStatus: the target is
+  // about to be deleted. deleteResidue never throws, so one bad path does
+  // not stop the remaining sources (NFR-3).
+  async unwindSourcesForTitle(scope: { movieId: number } | { showId: number }): Promise<void> {
+    const where =
+      'movieId' in scope
+        ? { movieId: scope.movieId }
+        : {
+            OR: [
+              { season: { showId: scope.showId } },
+              { episode: { season: { showId: scope.showId } } },
+            ],
+          };
+    const sources = await this.prisma.mediaSource.findMany({ where });
 
-    return true;
+    const hashes = sources.map((s) => s.infoHash).filter((h): h is string => !!h);
+    if (hashes.length > 0) {
+      await this.callTorrentClient(() => this.qbittorrent.remove(hashes, true));
+    }
+
+    for (const source of sources) {
+      await this.unwindSource(source, { removeTorrent: false });
+    }
   }
 
   // T006/REQ-8/REQ-9/REQ-10: deletes whatever the source left on disk under

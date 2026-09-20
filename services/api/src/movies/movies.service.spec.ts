@@ -60,9 +60,12 @@ describe('MoviesService', () => {
       create: jest.Mock;
       update: jest.Mock;
       findUniqueOrThrow: jest.Mock;
+      delete: jest.Mock;
     };
     userMovie: {
       upsert: jest.Mock;
+      count: jest.Mock;
+      delete: jest.Mock;
     };
     mediaSource: {
       findUnique: jest.Mock;
@@ -86,6 +89,7 @@ describe('MoviesService', () => {
   };
   let downloads: {
     handleTorrentCompleted: jest.Mock;
+    unwindSourcesForTitle: jest.Mock;
   };
   let mediaServerReconcile: {
     reconcileMovie: jest.Mock;
@@ -103,9 +107,12 @@ describe('MoviesService', () => {
         create: jest.fn(),
         update: jest.fn(),
         findUniqueOrThrow: jest.fn(),
+        delete: jest.fn(),
       },
       userMovie: {
         upsert: jest.fn(),
+        count: jest.fn(),
+        delete: jest.fn(),
       },
       mediaSource: {
         findUnique: jest.fn(),
@@ -129,6 +136,7 @@ describe('MoviesService', () => {
     };
     downloads = {
       handleTorrentCompleted: jest.fn().mockResolvedValue('ok'),
+      unwindSourcesForTitle: jest.fn().mockResolvedValue(undefined),
     };
     mediaServerReconcile = {
       reconcileMovie: jest.fn().mockResolvedValue(undefined),
@@ -385,6 +393,63 @@ describe('MoviesService', () => {
         response: { i18n: { key: ERROR_KEYS.MOVIE_NOT_FOUND } },
       });
       expect(prisma.movie.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // These tests exist because both removal branches "succeed": picking the
+  // wrong one either deletes a title out from under another user who still
+  // owns it, or leaves a title nobody owns (with live torrents) behind, and
+  // neither raises an error anywhere.
+  describe('remove', () => {
+    const owned = { id: 7, mediaSources: [], processJobs: [] };
+
+    it('drops only the caller row and never unwinds when another user still owns the film', async () => {
+      prisma.movie.findFirst.mockResolvedValue(owned);
+      prisma.userMovie.count.mockResolvedValue(2);
+
+      const result = await service.remove(7, 'user-1');
+
+      expect(prisma.userMovie.count).toHaveBeenCalledWith({ where: { movieId: 7, userId: { not: 'user-1' } } });
+      expect(prisma.userMovie.delete).toHaveBeenCalledWith({ where: { userId_movieId: { userId: 'user-1', movieId: 7 } } });
+      expect(downloads.unwindSourcesForTitle).not.toHaveBeenCalled();
+      expect(prisma.movie.delete).not.toHaveBeenCalled();
+      expect(result).toEqual({ deleted: false, remainingOwners: 2 });
+    });
+
+    it('unwinds every source and only then deletes the film when the caller is the last owner', async () => {
+      prisma.movie.findFirst.mockResolvedValue(owned);
+      prisma.userMovie.count.mockResolvedValue(0);
+
+      const result = await service.remove(7, 'user-1');
+
+      expect(downloads.unwindSourcesForTitle).toHaveBeenCalledWith({ movieId: 7 });
+      expect(downloads.unwindSourcesForTitle.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.movie.delete.mock.invocationCallOrder[0],
+      );
+      expect(prisma.movie.delete).toHaveBeenCalledWith({ where: { id: 7 } });
+      expect(prisma.userMovie.delete).not.toHaveBeenCalled();
+      expect(result).toEqual({ deleted: true, remainingOwners: 0 });
+    });
+
+    it('keeps the film when the torrent client rejects the unwind', async () => {
+      prisma.movie.findFirst.mockResolvedValue(owned);
+      prisma.userMovie.count.mockResolvedValue(0);
+      downloads.unwindSourcesForTitle.mockRejectedValue(new Error('rejected'));
+
+      await expect(service.remove(7, 'user-1')).rejects.toThrow('rejected');
+      expect(prisma.movie.delete).not.toHaveBeenCalled();
+    });
+
+    it('refuses a film the caller does not own, or one already removed, identically and deletes nothing', async () => {
+      prisma.movie.findFirst.mockResolvedValue(null);
+
+      await expect(service.remove(7, 'user-2')).rejects.toMatchObject({
+        response: { i18n: { key: ERROR_KEYS.MOVIE_NOT_FOUND, params: { id: 7 } } },
+      });
+      expect(prisma.userMovie.count).not.toHaveBeenCalled();
+      expect(prisma.userMovie.delete).not.toHaveBeenCalled();
+      expect(prisma.movie.delete).not.toHaveBeenCalled();
+      expect(downloads.unwindSourcesForTitle).not.toHaveBeenCalled();
     });
   });
 

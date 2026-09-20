@@ -28,7 +28,8 @@
       "currentUserFailed": "Could not fetch the current user"
     },
     "movie": {
-      "already_completed": "This movie is already downloaded. Confirm to replace the current file."
+      "already_completed": "This movie is already downloaded. Confirm to replace the current file.",
+      "not_found": "Movie {id} does not exist"
     },
     "media": {
       "catalog_unavailable": "Could not query the catalog. Check the TMDB API key.",
@@ -142,6 +143,9 @@
       "episode_numbers_missing": "Episode has no season/episode number: cannot build the output path",
       "unknown_driver": "Unknown ENCODE_DRIVER: {driver}",
       "unexpected": "Unexpected encode failure: {detail}"
+    },
+    "show": {
+      "not_available": "Resource not available for this user"
     }
   },
   "landing": {
@@ -378,6 +382,16 @@
       "audioLabel": "Audio languages",
       "subtitleLabel": "Subtitle languages",
       "audioMandatoryLabel": "Mandatory audio"
+    },
+    "removeTitle": {
+      "title": "Remove title",
+      "button": "Remove",
+      "messageShared": "<b>{target}</b> will be removed from your library. Other users still have it, so it stays in Perceptor for them.",
+      "messageLast": "<b>{target}</b> will be deleted from Perceptor. Its downloads and any encode in progress will be cancelled.",
+      "fileStays": "The file already in your library is not deleted; it stays where it is.",
+      "confirm": "Remove",
+      "cancel": "Cancel",
+      "removing": "Removing..."
     }
   },
   "movies": {

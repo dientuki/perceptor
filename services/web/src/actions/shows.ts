@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import {
   redirectIfUnauthenticated,
@@ -8,7 +9,11 @@ import {
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { toActionError, translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
-import type { AcquisitionResult, ContentKind } from "@/types/media";
+import type {
+  AcquisitionResult,
+  ContentKind,
+  TitleRemovalResult,
+} from "@/types/media";
 
 export interface Episode {
   id: string;
@@ -44,6 +49,8 @@ export interface Show {
   audioLanguages?: Language[];
   subtitleLanguages?: Language[];
   audioMandatory?: boolean;
+  // Only present when fetched via getShowById — never selected by a listing
+  otherOwners?: number;
 }
 
 const GET_SHOWS_QUERY = `
@@ -108,6 +115,7 @@ const GET_SHOW_QUERY = `
         name
       }
       audioMandatory
+      otherOwners
       seasons {
         id
         seasonNumber
@@ -295,4 +303,48 @@ export async function addMagnetToSeasonAction(
   }
 
   return { success: true, ...data!.addMagnetToSeason };
+}
+
+const REMOVE_SHOW_MUTATION = `
+  mutation RemoveShow($id: Int!) {
+    removeShow(id: $id) {
+      deleted
+      remainingOwners
+    }
+  }
+`;
+
+export async function removeShowAction(
+  id: string,
+): Promise<TitleRemovalResult> {
+  type Payload = { removeShow: { deleted: boolean; remainingOwners: number } };
+  let result: Awaited<ReturnType<typeof fetchGraphQL<Payload>>>;
+  try {
+    result = await fetchGraphQL<Payload>(REMOVE_SHOW_MUTATION, {
+      id: Number(id),
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { data, errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  if (!data?.removeShow) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  revalidatePath("/shows");
+
+  return {
+    success: true,
+    deleted: data.removeShow.deleted,
+    remainingOwners: data.removeShow.remainingOwners,
+  };
 }

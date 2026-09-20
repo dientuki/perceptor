@@ -121,3 +121,40 @@ describe('MoviesResolver.setMovieContentKind guard order', () => {
     expect(result).toEqual({ id: 7, contentKind: 'ANIME' });
   });
 });
+
+// This suite exists because a removeMovie that read the film before
+// assertEnabled(MOVIE) would tell a caller in an installation with movies
+// off whether an id exists, and one that skipped the guard would let a
+// disabled type still be deleted — the refusal looks like any other failure.
+describe('MoviesResolver.removeMovie', () => {
+  const principal: AuthPrincipal = { type: 'user', id: 'u1', username: 'alice', jti: 'session-1' };
+
+  const build = () => {
+    const moviesService = { remove: jest.fn() } as unknown as MoviesService;
+    const caps = { assertEnabled: jest.fn() } as unknown as MediaCapabilitiesService;
+    const resolver = new MoviesResolver(moviesService, {} as unknown as LanguagesService, caps);
+    return { resolver, moviesService, caps };
+  };
+
+  it('refuses with error.media.type_disabled before the service is touched when movies are disabled', async () => {
+    const { resolver, moviesService, caps } = build();
+    (caps.assertEnabled as jest.Mock).mockRejectedValue(
+      new ForbiddenException({ i18n: { key: ERROR_KEYS.MEDIA_TYPE_DISABLED, params: { type: MEDIA_TYPE.MOVIE } } }),
+    );
+
+    await expect(resolver.removeMovie(7, principal)).rejects.toMatchObject({
+      response: { i18n: { key: ERROR_KEYS.MEDIA_TYPE_DISABLED } },
+    });
+    expect(moviesService.remove).not.toHaveBeenCalled();
+  });
+
+  it('dispatches to the service with the caller id once enabled', async () => {
+    const { resolver, moviesService, caps } = build();
+    (caps.assertEnabled as jest.Mock).mockResolvedValue(undefined);
+    (moviesService.remove as jest.Mock).mockResolvedValue({ deleted: true, remainingOwners: 0 });
+
+    await expect(resolver.removeMovie(7, principal)).resolves.toEqual({ deleted: true, remainingOwners: 0 });
+    expect(caps.assertEnabled).toHaveBeenCalledWith(MEDIA_TYPE.MOVIE);
+    expect(moviesService.remove).toHaveBeenCalledWith(7, 'u1');
+  });
+});

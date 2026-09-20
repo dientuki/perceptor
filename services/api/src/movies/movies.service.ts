@@ -177,15 +177,6 @@ export class MoviesService implements MediaTypeService {
     });
   }
 
-  async remove(id: number) {
-    const existing = await this.prisma.movie.findUnique({ where: { id } });
-    if (!existing) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
-
-    return this.prisma.movie.delete({
-      where: { id },
-    });
-  }
-
   // Única definición de la clave de cache, compartida por el write de la búsqueda
   // y el read del add: evita que ambos lados se desincronicen.
   private cacheKey(tmdbId: number): string {
@@ -270,6 +261,38 @@ export class MoviesService implements MediaTypeService {
       data: { audioMandatory: mandatory },
     });
     return mandatory;
+  }
+
+  // 067-title-removal: how many OTHER users hold this film. Advisory for the
+  // confirmation dialog and the same count remove() branches on.
+  async otherOwnersFor(userId: string, movieId: number): Promise<number> {
+    return this.prisma.userMovie.count({
+      where: { movieId, userId: { not: userId } },
+    });
+  }
+
+  // 067-title-removal: shared title drops only the caller's ownership row
+  // (its per-title language rows cascade with it); the last owner unwinds
+  // every source first — the torrent client step can throw, so it runs
+  // before any row is deleted (NFR-2) — then deletes the title, whose
+  // cascades take seasons/sources/jobs. Library files are never touched.
+  // findOneFromDb returns null for a missing id and a foreign one alike, so
+  // a second removal is the ordinary refusal (NFR-5).
+  async remove(id: number, userId: string): Promise<{ deleted: boolean; remainingOwners: number }> {
+    const movie = await this.findOneFromDb(id, userId);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
+
+    const others = await this.otherOwnersFor(userId, id);
+    if (others > 0) {
+      await this.prisma.userMovie.delete({
+        where: { userId_movieId: { userId, movieId: id } },
+      });
+      return { deleted: false, remainingOwners: others };
+    }
+
+    await this.downloadsService.unwindSourcesForTitle({ movieId: id });
+    await this.prisma.movie.delete({ where: { id } });
+    return { deleted: true, remainingOwners: 0 };
   }
 
   // 048-shorts-category REQ-6: the only way an already-registered film gets

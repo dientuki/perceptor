@@ -46,6 +46,11 @@ type Movie {
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
+
+  """
+  How many *other* users have this film in their library. 0 when the caller is the last owner.
+  """
+  otherOwners: Int!
 }
 
 """
@@ -60,6 +65,19 @@ enum ContentKind {
   LIVE_ACTION
   ANIME
   CGI
+}
+
+"""The outcome of removing a title from the caller's library."""
+type TitleRemoval {
+  """
+  True when the caller was the last owner and the title itself was deleted from Perceptor.
+  """
+  deleted: Boolean!
+
+  """
+  How many users still own the title after this removal. 0 when `deleted` is true.
+  """
+  remainingOwners: Int!
 }
 
 type Setting {
@@ -275,6 +293,11 @@ type Show {
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
+
+  """
+  How many *other* users have this series in their library. 0 when the caller is the last owner.
+  """
+  otherOwners: Int!
 }
 
 type FfprobeLog {
@@ -490,6 +513,11 @@ type Mutation {
   Reclasifica el estilo de animación de una película (057-content-kind-classification)
   """
   setMovieContentKind(movieId: Int!, contentKind: ContentKind!): Movie!
+
+  """
+  Removes a film from the caller's library; deletes it from Perceptor when they were the last owner (067)
+  """
+  removeMovie(id: Int!): TitleRemoval!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
 
   """
@@ -564,6 +592,11 @@ type Mutation {
   Reclasifica el estilo de animación de una serie (057-content-kind-classification)
   """
   setShowContentKind(showId: Int!, contentKind: ContentKind!): Show!
+
+  """
+  Removes a series from the caller's library; deletes it from Perceptor when they were the last owner (067)
+  """
+  removeShow(id: Int!): TitleRemoval!
 
   """Envía un release elegido a qBittorrent y lo asocia a la temporada"""
   addTorrentToSeason(seasonId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Season!

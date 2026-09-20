@@ -5,6 +5,8 @@ import { RedisService } from '@/redis/redis.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { MEDIA_TYPE } from '@/types/media';
+import { DownloadsService } from '@/downloads/downloads.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // This suite exists because ShowsService's riskiest paths all fail with a
 // perfectly successful response and nothing to notice:
@@ -52,10 +54,11 @@ describe('ShowsService', () => {
       findFirst: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
+      delete: jest.Mock;
     };
     season: { upsert: jest.Mock };
     episode: { upsert: jest.Mock };
-    userShow: { upsert: jest.Mock };
+    userShow: { upsert: jest.Mock; count: jest.Mock; delete: jest.Mock };
   };
   let redis: {
     get: jest.Mock;
@@ -72,6 +75,7 @@ describe('ShowsService', () => {
   let mediaServerReconcile: {
     reconcileShow: jest.Mock;
   };
+  let downloads: { unwindSourcesForTitle: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -81,10 +85,11 @@ describe('ShowsService', () => {
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        delete: jest.fn(),
       },
       season: { upsert: jest.fn() },
       episode: { upsert: jest.fn() },
-      userShow: { upsert: jest.fn() },
+      userShow: { upsert: jest.fn(), count: jest.fn(), delete: jest.fn() },
     };
     redis = {
       get: jest.fn(),
@@ -102,6 +107,8 @@ describe('ShowsService', () => {
       reconcileShow: jest.fn().mockResolvedValue(undefined),
     };
 
+    downloads = { unwindSourcesForTitle: jest.fn().mockResolvedValue(undefined) };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ShowsService,
@@ -112,6 +119,7 @@ describe('ShowsService', () => {
           provide: MediaServerReconcileService,
           useValue: mediaServerReconcile,
         },
+        { provide: DownloadsService, useValue: downloads },
       ],
     }).compile();
 
@@ -396,6 +404,64 @@ describe('ShowsService', () => {
 
         expect(result?.seasons[0].episodes[0].status).toBe('MISSING');
       });
+    });
+  });
+
+  // These tests exist because both removal branches "succeed": picking the
+  // wrong one either deletes a series out from under another user who still
+  // owns it, or leaves a series nobody owns (with live torrents) behind, and
+  // neither raises an error anywhere. The series unwind is delegated to
+  // DownloadsService.unwindSourcesForTitle({ showId }), whose own suite
+  // covers collecting season-pack and per-episode sources together; here we
+  // pin that the series path asks for exactly that scope.
+  describe('remove', () => {
+    const owned = { id: 5, seasons: [] };
+
+    it('drops only the caller row and never unwinds when another user still owns the series', async () => {
+      prisma.show.findFirst.mockResolvedValue(owned);
+      prisma.userShow.count.mockResolvedValue(1);
+
+      const result = await service.remove(5, 'user-1');
+
+      expect(prisma.userShow.count).toHaveBeenCalledWith({ where: { showId: 5, userId: { not: 'user-1' } } });
+      expect(prisma.userShow.delete).toHaveBeenCalledWith({ where: { userId_showId: { userId: 'user-1', showId: 5 } } });
+      expect(downloads.unwindSourcesForTitle).not.toHaveBeenCalled();
+      expect(prisma.show.delete).not.toHaveBeenCalled();
+      expect(result).toEqual({ deleted: false, remainingOwners: 1 });
+    });
+
+    it('unwinds by showId (season packs and episodes) and only then deletes the series for the last owner', async () => {
+      prisma.show.findFirst.mockResolvedValue(owned);
+      prisma.userShow.count.mockResolvedValue(0);
+
+      const result = await service.remove(5, 'user-1');
+
+      expect(downloads.unwindSourcesForTitle).toHaveBeenCalledWith({ showId: 5 });
+      expect(downloads.unwindSourcesForTitle.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.show.delete.mock.invocationCallOrder[0],
+      );
+      expect(prisma.show.delete).toHaveBeenCalledWith({ where: { id: 5 } });
+      expect(result).toEqual({ deleted: true, remainingOwners: 0 });
+    });
+
+    it('keeps the series when the torrent client rejects the unwind', async () => {
+      prisma.show.findFirst.mockResolvedValue(owned);
+      prisma.userShow.count.mockResolvedValue(0);
+      downloads.unwindSourcesForTitle.mockRejectedValue(new Error('rejected'));
+
+      await expect(service.remove(5, 'user-1')).rejects.toThrow('rejected');
+      expect(prisma.show.delete).not.toHaveBeenCalled();
+    });
+
+    it('refuses a series the caller does not own, or one already removed, and deletes nothing', async () => {
+      prisma.show.findFirst.mockResolvedValue(null);
+
+      await expect(service.remove(5, 'user-2')).rejects.toMatchObject({
+        response: { i18n: { key: ERROR_KEYS.SHOW_NOT_AVAILABLE } },
+      });
+      expect(prisma.userShow.delete).not.toHaveBeenCalled();
+      expect(prisma.show.delete).not.toHaveBeenCalled();
+      expect(downloads.unwindSourcesForTitle).not.toHaveBeenCalled();
     });
   });
 

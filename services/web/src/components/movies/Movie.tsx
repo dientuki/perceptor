@@ -9,6 +9,7 @@ import {
 } from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
 import {
+  removeMovieAction,
   setMovieContentKindAction,
   setMovieShortAction,
 } from "@/actions/movies";
@@ -18,6 +19,7 @@ import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
 import RankingDebugPanel from "@/components/media/RankingDebugPanel";
+import RemoveTitleButton from "@/components/media/RemoveTitleButton";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
 import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
@@ -158,6 +160,13 @@ export default function Movie({
             <Magnet size={18} className="text-red-500" />
             {t("magnetButton")}
           </Button>
+          <RemoveTitleButton
+            title={movie.title}
+            otherOwners={movie.otherOwners ?? 0}
+            hasLibraryFile={movie.status === "COMPLETED"}
+            redirectTo={isShort ? "/shorts" : "/movies"}
+            onConfirm={removeMovieAction.bind(null, movie.id)}
+          />
         </div>
 
         {shortsEnabled && (

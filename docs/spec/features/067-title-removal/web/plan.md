@@ -2,7 +2,7 @@
 title: Title Removal — web slice
 service: web
 last_updated: 2026-09-20
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Title Removal — `web` (`web/plan.md`)

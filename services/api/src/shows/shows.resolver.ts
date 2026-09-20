@@ -2,6 +2,7 @@ import { Resolver, Query, Mutation, ResolveField, Parent, Args, Int } from '@nes
 import { LanguageTrackKind as PrismaLanguageTrackKind } from '@prisma/client';
 import { ShowsService } from './shows.service';
 import { Show } from './entities/show.entity';
+import { TitleRemoval } from '@/media/entities/title-removal.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { LanguagesService } from '@/languages/languages.service';
 import { LanguageTrackKind } from '@/preferences/entities/language-track-kind.enum';
@@ -20,6 +21,14 @@ export class ShowsResolver {
     private readonly languagesService: LanguagesService,
     private readonly mediaCapabilitiesService: MediaCapabilitiesService,
   ) {}
+
+  // 067-title-removal: other users holding this series, only when selected —
+  // a per-row count, so it must never be part of a listing.
+  @ResolveField(() => Int)
+  async otherOwners(@Parent() show: Show, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.showsService.otherOwnersFor(userId, show.id);
+  }
 
   // Direct query against the DB (MariaDB / Prisma), scoped to the caller's
   // own library. The global JwtAuthGuard already requires a credential; none
@@ -144,5 +153,22 @@ export class ShowsResolver {
     const show = await this.showsService.findOneFromDb(showId, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
     return this.showsService.setContentKind(showId, contentKind);
+  }
+
+  @Mutation(() => TitleRemoval, {
+    name: 'removeShow',
+    description: "Removes a series from the caller's library; deletes it from Perceptor when they were the last owner (067)",
+  })
+  async removeShow(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    // assertEnabled first, so a disabled type never reveals whether the id exists.
+    await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.SHOW);
+    const userId = principal.type === 'user' ? principal.id : '';
+    // Ownership gate in the resolver, as setShowContentKind does.
+    const show = await this.showsService.findOneFromDb(id, userId);
+    if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
+    return this.showsService.remove(id, userId);
   }
 }

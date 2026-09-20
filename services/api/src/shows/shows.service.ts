@@ -16,6 +16,7 @@ import { deriveEpisodeStatus } from '@/pipeline-status/pipeline-status';
 import { CalendarEpisodeRow } from '@/calendar/group-episodes';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { classifyContentKind } from '@/media/content-kind';
+import { DownloadsService } from '@/downloads/downloads.service';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs) — same value as
 // MoviesService, kept as its own constant here on purpose (see class doc
@@ -49,6 +50,7 @@ export class ShowsService implements MediaTypeService {
     private readonly redis: RedisService,
     private readonly tmdb: TmdbClient,
     private readonly mediaServerReconcile: MediaServerReconcileService,
+    private readonly downloadsService: DownloadsService,
   ) {}
 
   // The library belongs to the user: only returns series this userId has
@@ -333,6 +335,37 @@ export class ShowsService implements MediaTypeService {
       // every future retry until HYDRATE_CLAIM_TTL_SECONDS expires.
       await this.redis.del(claimKey);
     }
+  }
+
+  // 067-title-removal: how many OTHER users hold this series. Advisory for the
+  // confirmation dialog and the same count remove() branches on.
+  async otherOwnersFor(userId: string, showId: number): Promise<number> {
+    return this.prisma.userShow.count({
+      where: { showId, userId: { not: userId } },
+    });
+  }
+
+  // 067-title-removal: twin of MoviesService.remove. A shared series drops
+  // only the caller's ownership row; the last owner unwinds every source
+  // (season packs and single episodes) before the series row is deleted, so
+  // a torrent client failure aborts with nothing removed (NFR-2). The
+  // resolver has already run the ownership gate (this service's template),
+  // and the re-read here keeps a second removal an ordinary refusal.
+  async remove(id: number, userId: string): Promise<{ deleted: boolean; remainingOwners: number }> {
+    const show = await this.findOneFromDb(id, userId);
+    if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
+
+    const others = await this.otherOwnersFor(userId, id);
+    if (others > 0) {
+      await this.prisma.userShow.delete({
+        where: { userId_showId: { userId, showId: id } },
+      });
+      return { deleted: false, remainingOwners: others };
+    }
+
+    await this.downloadsService.unwindSourcesForTitle({ showId: id });
+    await this.prisma.show.delete({ where: { id } });
+    return { deleted: true, remainingOwners: 0 };
   }
 
   // The caller's own `audioMandatory` flag for this series, read off the

@@ -77,3 +77,8 @@ export type FileAcquisitionTarget = Exclude<
 export type AcquisitionResult =
   | { success: true }
   | { error: string; errorKey?: string };
+
+/** Outcome of removeMovie/removeShow; `deleted` is false when only the caller's reference went. */
+export type TitleRemovalResult =
+  | { success: true; deleted: boolean; remainingOwners: number }
+  | { error: string };

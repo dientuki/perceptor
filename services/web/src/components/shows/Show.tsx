@@ -5,8 +5,9 @@ import {
   setShowPreferredTrackLanguagesAction,
 } from "@/actions/languages";
 import type { Show as ShowRecord } from "@/actions/shows";
-import { setShowContentKindAction } from "@/actions/shows";
+import { removeShowAction, setShowContentKindAction } from "@/actions/shows";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
+import RemoveTitleButton from "@/components/media/RemoveTitleButton";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
 import StatusBadge from "@/components/status/StatusBadge";
 import type { Language } from "@/types/languages";
@@ -69,6 +70,18 @@ export default async function Show({
             • {show.originalLanguage.toUpperCase()} •{" "}
             <StatusBadge status={show.status} />
           </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <RemoveTitleButton
+            title={show.title}
+            otherOwners={show.otherOwners ?? 0}
+            hasLibraryFile={(show.seasons ?? []).some((season) =>
+              season.episodes.some((episode) => episode.status === "COMPLETED"),
+            )}
+            redirectTo="/shows"
+            onConfirm={removeShowAction.bind(null, show.id)}
+          />
         </div>
 
         <div className="space-y-2">

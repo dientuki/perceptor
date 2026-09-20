@@ -873,6 +873,83 @@ describe('DownloadsService', () => {
   // WAITING/READY forever. Fault injection: swap removeEncode/addEncode and
   // the ordering cases fail; drop the restore in the catch and the
   // enqueue-failure cases fail.
+  // This block exists because unwinding a whole title (067) fails silently in
+  // three ways: a source shape missed when collecting a series' sources
+  // (its torrent keeps seeding forever, invisible once the row is gone), a
+  // dropped publishCancel (the worker keeps encoding into nothing), and a
+  // torrent removal split per source (a rejection halfway leaves some
+  // torrents gone and the title still listed). It also pins that a residue
+  // failure on one source never stops the others.
+  describe('unwindSourcesForTitle — title-scoped unwind', () => {
+    const src = (id: number, infoHash: string | null, extra: object = {}) => ({
+      id,
+      infoHash,
+      downloadPath: `/media/downloads/s${id}`,
+      kind: 'TORRENT_SEARCH',
+      movieId: null,
+      seasonId: null,
+      episodeId: null,
+      ...extra,
+    });
+
+    it('sends every hash of a movie/season/episode-shaped set in ONE remove() call, then unwinds each source in order', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([
+        src(1, 'aaa', { movieId: 9 }),
+        src(2, 'bbb', { seasonId: 4 }),
+        src(3, 'ccc', { episodeId: 5 }),
+        src(4, null),
+      ]);
+      prisma.processJob.findMany.mockImplementation(async ({ where }: { where: { sourceFile: { mediaSourceId: number } } }) =>
+        where.sourceFile.mediaSourceId === 2 ? [{ id: 20 }] : [],
+      );
+
+      await service.unwindSourcesForTitle({ showId: 3 });
+
+      expect(qbittorrent.remove).toHaveBeenCalledTimes(1);
+      expect(qbittorrent.remove).toHaveBeenCalledWith(['aaa', 'bbb', 'ccc'], true);
+      expect(encodeQueue.publishCancel).toHaveBeenCalledWith(20);
+      expect(encodeQueue.removeEncode).toHaveBeenCalledWith(20);
+      expect(queue.removeSourceReady.mock.calls.map((c) => c[0])).toEqual([1, 2, 3, 4]);
+      expect(prisma.mediaSource.delete.mock.calls.map((c) => c[0].where.id)).toEqual([1, 2, 3, 4]);
+      expect(rm).toHaveBeenCalledTimes(4);
+      // The series query must reach both season packs and episode singles.
+      const where = prisma.mediaSource.findMany.mock.calls[0][0].where;
+      expect(JSON.stringify(where)).toContain('"season":{"showId":3}');
+      expect(JSON.stringify(where)).toContain('"episode":{"season":{"showId":3}}');
+    });
+
+    it('leaves the database, disk and queues untouched when the torrent client rejects', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([src(1, 'aaa', { movieId: 9 })]);
+      qbittorrent.remove.mockRejectedValue(new Error('down'));
+
+      await expect(service.unwindSourcesForTitle({ movieId: 9 })).rejects.toBeDefined();
+
+      expect(prisma.mediaSource.delete).not.toHaveBeenCalled();
+      expect(rm).not.toHaveBeenCalled();
+      expect(encodeQueue.publishCancel).not.toHaveBeenCalled();
+      expect(queue.removeSourceReady).not.toHaveBeenCalled();
+    });
+
+    it('keeps unwinding the remaining sources when residue deletion throws on one', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([src(1, 'aaa', { movieId: 9 }), src(2, 'bbb', { movieId: 9 })]);
+      (rm as jest.Mock).mockRejectedValueOnce(new Error('EACCES'));
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await expect(service.unwindSourcesForTitle({ movieId: 9 })).resolves.toBeUndefined();
+
+      spy.mockRestore();
+      expect(prisma.mediaSource.delete).toHaveBeenCalledTimes(2);
+      expect(rm).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not call the torrent client for a title with only uploads', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([src(1, null, { movieId: 9, kind: 'LOCAL_FILE' })]);
+      await service.unwindSourcesForTitle({ movieId: 9 });
+      expect(qbittorrent.remove).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.delete).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('downloadStart on an ERROR source — resume', () => {
     const at = new Date('2026-09-19T10:00:00Z');
     const sourceRow = (over: Record<string, unknown> = {}) => ({

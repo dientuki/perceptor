@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-20
 last_updated: 2026-09-20
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -194,52 +194,52 @@ any media row and are untouched by the delete.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a film only user A owns, when A confirms removal on `/movies/<id>`, then A lands
+- [ ] **AC-1**: _[not run live; covered by unit tests only]_ Given a film only user A owns, when A confirms removal on `/movies/<id>`, then A lands
       on `/movies`, the film is gone from the listing, and `bin/mysql -e 'select count(*) from movies
       where id = <id>'` returns 0.
-- [ ] **AC-2**: Given a film users A and B both own, when A confirms removal, then the film is gone
+- [ ] **AC-2**: _[not run live; covered by unit tests only]_ Given a film users A and B both own, when A confirms removal, then the film is gone
       from A's `/movies` but still listed for B, `bin/mysql -e 'select count(*) from movies where id =
       <id>'` returns 1, and `select count(*) from user_movies where movie_id = <id>` returns 1.
-- [ ] **AC-3**: Given a series only user A owns with three seasons registered, when A confirms removal
+- [ ] **AC-3**: _[not run live; covered by unit tests only]_ Given a series only user A owns with three seasons registered, when A confirms removal
       on `/shows/<id>`, then `select count(*) from seasons where show_id = <id>` and `select count(*)
       from episodes e join seasons s on e.season_id = s.id where s.show_id = <id>` both return 0.
-- [ ] **AC-4**: Given a film only user A owns with a torrent actively downloading, when A confirms
+- [ ] **AC-4**: _[not run live; covered by unit tests only]_ Given a film only user A owns with a torrent actively downloading, when A confirms
       removal, then the torrent is gone from qBittorrent's web UI, its folder under the downloads root
       is gone, and the film's row is gone.
-- [ ] **AC-5**: Given a film only user A owns with an encode in progress, when A confirms removal,
+- [ ] **AC-5**: _[not run live; covered by unit tests only]_ Given a film only user A owns with an encode in progress, when A confirms removal,
       then the worker log shows the encode terminated by cancellation and the worker reports no
       outcome for it.
-- [ ] **AC-6 (failure path)**: Given the `torrent` container is stopped and a film with a live torrent,
+- [ ] **AC-6 (failure path)**: _[not run live; covered by unit tests only]_ Given the `torrent` container is stopped and a film with a live torrent,
       when A confirms removal, then the dialog shows the translated
       `error.download.torrent_client_rejected` message, the film is **still** in `/movies`, its
       `media_sources` rows are still present, and its files under the downloads root are still on disk.
-- [ ] **AC-7 (failure path)**: Given user B is signed in and a film only user A owns, when B calls
+- [ ] **AC-7 (failure path)**: _[not run live; covered by unit tests only]_ Given user B is signed in and a film only user A owns, when B calls
       `removeMovie(id: <A's film id>)`, then the response is `error.movie.not_found` with the same
       shape as calling it with a nonexistent id, and `select count(*) from movies where id = <id>`
       still returns 1.
-- [ ] **AC-8 (failure path)**: Given a film already removed, when the same `removeMovie(id:)` is
+- [ ] **AC-8 (failure path)**: _[not run live; covered by unit tests only]_ Given a film already removed, when the same `removeMovie(id:)` is
       called again, then the response is `error.movie.not_found` and no 500 appears in `api`'s log.
-- [ ] **AC-9**: Given a `COMPLETED` film only user A owns, when A confirms removal, then the file at
+- [ ] **AC-9**: _[not run: needs a running stack and a browser session]_ Given a `COMPLETED` film only user A owns, when A confirms removal, then the file at
       the film's former `filePath` under the destinations root is still on disk with an unchanged
       mtime, and `select count(*) from movies where id = <id>` returns 0.
-- [ ] **AC-10**: Given the film of AC-9, when A searches the same title again and registers it, then it
+- [ ] **AC-10**: _[not run: needs a running stack and a browser session]_ Given the film of AC-9, when A searches the same title again and registers it, then it
       appears in `/movies` with status `MISSING` and a new row id.
-- [ ] **AC-11**: Given a film only user A owns whose files were ffprobed, when A confirms removal, then
+- [ ] **AC-11**: _[not run: needs a running stack and a browser session]_ Given a film only user A owns whose files were ffprobed, when A confirms removal, then
       `select count(*) from ffprobe_logs where file like '%<downloadPath>%'` returns the same count as
       before the removal.
-- [ ] **AC-12**: Given a shared film, when A removes it, then A's rows in `user_movie_languages` for
+- [ ] **AC-12**: _[not run: needs a running stack and a browser session]_ Given a shared film, when A removes it, then A's rows in `user_movie_languages` for
       that film are gone (`select count(*) … where user_id = '<A>' and movie_id = <id>` returns 0) and
       B's are unchanged.
-- [ ] **AC-13**: Given `shows_enabled` is false, when `removeShow` is called, then the response is
+- [ ] **AC-13**: _[not run live; covered by unit tests only]_ Given `shows_enabled` is false, when `removeShow` is called, then the response is
       `error.media.type_disabled` and the series row is unchanged.
-- [ ] **AC-14**: `bin/npm api run test` passes and `git status --short services/api/prisma` is empty
+- [x] **AC-14**: `bin/npm api run test` passes and `git status --short services/api/prisma` is empty
       (NFR-1). `git diff --stat services/worker` is empty (NFR-4).
-- [ ] **AC-15**: The confirmation dialog for a title only the caller owns and one the caller shares
+- [ ] **AC-15**: _[not run: needs a running stack and a browser session]_ The confirmation dialog for a title only the caller owns and one the caller shares
       with another user show different copy, matching the two outcomes of REQ-7, in both `en` and `es`.
-- [ ] **AC-16**: With `User.uiLocale = es`, AC-7's refusal renders in Spanish in the dialog, not
+- [ ] **AC-16**: _[not run: needs a running stack and a browser session]_ With `User.uiLocale = es`, AC-7's refusal renders in Spanish in the dialog, not
       `Movie {id} does not exist` (REQ-13), and `bin/cli web node scripts/check-messages.mjs` reports
       no `en`/`es` drift.
-- [ ] **AC-17**: Given a film users A and B both own, when A opens `/movies/<id>`, then the
+- [ ] **AC-17**: _[not run: needs a running stack and a browser session]_ Given a film users A and B both own, when A opens `/movies/<id>`, then the
       `movie(id:)` response carries `otherOwners: 1`; after B removes it, the same query for A
       carries `otherOwners: 0`.
 

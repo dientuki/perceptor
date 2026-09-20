@@ -67,4 +67,9 @@ export class Show {
   // — nothing consumes it yet (REQ-11).
   @Field()
   audioMandatory: boolean;
+
+  // How many *other* users have this series in their library (067).
+  // Populated by the resolver only when selected; never by listings.
+  @Field(() => Int, { description: 'How many *other* users have this series in their library. 0 when the caller is the last owner.' })
+  otherOwners: number;
 }

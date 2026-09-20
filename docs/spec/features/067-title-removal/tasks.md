@@ -1,7 +1,7 @@
 ---
 title: Title Removal — Tasks
 last_updated: 2026-09-20
-status: Draft
+status: Done
 ---
 
 # TASKS: Title Removal (`tasks.md`)
@@ -27,11 +27,11 @@ progress.
 
 ### Group 1 — `api`: the unwind seam, the two removals, the contract
 
-- [ ] **T001** `[api]` Add `src/media/entities/title-removal.entity.ts` — the `TitleRemoval`
+- [x] **T001** `[api]` Add `src/media/entities/title-removal.entity.ts` — the `TitleRemoval`
       `@ObjectType` with `deleted: Boolean!` and `remainingOwners: Int!`, exactly as `spec.md`
       § GraphQL Contract Delta declares it (`api/plan.md` § Steps 1).
       *Done when:* `bin/cli api npx --no tsc --noEmit` reports 0 errors.
-- [ ] **T002** `[api]` Extract the per-source steps of `downloadDelete` in
+- [x] **T002** `[api]` Extract the per-source steps of `downloadDelete` in
       `src/downloads/downloads.service.ts` into a private `unwindSource(source, { removeTorrent })`
       — torrent client, then `publishCancel` + `removeEncode` per job, then `removeSourceReady`,
       then `deleteResidue`, then the row, in that order. `downloadDelete` keeps its
@@ -40,7 +40,7 @@ progress.
       *Done when:* `bin/npm api run test -- downloads.service` passes with the existing
       `downloadDelete` suite (`downloads.service.spec.ts:742`) **unmodified** — it is the regression
       net for this extraction, so a task that had to edit it is a task that changed behaviour.
-- [ ] **T003** `[api]` Add the public `unwindSourcesForTitle(scope: { movieId } | { showId })` to
+- [x] **T003** `[api]` Add the public `unwindSourcesForTitle(scope: { movieId } | { showId })` to
       `src/downloads/downloads.service.ts`: collect every `MediaSource` of the title (for a series,
       across `season.showId` **and** `episode.season.showId`), make **one**
       `callTorrentClient(() => qbittorrent.remove(hashes, true))` for every non-null `infoHash`,
@@ -53,7 +53,7 @@ progress.
       (the dropped cancel that leaves the worker encoding into nothing); a `callTorrentClient`
       rejection leaving `mediaSource.delete` and `rm` uncalled (NFR-2/AC-6); and a throwing
       `deleteResidue` not stopping the remaining sources (NFR-3).
-- [ ] **T004** `[api]` Add `remove(id, userId)` and `otherOwnersFor(userId, movieId)` to
+- [x] **T004** `[api]` Add `remove(id, userId)` and `otherOwnersFor(userId, movieId)` to
       `src/movies/movies.service.ts`: `findOneFromDb` → null throws
       `i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id })`; count other owners; > 0 deletes the
       one `userMovie` row and returns `{ deleted: false, remainingOwners: n }`; 0 calls
@@ -63,7 +63,7 @@ progress.
       → only the join row deleted and `unwindSourcesForTitle` never called (AC-2); 0 → unwind then
       delete (AC-1); an id the caller does not own → the keyed refusal with nothing deleted (AC-7);
       an id already removed → the same refusal, no Prisma throw (AC-8, NFR-5).
-- [ ] **T005** `[api]` Expose the film surface: `removeMovie(id: Int!): TitleRemoval!` in
+- [x] **T005** `[api]` Expose the film surface: `removeMovie(id: Int!): TitleRemoval!` in
       `src/movies/movies.resolver.ts` with `assertEnabled(MEDIA_TYPE.MOVIE)` **before** the
       ownership read (`setMovieContentKind`'s template), the `otherOwners` `@ResolveField`, and the
       `otherOwners: Int!` declaration in `src/movies/entities/movies.entity.ts`
@@ -71,7 +71,7 @@ progress.
       *Done when:* typecheck 0 errors; `bin/npm api run test -- movies.resolver` passes including a
       case where `movies_enabled` false yields `error.media.type_disabled` without revealing whether
       the id exists (AC-13's film twin); `src/schema.gql` shows `removeMovie` and `Movie.otherOwners`.
-- [ ] **T006** `[api]` Add `DownloadsModule` to `src/shows/shows.module.ts` imports, then
+- [x] **T006** `[api]` Add `DownloadsModule` to `src/shows/shows.module.ts` imports, then
       `remove(id, userId)` and `otherOwnersFor(userId, showId)` in `src/shows/shows.service.ts` —
       the twin of T004 against `userShow`/`show`, refusing with `ERROR_KEYS.SHOW_NOT_AVAILABLE` (no
       params) and unwinding through `unwindSourcesForTitle({ showId })` (`api/plan.md` § Steps 7,
@@ -79,7 +79,7 @@ progress.
       *Done when:* the api container boots with no Nest dependency-resolution error, and
       `bin/npm api run test -- shows.service` passes with the same four cases as T004 plus one
       asserting a series' season-pack **and** per-episode sources are both collected (AC-3).
-- [ ] **T007** `[api]` Expose the series surface: `removeShow(id: Int!): TitleRemoval!` in
+- [x] **T007** `[api]` Expose the series surface: `removeShow(id: Int!): TitleRemoval!` in
       `src/shows/shows.resolver.ts` following `setShowContentKind`'s ordering (`assertEnabled` →
       `findOneFromDb` → refuse), the `otherOwners` `@ResolveField`, and the declaration in
       `src/shows/entities/show.entity.ts` (`api/plan.md` § Steps 8). Keep the deliberate asymmetry:
@@ -88,7 +88,7 @@ progress.
       *Done when:* typecheck 0 errors; `bin/npm api run test -- shows.resolver` passes including
       `shows_enabled` false → `error.media.type_disabled` with the series row unchanged (AC-13);
       `src/schema.gql` shows `removeShow` and `Show.otherOwners`.
-- [ ] **T008** `[api]` Regenerate and check the whole slice (`api/plan.md` § Done when). → T005, T007
+- [x] **T008** `[api]` Regenerate and check the whole slice (`api/plan.md` § Done when). → T005, T007
       *Done when:* `bin/cli api npx --no tsc --noEmit` 0 errors; `bin/npm api run test` all green;
       `git status --short services/api/prisma` **empty** (NFR-1 — a migration here means someone
       solved a problem the schema had already solved); `git diff services/api/src/schema.gql` is
@@ -100,7 +100,7 @@ progress.
 Everything here depends on T008: `web` retypes the schema by hand with no codegen, so a field
 selected before it exists in `schema.gql` fails only at runtime.
 
-- [ ] **T009** `[web]` Add `otherOwners` to the two **detail** queries and their types in
+- [x] **T009** `[web]` Add `otherOwners` to the two **detail** queries and their types in
       `src/actions/movies.ts` and `src/actions/shows.ts`, and add `removeMovieAction(id)` /
       `removeShowAction(id)` following `deleteDownloadAction`'s shape
       (`fetchGraphQL` → `redirectIfUnauthenticated` → `toActionError` → success), returning
@@ -109,7 +109,7 @@ selected before it exists in `schema.gql` fails only at runtime.
       *Done when:* `bin/cli web npx --no tsc --noEmit` reports 0 errors, and `otherOwners` appears
       in neither `getMovies`/`getShows` nor the billboard or calendar queries — it is a per-row
       count and belongs nowhere near a listing (`plan.md` § Contract Freeze).
-- [ ] **T010** `[web]` Add `src/components/media/RemoveTitleModal.tsx` on
+- [x] **T010** `[web]` Add `src/components/media/RemoveTitleModal.tsx` on
       `DeleteDownloadModal.tsx`'s template (Modal + `useModal`, error inside the dialog, cleared on
       every open, `isPending`, `variant="danger"`, `Trash2`), with copy branching on
       `otherOwners > 0` ("se quita de tu biblioteca") versus `0` ("se elimina de Perceptor"), plus
@@ -121,7 +121,7 @@ selected before it exists in `schema.gql` fails only at runtime.
       *Done when:* `bin/npm web run build` exits 0, and on a running stack the two dialogs render
       different copy for a shared title and a solely-owned one (AC-15), with the file-stays line
       present on a `COMPLETED` title.
-- [ ] **T011** `[web]` Complete both message catalogs: every key T010 introduced, **plus** the two
+- [x] **T011** `[web]` Complete both message catalogs: every key T010 introduced, **plus** the two
       REQ-13 keys that exist in neither file today — `errors.movie.not_found` (takes `{id}`) and
       `errors.show.not_available` — in `messages/en.json` and `messages/es.json`, Rioplatense
       register for `es` (`web/plan.md` § Steps 6). → T010
@@ -132,7 +132,7 @@ selected before it exists in `schema.gql` fails only at runtime.
 
 ### Group 3 — verification and docs
 
-- [ ] **T012** `[docs]` Update the root `CLAUDE.md`: the **Browse library** row of the pipeline
+- [x] **T012** `[docs]` Update the root `CLAUDE.md`: the **Browse library** row of the pipeline
       table gains title removal (`removeMovie`/`removeShow`, the two outcomes, the reuse of `047`'s
       unwind, `FfprobeLog` surviving, Article XII leaving the library file), and the **Current
       state** section gains this feature's measured counts. Check whether
@@ -140,7 +140,7 @@ selected before it exists in `schema.gql` fails only at runtime.
       → T008, T011
       *Done when:* the pipeline table's Browse library row cites `067`, and the numbers recorded in
       Current state are ones this task actually re-ran rather than copied.
-- [ ] **T013** `[docs]` Walk every acceptance criterion in `spec.md` against a running stack,
+- [x] **T013** `[docs]` Walk every acceptance criterion in `spec.md` against a running stack,
       following `plan.md` § Verification's nine-step manual pass with two users — including the
       three that only a live run reaches: the untouched library file and its mtime after removing a
       `COMPLETED` title (AC-9), re-registering that same title clean (AC-10), and the unchanged

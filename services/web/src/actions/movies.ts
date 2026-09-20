@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import {
   redirectIfUnauthenticated,
@@ -8,7 +9,7 @@ import {
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
-import type { ContentKind } from "@/types/media";
+import type { ContentKind, TitleRemovalResult } from "@/types/media";
 
 export interface Movie {
   id: string;
@@ -24,6 +25,8 @@ export interface Movie {
   audioLanguages: Language[];
   subtitleLanguages: Language[];
   audioMandatory: boolean;
+  // Only present when fetched via getMovieById — never selected by a listing
+  otherOwners?: number;
 }
 
 export async function getMovies(isShort?: boolean): Promise<Movie[]> {
@@ -92,6 +95,7 @@ const GET_MOVIE_QUERY = `
         name
       }
       audioMandatory
+      otherOwners
     }
   }
 `;
@@ -186,4 +190,49 @@ export async function setMovieShortAction(
   }
 
   return { success: true };
+}
+
+const REMOVE_MOVIE_MUTATION = `
+  mutation RemoveMovie($id: Int!) {
+    removeMovie(id: $id) {
+      deleted
+      remainingOwners
+    }
+  }
+`;
+
+export async function removeMovieAction(
+  id: string,
+): Promise<TitleRemovalResult> {
+  type Payload = { removeMovie: { deleted: boolean; remainingOwners: number } };
+  let result: Awaited<ReturnType<typeof fetchGraphQL<Payload>>>;
+  try {
+    result = await fetchGraphQL<Payload>(REMOVE_MOVIE_MUTATION, {
+      id: Number(id),
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { data, errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  if (!data?.removeMovie) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  revalidatePath("/movies");
+  revalidatePath("/shorts");
+
+  return {
+    success: true,
+    deleted: data.removeMovie.deleted,
+    remainingOwners: data.removeMovie.remainingOwners,
+  };
 }

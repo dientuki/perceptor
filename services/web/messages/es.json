@@ -28,7 +28,8 @@
       "currentUserFailed": "Error al obtener el usuario actual"
     },
     "movie": {
-      "already_completed": "Esta película ya está descargada. Confirmá para reemplazar el archivo actual."
+      "already_completed": "Esta película ya está descargada. Confirmá para reemplazar el archivo actual.",
+      "not_found": "La película {id} no existe"
     },
     "media": {
       "catalog_unavailable": "No se pudo consultar el catálogo. Revisá la API key de TMDB.",
@@ -142,6 +143,9 @@
       "episode_numbers_missing": "El episodio no tiene número de temporada/episodio: no se puede armar la ruta de salida",
       "unknown_driver": "ENCODE_DRIVER desconocido: {driver}",
       "unexpected": "Falla inesperada de codificación: {detail}"
+    },
+    "show": {
+      "not_available": "Recurso no disponible para este usuario"
     }
   },
   "landing": {
@@ -378,6 +382,16 @@
       "audioLabel": "Idiomas de audio",
       "subtitleLabel": "Idiomas de subtítulos",
       "audioMandatoryLabel": "Audio obligatorio"
+    },
+    "removeTitle": {
+      "title": "Quitar título",
+      "button": "Quitar",
+      "messageShared": "<b>{target}</b> se quita de tu biblioteca. Otros usuarios todavía lo tienen, así que sigue en Perceptor para ellos.",
+      "messageLast": "<b>{target}</b> se elimina de Perceptor. Se cancelan sus descargas y cualquier codificación en curso.",
+      "fileStays": "El archivo que ya está en tu biblioteca no se borra; queda donde está.",
+      "confirm": "Quitar",
+      "cancel": "Cancelar",
+      "removing": "Quitando..."
     }
   },
   "movies": {

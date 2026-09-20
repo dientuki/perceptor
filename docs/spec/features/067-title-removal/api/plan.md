@@ -2,7 +2,7 @@
 title: Title Removal — api slice
 service: api
 last_updated: 2026-09-20
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Title Removal — `api` (`api/plan.md`)

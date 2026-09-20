@@ -285,7 +285,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   still holds it; if so the row keeps its `downloadPath`, `start()` runs unless it finished, and only
   `status` plus the error fields change; a finished torrent is handed to
   `DownloadsService.handleTorrentCompleted` after the row update. If qBittorrent no longer holds it,
-  the old `add()` path runs. The three modules import `DownloadsModule` for that.
+  the old `add()` path runs. The three modules import `DownloadsModule` for that (`067`: `movies/` and `shows/` also call `unwindSourcesForTitle` from `remove()`).
 - **`seasons/`** — the **third** structural twin of `attachTorrentSource`, same deliberate
   non-abstraction. Two mutations as of `059-season-pack-acquisition-ui` —
   `addMagnetToSeason(seasonId, magnet, force)` and `addTorrentToSeason(seasonId, infoHash, urls,

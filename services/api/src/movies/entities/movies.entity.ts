@@ -61,4 +61,9 @@ export class Movie {
   // nothing consumes it yet (REQ-11). Never populated by MoviesService itself.
   @Field()
   audioMandatory: boolean;
+
+  // How many *other* users have this film in their library (067). Populated
+  // by the resolver only when selected; never by MoviesService's listings.
+  @Field(() => Int, { description: 'How many *other* users have this film in their library. 0 when the caller is the last owner.' })
+  otherOwners: number;
 }

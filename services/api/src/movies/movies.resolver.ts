@@ -3,6 +3,7 @@ import { LanguageTrackKind as PrismaLanguageTrackKind, ContentKind as PrismaCont
 import { MoviesService } from './movies.service';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { Movie } from './entities/movies.entity';
+import { TitleRemoval } from '@/media/entities/title-removal.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { LanguagesService } from '@/languages/languages.service';
 import { LanguageTrackKind } from '@/preferences/entities/language-track-kind.enum';
@@ -52,6 +53,14 @@ export class MoviesResolver {
   async audioMandatory(@Parent() movie: Movie, @CurrentUser() principal: AuthPrincipal) {
     const userId = principal.type === 'user' ? principal.id : '';
     return this.moviesService.findAudioMandatoryFor(userId, movie.id);
+  }
+
+  // 067-title-removal: other users holding this film, only when selected —
+  // a per-row count, so it must never be part of a listing.
+  @ResolveField(() => Int)
+  async otherOwners(@Parent() movie: Movie, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.otherOwnersFor(userId, movie.id);
   }
 
   // Direct query against the DB (MariaDB / Prisma), scoped to the caller's
@@ -195,5 +204,19 @@ export class MoviesResolver {
       userId,
       contentKind as unknown as PrismaContentKind,
     );
+  }
+
+  @Mutation(() => TitleRemoval, {
+    name: 'removeMovie',
+    description: "Removes a film from the caller's library; deletes it from Perceptor when they were the last owner (067)",
+  })
+  async removeMovie(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    // Capability check first, so a disabled type never reveals whether the id exists.
+    await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.MOVIE);
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.remove(id, userId);
   }
 }
