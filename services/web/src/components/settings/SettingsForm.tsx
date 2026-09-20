@@ -20,6 +20,7 @@ import MediaManagerPanel from "@/components/settings/MediaManagerPanel";
 import MediaServerFields from "@/components/settings/MediaServerFields";
 import SchedulingPanel from "@/components/settings/SchedulingPanel";
 import TorrentManagerPanel from "@/components/settings/TorrentManagerPanel";
+import StatefulForm from "@/components/form/StatefulForm";
 import Button from "@/components/ui/button/Button";
 import TabNav, { type TabNavItem } from "@/components/ui/tabs/TabNav";
 import type { EnvironmentInfo } from "@/types/environment";
@@ -150,7 +151,7 @@ export default function SettingsForm({
         />
       </div>
 
-      <form
+      <StatefulForm
         action={formAction}
         className={activeTab === "environment" ? "hidden" : ""}
       >
@@ -221,7 +222,7 @@ export default function SettingsForm({
             {isPending ? t("saving") : t("save")}
           </Button>
         </div>
-      </form>
+      </StatefulForm>
     </div>
   );
 }

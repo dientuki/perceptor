@@ -1,5 +1,7 @@
-import React, { FC } from "react";
+"use client";
 import { ChevronDown } from "lucide-react";
+import type React from "react";
+import { type FC, useState } from "react";
 
 interface SelectOption {
   value: string;
@@ -38,6 +40,26 @@ const Select: FC<SelectProps> = ({
       : ""
   } ${className}`;
 
+  // A native <select> exposes no "is the dropdown open" state, so the chevron
+  // tracks it from the events that open and close the popup: pointer/keyboard
+  // to open, change/blur/Escape to close. Purely decorative — if a browser
+  // ever closes the popup without firing any of these, the arrow points the
+  // wrong way for a moment and nothing else breaks.
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setIsOpen(false);
+    onChange?.(event);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLSelectElement>) => {
+    if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) {
+      setIsOpen(true);
+    } else if (event.key === "Escape" || event.key === "Tab") {
+      setIsOpen(false);
+    }
+  };
+
   return (
     <div className="relative">
       <select
@@ -45,7 +67,10 @@ const Select: FC<SelectProps> = ({
         name={name}
         value={value}
         defaultValue={defaultValue}
-        onChange={onChange}
+        onChange={handleChange}
+        onMouseDown={() => !disabled && setIsOpen((open) => !open)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => setIsOpen(false)}
         disabled={disabled}
         className={selectClasses}
       >
@@ -56,7 +81,10 @@ const Select: FC<SelectProps> = ({
         ))}
       </select>
       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">
-        <ChevronDown size={18} />
+        <ChevronDown
+          size={18}
+          className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
       </span>
     </div>
   );

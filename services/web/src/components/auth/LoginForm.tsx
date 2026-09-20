@@ -7,6 +7,7 @@ import { loginAction } from "@/actions/auth";
 import Checkbox from "@/components/form/input/Checkbox";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
+import StatefulForm from "@/components/form/StatefulForm";
 import Button from "@/components/ui/button/Button";
 
 export default function LoginForm() {
@@ -37,7 +38,7 @@ export default function LoginForm() {
             </p>
           </div>
           <div>
-            <form action={formAction}>
+            <StatefulForm action={formAction}>
               <div className="space-y-6">
                 <div>
                   <Label>
@@ -103,7 +104,7 @@ export default function LoginForm() {
                   </Button>
                 </div>
               </div>
-            </form>
+            </StatefulForm>
           </div>
         </div>
       </div>
