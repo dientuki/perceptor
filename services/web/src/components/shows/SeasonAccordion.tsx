@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import type { Episode, Season } from "@/actions/shows";
 import ImportFileModal from "@/components/import/importFileModal";
+import ImportSeasonFilesModal from "@/components/import/ImportSeasonFilesModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 import SeasonAcquisitionButtons from "@/components/shows/SeasonAcquisitionButtons";
@@ -118,6 +119,12 @@ export default function SeasonAccordion({
     closeModal: closeSearchModal,
   } = useModal();
 
+  const {
+    isOpen: isSeasonFileModalOpen,
+    openModal: openSeasonFileModal,
+    closeModal: closeSeasonFileModal,
+  } = useModal();
+
   const handleOpenFileModal = (episode: Episode) => {
     setActiveTarget({
       kind: "episode",
@@ -165,6 +172,17 @@ export default function SeasonAccordion({
     openSearchModal();
   };
 
+  const handleOpenSeasonFileModal = () => {
+    setActiveTarget({
+      kind: "season",
+      season,
+      showTitle,
+      audioMandatory,
+      audioLanguages,
+    });
+    openSeasonFileModal();
+  };
+
   const handleOpenSeasonMagnetModal = () => {
     setActiveTarget({
       kind: "season",
@@ -197,6 +215,7 @@ export default function SeasonAccordion({
         <div className="ml-4">
           <SeasonAcquisitionButtons
             onSearch={handleOpenSeasonSearchModal}
+            onImportFile={handleOpenSeasonFileModal}
             onMagnet={handleOpenSeasonMagnetModal}
           />
         </div>
@@ -244,6 +263,11 @@ export default function SeasonAccordion({
         isOpen={isFileModalOpen}
         onClose={closeFileModal}
         target={activeTarget?.kind === "season" ? null : activeTarget}
+      />
+      <ImportSeasonFilesModal
+        isOpen={isSeasonFileModalOpen}
+        onClose={closeSeasonFileModal}
+        target={activeTarget?.kind === "season" ? activeTarget : null}
       />
       <ImportMagnetModal
         isOpen={isMagnetModalOpen}

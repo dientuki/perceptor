@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { RedisService } from '../redis/redis.service';
-import { UploadTicketsService } from './upload-tickets.service';
+import { UploadTicketMismatchError, UploadTicketsService } from './upload-tickets.service';
 
 // This is the entire mechanism behind REQ-11/AC-11/AC-12: a tus POST is only
 // allowed to create an upload if it carries a ticket minted by an
@@ -133,6 +133,65 @@ describe('UploadTicketsService', () => {
       await service.markReplaceAuthorised(uploadId);
 
       await expect(service.isReplaceAuthorised(uploadId)).resolves.toBe(true);
+    });
+  });
+
+  // 068-season-multi-file-upload: the `{ mediaSourceId }` target names an open
+  // season upload session, and one ticket is minted per file of a batch. If a
+  // mismatch burned the ticket, a client that mis-addressed one file would lose
+  // the ticket it needed and the batch would stall with a generic "already
+  // used" error far from the cause; if a session ticket verified for another
+  // session, or for a movie/episode target, a file would be written into the
+  // wrong folder with a 200 and nothing anywhere would say so. These cases pin
+  // AC-7 (mismatch before spend) and the cross-target isolation.
+  describe('the session target', () => {
+    const SESSION_ID = 900;
+
+    it('rejects a session mismatch with a session error and does not spend the ticket', async () => {
+      const ticket = await service.mint('user-1', { mediaSourceId: SESSION_ID });
+
+      await expect(service.verifyAndSpend(ticket.token, { mediaSourceId: SESSION_ID + 1 })).rejects.toMatchObject({
+        constructor: UploadTicketMismatchError,
+        target: 'session',
+      });
+
+      // Same token, real session: still spendable, exactly once.
+      await expect(service.verifyAndSpend(ticket.token, { mediaSourceId: SESSION_ID })).resolves.toEqual({
+        userId: 'user-1',
+        force: false,
+      });
+      await expect(service.verifyAndSpend(ticket.token, { mediaSourceId: SESSION_ID })).rejects.toThrow();
+    });
+
+    it('never verifies a session ticket for a movie or episode target, and does not spend it', async () => {
+      const ticket = await service.mint('user-1', { mediaSourceId: SESSION_ID + 2 });
+
+      await expect(service.verifyAndSpend(ticket.token, { movieId: SESSION_ID + 2 })).rejects.toBeInstanceOf(
+        UploadTicketMismatchError,
+      );
+      await expect(service.verifyAndSpend(ticket.token, { episodeId: SESSION_ID + 2 })).rejects.toBeInstanceOf(
+        UploadTicketMismatchError,
+      );
+
+      await expect(service.verifyAndSpend(ticket.token, { mediaSourceId: SESSION_ID + 2 })).resolves.toEqual({
+        userId: 'user-1',
+        force: false,
+      });
+    });
+
+    it('never verifies a movie or episode ticket for a session target, and does not spend it', async () => {
+      const movieTicket = await service.mint('user-1', { movieId: SESSION_ID + 3 });
+      const episodeTicket = await service.mint('user-1', { episodeId: SESSION_ID + 3 });
+
+      await expect(service.verifyAndSpend(movieTicket.token, { mediaSourceId: SESSION_ID + 3 })).rejects.toMatchObject({
+        target: 'session',
+      });
+      await expect(service.verifyAndSpend(episodeTicket.token, { mediaSourceId: SESSION_ID + 3 })).rejects.toMatchObject({
+        target: 'session',
+      });
+
+      await expect(service.verifyAndSpend(movieTicket.token, { movieId: SESSION_ID + 3 })).resolves.toBeDefined();
+      await expect(service.verifyAndSpend(episodeTicket.token, { episodeId: SESSION_ID + 3 })).resolves.toBeDefined();
     });
   });
 });

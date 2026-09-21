@@ -53,14 +53,17 @@ export type AcquisitionTarget =
       audioLanguages: Language[];
     };
 
-// The subset of `AcquisitionTarget` that can reach a file upload. A season
-// target has no upload entry point (REQ-2, 059-season-pack-acquisition-ui) —
-// `createUploadTicketAction`/`importFileModal.tsx` take this instead of the
-// full union so a season can never reach `movieId: undefined, episodeId:
-// undefined` by accident; the exclusion is enforced by the type checker, not
-// by a runtime guard.
-export type FileAcquisitionTarget = Exclude<
-  AcquisitionTarget,
+// Every acquisition target can reach a file upload since 068 (season
+// multi-file upload), which supersedes 059's REQ-2 exclusion of the season
+// branch. The single-file path (`createUploadTicketAction`,
+// `importFileModal.tsx`) still cannot take a season: it narrows to
+// `SingleFileAcquisitionTarget` at its own boundary so a season can never
+// reach `movieId: undefined, episodeId: undefined` — enforced by the type
+// checker, not by a runtime guard.
+export type FileAcquisitionTarget = AcquisitionTarget;
+
+export type SingleFileAcquisitionTarget = Exclude<
+  FileAcquisitionTarget,
   { kind: "season" }
 >;
 

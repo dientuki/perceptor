@@ -3,9 +3,19 @@ import { SeasonsService } from './seasons.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { SettingsService } from '@/settings/settings.service';
+import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { ProcessQueueService } from '@/queue/process-queue.service';
+import { SessionService } from '@/uploads/session.service';
+import { UploadsService } from '@/uploads/uploads.service';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
+import { mkdtemp, mkdir, writeFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 jest.mock('@/clients/indexer/resolve-info-hash');
+jest.mock('@tus/server', () => ({ Server: class {} }));
+jest.mock('@tus/file-store', () => ({ FileStore: class {} }));
 const mockResolveInfoHash = resolveInfoHash as jest.MockedFunction<typeof resolveInfoHash>;
 
 // This suite mirrors episodes.service.spec.ts's central concern one relation
@@ -51,7 +61,11 @@ describe('SeasonsService', () => {
     };
   };
   let qbittorrent: { add: jest.Mock; info: jest.Mock; start: jest.Mock };
-  let downloads: { handleTorrentCompleted: jest.Mock };
+  let downloads: { handleTorrentCompleted: jest.Mock; resolveRace: jest.Mock };
+  let mediaRoots: { resolveFromRoot: jest.Mock };
+  let queue: { addSourceReady: jest.Mock };
+  let sessions: { findOpenSeasonSession: jest.Mock };
+  let uploads: { demoteSupersededSources: jest.Mock };
 
   const season = {
     id: 42,
@@ -77,7 +91,11 @@ describe('SeasonsService', () => {
       },
     };
     qbittorrent = { add: jest.fn(), info: jest.fn(), start: jest.fn() };
-    downloads = { handleTorrentCompleted: jest.fn().mockResolvedValue('ok') };
+    downloads = { handleTorrentCompleted: jest.fn().mockResolvedValue('ok'), resolveRace: jest.fn() };
+    mediaRoots = { resolveFromRoot: jest.fn().mockResolvedValue('/tmp') };
+    queue = { addSourceReady: jest.fn() };
+    sessions = { findOpenSeasonSession: jest.fn() };
+    uploads = { demoteSupersededSources: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -85,6 +103,11 @@ describe('SeasonsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: QbittorrentClient, useValue: qbittorrent },
         { provide: DownloadsService, useValue: downloads },
+        { provide: SettingsService, useValue: { getMap: jest.fn().mockResolvedValue({}) } },
+        { provide: MediaRootsService, useValue: mediaRoots },
+        { provide: ProcessQueueService, useValue: queue },
+        { provide: SessionService, useValue: sessions },
+        { provide: UploadsService, useValue: uploads },
       ],
     }).compile();
 
@@ -508,6 +531,134 @@ describe('SeasonsService', () => {
 
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expectNoWrites();
+    });
+  });
+
+  // 068-season-multi-file-upload: the upload-session close is the one place a
+  // folder of uploaded files is handed to the scan, and every failure here is
+  // silent to the caller:
+  //  - a second finishSeasonUpload that is not refused enqueues a second scan
+  //    of the same folder, encoding the season twice into the same destination
+  //    paths, with two success-looking responses;
+  //  - closing an empty session as READY enqueues a scan of an empty folder
+  //    and reports a season that will never produce a job;
+  //  - startSeasonUpload without the COMPLETED-episode guard (or with `force`
+  //    not demoting) lets an upload silently sit beside, or clobber, a season
+  //    that already finished;
+  //  - a session that lost resolveRace flipped to READY anyway would encode a
+  //    season a sibling source already owns.
+  describe('season upload sessions', () => {
+    let dir: string;
+
+    beforeEach(async () => {
+      dir = await mkdtemp(join(tmpdir(), 'season-upload-'));
+    });
+
+    afterEach(async () => {
+      await rm(dir, { recursive: true, force: true });
+    });
+
+    describe('startSeasonUpload', () => {
+      beforeEach(() => {
+        prisma.season.findFirst.mockResolvedValue(season);
+        prisma.mediaSource.create.mockResolvedValue({ id: 900 });
+        mediaRoots.resolveFromRoot.mockResolvedValue(dir);
+      });
+
+      it('refuses a season with a COMPLETED episode without force and creates nothing', async () => {
+        prisma.episode.count.mockResolvedValue(1);
+
+        await expect(service.startSeasonUpload(42, false, 'user-1')).rejects.toMatchObject({
+          response: { i18n: { key: 'error.season.already_completed' } },
+        });
+
+        expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+        expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+        expect(await readdir(dir)).toEqual([]);
+      });
+
+      it('with force demotes active sources before creating the session row', async () => {
+        prisma.episode.count.mockResolvedValue(1);
+
+        const result = await service.startSeasonUpload(42, true, 'user-1');
+
+        expect(result).toEqual({ mediaSourceId: 900, seasonId: 42 });
+        expect(prisma.mediaSource.updateMany).toHaveBeenCalledTimes(1);
+        expect(prisma.mediaSource.updateMany.mock.calls[0][0].where).toEqual({
+          seasonId: 42,
+          status: { not: 'ERROR' },
+        });
+        expect(prisma.mediaSource.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+          prisma.mediaSource.create.mock.invocationCallOrder[0],
+        );
+        expect(prisma.mediaSource.create.mock.calls[0][0].data).toMatchObject({
+          kind: 'LOCAL_FOLDER',
+          status: 'PENDING',
+          seasonId: 42,
+        });
+      });
+    });
+
+    describe('finishSeasonUpload', () => {
+      const open = () => ({ id: 900, seasonId: 42, downloadPath: dir });
+
+      beforeEach(() => {
+        prisma.season.findUniqueOrThrow.mockResolvedValue({ id: 42, episodes: [] });
+      });
+
+      it('refuses a second close without enqueueing a second scan', async () => {
+        await writeFile(join(dir, 'e01.mkv'), 'x');
+        sessions.findOpenSeasonSession.mockResolvedValueOnce(open()).mockResolvedValueOnce(null);
+        downloads.resolveRace.mockResolvedValue('ganador: mediaSource 900, 0 pausado(s)');
+        prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+        await service.finishSeasonUpload(900, 'user-1');
+        await expect(service.finishSeasonUpload(900, 'user-1')).rejects.toMatchObject({
+          response: { i18n: { key: 'error.upload.session_not_open' } },
+        });
+
+        expect(queue.addSourceReady).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not enqueue when a concurrent close already flipped the row', async () => {
+        await writeFile(join(dir, 'e01.mkv'), 'x');
+        sessions.findOpenSeasonSession.mockResolvedValue(open());
+        downloads.resolveRace.mockResolvedValue('ganador: mediaSource 900, 0 pausado(s)');
+        prisma.mediaSource.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(service.finishSeasonUpload(900, 'user-1')).rejects.toMatchObject({
+          response: { i18n: { key: 'error.upload.session_not_open' } },
+        });
+
+        expect(queue.addSourceReady).not.toHaveBeenCalled();
+      });
+
+      it('refuses an empty session, leaving it PENDING with nothing enqueued', async () => {
+        await mkdir(join(dir, 'nested'));
+        sessions.findOpenSeasonSession.mockResolvedValue(open());
+
+        await expect(service.finishSeasonUpload(900, 'user-1')).rejects.toMatchObject({
+          response: { i18n: { key: 'error.upload.session_empty' } },
+        });
+
+        expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+        expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+        expect(downloads.resolveRace).not.toHaveBeenCalled();
+        expect(queue.addSourceReady).not.toHaveBeenCalled();
+      });
+
+      it('answers superseded when the session loses the race, without READY or enqueue', async () => {
+        await writeFile(join(dir, 'e01.mkv'), 'x');
+        sessions.findOpenSeasonSession.mockResolvedValue(open());
+        downloads.resolveRace.mockResolvedValue('mediaSource 900 superado, el target ya tiene un ganador');
+
+        await expect(service.finishSeasonUpload(900, 'user-1')).rejects.toMatchObject({
+          response: { i18n: { key: 'error.upload.superseded' } },
+        });
+
+        expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+        expect(queue.addSourceReady).not.toHaveBeenCalled();
+      });
     });
   });
 });

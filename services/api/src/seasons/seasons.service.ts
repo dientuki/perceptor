@@ -1,4 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import type { Dirent } from 'node:fs';
+import { mkdir, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
@@ -8,6 +12,11 @@ import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { SettingsService } from '@/settings/settings.service';
+import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { ProcessQueueService } from '@/queue/process-queue.service';
+import { SessionService } from '@/uploads/session.service';
+import { UploadsService } from '@/uploads/uploads.service';
 
 // REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw.
 // Fallback derived from the target row's id, not the MediaSource's — see
@@ -38,6 +47,11 @@ export class SeasonsService {
     private readonly prisma: PrismaService,
     private readonly qbittorrent: QbittorrentClient,
     private readonly downloadsService: DownloadsService,
+    private readonly settings: SettingsService,
+    private readonly mediaRoots: MediaRootsService,
+    private readonly queue: ProcessQueueService,
+    private readonly sessions: SessionService,
+    private readonly uploads: UploadsService,
   ) {}
 
   async findOneFromDb(id: number, userId: string) {
@@ -224,6 +238,69 @@ export class SeasonsService {
     // — a bare row here would fail the mutation *after* the torrent was
     // already accepted, see api/plan.md's "Season returned without its
     // episodes" risk.
+    return this.findSeasonWithEpisodes(seasonId);
+  }
+
+  async startSeasonUpload(seasonId: number, force: boolean, userId: string) {
+    const season = await this.findOneFromDb(seasonId, userId);
+    if (!season) throw i18nError.notFound(ERROR_KEYS.SEASON_NOT_FOUND, { id: seasonId });
+
+    if (!force) {
+      const hasCompletedEpisode =
+        (await this.prisma.episode.count({ where: { seasonId, status: 'COMPLETED' } })) > 0;
+      if (hasCompletedEpisode) {
+        throw i18nError.conflict(ERROR_KEYS.SEASON_ALREADY_COMPLETED);
+      }
+    }
+
+    const config = await this.settings.getMap();
+    const downloadsBase = await this.mediaRoots.resolveFromRoot('downloads', config.path_downloads ?? '.');
+    const downloadPath = join(downloadsBase, 'imports', randomUUID());
+    await mkdir(downloadPath, { recursive: true });
+
+    if (force) {
+      await this.demoteActiveSources(seasonId);
+    }
+
+    const mediaSource = await this.prisma.mediaSource.create({
+      data: { kind: 'LOCAL_FOLDER', status: 'PENDING', seasonId, downloadPath },
+    });
+
+    return { mediaSourceId: mediaSource.id, seasonId };
+  }
+
+  // Closes an upload session: the one place a season upload is handed to the
+  // scan. Mirrors handleTorrentCompleted's season tail — race, READY, enqueue —
+  // and writes no episode status (a season source has no episode of its own).
+  async finishSeasonUpload(mediaSourceId: number, userId: string) {
+    const session = await this.sessions.findOpenSeasonSession(mediaSourceId, userId);
+    if (!session || !session.seasonId || !session.downloadPath) {
+      throw i18nError.conflict(ERROR_KEYS.UPLOAD_SESSION_NOT_OPEN);
+    }
+    const seasonId = session.seasonId;
+
+    const entries = await readdir(session.downloadPath, { withFileTypes: true }).catch((): Dirent[] => []);
+    if (!entries.some((entry) => entry.isFile())) {
+      throw i18nError.conflict(ERROR_KEYS.UPLOAD_SESSION_EMPTY);
+    }
+
+    await this.uploads.demoteSupersededSources({ seasonId }, `session-${mediaSourceId}`);
+
+    const raceResult = await this.downloadsService.resolveRace(mediaSourceId);
+    if (!raceResult.startsWith('ganador')) {
+      throw i18nError.conflict(ERROR_KEYS.UPLOAD_SUPERSEDED);
+    }
+
+    // Atomic PENDING -> READY: of two concurrent closes only one flips the
+    // row, and only that one enqueues the scan.
+    const { count } = await this.prisma.mediaSource.updateMany({
+      where: { id: mediaSourceId, status: 'PENDING' },
+      data: { status: 'READY' },
+    });
+    if (count === 0) throw i18nError.conflict(ERROR_KEYS.UPLOAD_SESSION_NOT_OPEN);
+
+    await this.queue.addSourceReady({ mediaSourceId });
+
     return this.findSeasonWithEpisodes(seasonId);
   }
 

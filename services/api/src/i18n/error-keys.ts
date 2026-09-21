@@ -97,6 +97,11 @@ export const ERROR_KEYS = {
   UPLOAD_TICKET_WRONG_EPISODE: 'error.upload.ticket_wrong_episode',
   UPLOAD_METADATA_INCOMPLETE: 'error.upload.metadata_incomplete',
   UPLOAD_SUPERSEDED: 'error.upload.superseded',
+  UPLOAD_SESSION_NOT_FOUND: 'error.upload.session_not_found',
+  UPLOAD_SESSION_NOT_OPEN: 'error.upload.session_not_open',
+  UPLOAD_SESSION_EMPTY: 'error.upload.session_empty',
+  UPLOAD_SESSION_CLOSED: 'error.upload.session_closed',
+  UPLOAD_TICKET_WRONG_SOURCE: 'error.upload.ticket_wrong_source',
 
   // ffprobe-logs
   FFPROBE_LOG_NOT_FOUND: 'error.ffprobeLog.not_found',

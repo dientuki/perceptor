@@ -11,6 +11,7 @@ import { RedisModule } from '../redis/redis.module';
 import { MoviesModule } from '@/movies/movies.module';
 import { EpisodesModule } from '@/episodes/episodes.module';
 import { DownloadsModule } from '@/downloads/downloads.module';
+import { SessionService } from './session.service';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { DownloadsModule } from '@/downloads/downloads.module';
     DownloadsModule,
   ],
   controllers: [UploadsController],
-  providers: [UploadsService, UploadsResolver, UploadTicketsService],
+  providers: [UploadsService, UploadsResolver, UploadTicketsService, SessionService],
+  exports: [SessionService, UploadsService],
 })
 export class UploadsModule {}

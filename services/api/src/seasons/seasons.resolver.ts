@@ -1,6 +1,7 @@
 import { Resolver, Mutation, Args, Int } from '@nestjs/graphql';
 import { SeasonsService } from './seasons.service';
 import { Season } from '@/shows/entities/season.entity';
+import { SeasonUploadSession } from './entities/season-upload-session.entity';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
 
@@ -40,5 +41,30 @@ export class SeasonsResolver {
   ) {
     const userId = principal.type === 'user' ? principal.id : '';
     return this.seasonsService.addMagnetToSeason(seasonId, { magnet, force }, userId);
+  }
+
+  @Mutation(() => SeasonUploadSession, {
+    name: 'startSeasonUpload',
+    description: 'Opens an upload session for a season',
+  })
+  async startSeasonUpload(
+    @Args('seasonId', { type: () => Int }) seasonId: number,
+    @Args('force', { type: () => Boolean, nullable: true, defaultValue: false }) force: boolean,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.seasonsService.startSeasonUpload(seasonId, force, userId);
+  }
+
+  @Mutation(() => Season, {
+    name: 'finishSeasonUpload',
+    description: 'Closes an upload session and hands its folder to the scan',
+  })
+  async finishSeasonUpload(
+    @Args('mediaSourceId', { type: () => Int }) mediaSourceId: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.seasonsService.finishSeasonUpload(mediaSourceId, userId);
   }
 }

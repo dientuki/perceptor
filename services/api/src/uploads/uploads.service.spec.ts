@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ERROR_KEYS } from '@/i18n/error-keys';
@@ -139,6 +139,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       queue as any,
       uploadTickets as any,
       downloads as any,
+      {} as any,
     );
 
     return { service, prisma, queue, downloads, rows, jobRows };
@@ -331,5 +332,169 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
         body: expect.stringContaining(ERROR_KEYS.UPLOAD_SUPERSEDED),
       });
     });
+  });
+});
+
+// Defends the session branch of the tus hooks (068-season-multi-file-upload):
+// the many files of one season upload landing in the session's own folder.
+//
+// Every failure here is silent. A file written outside the session folder
+// answers 200 to the browser and the episode simply never encodes, because
+// the scan looks elsewhere. Two files sharing a basename that overwrite each
+// other collapse into one and an episode vanishes from an otherwise
+// successful season. A session closed or deleted mid-upload that still
+// accepts the file leaves an orphan on disk under a folder nobody scans. And
+// a session finish that created a MediaSource or resolved a race per file
+// would enqueue a scan per file instead of one when the season is closed.
+// Remove the `isInsideRoot` re-check, the `taken` disambiguation in
+// moveIntoSession, or the null-session guard and the matching case goes red.
+//
+// The filesystem is real (mkdtemp) because the collision property is about
+// what rename() really does to a real directory; Prisma, the queue and the
+// arbiter are stubs asserted never to be called.
+describe('UploadsService session branch (season multi-file upload)', () => {
+  const SESSION_ID = 7;
+  const OWNER_ID = 3;
+
+  let downloadsRoot: string;
+  let outsideRoot: string;
+  let sessionDir: string;
+
+  beforeEach(async () => {
+    downloadsRoot = await mkdtemp(join(tmpdir(), 'uploads-session-root-'));
+    outsideRoot = await mkdtemp(join(tmpdir(), 'uploads-session-outside-'));
+    sessionDir = join(downloadsRoot, 'imports', 'season-7');
+    await mkdir(sessionDir, { recursive: true });
+  });
+
+  function build(options: { session: { downloadPath: string | null } | null; ownerId?: string | number | null }) {
+    const prisma: any = {
+      mediaSource: { create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findMany: jest.fn() },
+      movie: { findUnique: jest.fn(), update: jest.fn() },
+      episode: { findUnique: jest.fn(), update: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const uploadTickets = {
+      getUploadOwner: jest.fn().mockResolvedValue(options.ownerId === undefined ? OWNER_ID : options.ownerId),
+      verifyAndSpend: jest.fn().mockResolvedValue({ userId: OWNER_ID, force: false }),
+      markUploadOwner: jest.fn().mockResolvedValue(undefined),
+    };
+    const downloads = { resolveRace: jest.fn() };
+    const queue = { addSourceReady: jest.fn() };
+    const sessions = { findOpenSeasonSession: jest.fn().mockResolvedValue(options.session) };
+    // Real containment semantics over the temp root, not a constant answer.
+    const mediaRoots = {
+      resolveFromRoot: jest.fn(async () => downloadsRoot),
+      isInsideRoot: jest.fn(async (_id: string, p: string) => p === downloadsRoot || p.startsWith(downloadsRoot + '/')),
+    };
+
+    const service = new UploadsService(
+      prisma,
+      { getMap: jest.fn().mockResolvedValue({ path_downloads: '.' }) } as any,
+      mediaRoots as any,
+      queue as any,
+      uploadTickets as any,
+      downloads as any,
+      sessions as any,
+    );
+    return { service, prisma, queue, downloads, sessions, uploadTickets };
+  }
+
+  async function stage(uploadId: string, filename: string, extra: Record<string, string> = {}) {
+    const staged = join(downloadsRoot, 'uploads', uploadId);
+    await mkdir(join(downloadsRoot, 'uploads'), { recursive: true });
+    await writeFile(staged, `bytes-${uploadId}`);
+    return {
+      id: uploadId,
+      metadata: { mediaSourceId: String(SESSION_ID), filename, ...extra } as Record<string, string>,
+      storage: { path: staged },
+    };
+  }
+
+  const exists = (p: string) => access(p).then(() => true, () => false);
+
+  it('refuses a session whose downloadPath escapes the downloads root, before any write', async () => {
+    const { service } = build({ session: { downloadPath: outsideRoot } });
+    const upload = await stage('up-escape', 'e01.mkv');
+
+    await expect((service as any).handleUploadFinish(upload)).rejects.toMatchObject({
+      status_code: 409,
+      body: expect.stringContaining(ERROR_KEYS.UPLOAD_SESSION_CLOSED),
+    });
+
+    expect(await readdir(outsideRoot)).toEqual([]);
+    expect(await exists(upload.storage.path)).toBe(true);
+  });
+
+  it('keeps both files when two uploads share a basename, never overwriting the first', async () => {
+    const { service } = build({ session: { downloadPath: sessionDir } });
+    const first = await stage('up-first', 'episode.mkv');
+    const second = await stage('up-second', 'episode.mkv');
+
+    await (service as any).handleUploadFinish(first);
+    await (service as any).handleUploadFinish(second);
+
+    expect((await readdir(sessionDir)).sort()).toEqual(['episode.mkv', 'episode.up-second.mkv']);
+    expect(await readFile(join(sessionDir, 'episode.mkv'), 'utf8')).toBe('bytes-up-first');
+    expect(await readFile(join(sessionDir, 'episode.up-second.mkv'), 'utf8')).toBe('bytes-up-second');
+  });
+
+  it('answers 409 session_closed when the session was closed or deleted mid-upload', async () => {
+    const { service } = build({ session: null });
+    const upload = await stage('up-closed', 'e02.mkv');
+
+    await expect((service as any).handleUploadFinish(upload)).rejects.toMatchObject({
+      status_code: 409,
+      body: expect.stringContaining(ERROR_KEYS.UPLOAD_SESSION_CLOSED),
+    });
+
+    expect(await readdir(sessionDir)).toEqual([]);
+    expect(await exists(upload.storage.path)).toBe(true);
+  });
+
+  it('answers 409 session_closed when the upload has no recorded owner', async () => {
+    const { service, sessions } = build({ session: { downloadPath: sessionDir }, ownerId: null });
+
+    await expect((service as any).handleUploadFinish(await stage('up-orphan', 'e03.mkv'))).rejects.toMatchObject({
+      status_code: 409,
+    });
+    expect(sessions.findOpenSeasonSession).not.toHaveBeenCalled();
+    expect(await readdir(sessionDir)).toEqual([]);
+  });
+
+  it.each([
+    ['movieId', { movieId: '2' }],
+    ['episodeId', { episodeId: '5' }],
+  ])('rejects mediaSourceId together with %s as 400 metadata_incomplete, on create and on finish', async (_n, extra) => {
+    const { service, uploadTickets, sessions } = build({ session: { downloadPath: sessionDir } });
+    const upload = await stage('up-mixed', 'e04.mkv', extra);
+
+    await expect((service as any).handleUploadFinish(upload)).rejects.toMatchObject({ status_code: 400 });
+
+    const req = new Request('http://x/uploads', { headers: { authorization: 'Bearer t' } });
+    await expect(service.onUploadCreate(req, upload)).rejects.toMatchObject({
+      status_code: 400,
+      body: expect.stringContaining(ERROR_KEYS.UPLOAD_METADATA_INCOMPLETE),
+    });
+
+    // A malformed create must not burn the ticket or touch the session.
+    expect(uploadTickets.verifyAndSpend).not.toHaveBeenCalled();
+    expect(sessions.findOpenSeasonSession).not.toHaveBeenCalled();
+    expect(await exists(upload.storage.path)).toBe(true);
+  });
+
+  it('creates no MediaSource, resolves no race and enqueues nothing when a session file finishes', async () => {
+    const { service, prisma, downloads, queue } = build({ session: { downloadPath: sessionDir } });
+
+    await (service as any).handleUploadFinish(await stage('up-ok', 'e05.mkv'));
+
+    expect(await exists(join(sessionDir, 'e05.mkv'))).toBe(true);
+    expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+    expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+    expect(prisma.episode.update).not.toHaveBeenCalled();
+    expect(prisma.movie.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(downloads.resolveRace).not.toHaveBeenCalled();
+    expect(queue.addSourceReady).not.toHaveBeenCalled();
   });
 });

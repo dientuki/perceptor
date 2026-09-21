@@ -129,6 +129,13 @@ export const MESSAGES_EN: Record<string, string> = {
     'The upload ticket does not belong to this episode',
   [ERROR_KEYS.UPLOAD_METADATA_INCOMPLETE]: 'Upload metadata is incomplete',
   [ERROR_KEYS.UPLOAD_SUPERSEDED]: 'Superseded by a newer upload',
+  [ERROR_KEYS.UPLOAD_SESSION_NOT_FOUND]:
+    'Upload session {id} does not exist or is already closed',
+  [ERROR_KEYS.UPLOAD_SESSION_NOT_OPEN]: 'The upload session is already closed',
+  [ERROR_KEYS.UPLOAD_SESSION_EMPTY]: 'No file was uploaded to this session',
+  [ERROR_KEYS.UPLOAD_SESSION_CLOSED]: 'The upload session is no longer open',
+  [ERROR_KEYS.UPLOAD_TICKET_WRONG_SOURCE]:
+    'The upload ticket does not belong to this session',
 
   // ffprobe-logs
   [ERROR_KEYS.FFPROBE_LOG_NOT_FOUND]: 'ffprobe log {id} does not exist',

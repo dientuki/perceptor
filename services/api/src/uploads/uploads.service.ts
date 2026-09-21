@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { join } from 'node:path';
-import { mkdir, rename } from 'node:fs/promises';
+import { join, parse } from 'node:path';
+import { access, mkdir, rename } from 'node:fs/promises';
 import { Server } from '@tus/server';
 import { FileStore } from '@tus/file-store';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -12,6 +12,7 @@ import { MESSAGES_EN } from '@/i18n/messages.en';
 import { UploadTicketExpiredError, UploadTicketMismatchError, UploadTicketsService } from './upload-tickets.service';
 import type { UploadTicketTarget } from './upload-tickets.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { SessionService } from './session.service';
 
 const ILLEGAL_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
 
@@ -78,6 +79,7 @@ export class UploadsService implements OnModuleInit {
     private readonly queue: ProcessQueueService,
     private readonly uploadTickets: UploadTicketsService,
     private readonly downloads: DownloadsService,
+    private readonly sessions: SessionService,
   ) {}
 
   async onModuleInit() {
@@ -134,7 +136,30 @@ export class UploadsService implements OnModuleInit {
 
     const rawMovieId = upload.metadata?.movieId;
     const rawEpisodeId = upload.metadata?.episodeId;
+    const rawMediaSourceId = upload.metadata?.mediaSourceId;
     const isEpisode = rawEpisodeId !== undefined && rawEpisodeId !== null && rawEpisodeId !== '';
+    const isSession = rawMediaSourceId !== undefined && rawMediaSourceId !== null && rawMediaSourceId !== '';
+
+    if (isSession) {
+      const hasOtherTarget = isEpisode || (rawMovieId !== undefined && rawMovieId !== null && rawMovieId !== '');
+      const mediaSourceId = Number(rawMediaSourceId);
+      if (hasOtherTarget || !Number.isInteger(mediaSourceId) || mediaSourceId <= 0) {
+        throw new UploadHttpError(400, ERROR_KEYS.UPLOAD_METADATA_INCOMPLETE);
+      }
+      try {
+        const { userId } = await this.uploadTickets.verifyAndSpend(token, { mediaSourceId });
+        await this.uploadTickets.markUploadOwner(upload.id, userId);
+      } catch (err) {
+        if (err instanceof UploadTicketMismatchError) {
+          throw new UploadHttpError(403, ERROR_KEYS.UPLOAD_TICKET_WRONG_SOURCE);
+        }
+        if (err instanceof UploadTicketExpiredError) {
+          throw new UploadHttpError(401, ERROR_KEYS.UPLOAD_TICKET_EXPIRED);
+        }
+        throw err;
+      }
+      return {};
+    }
 
     const target: UploadTicketTarget = isEpisode
       ? { episodeId: Number(rawEpisodeId) }
@@ -184,6 +209,27 @@ export class UploadsService implements OnModuleInit {
 
     const filename = sanitizeFilename(upload.metadata?.filename || upload.id);
     const rawPath = upload.storage?.path;
+
+    const rawMediaSourceId = upload.metadata?.mediaSourceId;
+    if (rawMediaSourceId !== undefined && rawMediaSourceId !== null && rawMediaSourceId !== '') {
+      const mediaSourceId = Number(rawMediaSourceId);
+      const hasOtherTarget = isEpisode || (rawMovieId !== undefined && rawMovieId !== null && rawMovieId !== '');
+      if (hasOtherTarget || !Number.isInteger(mediaSourceId) || mediaSourceId <= 0 || !rawPath) {
+        throw new UploadHttpError(400, ERROR_KEYS.UPLOAD_METADATA_INCOMPLETE);
+      }
+
+      const ownerId = await this.uploadTickets.getUploadOwner(upload.id);
+      const session = ownerId ? await this.sessions.findOpenSeasonSession(mediaSourceId, ownerId) : null;
+      if (!session || !session.downloadPath) throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SESSION_CLOSED);
+
+      if (!(await this.mediaRoots.isInsideRoot('downloads', session.downloadPath))) {
+        throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SESSION_CLOSED);
+      }
+
+      const destPath = await this.moveIntoSession(upload.id, rawPath, session.downloadPath, filename);
+      console.log(`[uploads] ${upload.id}: completado -> sesión ${mediaSourceId} (${destPath})`);
+      return;
+    }
 
     if (isEpisode) {
       const episodeId = Number(rawEpisodeId);
@@ -315,8 +361,8 @@ export class UploadsService implements OnModuleInit {
   // whether or not the ticket carried `force`. A DOWNLOADING/QUEUED/PAUSED
   // sibling is deliberately left alone: it is a racer, and resolveRace stops
   // and pauses it as one.
-  private async demoteSupersededSources(
-    target: { movieId: number } | { episodeId: number },
+  async demoteSupersededSources(
+    target: { movieId: number } | { episodeId: number } | { seasonId: number },
     uploadId: string,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
@@ -361,6 +407,30 @@ export class UploadsService implements OnModuleInit {
         `[uploads] ${uploadId}: ${demotedIds.length} source(s) anterior(es) marcada(s) ERROR por reemplazo, ${jobsClosed} processJob(s) cerrado(s)`,
       );
     });
+  }
+
+  // Session twin of moveUploadedFile: the folder already exists and belongs to
+  // the session. A name already taken there keeps both files, the later one
+  // carrying its tus upload id, and is never overwritten.
+  private async moveIntoSession(
+    uploadId: string,
+    rawPath: string,
+    sessionDir: string,
+    filename: string,
+  ): Promise<string> {
+    let destPath = join(sessionDir, filename);
+    const taken = await access(destPath).then(
+      () => true,
+      () => false,
+    );
+    if (taken) {
+      const { name, ext } = parse(filename);
+      destPath = join(sessionDir, `${name}.${uploadId}${ext}`);
+    }
+    await mkdir(sessionDir, { recursive: true });
+    await rename(rawPath, destPath);
+
+    return destPath;
   }
 
   // Shared by both branches of handleUploadFinish: re-reads path_downloads

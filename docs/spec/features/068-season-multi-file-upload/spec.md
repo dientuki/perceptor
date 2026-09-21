@@ -112,12 +112,12 @@ touched at all.
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (`worker` is untouched)**: `git diff --stat services/worker` must be empty. A season
+- [x] **NFR-1 (`worker` is untouched)**: `git diff --stat services/worker` must be empty. A season
       upload is indistinguishable from a season torrent at the worker's input: a `MediaSource` with
       a `seasonId` and a `downloadPath` folder. This is the mechanism by which REQ-7 is already true
       rather than newly implemented.
 
-- [ ] **NFR-2 (No migration)**: No Prisma model, column or enum value is added.
+- [x] **NFR-2 (No migration)**: No Prisma model, column or enum value is added.
       `git status --short services/api/prisma` must be empty. `SourceKind.LOCAL_FOLDER` and
       `MediaSource.seasonId` both already exist.
 
@@ -233,7 +233,7 @@ the page; the season now belongs to another source.
       file's next tus request answers `409` with `error.upload.session_closed`, the modal shows the
       translated message in the active locale rather than a key or English text, the session folder
       is gone from disk, and the season's aired episodes fall back to `MISSING`.
-- [ ] **AC-7** *(failure)*: Given a ticket minted by `createSeasonUploadTicket` for session A,
+- [x] **AC-7** *(failure)*: Given a ticket minted by `createSeasonUploadTicket` for session A,
       when it is presented at the tus `POST` of a file whose metadata names session B, then the
       request answers `403` with `error.upload.ticket_wrong_source` **and** the ticket is not spent —
       replaying it against session A still succeeds.
@@ -242,14 +242,14 @@ the page; the season now belongs to another source.
       for that season with `force: false` answers `error.season.already_completed`, and confirming
       the replacement starts the session and demotes the season's previous `READY`/`SCANNED` source
       to `ERROR` with `error.source.replaced`.
-- [ ] **AC-9** *(failure)*: Given an open session with no file uploaded, `finishSeasonUpload` answers
+- [x] **AC-9** *(failure)*: Given an open session with no file uploaded, `finishSeasonUpload` answers
       `error.upload.session_empty` and the session row is still `PENDING`.
-- [ ] **AC-10**: `git diff --stat services/worker` is empty and `git status --short
+- [x] **AC-10**: `git diff --stat services/worker` is empty and `git status --short
       services/api/prisma` is empty (NFR-1, NFR-2).
-- [ ] **AC-11**: `bin/npm api run test` passes, `bin/cli web npx --no tsc --noEmit` reports 0 errors,
+- [x] **AC-11**: `bin/npm api run test` passes, `bin/cli web npx --no tsc --noEmit` reports 0 errors,
       `bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs` reports no
       `en`/`es` drift.
-- [ ] **AC-12**: The `schema.gql` diff is exactly `SeasonUploadSession`, `startSeasonUpload`,
+- [x] **AC-12**: The `schema.gql` diff is exactly `SeasonUploadSession`, `startSeasonUpload`,
       `createSeasonUploadTicket` and `finishSeasonUpload` — nothing else (Constitution, Article VIII).
 
 ## Out of Scope

@@ -300,6 +300,11 @@ type Show {
   otherOwners: Int!
 }
 
+type SeasonUploadSession {
+  mediaSourceId: Int!
+  seasonId: Int!
+}
+
 type FfprobeLog {
   id: Int!
   file: String!
@@ -568,6 +573,7 @@ type Mutation {
   """El worker pide borrar el torrent del cliente tras un encode exitoso"""
   downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!
   createUploadTicket(movieId: Int, episodeId: Int, force: Boolean = false): UploadTicket!
+  createSeasonUploadTicket(mediaSourceId: Int!): UploadTicket!
 
   """Envía un release elegido a qBittorrent y lo asocia al episodio"""
   addTorrentToEpisode(episodeId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Episode!
@@ -605,6 +611,12 @@ type Mutation {
   Manda un magnet pegado por el usuario a qBittorrent y lo asocia a la temporada
   """
   addMagnetToSeason(seasonId: Int!, magnet: String!, force: Boolean = false): Season!
+
+  """Opens an upload session for a season"""
+  startSeasonUpload(seasonId: Int!, force: Boolean = false): SeasonUploadSession!
+
+  """Closes an upload session and hands its folder to the scan"""
+  finishSeasonUpload(mediaSourceId: Int!): Season!
 
   """The worker reports one raw ffprobe payload before an encode starts"""
   recordFfprobe(file: String!, ffprobe: String!): FfprobeLog!

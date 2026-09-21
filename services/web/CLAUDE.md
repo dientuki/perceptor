@@ -446,11 +446,16 @@ Follow this for any new acquisition entry point rather than reintroducing a bare
 redeclare it.
 
 **The `"season"` branch, `FileAcquisitionTarget`, and `src/lib/acquisition-target.ts`
-(`059-season-pack-acquisition-ui`).** A season has no upload entry point (REQ-2 — importing a whole
-season is a different upload shape, deferred to its own spec), so `importFileModal.tsx` and
-`createUploadTicketAction` (`src/actions/uploads.ts`) take `FileAcquisitionTarget =
-Exclude<AcquisitionTarget, { kind: "season" }>` instead of the full union — a season target reaching
-`movieId: undefined, episodeId: undefined` is a type error, not a runtime guard.
+(`059-season-pack-acquisition-ui`).** `FileAcquisitionTarget` is the full union since `068-season-multi-file-upload`
+(which supersedes `059` REQ-2: a season now has its own upload modal, `ImportSeasonFilesModal.tsx`,
+one tus upload per file over an upload session). The single-file `importFileModal.tsx` and
+`createUploadTicketAction` (`src/actions/uploads.ts`) still take `SingleFileAcquisitionTarget =
+Exclude<FileAcquisitionTarget, { kind: "season" }>` — a season target reaching
+`movieId: undefined, episodeId: undefined` is a type error, not a runtime guard. The season modal
+runs up to 4 uploads at once with one pause/resume over the whole batch, and sends `mediaSourceId` +
+`filename` as tus metadata, never `movieId`/`episodeId`; its actions are
+`startSeasonUploadAction`/`createSeasonUploadTicketAction`/`finishSeasonUploadAction`, and cancelling
+deletes the session through the existing `deleteDownloadAction`.
 `src/lib/acquisition-target.ts` holds the two helpers that used to be a three-way ternary copied
 across `SearchTorrent.tsx`/`SearchTorrentModal.tsx`/`importMagnetModal.tsx`/`importFileModal.tsx`:
 `isAcquisitionTargetCompleted(target)` (film/episode `status === "COMPLETED"`, season `some episode

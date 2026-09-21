@@ -14,7 +14,7 @@ import {
   buildAcquisitionTargetLabel,
   isAcquisitionTargetCompleted,
 } from "@/lib/acquisition-target";
-import type { FileAcquisitionTarget } from "@/types/media";
+import type { SingleFileAcquisitionTarget } from "@/types/media";
 
 interface ImportFileModalProps {
   isOpen: boolean;
@@ -22,7 +22,7 @@ interface ImportFileModalProps {
   // A season target has no upload entry point (REQ-2,
   // 059-season-pack-acquisition-ui) — the type checker, not a runtime guard,
   // is what keeps one from reaching this modal.
-  target: FileAcquisitionTarget | null;
+  target: SingleFileAcquisitionTarget | null;
 }
 
 type UploadStatus = "idle" | "uploading" | "paused" | "error" | "done";
@@ -226,7 +226,7 @@ export default function ImportFileModal({
   const percent =
     progress.total > 0 ? Math.round((progress.sent / progress.total) * 100) : 0;
 
-  // `target` can never be `{ kind: "season" }` here (`FileAcquisitionTarget`),
+  // `target` can never be `{ kind: "season" }` here (`SingleFileAcquisitionTarget`),
   // so the season-label formatter is never actually invoked.
   const targetLabel = buildAcquisitionTargetLabel(target, (n) => String(n));
 

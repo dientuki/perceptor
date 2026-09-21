@@ -6,15 +6,17 @@ import Button from "@/components/ui/button/Button";
 
 /**
  * The three season-level acquisition buttons on a season accordion header —
- * search, import file (disabled, REQ-2) and magnet — same order, icons,
+ * search, import file (068) and magnet — same order, icons,
  * sizes and title keys as `EpisodeRow`'s own three buttons in
  * `SeasonAccordion.tsx` (059-season-pack-acquisition-ui).
  */
 export default function SeasonAcquisitionButtons({
   onSearch,
+  onImportFile,
   onMagnet,
 }: {
   onSearch: () => void;
+  onImportFile: () => void;
   onMagnet: () => void;
 }) {
   const t = useTranslations("shows.seasonAccordion");
@@ -32,7 +34,7 @@ export default function SeasonAcquisitionButtons({
         size="sm"
         variant="outline"
         title={t("importFileButtonTitle")}
-        disabled
+        onClick={onImportFile}
       >
         <FileVideo size={16} />
       </Button>

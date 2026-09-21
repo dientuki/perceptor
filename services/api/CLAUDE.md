@@ -293,7 +293,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   via `resolveInfoHash` before calling the same private `attachTorrentSource`) — both scoped through
   `season.show.users`, with a season-scoped conflict on `MediaSource.seasonId` and the same
   demote-on-`force` ordering (qBittorrent accepts the release first, *then* the previous source is
-  demoted, *then* the replacement is created). `web` has a UI for both since `059` — see
+  demoted, *then* the replacement is created). Since `068` it also owns `startSeasonUpload(seasonId, force)` and `finishSeasonUpload(mediaSourceId)`: an upload session is a season-scoped `MediaSource` (`LOCAL_FOLDER`, `PENDING`, `downloadPath` an empty per-session folder under the downloads root); closing it demotes superseded sources, runs `resolveRace`, flips `PENDING`→`READY` atomically (`updateMany`, so two closes enqueue one scan) and enqueues `addSourceReady` — it writes no episode status. `web` has a UI for both since `059` — see
   `services/web/CLAUDE.md`'s `AcquisitionTarget` section. Its final read is a
   `season.findUniqueOrThrow` that **must `include` the episodes** — `Season.episodes` is non-null, so
   a bare row fails the mutation *after* qBittorrent already accepted the torrent, orphaning the
@@ -598,7 +598,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   (atomic, so two concurrent POSTs can't both win). Never re-checked on `PATCH`, by design.
   `createUploadTicket(movieId: Int, episodeId: Int, force: Boolean = false)` takes both nullable and
   requires **exactly one**; `UploadTicketsService.mint`/`verifyAndSpend` take a
-  `UploadTicketTarget = { movieId } | { episodeId }`, and the target check runs **before** the Redis
+  `UploadTicketTarget = { movieId } | { episodeId } | { mediaSourceId }` (`068`: `createSeasonUploadTicket(mediaSourceId)`, guarded by `SessionService.findOpenSeasonSession`; a tus upload carrying `mediaSourceId` is moved into the session folder — colliding names are disambiguated, never overwritten — and creates no `MediaSource`, resolves no race, enqueues nothing; `mediaSourceId` together with `movieId`/`episodeId` is a `400`), and the target check runs **before** the Redis
   spend — a mismatch must not burn the ticket. It also requires the caller's `user_movies` link,
   calling the same `findOneFromDb` that `movie(id)` uses. `handleUploadFinish` keeps a bare
   `prisma.movie.findUnique` — not an ownership hole, since a ticket is only mintable for an owned film

@@ -5,6 +5,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { UploadTicket } from './entities/upload-ticket.entity';
 import { UploadTicketsService } from './upload-tickets.service';
+import { SessionService } from './session.service';
 import { MoviesService } from '@/movies/movies.service';
 import { EpisodesService } from '@/episodes/episodes.service';
 import { i18nError } from '@/i18n/i18n-error';
@@ -16,6 +17,7 @@ export class UploadsResolver {
     private readonly uploadTickets: UploadTicketsService,
     private readonly movies: MoviesService,
     private readonly episodes: EpisodesService,
+    private readonly sessions: SessionService,
   ) {}
 
   // Deliberately no @AllowService() — an upload ticket is delegated from a
@@ -77,5 +79,26 @@ export class UploadsResolver {
     }
 
     return await this.uploadTickets.mint(principal.id, { episodeId: episodeId as number }, force);
+  }
+
+  // 068-season-multi-file-upload: one single-use ticket per file of an open
+  // season upload session. Nothing is minted unless the caller owns an open
+  // session (LOCAL_FOLDER + PENDING + season-scoped).
+  @UseGuards(JwtAuthGuard)
+  @Mutation(() => UploadTicket)
+  async createSeasonUploadTicket(
+    @Args('mediaSourceId', { type: () => Int }) mediaSourceId: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ): Promise<UploadTicket> {
+    if (principal.type !== 'user') {
+      throw new UnauthorizedException('No autenticado');
+    }
+
+    const session = await this.sessions.findOpenSeasonSession(mediaSourceId, principal.id);
+    if (!session) {
+      throw i18nError.notFound(ERROR_KEYS.UPLOAD_SESSION_NOT_FOUND, { id: mediaSourceId });
+    }
+
+    return await this.uploadTickets.mint(principal.id, { mediaSourceId });
   }
 }

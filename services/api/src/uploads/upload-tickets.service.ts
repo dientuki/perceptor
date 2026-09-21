@@ -14,6 +14,7 @@ const UPLOAD_TICKET_KEY_PREFIX = 'upload:ticket:';
 // and a Redis outage or an expired marker on a long-paused upload both
 // resolve to "no replace", never the other way around.
 const UPLOAD_REPLACE_KEY_PREFIX = 'upload:replace:';
+const UPLOAD_OWNER_KEY_PREFIX = 'upload:owner:';
 // 7 days: long enough to cover a paused resumable upload, short enough that
 // a stale marker for an abandoned upload eventually stops mattering.
 const REPLACE_MARKER_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -23,7 +24,11 @@ const REPLACE_MARKER_TTL_SECONDS = 7 * 24 * 60 * 60;
 // NFR-1); `episodeId` sits beside it rather than generalising into a single
 // `mediaId`, the same restraint `006-media-search` applied everywhere except
 // `MediaSearchResult`.
-export type UploadTicketTarget = { movieId: number } | { episodeId: number };
+//
+// 068-season-multi-file-upload: a third target, `{ mediaSourceId }`, names an
+// open season upload session (a PENDING LOCAL_FOLDER source). It is bound the
+// same way — a ticket for session A never authorises a file for session B.
+export type UploadTicketTarget = { movieId: number } | { episodeId: number } | { mediaSourceId: number };
 
 // Typed twins of the plain `Error`s this service used to throw, so callers
 // (`uploads.service.ts`) can branch on `instanceof` instead of matching
@@ -32,7 +37,7 @@ export type UploadTicketTarget = { movieId: number } | { episodeId: number };
 export class UploadTicketExpiredError extends Error {}
 
 export class UploadTicketMismatchError extends Error {
-  constructor(public readonly target: 'movie' | 'episode') {
+  constructor(public readonly target: 'movie' | 'episode' | 'session') {
     super(`Upload ticket does not match the ${target} being uploaded`);
   }
 }
@@ -41,6 +46,7 @@ type UploadTicketPayload = {
   sub: string;
   movieId?: number;
   episodeId?: number;
+  mediaSourceId?: number;
   typ: 'upload';
   jti: string;
   // 027-replace-completed-media: the confirmed-replacement decision, signed
@@ -76,7 +82,11 @@ export class UploadTicketsService {
     const jti = randomUUID();
     const payload: UploadTicketPayload = {
       sub: userId,
-      ...('movieId' in target ? { movieId: target.movieId } : { episodeId: target.episodeId }),
+      ...('movieId' in target
+        ? { movieId: target.movieId }
+        : 'episodeId' in target
+          ? { episodeId: target.episodeId }
+          : { mediaSourceId: target.mediaSourceId }),
       typ: 'upload',
       jti,
       force,
@@ -114,13 +124,21 @@ export class UploadTicketsService {
       throw new UploadTicketExpiredError('Token is not an upload ticket');
     }
 
-    const matches =
-      'movieId' in target
-        ? payload.movieId !== undefined && Number(payload.movieId) === target.movieId
-        : payload.episodeId !== undefined && Number(payload.episodeId) === target.episodeId;
+    let matches: boolean;
+    let kind: 'movie' | 'episode' | 'session';
+    if ('movieId' in target) {
+      kind = 'movie';
+      matches = payload.movieId !== undefined && Number(payload.movieId) === target.movieId;
+    } else if ('episodeId' in target) {
+      kind = 'episode';
+      matches = payload.episodeId !== undefined && Number(payload.episodeId) === target.episodeId;
+    } else {
+      kind = 'session';
+      matches = payload.mediaSourceId !== undefined && Number(payload.mediaSourceId) === target.mediaSourceId;
+    }
 
     if (!matches) {
-      throw new UploadTicketMismatchError('movieId' in target ? 'movie' : 'episode');
+      throw new UploadTicketMismatchError(kind);
     }
 
     const secondsRemaining = payload.exp - Math.floor(Date.now() / 1000);
@@ -144,6 +162,14 @@ export class UploadTicketsService {
     }
 
     return { userId: payload.sub, force: payload.force ?? false };
+  }
+
+  async markUploadOwner(uploadId: string, userId: string): Promise<void> {
+    await this.redis.set(`${UPLOAD_OWNER_KEY_PREFIX}${uploadId}`, userId, 'EX', REPLACE_MARKER_TTL_SECONDS, 'NX');
+  }
+
+  async getUploadOwner(uploadId: string): Promise<string | null> {
+    return this.redis.get(`${UPLOAD_OWNER_KEY_PREFIX}${uploadId}`);
   }
 
   /**
