@@ -1,7 +1,9 @@
 // A season block: "S01" followed by one or more chained "E<digits>" groups,
 // so a multi-episode name like "S01E01E02" is captured as one block with two
-// episode numbers rather than missed entirely.
-const SEASON_BLOCK = /s(\d{1,2})((?:e\d{1,3})+)/gi;
+// episode numbers rather than missed entirely. A single separator (space,
+// dot, underscore or dash) is tolerated between the season and the first
+// episode, since some releases write "S02 E01" or "S02.E01".
+const SEASON_BLOCK = /s(\d{1,2})[ ._-]?((?:e\d{1,3})+)/gi;
 const EPISODE_NUMBER = /e(\d{1,3})/gi;
 
 export type ParsedEpisode = {

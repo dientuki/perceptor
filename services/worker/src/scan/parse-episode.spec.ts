@@ -25,6 +25,16 @@ describe('parseEpisode', () => {
     });
   });
 
+  it('tolerates a single separator between season and episode', () => {
+    expect(parseEpisode('Третий лишний - Ted S02 E01 (Говори мне непристойности) WEB-DL 2160p (2026).mkv')).toEqual({
+      seasonNumber: 2,
+      episodeNumber: 1,
+    });
+    expect(parseEpisode('Show.S02.E03.mkv')).toEqual({ seasonNumber: 2, episodeNumber: 3 });
+    expect(parseEpisode('Show_S02_E04.mkv')).toEqual({ seasonNumber: 2, episodeNumber: 4 });
+    expect(parseEpisode('Show S02-E05.mkv')).toEqual({ seasonNumber: 2, episodeNumber: 5 });
+  });
+
   it('treats a multi-episode name as ambiguous, not a guess', () => {
     expect(parseEpisode('S01E01E02')).toBeNull();
   });
