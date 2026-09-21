@@ -31,9 +31,9 @@ Perceptor is the whole path as a single product:
 Perceptor is an MVP. The pipeline runs end to end for both films and series: search, register, find
 a release, download, scan, transcode, file, notify and browse. It has no production deployment and
 no users besides its author. The published images are release candidates (`v0.1.0-rc1` through
-`v0.2.0-rc1`); there is no stable release yet.
+`v0.2.0-rc4`); there is no stable release yet.
 
-Fifty-seven feature specs (`001` through `057`) live in `docs/spec/features/`. The root `CLAUDE.md`
+Sixty-eight feature specs (`001` through `068`) live in `docs/spec/features/`. The root `CLAUDE.md`
 has a stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -61,8 +61,9 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
   when you registered the series.
 - 🧲 **Or paste a magnet** — for a film, a single episode, or a whole season pack — and skip the
   search entirely.
-- 📤 **Or upload a file you already have**, resumable, up to tens of gigabytes, straight from the
-  browser.
+- 📤 **Or upload what you already have**, resumable, up to tens of gigabytes, straight from the
+  browser: one file for a film or an episode, or a whole season's episodes at once from the season
+  header, matched to their episodes by `SxxEyy` like any season pack.
 - 🪞 **A title you already own isn't re-downloaded.** Registering something reconciles it against
   your media server first: if Jellyfin already has the film — or some of the episodes — they come
   in as complete, not missing.
@@ -72,7 +73,7 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
   registered, and you can correct it per title. The encoder tunes itself to it.
 
 ### Acquire
-- 🌐 **Indexer search through Prowlarr**, for a full film or one specific episode, with a
+- 🌐 **Indexer search through Prowlarr**, for a film, one specific episode or a whole season, with a
   **FlareSolverr** proxy pre-registered for Cloudflare-fronted trackers. Every row Prowlarr returns
   survives the trip: nothing is dropped for missing metadata.
 - 🏆 **"Best candidates"** re-ranks the results the way an automatic picker would, so you can see
@@ -84,14 +85,22 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
   the first one to finish wins, the losers are demoted.
 - 🗑️ **Deleting a source deletes it everywhere.** A running encode is cancelled, its queue entries
   are withdrawn and the download is cleaned up. The finished library is never touched.
+- 🔁 **Adding the same torrent twice is harmless.** Re-adding a release already attached to the
+  same title is a no-op, not a second download over the first one's folder.
+- 🩺 **A failed source says why, and resumes where it broke.** An errored download shows its last
+  error, and Play picks it back up from the stage that failed — the file is never downloaded again.
 - ♻️ **A finished title can be replaced.** A bad cut, a broken encode or the wrong language isn't a
   dead end: point a new torrent or a new upload at it and it supersedes what's there.
 - 🔑 **No API-key copy-paste on a fresh checkout.** The installer generates Prowlarr's key and the
   container adopts it before boot.
 
 ### Process
-- 🎞️ **H264 / VC-1 → AV1** via `libsvtav1`; **4K HDR10 and Dolby Vision downscaled to 1080p with
-  their HDR preserved**, never flattened to SDR; audio to Opus.
+- 🎞️ **Everything to AV1** via `libsvtav1` — H.264, HEVC, VC-1 and oversized AV1 alike — audio to
+  Opus. The administrator picks a **resolution ceiling** (4K, 1080p, 720p, 480p or 360p): anything
+  above it is downscaled to fit, nothing is ever upscaled, and only AV1 that already fits is copied
+  untouched.
+- 🌈 **HDR survives.** HDR10, Dolby Vision and HLG keep their colour tags through the encode, scaled
+  or not — never flattened to SDR.
 - 🗣️ **Language preferences you choose**, at three levels that merge rather than override: the
   installation default, your own account preferences, and extra languages on one specific title.
   **Audio and subtitles are chosen separately** — original audio plus Spanish subtitles is a thing
@@ -123,10 +132,19 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
 - 🔔 **Media server notification** — Jellyfin today, opt-in from Settings — with the path translated
   to what your media server actually sees, plus a local index you can re-sync on demand.
 - 🖥️ **Library browsing** for films and series, with a billboard home, a per-series season accordion
-  and per-episode actions (search, import a file, add a torrent).
+  and actions per episode and per season (search, import, add a torrent or a magnet).
+- 📅 **A release calendar** at `/calendar`: a month grid of films, shorts and episodes, grouped per
+  series and season with a `completed/total` count and coloured by status.
+- 📥 **A global downloads queue** at `/downloads`: every source of every title, filterable, grouped
+  by title and paginated, with a sidebar badge counting what is actively in flight. Titles you don't
+  hold are visible read-only.
+- 🧹 **Removing a title** from its detail page drops it from your library. If someone else still
+  holds it, it stays for them; if you were the last owner, everything in flight is unwound first.
+  The file already in your library is never deleted.
 - 📊 **One status vocabulary.** Queued, downloading, encoding, done — the same words everywhere, so
   two screens never disagree about the same title. The downloads panel shows live progress and
-  speed for every torrent, plus how fast FFmpeg is encoding.
+  speed for every torrent, plus how fast FFmpeg is encoding, filterable by completed, working or
+  error.
 - ⏰ **Scheduled tasks** an admin can enable and pace from Settings, for the work that has to happen
   after registration rather than during it.
 - ⚙️ **Settings in the UI**, split into tabs: paths, TMDB key, indexer key, media server,
@@ -153,8 +171,8 @@ curl -fsSL https://raw.githubusercontent.com/dientuki/perceptor/master/install.s
 ```
 
 It downloads `docker-compose.yaml` and `.env`, asks five questions — download folder, library
-folder, admin user, admin password, Traefik yes/no (plus the domain if yes) and optionally your
-TMDB key — and derives everything else itself: `PUID`/`PGID`, the group that owns your library, your
+folder, admin user, admin password, Traefik yes/no (plus the domain and whether to serve HTTPS if
+yes) and optionally your TMDB key — and derives everything else itself: `PUID`/`PGID`, the group that owns your library, your
 timezone, free host ports, and the secrets (`JWT_SECRET`, `SERVICE_TOKEN`, `INDEXER_API_KEY`, the
 database password). Then it pulls the published images from GHCR and starts the stack.
 
@@ -170,6 +188,16 @@ Two things it does for you on every start, not just the first:
   `PERCEPTOR_AUTO_MIGRATE=false` in `.env` to opt out and run them yourself.
 - **The database is dumped first.** A one-shot `backup` service writes to `./backups` and keeps the
   five most recent; `api` will not start if the dump fails.
+
+### HTTPS
+
+With Traefik and a domain, the installer can also serve HTTPS from a **local certificate
+authority**. A one-shot `certs` service creates the CA in `./certs` once — it is never regenerated —
+and issues the certificate Traefik serves; plain HTTP keeps working alongside, with no redirect.
+Trust `certs/ca.crt` on every device that opens Perceptor over HTTPS; it is also served without
+login at `/ca.crt` and linked from **Settings → Environment**, so a phone can fetch it over plain
+HTTP. The CA is pinned to your domain: changing `DOMAIN` means deleting `./certs` and trusting the
+new `ca.crt`.
 
 Re-running the installer over a live installation repairs rather than replaces: it fills in what's
 missing and leaves every title, setting, user and password alone.
@@ -229,7 +257,8 @@ pipeline stage. Several specs open with the real incident that motivated them.
                         GraphQL)
 ```
 
-A one-shot `backup` service dumps the database before `api` starts.
+A one-shot `backup` service dumps the database before `api` starts, and, with HTTPS on, a one-shot
+`certs` service issues Traefik's certificate before it starts.
 
 - **`api` is the only source of truth.** `web` and `worker` never touch the database — everything
   goes through `api`'s GraphQL endpoint, so Prisma, business rules and authorization live in one
@@ -276,8 +305,9 @@ A one-shot `backup` service dumps the database before `api` starts.
    `process` job.
 7. **Scan.** The worker enumerates the files, keeps only what was actually downloaded, matches
    episodes by `SxxEyy` and reports back; `api` enqueues one `encode` job per file.
-8. **Transcode.** Driven by `ffprobe`, not the filename: H.264 / VC-1 to AV1, 4K HEVC downscaled to
-   1080p with HDR preserved, audio to Opus, tracks selected by language preference. With compression
+8. **Transcode.** Driven by `ffprobe`, not the filename: every recognized codec to AV1, downscaled
+   to the configured resolution ceiling with HDR preserved, tuned for live action, anime or CGI,
+   audio to Opus, tracks selected by language preference. With compression
    off, the file is only renamed and moved.
 9. **File and notify.** The output lands in the library, the worker reports `encodeCompleted`, and
    `api` notifies Jellyfin with the host-side path.
@@ -382,7 +412,6 @@ bin/cli api npx prisma studio
 
 Rough edges, stated plainly:
 
-- **Season packs are api-only.** `addMagnetToSeason` works; there's no web UI for it yet.
 - **Releases are never picked automatically.** "Best candidates" shows the shortlist an automatic
   picker would produce, but a human still clicks. Nothing in the stack acquires a title unattended.
 - **The scheduler does one real job.** `035` built the scheduling machinery and registered four task
@@ -395,7 +424,8 @@ Rough edges, stated plainly:
   this stack.
 - **Libraries don't overlap.** Each user sees only their own titles; a title someone else registered
   answers "not available for this user" rather than rendering. There is no shared or household
-  library.
+  library. The one exception is the `/downloads` queue, which shows every title's sources to any
+  signed-in user, read-only for the ones they don't hold.
 - **No quality profiles, no upgrade loop.** Perceptor normalizes what it gets rather than chasing a
   better release later — a deliberate omission, not a backlog item.
 - **The installer only knows how to repair a *finished* installation.** Re-running `install.sh`
