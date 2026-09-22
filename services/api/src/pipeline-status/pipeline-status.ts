@@ -99,7 +99,7 @@ const ACTIVE_ENCODE_STATUSES: EncodeStatus[] = ['WAITING', 'QUEUED', 'ENCODING']
 
 function meanProgress(jobs: SourceAltitudeJob[]): number {
   const sum = jobs.reduce((acc, job) => acc + job.progress, 0);
-  return Math.round(sum / jobs.length);
+  return Math.floor(sum / jobs.length);
 }
 
 // Rule 3 only (REQ-10): the mean of the non-null speeds of jobs *currently* ENCODING — a
@@ -119,8 +119,10 @@ function meanEncodeSpeed(jobs: SourceAltitudeJob[]): number | null {
 
 // The only place the 0..1 -> 0..100 conversion happens (REQ-3). The adapter boundary
 // (clients/torrent) keeps 0..1; nothing downstream of this function should multiply again.
+// Floored, never rounded: 99.9% must not read as 100% while bytes are still missing. The
+// epsilon absorbs float error (0.29 * 100 === 28.999999999999996) so floor does not lose 1%.
 function liveProgressToPercent(live: LiveTorrentReading): number {
-  return Math.round(live.progress * 100);
+  return Math.floor(live.progress * 100 + 1e-9);
 }
 
 /**

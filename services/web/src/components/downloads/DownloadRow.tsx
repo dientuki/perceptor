@@ -28,7 +28,7 @@ export default function DownloadRow({
   onDeleteRequest,
 }: DownloadRowProps) {
   const t = useTranslations("downloads.panel");
-  const tSeason = useTranslations("seasonAccordion");
+  const tSeason = useTranslations("shows.seasonAccordion");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [rowError, setRowError] = useState<string | null>(null);

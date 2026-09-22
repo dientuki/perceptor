@@ -51,7 +51,7 @@ export default function DownloadsPanel({
   const t = useTranslations("downloads.panel");
   const router = useRouter();
   const [isRefreshing, startRefresh] = useTransition();
-  const [filter, setFilter] = useState<Bucket | null>(null);
+  const [filter, setFilter] = useState<Bucket | null>("working");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [deleteTarget, setDeleteTarget] = useState<Download | null>(null);

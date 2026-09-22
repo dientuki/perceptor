@@ -54,6 +54,21 @@ describe('deriveSourceStatus', () => {
     });
   });
 
+  it('floors live download progress instead of rounding it', () => {
+    // 99.9% in the torrent client must not read as a finished 100%; 0.29 guards the float
+    // error (0.29 * 100 === 28.999999999999996) a bare Math.floor would turn into 28.
+    const at = (progress: number) =>
+      deriveSourceStatus({
+        sourceStatus: 'QUEUED',
+        jobs: [],
+        live: { state: 'DOWNLOADING', progress },
+      }).downloadProgress;
+
+    expect(at(0.999)).toBe(99);
+    expect(at(0.29)).toBe(29);
+    expect(at(1)).toBe(100);
+  });
+
   it('falls back to the column with null progress when no live reading exists (AC-6)', () => {
     // NFR-4: an unreachable torrent client must not throw and must not invent a percentage.
     // If rule 6 defaulted downloadProgress to 0 instead of null, this would still pass a naive

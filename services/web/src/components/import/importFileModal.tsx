@@ -187,7 +187,10 @@ export default function ImportFileModal({
       onProgress: (bytesSent, bytesTotal) =>
         setProgress({ sent: bytesSent, total: bytesTotal }),
       onSuccess: () => {
-        setStatus("done");
+        // The modal stays mounted across targets (one instance per season
+        // accordion), so a finished upload must clear its state or the next
+        // open shows this file's progress instead of the file picker.
+        reset();
         onClose();
         // Mismo criterio que SearchTorrent: refrescar el server component
         // para que la película aparezca con su estado nuevo.
