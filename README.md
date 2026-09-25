@@ -33,7 +33,7 @@ a release, download, scan, transcode, file, notify and browse. It has no product
 no users besides its author. The published images are release candidates (`v0.1.0-rc1` through
 `v0.2.0-rc4`); there is no stable release yet.
 
-Sixty-eight feature specs (`001` through `068`) live in `docs/spec/features/`. The root `CLAUDE.md`
+Seventy-one feature specs (`001` through `071`) live in `docs/spec/features/`. The root `CLAUDE.md`
 has a stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -71,6 +71,9 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
   filed in its own library folder; you can reclassify it from its detail page.
 - 🎨 **Live action, anime or CGI** is worked out from TMDB genres and keywords when a title is
   registered, and you can correct it per title. The encoder tunes itself to it.
+- 🗝️ **No TMDB key yet? The home page walks you through getting one.** A fresh install shows a
+  short, privacy-first tutorial instead of an empty screen, and a key TMDB rejects brings the same
+  guide back with a notice.
 
 ### Acquire
 - 🌐 **Indexer search through Prowlarr**, for a film, one specific episode or a whole season, with a
@@ -114,6 +117,9 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
   to finish.
 - ☑️ **Files you deselected in qBittorrent are ignored.** A skipped file still takes its full size on
   disk, but it is never mistaken for the release.
+- 💬 **You choose which subtitle formats survive.** Settings → Compression lists text formats (SRT,
+  ASS, WebVTT, mov_text) and image formats (PGS, VobSub, DVB) separately. Per language, text wins
+  over image; text tracks are written as SRT, image tracks are copied as-is — or keep none at all.
 - 🔤 **Track titles in their own script.** Audio and subtitle tracks are labelled `English`,
   `日本語`, `한국어` and so on, so any player shows a readable name.
 - 🔕 **Compression is optional.** Turn it off from Settings and the pipeline still renames, moves
@@ -133,6 +139,10 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
   to what your media server actually sees, plus a local index you can re-sync on demand.
 - 🖥️ **Library browsing** for films and series, with a billboard home, a per-series season accordion
   and actions per episode and per season (search, import, add a torrent or a magnet).
+- 🔄 **Refresh a title from its detail page.** It re-reads the catalog from TMDB — for a series,
+  every season and episode, adding what's new without deleting anything — and re-checks the media
+  server, marking as complete what it holds and as missing what it no longer does. What changed is
+  shown inline.
 - 📅 **A release calendar** at `/calendar`: a month grid of films, shorts and episodes, grouped per
   series and season with a `completed/total` count and coloured by status.
 - 📥 **A global downloads queue** at `/downloads`: every source of every title, filterable, grouped
@@ -148,7 +158,7 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
 - ⏰ **Scheduled tasks** an admin can enable and pace from Settings, for the work that has to happen
   after registration rather than during it.
 - ⚙️ **Settings in the UI**, split into tabs: paths, TMDB key, indexer key, media server,
-  compression, scheduling, and which media types are enabled. A read-only **Environment** tab
+  compression (resolution ceiling and subtitle formats), scheduling, and which media types are enabled. A read-only **Environment** tab
   shows how the installation is reachable and flags an upload URL that doesn't match your domain.
   **Disabling films or series actually
   disables them** — sidebar, billboard, search and routes all follow, while anything already in the
@@ -178,8 +188,8 @@ database password). Then it pulls the published images from GHCR and starts the 
 
 When it finishes, the directory holds `docker-compose.yaml`, `.env` and — once the stack has run
 once — `./backups`. No source, no `bin/`, no `services/`. Sign in with the admin credentials you
-chose; if you skipped the TMDB key, paste it in **Settings** before searching, since a missing key
-answers `401`.
+chose; if you skipped the TMDB key, the home page shows how to get one — paste it in **Settings**
+before searching.
 
 Two things it does for you on every start, not just the first:
 
@@ -360,7 +370,7 @@ your working copy, so edits hot-reload.
    whenever a `Dockerfile` or a dependency changes; source edits alone don't need it.
 
 5. **Sign in** as `ADMIN_USER` with the password you typed during install (it is never stored in `.env`) and open **Settings** to paste your TMDB API key —
-   a fresh checkout ships it empty, so search returns `401` until you do.
+   a fresh checkout ships it empty, and the home page shows a tutorial for getting one until you do.
 
 The schema is applied for you: `api` runs its pending migrations at boot here too. `bin/dbinit` is
 the one thing you may still need by hand, on a fresh `db` volume, before `prisma migrate dev` can
