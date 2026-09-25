@@ -197,9 +197,9 @@ None — no Prisma model or enum changes (NFR-4). Five new `Setting` rows, seede
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: On a fresh `bin/dbreset`, `bin/mysql -e "select \`key\`, value from Setting where \`key\` like 'subtitles_%'"`
+- [x] **AC-1**: On a fresh `bin/dbreset`, `bin/mysql -e "select \`key\`, value from Setting where \`key\` like 'subtitles_%'"`
       returns exactly the five NFR-1 rows and values.
-- [ ] **AC-2**: In Settings → Compression, turning "no subtitles" on disables both groups and all
+- [x] **AC-2**: In Settings → Compression, turning "no subtitles" on disables both groups and all
       seven checkboxes; turning it off and unchecking "allow image subtitles" leaves the three image
       checkboxes disabled but still showing their previous state. After Save and a reload the screen
       shows exactly what was saved.
