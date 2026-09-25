@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 export async function seedSettings(prisma: PrismaClient) {
   console.log('Seeding settings...');
 
-  const settings = [
+  const settings: { key: string; value: string; backfillEmpty?: boolean }[] = [
     // Relativos a las raíces declaradas en .env (HOST_DOWNLOADS_DIR/
     // HOST_DESTINATIONS_DIR, ver media-roots/): '.' es la raíz misma, así
     // que estos tres literales preservan el layout de biblioteca de siempre
@@ -49,6 +49,11 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'shorts_enabled', value: 'false' },
     { key: 'compression_enabled', value: 'true' },
     { key: 'compression_resolution', value: '1080p' },
+    { key: 'subtitles_enabled', value: 'true' },
+    { key: 'subtitles_text_enabled', value: 'true' },
+    { key: 'subtitles_text_formats', value: 'srt,ass,webvtt,mov_text', backfillEmpty: false },
+    { key: 'subtitles_image_enabled', value: 'false' },
+    { key: 'subtitles_image_formats', value: 'pgs,vobsub,dvb', backfillEmpty: false },
 
     { key: 'ui_locale', value: '' },
     { key: 'default_languages', value: '' },
@@ -81,11 +86,11 @@ export async function seedSettings(prisma: PrismaClient) {
   // the state every installation is in before a human (or, for
   // tracker_api_key, INDEXER_API_KEY) supplies a real value — which gets
   // backfilled instead of left blank forever.
-  for (const setting of settings) {
+  for (const { backfillEmpty, ...setting } of settings) {
     const existing = await prisma.setting.findUnique({ where: { key: setting.key } });
     if (!existing) {
       await prisma.setting.create({ data: setting });
-    } else if (existing.value === '' && setting.value !== '') {
+    } else if (backfillEmpty !== false && existing.value === '' && setting.value !== '') {
       await prisma.setting.update({ where: { key: setting.key }, data: { value: setting.value } });
     }
   }

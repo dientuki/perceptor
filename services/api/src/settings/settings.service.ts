@@ -80,6 +80,31 @@ export class SettingsService {
         });
       }
 
+      if (catalogEntry.kind === 'enum_list') {
+        const options = catalogEntry.options!;
+        const ids = [
+          ...new Set(
+            entry.value
+              .split(',')
+              .map((id) => id.trim())
+              .filter((id) => id.length > 0),
+          ),
+        ];
+
+        if (ids.some((id) => !options.includes(id))) {
+          throw i18nError.badRequest(ERROR_KEYS.SETTING_EXPECTED_ENUM_LIST, {
+            key: entry.key,
+            options: options.join(', '),
+          });
+        }
+
+        normalizedEntries.push({
+          key: entry.key,
+          value: options.filter((option) => ids.includes(option)).join(','),
+        });
+        continue;
+      }
+
       if (catalogEntry.kind === 'cron') {
         try {
           new CronTime(entry.value);

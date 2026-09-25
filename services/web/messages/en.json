@@ -34,6 +34,7 @@
     "media": {
       "catalog_unavailable": "Could not query the catalog. Check the TMDB API key.",
       "unsupported_type": "Unsupported media type: {type}",
+      "refresh_in_progress": "This title is already being refreshed, try again in a moment",
       "type_disabled": "{type, select, movie {Movies are disabled on this system} show {Series are disabled on this system} other {This media type is disabled on this system}}",
       "search_unavailable": "Search is disabled on this system",
       "shorts_disabled": "Shorts are disabled on this system"
@@ -117,7 +118,8 @@
       "task_unavailable": "This task is not available: its media type is disabled"
     },
     "setting": {
-      "expected_cron": "The value of {key} must be a valid cron expression"
+      "expected_cron": "The value of {key} must be a valid cron expression",
+      "expected_enum_list": "{key} may only contain: {options}"
     },
     "calendar": {
       "invalid_date": "Invalid date: {value}",
@@ -409,6 +411,14 @@
       "subtitleLabel": "Subtitle languages",
       "audioMandatoryLabel": "Mandatory audio"
     },
+    "refreshTitle": {
+      "button": "Refresh",
+      "done": "Refreshed",
+      "promoted": "{count, plural, one {# item marked as completed} other {# items marked as completed}}",
+      "demoted": "{count, plural, one {# item marked as missing} other {# items marked as missing}}",
+      "catalogFailed": "Could not update the catalog data",
+      "mediaServerFailed": "Could not check the media server"
+    },
     "removeTitle": {
       "title": "Remove title",
       "button": "Remove",
@@ -591,6 +601,12 @@
         "720p": "720p",
         "480p": "480p",
         "360p": "360p"
+      },
+      "subtitles": {
+        "label": "Subtitles",
+        "none": "No subtitles",
+        "allowText": "Allow text subtitles",
+        "allowImage": "Allow image subtitles"
       }
     },
     "mediaServer": {

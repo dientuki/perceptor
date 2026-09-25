@@ -16,6 +16,7 @@ import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED } from '../i18n/error
 import { EncodeCancelledError, registerEncode, releaseEncode } from '../encode/cancellation';
 import { normalizeContentKind } from '../encode/content-kind';
 import { normalizeCompressionResolution } from '../encode/compression-resolution';
+import { normalizeSubtitleFormats } from '../encode/subtitle-formats';
 
 export type EncodeJobDetails = {
   id: number;
@@ -31,6 +32,7 @@ export type EncodeJobDetails = {
   allowedAudioLanguageTags: string[];
   allowedSubtitleLanguagesIso3: string[];
   allowedSubtitleLanguageTags: string[];
+  allowedSubtitleFormats: string[];
   contentKind: string;
   compressionResolution: string;
   seasonNumber: number | null;
@@ -80,7 +82,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags contentKind compressionResolution
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags allowedSubtitleFormats contentKind compressionResolution
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
         compressionEnabled
@@ -99,8 +101,9 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const compressing = details.compressionEnabled !== false;
   const contentKind = normalizeContentKind(details.contentKind);
   const compressionResolution = normalizeCompressionResolution(details.compressionResolution);
+  const allowedSubtitleFormats = normalizeSubtitleFormats(details.allowedSubtitleFormats);
   console.log(
-    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution}`,
+    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution} allowedSubtitleFormats=${JSON.stringify(allowedSubtitleFormats)}`,
   );
 
   const trackTitles = await fetchTrackTitles();
@@ -191,6 +194,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             allowedAudioLanguageTags: details.allowedAudioLanguageTags ?? [],
             allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
             allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
+            allowedSubtitleFormats,
             contentKind,
             compressionResolution,
             containerTitle: buildContainerTitle(details),
@@ -212,6 +216,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             allowedAudioLanguageTags: details.allowedAudioLanguageTags ?? [],
             allowedSubtitleLanguagesIso3: details.allowedSubtitleLanguagesIso3,
             allowedSubtitleLanguageTags: details.allowedSubtitleLanguageTags ?? [],
+            allowedSubtitleFormats,
             contentKind,
             compressionResolution,
             containerTitle: buildContainerTitle(details),

@@ -2,6 +2,7 @@ import { Resolver, Query, Mutation, ResolveField, Parent, Args, Int } from '@nes
 import { LanguageTrackKind as PrismaLanguageTrackKind } from '@prisma/client';
 import { ShowsService } from './shows.service';
 import { Show } from './entities/show.entity';
+import { TitleRefresh } from '@/media/entities/title-refresh.entity';
 import { TitleRemoval } from '@/media/entities/title-removal.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { LanguagesService } from '@/languages/languages.service';
@@ -170,5 +171,20 @@ export class ShowsResolver {
     const show = await this.showsService.findOneFromDb(id, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
     return this.showsService.remove(id, userId);
+  }
+
+  @Mutation(() => TitleRefresh, {
+    name: 'refreshShow',
+    description: 'Re-reads a series from TMDB and the media server and re-syncs its status (069)',
+  })
+  async refreshShow(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.SHOW);
+    const userId = principal.type === 'user' ? principal.id : '';
+    const show = await this.showsService.findOneFromDb(id, userId);
+    if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
+    return this.showsService.refresh(id);
   }
 }

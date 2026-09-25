@@ -265,7 +265,7 @@ describe('ShowsService', () => {
     // MediaSource is SCANNED and whose ProcessJob is COMPLETED must read
     // COMPLETED once it crosses GraphQL. Failing to route through the
     // include and the derivation would silently keep reporting DOWNLOADING.
-    it('derives COMPLETED for an episode with a SCANNED source and a COMPLETED job', async () => {
+    it('reads the stored column, not the finished SCANNED source or COMPLETED job, for an episode (REQ-17)', async () => {
       prisma.show.findFirst.mockResolvedValue({
         id: 7,
         title: 'Mine',
@@ -290,7 +290,8 @@ describe('ShowsService', () => {
 
       const result = await service.findOneFromDb(7, 'user-1');
 
-      expect(result?.seasons[0].episodes[0].status).toBe('COMPLETED');
+      // 069 REQ-17: finished history no longer lifts the column; it is the column that decides.
+      expect(result?.seasons[0].episodes[0].status).toBe('DOWNLOADING');
     });
 
     // 059-season-pack-acquisition-ui T003 / AC-7-AC-8: the season-pack lift.

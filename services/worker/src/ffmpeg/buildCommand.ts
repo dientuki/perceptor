@@ -59,6 +59,7 @@ export function buildFfmpegCommand(
     ),
     ...getSubtitleParams(
       sStreams,
+      details.allowedSubtitleFormats,
       details.allowedSubtitleLanguagesIso3,
       details.allowedSubtitleLanguageTags,
       details.trackTitles,

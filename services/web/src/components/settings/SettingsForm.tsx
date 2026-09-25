@@ -199,6 +199,15 @@ export default function SettingsForm({
                 getSettingValue("compression_enabled") === "true"
               }
               compressionResolution={getSettingValue("compression_resolution")}
+              subtitlesEnabled={getSettingValue("subtitles_enabled") === "true"}
+              subtitlesTextEnabled={
+                getSettingValue("subtitles_text_enabled") === "true"
+              }
+              subtitlesTextFormats={getSettingValue("subtitles_text_formats")}
+              subtitlesImageEnabled={
+                getSettingValue("subtitles_image_enabled") === "true"
+              }
+              subtitlesImageFormats={getSettingValue("subtitles_image_formats")}
             />
           </div>
 

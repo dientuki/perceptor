@@ -3,6 +3,7 @@ import { LanguageTrackKind as PrismaLanguageTrackKind, ContentKind as PrismaCont
 import { MoviesService } from './movies.service';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { Movie } from './entities/movies.entity';
+import { TitleRefresh } from '@/media/entities/title-refresh.entity';
 import { TitleRemoval } from '@/media/entities/title-removal.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { LanguagesService } from '@/languages/languages.service';
@@ -218,5 +219,18 @@ export class MoviesResolver {
     await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.MOVIE);
     const userId = principal.type === 'user' ? principal.id : '';
     return this.moviesService.remove(id, userId);
+  }
+
+  @Mutation(() => TitleRefresh, {
+    name: 'refreshMovie',
+    description: 'Re-reads a film from TMDB and re-checks it against the media server (069)',
+  })
+  async refreshMovie(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.MOVIE);
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.refresh(id, userId);
   }
 }

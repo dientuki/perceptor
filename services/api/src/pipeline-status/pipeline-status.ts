@@ -247,8 +247,11 @@ export type TitleAltitudeInput = {
 
 /**
  * Title-altitude derivation (REQ-4): `ERROR` if and only if the stored column is `ERROR`;
- * otherwise the maximum over the ladder of (a) the column, (b) each non-`ERROR` source's
- * translated status, and (c) the job set with `ERROR` jobs ignored. Reads only the database
+ * otherwise the maximum over the ladder of (a) the column, (b) each source's translated status
+ * except `ERROR` and `SCANNED` ones, and (c) `ENCODING` when any job is WAITING/QUEUED/ENCODING.
+ * A `SCANNED` source and a `COMPLETED` job are finished history, not live work (REQ-17,
+ * `069-title-refresh`): they contribute nothing, so the stored column alone says whether a
+ * finished run still counts (a refresh that demotes the column to `MISSING` must stick). Reads only the database
  * (REQ-5, no live reading) and does not group jobs by source — `plan.md` § Approach decision 1
  * is explicit that `Movie.processJobs`/`Episode.processJobs` are denormalized precisely so this
  * join is unnecessary. Taking `ERROR` from the raw job set instead of the column would let a
@@ -264,16 +267,14 @@ export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
   let best = translateMediaStatus(status) as Exclude<PipelineStatus, 'ERROR'>;
 
   for (const source of sources) {
-    if (source.status === 'ERROR') {
+    if (source.status === 'ERROR' || source.status === 'SCANNED') {
       continue;
     }
     best = maxStatus(best, translateSourceStatus(source.status) as Exclude<PipelineStatus, 'ERROR'>);
   }
 
-  const activeJobs = jobs.filter((job) => job.status !== 'ERROR');
-  if (activeJobs.length > 0) {
-    const allCompleted = activeJobs.every((job) => job.status === 'COMPLETED');
-    best = maxStatus(best, allCompleted ? 'COMPLETED' : 'ENCODING');
+  if (jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status))) {
+    best = maxStatus(best, 'ENCODING');
   }
 
   return best;

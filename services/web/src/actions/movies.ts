@@ -9,7 +9,11 @@ import {
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
-import type { ContentKind, TitleRemovalResult } from "@/types/media";
+import type {
+  ContentKind,
+  TitleRefreshResult,
+  TitleRemovalResult,
+} from "@/types/media";
 
 export interface Movie {
   id: string;
@@ -190,6 +194,56 @@ export async function setMovieShortAction(
   }
 
   return { success: true };
+}
+
+const REFRESH_MOVIE_MUTATION = `
+  mutation RefreshMovie($id: Int!) {
+    refreshMovie(id: $id) {
+      catalog
+      mediaServer
+      promoted
+      demoted
+    }
+  }
+`;
+
+export async function refreshMovieAction(
+  id: string,
+): Promise<TitleRefreshResult> {
+  type Payload = {
+    refreshMovie: {
+      catalog: "DONE" | "FAILED";
+      mediaServer: "DONE" | "SKIPPED" | "FAILED";
+      promoted: number;
+      demoted: number;
+    };
+  };
+  let result: Awaited<ReturnType<typeof fetchGraphQL<Payload>>>;
+  try {
+    result = await fetchGraphQL<Payload>(REFRESH_MOVIE_MUTATION, {
+      id: Number(id),
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { data, errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  if (!data?.refreshMovie) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  revalidatePath("/movies");
+  revalidatePath("/shorts");
+
+  return { success: true, ...data.refreshMovie };
 }
 
 const REMOVE_MOVIE_MUTATION = `

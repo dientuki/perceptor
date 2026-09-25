@@ -204,3 +204,69 @@ describe('SettingsService — cron kind', () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 });
+
+// This suite exists because otherwise the subtitle format lists fail with no
+// error anywhere: a list that accepted an id from the other group (an image id
+// in the text list) or dropped an empty value would reach storage, and the
+// worker would then keep or discard subtitle tracks in every future encode
+// with nothing thrown. Each case fails if the group check, the empty-list
+// pass-through, or the dedupe/catalog-order normalization is removed.
+describe('SettingsService — enum_list kind', () => {
+  let service: SettingsService;
+  let upsert: jest.Mock;
+
+  beforeEach(async () => {
+    upsert = jest.fn().mockResolvedValue({});
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SettingsService,
+        { provide: PrismaService, useValue: { setting: { upsert, findMany: jest.fn().mockResolvedValue([]) } } },
+        { provide: MediaRootsService, useValue: { resolveFromRoot: jest.fn() } },
+        { provide: LanguagesService, useValue: { validateAndResolveLanguageIds: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get<SettingsService>(SettingsService);
+  });
+
+  it.each(['srt,pgs', 'srt,foo'])('refuses %s in the text list without writing anything', async (value) => {
+    let caught: unknown;
+
+    try {
+      await service.updateMany([
+        { key: 'subtitles_enabled', value: 'true' },
+        { key: 'subtitles_text_formats', value },
+      ]);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BadRequestException);
+    expect((caught as BadRequestException).getResponse()).toMatchObject({
+      i18n: {
+        key: 'error.setting.expected_enum_list',
+        params: { key: 'subtitles_text_formats', options: 'srt, ass, webvtt, mov_text' },
+      },
+    });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('stores an empty selection as an empty string instead of refusing or skipping it', async () => {
+    await service.updateMany([{ key: 'subtitles_text_formats', value: '' }]);
+
+    expect(upsert).toHaveBeenCalledWith({
+      where: { key: 'subtitles_text_formats' },
+      update: { value: '' },
+      create: { key: 'subtitles_text_formats', value: '' },
+    });
+  });
+
+  it('trims, dedupes and stores ids in catalog order', async () => {
+    await service.updateMany([{ key: 'subtitles_text_formats', value: 'ass, srt,srt' }]);
+
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: { value: 'srt,ass' } }),
+    );
+  });
+});

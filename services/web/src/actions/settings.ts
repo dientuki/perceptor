@@ -99,10 +99,18 @@ const BOOLEAN_KEYS = [
   "shows_enabled",
   "shorts_enabled",
   "compression_enabled",
+  "subtitles_enabled",
+  "subtitles_text_enabled",
+  "subtitles_image_enabled",
   "schedule_refresh_movies_enabled",
   "schedule_refresh_shows_enabled",
   "schedule_refresh_episodes_enabled",
   "schedule_acquire_pending_enabled",
+] as const;
+
+const LIST_KEYS = [
+  "subtitles_text_formats",
+  "subtitles_image_formats",
 ] as const;
 
 export async function updateSettingsAction(
@@ -121,6 +129,13 @@ export async function updateSettingsAction(
       key,
       value: formData.get(key) === "true" ? "true" : "false",
     });
+  }
+
+  for (const key of LIST_KEYS) {
+    const value = formData.get(key);
+    if (typeof value === "string") {
+      entries.push({ key, value });
+    }
   }
 
   const t = await getTranslations("errors");

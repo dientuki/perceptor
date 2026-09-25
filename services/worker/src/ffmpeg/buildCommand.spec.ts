@@ -16,6 +16,7 @@ function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
     allowedAudioLanguageTags: ['en'],
     allowedSubtitleLanguagesIso3: ['eng'],
     allowedSubtitleLanguageTags: ['en'],
+    allowedSubtitleFormats: ['srt', 'mov_text'],
     contentKind: 'LIVE_ACTION',
     compressionResolution: '1080p',
     containerTitle: 'Some Title',

@@ -43,6 +43,7 @@ export const ERROR_KEYS = {
   MEDIA_TYPE_DISABLED: 'error.media.type_disabled',
   MEDIA_SEARCH_UNAVAILABLE: 'error.media.search_unavailable',
   MEDIA_SHORTS_DISABLED: 'error.media.shorts_disabled',
+  MEDIA_REFRESH_IN_PROGRESS: 'error.media.refresh_in_progress',
 
   // magnet parsing (services/api/src/clients/torrent/magnet.ts)
   MAGNET_NOT_A_MAGNET: 'error.magnet.not_a_magnet',
@@ -63,6 +64,7 @@ export const ERROR_KEYS = {
   SETTING_EXPECTED_BOOLEAN: 'error.setting.expected_boolean',
   SETTING_EXPECTED_INT: 'error.setting.expected_int',
   SETTING_EXPECTED_ENUM: 'error.setting.expected_enum',
+  SETTING_EXPECTED_ENUM_LIST: 'error.setting.expected_enum_list',
   SETTING_MISSING: 'error.setting.missing',
   SETTING_EXPECTED_CRON: 'error.setting.expected_cron',
   LANGUAGE_DUPLICATE: 'error.language.duplicate',

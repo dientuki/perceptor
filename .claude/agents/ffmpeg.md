@@ -154,10 +154,11 @@ When they are indistinguishable, all of them stay — the user would rather see 
 player, notice it, and send a new `ffprobe` to correct this file, than have the encoder pick one at
 random and silently lose the right one.
 
-- **S1 (hard).** Text codecs only — `subrip`, `mov_text`, `tx3g`. An image subtitle (PGS, VOBSUB) is
-  never emitted, not even as the last remaining candidate in a language. No case in the corpus
-  currently exercises the all-PGS-so-zero-subtitles path — the one that did (`4.json`) was retired
-  (REQ-8 of `024`).
+- **S1 (hard).** Only formats in `allowedFormats` (`EncodeJobDetails.allowedSubtitleFormats`, resolved
+  by `api`). The catalog: `srt` = `subrip`; `ass` = `ass`, `ssa`; `webvtt`; `mov_text` = `mov_text`,
+  `tx3g` (text group); `pgs` = `hdmv_pgs_subtitle`; `vobsub` = `dvd_subtitle`; `dvb` =
+  `dvb_subtitle` (image group). Any other codec (`eia_608`, …) is never emitted. An empty list
+  emits no subtitle at all and logs it. Text is written `-c:s srt`, image is stream-copied.
 - **S2 (hard).** Only languages in `allowedLanguagesIso3`, normalized as in A1.
 - **S3 (hard).** A track with no real cue payload is dropped. Measured from `NUMBER_OF_BYTES` and
   `NUMBER_OF_FRAMES`, not from `BPS` alone — `BPS` is a rounded integer and a short real track can
@@ -167,6 +168,8 @@ random and silently lose the right one.
   language, and is kept when it is the only one. Detected from `disposition.hearing_impaired`
   **and** the title, because files tag it either way. Case `1.json` drops an English SDH track this
   way (title-only detection).
+- **S4b (text before image).** Per language, after S4 and before S5: when at least one text stream
+  survives, image streams of that language are dropped; a language with only image streams keeps them.
 - **S5 (evidence, request-driven).** The same three cases as A4, with one difference: subtitles are
   never reduced to one. Every track matching a requested variant is kept; when nothing matches, every
   track of the language is kept; when no variant was requested, S6 applies unchanged. Ordering

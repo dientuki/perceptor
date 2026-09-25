@@ -198,7 +198,61 @@ describe('deriveSourceStatus', () => {
   });
 });
 
+// REQ-17 (069-title-refresh) bug class: a title demoted to MISSING (its file left the media
+// server) still reading COMPLETED/DOWNLOADED because a finished SCANNED source or COMPLETED job
+// lifted it back, so the refresh looks like a no-op; and the opposite, an active job/source no
+// longer lifting a title so a real download reads MISSING. Neither throws anywhere.
 describe('deriveTitleStatus', () => {
+  it('keeps a MISSING column MISSING beside a SCANNED source and a COMPLETED job (REQ-17)', () => {
+    expect(
+      deriveTitleStatus({
+        status: 'MISSING',
+        sources: [{ status: 'SCANNED' }],
+        jobs: [{ status: 'COMPLETED' }],
+      }),
+    ).toBe('MISSING');
+  });
+
+  it('keeps a COMPLETED column COMPLETED beside a SCANNED source and a COMPLETED job (REQ-17)', () => {
+    expect(
+      deriveTitleStatus({
+        status: 'COMPLETED',
+        sources: [{ status: 'SCANNED' }],
+        jobs: [{ status: 'COMPLETED' }],
+      }),
+    ).toBe('COMPLETED');
+  });
+
+  it('lifts a SCANNED source with an ENCODING job to ENCODING (REQ-17)', () => {
+    expect(
+      deriveTitleStatus({
+        status: 'MISSING',
+        sources: [{ status: 'SCANNED' }],
+        jobs: [{ status: 'ENCODING' }],
+      }),
+    ).toBe('ENCODING');
+  });
+
+  it.each(['WAITING', 'QUEUED'] as const)('lifts a %s job to ENCODING (REQ-17)', (status) => {
+    expect(deriveTitleStatus({ status: 'MISSING', sources: [], jobs: [{ status }] })).toBe('ENCODING');
+  });
+
+  it('lifts a READY source with no jobs to DOWNLOADED (REQ-17)', () => {
+    expect(deriveTitleStatus({ status: 'MISSING', sources: [{ status: 'READY' }], jobs: [] })).toBe(
+      'DOWNLOADED',
+    );
+  });
+
+  it('lets an ERROR column win over everything (REQ-17)', () => {
+    expect(
+      deriveTitleStatus({
+        status: 'ERROR',
+        sources: [{ status: 'READY' }],
+        jobs: [{ status: 'ENCODING' }],
+      }),
+    ).toBe('ERROR');
+  });
+
   it('reads COMPLETED when the column is COMPLETED, one source is ERROR and one is SCANNED with a COMPLETED job (AC-8)', () => {
     // This is the highest-value case in the suite (plan.md flags it explicitly). ERROR must come
     // from the stored column alone. `038-encode-report-durability` REQ-9 moves a demoted source's

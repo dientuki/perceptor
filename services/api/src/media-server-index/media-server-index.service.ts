@@ -127,6 +127,34 @@ export class MediaServerIndexService {
     return this.readState();
   }
 
+  // Interval between readState() polls while another rebuild holds the claim.
+  // An instance field so a spec can shrink it instead of waiting real seconds.
+  waitPollIntervalMs = 1000;
+
+  // Guarantees a fresh index before a caller acts on lookups (069 title
+  // refresh). 'native' = the client resolves provider ids itself, no index
+  // involved. Otherwise rebuild(); if another rebuild holds the claim it
+  // returns 'syncing' immediately, so poll readState() until it settles,
+  // bounded by the claim TTL (the claim cannot outlive it). Only a final
+  // 'ready' is 'ready' — anything else is 'failed', never a stale success.
+  async refreshAndWait(
+    clientId: string,
+    config: MediaServerConfig,
+  ): Promise<'ready' | 'failed' | 'native'> {
+    const client = createMediaServerClient(clientId, config, {
+      lookup: (mediaType, tmdbId) => this.lookup(mediaType, tmdbId),
+    });
+    if (!client?.listLibrary) return 'native';
+
+    let snapshot = await this.rebuild(clientId, config);
+    const deadline = Date.now() + REBUILD_CLAIM_TTL_SECONDS * 1000;
+    while (snapshot.state === 'syncing' && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, this.waitPollIntervalMs));
+      snapshot = await this.readState();
+    }
+    return snapshot.state === 'ready' ? 'ready' : 'failed';
+  }
+
   // Derives `state` rather than trusting the stored value verbatim: a
   // process that dies mid-rebuild leaves "syncing" written with no claim
   // left holding it, which would otherwise wedge the UI showing "syncing"

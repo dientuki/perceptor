@@ -5,6 +5,7 @@
 // de la query, mismo criterio que paths/build-output-path.ts.
 import type { CompressionResolution } from './compression-resolution';
 import type { ContentKind } from './content-kind';
+import type { SubtitleFormat } from './subtitle-formats';
 
 export type EncodeInput = {
   originalLanguageIso3: string;
@@ -12,6 +13,7 @@ export type EncodeInput = {
   allowedAudioLanguageTags: string[];
   allowedSubtitleLanguagesIso3: string[];
   allowedSubtitleLanguageTags: string[];
+  allowedSubtitleFormats: SubtitleFormat[];
   contentKind: ContentKind;
   compressionResolution: CompressionResolution;
   containerTitle: string;

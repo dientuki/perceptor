@@ -17,6 +17,7 @@ import { CalendarEpisodeRow } from '@/calendar/group-episodes';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { classifyContentKind } from '@/media/content-kind';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { RefreshCatalogOutcome, TitleRefresh } from '@/media/entities/title-refresh.entity';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs) — same value as
 // MoviesService, kept as its own constant here on purpose (see class doc
@@ -228,6 +229,73 @@ export class ShowsService implements MediaTypeService {
     return `show:hydrate:${tmdbId}`;
   }
 
+  // Upserts every season and episode of a series from an already-fetched
+  // season list (one TMDB call per season). Takes the list rather than
+  // fetching the show detail so a caller that already holds it can reuse
+  // this. Does not touch seasonsSyncedAt or reconcile: that stays with the
+  // caller, after the whole loop has succeeded.
+  private async syncSeasonsAndEpisodes(
+    showId: number,
+    tmdbId: number,
+    seasons: ShowDetail['seasons'],
+  ): Promise<void> {
+    // Sequential on purpose (NFR-6): a Promise.all over N seasons bursts
+    // requests at TMDB's rate limit and can leave the series
+    // half-populated with no error anywhere. Season 0 (specials) is not
+    // filtered — REQ-12.
+    for (const season of seasons) {
+      const seasonRow = await this.prisma.season.upsert({
+        where: {
+          showId_seasonNumber: { showId, seasonNumber: season.seasonNumber },
+        },
+        update: {
+          releaseDate: season.releaseDate
+            ? new Date(season.releaseDate)
+            : undefined,
+        },
+        create: {
+          showId,
+          seasonNumber: season.seasonNumber,
+          releaseDate: season.releaseDate
+            ? new Date(season.releaseDate)
+            : undefined,
+        },
+      });
+
+      const episodes = await this.tmdb.seasonDetails(
+        tmdbId,
+        season.seasonNumber,
+      );
+
+      for (const episode of episodes) {
+        await this.prisma.episode.upsert({
+          where: {
+            seasonId_episodeNumber: {
+              seasonId: seasonRow.id,
+              episodeNumber: episode.episodeNumber,
+            },
+          },
+          update: {
+            title: episode.title,
+            overview: episode.overview,
+            releaseDate: episode.releaseDate
+              ? new Date(episode.releaseDate)
+              : undefined,
+          },
+          create: {
+            seasonId: seasonRow.id,
+            episodeNumber: episode.episodeNumber,
+            title: episode.title,
+            overview: episode.overview,
+            releaseDate: episode.releaseDate
+              ? new Date(episode.releaseDate)
+              : undefined,
+          },
+        });
+      }
+    }
+  }
+
   // Fetches every season and episode a series' catalog entry lists and
   // writes them in. Detached from register() (REQ-13), so nothing here can
   // reach a caller: the whole body is try/catch/finally, and the only traces
@@ -257,61 +325,7 @@ export class ShowsService implements MediaTypeService {
         tmdbId,
       )) as ShowDetail;
 
-      // Sequential on purpose (NFR-6): a Promise.all over N seasons bursts
-      // requests at TMDB's rate limit and can leave the series
-      // half-populated with no error anywhere. Season 0 (specials) is not
-      // filtered — REQ-12.
-      for (const season of detail.seasons) {
-        const seasonRow = await this.prisma.season.upsert({
-          where: {
-            showId_seasonNumber: { showId, seasonNumber: season.seasonNumber },
-          },
-          update: {
-            releaseDate: season.releaseDate
-              ? new Date(season.releaseDate)
-              : undefined,
-          },
-          create: {
-            showId,
-            seasonNumber: season.seasonNumber,
-            releaseDate: season.releaseDate
-              ? new Date(season.releaseDate)
-              : undefined,
-          },
-        });
-
-        const episodes = await this.tmdb.seasonDetails(
-          tmdbId,
-          season.seasonNumber,
-        );
-
-        for (const episode of episodes) {
-          await this.prisma.episode.upsert({
-            where: {
-              seasonId_episodeNumber: {
-                seasonId: seasonRow.id,
-                episodeNumber: episode.episodeNumber,
-              },
-            },
-            update: {
-              title: episode.title,
-              overview: episode.overview,
-              releaseDate: episode.releaseDate
-                ? new Date(episode.releaseDate)
-                : undefined,
-            },
-            create: {
-              seasonId: seasonRow.id,
-              episodeNumber: episode.episodeNumber,
-              title: episode.title,
-              overview: episode.overview,
-              releaseDate: episode.releaseDate
-                ? new Date(episode.releaseDate)
-                : undefined,
-            },
-          });
-        }
-      }
+      await this.syncSeasonsAndEpisodes(showId, tmdbId, detail.seasons);
 
       // Only reached once every season and every episode above has been
       // written — any earlier and a partial fetch would look complete
@@ -333,6 +347,73 @@ export class ShowsService implements MediaTypeService {
     } finally {
       // Deletes the claim regardless of outcome, so a failure does not wedge
       // every future retry until HYDRATE_CLAIM_TTL_SECONDS expires.
+      await this.redis.del(claimKey);
+    }
+  }
+
+  // 069-title-refresh: re-reads the series from TMDB (row fields, plus any new
+  // seasons/episodes; nothing is ever deleted or blanked) and re-syncs status
+  // against the media server. Ownership is checked by the resolver. TMDB and
+  // media-server failures are outcomes, never thrown; only a lost claim throws.
+  async refresh(id: number): Promise<TitleRefresh> {
+    const row = await this.prisma.show.findUnique({ where: { id } });
+    if (!row) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
+    const tmdbId = row.tmdbId;
+
+    // Same key hydrate() claims, so a refresh and a hydration never overlap.
+    const claimKey = this.hydrateClaimKey(tmdbId);
+    const claimed = await this.redis.set(claimKey, '1', 'EX', HYDRATE_CLAIM_TTL_SECONDS, 'NX');
+    if (claimed !== 'OK') throw i18nError.conflict(ERROR_KEYS.MEDIA_REFRESH_IN_PROGRESS);
+
+    try {
+      let catalog = RefreshCatalogOutcome.DONE;
+      try {
+        // One details() call feeds both the row and the season loop.
+        const detail = (await this.tmdb.details(MEDIA_TYPE.SHOW, tmdbId)) as ShowDetail;
+        const releaseDate = detail.firstAirDate || null;
+        await this.prisma.show.update({
+          where: { id },
+          data: {
+            title: detail.title,
+            overview: detail.overview,
+            posterUrl: posterUrl(detail.posterPath) ?? undefined,
+            releaseDate: releaseDate ? new Date(releaseDate) : undefined,
+            originalLanguage: detail.originalLanguage,
+          },
+        });
+
+        await this.syncSeasonsAndEpisodes(id, tmdbId, detail.seasons);
+
+        await this.prisma.show.update({
+          where: { id },
+          data: { seasonsSyncedAt: new Date() },
+        });
+
+        await this.cacheShows([
+          {
+            id: detail.id,
+            title: detail.title,
+            releaseDate,
+            posterUrl: posterUrl(detail.posterPath),
+            originalLanguage: detail.originalLanguage,
+            overview: detail.overview,
+            type: MEDIA_TYPE.SHOW,
+            genreIds: detail.genreIds,
+          },
+        ]);
+      } catch (err) {
+        console.error(`Error refreshing catalog for show tmdbId=${tmdbId}:`, err);
+        catalog = RefreshCatalogOutcome.FAILED;
+      }
+
+      const sync = await this.mediaServerReconcile.syncShow(id, tmdbId);
+      return {
+        catalog,
+        mediaServer: sync.outcome,
+        promoted: sync.promoted,
+        demoted: sync.demoted,
+      };
+    } finally {
       await this.redis.del(claimKey);
     }
   }

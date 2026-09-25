@@ -343,6 +343,28 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // REQ-7 (070-subtitle-format-selection): the effective format list lives in
+  // `base`, so a refactor that moved it into one branch would leave the other
+  // job type with an undefined field and every such encode would silently
+  // keep or drop the wrong subtitles.
+  describe('getEncodeJobDetails — allowedSubtitleFormats', () => {
+    it('is present on the movie and episode branches', async () => {
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      prisma.userShow.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' });
+
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      const movie = await service.getEncodeJobDetails(1);
+
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      const episode = await service.getEncodeJobDetails(1);
+
+      expect(movie.allowedSubtitleFormats).toEqual(['srt', 'ass', 'webvtt', 'mov_text']);
+      expect(episode.allowedSubtitleFormats).toEqual(['srt', 'ass', 'webvtt', 'mov_text']);
+    });
+  });
+
   // REQ-12/REQ-13 (048-shorts-category): a film flagged `isShort` must land
   // under `path_shorts` instead of `path_movies`, but only while the shorts
   // category is *effectively* enabled — a wrong branch here transcodes

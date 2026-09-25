@@ -21,6 +21,38 @@ type LoginResponse {
   user: User!
 }
 
+"""The outcome of refreshing a title from TMDB and from the media server."""
+type TitleRefresh {
+  """Whether the TMDB catalog data was re-read and written in full."""
+  catalog: RefreshCatalogOutcome!
+
+  """
+  Whether the media server was checked, skipped because none is configured, or failed.
+  """
+  mediaServer: RefreshMediaServerOutcome!
+
+  """
+  Films/episodes moved from MISSING to COMPLETED. 0 unless mediaServer is DONE.
+  """
+  promoted: Int!
+
+  """
+  Films/episodes moved from COMPLETED to MISSING. 0 unless mediaServer is DONE.
+  """
+  demoted: Int!
+}
+
+enum RefreshCatalogOutcome {
+  DONE
+  FAILED
+}
+
+enum RefreshMediaServerOutcome {
+  DONE
+  SKIPPED
+  FAILED
+}
+
 type Language {
   id: ID!
   tag: String!
@@ -221,6 +253,7 @@ type EncodeJobDetails {
   downloadsRoot: String!
   compressionEnabled: Boolean!
   compressionResolution: String!
+  allowedSubtitleFormats: [String!]!
 }
 
 type EncodeCompletedResult {
@@ -523,6 +556,11 @@ type Mutation {
   Removes a film from the caller's library; deletes it from Perceptor when they were the last owner (067)
   """
   removeMovie(id: Int!): TitleRemoval!
+
+  """
+  Re-reads a film from TMDB and re-checks it against the media server (069)
+  """
+  refreshMovie(id: Int!): TitleRefresh!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
 
   """
@@ -603,6 +641,11 @@ type Mutation {
   Removes a series from the caller's library; deletes it from Perceptor when they were the last owner (067)
   """
   removeShow(id: Int!): TitleRemoval!
+
+  """
+  Re-reads a series from TMDB and the media server and re-syncs its status (069)
+  """
+  refreshShow(id: Int!): TitleRefresh!
 
   """Envía un release elegido a qBittorrent y lo asocia a la temporada"""
   addTorrentToSeason(seasonId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Season!

@@ -55,6 +55,7 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.MEDIA_TYPE_DISABLED]: '{type} is disabled on this system',
   [ERROR_KEYS.MEDIA_SEARCH_UNAVAILABLE]: 'Search is disabled on this system',
   [ERROR_KEYS.MEDIA_SHORTS_DISABLED]: 'Shorts are disabled on this system',
+  [ERROR_KEYS.MEDIA_REFRESH_IN_PROGRESS]: 'This title is already being refreshed, try again in a moment',
 
   // magnet parsing
   [ERROR_KEYS.MAGNET_NOT_A_MAGNET]: 'That does not look like a magnet link',
@@ -80,6 +81,7 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SETTING_EXPECTED_BOOLEAN]: '"{key}" must be "true" or "false"',
   [ERROR_KEYS.SETTING_EXPECTED_INT]: '"{key}" must be a number',
   [ERROR_KEYS.SETTING_EXPECTED_ENUM]: '"{key}" must be one of: {options}',
+  [ERROR_KEYS.SETTING_EXPECTED_ENUM_LIST]: '{key} may only contain: {options}',
   [ERROR_KEYS.SETTING_MISSING]:
     'Setting "{key}" is missing — configure it in Settings before encoding',
   [ERROR_KEYS.SETTING_EXPECTED_CRON]:

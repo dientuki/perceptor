@@ -17,6 +17,7 @@ import { buildFfmpegCommand } from './buildCommand';
 import { KeyedError } from '../i18n/keyed-error';
 import { CONTENT_KIND_VALUES, type ContentKind } from '../encode/content-kind';
 import type { CompressionResolution } from '../encode/compression-resolution';
+import type { SubtitleFormat } from '../encode/subtitle-formats';
 
 const CASES_DIR = join(__dirname, '..', '..', 'ffmpeg');
 
@@ -50,6 +51,7 @@ type CaseInput = {
   allowedAudioLanguageTags?: string[];
   allowedSubtitleLanguagesIso3: string[];
   allowedSubtitleLanguageTags?: string[];
+  allowedSubtitleFormats?: SubtitleFormat[];
   originalLanguageIso3: string;
   contentKind: ContentKind;
   compressionResolution?: CompressionResolution;
@@ -242,6 +244,7 @@ describe('ffmpeg cases', () => {
       allowedSubtitleLanguagesIso3: input.allowedSubtitleLanguagesIso3,
       allowedSubtitleLanguageTags: input.allowedSubtitleLanguageTags ?? [],
       originalLanguageIso3: input.originalLanguageIso3,
+      allowedSubtitleFormats: input.allowedSubtitleFormats ?? ['srt', 'mov_text'],
       contentKind: input.contentKind,
       compressionResolution: input.compressionResolution ?? '1080p',
       containerTitle: input.containerTitle,

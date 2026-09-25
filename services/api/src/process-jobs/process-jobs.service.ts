@@ -12,6 +12,7 @@ import { i18nError } from '@/i18n/i18n-error';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
 import { ContentKind } from '@/media/entities/content-kind.enum';
+import { resolveAllowedSubtitleFormats } from '@/settings/subtitle-formats';
 import { COMPRESSION_RESOLUTIONS, DEFAULT_COMPRESSION_RESOLUTION } from '@/settings/settings.catalog';
 
 // REQ-4: one automatic recovery per ProcessJob, ever — a constant, not a
@@ -74,6 +75,7 @@ export class ProcessJobsService {
       downloadsRoot: await this.mediaRoots.resolveFromRoot('downloads', '.'),
       compressionEnabled,
       compressionResolution,
+      allowedSubtitleFormats: resolveAllowedSubtitleFormats(settingsMap),
     };
 
     if (processJob.movie) {

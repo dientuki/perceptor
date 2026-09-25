@@ -347,6 +347,12 @@ reclassifies a title's `contentKind` (`LIVE_ACTION`/`ANIME`/`CGI`) via
 `value`, so reverting on a refusal is just setting state back to the previous value; copying the
 remount trick onto a controlled component would be dead code from day one.
 
+Since `069-title-refresh` both pages also render `src/components/media/RefreshTitleButton.tsx`, bound to
+`refreshMovieAction`/`refreshShowAction` and mounted before `RemoveTitleButton`. A `FAILED` outcome is
+not an error: the action returns `{ success: true, catalog, mediaServer, promoted, demoted }`, the page
+reloads with `router.refresh()`, and the button shows which step failed inline (`SKIPPED` shows no
+warning). Only a thrown key (`error.media.refresh_in_progress`, not found, disabled) arrives as `{ error }`.
+
 Since `022-download-status-tags` both pages also render `src/components/downloads/DownloadsPanel.tsx`
 (rows from `getMovieDownloads`/`getShowDownloads` in `src/actions/downloads.ts`, joined into each
 page's existing `Promise.all`), with `src/components/downloads/DeleteDownloadModal.tsx` on the
@@ -793,3 +799,13 @@ confirms `en.json`/`es.json` match exactly (422 keys — the new `contentKind` n
 `bin/npm web run lint` is **not** a usable gate: `biome check` reports ~1519 errors and ~65 warnings
 across the pre-existing template, with or without any given change. Judge a new file by running Biome
 on that file, never on the repo.
+
+## Settings → Compression carries the subtitle format choice (`070-subtitle-format-selection`)
+
+`CompressionPanel.tsx` renders a "no subtitles" checkbox and two groups (text: SRT, ASS/SSA, WebVTT,
+MP4 text; image: PGS, VobSub, DVB), each format its own checkbox. Locking (compression off, "no
+subtitles", a group's own toggle) only disables controls and never clears state, so re-enabling
+restores what the administrator had. The controls carry no `name`; five hidden inputs persist the
+values. `actions/settings.ts` sends the two list keys through `LIST_KEYS`, always, the empty string
+included — `EDITABLE_KEYS`' blank filter would silently drop an empty list. `web` never selects
+`EncodeJobDetails.allowedSubtitleFormats`.

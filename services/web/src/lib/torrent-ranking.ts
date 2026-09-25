@@ -296,6 +296,7 @@ function preferredGroup(
   const trailingSegment =
     title
       .trim()
+      .replace(/\s*\[[^\]]*\]$/, "")
       .split(/[\s.-]+/)
       .pop() ?? "";
   return groups.includes(trailingSegment)

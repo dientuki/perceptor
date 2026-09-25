@@ -81,6 +81,17 @@ export type AcquisitionResult =
   | { success: true }
   | { error: string; errorKey?: string };
 
+/** Outcome of refreshMovie/refreshShow. FAILED outcomes are reported, not thrown. */
+export type TitleRefreshResult =
+  | {
+      success: true;
+      catalog: "DONE" | "FAILED";
+      mediaServer: "DONE" | "SKIPPED" | "FAILED";
+      promoted: number;
+      demoted: number;
+    }
+  | { error: string };
+
 /** Outcome of removeMovie/removeShow; `deleted` is false when only the caller's reference went. */
 export type TitleRemovalResult =
   | { success: true; deleted: boolean; remainingOwners: number }

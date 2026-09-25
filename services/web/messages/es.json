@@ -34,6 +34,7 @@
     "media": {
       "catalog_unavailable": "No se pudo consultar el catálogo. Revisá la API key de TMDB.",
       "unsupported_type": "Tipo de medio no soportado: {type}",
+      "refresh_in_progress": "Ya se está actualizando este título, probá de nuevo en un momento",
       "type_disabled": "{type, select, movie {Las películas están deshabilitadas en este sistema} show {Las series están deshabilitadas en este sistema} other {Este tipo de medio está deshabilitado en este sistema}}",
       "search_unavailable": "La búsqueda está deshabilitada en este sistema",
       "shorts_disabled": "Los cortos están deshabilitados en este sistema"
@@ -117,7 +118,8 @@
       "task_unavailable": "Esta tarea no está disponible: su tipo de contenido está deshabilitado"
     },
     "setting": {
-      "expected_cron": "El valor de {key} tiene que ser una expresión cron válida"
+      "expected_cron": "El valor de {key} tiene que ser una expresión cron válida",
+      "expected_enum_list": "El valor de {key} sólo puede contener: {options}"
     },
     "calendar": {
       "invalid_date": "Fecha inválida: {value}",
@@ -409,6 +411,14 @@
       "subtitleLabel": "Idiomas de subtítulos",
       "audioMandatoryLabel": "Audio obligatorio"
     },
+    "refreshTitle": {
+      "button": "Actualizar",
+      "done": "Actualizado",
+      "promoted": "{count, plural, one {# elemento pasó a completado} other {# elementos pasaron a completado}}",
+      "demoted": "{count, plural, one {# elemento pasó a faltante} other {# elementos pasaron a faltantes}}",
+      "catalogFailed": "No se pudieron actualizar los datos del catálogo",
+      "mediaServerFailed": "No se pudo consultar el servidor de medios"
+    },
     "removeTitle": {
       "title": "Quitar título",
       "button": "Quitar",
@@ -591,6 +601,12 @@
         "720p": "720p",
         "480p": "480p",
         "360p": "360p"
+      },
+      "subtitles": {
+        "label": "Subtítulos",
+        "none": "Sin subtítulos",
+        "allowText": "Permitir subtítulos de texto",
+        "allowImage": "Permitir subtítulos de imagen"
       }
     },
     "mediaServer": {

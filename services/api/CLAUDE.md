@@ -316,6 +316,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `status === 'ENCODING'`) and `null` from every other rule — so a completed, failed, cancelled or
   not-yet-started job's stored speed is never read, by construction, not by a consumer remembering
   to clear it (REQ-10).
+  Since `069-title-refresh` (REQ-17), `deriveTitleStatus` also ignores a `SCANNED` source and a
+  `COMPLETED` job: only live work (a non-`ERROR`, non-`SCANNED` source; a `WAITING`/`QUEUED`/`ENCODING`
+  job) lifts a title above its stored column, so a demotion by the media server sticks. `deriveSourceStatus`
+  (the per-row `/downloads` altitude) is unchanged.
   `deriveTitleStatus` decides one `Movie`/`Episode`'s status as the maximum, over an eight-value
   rank ladder, of its own stored `MediaStatus` and each non-`ERROR` source's derived status — `ERROR`
   surfaces **only** from the stored column, never from a raw job/source read, so a demoted
@@ -507,7 +511,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `getMap()` call onto `EncodeJobDetails.compressionResolution`, resolved at the same query-time
   moment as `compressionEnabled`: the raw row if it is one of the five values, else
   `DEFAULT_COMPRESSION_RESOLUTION` (`'1080p'`) — a missing or hand-edited-invalid row never fails the
-  query. Three more rows — `media_server_index_state`,
+  query. Since `070-subtitle-format-selection`, five `subtitles_*` rows (a new `enum_list` `SettingKind`, which validates, dedupes and stores catalog order; `""` is a valid empty list) are resolved by the pure `resolveAllowedSubtitleFormats` (`settings/subtitle-formats.ts`) onto `EncodeJobDetails.allowedSubtitleFormats`, and the seed does not back-fill the two list rows when empty. Three more rows — `media_server_index_state`,
   `media_server_index_synced_at`, `media_server_index_count` (`034-jellyfin-library-reconciliation`)
   — are seeded but **absent from `settings.catalog.ts`**, the same non-editable treatment as
   `torrent_port`: they are state the system writes about the media-server index rebuild, not
@@ -564,12 +568,22 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   branch (both detached). `MediaServerResolver` gained `mediaServerIndexStatus`/
   `resyncMediaServerIndex`, each with its own `@UseGuards(AdminGuard)` — the existing
   `mediaServerClients` query stays unguarded.
+  Since `069-title-refresh`, the same service also has `syncMovie`/`syncShow`: bidirectional and
+  counted, never throwing (`SKIPPED` with no client, `FAILED` with zero writes when the index or a
+  listing fails). Every write is one `updateMany` whose `where` carries the in-flight relation filter
+  (no live source or job; for an aired episode, no live season pack — `059`'s lift as a filter), and a
+  demotion sets `filePath: null` so `recompute*Status` cannot re-promote it. `MoviesService.refresh`/
+  `ShowsService.refresh` call them; a series refresh takes the same `show:hydrate:<tmdbId>` claim as
+  `hydrate()`, a film the twin `movie:refresh:<tmdbId>`, and a lost claim is
+  `error.media.refresh_in_progress`.
 - **`media-server-index/`** — a leaf module (imports only `RedisModule`; `PrismaService` comes from
   the global `PrismaModule`) holding the local index a client with no native provider-id filter
   (Jellyfin) needs: a `MediaServerItem` row per `(mediaType, tmdbId)` mapping to that server's own
   item id. Deliberately its own module rather than living inside `media-server/`: `SettingsResolver`
   has to trigger a rebuild and `MediaServerModule` already imports `SettingsModule`, so folding the
   index into `media-server/` would make `SettingsModule ⇄ MediaServerModule` circular.
+  `refreshAndWait()` (`069`) rebuilds and, when another rebuild holds the claim, polls `readState()`
+  until it settles (bounded by the claim TTL), returning `ready`/`failed`/`native`.
   `MediaServerIndexService.rebuild()` claims a Redis `SET … NX` lock, enumerates the client's whole
   library via its optional `listLibrary()`, and replaces the table wholesale inside one
   `$transaction` (an explicit `timeout` — the 5s default does not survive a real library) —

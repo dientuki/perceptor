@@ -5,8 +5,13 @@ import {
   setShowPreferredTrackLanguagesAction,
 } from "@/actions/languages";
 import type { Show as ShowRecord } from "@/actions/shows";
-import { removeShowAction, setShowContentKindAction } from "@/actions/shows";
+import {
+  refreshShowAction,
+  removeShowAction,
+  setShowContentKindAction,
+} from "@/actions/shows";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
+import RefreshTitleButton from "@/components/media/RefreshTitleButton";
 import RemoveTitleButton from "@/components/media/RemoveTitleButton";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
 import StatusBadge from "@/components/status/StatusBadge";
@@ -73,6 +78,9 @@ export default async function Show({
         </div>
 
         <div className="flex flex-wrap gap-3">
+          <RefreshTitleButton
+            onRefresh={refreshShowAction.bind(null, show.id)}
+          />
           <RemoveTitleButton
             title={show.title}
             otherOwners={show.otherOwners ?? 0}

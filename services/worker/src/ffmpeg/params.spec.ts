@@ -11,6 +11,7 @@
 // when nobody asked for it, or ignored when somebody did.
 
 import { describe, expect, it, vi } from 'vitest';
+import type { SubtitleFormat } from '../encode/subtitle-formats';
 import { getAudioParams, getSubtitleParams, getVideoParams } from './params';
 
 function audioStream(overrides: Record<string, any>) {
@@ -516,7 +517,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, codec_name: 'hdmv_pgs_subtitle', tags: { language: 'eng' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['eng'], [], TRACK_TITLES);
 
     expect(params).toEqual([]);
   });
@@ -526,7 +527,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, tags: { language: 'eng', BPS: '1' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['eng'], [], TRACK_TITLES);
 
     expect(params).toEqual([]);
   });
@@ -536,7 +537,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, tags: { language: 'eng', title: 'FORCED' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['eng'], [], TRACK_TITLES);
 
     expect(params).toContain('title=English');
   });
@@ -552,7 +553,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'eng', title: 'English' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['eng'], [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:5');
@@ -563,7 +564,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 4, tags: { language: 'eng', title: 'SDH' }, disposition: { hearing_impaired: 1 } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng'], [], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['eng'], [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:4');
@@ -575,7 +576,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'BTM' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], [], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['spa'], [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params.filter((arg) => arg === 'title=Español')).toHaveLength(2);
@@ -593,7 +594,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'Español LA' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], [], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['spa'], [], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params).toContain('0:4');
@@ -606,7 +607,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'Español LA' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], ['es-419'], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['spa'], ['es-419'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:5');
@@ -619,7 +620,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'Latino' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], ['es-ES'], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['spa'], ['es-ES'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:4');
@@ -633,7 +634,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'Latino' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], ['es-419'], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['spa'], ['es-419'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:5');
@@ -649,7 +650,7 @@ describe('getSubtitleParams', () => {
       }),
     ];
 
-    const params = getSubtitleParams(streams, ['spa'], ['es-419'], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['spa'], ['es-419'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:4');
@@ -661,7 +662,7 @@ describe('getSubtitleParams', () => {
       subtitleStream({ index: 5, tags: { language: 'spa', title: 'BTM' } }),
     ];
 
-    const params = getSubtitleParams(streams, ['eng', 'spa'], ['es-ES'], TRACK_TITLES);
+    const params = getSubtitleParams(streams, ['srt', 'mov_text'], ['eng', 'spa'], ['es-ES'], TRACK_TITLES);
 
     expect(mapArgCount(params)).toBe(2);
     expect(params).toContain('0:4');
@@ -669,8 +670,120 @@ describe('getSubtitleParams', () => {
   });
 
   it('builds a valid, empty subtitle argument list when the file has no subtitle stream at all (REQ-13, AC-13)', () => {
-    const params = getSubtitleParams([], ['eng'], [], TRACK_TITLES);
+    const params = getSubtitleParams([], ['srt', 'mov_text'], ['eng'], [], TRACK_TITLES);
 
     expect(params).toEqual([]);
+  });
+
+  describe('format selection (070)', () => {
+    const ALL: SubtitleFormat[] = ['srt', 'ass', 'webvtt', 'mov_text', 'pgs', 'vobsub', 'dvb'];
+    const cases: Array<[string, SubtitleFormat, string]> = [
+      ['subrip', 'srt', 'srt'],
+      ['ass', 'ass', 'srt'],
+      ['ssa', 'ass', 'srt'],
+      ['webvtt', 'webvtt', 'srt'],
+      ['mov_text', 'mov_text', 'srt'],
+      ['tx3g', 'mov_text', 'srt'],
+      ['hdmv_pgs_subtitle', 'pgs', 'copy'],
+      ['dvd_subtitle', 'vobsub', 'copy'],
+      ['dvb_subtitle', 'dvb', 'copy'],
+    ];
+
+    it.each(cases)('%s is selected when %s is allowed and written with %s', (codec, format, output) => {
+      const streams = [subtitleStream({ index: 4, codec_name: codec, tags: { language: 'eng' } })];
+
+      const params = getSubtitleParams(streams, [format], ['eng'], [], TRACK_TITLES);
+
+      expect(params).toEqual(['-map', '0:4', '-c:s:0', output, '-metadata:s:s:0', 'title=English']);
+    });
+
+    it.each(cases)('%s is dropped when %s is not allowed', (codec, format) => {
+      const streams = [subtitleStream({ index: 4, codec_name: codec, tags: { language: 'eng' } })];
+
+      const params = getSubtitleParams(
+        streams,
+        ALL.filter((id) => id !== format),
+        ['eng'],
+        [],
+        TRACK_TITLES,
+      );
+
+      expect(params).toEqual([]);
+    });
+
+    it('never selects a closed-caption codec, even with every format allowed', () => {
+      const streams = [subtitleStream({ index: 4, codec_name: 'eia_608', tags: { language: 'eng' } })];
+
+      expect(getSubtitleParams(streams, ALL, ['eng'], [], TRACK_TITLES)).toEqual([]);
+    });
+
+    it('emits nothing and logs when the allowed list is empty', () => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const streams = [subtitleStream({ index: 4, tags: { language: 'eng' } })];
+
+      expect(getSubtitleParams(streams, [], ['eng'], [], TRACK_TITLES)).toEqual([]);
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('disabled by settings'));
+      log.mockRestore();
+    });
+
+    it('keeps text over image per language and the image track of a language with no text (AC-7)', () => {
+      const streams = [
+        subtitleStream({ index: 4, codec_name: 'subrip', tags: { language: 'spa' } }),
+        subtitleStream({ index: 5, codec_name: 'hdmv_pgs_subtitle', tags: { language: 'spa' } }),
+        subtitleStream({ index: 6, codec_name: 'hdmv_pgs_subtitle', tags: { language: 'eng' } }),
+      ];
+
+      const params = getSubtitleParams(streams, ALL, ['spa', 'eng'], [], TRACK_TITLES);
+
+      expect(params).toEqual([
+        '-map', '0:4', '-c:s:0', 'srt', '-metadata:s:s:0', 'title=Español',
+        '-map', '0:6', '-c:s:1', 'copy', '-metadata:s:s:1', 'title=English',
+      ]);
+    });
+
+    it('keeps the text track and drops the image track even when only the image track carries the requested variant', () => {
+      const streams = [
+        subtitleStream({ index: 4, codec_name: 'subrip', tags: { language: 'spa', title: 'Spanish' } }),
+        subtitleStream({ index: 5, codec_name: 'hdmv_pgs_subtitle', tags: { language: 'spa', title: 'Latino' } }),
+      ];
+
+      const params = getSubtitleParams(streams, ALL, ['spa'], ['es-419'], TRACK_TITLES);
+
+      expect(mapArgCount(params)).toBe(1);
+      expect(params).toContain('0:4');
+    });
+
+    it('keeps a PGS-only language with the language track title when only image is allowed', () => {
+      const streams = [subtitleStream({ index: 4, codec_name: 'hdmv_pgs_subtitle', tags: { language: 'spa' } })];
+
+      const params = getSubtitleParams(streams, ['pgs'], ['spa'], [], TRACK_TITLES);
+
+      expect(params).toContain('title=Español');
+      expect(params).toContain('copy');
+    });
+
+    it('drops a small image track by the cue-payload floor', () => {
+      const streams = [
+        subtitleStream({
+          index: 4,
+          codec_name: 'hdmv_pgs_subtitle',
+          tags: { language: 'eng', NUMBER_OF_BYTES: '10' },
+        }),
+      ];
+
+      expect(getSubtitleParams(streams, ['pgs'], ['eng'], [], TRACK_TITLES)).toEqual([]);
+    });
+
+    it('prefers a plain image track over a hearing-impaired one', () => {
+      const streams = [
+        subtitleStream({ index: 4, codec_name: 'hdmv_pgs_subtitle', tags: { language: 'eng', title: 'English SDH' } }),
+        subtitleStream({ index: 5, codec_name: 'hdmv_pgs_subtitle', tags: { language: 'eng' } }),
+      ];
+
+      const params = getSubtitleParams(streams, ['pgs'], ['eng'], [], TRACK_TITLES);
+
+      expect(mapArgCount(params)).toBe(1);
+      expect(params).toContain('0:5');
+    });
   });
 });

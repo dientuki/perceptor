@@ -1745,6 +1745,49 @@ Consumer obligations:
   writes the setting through `settings`/`updateSettings`, exactly as it did before this feature, with
   one more radio option in Settings → Compression.
 
+### `allowedSubtitleFormats` is the already-effective list of subtitle formats to keep (`070-subtitle-format-selection`)
+
+```graphql
+type EncodeJobDetails {
+  allowedSubtitleFormats: [String!]!
+}
+```
+
+One field added to an existing type; nothing else on it changes. Five settings back it
+(`subtitles_enabled`, `subtitles_text_enabled`, `subtitles_text_formats`, `subtitles_image_enabled`,
+`subtitles_image_formats`), all written through the existing `updateSettings` and never exposed on
+`EncodeJobDetails` themselves.
+
+**`[String!]!`, not an enum**, for the reason `compressionResolution` is a string: a hand-edited
+stored id must not turn into a serialization error on the whole `processJob` query. Valid ids are
+exactly `srt`, `ass`, `webvtt`, `mov_text` (text group) and `pgs`, `vobsub`, `dvb` (image group).
+
+**The list is already effective.** `api` resolves it: `subtitles_enabled` off gives `[]`; otherwise
+the text ids (when the text group is on, and its list is non-empty) followed by the image ids (when
+the image group is on). The worker never sees the group switches and never re-derives them. `[]`
+means "keep no subtitles". Resolved **at query time**, from the same `getMap()` call the other
+compression fields use, so a job enqueued before a change encodes under the new one. A missing row
+resolves to that setting's default; ids outside the group's catalog are dropped.
+
+**The worker trusts nothing it reads.** `normalizeSubtitleFormats()`
+(`services/worker/src/encode/subtitle-formats.ts`) maps an absent, `null` or non-array value to the
+default text formats and logs; unknown ids are dropped and logged; `[]` stays `[]`. `passthrough.ts`
+never reads the field.
+
+| Condition | HTTP / GraphQL error |
+| :-- | :-- |
+| a subtitle row missing or holding unknown ids | none — resolves to the default / drops the ids |
+| `allowedSubtitleFormats` absent or malformed on the worker side | none — default text formats, logged |
+| `updateSettings` with an id outside the group's catalog in either list | `BadRequestException`, `error.setting.expected_enum_list`, params `{ key, options }` |
+| `updateSettings` with `subtitles_*_enabled` not `true`/`false` | existing `error.setting.expected_boolean` |
+
+Consumer obligations:
+
+- `worker` adds the field to its `processJob` selection and normalizes it once beside
+  `compressionResolution`; the result rides `EncodeInput` into `getSubtitleParams`.
+- `web` never selects the field; it writes the five settings, sending both lists on every save,
+  the empty string included.
+
 ### A season pack reaches the web, and its episodes read `QUEUED` while it's in flight (`059-season-pack-acquisition-ui`)
 
 ```graphql
@@ -1961,6 +2004,45 @@ Things the schema cannot express, all load-bearing:
 - **`sourceScanFailed` is the second service-only operation** (after `encodeWorkerStarted`,
   `054`): `@AllowService()` plus an explicit `principal.type === 'service'` check. It returns `true`
   for a source that is missing or no longer `READY`: that is success, never something to retry.
+
+### A title's refresh reports outcomes, not errors (`069-title-refresh`)
+
+```graphql
+type Mutation {
+  refreshMovie(id: Int!): TitleRefresh!
+  refreshShow(id: Int!): TitleRefresh!
+}
+
+type TitleRefresh {
+  catalog: RefreshCatalogOutcome!
+  mediaServer: RefreshMediaServerOutcome!
+  promoted: Int!   # MISSING -> COMPLETED; 0 unless mediaServer is DONE
+  demoted: Int!    # COMPLETED -> MISSING; 0 unless mediaServer is DONE
+}
+
+enum RefreshCatalogOutcome { DONE FAILED }
+enum RefreshMediaServerOutcome { DONE SKIPPED FAILED }
+```
+
+Things the schema cannot express, all load-bearing:
+
+- **A TMDB or media-server failure is a `FAILED` outcome on a successful response, never an
+  error.** The two steps are independent, so `web` can report one while the other succeeded. A
+  `FAILED` step wrote nothing on the media-server side; a catalog `FAILED` may have written part of
+  a series (never blanking or deleting anything). `SKIPPED` means no media server is configured and
+  is not a problem.
+- **Only four things throw:** `error.movie.not_found` (missing or another user's film),
+  `error.show.not_available` (the same, for a series), `error.media.type_disabled`, and the new
+  `error.media.refresh_in_progress` (`409`, a refresh or a background hydration already holds the
+  title's Redis claim).
+- **The mutation returns counts, not the title.** `web` reloads the page (`router.refresh()`).
+- **The media server is the source of truth for `COMPLETED`/`MISSING`, but only for a title with
+  nothing in flight.** A title with a live source or job, or a source in `ERROR`, is never promoted
+  or demoted. A demotion also clears `filePath`; the `ProcessJob` history is left as it was.
+- **REQ-17 changes what a title's `status` means.** A finished pipeline run (a `SCANNED` source, a
+  `COMPLETED` job) no longer lifts the derived status: the stored column decides it, and only live
+  work lifts it. `Download.status` per source row is unchanged.
+- **`isShort` and `contentKind` are never re-derived by a refresh.**
 
 ### What never crosses the boundary
 

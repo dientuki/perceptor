@@ -22,9 +22,17 @@ import { MediaServerReconcileService } from '@/media-server/media-server-reconci
 import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import {
+  RefreshCatalogOutcome,
+  TitleRefresh,
+} from '@/media/entities/title-refresh.entity';
 
 // TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
+
+// TTL of the refresh claim key; the `finally` in refresh() deletes it on
+// every exit path, this only bounds a process dying mid-refresh.
+const REFRESH_CLAIM_TTL_SECONDS = 60 * 2;
 
 // Zero-padded "<Show> S04E01" rendering for a MediaSource owned by an
 // episode, used only in the collision message below — matches the prefill
@@ -293,6 +301,85 @@ export class MoviesService implements MediaTypeService {
     await this.downloadsService.unwindSourcesForTitle({ movieId: id });
     await this.prisma.movie.delete({ where: { id } });
     return { deleted: true, remainingOwners: 0 };
+  }
+
+  // 069-title-refresh: re-reads the catalog facts from TMDB and re-checks the
+  // media server for one owned film. Everything that can throw (ownership,
+  // the claim) throws before any external call. A TMDB failure is reported as
+  // catalog FAILED with the row untouched, never thrown. Only title, overview,
+  // posterUrl, releaseDate and originalLanguage are written: isShort and
+  // contentKind are user-correctable and never touched here.
+  async refresh(id: number, userId: string): Promise<TitleRefresh> {
+    const movie = await this.findOneFromDb(id, userId);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
+
+    const claimKey = `movie:refresh:${movie.tmdbId}`;
+    const claimed = await this.redis.set(
+      claimKey,
+      '1',
+      'EX',
+      REFRESH_CLAIM_TTL_SECONDS,
+      'NX',
+    );
+    if (claimed !== 'OK') {
+      throw i18nError.conflict(ERROR_KEYS.MEDIA_REFRESH_IN_PROGRESS);
+    }
+
+    try {
+      const catalog = await this.refreshCatalog(id, movie.tmdbId);
+      const sync = await this.mediaServerReconcile.syncMovie(id, movie.tmdbId);
+      return {
+        catalog,
+        mediaServer: sync.outcome,
+        promoted: sync.promoted,
+        demoted: sync.demoted,
+      };
+    } finally {
+      await this.redis.del(claimKey);
+    }
+  }
+
+  private async refreshCatalog(
+    id: number,
+    tmdbId: number,
+  ): Promise<RefreshCatalogOutcome> {
+    try {
+      const detail = (await this.tmdb.details(
+        MEDIA_TYPE.MOVIE,
+        tmdbId,
+      )) as MovieDetail;
+      const earliestReleaseDate = await this.tmdb.earliestMovieReleaseDate(tmdbId);
+      const releaseDate = earliestReleaseDate || detail.releaseDate || null;
+
+      const entry: MediaSearchResult = {
+        id: detail.id,
+        title: detail.title,
+        releaseDate: detail.releaseDate || null,
+        posterUrl: posterUrl(detail.posterPath),
+        originalLanguage: detail.originalLanguage,
+        overview: detail.overview,
+        type: MEDIA_TYPE.MOVIE,
+        runtime: detail.runtime ?? null,
+        genreIds: detail.genreIds ?? [],
+        earliestReleaseDate,
+      };
+
+      await this.prisma.movie.update({
+        where: { id },
+        data: {
+          title: entry.title,
+          overview: entry.overview,
+          posterUrl: entry.posterUrl ?? undefined,
+          releaseDate: releaseDate ? new Date(releaseDate) : undefined,
+          originalLanguage: entry.originalLanguage,
+        },
+      });
+      void this.cacheMovies([entry]);
+      return RefreshCatalogOutcome.DONE;
+    } catch (err) {
+      console.error(`Catalog refresh failed for movie ${id}:`, err);
+      return RefreshCatalogOutcome.FAILED;
+    }
   }
 
   // 048-shorts-category REQ-6: the only way an already-registered film gets

@@ -223,4 +223,38 @@ describe('MediaServerIndexService', () => {
       expect(result.state).toBe('syncing');
     });
   });
+
+  // Header: refreshAndWait gates a bidirectional sync that DEMOTES titles the
+  // index says are absent. If waiting on someone else's rebuild that ended in
+  // failure reported 'ready', the sync would demote against a stale index with
+  // no error anywhere.
+  describe('refreshAndWait', () => {
+    it('claim held elsewhere, state goes syncing -> failed -> result failed', async () => {
+      jest.spyOn(registry, 'createMediaServerClient').mockReturnValue({
+        refreshLibrary: jest.fn(),
+        createdMedia: jest.fn(),
+        findByTmdbId: jest.fn(),
+        listPresentEpisodes: jest.fn(),
+        listLibrary: jest.fn(),
+      } as never);
+      redisSet.mockResolvedValue(null); // claim held by another rebuild
+      redisExists.mockResolvedValue(1);
+      const states = ['syncing', 'syncing', 'failed'];
+      findMany.mockImplementation(() =>
+        Promise.resolve([
+          { key: 'media_server_index_state', value: states.shift() ?? 'failed' },
+        ]),
+      );
+      service.waitPollIntervalMs = 1;
+
+      const result = await service.refreshAndWait('jellyfin', {
+        host: 'h',
+        port: '1',
+        apiKey: 'k',
+      });
+
+      expect(result).toBe('failed');
+      expect(states).toHaveLength(0);
+    });
+  });
 });

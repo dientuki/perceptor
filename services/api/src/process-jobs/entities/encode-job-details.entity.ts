@@ -119,4 +119,7 @@ export class EncodeJobDetails {
 
   @Field()
   compressionResolution: string;
+
+  @Field(() => [String])
+  allowedSubtitleFormats: string[];
 }

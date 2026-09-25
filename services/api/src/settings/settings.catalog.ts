@@ -13,6 +13,7 @@ export type SettingKind =
   | 'secret'
   | 'enum'
   | 'languages'
+  | 'enum_list'
   | 'cron';
 
 export type SettingCatalogEntry = {
@@ -20,7 +21,7 @@ export type SettingCatalogEntry = {
   // Sólo presente cuando kind === 'path': contra qué raíz de media-roots se
   // valida este valor.
   rootId?: string;
-  // Sólo presente cuando kind === 'enum': los valores permitidos.
+  // Sólo presente cuando kind === 'enum' o 'enum_list': los valores permitidos.
   options?: string[];
 };
 
@@ -35,6 +36,9 @@ export const COMPRESSION_RESOLUTIONS = ['4k', '1080p', '720p', '480p', '360p'] a
 // the stored `compression_resolution` row is missing or outside the catalog
 // (058-compression-resolution, REQ-4) — never a raw invalid value on the wire.
 export const DEFAULT_COMPRESSION_RESOLUTION: (typeof COMPRESSION_RESOLUTIONS)[number] = '1080p';
+
+export const SUBTITLE_TEXT_FORMATS = ['srt', 'ass', 'webvtt', 'mov_text'] as const;
+export const SUBTITLE_IMAGE_FORMATS = ['pgs', 'vobsub', 'dvb'] as const;
 
 // torrent_port no es editable: es el puerto interno de qBittorrent dentro de
 // la red de Docker (QBITTORRENT_WEBUI_PORT en .env), no algo que el usuario
@@ -55,6 +59,11 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   // options sale del registro de clientes (clients/media-server/registry.ts),
   // no de una lista a mano: sumar un media server ahí lo vuelve válido acá
   // automáticamente.
+  subtitles_enabled: { kind: 'boolean' },
+  subtitles_text_enabled: { kind: 'boolean' },
+  subtitles_text_formats: { kind: 'enum_list', options: [...SUBTITLE_TEXT_FORMATS] },
+  subtitles_image_enabled: { kind: 'boolean' },
+  subtitles_image_formats: { kind: 'enum_list', options: [...SUBTITLE_IMAGE_FORMATS] },
   media_server_client: { kind: 'enum', options: MEDIA_SERVER_IDS },
   media_server_host: { kind: 'string' },
   media_server_port: { kind: 'int' },

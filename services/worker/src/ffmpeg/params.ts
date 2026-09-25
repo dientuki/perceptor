@@ -6,6 +6,7 @@ import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import type { ContentKind } from '../encode/content-kind';
 import type { CompressionResolution } from '../encode/compression-resolution';
+import type { SubtitleFormat } from '../encode/subtitle-formats';
 import {
   ERROR_ENCODE_NO_ORIGINAL_AUDIO,
   ERROR_ENCODE_NO_VIDEO_STREAM,
@@ -407,7 +408,17 @@ export function getAudioParams(
 
 // src/core/ffmpeg/params.ts
 
-const TEXT_SUBTITLE_CODECS = ['subrip', 'mov_text', 'tx3g'];
+type SubtitleGroup = 'text' | 'image';
+
+const SUBTITLE_FORMATS: Record<SubtitleFormat, { group: SubtitleGroup; codecs: string[] }> = {
+  srt: { group: 'text', codecs: ['subrip'] },
+  ass: { group: 'text', codecs: ['ass', 'ssa'] },
+  webvtt: { group: 'text', codecs: ['webvtt'] },
+  mov_text: { group: 'text', codecs: ['mov_text', 'tx3g'] },
+  pgs: { group: 'image', codecs: ['hdmv_pgs_subtitle'] },
+  vobsub: { group: 'image', codecs: ['dvd_subtitle'] },
+  dvb: { group: 'image', codecs: ['dvb_subtitle'] },
+};
 
 const MIN_SUBTITLE_BYTES = 2000;
 const MIN_SUBTITLE_CUES = 100;
@@ -415,8 +426,21 @@ const MIN_SUBTITLE_CUES = 100;
 const HEARING_IMPAIRED_MARKERS = ['sdh', 'cc'];
 const HEARING_IMPAIRED_PHRASES = ['hearing impaired', 'hearing-impaired'];
 
-function isTextSubtitle(stream: any): boolean {
-  return TEXT_SUBTITLE_CODECS.includes((stream.codec_name || '').toLowerCase());
+function subtitleFormatOf(stream: any): SubtitleFormat | null {
+  const codec = (stream.codec_name || '').toLowerCase();
+  const match = (Object.keys(SUBTITLE_FORMATS) as SubtitleFormat[]).find((format) =>
+    SUBTITLE_FORMATS[format].codecs.includes(codec),
+  );
+  return match ?? null;
+}
+
+function subtitleGroupOf(stream: any): SubtitleGroup | null {
+  const format = subtitleFormatOf(stream);
+  return format ? SUBTITLE_FORMATS[format].group : null;
+}
+
+function isImageSubtitle(stream: any): boolean {
+  return subtitleGroupOf(stream) === 'image';
 }
 
 function hasCuePayload(stream: any): boolean {
@@ -442,10 +466,6 @@ function isHearingImpaired(stream: any): boolean {
   );
 }
 
-// REQ-12: one resolver, two callers — getAudioParams prefixes its layout
-// with this, getSubtitleParams uses it as the whole title. Detection is
-// unconditional (REQ-3): the same track reads the same way regardless of
-// who triggered the encode, never gated on what was requested.
 function trackLanguageTitle(stream: any, trackTitles: Record<string, string>): string {
   const lang = normalizeIso3(stream.tags?.language || 'und');
   const variant = detectVariant(stream);
@@ -458,13 +478,16 @@ function trackLanguageTitle(stream: any, trackTitles: Record<string, string>): s
 
 export function getSubtitleParams(
   subtitleStreams: any[],
+  allowedFormats: SubtitleFormat[],
   allowedLanguagesIso3: string[],
   allowedLanguageTags: string[],
   trackTitles: Record<string, string>,
 ) {
-  // Same list the caller resolved for getAudioParams (REQ-8 shares the one
-  // allow-list with REQ-4 — see the assumption at the top of spec.md). Both
-  // sides normalized for the same /B-vs-/T reason as the audio track match.
+  if (allowedFormats.length === 0) {
+    console.log('[ffmpeg] subtitles disabled by settings (allowedSubtitleFormats empty).');
+    return [];
+  }
+
   const allowedLangs = Array.from(
     new Set(allowedLanguagesIso3.map((lang) => normalizeIso3(lang))),
   );
@@ -472,7 +495,7 @@ export function getSubtitleParams(
   const candidates = subtitleStreams.filter(
     (s) =>
       allowedLangs.includes(normalizeIso3(s.tags?.language || '')) &&
-      isTextSubtitle(s) &&
+      allowedFormats.includes(subtitleFormatOf(s) as SubtitleFormat) &&
       hasCuePayload(s),
   );
 
@@ -483,14 +506,9 @@ export function getSubtitleParams(
     );
     if (langStreams.length === 0) return;
 
-    // REQ-17: SDH runs first, so a hearing-impaired track can never become
-    // the variant match that discards a plain one, and stays when it is the
-    // only candidate.
     langStreams = preferring(langStreams, isHearingImpaired);
+    langStreams = preferring(langStreams, isImageSubtitle);
 
-    // REQ-4/REQ-5/REQ-6/REQ-15: unlike audio, subtitles are never reduced to
-    // one — every stream a matched variant survives with is kept, and so is
-    // every stream when nothing matches or no variant was requested at all.
     const requestedForLang = requestedVariants(langCode, allowedLanguageTags);
     if (requestedForLang.length > 0) {
       const narrowed = narrowToVariants(langStreams, requestedForLang);
@@ -503,7 +521,7 @@ export function getSubtitleParams(
   });
 
   if (selected.length === 0) {
-    console.log('[ffmpeg] no text subtitle in an allowed language survived the rules.');
+    console.log('[ffmpeg] no subtitle in an allowed language and format survived the rules.');
     return [];
   }
 
@@ -511,7 +529,7 @@ export function getSubtitleParams(
 
   selected.forEach((s, index) => {
     params.push('-map', `0:${s.index}`);
-    params.push(`-c:s:${index}`, 'srt');
+    params.push(`-c:s:${index}`, isImageSubtitle(s) ? 'copy' : 'srt');
     params.push(`-metadata:s:s:${index}`, `title=${trackLanguageTitle(s, trackTitles)}`);
   });
 

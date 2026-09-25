@@ -153,6 +153,8 @@ Article V.
 
 ## Audio/subtitle/quality rules read a resolved list, never guess (`011-av1-transcode`)
 
+Since `070-subtitle-format-selection`, `EncodeInput.allowedSubtitleFormats` (normalized by `src/encode/subtitle-formats.ts`, absent/`null` → the text formats, `[]` → no subtitles) is handed to `getSubtitleParams` as its second argument beside the language pair; text tracks are written SRT, image tracks copied, and text beats image per language.
+
 `src/ffmpeg/params.ts`'s `getAudioParams`/`getSubtitleParams` take the allow-list `api` already
 merged and resolved — they no longer derive their own `[original, 'spa', 'eng']`. Since
 `039-per-title-language-split`, that is no longer one list feeding both functions: `EncodeInput`

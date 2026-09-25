@@ -9,6 +9,7 @@ import {
 } from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
 import {
+  refreshMovieAction,
   removeMovieAction,
   setMovieContentKindAction,
   setMovieShortAction,
@@ -19,6 +20,7 @@ import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
 import RankingDebugPanel from "@/components/media/RankingDebugPanel";
+import RefreshTitleButton from "@/components/media/RefreshTitleButton";
 import RemoveTitleButton from "@/components/media/RemoveTitleButton";
 import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
 import StatusBadge from "@/components/status/StatusBadge";
@@ -160,6 +162,9 @@ export default function Movie({
             <Magnet size={18} className="text-red-500" />
             {t("magnetButton")}
           </Button>
+          <RefreshTitleButton
+            onRefresh={refreshMovieAction.bind(null, movie.id)}
+          />
           <RemoveTitleButton
             title={movie.title}
             otherOwners={movie.otherOwners ?? 0}
