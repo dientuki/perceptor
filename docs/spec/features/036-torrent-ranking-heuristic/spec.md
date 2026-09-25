@@ -1,10 +1,10 @@
 ---
 title: Torrent Ranking Heuristic
-spec_version: 0.6.0
+spec_version: 0.7.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-31
-last_updated: 2026-09-05
-status: Implemented
+last_updated: 2026-09-25
+status: Approved
 services: [web]
 ---
 
@@ -181,6 +181,47 @@ behaviour it has; `web` gains a view over its results.
       1080p release, exactly the inversion REQ-3's tier pass exists to prevent for AV1/VP9. Like
       REQ-4/REQ-4a this runs before the tier pass, so an upscaled 2160p release cannot set the tier
       and evict every genuine 1080p one.
+
+- [ ] **REQ-4c (Cinema-Capture Veto)** *(`0.7.0`, see § Post-Implementation Amendments)*: When the
+      caller's `UserPreferences.allowCinemaReleases` is **false**, a release whose name identifies
+      it as captured in a cinema — `CAM`, `HDCAM`, `CAMRIP`, `TS`, `HDTS`, `TELESYNC`, `TC`,
+      `TELECINE`, `SCR`, `SCREENER`, `DVDSCR`, `BDSCR`, `DCP`, `DCPRIP`, `WP`/`WORKPRINT` — is
+      discarded in pass 1 alongside REQ-4, REQ-4a and REQ-4b, whatever resolution it claims. When
+      the flag is **true** the veto does not run and the ranking is byte-identical to `0.6.0`.
+
+      This is the checkbox the `0.4.0` Out of Scope section deferred, now that the preference it
+      needs exists end to end (`021-user-preferences`: `User.allowCinemaReleases`, default `false`,
+      the `preferences` query, the `setAllowCinemaReleases` mutation and the Movies tab switch are
+      all already shipped and, until this requirement, write-only). Nothing about the storage, the
+      contract or the UI changes here — only who reads the value.
+
+      **It is a veto and not a demotion for the same reason REQ-4b is.** A cinema capture is not a
+      lower-quality *encode* of the source, it is a different source: a camera pointed at a screen,
+      or a distribution master never meant for viewing. Under REQ-3's tier pass a `CAM` tagged
+      `1080p` does not merely lose a tiebreak, it *sets the tier* and evicts every honest 720p
+      release from the candidate set — the failure mode the `0.4.0` spec flagged as "the first
+      thing to watch for in the manual pass", observed in real result lists ever since.
+
+      **The detection list is matched as boundary-anchored tokens**, the same
+      `(?<![\dA-Za-z])…(?![\dA-Za-z])` discipline REQ-5/REQ-7/REQ-4b already use, and it matters
+      more here than anywhere else in the file: these are the shortest tokens the heuristic has.
+      An unanchored `ts` matches `Ghosts`, `Nights` and the `TS` in `DTS`; an unanchored `tc`
+      matches `Catch`; an unanchored `cam` matches `Camelot`. A false positive here does not
+      reorder a release, it **removes** it, so every token in the list must be provably
+      unambiguous or it does not ship. `DTS`/`DTS-HD` in particular is an audio codec REQ-10
+      already ranks and must never be read as a telesync.
+
+      **Scope: films only.** The veto runs when the modal's target is a movie. An episode or
+      season-pack search ranks exactly as it does today, whatever the flag says — the switch lives
+      in the Movies panel of `/preferences` and means what it says there. Widening it to series is
+      a separate decision with its own UI move, not an implementation detail.
+
+      **When the flag is not known, the veto runs.** `SearchTorrent` fetches preferences per mount
+      and holds `null` until they arrive, or forever if the call fails. Unlike REQ-22's language
+      requirement and REQ-6's preferred groups — both of which degrade to inert, because both only
+      *order* — an inert veto changes what the user sees, so the unknown case resolves to the
+      column's own default (`false`, veto on) rather than to today's behaviour. This matches the
+      fallback `getPreferences` already returns when `api` answers with no data.
 
 - [x] **REQ-5 (Criterion 1 — Resolution)**: Read from the release name, case-insensitive, highest
       match wins: `2160`/`4k` → 5, `1080` → 4, `720` → 3, `480` → 2, `360` → 1, nothing recognised
@@ -542,6 +583,26 @@ document or anything under `services/api/`, they have left scope and must stop a
       `Upscaled` or `AI Upscale`, when the button is pressed, that release is absent and the
       candidate set is drawn from the next tier down — same shape as AC-4, different trigger.
 
+- [ ] **AC-4d** (cinema veto, both states) *(`0.7.0`)*: Given a film whose result list holds five
+      2160p releases of which three are tagged `CAM`, `HDTS` and `DVDSCR`, and the caller's
+      *Allow cinema releases* switch is **off**, when the button is pressed the candidate set holds
+      exactly the other two and the three captures are absent. Given the identical list with the
+      switch **on**, all five are present and ordered exactly as `0.6.0` orders them.
+
+- [ ] **AC-4e** (failure path — the veto empties the set): Given a film whose result list holds
+      *only* cinema captures and the switch is **off**, when the button is pressed the table shows
+      the empty-candidate message from REQ-17 — not the "no results" copy — no error reaches the
+      console, and pressing the button again restores every release in its original order.
+
+- [ ] **AC-4f** (failure path — no false positives): Given a result list containing
+      `… 1080p BluRay DTS-HD MA 5.1 …`, `Ghosts.of.Mars.1080p.BluRay`, `Catch.Me.If.You.Can.1080p`
+      and `Camelot.1080p.WEB-DL`, and the switch is **off**, when the button is pressed **all four**
+      are present — `DTS`, `Ghosts`, `Catch` and `Camelot` are not cinema captures, and the
+      boundary-anchored match is what proves it.
+
+- [ ] **AC-4g** (scope): Given the switch is **off** and an episode search returns a release tagged
+      `HDTS`, when the button is pressed that release is present — the veto is scoped to films.
+
 - [x] **AC-5** (nothing is lost): Given the candidate view is active, when the button is pressed
       again, the table is byte-identical to AC-1 — every hidden release back, in its original
       position, with no parsed-attribute labels.
@@ -637,17 +698,17 @@ document or anything under `services/api/`, they have left scope and must stop a
   among others, which is exactly the model REQ-3 rejects. This feature neither uses nor deletes it.
   When the automatic pick moves this logic to `api`, that is the code it should replace.
 
-- **Handling bad rips (`CAM`, `TS`, `TELESYNC`, `SCREENER`) and specific groups (`YTS`, `RARBG`).**
-  Only the AV1/VP9 veto (and the upscale veto — REQ-4b) removes; nothing else does. An
-  unrecognised source ranks last under REQ-7,
-  which is a weak defence — and note a `CAM` tagged `1080p` not only survives but can *define* the
-  tier, evicting every legitimate 720p release from the candidate set. REQ-3 makes this sharper
-  than it was under a pure ordering, and it is the first thing to watch for in the manual pass.
+- **Handling specific groups (`YTS`, `RARBG`).** Bad rips are no longer here — REQ-4c
+  (`0.7.0`) removes cinema captures when the caller's *Allow cinema releases* switch is off, which
+  is the "permitir cine" checkbox this section deferred at `0.4.0`. Group reputation is still
+  one-directional: REQ-6 *promotes* a preferred group and nothing demotes a distrusted one, so a
+  `YTS` release still competes on its name alone. A distrust list is the mirror of REQ-6 and wants
+  the same per-user storage `021` gave the preferred one.
 
-  The eventual fix is a **"permitir cine" checkbox**, off by default, which is a user preference
-  with its own detection list, its own i18n keys and its own persistence question — not a weight,
-  and not something to fold into this button. Until it ships, the human reading the candidate view
-  is the filter.
+- **Widening the cinema veto to series** *(`0.7.0`)*. REQ-4c runs for films only, because the
+  switch lives in the Movies panel of `/preferences` and says so. A `HDTS` of a simulcast episode
+  is a real thing; covering it means deciding whether the switch is per-media-type or global, and
+  moving it in the UI accordingly.
 
 - **Enforcing "mandatory" anywhere but the ranking** *(`0.5.0`)*. REQ-22 promotes; it never vetoes,
   and a release that does not advertise the language is still perfectly eligible to be picked and
@@ -689,3 +750,35 @@ candidate set actually match what a user would search with. Implemented 2026-09-
   same failure mode REQ-4 (AV1/VP9) and REQ-4a (dead swarm) already exist to prevent, so the fix is
   the same shape — a third pass-1 veto, not a new comparator criterion. See `web/plan.md`'s
   amendments table for the implementation detail.
+
+## Post-Implementation Amendments (2026-09-25)
+
+One follow-up requirement, recorded against a feature already `Implemented`. It adds no service,
+no Prisma column, no GraphQL field and no i18n key — every one of those already shipped under
+`021-user-preferences` — so by Article VII it is an amendment here rather than a feature of its
+own. `services: [web]` is unchanged.
+
+- **REQ-4c (Cinema-Capture Veto), AC-4d–AC-4g.** `User.allowCinemaReleases` has existed, been
+  editable and been persisted since `021`, and has never been read by anything: the switch in the
+  Movies tab of `/preferences` writes a column no code consults. REQ-4c is what makes it mean
+  something, and the meaning is exactly the one the `0.4.0` Out of Scope section wrote down —
+  off hides cinema captures, on is today's behaviour unchanged.
+
+  It lands as a **fourth pass-1 veto beside REQ-4b**, not as a comparator criterion, for the
+  reason REQ-4b did: the damage a `CAM` does under REQ-3 is not that it ranks too high but that it
+  *sets the tier*, taking the whole honest candidate set with it. The two are the same shape —
+  a boundary-anchored token match over the lowercased title, evaluated before the tier pass —
+  and REQ-4b's list is deliberately the model for REQ-4c's. Whether they share one predicate or
+  stay two is `/plan-feature`'s call; what the spec fixes is that they run in the same pass, under
+  the same matching discipline, with the same removal semantics.
+
+  The one genuinely new thing is that this veto is **conditional**, where the other three are
+  unconditional. That is what forces REQ-4c to answer two questions the others never had to: what
+  happens for a target that is not a film (nothing — films only), and what happens when the flag
+  has not loaded (the veto runs, resolving to the column default rather than to today's
+  behaviour). The films-only rule has AC-4g; the not-yet-loaded rule is asserted in REQ-4c with no
+  acceptance criterion of its own, because it is a state the UI reaches only through a failed
+  network call and not one a user can drive from outside the code. `web` has no test runner and
+  this feature must not add one (`services/web/CLAUDE.md`), so the compensating control is the
+  same one every other rule in this spec relies on: the offline harness in `web/plan.md` § Tests,
+  driven with the flag absent.

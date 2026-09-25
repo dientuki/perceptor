@@ -1,7 +1,7 @@
 ---
 title: Torrent Ranking Heuristic — Tasks
-last_updated: 2026-09-05
-status: Done
+last_updated: 2026-09-25
+status: In Progress
 ---
 
 # TASKS: Torrent Ranking Heuristic (`tasks.md`)
@@ -38,6 +38,10 @@ holds for **T014** in Group 4.
 > **Group 5 is the `spec_version` 0.6.0 amendment** — the upscale veto (REQ-4b) — added
 > 2026-09-05, implemented 2026-09-19. Its tasks (T017–T019) are ticked and AC-4c is ticked in
 > `spec.md`.
+>
+> **Group 6 is the `spec_version` 0.7.0 amendment** — the cinema-capture veto (REQ-4c) — added
+> 2026-09-25, and is the **outstanding work**. Its tasks (T020–T023) are unticked and its
+> acceptance criteria (AC-4d … AC-4g) are unticked in `spec.md`.
 
 ## Tasks
 
@@ -361,6 +365,81 @@ T017 and T018 are sequential; T019 is `[docs]` and closes the amendment.
       *Done when:* the CLAUDE.md section names the third veto, REQ-4b/AC-4c are ticked with a
       trace to T018's report, and no "pending"/"not yet implemented" marker remains in any of the
       four feature files.
+
+### Group 6 — `spec_version` 0.7.0: the cinema-capture veto
+
+One service, two files, no contract change. `spec.md` REQ-4c: when the caller's
+`UserPreferences.allowCinemaReleases` is false, a release identified as a cinema capture is
+discarded in pass 1 alongside REQ-4/REQ-4a/REQ-4b. The preference, its mutation, its column and
+its switch all already exist (`021-user-preferences`) and have never been read by anything — this
+group is the read side only.
+
+**What makes this group different from Group 5: the veto is conditional.** That is the whole
+source of its risk and the reason T021 exists as its own task rather than as a line inside T020.
+
+All four are strictly sequential — no `[P]` anywhere in this group. T020 is the module, T021 is
+the one expression that arms it, T022 is the live pass, T023 closes the amendment.
+
+- [x] **T020** `[web]` In `services/web/src/lib/torrent-ranking.ts`, add the veto to the module
+      only — no caller change. Three parts, in order (`web/plan.md` step 17):
+      **(a)** extract `matchesAnyToken(title, tokens)`, building the same
+      `(?<![\dA-Za-z])…(?![\dA-Za-z])` regex the file already uses in five places;
+      **(b)** add `isCinemaCapture(title)` beside `isUpscaled`, over **exactly** REQ-4c's token
+      list (`cam`, `hdcam`, `camrip`, `ts`, `hdts`, `telesync`, `tc`, `telecine`, `scr`,
+      `screener`, `dvdscr`, `bdscr`, `dcp`, `dcprip`, `wp`, `workprint`) — no token that is not in
+      REQ-4c;
+      **(c)** add a fourth parameter `allowCinemaReleases?: boolean` **defaulting to `false`**, and
+      union `!allowCinemaReleases && isCinemaCapture(…)` into pass 1's existing filter.
+      Do **not** merge `isUpscaled` and `isCinemaCapture` into one predicate — share
+      `matchesAnyToken`, not the decision (`web/plan.md` step 17a). No new pass, no comparator key,
+      no new `ranking` field, no `messages/*.json` change.
+      *Done when:* `bin/cli web npx --no tsc --noEmit` reports the baseline (0) and
+      `bin/cli web npx --no biome check src/lib/torrent-ranking.ts` is clean; and a harness run
+      (`web/plan.md` § Tests) pastes output showing, **with the argument omitted**, that one
+      genuine capture per REQ-4c token is discarded while all four AC-4f names survive —
+      `Movie.2024.1080p.BluRay.DTS-HD.MA.5.1`, `Ghosts.of.Mars.1080p.BluRay`,
+      `Catch.Me.If.You.Can.1080p`, `Camelot.1080p.WEB-DL` — and, with the argument `true`, that
+      every capture is kept and the ordering is identical to the `0.6.0` result.
+      Covers **AC-4f** and REQ-4c's unknown-flag branch.
+
+- [x] **T021** `[web]` In `services/web/src/components/search/SearchTorrent.tsx`, compute the
+      argument beside the existing `preferredGroups` derivation and pass it to
+      `rankTorrentResults`: a **movie** target gets `preferences?.allowCinemaReleases ?? false`;
+      an episode, season or null target gets `true`. Add the one comment Article XI's second case
+      owes that `true` — it means "this veto does not apply to this target kind", not "the user
+      allows captures". No new state, no new button, no new copy, no call to
+      `setAllowCinemaReleases`, and no edit to `PreferencesForm.tsx` or to any query document:
+      `Preferences` already selects `allowCinemaReleases` and the component already holds it
+      unused. → T020
+      *Done when:* `bin/cli web npx --no tsc --noEmit` reports the baseline, `bin/npm web run
+      build` exits 0, `bin/cli web node scripts/check-messages.mjs` reports the **same key count
+      as before this group** (REQ-4c adds no copy), and
+      `git diff --stat services/web` names exactly two modified files.
+
+- [ ] **T022** `[web]` Run the `spec_version` 0.7.0 live pass — `plan.md` § Verification steps
+      16–21, against a film still in cinemas, whose result list actually contains captures. Cover:
+      the switch **off** removing every `CAM`/`HDTS`/`DVDSCR`/`DCP` row (**AC-4d**); the switch
+      **on** restoring them with the `0.6.0` ordering (**AC-4d**); an all-captures list producing
+      REQ-17's empty-candidate message and not the "no results" copy, with a clean console and a
+      working toggle-back (**AC-4e**); no legitimate release culled (**AC-4f**); and an
+      **episode** search with the switch off keeping an `HDTS` row (**AC-4g**). Remember the
+      preference is fetched per mount — reopen the modal after changing the switch. → T021
+      *Done when:* the report names, per criterion, the exact release titles that were vetoed and
+      the exact titles that survived, plus the before/after row counts. A criterion the live
+      indexer could not produce is recorded in § Blocked with what it would need — **not** ticked.
+      REQ-4c's unknown-flag branch is reachable here only by blocking the preferences request in
+      devtools: do it and mark it forced, or state plainly that it was not exercised.
+
+- [ ] **T023** `[docs]` Update `services/web/CLAUDE.md`'s torrent-ranking section: pass 1 now
+      vetoes **four** things, not three, and the fourth is the only conditional one — name the
+      preference it reads and the films-only scope. Update the root `CLAUDE.md` "Find release" row
+      to say the "Best candidates" toggle now honours `allowCinemaReleases`, which stopped being
+      write-only. Then walk **AC-4d … AC-4g** against T022's report, tick each one in `spec.md`
+      along with REQ-4c, and set `status: Implemented` on `spec.md`, `plan.md` and `web/plan.md`
+      and `status: Done` here. → T022
+      *Done when:* both CLAUDE.md files name the fourth veto and its condition, every AC in
+      Group 6 is either ticked with a trace to T022's report or listed in § Blocked, and no
+      "outstanding"/"unticked" marker for `0.7.0` remains in any of the four feature files.
 
 ## Blocked
 

@@ -1,8 +1,8 @@
 ---
 title: Torrent Ranking Heuristic — web slice
 service: web
-last_updated: 2026-09-05
-status: Implemented
+last_updated: 2026-09-25
+status: Approved
 ---
 
 # PLAN: Torrent Ranking Heuristic — `web` (`web/plan.md`)
@@ -52,6 +52,18 @@ Writes are confined to `services/web/` and this directory.
 | `services/web/src/lib/torrent-ranking.ts` | Modified | A third pass-1 veto predicate, `isUpscaled(title)`, alongside `isVetoed`/`isDeadSwarm` — boundary-anchored match on `upscaled`/`upscale`/`ai upscale`/`ai-upscale`/`aiupscale`. Unioned into the same pass-1 filter; no new pass, no new comparator criterion, no new `ranking` field (a veto has nothing to label — the release is simply absent). |
 
 No caller change: `SearchTorrent.tsx` already renders whatever pass 1 leaves standing.
+
+**`spec_version` 0.7.0 (`../spec.md` § Post-Implementation Amendments, REQ-4c):**
+
+| File | New / Modified | What changes |
+| :-- | :-- | :-- |
+| `services/web/src/lib/torrent-ranking.ts` | Modified | A fourth pass-1 veto predicate, `isCinemaCapture(title)`, beside `isUpscaled`; a shared token-matching helper the two use; one new argument on `rankTorrentResults` that arms it. No new `ranking` field, no comparator key, no change to the tier pass. |
+| `services/web/src/components/search/SearchTorrent.tsx` | Modified | One derived expression that turns `preferences.allowCinemaReleases` plus the target kind into that argument, and passes it. Nothing else — no new state, no new button, no new copy. |
+
+**No catalog change.** REQ-4c adds no user-facing string: the empty-candidate state it can produce
+is REQ-17's existing message, reused verbatim. `messages/en.json` and `messages/es.json` are
+**untouched**, and `scripts/check-messages.mjs` must still report the same key count it does today.
+A new key here means the plan was misread.
 
 No other file. In particular `src/actions/indexer.ts` and `src/types/indexer.ts` are **unchanged** —
 the module consumes `TorrentResult` as it already exists — and so are
@@ -228,6 +240,71 @@ Steps 12–16 are the outstanding work. Each is verifiable on its own; do not co
     **Do not touch the query documents.** `GetMovie` and `GetShow` already select both fields
     (`039`). Adding them again, or reaching for a new server action, means the plan was misread.
 
+### `spec_version` 0.7.0 — the cinema-capture veto
+
+Steps 12–16 are done. Step 17 is the outstanding work, and it is deliberately one step: the
+predicate and its wiring are useless apart (see `../plan.md` § Order of Work).
+
+17. **The veto** (REQ-4c). Three edits, in this order.
+
+    **a. The shared token helper.** `isUpscaled` and the new `isCinemaCapture` both do the same
+    thing — match any of a fixed set of tokens, boundary-anchored, against an already-lowercased
+    title. Extract that once:
+
+    ```
+    matchesAnyToken(title: string, tokens: string[]): boolean
+    ```
+
+    building the same `(?<![\dA-Za-z])…(?![\dA-Za-z])` regex the file already uses in five places.
+    **This is the "merge" the amendment asks for, and it is the only merge asked for.** Do *not*
+    fold the two vetoes into one predicate: REQ-4b is unconditional and REQ-4c is not, so a single
+    function would have to take the flag and would make the unconditional veto look conditional to
+    the next reader. Share the mechanism, not the decision.
+
+    `isUpscaled` keeps its own regex if converting it is awkward — its `(?:ai[\s._-]?)?` prefix is
+    not a plain token and forcing it through the helper would complicate the helper to serve one
+    caller. Reusing the helper for the new predicate alone is a complete outcome for this step.
+
+    **b. The predicate.** `isCinemaCapture(title)` over REQ-4c's token list. Every token is a plain
+    literal — no prefixes, no optional groups — which is exactly why the helper fits it. Add them
+    lowercased, and add nothing that is not in REQ-4c: the list is a requirement, not a starting
+    point, and a token invented at the keyboard removes releases nobody approved removing.
+
+    Re-read REQ-4c's paragraph on ambiguity before writing the list. `ts` must not match `DTS`
+    (REQ-10 ranks it as an audio codec), `tc` must not match `Catch`, `cam` must not match
+    `Camelot`. The boundary is what buys that, and **AC-4f** is the check.
+
+    **c. The argument and the wiring.** `rankTorrentResults` gains a fourth parameter:
+
+    ```
+    allowCinemaReleases?: boolean   // default false — the veto runs
+    ```
+
+    Union `!allowCinemaReleases && isCinemaCapture(lowerTitle(result))` into the existing pass-1
+    filter, beside the three predicates already there. No new pass.
+
+    **The default is `false`, and it is the one place in this module where an absent argument is
+    not inert.** Every other optional parameter degrades to no-op when omitted (NFR-5). This one
+    defaults to *vetoing*, because the preference it mirrors defaults to `false` and because an
+    inert veto silently shows a user the releases they switched off. `../plan.md` § Contract Freeze
+    records it; do not normalise it.
+
+    In `SearchTorrent.tsx`, compute it beside the existing `preferredGroups` derivation — same
+    shape, same place, same `preferences` state:
+
+    - target is a **movie** → `preferences?.allowCinemaReleases ?? false`
+    - target is anything else (episode, season, or `null`) → `true`
+
+    The `true` on the second branch means **"this veto does not apply to this target"**, not
+    "the user allows captures". It is the one genuinely unreadable line in the change, so it is
+    the one line in it that is owed a comment under Article XI's second case — a rule whose reason
+    cannot live in its name.
+
+    If that branch reads badly enough to bother you, collapsing the module's optional parameters
+    into a single options object is a sanctioned simplification (Article X) — one module, one
+    caller — but it is **all or nothing**: three positionals plus an options bag is worse than
+    either. Decide once, and say which you did in the report.
+
 ## Contract obligations
 
 `../spec.md` § GraphQL Contract Delta is **None — this feature does not cross the service
@@ -247,6 +324,18 @@ The existing error handling in `SearchTorrent.tsx` (`searchError` from `searchTo
 
 Nothing about the selection is persisted or transmitted (NFR-1): no cookie, no `localStorage`, no
 setting, no request body. Toggling issues zero network traffic (NFR-2).
+
+**This still holds at `spec_version` 0.7.0, with one clarification worth stating plainly.** REQ-4c
+reads `UserPreferences.allowCinemaReleases` — a field `api` has exposed since `021` and which
+`SearchTorrent.tsx` **already fetches and already holds in state**, unused. The `Preferences` query
+document in `src/actions/preferences.ts` already selects it. So this amendment adds no query, no
+field, no server action and no `api` edit; it reads a value that is in the browser and being
+thrown away today.
+
+Writing the preference is out of bounds here. `setAllowCinemaReleases` and the switch in
+`PreferencesForm.tsx` exist and are correct — do not add a second control in the modal, do not call
+the mutation from `SearchTorrent.tsx`, and do not "improve" the preferences form while passing
+through it.
 
 ## Tests
 
@@ -284,6 +373,16 @@ an unanchored `lat` promoting every release, or an uncapped `+1` letting a `WEB-
 `BluRay`, both produce a plausible-looking table. Drive the harness with the AC-12 five-release
 set both armed and unarmed, and with the AC-16 false-positive names (`MULTi`, `DUAL`, `Translated`,
 `Latvian`) before touching the UI.
+
+**`spec_version` 0.7.0 needs the harness for one specific thing: the false-positive list.** Every
+other rule in this module reorders when it is wrong; this one *removes*, and it removes the same
+way whether it is right or wrong. Drive the harness with AC-4f's four names — a `DTS-HD MA` title,
+`Ghosts.of.Mars`, `Catch.Me.If.You.Can`, `Camelot` — plus one genuine capture per token in REQ-4c's
+list, with the flag both set and unset, **before** opening the UI. A token that eats a legitimate
+release will not announce itself in the browser: the row is simply not there.
+
+The unknown-flag branch (argument omitted → veto runs) is the other harness case, since the manual
+pass can only reach it by forcing a network failure.
 
 The recorded follow-up is the automatic picker: when the selection moves to `api` to run without a
 human, it lands where jest already lives and where `src/clients/indexer/score.ts` already sits.

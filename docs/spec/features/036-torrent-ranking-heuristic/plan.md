@@ -1,8 +1,8 @@
 ---
 title: Torrent Ranking Heuristic — Implementation Plan
-spec_version: 0.6.0
-last_updated: 2026-09-05
-status: Implemented
+spec_version: 0.7.0
+last_updated: 2026-09-25
+status: Approved
 ---
 
 # PLAN: Torrent Ranking Heuristic (`plan.md`)
@@ -12,7 +12,8 @@ status: Implemented
 > after the code had stopped computing one. `spec_version` 0.5.0 adds the mandatory-audio
 > promotion. Both are reflected below — the 0.4.0 text is a correction of documentation drift, not
 > new work, and nothing in § Order of Work for it remains to be done. `spec_version` 0.6.0
-> (REQ-4b, the upscale veto) is implemented — step 9 below is done.
+> (REQ-4b, the upscale veto) is implemented — step 9 below is done. **`spec_version` 0.7.0
+> (REQ-4c, the cinema-capture veto) is the only outstanding work: step 10.**
 
 ## Approach
 
@@ -99,6 +100,16 @@ Steps 1–9 are **done**. `spec_version` 0.6.0 (`spec.md` § Post-Implementation
 | :-- | :-- | :-- |
 | 9 | `web` | REQ-4b — a third pass-1 veto predicate (`isUpscaled`) alongside `isVetoed`/`isDeadSwarm` in `torrent-ranking.ts`, matching `upscaled`/`ai upscale`/`ai-upscale`/`aiupscale`, boundary-anchored. No new caller wiring — pass 1 already unions its predicates, so this is a same-shape addition, not a new pass. |
 
+Steps 1–9 are **done**. `spec_version` 0.7.0 (`spec.md` § Post-Implementation Amendments,
+2026-09-25) adds the last one. It is one step and not two deliberately: the predicate and the
+caller wiring are useless apart, because unlike REQ-4b this veto is **conditional** — a predicate
+with no flag reaching it would either veto unconditionally (wrong for a user who allows captures)
+or never fire at all (dead code that passes every check).
+
+| Step | Service | Why it must come here |
+| :-- | :-- | :-- |
+| 10 | `web` | REQ-4c — a fourth pass-1 veto predicate (`isCinemaCapture`) beside `isUpscaled`, plus the one argument that arms it and the one expression in `SearchTorrent.tsx` that computes it from `preferences.allowCinemaReleases` and the target kind. Nothing else in the module moves: the tier pass, the comparator and every `ranking` label are untouched — a veto removes a row, so there is nothing for it to label. |
+
 ## Contract Freeze
 
 `spec.md` § GraphQL Contract Delta is **None**, and that is the frozen part: this feature adds no
@@ -127,6 +138,22 @@ What an implementer will be tempted to change and must not:
   into a filter would discard nearly every disc source.
 - **The button never acquires.** REQ-15. Auto-selecting the top candidate is the *next* feature and
   must not arrive early by way of "it was one line".
+
+- **The cinema veto reads a preference; it never writes one** *(`0.7.0`)*. `allowCinemaReleases`
+  already has a mutation (`setAllowCinemaReleases`) and a switch in the Movies tab of
+  `/preferences`. This feature is the **read** side only. Adding a second control inside the
+  torrent modal — even a convenient one — is a UI decision the spec did not make, and it would give
+  the same preference two homes.
+
+- **The veto defaults to ON when the flag is unknown, and that asymmetry is deliberate** *(`0.7.0`)*.
+  Every other optional argument to `rankTorrentResults` degrades to inert when absent (NFR-5,
+  REQ-22, REQ-6). This one does not: absent means the veto runs. An implementer who "fixes" it for
+  consistency has inverted REQ-4c, and the result is silent — captures reappear for a user who
+  switched them off, with nothing on screen to say why.
+
+- **Films only** *(`0.7.0`)*. REQ-4c does not run for an episode or season-pack target. Widening it
+  is in § Out of Scope with the reason; doing it here because "the modal is shared anyway" makes
+  the Movies-tab switch mean something it does not say.
 
 ## Migrations
 
@@ -157,6 +184,9 @@ from it. That is the failure mode to defend against.
 | **The empty-candidate state reuses "no results" copy.** | The user reads "no se encontraron resultados" and searches again, when the releases are one press away. | REQ-17 requires its own message and its own key. AC-6 checks the exact copy. |
 | **No test runner in `web`.** | Every row above is exactly the class of bug Article IX says is owed a test, and this service has nowhere to put one. | Accepted and recorded, not waved away — see `web/plan.md` § Tests. The manual pass is the compensating control; moving the heuristic to `api` (where jest lives) is the named follow-up and the destination anyway. |
 | **The upscale veto matches too loosely.** `includes("upscale")` also hits an unrelated title token, or a hyphen/space variant is missed. | Either a legitimate release is discarded (silent, looks like it just wasn't in the results) or an upscale survives and can define the tier exactly like an unvetoed AV1 release would. | Boundary-anchored matching for every spelling (`upscaled`, `upscale`, `ai upscale`, `ai-upscale`, `aiupscale`), checked by eye in the manual pass against real indexer titles — same discipline as REQ-4/REQ-4a. AC-4c is the direct check. |
+| **A cinema token matched inside a real title** *(`0.7.0`)*. The 2018 film **`Cam`** is the worked example; `TS`, `TC`, `SCR` and `WP` are short enough to collide with a title word or a foreign-language token. | Every release for that film is vetoed, so the candidate set comes back empty — or worse, partially culled — and REQ-17's message reads as "the heuristic rejected everything". Nothing on screen distinguishes this from a genuinely bad result list. | Boundary anchoring removes the *substring* class (`DTS`, `Ghosts`, `Catch`, `Camelot` — AC-4f) but **cannot** remove this class: `Cam` as a standalone title token is indistinguishable from `CAM` as a source tag by name alone. Accepted and documented rather than solved: the switch is the escape hatch, and REQ-17's empty state is already distinct from "no results". Do not attempt a positional heuristic ("only after the year") to rescue it — that is a new rule the spec did not approve. |
+| **The flag is read but the target kind is not** *(`0.7.0`)*. | The veto fires on episode and season searches too. Silent: a user hunting an `HDTS` simulcast sees an empty candidate set and assumes the indexer returned nothing. | REQ-4c is films-only and **AC-4g** is the direct check. The caller computes the argument, not the module — the module has no `target` and must not grow one. |
+| **`preferences` is still `null` when the button is pressed** *(`0.7.0`)*. It is fetched per mount, unawaited. | With the argument defaulting to "veto on", a user who allows captures briefly (or permanently, if the call failed) sees them removed. With it defaulting the other way, a user who forbids them sees them. Either way nothing errors. | REQ-4c resolves it to the column default (veto on), matching the fallback `getPreferences` already returns when `api` answers with no data. The window is small in practice — the button is disabled until a search returns, which is strictly after the preferences call is issued — but it is a window, not an impossibility. |
 
 ## Verification
 
@@ -233,9 +263,9 @@ searching a title that produces them, and say so in the report rather than marki
 
 - **Every release vetoed** — the empty-candidate message from REQ-17 appears, distinct from the "no
   results" copy, and pressing again restores the list. **AC-6**
-- **A `CAM`/`TS` tagged `1080p`** — it will survive and may define the tier, evicting legitimate
-  releases. That is known and out of scope (`spec.md`); report whether it actually happened, since
-  it decides how urgent the "permitir cine" filter is.
+- **A `CAM`/`TS` tagged `1080p`** — *(superseded at `0.7.0`; see the cinema-veto pass below.)* With
+  the switch **on** it still survives and may define the tier, which is now the documented,
+  user-chosen behaviour rather than a gap.
 - **The tiebreak actually deciding** (**AC-17**) — two candidates at the same family ceiling where
   only the smaller names the language. Live sets often settle on source or size before reaching
   criterion 7, so if it never fired, say so instead of ticking AC-17.
@@ -246,3 +276,36 @@ grep -rn "Ordenar" services/web/src
 ```
 
 Expected: no output — the Spanish copy lives in `messages/es.json` (**AC-11**, `018-ui-i18n`).
+
+### The `spec_version` 0.7.0 pass — the cinema veto
+
+Run after the pass above, on a **film**, with the torrent modal open. The switch is
+*Allow cinema releases* in the Movies tab of `/preferences`; it is **off** on a fresh account, so
+check its state before reading anything into the result.
+
+Pick a search that actually returns captures. A film still in cinemas is the reliable source;
+`spec.md`'s AC-4d shape (three captures among five same-tier releases) occurs naturally there and
+almost never on a catalogue title.
+
+16. Switch **off**. Search, press the button. Every `CAM`/`HDTS`/`DVDSCR`/`DCP` row is gone, and
+    the survivors are the same tier as each other. Count them against the pre-press table and name
+    the vetoed titles in the report — a veto leaves nothing on screen, so the count is the only
+    evidence. **AC-4d**
+17. Switch **on** (`/preferences`, save, reopen the modal — the value is fetched per mount, so an
+    open modal keeps the stale one). Search the same title, press again: every capture is back and
+    the ordering matches what `0.6.0` produced. **AC-4d**
+18. Switch **off** again and search a title whose results are *only* captures. The
+    empty-candidate message from REQ-17 appears — not the "no results" copy — the console is
+    clean, and pressing again restores every release. **AC-4e**
+19. With the switch **off**, confirm by eye that no legitimate release was culled: a `DTS-HD MA`
+    row, and any title containing `Ghosts`, `Catch` or `Camelot`, must all still be present. If the
+    live set holds none, search `Ghosts of Mars` on purpose and say so. **AC-4f**
+20. Open an **episode's** modal with the switch still **off** and search something returning an
+    `HDTS`. It must be **present** — the veto is films-only. **AC-4g**
+21. Confirm the network panel stayed silent throughout: the flag comes from the preferences call
+    the modal already makes on mount, and pressing the button issues nothing. **NFR-2**
+
+The one case the manual pass cannot reach is REQ-4c's unknown-flag branch — it needs the
+preferences call to fail. Force it if you want it covered (block the request in devtools, press
+the button, confirm captures are hidden) and report it as forced; otherwise state plainly that it
+was not exercised.

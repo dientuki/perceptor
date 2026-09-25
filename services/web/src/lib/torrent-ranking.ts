@@ -70,6 +70,16 @@ function languageTokens(language: Pick<Language, "iso2" | "iso3">): string[] {
   );
 }
 
+function matchesAnyToken(
+  title: string,
+  tokens: string[],
+  flags?: string,
+): boolean {
+  return tokens.some((tag) =>
+    new RegExp(`(?<![\\dA-Za-z])${tag}(?![\\dA-Za-z])`, flags).test(title),
+  );
+}
+
 /**
  * REQ-23 — whether `title` advertises `language`: any of its tokens present as its own
  * boundary-anchored token, case-insensitively. Same `(?<![\dA-Za-z])…(?![\dA-Za-z])` discipline
@@ -81,9 +91,7 @@ export function matchesLanguage(
   title: string,
   language: Pick<Language, "iso2" | "iso3">,
 ): boolean {
-  return languageTokens(language).some((tag) =>
-    new RegExp(`(?<![\\dA-Za-z])${tag}(?![\\dA-Za-z])`, "i").test(title),
-  );
+  return matchesAnyToken(title, languageTokens(language), "i");
 }
 
 /** The parsed interpretation behind a candidate's placement — rendered per row, see REQ-14. */
@@ -216,6 +224,29 @@ function isUpscaled(title: string): boolean {
   return /(?<![\dA-Za-z])(?:ai[\s._-]?)?upscal(?:ed|e)(?![\dA-Za-z])/.test(
     title,
   );
+}
+
+const CINEMA_CAPTURE_TOKENS = [
+  "cam",
+  "hdcam",
+  "camrip",
+  "ts",
+  "hdts",
+  "telesync",
+  "tc",
+  "telecine",
+  "scr",
+  "screener",
+  "dvdscr",
+  "bdscr",
+  "dcp",
+  "dcprip",
+  "wp",
+  "workprint",
+];
+
+function isCinemaCapture(title: string): boolean {
+  return matchesAnyToken(title, CINEMA_CAPTURE_TOKENS);
 }
 
 /**
@@ -497,6 +528,7 @@ export function rankTorrentResults(
   results: TorrentResult[],
   requirement?: LanguageRequirement | null,
   preferredGroups?: string[] | null,
+  allowCinemaReleases = false,
 ): RankedTorrentResult[] {
   // Caller's own preferred groups (UserPreferences.torrentGroups, scoped MOVIE/SHOW), lower-cased
   // for the same case-insensitive match `matchesLanguage` uses; falls back to the hardcoded
@@ -512,7 +544,8 @@ export function rankTorrentResults(
     (result) =>
       !isVetoed(lowerTitle(result)) &&
       !isDeadSwarm(result) &&
-      !isUpscaled(lowerTitle(result)),
+      !isUpscaled(lowerTitle(result)) &&
+      !(!allowCinemaReleases && isCinemaCapture(lowerTitle(result))),
   );
 
   // Pass 2 — tier. Guard the empty-survivor case explicitly rather than letting Math.max

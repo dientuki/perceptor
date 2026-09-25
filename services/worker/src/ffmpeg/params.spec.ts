@@ -286,7 +286,7 @@ describe('getVideoParams', () => {
   describe('titles (REQ-14)', () => {
     it('titles a converted (non-scaled) H264 SDR encode', () => {
       const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p');
-      expect(titleOf(args)).toBe('AV1 (Converted from H264 SDR)');
+      expect(titleOf(args)).toBe('AV1 (Converted from H264)');
     });
 
     it('titles a downscaled 4K HEVC DoVi encode, starting with plain AV1 and naming the source tier', () => {
@@ -296,7 +296,7 @@ describe('getVideoParams', () => {
         '360p',
       );
       const title = titleOf(args)!;
-      expect(title).toBe('AV1 (Downscaled from 4K HEVC DoVi)');
+      expect(title).toBe('AV1 (Downscaled from 4K HEVC)');
       expect(title.startsWith('AV1 (')).toBe(true);
       expect(title).not.toMatch(/360p|480p|720p|1080p/);
     });

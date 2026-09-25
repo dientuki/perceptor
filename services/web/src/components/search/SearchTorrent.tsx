@@ -143,10 +143,23 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
       ).map((g) => g.name)
     : [];
 
+  // `true` for an episode, a season or no target means "the cinema-capture veto does not apply to
+  // this target kind" (REQ-4c) — it is not "the user allows captures". Only a movie consults the
+  // user's own `allowCinemaReleases` preference.
+  const allowCinemaReleases =
+    target?.kind === "movie"
+      ? (preferences?.allowCinemaReleases ?? false)
+      : true;
+
   // The candidate view derives from `results` without ever mutating it — REQ-16/AC-5 depend on
   // `results` surviving in the API's original order for as long as the modal is open.
   const candidateResults: (TorrentResult | RankedTorrentResult)[] = showBest
-    ? rankTorrentResults(results, languageRequirement, preferredGroups)
+    ? rankTorrentResults(
+        results,
+        languageRequirement,
+        preferredGroups,
+        allowCinemaReleases,
+      )
     : results;
 
   const filteredResults = candidateResults.filter((res) =>

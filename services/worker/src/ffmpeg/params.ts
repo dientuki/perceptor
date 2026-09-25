@@ -182,11 +182,13 @@ function colorTagsFor(form: HdrForm): string[] {
   }
 }
 
-// REQ-14: always plain "AV1", never the target tier.
-function videoTitle(codec: string, form: HdrForm, scaled: boolean, sourceLabel: string): string {
+// REQ-14: always plain "AV1", never the target tier. The HDR form is
+// deliberately not part of the title text — Jellyfin mishandles the file
+// when it's present — even though it still drives colour tag selection above.
+function videoTitle(codec: string, scaled: boolean, sourceLabel: string): string {
   const codec_ = codecLabel(codec);
-  if (!scaled) return `AV1 (Converted from ${codec_} ${form})`;
-  return `AV1 (Downscaled from ${sourceLabel} ${codec_} ${form})`;
+  if (!scaled) return `AV1 (Converted from ${codec_})`;
+  return `AV1 (Downscaled from ${sourceLabel} ${codec_})`;
 }
 
 function copyVideoArgs(): string[] {
@@ -244,7 +246,7 @@ export function getVideoParams(
   return buildAv1EncodeArgs(contentKind, quality, {
     vf,
     colorTags: colorTagsFor(form),
-    title: videoTitle(codec, form, exceeds, sourceTierLabel(width, height)),
+    title: videoTitle(codec, exceeds, sourceTierLabel(width, height)),
   });
 }
 
