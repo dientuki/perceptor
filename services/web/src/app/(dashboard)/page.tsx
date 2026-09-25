@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { unstable_rethrow } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { getCurrentUser } from "@/actions/auth";
 import { getMediaCapabilities, getPopularMedia } from "@/actions/media";
 import { PopularCarousel } from "@/components/billboard/PopularCarousel";
+import TmdbKeyOnboarding from "@/components/billboard/TmdbKeyOnboarding";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import type { MediaSearchResult } from "@/types/search";
 
@@ -19,14 +21,26 @@ export default async function BillboardPage() {
   const t = await getTranslations("pages.billboard");
   const b = await getTranslations("billboard");
 
-  const { moviesEnabled, showsEnabled } = await getMediaCapabilities();
+  const { moviesEnabled, showsEnabled, catalogKeyConfigured } =
+    await getMediaCapabilities();
+
+  // No key: show the onboarding panel and never call popularMedia (071).
+  if (!catalogKeyConfigured && (moviesEnabled || showsEnabled)) {
+    const { isAdmin } = await getCurrentUser();
+    return (
+      <div>
+        <PageBreadcrumb pageTitle={t("title")} />
+        <TmdbKeyOnboarding isAdmin={isAdmin} keyRejected={false} />
+      </div>
+    );
+  }
 
   // Only build a Promise.allSettled entry for an enabled type — a disabled
   // type gets no getPopularMedia call at all (REQ-3), not a call whose
   // result is discarded.
   const jobs: Array<{
     type: "movie" | "show";
-    promise: Promise<MediaSearchResult[]>;
+    promise: ReturnType<typeof getPopularMedia>;
   }> = [];
   if (moviesEnabled) {
     jobs.push({ type: "movie", promise: getPopularMedia("movie") });
@@ -51,28 +65,50 @@ export default async function BillboardPage() {
 
   const resultByType = new Map<
     "movie" | "show",
-    PromiseSettledResult<MediaSearchResult[]>
+    PromiseSettledResult<Awaited<ReturnType<typeof getPopularMedia>>>
   >(jobs.map((job, index) => [job.type, settled[index]]));
 
   const moviesResult = resultByType.get("movie");
+  const moviesValue =
+    moviesResult?.status === "fulfilled" ? moviesResult.value : null;
   const movies: MediaSearchResult[] =
-    moviesResult?.status === "fulfilled" ? moviesResult.value : [];
+    moviesValue && "items" in moviesValue ? moviesValue.items : [];
   const moviesError =
-    moviesResult?.status === "rejected"
-      ? moviesResult.reason instanceof Error
-        ? moviesResult.reason.message
-        : String(moviesResult.reason)
-      : null;
+    moviesValue && "error" in moviesValue
+      ? moviesValue.error
+      : moviesResult?.status === "rejected"
+        ? moviesResult.reason instanceof Error
+          ? moviesResult.reason.message
+          : String(moviesResult.reason)
+        : null;
 
   const showsResult = resultByType.get("show");
+  const showsValue =
+    showsResult?.status === "fulfilled" ? showsResult.value : null;
   const shows: MediaSearchResult[] =
-    showsResult?.status === "fulfilled" ? showsResult.value : [];
+    showsValue && "items" in showsValue ? showsValue.items : [];
   const showsError =
-    showsResult?.status === "rejected"
-      ? showsResult.reason instanceof Error
-        ? showsResult.reason.message
-        : String(showsResult.reason)
-      : null;
+    showsValue && "error" in showsValue
+      ? showsValue.error
+      : showsResult?.status === "rejected"
+        ? showsResult.reason instanceof Error
+          ? showsResult.reason.message
+          : String(showsResult.reason)
+        : null;
+
+  const unauthorizedKey = "error.media.catalog_unauthorized";
+  const keyRejected = [moviesValue, showsValue].some(
+    (value) => value && "error" in value && value.errorKey === unauthorizedKey,
+  );
+  if (keyRejected) {
+    const { isAdmin } = await getCurrentUser();
+    return (
+      <div>
+        <PageBreadcrumb pageTitle={t("title")} />
+        <TmdbKeyOnboarding isAdmin={isAdmin} keyRejected />
+      </div>
+    );
+  }
 
   return (
     <div>

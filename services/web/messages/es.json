@@ -37,7 +37,8 @@
       "refresh_in_progress": "Ya se está actualizando este título, probá de nuevo en un momento",
       "type_disabled": "{type, select, movie {Las películas están deshabilitadas en este sistema} show {Las series están deshabilitadas en este sistema} other {Este tipo de medio está deshabilitado en este sistema}}",
       "search_unavailable": "La búsqueda está deshabilitada en este sistema",
-      "shorts_disabled": "Los cortos están deshabilitados en este sistema"
+      "shorts_disabled": "Los cortos están deshabilitados en este sistema",
+      "catalog_unauthorized": "TMDB rechazó la clave de API configurada."
     },
     "episode": {
       "already_completed": "Este episodio ya está descargado. Confirmá para reemplazar el archivo actual."
@@ -383,7 +384,27 @@
   "billboard": {
     "moviesHeading": "Películas populares",
     "showsHeading": "Series populares",
-    "unavailable": "Las películas y las series están deshabilitadas en este sistema."
+    "unavailable": "Las películas y las series están deshabilitadas en este sistema.",
+    "tmdbOnboarding": {
+      "rejectedTitle": "Tu clave de TMDB no funciona",
+      "rejectedBody": "TMDB rechazó la clave de API configurada. Reemplazala por una válida siguiendo los pasos de abajo.",
+      "title": "Conectá Perceptor con TMDB",
+      "whyTitle": "Por qué necesitás tu propia clave",
+      "why": "Perceptor no tiene un servidor central ni una clave compartida. Con tu propia clave de TMDB, las consultas al catálogo van directo desde tu instalación a TMDB, con tu propia cuenta. Perceptor no guarda ningún dato tuyo de ninguna forma.",
+      "adminOnly": "Solo un administrador puede completar el último paso.",
+      "stepsTitle": "Cómo conseguir una clave",
+      "step1": "Creá una cuenta gratuita en TMDB.",
+      "step1Link": "Registrarse en TMDB",
+      "step2": "Confirmá el e-mail que te manda TMDB y después iniciá sesión.",
+      "step2Link": "Iniciar sesión en TMDB",
+      "step3": "Abrí la página de API y pedí una clave: elegí el tipo \"Developer\", uso personal / no comercial, y aceptá los términos.",
+      "step3Link": "Abrir la página de API de TMDB",
+      "step3Terms": "Términos de uso de TMDB",
+      "step4": "Copiá el \"API Read Access Token\" de esa misma página. Es el token largo, no la \"API Key\" corta.",
+      "step5Admin": "Pegalo en el campo de clave de API de TMDB en Ajustes y guardá.",
+      "step5Link": "Abrir Ajustes",
+      "step5User": "Pedile a un administrador que lo pegue en Ajustes, en el campo de clave de API de TMDB, y guarde."
+    }
   },
   "media": {
     "card": {

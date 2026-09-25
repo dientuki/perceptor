@@ -102,16 +102,16 @@ None.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given `movie_db_api_key` empty, an admin opening `/` sees the privacy reason first,
+- [x] **AC-1**: Given `movie_db_api_key` empty, an admin opening `/` sees the privacy reason first,
       then the five steps with working links, step 5 linking to Settings; no catalog error text
       appears, and the api logs show no TMDB request for that page load.
 - [ ] **AC-2**: Given the same state, a non-admin opening `/` sees the same reason and steps, with a
       clear note that only an administrator can finish, and no link to Settings.
-- [ ] **AC-3 (failure)**: Given `movie_db_api_key` set to `garbage`, opening `/` shows the "your key
+- [x] **AC-3 (failure)**: Given `movie_db_api_key` set to `garbage`, opening `/` shows the "your key
       does not work" notice followed by the onboarding panel.
-- [ ] **AC-4 (failure)**: Given a valid key but TMDB unreachable (e.g. network cut from the `api`
+- [x] **AC-4 (failure)**: Given a valid key but TMDB unreachable (e.g. network cut from the `api`
       container), `/` shows today's `catalog_unavailable` error, not the onboarding panel.
-- [ ] **AC-5**: After an admin saves a valid key in Settings, reloading `/` shows the popular
+- [x] **AC-5**: After an admin saves a valid key in Settings, reloading `/` shows the popular
       carousels.
 - [ ] **AC-6**: Every link in the panel opens the expected TMDB page (signup, login, API settings,
       API terms) — checked by hand on the day the spec is approved.

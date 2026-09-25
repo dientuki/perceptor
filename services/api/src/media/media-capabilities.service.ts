@@ -26,6 +26,7 @@ export class MediaCapabilitiesService {
       moviesEnabled,
       showsEnabled: this.isEnabledInMap(map, MEDIA_TYPE.SHOW),
       shortsEnabled: moviesEnabled && map['shorts_enabled'] === 'true',
+      catalogKeyConfigured: (map['movie_db_api_key'] ?? '').trim() !== '',
     };
   }
 

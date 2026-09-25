@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TmdbClient } from '@/clients/tmdb/client';
+import { TmdbHttpError } from '@/clients/tmdb/errors';
 import { MediaDispatchService } from './media-dispatch.service';
 import { MediaSearchResult as MediaSearchResultEntity } from '@/media/entities/media-search-result.entity';
 import { MediaSearchResult } from '@/clients/types';
@@ -49,7 +50,12 @@ export class PopularMediaService {
     if (!rows) {
       try {
         rows = await this.tmdb.popular(type as MediaType, locale);
-      } catch {
+      } catch (err) {
+        // Only a 401 means the configured key was rejected; every other failure
+        // (5xx, network) stays the generic outage key.
+        if (err instanceof TmdbHttpError && err.status === 401) {
+          throw i18nError.serviceUnavailable(ERROR_KEYS.MEDIA_CATALOG_UNAUTHORIZED);
+        }
         throw i18nError.serviceUnavailable(ERROR_KEYS.MEDIA_CATALOG_UNAVAILABLE);
       }
 

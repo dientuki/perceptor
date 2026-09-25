@@ -58,10 +58,13 @@ status: In Progress
       non-admin, empty key, `garbage` key, unreachable TMDB, valid key, every link clicked,
       non-admin GraphQL read). → T005
       *Done when:* each AC is recorded as confirmed or explicitly not run, with the reason.
-      *Result (2026-09-25):* AC-1 to AC-5 and AC-7 (response half) **not run** — no login available in
-      the session, and AC-3/AC-5 would rewrite the installation's TMDB key. AC-6: signup, login and
-      api-terms answer 200; `/settings/api` answers 401 anonymously (needs a TMDB login), so that
-      link was not confirmed by hand. AC-7 drift half: `check-messages` OK at 553 keys.
+      *Result (2026-09-25):* confirmed live in the browser pane as admin: AC-1 (empty key: reason +
+      five steps, no error text, no rejection notice, no TMDB line in the api logs), AC-3 (`garbage`:
+      notice + panel), AC-4 (`movie_db_host` pointed at a dead port with the popular cache cleared:
+      today's `catalog_unavailable` text, no panel), AC-5 (real key: carousels). **Not run:** AC-2 and
+      the non-admin half of AC-7 (no non-admin login); AC-6 only partly — the four hrefs and `/settings`
+      are as specified and signup/login/api-terms answer 200, but `/settings/api` needs a TMDB login
+      (401 anonymously). AC-7 drift half: `check-messages` OK at 553 keys.
 - [x] **T007** `[docs]` Update root `CLAUDE.md`: Search catalog row (`071` in specs, one sentence on
       `catalogKeyConfigured` + onboarding panel) and a "Current state" entry with measured counts.
       → T006

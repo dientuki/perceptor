@@ -32,6 +32,7 @@ describe('MediaCapabilitiesService', () => {
       moviesEnabled: true,
       showsEnabled: true,
       shortsEnabled: false,
+      catalogKeyConfigured: false,
     });
   });
 
@@ -41,6 +42,7 @@ describe('MediaCapabilitiesService', () => {
       moviesEnabled: true,
       showsEnabled: true,
       shortsEnabled: false,
+      catalogKeyConfigured: true,
     });
   });
 
@@ -50,6 +52,7 @@ describe('MediaCapabilitiesService', () => {
       moviesEnabled: true,
       showsEnabled: true,
       shortsEnabled: false,
+      catalogKeyConfigured: false,
     });
   });
 
@@ -59,6 +62,7 @@ describe('MediaCapabilitiesService', () => {
       moviesEnabled: false,
       showsEnabled: true,
       shortsEnabled: false,
+      catalogKeyConfigured: false,
     });
   });
 
@@ -68,6 +72,7 @@ describe('MediaCapabilitiesService', () => {
       moviesEnabled: true,
       showsEnabled: true,
       shortsEnabled: true,
+      catalogKeyConfigured: false,
     });
   });
 
@@ -77,6 +82,21 @@ describe('MediaCapabilitiesService', () => {
       moviesEnabled: false,
       showsEnabled: true,
       shortsEnabled: false,
+      catalogKeyConfigured: false,
+    });
+  });
+
+  // Otherwise a blank or absent TMDB key reads as configured and `web` never
+  // shows the onboarding prompt, leaving an empty home page with no error.
+  describe('catalogKeyConfigured', () => {
+    it.each([
+      ['empty', { movie_db_api_key: '' }, false],
+      ['whitespace-only', { movie_db_api_key: '  \t ' }, false],
+      ['absent', {}, false],
+      ['set', { movie_db_api_key: 'abc' }, true],
+    ])('is derived from the %s key', async (_n, map, expected) => {
+      await build(map);
+      await expect(service.read()).resolves.toMatchObject({ catalogKeyConfigured: expected });
     });
   });
 

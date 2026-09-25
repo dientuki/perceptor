@@ -6,6 +6,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { SettingsService } from '@/settings/settings.service';
 import { RedisService } from '@/redis/redis.service';
 import { MEDIA_TYPE } from '@/types/media';
+import { TmdbHttpError } from '@/clients/tmdb/errors';
 
 // This suite exists because 033-billboard-and-navigation's list cache sits on
 // top of three invariants that a perfectly successful response cannot reveal
@@ -123,5 +124,35 @@ describe('PopularMediaService', () => {
     expect(redis.get).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
     expect(tmdb.popular).not.toHaveBeenCalled();
+  });
+
+  // Defends against a rejected key (401) being reported as a generic outage, or
+  // every failure being upgraded to "bad key": the billboard would then show the
+  // wrong onboarding state with no error anywhere.
+  describe('TMDB failures', () => {
+    const keyOf = async (err: unknown) => {
+      tmdb.popular.mockRejectedValue(err);
+      prisma.user.findUnique.mockResolvedValue({ uiLocale: 'en' });
+      try {
+        await service.list(MEDIA_TYPE.MOVIE, 'user-1');
+      } catch (e) {
+        return (e as { getResponse: () => { i18n: { key: string } } }).getResponse().i18n.key;
+      }
+      return undefined;
+    };
+
+    it('maps a TMDB 401 to catalog_unauthorized and writes nothing to the cache', async () => {
+      expect(await keyOf(new TmdbHttpError(401, 'TMDB 401'))).toBe('error.media.catalog_unauthorized');
+      expect(redis.set).not.toHaveBeenCalled();
+    });
+
+    it('keeps catalog_unavailable for a TMDB 500', async () => {
+      expect(await keyOf(new TmdbHttpError(500, 'TMDB 500'))).toBe('error.media.catalog_unavailable');
+      expect(redis.set).not.toHaveBeenCalled();
+    });
+
+    it('keeps catalog_unavailable for a network error', async () => {
+      expect(await keyOf(new TypeError('fetch failed'))).toBe('error.media.catalog_unavailable');
+    });
   });
 });

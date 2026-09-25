@@ -40,6 +40,7 @@ export const ERROR_KEYS = {
   MAGNET_ALREADY_ATTACHED_SEASON: 'error.magnet.already_attached_season',
   MEDIA_UNSUPPORTED_TYPE: 'error.media.unsupported_type',
   MEDIA_CATALOG_UNAVAILABLE: 'error.media.catalog_unavailable',
+  MEDIA_CATALOG_UNAUTHORIZED: 'error.media.catalog_unauthorized',
   MEDIA_TYPE_DISABLED: 'error.media.type_disabled',
   MEDIA_SEARCH_UNAVAILABLE: 'error.media.search_unavailable',
   MEDIA_SHORTS_DISABLED: 'error.media.shorts_disabled',

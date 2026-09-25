@@ -25,6 +25,8 @@ export interface MediaCapabilities {
   moviesEnabled: boolean;
   showsEnabled: boolean;
   shortsEnabled: boolean;
+  // movie_db_api_key is non-empty (071-tmdb-key-onboarding); never the key itself.
+  catalogKeyConfigured: boolean;
 }
 
 // Discriminated union so a target is either a movie or an episode, never

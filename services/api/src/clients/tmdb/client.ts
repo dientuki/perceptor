@@ -13,6 +13,7 @@ import {
 import { mapMultiSearchResults } from './multi';
 import { mapPopularMovies, mapPopularShows } from './popular';
 import { MovieDBClient, MediaDetail, MediaSearchResult, ShowDetail, MovieDetail, EpisodeDetail } from '@/clients/types';
+import { TmdbHttpError } from './errors';
 import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { HTTP_METHOD } from '@/types/http';
 import { SettingsService } from '@/settings/settings.service';
@@ -96,7 +97,7 @@ export class TmdbClient implements MovieDBClient {
     const res = await fetch(urlPath.toString(), this.options(config.movie_db_api_key));
 
     if (!res.ok) {
-      throw new Error(`TMDB request failed: ${res.status} ${res.statusText} (${urlPath.toString()})`);
+      throw new TmdbHttpError(res.status, `TMDB request failed: ${res.status} ${res.statusText} (${urlPath.toString()})`);
     }
 
     const data = (await res.json()) as TmdbSearchResponse<T>;
@@ -113,7 +114,7 @@ export class TmdbClient implements MovieDBClient {
     const res = await fetch(urlPath.toString(), this.options(config.movie_db_api_key));
 
     if (!res.ok) {
-      throw new Error(`TMDB request failed: ${res.status} ${res.statusText} (${urlPath.toString()})`);
+      throw new TmdbHttpError(res.status, `TMDB request failed: ${res.status} ${res.statusText} (${urlPath.toString()})`);
     }
 
     return (await res.json()) as T;

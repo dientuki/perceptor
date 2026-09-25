@@ -14,4 +14,7 @@ export class MediaCapabilities {
 
   @Field()
   shortsEnabled: boolean;
+
+  @Field()
+  catalogKeyConfigured: boolean;
 }

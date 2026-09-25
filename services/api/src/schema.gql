@@ -300,6 +300,7 @@ type MediaCapabilities {
   moviesEnabled: Boolean!
   showsEnabled: Boolean!
   shortsEnabled: Boolean!
+  catalogKeyConfigured: Boolean!
 }
 
 type Season {

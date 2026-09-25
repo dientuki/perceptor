@@ -6,7 +6,7 @@ import {
   redirectToClearSession,
 } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
-import { translateGraphQLError } from "@/lib/graphql-error";
+import { toActionError, translateGraphQLError } from "@/lib/graphql-error";
 import type { MediaCapabilities, MediaType } from "@/types/media";
 import type { MediaSearchResult } from "@/types/search";
 
@@ -16,6 +16,7 @@ const MEDIA_CAPABILITIES_QUERY = `
       moviesEnabled
       showsEnabled
       shortsEnabled
+      catalogKeyConfigured
     }
   }
 `;
@@ -177,17 +178,19 @@ const POPULAR_MEDIA_QUERY = `
 // Handler context).
 export async function getPopularMedia(
   type: MediaType,
-): Promise<MediaSearchResult[]> {
+): Promise<
+  { items: MediaSearchResult[] } | { error: string; errorKey?: string }
+> {
   const { data, errors } = await fetchGraphQL<{
     popularMedia: MediaSearchResult[];
   }>(POPULAR_MEDIA_QUERY, { type });
 
   if (errors && errors.length > 0) {
     redirectToClearSession(errors);
-    throw new Error(await translateGraphQLError(errors[0]));
+    return await toActionError(errors[0]);
   }
 
-  return data?.popularMedia ?? [];
+  return { items: data?.popularMedia ?? [] };
 }
 
 const ADD_MEDIA_MUTATION = `

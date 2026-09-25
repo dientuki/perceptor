@@ -6,6 +6,7 @@
 // no error anywhere.
 
 import { TmdbClient } from './client';
+import { TmdbHttpError } from './errors';
 import { SettingsService } from '@/settings/settings.service';
 import { MEDIA_TYPE } from '@/types/media';
 
@@ -141,5 +142,40 @@ describe('TmdbClient.earliestMovieReleaseDate', () => {
     });
 
     expect(await client.earliestMovieReleaseDate(1)).toBeNull();
+  });
+});
+
+// This block exists because otherwise a rejected TMDB credential (401) and an
+// outage are indistinguishable to callers: both were a bare Error, so anything
+// deciding "key is wrong" versus "TMDB is down" had to parse message text.
+describe('TmdbClient non-ok responses', () => {
+  let client: TmdbClient;
+
+  beforeEach(() => {
+    client = new TmdbClient(settingsStub());
+    global.fetch = jest.fn();
+  });
+
+  function mockStatus(status: number, statusText: string) {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status, statusText });
+  }
+
+  it('throws TmdbHttpError carrying the status from fetchOne', async () => {
+    mockStatus(401, 'Unauthorized');
+
+    const err = await client.details(MEDIA_TYPE.MOVIE, 1).catch((e) => e);
+
+    expect(err).toBeInstanceOf(TmdbHttpError);
+    expect(err.status).toBe(401);
+    expect(err.message).toMatch(/^TMDB request failed: 401 Unauthorized \(/);
+  });
+
+  it('throws TmdbHttpError carrying the status from fetchResults', async () => {
+    mockStatus(503, 'Service Unavailable');
+
+    const err = await client.searchMulti('x').catch((e) => e);
+
+    expect(err).toBeInstanceOf(TmdbHttpError);
+    expect(err.status).toBe(503);
   });
 });

@@ -52,6 +52,7 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.MEDIA_UNSUPPORTED_TYPE]: 'Unsupported media type: {type}',
   [ERROR_KEYS.MEDIA_CATALOG_UNAVAILABLE]:
     'Could not reach the catalog. Check the TMDB API key.',
+  [ERROR_KEYS.MEDIA_CATALOG_UNAUTHORIZED]: 'TMDB rejected the configured API key.',
   [ERROR_KEYS.MEDIA_TYPE_DISABLED]: '{type} is disabled on this system',
   [ERROR_KEYS.MEDIA_SEARCH_UNAVAILABLE]: 'Search is disabled on this system',
   [ERROR_KEYS.MEDIA_SHORTS_DISABLED]: 'Shorts are disabled on this system',
