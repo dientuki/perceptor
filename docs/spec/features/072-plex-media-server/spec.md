@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-26
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 services: [api, web, worker]
 ---
 
@@ -280,13 +280,13 @@ None.
       `[media-server]` failure line and no `encodeFailed` is reported.
 - [ ] **AC-11 (failure)**: A file written to a path under no Plex library location still produces a
       scan request — the whole-library fallback — and the api log says the fallback was taken.
-- [ ] **AC-12 (failure)**: An encode whose job details carry a `libraryLayout` of `not-a-layout`
+- [x] **AC-12 (failure)**: An encode whose job details carry a `libraryLayout` of `not-a-layout`
       completes, writes the Jellyfin-layout path, and logs the unrecognised value.
 - [ ] **AC-13**: Switching the configured client from Jellyfin to Plex and letting the automatic
       rebuild finish leaves `MediaServerItem` holding only Plex `externalId`s
       (`bin/mysql -e 'select externalId from MediaServerItem limit 5'` shows numeric rating keys, not
       Jellyfin GUID hex strings). Files written before the switch keep their old names on disk.
-- [ ] **AC-14**: `git status --short services/api/prisma` shows no migration, and the `schema.gql`
+- [x] **AC-14**: `git status --short services/api/prisma` shows no migration, and the `schema.gql`
       diff is exactly the three new fields on `MediaServerOption` plus `libraryLayout` on
       `EncodeJobDetails`.
 

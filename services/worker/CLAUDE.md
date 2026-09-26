@@ -41,7 +41,8 @@ src/scan/mark-downloaded.ts  flags each enumerated file isDownloaded against api
 src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode, over InventoriedFile[] (052) — isDownloaded: false is excluded before either rule runs
 src/encode/              the driver seam (see below)
 src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639
-src/paths/build-output-path.ts   composes the final library path
+src/paths/build-output-path.ts   composes the final library path, one branch per `libraryLayout` (`072`)
+src/paths/library-layout.ts      `normalizeLibraryLayout`: unknown value warns, defaults to `jellyfin`
 src/paths/is-inside-root.ts      pure containment check, used before any delete
 src/metadata/container-tags.ts   buildContainerTitle · buildSourceTag — the two container-level tags
 ```

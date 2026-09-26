@@ -2,7 +2,7 @@
 title: Plex media server client — Implementation Plan
 spec_version: 0.2.0
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Plex media server client (`plan.md`)

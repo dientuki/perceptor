@@ -2,7 +2,7 @@
 title: Plex media server client — web slice
 service: web
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Plex media server client — `web` (`web/plan.md`)

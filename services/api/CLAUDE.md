@@ -702,7 +702,7 @@ to qBittorrent 5.0; deliberately **no** `setForceStart`, a member with no caller
 of `info()` read the same way, throwing `TorrentClientError` on any non-2xx including a 404 for an
 unknown hash — lowercasing is load-bearing, since an indexer-sourced `infoHash` is stored uppercase
 and qBittorrent 404s on the mismatch), `clients/media-server/`
-(with a `registry.ts`), plus the shared `clients/types.ts`.
+(with a `registry.ts`; since `072` each entry also declares `layout` (`jellyfin`|`plex`), `defaultPort`, `credentialLabel` and `credentialHelpUrl`, and `plex.ts` is the second client), plus the shared `clients/types.ts`.
 `clients/tmdb/multi.ts` is the pure mapper for `search/multi` rows (film/series discriminated by
 `media_type`, everything else dropped), used by `TmdbClient.searchMulti()`.
 

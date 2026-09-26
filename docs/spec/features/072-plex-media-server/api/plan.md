@@ -2,7 +2,7 @@
 title: Plex media server client — api slice
 service: api
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Plex media server client — `api` (`api/plan.md`)
