@@ -157,6 +157,9 @@ type LanguageTrackTitle {
 type MediaServerOption {
   id: ID!
   label: String!
+  defaultPort: Int
+  credentialLabel: String
+  credentialHelpUrl: String
 }
 
 type MediaServerIndexStatus {
@@ -201,6 +204,23 @@ type TorrentLink {
   downloadUrl: String
 }
 
+type ReleaseRanking {
+  resolutionTier: Int!
+  resolutionLabel: String!
+  preferredGroup: Boolean!
+  groupLabel: String
+  sourceRank: Int!
+  sourceLabel: String!
+  codecRank: Int!
+  codecLabel: String!
+  dynamicRangeRank: Int!
+  dynamicRangeLabel: String!
+  audioRank: Int!
+  audioLabel: String!
+  matchedLanguage: String
+  sourcePromoted: Boolean!
+}
+
 type TorrentResult {
   id: String!
   infoHash: String
@@ -210,6 +230,102 @@ type TorrentResult {
   leechers: Int!
   items: [TorrentLink!]!
   infoUrl: [TorrentLink!]!
+
+  """
+  Parsed ranking of this release. Present on every row, vetoed ones included.
+  """
+  ranking: ReleaseRanking!
+
+  """
+  True when this row survived every veto and sits in the best resolution tier present in this response.
+  """
+  candidate: Boolean!
+
+  """
+  1-based position among the candidates, best first. Null when `candidate` is false.
+  """
+  candidateRank: Int
+}
+
+type Episode {
+  id: ID!
+  episodeNumber: Int!
+  title: String
+  overview: String
+  releaseDate: DateTime
+  status: String!
+}
+
+type Season {
+  id: ID!
+  seasonNumber: Int!
+  releaseDate: DateTime
+  episodes: [Episode!]!
+}
+
+type Show {
+  id: ID!
+  tmdbId: Int!
+  title: String!
+  overview: String
+  posterUrl: String
+  releaseDate: DateTime
+  originalLanguage: String!
+  contentKind: ContentKind!
+  status: String!
+  seasonsSyncedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  seasons: [Season!]!
+  audioLanguages: [Language!]!
+  subtitleLanguages: [Language!]!
+  audioMandatory: Boolean!
+
+  """
+  How many *other* users have this series in their library. 0 when the caller is the last owner.
+  """
+  otherOwners: Int!
+}
+
+type SeasonUploadSession {
+  mediaSourceId: Int!
+  seasonId: Int!
+}
+
+type UploadTicket {
+  token: String!
+  expiresAt: DateTime!
+}
+
+"""
+A release group name in the administrator-curated catalog. Carries no scope of its own — a user decides, per group, whether it applies to their films, their series, both or neither.
+"""
+type TorrentGroup {
+  id: Int!
+  name: String!
+}
+
+"""
+The signed-in caller's own preferences. Never reachable from another user.
+"""
+type UserPreferences {
+  """
+  CAM/TS releases acceptable for this user. False for every user until they say otherwise.
+  """
+  allowCinemaReleases: Boolean!
+
+  """
+  Whether the audio track in a preferred language is mandatory. Inert this cycle — nothing reads it yet.
+  """
+  audioMandatory: Boolean!
+  audioLanguages: [Language!]!
+  subtitleLanguages: [Language!]!
+
+  """The caller's selected torrent groups for their films."""
+  movieTorrentGroups: [TorrentGroup!]!
+
+  """The caller's selected torrent groups for their series."""
+  showTorrentGroups: [TorrentGroup!]!
 }
 
 type MediaSource {
@@ -254,6 +370,7 @@ type EncodeJobDetails {
   compressionEnabled: Boolean!
   compressionResolution: String!
   allowedSubtitleFormats: [String!]!
+  libraryLayout: String!
 }
 
 type EncodeCompletedResult {
@@ -261,20 +378,6 @@ type EncodeCompletedResult {
   removeTorrent: Boolean!
   deleteInputFile: Boolean!
   deleteDownloadPath: Boolean!
-}
-
-type UploadTicket {
-  token: String!
-  expiresAt: DateTime!
-}
-
-type Episode {
-  id: ID!
-  episodeNumber: Int!
-  title: String
-  overview: String
-  releaseDate: DateTime
-  status: String!
 }
 
 type MediaSearchResult {
@@ -303,78 +406,11 @@ type MediaCapabilities {
   catalogKeyConfigured: Boolean!
 }
 
-type Season {
-  id: ID!
-  seasonNumber: Int!
-  releaseDate: DateTime
-  episodes: [Episode!]!
-}
-
-type Show {
-  id: ID!
-  tmdbId: Int!
-  title: String!
-  overview: String
-  posterUrl: String
-  releaseDate: DateTime
-  originalLanguage: String!
-  contentKind: ContentKind!
-  status: String!
-  seasonsSyncedAt: DateTime
-  createdAt: DateTime!
-  updatedAt: DateTime!
-  seasons: [Season!]!
-  audioLanguages: [Language!]!
-  subtitleLanguages: [Language!]!
-  audioMandatory: Boolean!
-
-  """
-  How many *other* users have this series in their library. 0 when the caller is the last owner.
-  """
-  otherOwners: Int!
-}
-
-type SeasonUploadSession {
-  mediaSourceId: Int!
-  seasonId: Int!
-}
-
 type FfprobeLog {
   id: Int!
   file: String!
   ffprobe: String!
   createdAt: DateTime!
-}
-
-"""
-A release group name in the administrator-curated catalog. Carries no scope of its own — a user decides, per group, whether it applies to their films, their series, both or neither.
-"""
-type TorrentGroup {
-  id: Int!
-  name: String!
-}
-
-"""
-The signed-in caller's own preferences. Never reachable from another user.
-"""
-type UserPreferences {
-  """
-  CAM/TS releases acceptable for this user. False for every user until they say otherwise.
-  """
-  allowCinemaReleases: Boolean!
-
-  """
-  Whether the audio track in a preferred language is mandatory. Inert this cycle — nothing reads it yet.
-  """
-  audioMandatory: Boolean!
-  audioLanguages: [Language!]!
-  subtitleLanguages: [Language!]!
-
-  """The caller's selected torrent groups for their films."""
-  movieTorrentGroups: [TorrentGroup!]!
-
-  """The caller's selected torrent groups for their series."""
-  showTorrentGroups: [TorrentGroup!]!
 }
 
 type EnvironmentEndpoint {
@@ -471,9 +507,6 @@ type Query {
   """
   trackTitles: [LanguageTrackTitle!]!
 
-  """List every registered scheduled task and its current status"""
-  scheduledTasks: [ScheduledTask!]!
-
   """
   Media servers soportados, derivados del registro de clientes — la UI arma el combo con esto en vez de hardcodear las opciones.
   """
@@ -485,7 +518,11 @@ type Query {
   activeDownloadCount: Int!
 
   """Busca releases en el indexer (Prowlarr)"""
-  searchTorrents(query: String!): [TorrentResult!]!
+  searchTorrents(query: String!, movieId: Int, seasonId: Int, episodeId: Int): [TorrentResult!]!
+  shows: [Show!]!
+  show(id: Int!): Show
+  preferences: UserPreferences!
+  torrentGroups: [TorrentGroup!]!
   mediaSource(id: Int!): MediaSource
 
   """Datos que el worker necesita para encodear un ProcessJob"""
@@ -494,16 +531,15 @@ type Query {
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
   searchAllMedia(query: String!): [MediaSearchResult!]!
   popularMedia(type: String!): [MediaSearchResult!]!
-  shows: [Show!]!
-  show(id: Int!): Show
 
   """List recorded ffprobe payloads, newest first"""
   ffprobeLogs(file: String, take: Int! = 50, skip: Int! = 0): [FfprobeLog!]!
 
   """Fetch one recorded ffprobe payload by id"""
   ffprobeLog(id: Int!): FfprobeLog!
-  preferences: UserPreferences!
-  torrentGroups: [TorrentGroup!]!
+
+  """List every registered scheduled task and its current status"""
+  scheduledTasks: [ScheduledTask!]!
 
   """
   How this installation is reachable as this container has it loaded: routing mode, domain, the four published-service ports/URLs, and the upload endpoint this container expects — never process.env wholesale, never a fabricated host.
@@ -563,11 +599,6 @@ type Mutation {
   """
   refreshMovie(id: Int!): TitleRefresh!
   updateSettings(entries: [SettingInput!]!): [Setting!]!
-
-  """
-  Trigger a registered scheduled task immediately, regardless of its cadence
-  """
-  runScheduledTask(id: String!): ScheduledTask!
   resyncMediaServerIndex: MediaServerIndexStatus!
 
   """Aviso del cliente de torrents de que una descarga terminó"""
@@ -583,45 +614,6 @@ type Mutation {
   Borra un torrent del cliente de torrents junto con sus archivos, y su fila
   """
   downloadDelete(mediaSourceId: Int!): Boolean!
-
-  """
-  El worker reporta el inventario de archivos de un MediaSource ya descargado
-  """
-  sourceScanned(mediaSourceId: Int!, files: [SourceFileInput!]!, matches: [ScannedMatchInput!]!): MediaSource!
-
-  """The worker reports that scanning a downloaded MediaSource failed"""
-  sourceScanFailed(mediaSourceId: Int!, errorKey: String!, errorParams: String, errorMessage: String!): Boolean!
-
-  """El worker avisa que arrancó a encodear un ProcessJob"""
-  encodeStarted(processJobId: Int!): String!
-
-  """El worker reporta el progreso (0-100) de un encode en curso"""
-  encodeProgress(processJobId: Int!, progress: Int!, speed: Float): String!
-
-  """El worker avisa que un encode terminó bien"""
-  encodeCompleted(processJobId: Int!, outputFilePath: String!, ffmpegCommand: String!): EncodeCompletedResult!
-
-  """El worker avisa que un encode falló"""
-  encodeFailed(processJobId: Int!, errorKey: String!, errorParams: String, errorMessage: String!): Boolean!
-
-  """
-  El worker avisa que acaba de arrancar; api reconcilia los ProcessJob huérfanos
-  """
-  encodeWorkerStarted: Int!
-
-  """El worker pide borrar el torrent del cliente tras un encode exitoso"""
-  downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!
-  createUploadTicket(movieId: Int, episodeId: Int, force: Boolean = false): UploadTicket!
-  createSeasonUploadTicket(mediaSourceId: Int!): UploadTicket!
-
-  """Envía un release elegido a qBittorrent y lo asocia al episodio"""
-  addTorrentToEpisode(episodeId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Episode!
-
-  """
-  Manda un magnet pegado por el usuario a qBittorrent y lo asocia al episodio
-  """
-  addMagnetToEpisode(episodeId: Int!, magnet: String!, force: Boolean = false): Episode!
-  addMedia(tmdbId: Int!, type: String!): MediaRef!
 
   """
   Reemplaza la preferencia de idiomas del usuario para una serie puntual, para un tipo de pista
@@ -661,18 +653,62 @@ type Mutation {
 
   """Closes an upload session and hands its folder to the scan"""
   finishSeasonUpload(mediaSourceId: Int!): Season!
+  createUploadTicket(movieId: Int, episodeId: Int, force: Boolean = false): UploadTicket!
+  createSeasonUploadTicket(mediaSourceId: Int!): UploadTicket!
 
-  """The worker reports one raw ffprobe payload before an encode starts"""
-  recordFfprobe(file: String!, ffprobe: String!): FfprobeLog!
+  """Envía un release elegido a qBittorrent y lo asocia al episodio"""
+  addTorrentToEpisode(episodeId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Episode!
 
-  """Delete one recorded ffprobe payload by id"""
-  deleteFfprobeLog(id: Int!): Boolean!
+  """
+  Manda un magnet pegado por el usuario a qBittorrent y lo asocia al episodio
+  """
+  addMagnetToEpisode(episodeId: Int!, magnet: String!, force: Boolean = false): Episode!
   setAllowCinemaReleases(allowed: Boolean!): UserPreferences!
   setAudioMandatory(mandatory: Boolean!): UserPreferences!
   setPreferredTrackLanguages(kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
   createTorrentGroup(name: String!): TorrentGroup!
   deleteTorrentGroup(id: Int!): Boolean!
   setPreferredTorrentGroups(scope: TorrentGroupScope!, ids: [Int!]!): [TorrentGroup!]!
+
+  """
+  El worker reporta el inventario de archivos de un MediaSource ya descargado
+  """
+  sourceScanned(mediaSourceId: Int!, files: [SourceFileInput!]!, matches: [ScannedMatchInput!]!): MediaSource!
+
+  """The worker reports that scanning a downloaded MediaSource failed"""
+  sourceScanFailed(mediaSourceId: Int!, errorKey: String!, errorParams: String, errorMessage: String!): Boolean!
+
+  """El worker avisa que arrancó a encodear un ProcessJob"""
+  encodeStarted(processJobId: Int!): String!
+
+  """El worker reporta el progreso (0-100) de un encode en curso"""
+  encodeProgress(processJobId: Int!, progress: Int!, speed: Float): String!
+
+  """El worker avisa que un encode terminó bien"""
+  encodeCompleted(processJobId: Int!, outputFilePath: String!, ffmpegCommand: String!): EncodeCompletedResult!
+
+  """El worker avisa que un encode falló"""
+  encodeFailed(processJobId: Int!, errorKey: String!, errorParams: String, errorMessage: String!): Boolean!
+
+  """
+  El worker avisa que acaba de arrancar; api reconcilia los ProcessJob huérfanos
+  """
+  encodeWorkerStarted: Int!
+
+  """El worker pide borrar el torrent del cliente tras un encode exitoso"""
+  downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!
+  addMedia(tmdbId: Int!, type: String!): MediaRef!
+
+  """The worker reports one raw ffprobe payload before an encode starts"""
+  recordFfprobe(file: String!, ffprobe: String!): FfprobeLog!
+
+  """Delete one recorded ffprobe payload by id"""
+  deleteFfprobeLog(id: Int!): Boolean!
+
+  """
+  Trigger a registered scheduled task immediately, regardless of its cadence
+  """
+  runScheduledTask(id: String!): ScheduledTask!
 }
 
 input LoginInput {
@@ -712,6 +748,11 @@ input SettingInput {
   value: String!
 }
 
+enum TorrentGroupScope {
+  MOVIE
+  SHOW
+}
+
 input SourceFileInput {
   filePath: String!
   fileName: String!
@@ -724,9 +765,4 @@ input ScannedMatchInput {
   filePath: String!
   seasonNumber: Int
   episodeNumber: Int
-}
-
-enum TorrentGroupScope {
-  MOVIE
-  SHOW
 }

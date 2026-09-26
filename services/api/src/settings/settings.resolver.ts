@@ -1,5 +1,6 @@
 import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
-import { UseGuards, Inject, forwardRef } from '@nestjs/common';
+import { UseGuards } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { SettingsService } from './settings.service';
 import { Setting } from './entities/setting.entity';
 import { SettingInput } from './dto/setting.input';
@@ -59,9 +60,17 @@ export class SettingsResolver {
     private readonly qbittorrentClient: QbittorrentClient,
     private readonly mediaRootsService: MediaRootsService,
     private readonly mediaServerIndex: MediaServerIndexService,
-    @Inject(forwardRef(() => SchedulerService))
-    private readonly schedulerService: SchedulerService,
+    // SchedulerService is resolved lazily instead of injected: importing
+    // SchedulerModule from SettingsModule made a file-level import cycle
+    // (Settings -> Scheduler -> Indexer -> Movies -> ... -> Settings) that left
+    // random modules `undefined` at boot (073). SchedulerModule is registered
+    // in AppModule, so `strict: false` finds it.
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  private get schedulerService(): SchedulerService {
+    return this.moduleRef.get(SchedulerService, { strict: false });
+  }
 
   @Public()
   @Query(() => String, { name: 'defaultUiLocale', nullable: true })

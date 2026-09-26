@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { PrismaModule } from '@/prisma/prisma.module';
@@ -14,13 +14,10 @@ import { AcquireEpisodesTask } from './tasks/acquire-episodes.task';
 import { AcquirePendingTask } from './tasks/acquire-pending.task';
 
 @Module({
-  // forwardRef both ways: SettingsResolver injects SchedulerService (T010) to
-  // re-arm on a `schedule_*` settings change, and SchedulerService already
-  // depends on SettingsService — a plain two-way import would be circular.
   imports: [
     ScheduleModule.forRoot(),
     PrismaModule,
-    forwardRef(() => SettingsModule),
+    SettingsModule,
     IndexerModule,
     EpisodesModule,
   ],

@@ -6,6 +6,7 @@ import { SettingsService } from './settings.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerIndexService } from '@/media-server-index/media-server-index.service';
+import { ModuleRef } from '@nestjs/core';
 import { SchedulerService } from '@/scheduler/scheduler.service';
 
 // This suite exists because otherwise a guard applied at the wrong level
@@ -77,7 +78,7 @@ describe('SettingsResolver updateSettings re-arm guard', () => {
       qbittorrentClient,
       mediaRootsService,
       mediaServerIndex,
-      schedulerService,
+      { get: () => schedulerService } as unknown as ModuleRef,
     );
 
     return { resolver, schedulerService };
@@ -136,7 +137,7 @@ describe('SettingsResolver updateSettings acquire_episodes cutoff stamp', () => 
       { setSavePath: jest.fn() } as unknown as QbittorrentClient,
       { resolveFromRoot: jest.fn() } as unknown as MediaRootsService,
       { rebuild: jest.fn() } as unknown as MediaServerIndexService,
-      schedulerService,
+      { get: () => schedulerService } as unknown as ModuleRef,
     );
     return { resolver, schedulerService };
   };
