@@ -2,7 +2,7 @@
 title: Show Refresh Sweep — api slice
 service: api
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Show Refresh Sweep — `api` (`api/plan.md`)

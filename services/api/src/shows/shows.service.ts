@@ -332,7 +332,7 @@ export class ShowsService implements MediaTypeService {
       // (REQ-14).
       await this.prisma.show.update({
         where: { id: showId },
-        data: { seasonsSyncedAt: new Date() },
+        data: { seasonsSyncedAt: new Date(), tmdbStatus: detail.status },
       });
 
       // After, never before: a reconcile failure here must not make the
@@ -347,6 +347,54 @@ export class ShowsService implements MediaTypeService {
     } finally {
       // Deletes the claim regardless of outcome, so a failure does not wedge
       // every future retry until HYDRATE_CLAIM_TTL_SECONDS expires.
+      await this.redis.del(claimKey);
+    }
+  }
+
+  private async syncCatalogFromTmdb(showId: number, tmdbId: number): Promise<void> {
+    const detail = (await this.tmdb.details(MEDIA_TYPE.SHOW, tmdbId)) as ShowDetail;
+    const releaseDate = detail.firstAirDate || null;
+    await this.prisma.show.update({
+      where: { id: showId },
+      data: {
+        title: detail.title,
+        overview: detail.overview,
+        posterUrl: posterUrl(detail.posterPath) ?? undefined,
+        releaseDate: releaseDate ? new Date(releaseDate) : undefined,
+        originalLanguage: detail.originalLanguage,
+        tmdbStatus: detail.status,
+      },
+    });
+
+    await this.syncSeasonsAndEpisodes(showId, tmdbId, detail.seasons);
+
+    await this.prisma.show.update({
+      where: { id: showId },
+      data: { seasonsSyncedAt: new Date() },
+    });
+
+    await this.cacheShows([
+      {
+        id: detail.id,
+        title: detail.title,
+        releaseDate,
+        posterUrl: posterUrl(detail.posterPath),
+        originalLanguage: detail.originalLanguage,
+        overview: detail.overview,
+        type: MEDIA_TYPE.SHOW,
+        genreIds: detail.genreIds,
+      },
+    ]);
+  }
+
+  async syncCatalogClaimed(showId: number, tmdbId: number): Promise<boolean> {
+    const claimKey = this.hydrateClaimKey(tmdbId);
+    const claimed = await this.redis.set(claimKey, '1', 'EX', HYDRATE_CLAIM_TTL_SECONDS, 'NX');
+    if (claimed !== 'OK') return false;
+    try {
+      await this.syncCatalogFromTmdb(showId, tmdbId);
+      return true;
+    } finally {
       await this.redis.del(claimKey);
     }
   }
@@ -368,39 +416,7 @@ export class ShowsService implements MediaTypeService {
     try {
       let catalog = RefreshCatalogOutcome.DONE;
       try {
-        // One details() call feeds both the row and the season loop.
-        const detail = (await this.tmdb.details(MEDIA_TYPE.SHOW, tmdbId)) as ShowDetail;
-        const releaseDate = detail.firstAirDate || null;
-        await this.prisma.show.update({
-          where: { id },
-          data: {
-            title: detail.title,
-            overview: detail.overview,
-            posterUrl: posterUrl(detail.posterPath) ?? undefined,
-            releaseDate: releaseDate ? new Date(releaseDate) : undefined,
-            originalLanguage: detail.originalLanguage,
-          },
-        });
-
-        await this.syncSeasonsAndEpisodes(id, tmdbId, detail.seasons);
-
-        await this.prisma.show.update({
-          where: { id },
-          data: { seasonsSyncedAt: new Date() },
-        });
-
-        await this.cacheShows([
-          {
-            id: detail.id,
-            title: detail.title,
-            releaseDate,
-            posterUrl: posterUrl(detail.posterPath),
-            originalLanguage: detail.originalLanguage,
-            overview: detail.overview,
-            type: MEDIA_TYPE.SHOW,
-            genreIds: detail.genreIds,
-          },
-        ]);
+        await this.syncCatalogFromTmdb(id, tmdbId);
       } catch (err) {
         console.error(`Error refreshing catalog for show tmdbId=${tmdbId}:`, err);
         catalog = RefreshCatalogOutcome.FAILED;

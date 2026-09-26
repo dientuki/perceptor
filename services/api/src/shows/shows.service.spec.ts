@@ -848,4 +848,91 @@ describe('ShowsService', () => {
       consoleErrorSpy.mockRestore();
     });
   });
+
+  // 074-show-refresh-sweep: the sweep reaches the catalog step only through
+  // syncCatalogClaimed. A claim check that never fires lets a nightly sweep
+  // and a manual Refresh interleave two season loops on one series, and a
+  // stamp written before the season loop finishes makes a half-synced series
+  // look complete for 30 or 180 days; both leave a normal-looking response
+  // and no error anywhere. A tmdbStatus that is never written leaves every
+  // series on the continuing cadence forever.
+  describe('syncCatalogClaimed', () => {
+    const detail = {
+      type: MEDIA_TYPE.SHOW,
+      id: 42,
+      title: 'Breaking Bad',
+      originalTitle: 'Breaking Bad',
+      overview: 'A chemistry teacher turns to crime.',
+      posterPath: '/bb.jpg',
+      backdropPath: '/bb-backdrop.jpg',
+      originalLanguage: 'en',
+      voteAverage: 9.5,
+      status: 'Ended',
+      firstAirDate: '2008-01-20',
+      numberOfSeasons: 2,
+      numberOfEpisodes: 20,
+      genreIds: [],
+      seasons: [
+        { id: 1, name: 'Season 1', seasonNumber: 1, episodeCount: 1, releaseDate: '2008-01-20', overview: '', posterPath: '' },
+        { id: 2, name: 'Season 2', seasonNumber: 2, episodeCount: 1, releaseDate: '2009-03-08', overview: '', posterPath: '' },
+      ],
+    };
+    const episode = {
+      id: 1,
+      title: 'Pilot',
+      overview: '...',
+      releaseDate: '2008-01-20',
+      episodeNumber: 1,
+      stillPath: null,
+      voteAverage: 8.9,
+    };
+
+    beforeEach(() => {
+      redis.del.mockResolvedValue(1);
+      prisma.show.update.mockResolvedValue({});
+      prisma.season.upsert.mockImplementation(({ create }: { create: { seasonNumber: number } }) =>
+        Promise.resolve({ id: create.seasonNumber, showId: 9, seasonNumber: create.seasonNumber }),
+      );
+      prisma.episode.upsert.mockResolvedValue({});
+      redis.pipeline.mockReturnValue({ set: jest.fn(), exec: jest.fn().mockResolvedValue([]) });
+    });
+
+    it('writes the TMDB status verbatim onto the row and stamps seasonsSyncedAt after it', async () => {
+      redis.set.mockResolvedValue('OK');
+      tmdb.details.mockResolvedValue(detail);
+      tmdb.seasonDetails.mockResolvedValue([episode]);
+
+      await expect(service.syncCatalogClaimed(9, 42)).resolves.toBe(true);
+
+      const updates = prisma.show.update.mock.calls.map(([arg]) => arg.data);
+      expect(updates[0]).toEqual(expect.objectContaining({ tmdbStatus: 'Ended' }));
+      expect(updates[1]).toEqual({ seasonsSyncedAt: expect.any(Date) });
+      expect(redis.del).toHaveBeenCalledWith('show:hydrate:42');
+    });
+
+    it('resolves false and makes no TMDB call when the claim is held, and leaves the held claim alone', async () => {
+      redis.set.mockResolvedValue(null);
+
+      await expect(service.syncCatalogClaimed(9, 42)).resolves.toBe(false);
+
+      expect(redis.set).toHaveBeenCalledWith('show:hydrate:42', '1', 'EX', expect.any(Number), 'NX');
+      expect(tmdb.details).not.toHaveBeenCalled();
+      expect(prisma.show.update).not.toHaveBeenCalled();
+      expect(redis.del).not.toHaveBeenCalled();
+    });
+
+    it('never stamps seasonsSyncedAt when a season fetch rejects, rethrows, and releases the claim', async () => {
+      redis.set.mockResolvedValue('OK');
+      tmdb.details.mockResolvedValue(detail);
+      tmdb.seasonDetails.mockImplementation((_tmdbId: number, seasonNumber: number) =>
+        seasonNumber === 2 ? Promise.reject(new Error('TMDB rate limited')) : Promise.resolve([episode]),
+      );
+
+      await expect(service.syncCatalogClaimed(9, 42)).rejects.toThrow('TMDB rate limited');
+
+      const updates = prisma.show.update.mock.calls.map(([arg]) => arg.data);
+      expect(updates.some((data) => 'seasonsSyncedAt' in data)).toBe(false);
+      expect(redis.del).toHaveBeenCalledWith('show:hydrate:42');
+    });
+  });
 });

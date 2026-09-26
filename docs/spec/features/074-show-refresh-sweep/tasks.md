@@ -1,7 +1,7 @@
 ---
 title: Show Refresh Sweep — Tasks
 last_updated: 2026-09-26
-status: Draft
+status: Done
 ---
 
 # TASKS: Show Refresh Sweep (`tasks.md`)
@@ -27,7 +27,7 @@ implemented concurrently and owns `scheduler.module.ts`'s `imports`/`providers` 
 
 ### Group 1 — the column and the shared catalog step
 
-- [ ] **T001** `[api]` Add `tmdbStatus String?` to `model Show` in
+- [x] **T001** `[api]` Add `tmdbStatus String?` to `model Show` in
       `services/api/prisma/schema.prisma`, beside `seasonsSyncedAt`, and generate the migration with
       `bin/npm api run prisma:migrate` (name it `add_show_tmdb_status`). No backfill, no index, no
       default. Do **not** name it `status` — `Show.status` is already `MediaStatus`.
@@ -35,7 +35,7 @@ implemented concurrently and owns `scheduler.module.ts`'s `imports`/`providers` 
       exactly one new migration directory, and `bin/cli api npx prisma migrate status` reports
       nothing pending.
 
-- [ ] **T002** `[api]` In `services/api/src/shows/shows.service.ts`, extract the catalog half of
+- [x] **T002** `[api]` In `services/api/src/shows/shows.service.ts`, extract the catalog half of
       `refresh()` (its inner `try`: `tmdb.details()`, the `show.update()`, `syncSeasonsAndEpisodes()`,
       the `seasonsSyncedAt` stamp, `cacheShows()`) into a private `syncCatalogFromTmdb(showId,
       tmdbId)` that still **throws** on failure, and add a public `syncCatalogClaimed(showId,
@@ -48,7 +48,7 @@ implemented concurrently and owns `scheduler.module.ts`'s `imports`/`providers` 
       with every pre-existing `shows.service.spec.ts` `refresh` case **unmodified**. If a case needs
       editing, stop and report — the extraction changed behaviour (`plan.md` § Risks).
 
-- [ ] **T003** `[api]` Write the status: `tmdbStatus: detail.status` on the `show.update()` inside
+- [x] **T003** `[api]` Write the status: `tmdbStatus: detail.status` on the `show.update()` inside
       `syncCatalogFromTmdb()`, and on the `show.update()` `hydrate()` already makes for
       `seasonsSyncedAt`. Leave `register()`'s `show.create()` alone — it builds from a cached
       `MediaSearchResult` that carries no status, and hydration fills the column seconds later.
@@ -59,7 +59,7 @@ implemented concurrently and owns `scheduler.module.ts`'s `imports`/`providers` 
 
 ### Group 2 — the sweep
 
-- [ ] **T004** `[api]` Replace the `RefreshShowsTask` stub body in
+- [x] **T004** `[api]` Replace the `RefreshShowsTask` stub body in
       `services/api/src/scheduler/tasks/refresh-shows.task.ts` (inject `PrismaService` and
       `ShowsService`): module-level `ENDED_REFRESH_DAYS = 180`, `CONTINUING_REFRESH_DAYS = 30` and
       `ENDED_STATUSES = ['Ended', 'Canceled']`; one `findMany` selecting due series ordered by
@@ -80,7 +80,7 @@ implemented concurrently and owns `scheduler.module.ts`'s `imports`/`providers` 
 
 ### Group 3 — tests
 
-- [ ] **T005** `[api]` Write `services/api/src/scheduler/tasks/refresh-shows.task.spec.ts`, following
+- [x] **T005** `[api]` Write `services/api/src/scheduler/tasks/refresh-shows.task.spec.ts`, following
       the shape and Article IX header style of `refresh-episodes.task.spec.ts` — the header names the
       class of failure: a sweep that reports a clean `SUCCESS` while selecting the wrong set, and
       nothing else in the system notices a series that stopped being refreshed. Cases, each written
@@ -95,7 +95,7 @@ implemented concurrently and owns `scheduler.module.ts`'s `imports`/`providers` 
       *Done when:* `bin/npm api test` passes with the new suite, and temporarily reverting the
       `{ tmdbStatus: null }` arm in T004's `where` makes exactly that case fail.
 
-- [ ] **T006** `[api] [P]` Extend `services/api/src/shows/shows.service.spec.ts` for the new surface
+- [x] **T006** `[api] [P]` Extend `services/api/src/shows/shows.service.spec.ts` for the new surface
       only: `tmdbStatus` is written from `detail.status`; `syncCatalogClaimed()` resolves `false` and
       issues no TMDB call when the Redis `SET NX` does not return `'OK'`; a rejecting `seasonDetails`
       leaves the `seasonsSyncedAt` stamp unwritten. Do not edit the existing `refresh` cases.
@@ -106,7 +106,7 @@ implemented concurrently and owns `scheduler.module.ts`'s `imports`/`providers` 
 
 ### Group 4 — verification and docs
 
-- [ ] **T007** `[api]` Run the full verification sweep of `api/plan.md` § Done when and record the
+- [x] **T007** `[api]` Run the full verification sweep of `api/plan.md` § Done when and record the
       numbers: `bin/cli api npx --no tsc --noEmit`, `bin/npm api test`,
       `bin/cli api npx prisma migrate status`, `git status --short services/api/prisma`,
       `git diff --stat services/api/src/schema.gql`.
@@ -115,7 +115,7 @@ implemented concurrently and owns `scheduler.module.ts`'s `imports`/`providers` 
       `<tests>/<suites>`; nothing pending in `migrate status`; a modified `schema.prisma` plus exactly
       one migration directory; and the `schema.gql` diff is **empty** (**AC-12**, Article VIII).
 
-- [ ] **T008** `[docs]` Update the `CLAUDE.md` files. In `services/api/CLAUDE.md`: the `scheduler/`
+- [x] **T008** `[docs]` Update the `CLAUDE.md` files. In `services/api/CLAUDE.md`: the `scheduler/`
       bullet says three tasks still stub `run()` — after this, `refresh_shows` is real, so describe
       its selection rule, its two constants, the claim it shares with `ShowsService`, and that it
       writes catalog rows only; the `shows/` territory gains `Show.tmdbStatus` and the shared catalog
@@ -127,7 +127,7 @@ implemented concurrently and owns `scheduler.module.ts`'s `imports`/`providers` 
       *Done when:* both files describe the shipped behaviour, and `grep -n "three still stub"
       services/api/CLAUDE.md` returns nothing.
 
-- [ ] **T009** `[docs]` Walk the acceptance criteria in `spec.md` against a running dev stack,
+- [x] **T009** `[docs]` Walk the acceptance criteria in `spec.md` against a running dev stack,
       following `plan.md` § Verification's manual pass (steps 2 through 8 cover AC-2 to AC-11,
       including the two failure paths: a garbage `movie_db_api_key` with two series due, and
       `shows_enabled` false refusing the manual trigger). Tick each box that was actually exercised,

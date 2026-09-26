@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-26
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 services: [api]
 ---
 
@@ -179,9 +179,17 @@ second timestamp column is added.
 - [ ] **AC-11 (failure)**: Given `shows_enabled` set to `false`, when `refresh_shows` is triggered
       manually, then the existing `error.schedule.task_unavailable` refusal is shown and no run row is
       created — unchanged behaviour from `045`/`035`, verified not to have regressed.
-- [ ] **AC-12**: `git status --short services/api/prisma` shows both a modified `schema.prisma` and
+- [x] **AC-12**: `git status --short services/api/prisma` shows both a modified `schema.prisma` and
       one new migration directory, and `bin/cli api npx prisma migrate status` reports no pending
       migration after `bin/npm api run prisma:migrate`.
+
+### Live pass
+
+Not run: AC-1 to AC-11. The dev stack has no registered series, `shows_enabled` is `false` and no
+live TMDB call was made, so nothing could be aged by hand or triggered. Their rules are pinned by
+unit tests (`refresh-shows.task.spec.ts`, 8 cases including the `NULL`-status arm, both cadence
+boundaries and the failure/held-claim paths; `shows.service.spec.ts`, 3 cases) but not exercised
+end to end. AC-12 held: `git diff --stat services/api/src/schema.gql` is empty.
 
 ## Out of Scope
 

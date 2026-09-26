@@ -382,6 +382,7 @@ model Show {
   originalLanguage String
   releaseDate      DateTime?
   seasonsSyncedAt  DateTime?
+  tmdbStatus       String?
 
   seasons   Season[]
   users     UserShow[]
