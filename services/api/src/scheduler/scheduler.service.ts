@@ -52,7 +52,7 @@ export class SchedulerService implements OnModuleInit {
   // — doing so would pull `MediaModule` (and with it `MoviesModule`/
   // `ShowsModule`) into `SchedulerModule`, adding a third edge to the
   // `SettingsModule ⇄ SchedulerModule` cycle that already needs `forwardRef`
-  // on both sides. A task with no `mediaType` (e.g. `acquire_pending`) is
+  // on both sides. A task with no `mediaType` is
   // always available. `!== 'false'` matches the idiom used elsewhere for a
   // boolean Setting: an absent row reads as enabled.
   private isAvailable(

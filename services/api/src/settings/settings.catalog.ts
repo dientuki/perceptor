@@ -82,8 +82,8 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   schedule_refresh_episodes_cron: { kind: 'cron' },
   schedule_acquire_episodes_enabled: { kind: 'boolean' },
   schedule_acquire_episodes_cron: { kind: 'cron' },
-  schedule_acquire_pending_enabled: { kind: 'boolean' },
-  schedule_acquire_pending_cron: { kind: 'cron' },
+  schedule_acquire_movies_enabled: { kind: 'boolean' },
+  schedule_acquire_movies_cron: { kind: 'cron' },
 };
 
 export function getSettingCatalogEntry(key: string): SettingCatalogEntry | undefined {

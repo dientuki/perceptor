@@ -94,6 +94,9 @@ model User {
   uiLocale String? @db.VarChar(35)
 
   allowCinemaReleases Boolean @default(false)
+  acquireTheatrical   Boolean @default(false)
+  acquireDigital      Boolean @default(false)
+  acquirePhysical     Boolean @default(false)
   audioMandatory      Boolean @default(false)
 
   movies UserMovie[]

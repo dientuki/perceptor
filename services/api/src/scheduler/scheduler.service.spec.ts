@@ -204,7 +204,7 @@ describe('SchedulerService', () => {
         schedule_refresh_movies_cron: '0 4 * * *',
         schedule_refresh_shows_enabled: 'false',
         schedule_refresh_episodes_enabled: 'false',
-        schedule_acquire_pending_enabled: 'false',
+        schedule_acquire_movies_enabled: 'false',
       });
       // Simulate the job already being armed from a prior call.
       schedulerRegistry.doesExist.mockImplementation((_type: string, id: string) => id === 'refresh_movies');
@@ -296,16 +296,15 @@ describe('SchedulerService', () => {
       expect(prisma.scheduledTaskRun.create).not.toHaveBeenCalled();
     });
 
-    it('a task with no mediaType (acquire_pending) stays available regardless of the media flags', async () => {
-      settingsService.getMap.mockResolvedValue({
+    it('a definition with no mediaType stays available regardless of the media flags', () => {
+      const definition = { id: 'synthetic', defaultCron: '0 * * * *', handler: class {} };
+
+      const available = (service as any).isAvailable(definition, {
         movies_enabled: 'false',
         shows_enabled: 'false',
       });
 
-      const tasks = await service.list();
-      const acquirePending = tasks.find((task) => task.id === 'acquire_pending');
-
-      expect(acquirePending?.available).toBe(true);
+      expect(available).toBe(true);
     });
   });
 });

@@ -19,6 +19,19 @@ export type SearchTarget =
   | { episodeId: number }
   | null;
 
+export type MovieOwnerMarks = {
+  userId: string;
+  acquireTheatrical: boolean;
+  acquireDigital: boolean;
+  acquirePhysical: boolean;
+  allowCinemaReleases: boolean;
+};
+
+export type MovieOwnersContext = {
+  context: RankingContext;
+  owners: MovieOwnerMarks[];
+};
+
 type EffectiveAudio = { mandatory: boolean; languages: RankingLanguage[] };
 
 @Injectable()
@@ -129,6 +142,64 @@ export class RankingContextService {
       languageRequirement: { mandatory, languages: Array.from(languages.values()) },
       preferredGroups: Array.from(groups),
       allowCinemaReleases: true,
+    };
+  }
+
+  async forMovieOwners(movieId: number): Promise<MovieOwnersContext> {
+    const rows = await this.prisma.userMovie.findMany({
+      where: { movieId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        user: {
+          select: { acquireTheatrical: true, acquireDigital: true, acquirePhysical: true },
+        },
+      },
+    });
+
+    let mandatory = false;
+    const languages = new Map<string, RankingLanguage>();
+    const groups = new Set<string>();
+    const owners: MovieOwnerMarks[] = [];
+
+    for (const owner of rows) {
+      const [preferences, ownLanguages] = await Promise.all([
+        this.preferencesService.findForUser(owner.userId),
+        this.languagesService.findMoviePreferredTrackLanguagesFor(
+          owner.userId,
+          movieId,
+          LanguageTrackKind.AUDIO,
+        ),
+      ]);
+      const effective = this.effectiveAudio(
+        { mandatory: owner.audioMandatory, languages: ownLanguages },
+        preferences,
+      );
+      mandatory = mandatory || effective.mandatory;
+      for (const language of effective.languages) {
+        languages.set(language.iso3.toLowerCase(), {
+          iso2: language.iso2,
+          iso3: language.iso3,
+        });
+      }
+      for (const group of preferences.movieTorrentGroups) {
+        groups.add(group.name);
+      }
+      owners.push({
+        userId: owner.userId,
+        acquireTheatrical: owner.user.acquireTheatrical,
+        acquireDigital: owner.user.acquireDigital,
+        acquirePhysical: owner.user.acquirePhysical,
+        allowCinemaReleases: preferences.allowCinemaReleases,
+      });
+    }
+
+    return {
+      context: {
+        languageRequirement: { mandatory, languages: Array.from(languages.values()) },
+        preferredGroups: Array.from(groups),
+        allowCinemaReleases: owners.every((o) => o.allowCinemaReleases),
+      },
+      owners,
     };
   }
 

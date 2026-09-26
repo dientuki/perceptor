@@ -326,6 +326,21 @@ type UserPreferences {
 
   """The caller's selected torrent groups for their series."""
   showTorrentGroups: [TorrentGroup!]!
+
+  """
+  Acquire a film automatically from two days after its theatrical release, at any quality the ranking accepts. Inert while `allowCinemaReleases` is false (076 REQ-7).
+  """
+  acquireTheatrical: Boolean!
+
+  """
+  Acquire a film automatically from one day after its digital release, WEB-DL or better.
+  """
+  acquireDigital: Boolean!
+
+  """
+  Acquire a film automatically from five days after its physical release, UHD or remux.
+  """
+  acquirePhysical: Boolean!
 }
 
 type MediaSource {
@@ -664,6 +679,11 @@ type Mutation {
   """
   addMagnetToEpisode(episodeId: Int!, magnet: String!, force: Boolean = false): Episode!
   setAllowCinemaReleases(allowed: Boolean!): UserPreferences!
+
+  """
+  Replaces the caller's three acquisition windows in one write. All three are always given — there is no partial update, because the form saves them together.
+  """
+  setAcquisitionWindows(theatrical: Boolean!, digital: Boolean!, physical: Boolean!): UserPreferences!
   setAudioMandatory(mandatory: Boolean!): UserPreferences!
   setPreferredTrackLanguages(kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
   createTorrentGroup(name: String!): TorrentGroup!

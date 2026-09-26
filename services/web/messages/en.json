@@ -604,9 +604,9 @@
           "label": "Refresh episodes",
           "description": "Refreshes registered episode data."
         },
-        "acquire_pending": {
-          "label": "Acquire pending",
-          "description": "Searches for a release for titles that still have none."
+        "acquire_movies": {
+          "label": "Acquire movies",
+          "description": "Searches for and downloads a release for films whose release window has opened."
         },
         "acquire_episodes": {
           "label": "Acquire episodes",
@@ -701,6 +701,9 @@
       "audioMandatoryLabel": "Mandatory audio",
       "subtitleLanguagesLabel": "Subtitle languages",
       "cinemaLabel": "Allow cinema releases",
+      "acquireTheatricalLabel": "Acquire from 2 days after the theatrical release (any quality; does nothing unless cinema releases are allowed)",
+      "acquireDigitalLabel": "Acquire from 1 day after the digital release (WEB-DL or better)",
+      "acquirePhysicalLabel": "Acquire from 5 days after the physical release (UHD or remux)",
       "movieGroupsLabel": "Preferred movie groups",
       "showGroupsLabel": "Preferred series groups",
       "noneLoaded": "No torrent groups have been loaded yet.",

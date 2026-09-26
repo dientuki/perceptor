@@ -607,9 +607,9 @@
           "label": "Actualizar episodios",
           "description": "Refresca los datos de episodios registrados."
         },
-        "acquire_pending": {
-          "label": "Buscar pendientes",
-          "description": "Busca una release para títulos que todavía no tienen ninguna."
+        "acquire_movies": {
+          "label": "Bajar películas",
+          "description": "Busca y descarga un release para las películas cuya ventana de estreno ya abrió."
         },
         "acquire_episodes": {
           "label": "Bajar episodios nuevos",
@@ -701,6 +701,9 @@
       "audioMandatoryLabel": "Audio obligatorio",
       "subtitleLanguagesLabel": "Idiomas de subtítulos",
       "cinemaLabel": "Permitir películas de cine",
+      "acquireTheatricalLabel": "Bajar desde 2 días después del estreno en cines (cualquier calidad; no hace nada si no permitís estrenos de cine)",
+      "acquireDigitalLabel": "Bajar desde 1 día después del estreno digital (WEB-DL o mejor)",
+      "acquirePhysicalLabel": "Bajar desde 5 días después del lanzamiento físico (UHD o remux)",
       "movieGroupsLabel": "Grupos preferidos para películas",
       "showGroupsLabel": "Grupos preferidos para series",
       "noneLoaded": "Todavía no se cargó ningún grupo de torrents.",

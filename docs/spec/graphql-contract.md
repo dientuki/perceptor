@@ -415,6 +415,9 @@ type Show {
 
 type UserPreferences {
   audioMandatory: Boolean!
+  acquireTheatrical: Boolean!
+  acquireDigital: Boolean!
+  acquirePhysical: Boolean!
 }
 
 type Mutation {
@@ -423,6 +426,7 @@ type Mutation {
   setMovieAudioMandatory(movieId: Int!, mandatory: Boolean!): Boolean!
   setShowAudioMandatory(showId: Int!, mandatory: Boolean!): Boolean!
   setAudioMandatory(mandatory: Boolean!): UserPreferences!
+  setAcquisitionWindows(theatrical: Boolean!, digital: Boolean!, physical: Boolean!): UserPreferences!
 }
 
 type EncodeJobDetails {
@@ -433,6 +437,12 @@ type EncodeJobDetails {
   allowedSubtitleLanguageTags: [String!]!
 }
 ```
+
+As of `076-automatic-movie-acquisition`, `UserPreferences` carries `acquireTheatrical`, `acquireDigital`
+and `acquirePhysical`, and `setAcquisitionWindows` replaces all three in one write. All three
+arguments are always sent — there is no partial update, because the `/preferences` form saves them
+together. `RankingContext.minSourceRank`, the quality floor the sweep arms, is `api`-internal and
+deliberately not part of this contract.
 
 As of `039-per-title-language-split`, `Movie.preferredLanguages`/`Show.preferredLanguages` and
 `setMoviePreferredLanguages`/`setShowPreferredLanguages` are **gone, not deprecated** —

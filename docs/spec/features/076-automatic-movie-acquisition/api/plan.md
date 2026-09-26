@@ -2,7 +2,7 @@
 title: Automatic Movie Acquisition — api slice
 service: api
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Automatic Movie Acquisition — `api` (`api/plan.md`)
@@ -46,7 +46,7 @@ If those three columns are absent, `075-movie-refresh-sweep` has not shipped. St
 | `src/scheduler/tasks/acquire-pending.task.ts` | **Deleted** | Replaced by the above (REQ-8) |
 | `src/scheduler/tasks/acquire-episodes.task.ts` | Modified | Imports `startOfUtcDay` from `acquisition-window.ts` instead of declaring it |
 | `src/scheduler/scheduler.registry.ts` | Modified | `acquire_pending` entry → `acquire_movies`, `mediaType: 'movie'`, `defaultCron: '0 2 * * *'` |
-| `src/scheduler/scheduler.module.ts` | Modified | `AcquirePendingTask` → `AcquireMoviesTask` in `providers`; add `MoviesModule` to `imports` |
+| `src/scheduler/scheduler.module.ts` | Modified | `AcquirePendingTask` → `AcquireMoviesTask` in `providers`. `MoviesModule` is **already** imported (`074`/`075` added it) — no import change is needed |
 | `src/scheduler/scheduler.service.ts` | Modified | The `isAvailable` comment naming `acquire_pending` as its example |
 | `src/scheduler/scheduler.service.spec.ts` | Modified | The "task with no mediaType" case — see § Steps 9 |
 
@@ -114,9 +114,9 @@ If those three columns are absent, `075-movie-refresh-sweep` has not shipped. St
    the same condition `acquire-episodes.task.ts` uses (REQ-14). Return `itemsProcessed: attached`.
 7. **Registry + module.** Replace the `acquire_pending` entry with
    `{ id: 'acquire_movies', defaultCron: '0 2 * * *', handler: AcquireMoviesTask, mediaType: 'movie' }`
-   and delete `acquire-pending.task.ts`. In `scheduler.module.ts`, swap the provider and add
-   `MoviesModule` to `imports` (`IndexerModule` already pulls it, so this adds an edge, not a cycle —
-   `MoviesModule` does not import `SchedulerModule`).
+   and delete `acquire-pending.task.ts`. In `scheduler.module.ts`, swap the provider — that is the
+   only change there: `MoviesModule` is already in `imports` as of `074`/`075`, so this slice adds no
+   module edge at all.
 8. **Seed + catalog.** Rename both keys in `prisma/seeds/settings.ts` (value `false`, cron
    `0 2 * * *`) and in `src/settings/settings.catalog.ts`. Do not write a data migration to delete the
    old rows — they are inert (`../plan.md` § Migrations).

@@ -47,6 +47,9 @@ export class PreferencesService {
       subtitleLanguages,
       movieTorrentGroups,
       showTorrentGroups,
+      acquireTheatrical: user.acquireTheatrical,
+      acquireDigital: user.acquireDigital,
+      acquirePhysical: user.acquirePhysical,
     };
   }
 
@@ -106,6 +109,21 @@ export class PreferencesService {
 
   async setAllowCinemaReleases(userId: string, allowed: boolean): Promise<UserPreferences> {
     await this.usersService.setAllowCinemaReleases(userId, allowed);
+    return this.findForUser(userId);
+  }
+
+  async setAcquisitionWindows(
+    userId: string,
+    windows: { theatrical: boolean; digital: boolean; physical: boolean },
+  ): Promise<UserPreferences> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        acquireTheatrical: windows.theatrical,
+        acquireDigital: windows.digital,
+        acquirePhysical: windows.physical,
+      },
+    });
     return this.findForUser(userId);
   }
 

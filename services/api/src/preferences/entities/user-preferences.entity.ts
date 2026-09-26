@@ -35,4 +35,22 @@ export class UserPreferences {
     description: "The caller's selected torrent groups for their series.",
   })
   showTorrentGroups: TorrentGroup[];
+
+  @Field({
+    description:
+      'Acquire a film automatically from two days after its theatrical release, at any quality the ranking accepts. Inert while `allowCinemaReleases` is false (076 REQ-7).',
+  })
+  acquireTheatrical: boolean;
+
+  @Field({
+    description:
+      'Acquire a film automatically from one day after its digital release, WEB-DL or better.',
+  })
+  acquireDigital: boolean;
+
+  @Field({
+    description:
+      'Acquire a film automatically from five days after its physical release, UHD or remux.',
+  })
+  acquirePhysical: boolean;
 }

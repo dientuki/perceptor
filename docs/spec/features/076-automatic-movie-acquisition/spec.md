@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-26
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -332,7 +332,7 @@ Seeded Settings rows:
 - [ ] **AC-15**: Given a film two users hold, where one marked digital and the other nothing, the
       film is acquired on its digital window (REQ-10); given a film where one owner has
       `allowCinemaReleases` on and the other off, no cinema capture is ever attached for it.
-- [ ] **AC-16**: `git status --short services/api/prisma` shows both a modified `schema.prisma` and
+- [x] **AC-16**: `git status --short services/api/prisma` shows both a modified `schema.prisma` and
       one new migration directory; `git diff --stat services/worker` is empty (NFR-5); and
       `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift.
 - [ ] **AC-17**: In the torrent modal for a film, the row list, the "Best candidates" toggle and the

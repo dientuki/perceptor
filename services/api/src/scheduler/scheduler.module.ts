@@ -13,7 +13,7 @@ import { RefreshMoviesTask } from './tasks/refresh-movies.task';
 import { RefreshShowsTask } from './tasks/refresh-shows.task';
 import { RefreshEpisodesTask } from './tasks/refresh-episodes.task';
 import { AcquireEpisodesTask } from './tasks/acquire-episodes.task';
-import { AcquirePendingTask } from './tasks/acquire-pending.task';
+import { AcquireMoviesTask } from './tasks/acquire-movies.task';
 
 @Module({
   imports: [
@@ -31,7 +31,7 @@ import { AcquirePendingTask } from './tasks/acquire-pending.task';
     RefreshMoviesTask,
     RefreshShowsTask,
     RefreshEpisodesTask,
-    AcquirePendingTask,
+    AcquireMoviesTask,
     AcquireEpisodesTask,
   ],
   exports: [SchedulerService],

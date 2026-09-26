@@ -6,14 +6,11 @@ import { RankingContextService } from '@/indexer/ranking-context.service';
 import { RankingContext } from '@/indexer/ranking';
 import { deriveEpisodeStatus } from '@/pipeline-status/pipeline-status';
 import { PrismaService } from '@/prisma/prisma.service';
+import { startOfUtcDay } from './acquisition-window';
 import { AUTO_ACQUIRE_EPISODES_SINCE_KEY, ScheduledTaskHandler } from '../scheduler.registry';
 
 export const MAX_EPISODES_PER_RUN = 20;
 const GRACE_DAYS = 1;
-
-export function startOfUtcDay(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
 
 export function buildEpisodeQuery(
   showTitle: string,

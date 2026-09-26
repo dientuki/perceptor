@@ -294,4 +294,32 @@ describe('rankTorrentResults', () => {
     expect(out[0].ranking.sourceRank).toBe(8);
     expect(out[0].ranking.resolutionTier).toBe(4);
   });
+
+  it('drops rows below minSourceRank before the best tier is chosen', () => {
+    const input = [
+      release('Movie.2026.2160p.WEB-DL.x265-GRP'),
+      release('Movie.2026.1080p.BluRay.REMUX.x264-GRP'),
+    ];
+
+    const out = rankTorrentResults(input, { ...UNARMED, minSourceRank: 6 });
+
+    expect(out.map((r) => r.candidateRank)).toEqual([null, 1]);
+  });
+
+  it('ranks identically when minSourceRank is absent, null or zero', () => {
+    const input = [
+      release('Movie.2026.2160p.WEB-DL.x265-GRP'),
+      release('Movie.2026.1080p.BluRay.REMUX.x264-GRP'),
+    ];
+
+    const baseline = rankTorrentResults(input, UNARMED);
+
+    expect(baseline.map((r) => r.candidateRank)).toEqual([1, null]);
+    expect(
+      rankTorrentResults(input, { ...UNARMED, minSourceRank: null }),
+    ).toEqual(baseline);
+    expect(
+      rankTorrentResults(input, { ...UNARMED, minSourceRank: 0 }),
+    ).toEqual(baseline);
+  });
 });

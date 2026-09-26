@@ -2,7 +2,7 @@
 title: Automatic Movie Acquisition — web slice
 service: web
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Automatic Movie Acquisition — `web` (`web/plan.md`)

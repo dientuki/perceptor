@@ -2,7 +2,7 @@
 title: Automatic Movie Acquisition — Implementation Plan
 spec_version: 0.2.0
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Automatic Movie Acquisition (`plan.md`)
@@ -10,12 +10,12 @@ status: Approved
 ## Precondition: `075` ships first
 
 This feature reads `Movie.theatricalReleaseDate`, `Movie.digitalReleaseDate` and
-`Movie.physicalReleaseDate`. **None of them exists yet** — `075-movie-refresh-sweep` is `Approved`
-and unimplemented, and `grep -n theatricalReleaseDate services/api/prisma/schema.prisma` returns
-nothing today. `076` cannot start until `075` is implemented and its migration applied. The `api`
-slice's first step is that check, and its instruction is to **stop and report** if the columns are
-absent rather than adding them here: they belong to `075`'s migration (Constitution, Article III —
-one owner per column, and two migrations adding the same column is a conflict no test catches).
+`Movie.physicalReleaseDate`. **Satisfied as of 2026-09-26**: `075-movie-refresh-sweep` reads
+`status: Implemented`, the three columns are in `schema.prisma` (lines ~357–359) and migration
+`20260926204113_add_movie_release_windows` is applied. The `api` slice still opens with that check,
+and its instruction if the columns are ever absent is to **stop and report** rather than add them
+here — they belong to `075`'s migration (Constitution, Article III: one owner per column, and two
+migrations adding the same column is a conflict no test catches).
 
 A useful consequence: `075` is also what keeps the dates *current*. `076` works without
 `refresh_movies` armed (NFR-3), but on an installation where it is off, a digital date TMDB
@@ -77,7 +77,7 @@ twin uses (REQ-10).
 
 | Step | Service | Why it must come here |
 | :-- | :-- | :-- |
-| 0 | — | `075` implemented and migrated. `076` reads three columns only `075` creates |
+| 0 | — | ✅ done — `075` implemented and migrated. `076` reads three columns only `075` creates |
 | 1 | `api` | Owns the migration, the three `UserPreferences` fields, the mutation, the registry entry and the sweep. `web` cannot query a field the schema does not have |
 | 2 | `web` | Renders the three checkboxes, fires the new mutation, renames the `acquire_pending` key and its two message entries |
 | 3 | `docs` | `docs/spec/graphql-contract.md` § `UserPreferences` (line ~416) gains the three fields and `setAcquisitionWindows`; the root `CLAUDE.md` pipeline table gains `076` on the "Find release" and "Download" rows |

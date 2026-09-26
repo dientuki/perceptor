@@ -40,6 +40,11 @@ function build(options: {
   titleLanguages?: Record<string, { iso2: string; iso3: string }[]>;
   titleMandatory?: Record<string, boolean>;
   owners?: { userId: string; audioMandatory: boolean }[];
+  movieOwners?: {
+    userId: string;
+    audioMandatory: boolean;
+    user: { acquireTheatrical: boolean; acquireDigital: boolean; acquirePhysical: boolean };
+  }[];
 }) {
   const prefsByUser = options.prefsByUser ?? { u1: prefs() };
   const titleLanguages = options.titleLanguages ?? {};
@@ -77,6 +82,7 @@ function build(options: {
   };
   const prisma = {
     userShow: { findMany: jest.fn(async () => options.owners ?? []) },
+    userMovie: { findMany: jest.fn(async () => options.movieOwners ?? []) },
   };
 
   const service = new RankingContextService(
@@ -217,5 +223,82 @@ describe('RankingContextService.forShowOwners', () => {
     const context = await service.forShowOwners(5);
 
     expect(context.languageRequirement?.mandatory).toBe(false);
+  });
+});
+
+describe('RankingContextService.forMovieOwners', () => {
+  const off = { acquireTheatrical: false, acquireDigital: false, acquirePhysical: false };
+
+  it('arms on one owner out of three, unions languages and groups, and keeps each owner marks', async () => {
+    const { service, prisma } = build({
+      movieOwners: [
+        { userId: 'a', audioMandatory: false, user: { ...off, acquireDigital: true } },
+        { userId: 'b', audioMandatory: true, user: { ...off, acquirePhysical: true } },
+        { userId: 'c', audioMandatory: false, user: off },
+      ],
+      prefsByUser: {
+        a: prefs({ allowCinemaReleases: true, movieTorrentGroups: [{ name: 'G1' }] }),
+        b: prefs({ allowCinemaReleases: true, movieTorrentGroups: [{ name: 'G2' }] }),
+        c: prefs({
+          allowCinemaReleases: true,
+          audioLanguages: [JAPANESE],
+          movieTorrentGroups: [{ name: 'G1' }],
+        }),
+      },
+      titleLanguages: { a: [ENGLISH], b: [SPANISH] },
+    });
+
+    const { context, owners } = await service.forMovieOwners(10);
+
+    expect(context.languageRequirement?.mandatory).toBe(true);
+    expect(context.languageRequirement?.languages.map((l) => l.iso3).sort()).toEqual([
+      'eng',
+      'jpn',
+      'spa',
+    ]);
+    expect(context.preferredGroups.sort()).toEqual(['G1', 'G2']);
+    expect(owners.map((o) => [o.userId, o.acquireDigital, o.acquirePhysical])).toEqual([
+      ['a', true, false],
+      ['b', false, true],
+      ['c', false, false],
+    ]);
+    expect(prisma.userMovie.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { movieId: 10 }, orderBy: { createdAt: 'asc' } }),
+    );
+  });
+
+  it('vetoes cinema captures for the whole film when any one owner disallows them', async () => {
+    const { service } = build({
+      movieOwners: [
+        { userId: 'a', audioMandatory: false, user: off },
+        { userId: 'b', audioMandatory: false, user: off },
+        { userId: 'c', audioMandatory: false, user: off },
+      ],
+      prefsByUser: {
+        a: prefs({ allowCinemaReleases: true }),
+        b: prefs({ allowCinemaReleases: false }),
+        c: prefs({ allowCinemaReleases: true }),
+      },
+    });
+
+    const { context, owners } = await service.forMovieOwners(10);
+
+    expect(context.allowCinemaReleases).toBe(false);
+    expect(owners.map((o) => o.allowCinemaReleases)).toEqual([true, false, true]);
+  });
+
+  it('allows cinema captures only when every owner allows them', async () => {
+    const { service } = build({
+      movieOwners: [
+        { userId: 'a', audioMandatory: false, user: off },
+        { userId: 'b', audioMandatory: false, user: off },
+      ],
+      prefsByUser: {
+        a: prefs({ allowCinemaReleases: true }),
+        b: prefs({ allowCinemaReleases: true }),
+      },
+    });
+
+    expect((await service.forMovieOwners(10)).context.allowCinemaReleases).toBe(true);
   });
 });

@@ -68,6 +68,27 @@ export class PreferencesResolver {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Mutation(() => UserPreferences, {
+    description:
+      "Replaces the caller's three acquisition windows in one write. All three are always given — there is no partial update, because the form saves them together.",
+  })
+  async setAcquisitionWindows(
+    @CurrentUser() principal: AuthPrincipal,
+    @Args('theatrical') theatrical: boolean,
+    @Args('digital') digital: boolean,
+    @Args('physical') physical: boolean,
+  ): Promise<UserPreferences> {
+    if (principal.type !== 'user') {
+      throw i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED);
+    }
+    return this.preferencesService.setAcquisitionWindows(principal.id, {
+      theatrical,
+      digital,
+      physical,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Mutation(() => UserPreferences)
   async setAudioMandatory(
     @CurrentUser() principal: AuthPrincipal,

@@ -18,6 +18,9 @@ const PREFERENCES_QUERY = `
   query Preferences {
     preferences {
       allowCinemaReleases
+      acquireTheatrical
+      acquireDigital
+      acquirePhysical
       audioMandatory
       audioLanguages {
         id
@@ -60,6 +63,9 @@ export async function getPreferences(): Promise<UserPreferences> {
   return (
     data?.preferences ?? {
       allowCinemaReleases: false,
+      acquireTheatrical: false,
+      acquireDigital: false,
+      acquirePhysical: false,
       audioMandatory: false,
       audioLanguages: [],
       subtitleLanguages: [],
@@ -97,6 +103,9 @@ const SET_ALLOW_CINEMA_RELEASES_MUTATION = `
   mutation SetAllowCinemaReleases($allowed: Boolean!) {
     setAllowCinemaReleases(allowed: $allowed) {
       allowCinemaReleases
+      acquireTheatrical
+      acquireDigital
+      acquirePhysical
       audioLanguages {
         id
         tag
@@ -160,6 +169,9 @@ const SET_AUDIO_MANDATORY_MUTATION = `
   mutation SetAudioMandatory($mandatory: Boolean!) {
     setAudioMandatory(mandatory: $mandatory) {
       allowCinemaReleases
+      acquireTheatrical
+      acquireDigital
+      acquirePhysical
       audioMandatory
       audioLanguages {
         id
@@ -377,4 +389,71 @@ export async function setPreferredTorrentGroupsAction(
   }
 
   return { success: true };
+}
+
+const SET_ACQUISITION_WINDOWS_MUTATION = `
+  mutation SetAcquisitionWindows($theatrical: Boolean!, $digital: Boolean!, $physical: Boolean!) {
+    setAcquisitionWindows(theatrical: $theatrical, digital: $digital, physical: $physical) {
+      allowCinemaReleases
+      acquireTheatrical
+      acquireDigital
+      acquirePhysical
+      audioMandatory
+      audioLanguages {
+        id
+        tag
+        iso2
+        iso3
+        name
+      }
+      subtitleLanguages {
+        id
+        tag
+        iso2
+        iso3
+        name
+      }
+      movieTorrentGroups {
+        id
+        name
+      }
+      showTorrentGroups {
+        id
+        name
+      }
+    }
+  }
+`;
+
+export async function setAcquisitionWindowsAction(
+  theatrical: boolean,
+  digital: boolean,
+  physical: boolean,
+): Promise<
+  { error: string } | { success: true; preferences: UserPreferences }
+> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_ACQUISITION_WINDOWS_MUTATION, {
+      theatrical,
+      digital,
+      physical,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return {
+    success: true,
+    preferences: (result.data as { setAcquisitionWindows: UserPreferences })
+      .setAcquisitionWindows,
+  };
 }

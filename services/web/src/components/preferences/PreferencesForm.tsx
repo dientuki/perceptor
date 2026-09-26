@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { setUiLocaleAction } from "@/actions/locale";
 import {
+  setAcquisitionWindowsAction,
   setAllowCinemaReleasesAction,
   setAudioMandatoryAction,
   setPreferredTorrentGroupsAction,
@@ -80,6 +81,15 @@ export default function PreferencesForm({
   );
   const [audioMandatory, setAudioMandatory] = useState(
     preferences.audioMandatory,
+  );
+  const [acquireTheatrical, setAcquireTheatrical] = useState(
+    preferences.acquireTheatrical,
+  );
+  const [acquireDigital, setAcquireDigital] = useState(
+    preferences.acquireDigital,
+  );
+  const [acquirePhysical, setAcquirePhysical] = useState(
+    preferences.acquirePhysical,
   );
   const [movieGroupIds, setMovieGroupIds] = useState<string[]>(() =>
     idsFrom(preferences.movieTorrentGroups),
@@ -158,6 +168,7 @@ export default function PreferencesForm({
         cinemaResult,
         audioMandatoryResult,
         movieResult,
+        windowsResult,
         showResult,
       ] = await Promise.all([
         setUiLocaleAction(null, localeForm),
@@ -167,6 +178,13 @@ export default function PreferencesForm({
         setAudioMandatoryAction(audioMandatory),
         showMoviesTab
           ? setPreferredTorrentGroupsAction("MOVIE", null, movieForm)
+          : Promise.resolve(null),
+        showMoviesTab
+          ? setAcquisitionWindowsAction(
+              acquireTheatrical,
+              acquireDigital,
+              acquirePhysical,
+            )
           : Promise.resolve(null),
         showShowsTab
           ? setPreferredTorrentGroupsAction("SHOW", null, showForm)
@@ -193,6 +211,12 @@ export default function PreferencesForm({
       if (movieResult && "error" in movieResult && movieResult.error) {
         newErrors.push(movieResult.error);
         setMovieGroupIds(idsFrom(preferences.movieTorrentGroups));
+      }
+      if (windowsResult && "error" in windowsResult && windowsResult.error) {
+        newErrors.push(windowsResult.error);
+        setAcquireTheatrical(preferences.acquireTheatrical);
+        setAcquireDigital(preferences.acquireDigital);
+        setAcquirePhysical(preferences.acquirePhysical);
       }
       if (showResult && "error" in showResult && showResult.error) {
         newErrors.push(showResult.error);
@@ -266,6 +290,26 @@ export default function PreferencesForm({
               onChange={setAllowCinemaReleases}
               label={t("cinemaLabel")}
             />
+            <div className="space-y-3">
+              <Checkbox
+                id="acquire-theatrical"
+                checked={acquireTheatrical}
+                onChange={setAcquireTheatrical}
+                label={t("acquireTheatricalLabel")}
+              />
+              <Checkbox
+                id="acquire-digital"
+                checked={acquireDigital}
+                onChange={setAcquireDigital}
+                label={t("acquireDigitalLabel")}
+              />
+              <Checkbox
+                id="acquire-physical"
+                checked={acquirePhysical}
+                onChange={setAcquirePhysical}
+                label={t("acquirePhysicalLabel")}
+              />
+            </div>
             {movieCatalog.length === 0 ? (
               <p className="text-gray-500">{t("noneLoaded")}</p>
             ) : (

@@ -76,6 +76,7 @@ export type RankingContext = {
   languageRequirement: LanguageRequirement | null;
   preferredGroups: string[];
   allowCinemaReleases: boolean;
+  minSourceRank?: number | null;
 };
 
 export type RankedTorrentResult = TorrentResult & {
@@ -366,7 +367,11 @@ export function rankTorrentResults(
       !isVetoed(lowerTitle(entry)) &&
       !isDeadSwarm(entry) &&
       !isUpscaled(lowerTitle(entry)) &&
-      !(!context.allowCinemaReleases && isCinemaCapture(lowerTitle(entry))),
+      !(!context.allowCinemaReleases && isCinemaCapture(lowerTitle(entry))) &&
+      !(
+        context.minSourceRank != null &&
+        entry.ranking.sourceRank < context.minSourceRank
+      ),
   );
 
   const maxTier = survivors.reduce(
