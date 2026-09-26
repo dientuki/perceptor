@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Perceptor — one search box, and it's in your library</title>
+<title>Perceptor — search it now, watch it tonight</title>
 <meta name="description" content="Type a title. Perceptor finds it, downloads it, shrinks it and files it in your library — already playable on everything you own. Self-hosted, no account, no tracking, one command to install.">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="mark-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="mark.png">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Perceptor — one search box, and it's in your library">
-<meta property="og:description" content="Type a title. It shows up in your library, already playable on everything you own.">
+<meta property="og:title" content="Perceptor — search it now, watch it tonight">
+<meta property="og:description" content="Search a title, and it shows up in your library the same evening — already playable on everything you own.">
 <meta property="og:url" content="https://dientuki.github.io/perceptor/">
+<meta property="og:image" content="https://dientuki.github.io/perceptor/og.png">
 <style>
   /* Fonts are served from this site, not from a font CDN: opening this page contacts nobody but
      GitHub. See fonts/README.txt — both are SIL OFL 1.1. */
@@ -59,7 +61,7 @@
   header{position:sticky;top:0;z-index:60;background:rgba(8,6,15,.8);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
   .nav{display:flex;align-items:center;gap:30px;height:66px}
   .brand{display:flex;align-items:center;gap:9px;font-weight:900;font-size:18px;letter-spacing:-.02em}
-  .brand svg{width:26px;height:26px}
+  .brand img{width:26px;height:26px}
   .nav .links{margin-left:auto;display:flex;align-items:center;gap:28px;font-size:15px;font-weight:500}
   .links a{color:var(--muted)}
   .links a:hover{color:var(--text)}
@@ -247,7 +249,7 @@
 <header>
   <div class="wrap nav">
     <a class="brand" href="#top">
-      <svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3c2a68"/><stop offset="55%" stop-color="#556cb2"/><stop offset="100%" stop-color="#8ce4ff"/></linearGradient></defs><path d="M6 32s9-15 26-15 26 15 26 15-9 15-26 15S6 32 6 32z" fill="none" stroke="url(#lg)" stroke-width="4.2"/><circle cx="32" cy="32" r="7.5" fill="url(#lg)"/></svg>
+      <img src="mark-192.png" alt="" width="26" height="26" decoding="async">
       Perceptor
     </a>
     <div class="links">
@@ -263,7 +265,7 @@
 
 <div class="hero" id="top">
   <div class="wrap">
-    <h1>Type a title.<br><span class="hl">It's in your library.</span></h1>
+    <h1>Search it now.<br><span class="hl">Watch it tonight.</span></h1>
     <p class="sub">Perceptor finds it, downloads it, shrinks it and files it away — already playable on the TV, the phone and the old laptop. You do the typing. It does the rest.</p>
     <div class="cta">
       <a class="btn" href="#install">Install in one command</a>
