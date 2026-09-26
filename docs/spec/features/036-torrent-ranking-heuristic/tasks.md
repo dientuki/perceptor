@@ -1,6 +1,6 @@
 ---
 title: Torrent Ranking Heuristic — Tasks
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 status: In Progress
 ---
 
@@ -11,15 +11,20 @@ status: In Progress
 | Marker | Meaning |
 | :-- | :-- |
 | `[web]` | Which subagent owns the task. Exactly one per task. |
+| `[api]` | Same, for Group 7 only — the heuristic moved to `api` under `073` (see below). |
 | `[docs]` | Documentation only. Owned by the orchestrator, not a service agent. |
 | `[P]` | May run in parallel with the other `[P]` tasks in the same group. |
 | `→ Tnnn` | Blocked by that task. |
 
-**One service in this feature.** No `[api]`, no `[worker]`, no `[infra]`: `spec.md` § GraphQL
-Contract Delta is **None**, § Data Model Changes is **None**, and nothing about the stack, the
-`bin/` wrappers, `.env` or any Dockerfile changes. An agent that finds itself editing
-`services/api/` — including the dead `src/clients/indexer/score.ts` — has left its scope and must
-stop and report (`.claude/agents/web.md`, Constitution Article VIII).
+**One service per group, and it is not the same service in every group.** Groups 1–6 are `[web]`:
+when they were written the heuristic was `services/web/src/lib/torrent-ranking.ts`, and an agent in
+those groups that found itself editing `services/api/` — including the dead
+`src/clients/indexer/score.ts` — had left its scope. **Group 7 is `[api]`**, because
+`073-automatic-episode-acquisition` moved the heuristic to `services/api/src/indexer/ranking.ts` and
+deleted the `web` file; there, `services/web/` is the out-of-scope side. No `[worker]` and no
+`[infra]` in any group: `spec.md` § GraphQL Contract Delta is **None**, § Data Model Changes is
+**None**, and nothing about the stack, the `bin/` wrappers, `.env` or any Dockerfile changes
+(`.claude/agents/<service>.md`, Constitution Article VIII).
 
 **There is no test runner in `web`, and none is being added** (`services/web/CLAUDE.md`;
 `web/plan.md` § Tests). That makes **T006 the real gate of this feature**, not a formality after
@@ -40,8 +45,14 @@ holds for **T014** in Group 4.
 > `spec.md`.
 >
 > **Group 6 is the `spec_version` 0.7.0 amendment** — the cinema-capture veto (REQ-4c) — added
-> 2026-09-25, and is the **outstanding work**. Its tasks (T020–T023) are unticked and its
-> acceptance criteria (AC-4d … AC-4g) are unticked in `spec.md`.
+> 2026-09-25. Its tasks T020/T021 are ticked; T022 (the live pass) and T023 (the doc close-out) are
+> not, and its acceptance criteria (AC-4d … AC-4g) are unticked in `spec.md`.
+>
+> **Group 7 is the `spec_version` 0.8.0 amendment** — REQ-8's codec ranks by resolution tier — added
+> 2026-09-26, and is the **outstanding work**. Its tasks (T024–T026) are unticked and its acceptance
+> criteria (AC-19 … AC-23) are unticked in `spec.md`. It is the first group that is `[api]`, and the
+> first with real unit tests: `web`'s missing runner, which every group above compensated for with a
+> manual pass, is not a constraint on the side that owns the code now.
 
 ## Tasks
 
@@ -440,6 +451,69 @@ the one expression that arms it, T022 is the live pass, T023 closes the amendmen
       *Done when:* both CLAUDE.md files name the fourth veto and its condition, every AC in
       Group 6 is either ticked with a trace to T022's report or listed in § Blocked, and no
       "outstanding"/"unticked" marker for `0.7.0` remains in any of the four feature files.
+
+### Group 7 — `spec_version` 0.8.0: the codec ranks depend on the resolution tier
+
+One service, two files, no contract change. `spec.md` REQ-8 as amended: at tier 5 the ranks stay
+`hevc` 3 / `avc` 2 / unrecognised 0; at tier 4 and below (and at tier 0) they become `avc` 3 /
+unrecognised 2 / `hevc` 1. REQ-11's criterion 4 skips between two disc sources **only at tier 5**;
+criterion 6 (audio) is untouched and still skips at every tier.
+
+**This group is `[api]`, not `[web]`.** The heuristic is `services/api/src/indexer/ranking.ts` since
+`073-automatic-episode-acquisition`; `services/web/src/lib/torrent-ranking.ts` no longer exists. An
+agent editing anything under `services/web/` or `services/worker/` here has left its scope and must
+stop and report. The slice plan for this group is **`api/plan.md`**, not `web/plan.md`.
+
+T024 and T025 are one rule split only by file, so they are sequential and small; T026 closes the
+amendment. No `[P]` in this group.
+
+- [ ] **T024** `[api]` In `services/api/src/indexer/ranking.ts`, make the codec rank a function of
+      the resolution tier and narrow the comparator's codec skip. Four edits, no more:
+      **(a)** add a constant beside `DISC_SOURCE_MIN_RANK` for the 4K tier (`UHD_RESOLUTION_TIER =
+      5`) and use it in both decisions below, so the tier number exists once;
+      **(b)** `codec(title)` → `codec(title, resolutionTier)`, returning REQ-8's two tables —
+      the three regexes and all three **labels** unchanged, only the ranks moving;
+      **(c)** in `buildRanking`, pass the `res.tier` already computed two lines above;
+      **(d)** in `compareCandidates`, gate criterion 4's `bothFromDisc` skip on
+      `a.ranking.resolutionTier >= UHD_RESOLUTION_TIER` as well — and leave criterion 6's arm
+      exactly as it is (`spec.md` REQ-10, REQ-11).
+      Do **not** touch the vetoes, `source`, `dynamicRange`, `audio`, `familyCeiling`,
+      `adjustSourceRank`, `rankTorrentResults`, `ranking-context.service.ts`, `indexer.service.ts`,
+      `indexer.resolver.ts` or `entities/torrent-result.entity.ts`. No new `ranking` field, no
+      resolver change, no `schema.gql` change, no Prisma migration.
+      *Done when:* `bin/cli api npx --no tsc --noEmit` reports the baseline (0),
+      `git status --short services/api/prisma` is empty, `services/api/schema.gql` is not in
+      `git diff --name-only`, and `git diff --stat services/web services/worker` is empty.
+
+- [ ] **T025** `[api]` In `services/api/src/indexer/ranking.spec.ts`, cover **AC-19 … AC-23**.
+      Two existing tests change result and must be **rewritten, not deleted**:
+      `'skips codec and audio between two disc sources'` uses a 1080p pair, where codec now decides
+      — move that pair to `2160p UHD BluRay Remux` (**AC-22**) and add a 1080p `BluRay` pair
+      asserting the opposite, the `x264` leading a **larger** `x265` (**AC-21**); and
+      `'still compares codec between two web sources'` expects the 1080p `x265` to lead — invert it
+      (**AC-19**) and rename it, then add the 2160p mirror where the smaller `x265` leads
+      (**AC-20**). Add the three-release 1080p `BluRay` case asserting `x264`, untagged, `x265` in
+      that order (**AC-23**), and one test reading `codecRank` directly off the returned `ranking`
+      for a 1080p `x264` and a 2160p `x265` — both 3 — so the tier dependency is asserted and not
+      merely implied (`plan.md` § Risks, "the rank table is read as absolute").
+      Leave `ranking-context.service.spec.ts`, `indexer.service.spec.ts` and
+      `scheduler/tasks/acquire-episodes.task.spec.ts` alone — the sweep consumes `candidateRank`,
+      whose shape does not change. → T024
+      *Done when:* `bin/npm api run test -- src/indexer` is green, the report names the test that
+      carries each of AC-19 … AC-23, and the suite/test counts before and after are both stated.
+
+- [ ] **T026** `[docs]` Update `services/api/CLAUDE.md`'s `indexer/` paragraph: the codec rank
+      depends on the resolution tier (HEVC first only at 4K, AVC first below it, unrecognised last
+      at 4K and in the middle below it), and the codec skip between two disc sources now applies at
+      4K only while the audio skip still applies at every tier. `services/web/CLAUDE.md` and the
+      root `CLAUDE.md` need no edit — the labels `web` renders are unchanged and both already defer
+      the algorithm's detail to `services/api/CLAUDE.md`; state that you checked rather than
+      skipping it silently. Do not add a line to the root `CLAUDE.md` § Current state: this is a
+      one-file correction, not a measured feature. Then tick **AC-19 … AC-23** in `spec.md` against
+      T025's report, and set `status: Done` here once Group 6 also closes. → T025
+      *Done when:* the `api` CLAUDE.md paragraph states both halves of the rule, every AC in Group 7
+      is ticked with a trace to a named test, and `git diff --stat services/web services/worker` is
+      still empty.
 
 ## Blocked
 

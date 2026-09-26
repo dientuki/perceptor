@@ -7,6 +7,12 @@ status: Approved
 
 # PLAN: Torrent Ranking Heuristic — `web` (`web/plan.md`)
 
+> **Historical from `spec_version` 0.8.0 on.** This slice covers `0.1.0`–`0.7.0`, when the heuristic
+> was `services/web/src/lib/torrent-ranking.ts`. `073-automatic-episode-acquisition` moved it to
+> `services/api/src/indexer/ranking.ts` and deleted that file, so every path and command below
+> describes the module's former home. The `0.8.0` amendment (REQ-8 by resolution tier) is `api`'s —
+> see `api/plan.md`. Nothing in `web` changes for it: the labels it renders are unchanged.
+
 ## Scope
 
 `web` owns the whole feature. It adds a pure selection module and wires a toggle into the existing

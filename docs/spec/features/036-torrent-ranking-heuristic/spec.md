@@ -1,9 +1,9 @@
 ---
 title: Torrent Ranking Heuristic
-spec_version: 0.7.0
+spec_version: 0.8.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-31
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 status: Approved
 services: [web]
 ---
@@ -277,16 +277,44 @@ behaviour it has; `web` gains a view over its results.
       `ma` would collide with DTS-HD MA and `max` with an ordinary title word, so neither is
       listed.
 
-- [x] **REQ-8 (Criterion 4 — Codec)**: `hevc`/`x265`/`h265` → 3, `avc`/`x264`/`h264` → 2, anything
-      older or unrecognised (`xvid`, `divx`, `mpeg2`, `vc-1`) → 0. `av1` and `vp9` never reach this
-      criterion — REQ-4 removed them. The separator inside `h265`/`h264` is optional: `H 265` and
-      `H.265` are as common as `H265` in real release names.
+- [ ] **REQ-8 (Criterion 4 — Codec)** *(amended in `0.8.0`, see § Post-Implementation Amendments;
+      unticked because the amended rule is not implemented — the `0.1.0` rule it replaces is)*: The
+      codec rank **depends on the resolution tier** (REQ-5), because what a codec says about *a
+      source to recompress* is not the same at 4K as below it:
 
-      **Not compared between two disc sources** (REQ-11). A UHD BluRay is HEVC whether or not the
-      release name says so, so a title that omits the codec is missing *information*, not quality;
-      comparing on it would rank a verbose title above an identical terse one for being verbose.
-      This cannot let an AV1 or VP9 rip through — REQ-4 vetoes those in pass 1, before any source
-      is looked at.
+      | Tier | `hevc`/`x265`/`h265` | `avc`/`x264`/`h264` | unrecognised — `xvid`, `divx`, `mpeg2`, `vc-1`, or no codec named |
+      | :-- | :-- | :-- | :-- |
+      | 5 (4K / 2160p) | 3 | 2 | 0 |
+      | 4 and below, and tier 0 | 1 | **3** | 2 |
+
+      `av1` and `vp9` never reach this criterion — REQ-4 removed them. The separator inside
+      `h265`/`h264` is optional: `H 265` and `H.265` are as common as `H265` in real release names.
+      The **labels** (`HEVC`, `AVC`, unrecognised) do not vary by tier — only the rank does — so a
+      row's chip under REQ-14 still reads as the parse and never as the placement.
+
+      *Amended in `spec_version` 0.8.0.* Until then the ranks were `hevc` 3 / `avc` 2 /
+      unrecognised 0 at **every** tier, which is a *playback* preference — the one thing this
+      feature is not choosing. Perceptor recompresses the release to AV1, so the question a codec
+      answers here is how much information the source carries into that encode. A 1080p `x265` has
+      already discarded detail an `x264` of the same release keeps, and is the smaller file for
+      exactly that reason; re-encoding it yields a worse AV1 than re-encoding the `x264` would. At
+      4K the original ordering stands untouched, and not as an exception: a UHD source **is** HEVC,
+      and a 2160p `x264` is a re-encode of one.
+
+      **Below 4K an unrecognised codec sits between the two, not last.** A 1080p release naming no
+      codec is H264 in practice, so ranking it under an explicit `x265` would invert the rule this
+      amendment exists to state. It still loses to a release that says `x264` — the same guess,
+      with evidence behind it. At tier 5 unrecognised stays last, unchanged.
+
+      **Not compared between two disc sources — at tier 5 only** (REQ-11). A UHD BluRay is HEVC
+      whether or not the release name says so, so at 4K a title that omits the codec is missing
+      *information*, not quality, and comparing on it would rank a verbose title above an identical
+      terse one for being verbose. Below 4K that argument reverses with the fact behind it: a disc
+      is AVC by definition there, so an explicit `x265` on a 1080p BluRay records that a group
+      re-encoded it — information, not verbosity. Before `0.8.0` the skip applied at every tier, so
+      `1080p BluRay x265` and `1080p BluRay x264` tied on codec and settled on **size**, where the
+      x265 wins precisely because it threw data away. This cannot let an AV1 or VP9 rip through at
+      any tier: REQ-4 vetoes those in pass 1, before any source is looked at.
 
 - [x] **REQ-9 (Criterion 5 — Dynamic Range)**: `hdr10` (including `hdr10+`) → 3, a bare `hdr` → 3,
       `dv`/`dovi`/`dolby vision` → 2, nothing recognised (SDR) → 0. Highest match wins, never
@@ -302,9 +330,14 @@ behaviour it has; `web` gains a view over its results.
       object-audio-capable) → 2; `dts`/`dd`/`ac3`/`aac` (plain lossy) → 1; nothing recognised → 0.
       Highest match wins. The `DDPA` spelling means DDP carrying Atmos and counts as `atmos`.
 
-      **Not compared between two disc sources** (REQ-11), for the same reason as REQ-8: a BluRay or
-      remux carries the disc's lossless track whether or not the name mentions it. Audio still
-      decides between two web sources, where the release name is the only evidence there is.
+      **Not compared between two disc sources** (REQ-11), for the reason REQ-8 gives at tier 5: a
+      BluRay or remux carries the disc's lossless track whether or not the name mentions it. Audio
+      still decides between two web sources, where the release name is the only evidence there is.
+
+      *Unlike REQ-8's since `spec_version` 0.8.0, this skip is **not** tier-conditional.* It holds
+      at every tier, because the fact under it does — a 1080p disc carries its lossless track the
+      same way a UHD one does. Only the codec argument reversed below 4K, and only because a disc's
+      codec, unlike its audio, is a different codec below 4K than above it.
 
 - [x] **REQ-11 (The Comparator)**: Candidates are ordered by comparing, in this exact sequence and
       stopping at the first difference:
@@ -314,7 +347,7 @@ behaviour it has; `web` gains a view over its results.
       | 1 | Resolution (REQ-5) | higher first |
       | 2 | Preferred group (REQ-6) | preferred first |
       | 3 | Source (REQ-7), **as adjusted by REQ-22** | higher first |
-      | 4 | Codec (REQ-8) | higher first — **skipped if both are disc sources** |
+      | 4 | Codec (REQ-8) | higher first, **on the tier's own table** — skipped if both are disc sources **and the tier is 5** |
       | 5 | Dynamic range (REQ-9) | higher first |
       | 6 | Audio (REQ-10) | higher first — **skipped if both are disc sources** |
       | 7 | Mandatory audio language (REQ-24) | **advertised** first; inert unless REQ-22 is armed |
@@ -327,6 +360,12 @@ behaviour it has; `web` gains a view over its results.
       so testing one of them for disc-ness tests both. **Disc-ness is tested on the adjusted rank**
       (REQ-22), which cannot change the answer: the bump never crosses the disc boundary, so a
       candidate is a disc source before it if and only if it is one after.
+
+      *Amended in `spec_version` 0.8.0, and unimplemented — it lands with REQ-8, which is unticked
+      for both of them.* Criterion 4 carries a second condition criterion 6 does
+      not: its skip applies only at resolution tier 5 (REQ-8). The tier may be read off either
+      candidate, for the reason disc-ness may — criterion 1 has already tied by the time row 4 is
+      reached, and pass 2 left a single tier standing in any case.
 
       *Criterion 7 added in `spec_version` 0.5.0.* Row 3 is where the mandatory audio language does
       its real work; row 7 only settles the pairs row 3 could not — two candidates already sharing
@@ -579,6 +618,10 @@ document or anything under `services/api/`, they have left scope and must stop a
       button is pressed the **larger** of the two leads — the terse title is not punished for
       being terse. Given the same pair as WEB-DLs, the one naming HEVC and Atmos leads instead.
 
+      *Both halves are 2160p, and since `spec_version` 0.8.0 that matters: this criterion reads the
+      tier-5 table and the tier-5 skip. The 1080p shapes are AC-21 and AC-23, and they resolve the
+      other way.*
+
 - [x] **AC-4c** (upscale veto): Given a list whose only 2160p release is tagged
       `Upscaled` or `AI Upscale`, when the button is pressed, that release is absent and the
       candidate set is drawn from the next tier down — same shape as AC-4, different trigger.
@@ -661,6 +704,29 @@ document or anything under `services/api/`, they have left scope and must stop a
       in its audio languages, when the torrent modal is opened for one of its episodes and the
       button is pressed, an episode release naming `SPA` is promoted the same way a film's is — the
       series' preference reaches the modal (REQ-25).
+
+- [ ] **AC-19** *(`0.8.0`, below 4K AVC leads)*: Given a candidate set whose best tier is 1080p and
+      two `WEB-DL` releases identical except for their codec, where the `x265` one is **larger**,
+      the `x264` one leads. Size is criterion 8 and codec is criterion 4, so the smaller AVC
+      release winning is the whole amendment in one assertion.
+
+- [ ] **AC-20** *(`0.8.0`, 4K unchanged)*: Given the same shape at 2160p — two `WEB-DL` releases,
+      the `x265` one **smaller** — the `x265` one leads. The pre-`0.8.0` ordering holds at tier 5,
+      and the tier is what decides which table applied.
+
+- [ ] **AC-21** *(`0.8.0`, discs compare codec below 4K)*: Given two `1080p BluRay` releases
+      identical except that the `x265` one is **larger**, the `x264` one leads. Before `0.8.0` both
+      were disc sources, codec was skipped, and size handed it to the `x265`.
+
+- [ ] **AC-22** *(`0.8.0`, discs still skip at 4K)*: Given two `2160p UHD BluRay Remux` releases
+      where the **larger** names no codec and no audio and the smaller names `x265 TrueHD Atmos`,
+      the larger one leads — criteria 4 and 6 are still skipped at tier 5, so size decides. Same
+      assertion AC-4b makes, restated at the tier where it still applies.
+
+- [ ] **AC-23** *(`0.8.0`, unrecognised in the middle)*: Given three `1080p BluRay` releases — one
+      `x264`, one naming no codec, one `x265` — they order `x264`, untagged, `x265`, whatever their
+      sizes. The untagged release beating the `x265` is the half of REQ-8 that does not follow from
+      "prefer AVC".
 
 ## Out of Scope
 
@@ -782,3 +848,38 @@ own. `services: [web]` is unchanged.
   this feature must not add one (`services/web/CLAUDE.md`), so the compensating control is the
   same one every other rule in this spec relies on: the offline harness in `web/plan.md` § Tests,
   driven with the flag absent.
+
+## Post-Implementation Amendments (2026-09-26)
+
+One correction to a requirement that has been implemented, and wrong, since `0.1.0`. It adds no
+service, no Prisma column, no GraphQL field, no i18n key and no new criterion — REQ-8's numbers and
+the scope of one skip in REQ-11 are the entire change — so by Article VII it is an amendment here
+rather than a feature of its own.
+
+**Where the code is.** `spec.md`'s `services: [web]` is historical and left as the record: the
+heuristic moved to `api` under `073-automatic-episode-acquisition`, and this amendment is
+implemented in `services/api/src/indexer/ranking.ts`, with tests in `ranking.spec.ts` — the test
+runner `web/plan.md` § Tests recorded as missing, and named as the reason to move it, now exists on
+the side that owns the code. `web` and `worker` are untouched.
+
+- **REQ-8 (Codec, by tier), REQ-11 row 4, AC-19–AC-23.** REQ-8 ranked `hevc` above `avc` at every
+  resolution, which reads as the obvious ordering and is the wrong one for this feature: § Context
+  says in its second paragraph that Perceptor is choosing **a source to recompress**, not a file to
+  watch, and REQ-8 then graded the codecs as if it were watching them. Below 4K the more
+  informative source is the `x264` — bigger, and bigger *because* it kept detail the `x265`
+  discarded — so it is the one that re-encodes to a better AV1. At 4K nothing changes, because
+  there the fact is the other way round: the disc is HEVC and an AVC release of it is a re-encode.
+
+  The second half of the correction is the **scope of REQ-11's skip**. REQ-8's reason for not
+  comparing codec between two disc sources is a fact about 4K discs — they are HEVC, named or not.
+  Below 4K a disc is AVC, named or not, so there an explicit `x265` is not a verbose spelling of
+  the same thing, it is a record of a re-encode. The skip therefore narrows to tier 5. Left as it
+  was, the common `1080p BluRay x265` / `1080p BluRay x264` pair tied through criteria 4, 5 and 6
+  and was settled on size, which selects the x265 for having thrown data away — the exact inversion
+  this amendment is here to remove.
+
+  Two things were deliberately **not** done, both recorded as decisions rather than omissions.
+  The chain is not reordered: source stays criterion 3 and codec stays 4, so a `1080p BluRay x265`
+  still outranks a `1080p WEB-DL x264` — a re-encoded disc still carries more bitrate than a web
+  stream. And the audio skip (REQ-10) stays unconditional, because the fact under *it* does not
+  change with the tier.

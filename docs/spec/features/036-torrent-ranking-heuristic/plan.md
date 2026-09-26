@@ -1,7 +1,7 @@
 ---
 title: Torrent Ranking Heuristic — Implementation Plan
-spec_version: 0.7.0
-last_updated: 2026-09-25
+spec_version: 0.8.0
+last_updated: 2026-09-26
 status: Approved
 ---
 
@@ -12,8 +12,16 @@ status: Approved
 > after the code had stopped computing one. `spec_version` 0.5.0 adds the mandatory-audio
 > promotion. Both are reflected below — the 0.4.0 text is a correction of documentation drift, not
 > new work, and nothing in § Order of Work for it remains to be done. `spec_version` 0.6.0
-> (REQ-4b, the upscale veto) is implemented — step 9 below is done. **`spec_version` 0.7.0
-> (REQ-4c, the cinema-capture veto) is the only outstanding work: step 10.**
+> (REQ-4b, the upscale veto) is implemented — step 9 below is done. `spec_version` 0.7.0
+> (REQ-4c, the cinema-capture veto) is step 10. **`spec_version` 0.8.0 (REQ-8 by resolution tier)
+> is step 11, and it is the outstanding work along with step 10.**
+>
+> **One thing below is stale everywhere and is left as the record.** This plan describes the
+> heuristic as a module of `web` (`src/lib/torrent-ranking.ts`). It is not one any more:
+> `073-automatic-episode-acquisition` moved it to `services/api/src/indexer/ranking.ts` and deleted
+> the `web` file, which is the follow-up § Risks' last row named. Read every "`web`" in § Approach,
+> § Order of Work steps 1–10 and § Contract Freeze as the service that owned the code when the step
+> ran. Step 11 is `api`, and its verification commands are `api`'s.
 
 ## Approach
 
@@ -110,6 +118,17 @@ or never fire at all (dead code that passes every check).
 | :-- | :-- | :-- |
 | 10 | `web` | REQ-4c — a fourth pass-1 veto predicate (`isCinemaCapture`) beside `isUpscaled`, plus the one argument that arms it and the one expression in `SearchTorrent.tsx` that computes it from `preferences.allowCinemaReleases` and the target kind. Nothing else in the module moves: the tier pass, the comparator and every `ranking` label are untouched — a veto removes a row, so there is nothing for it to label. |
 
+Steps 1–10 are the `web` era. `spec_version` 0.8.0 (`spec.md` § Post-Implementation Amendments,
+2026-09-26) is the first step against `api`, where the heuristic now lives. It is one step and not
+three because the three edits are one rule: a rank table that takes the tier, the one call site that
+passes it, and the one comparator arm whose skip the same tier now gates. Splitting them leaves the
+module in a state no requirement describes — a tier-aware table read by a tier-blind comparator
+orders `1080p BluRay x264` below `1080p BluRay x265` still, which is the bug.
+
+| Step | Service | Why it must come here |
+| :-- | :-- | :-- |
+| 11 | `api` | REQ-8 as amended (`api/plan.md`) — `codec(title)` grows a `resolutionTier` parameter and returns the tier's own ranks; `buildRanking` passes the `resolution(title).tier` it already computed one line above; `compareCandidates` narrows criterion 4's disc skip to tier 5, leaving criterion 6's alone. One file (`src/indexer/ranking.ts`), one spec file beside it. No veto, no label, no new `ranking` field, no context, no resolver, no GraphQL field — `codecRank` and `codecLabel` already exist and neither changes type. |
+
 ## Contract Freeze
 
 `spec.md` § GraphQL Contract Delta is **None**, and that is the frozen part: this feature adds no
@@ -136,6 +155,26 @@ What an implementer will be tempted to change and must not:
 - **The promotion never vetoes.** REQ-22, and § Out of Scope. A release that does not name the
   language is still a candidate — absence in a title is not absence in the file. Turning "mandatory"
   into a filter would discard nearly every disc source.
+- **The codec preference below 4K is inverted on purpose** *(`0.8.0`)*. REQ-8 ranks `x264` above
+  `x265` at 1080p and under. Every release guide, and the pre-`0.8.0` code, say the opposite, so
+  this reads as a bug to an implementer who does not know the feature is choosing an encode *source*
+  (`spec.md` § Context). Restoring HEVC-first "because HEVC is the better codec" reintroduces the
+  bug this amendment names.
+
+- **An unrecognised codec below 4K outranks an explicit HEVC** *(`0.8.0`)*. REQ-8 puts it between
+  the two, not last, because a 1080p release naming no codec is H264. Tidying it back to 0 "so
+  unknown means worst everywhere" hands the placement back to the `x265`, and the tier-5 table —
+  where unrecognised *is* last — is the reason that looks like consistency.
+
+- **Criterion 4's skip is tier-gated; criterion 6's is not** *(`0.8.0`)*. REQ-11. The two arms
+  looked identical before this amendment and no longer are. Factoring them back together to remove
+  the duplication silently changes one of them, whichever way it goes.
+
+- **The chain is not reordered** *(`0.8.0`)*. Source stays criterion 3, codec stays 4. Moving codec
+  above source below 4K — so a `WEB-DL x264` beats a `BluRay x265` — was considered and declined
+  (`spec.md` § Post-Implementation Amendments, 2026-09-26). It is a bigger claim than the one this
+  amendment makes and needs its own decision.
+
 - **The button never acquires.** REQ-15. Auto-selecting the top candidate is the *next* feature and
   must not arrive early by way of "it was one line".
 
@@ -184,6 +223,8 @@ from it. That is the failure mode to defend against.
 | **The empty-candidate state reuses "no results" copy.** | The user reads "no se encontraron resultados" and searches again, when the releases are one press away. | REQ-17 requires its own message and its own key. AC-6 checks the exact copy. |
 | **No test runner in `web`.** | Every row above is exactly the class of bug Article IX says is owed a test, and this service has nowhere to put one. | Accepted and recorded, not waved away — see `web/plan.md` § Tests. The manual pass is the compensating control; moving the heuristic to `api` (where jest lives) is the named follow-up and the destination anyway. |
 | **The upscale veto matches too loosely.** `includes("upscale")` also hits an unrelated title token, or a hyphen/space variant is missed. | Either a legitimate release is discarded (silent, looks like it just wasn't in the results) or an upscale survives and can define the tier exactly like an unvetoed AV1 release would. | Boundary-anchored matching for every spelling (`upscaled`, `upscale`, `ai upscale`, `ai-upscale`, `aiupscale`), checked by eye in the manual pass against real indexer titles — same discipline as REQ-4/REQ-4a. AC-4c is the direct check. |
+| **The tier is read from the wrong candidate** *(`0.8.0`)*. Criterion 4 now consults `a.resolutionTier` the way it already consults `a.sourceRank` for disc-ness. | If either were read before criterion 1 had settled, a pair straddling two tiers would be judged on one of their tables — silently, and only for pairs that cannot occur in a candidate set, which is what makes it survive review. | Pass 2 leaves exactly one tier standing (REQ-3), and `||` short-circuits so row 4 is unreachable until rows 1–3 tied. Both facts are why REQ-11 licenses reading either candidate; a comparator used on an unfiltered list keeps criterion 1 first and stays correct anyway. |
+| **The rank table is read as absolute** *(`0.8.0`)*. `codecRank` crosses the GraphQL boundary and now means different things at different tiers. | A future consumer compares `codecRank` between two rows of *different* tiers — or renders it as a quality number — and gets an ordering REQ-8 never claimed. Nothing errors; the number is always a plausible small integer. | The labels stay tier-independent and are what `web` renders (`codecLabel`; `codecRank` is fetched and unused). AC-19/AC-20 pin the same rank appearing for opposite codecs at the two tiers, so the dependency is asserted rather than implied. |
 | **A cinema token matched inside a real title** *(`0.7.0`)*. The 2018 film **`Cam`** is the worked example; `TS`, `TC`, `SCR` and `WP` are short enough to collide with a title word or a foreign-language token. | Every release for that film is vetoed, so the candidate set comes back empty — or worse, partially culled — and REQ-17's message reads as "the heuristic rejected everything". Nothing on screen distinguishes this from a genuinely bad result list. | Boundary anchoring removes the *substring* class (`DTS`, `Ghosts`, `Catch`, `Camelot` — AC-4f) but **cannot** remove this class: `Cam` as a standalone title token is indistinguishable from `CAM` as a source tag by name alone. Accepted and documented rather than solved: the switch is the escape hatch, and REQ-17's empty state is already distinct from "no results". Do not attempt a positional heuristic ("only after the year") to rescue it — that is a new rule the spec did not approve. |
 | **The flag is read but the target kind is not** *(`0.7.0`)*. | The veto fires on episode and season searches too. Silent: a user hunting an `HDTS` simulcast sees an empty candidate set and assumes the indexer returned nothing. | REQ-4c is films-only and **AC-4g** is the direct check. The caller computes the argument, not the module — the module has no `target` and must not grow one. |
 | **`preferences` is still `null` when the button is pressed** *(`0.7.0`)*. It is fetched per mount, unawaited. | With the argument defaulting to "veto on", a user who allows captures briefly (or permanently, if the call failed) sees them removed. With it defaulting the other way, a user who forbids them sees them. Either way nothing errors. | REQ-4c resolves it to the column default (veto on), matching the fallback `getPreferences` already returns when `api` answers with no data. The window is small in practice — the button is disabled until a search returns, which is strictly after the preferences call is issued — but it is a window, not an impossibility. |
@@ -309,3 +350,42 @@ The one case the manual pass cannot reach is REQ-4c's unknown-flag branch — it
 preferences call to fail. Force it if you want it covered (block the request in devtools, press
 the button, confirm captures are hidden) and report it as forced; otherwise state plainly that it
 was not exercised.
+
+### The `spec_version` 0.8.0 pass — codec by resolution tier
+
+This amendment lands in `api`, which has jest, so the five acceptance criteria are unit-asserted
+rather than eyeballed — the compensating control the rest of this plan relies on is not needed for
+it.
+
+```bash
+bin/npm api run test -- src/indexer
+```
+
+Expected: every suite green, with **AC-19 … AC-23** each traceable to a named test in
+`src/indexer/ranking.spec.ts`. Two existing tests must be rewritten rather than deleted: the
+1080p disc pair that asserted the skip (its pair moves to 2160p, and a 1080p pair asserting the
+*comparison* joins it) and the web pair that asserted HEVC-first at 1080p (its expectation
+inverts).
+
+```bash
+bin/cli api npx --no tsc --noEmit
+```
+
+Expected: **0 errors**, the baseline `services/api/CLAUDE.md` § Current state records.
+
+```bash
+git status --short services/api/prisma && git diff --stat services/web services/worker
+```
+
+Expected: both silent. No migration, and `services/api/schema.gql` out of the diff — the amendment
+touches no field.
+
+Then one live confirmation, which is cheap here and worth doing because the unit tests all run on
+synthetic titles:
+
+22. With the stack up, open a film whose best tier is **1080p**, open the torrent modal and press
+    "Best candidates". Every `x264` row sits above the `x265` rows of the same source, and a row
+    naming no codec sits between them. Read the chips, not the order alone — a wrong parse and a
+    wrong rank look the same from the order.
+23. Repeat on a film with real 2160p releases. The order there must match what `0.7.0` produced:
+    `x265` ahead of `x264`, and untagged last among web sources.

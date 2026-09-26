@@ -166,20 +166,62 @@ describe('rankTorrentResults', () => {
     expect(titles[0]).toBe('Movie.2026.2160p.BluRay.Remux-GRP');
   });
 
-  it('skips codec and audio between two disc sources', () => {
-    const terse = release('Movie.2026.1080p.BluRay-GRP', { size: 5_000 });
-    const verbose = release('Movie.2026.1080p.BluRay.x265.TrueHD.Atmos-GRP', {
-      size: 1_000,
+  it('skips codec and audio between two 4K disc sources (AC-22)', () => {
+    const terse = release('Movie.2026.2160p.UHD.BluRay.Remux-GRP', {
+      size: 5_000,
     });
+    const verbose = release(
+      'Movie.2026.2160p.UHD.BluRay.Remux.x265.TrueHD.Atmos-GRP',
+      { size: 1_000 },
+    );
 
     expect(ordered([verbose, terse], UNARMED)[0]).toBe(terse.title);
   });
 
-  it('still compares codec between two web sources', () => {
-    const avc = release('Show.S01E01.1080p.WEB-DL.x264-GRP', { size: 5_000 });
-    const hevc = release('Show.S01E01.1080p.WEB-DL.x265-GRP', { size: 1_000 });
+  it('compares codec between two 1080p disc sources, AVC leading a larger HEVC (AC-21)', () => {
+    const avc = release('Movie.2026.1080p.BluRay.x264-GRP', { size: 1_000 });
+    const hevc = release('Movie.2026.1080p.BluRay.x265-GRP', { size: 5_000 });
+
+    expect(ordered([hevc, avc], UNARMED)).toEqual([avc.title, hevc.title]);
+  });
+
+  it('prefers AVC over a larger HEVC between two 1080p web sources (AC-19)', () => {
+    const avc = release('Show.S01E01.1080p.WEB-DL.x264-GRP', { size: 1_000 });
+    const hevc = release('Show.S01E01.1080p.WEB-DL.x265-GRP', { size: 5_000 });
+
+    expect(ordered([hevc, avc], UNARMED)[0]).toBe(avc.title);
+  });
+
+  it('still prefers a smaller HEVC over AVC between two 2160p web sources (AC-20)', () => {
+    const avc = release('Show.S01E01.2160p.WEB-DL.x264-GRP', { size: 5_000 });
+    const hevc = release('Show.S01E01.2160p.WEB-DL.x265-GRP', { size: 1_000 });
 
     expect(ordered([avc, hevc], UNARMED)[0]).toBe(hevc.title);
+  });
+
+  it('orders x264, untagged, x265 at 1080p BluRay whatever the sizes (AC-23)', () => {
+    const avc = release('Movie.2026.1080p.BluRay.x264-GRP', { size: 1_000 });
+    const untagged = release('Movie.2026.1080p.BluRay-GRP', { size: 3_000 });
+    const hevc = release('Movie.2026.1080p.BluRay.x265-GRP', { size: 5_000 });
+
+    expect(ordered([hevc, untagged, avc], UNARMED)).toEqual([
+      avc.title,
+      untagged.title,
+      hevc.title,
+    ]);
+  });
+
+  it('reports codecRank 3 for 1080p x264 and for 2160p x265', () => {
+    const out = rankTorrentResults(
+      [
+        release('Movie.2026.1080p.WEB-DL.x264-GRP'),
+        release('Movie.2026.2160p.WEB-DL.x265-GRP'),
+      ],
+      UNARMED,
+    );
+
+    expect(out[0].ranking.codecRank).toBe(3);
+    expect(out[1].ranking.codecRank).toBe(3);
   });
 
   it('breaks a full tie by size, then seeders, then fewer leechers, then input order', () => {

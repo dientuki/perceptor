@@ -229,22 +229,26 @@ function source(title: string): { rank: number; label: string } {
   return { rank: 0, label: UNKNOWN_LABEL };
 }
 
-function codec(title: string): { rank: number; label: string } {
+function codec(
+  title: string,
+  resolutionTier: number,
+): { rank: number; label: string } {
+  const uhd = resolutionTier >= UHD_RESOLUTION_TIER;
   if (
     /\bhevc\b/.test(title) ||
     /\bx265\b/.test(title) ||
     /\bh[\s.-]?265\b/.test(title)
   ) {
-    return { rank: 3, label: 'HEVC' };
+    return { rank: uhd ? 3 : 1, label: 'HEVC' };
   }
   if (
     /\bavc\b/.test(title) ||
     /\bx264\b/.test(title) ||
     /\bh[\s.-]?264\b/.test(title)
   ) {
-    return { rank: 2, label: 'AVC' };
+    return { rank: uhd ? 2 : 3, label: 'AVC' };
   }
-  return { rank: 0, label: UNKNOWN_LABEL };
+  return { rank: uhd ? 0 : 2, label: UNKNOWN_LABEL };
 }
 
 function dynamicRange(title: string): { rank: number; label: string } {
@@ -289,7 +293,7 @@ function buildRanking(
   const res = resolution(title);
   const group = preferredGroup(title, groups);
   const src = source(title);
-  const cod = codec(title);
+  const cod = codec(title, res.tier);
   const range = dynamicRange(title);
   const aud = audio(title);
 
@@ -323,17 +327,20 @@ function buildRanking(
 }
 
 const DISC_SOURCE_MIN_RANK = 5;
+const UHD_RESOLUTION_TIER = 5;
 
 type Ranked = TorrentResult & { ranking: ReleaseRankingData };
 
 function compareCandidates(a: Ranked, b: Ranked): number {
   const bothFromDisc = a.ranking.sourceRank >= DISC_SOURCE_MIN_RANK;
+  const skipCodec =
+    bothFromDisc && a.ranking.resolutionTier >= UHD_RESOLUTION_TIER;
 
   return (
     b.ranking.resolutionTier - a.ranking.resolutionTier ||
     Number(b.ranking.preferredGroup) - Number(a.ranking.preferredGroup) ||
     b.ranking.sourceRank - a.ranking.sourceRank ||
-    (bothFromDisc ? 0 : b.ranking.codecRank - a.ranking.codecRank) ||
+    (skipCodec ? 0 : b.ranking.codecRank - a.ranking.codecRank) ||
     b.ranking.dynamicRangeRank - a.ranking.dynamicRangeRank ||
     (bothFromDisc ? 0 : b.ranking.audioRank - a.ranking.audioRank) ||
     Number(b.ranking.matchedLanguage !== null) -
