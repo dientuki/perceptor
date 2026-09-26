@@ -65,6 +65,9 @@
   .nav .links{margin-left:auto;display:flex;align-items:center;gap:28px;font-size:15px;font-weight:500}
   .links a{color:var(--muted)}
   .links a:hover{color:var(--text)}
+  /* .links a is more specific than .btn, so the pill would inherit the muted link colour
+     and read as an empty button. */
+  .links a.btn{color:#06121c}
   @media(max-width:820px){.links a.hide-sm{display:none}}
 
   /* ===== buttons ===== */
