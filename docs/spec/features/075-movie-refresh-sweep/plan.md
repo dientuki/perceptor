@@ -2,7 +2,7 @@
 title: Movie Refresh Sweep — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Movie Refresh Sweep (`plan.md`)

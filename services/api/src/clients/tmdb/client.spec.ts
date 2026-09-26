@@ -111,12 +111,21 @@ describe('TmdbClient.details', () => {
 // release date with no error anywhere: picking the first entry instead of the
 // earliest, or comparing raw timestamps of mixed shape, still yields a valid
 // date, and an empty response yielding "" would overwrite the plain date.
-describe('TmdbClient.earliestMovieReleaseDate', () => {
+// `.earliest` feeds 062's calendar, so a regression there silently moves every
+// film. The per-type fields exist so a wrong type mapping (2 and 3 both
+// theatrical, unknown types counting toward earliest only) yields a valid but
+// wrong window with no error.
+describe('TmdbClient.movieReleaseDates', () => {
   let client: TmdbClient;
 
   beforeEach(() => {
     client = new TmdbClient(settingsStub());
     global.fetch = jest.fn();
+  });
+
+  const entry = (day: string, type?: number) => ({
+    release_date: `${day}T00:00:00.000Z`,
+    ...(type === undefined ? {} : { type }),
   });
 
   it('picks the earliest date across countries and release types', async () => {
@@ -133,15 +142,83 @@ describe('TmdbClient.earliestMovieReleaseDate', () => {
       ],
     });
 
-    expect(await client.earliestMovieReleaseDate(1)).toBe('2025-11-15');
+    expect((await client.movieReleaseDates(1)).earliest).toBe('2025-11-15');
   });
 
-  it('returns null when there are no usable dates', async () => {
+  it('returns null earliest when there are no usable dates', async () => {
     mockFetchOnce({
       results: [{ iso_3166_1: 'US', release_dates: [{ release_date: '' }] }],
     });
 
-    expect(await client.earliestMovieReleaseDate(1)).toBeNull();
+    expect((await client.movieReleaseDates(1)).earliest).toBeNull();
+  });
+
+  it('returns all fields null for an empty response', async () => {
+    mockFetchOnce({});
+
+    expect(await client.movieReleaseDates(1)).toEqual({
+      earliest: null,
+      theatrical: null,
+      digital: null,
+      physical: null,
+    });
+  });
+
+  it('counts both type 2 and type 3 as theatrical', async () => {
+    mockFetchOnce({
+      results: [{ iso_3166_1: 'US', release_dates: [entry('2026-03-01', 3), entry('2026-02-01', 2)] }],
+    });
+    expect((await client.movieReleaseDates(1)).theatrical).toBe('2026-02-01');
+
+    mockFetchOnce({
+      results: [{ iso_3166_1: 'US', release_dates: [entry('2026-03-01', 3)] }],
+    });
+    expect((await client.movieReleaseDates(1)).theatrical).toBe('2026-03-01');
+  });
+
+  it('takes the earliest date across countries independently per type', async () => {
+    mockFetchOnce({
+      results: [
+        { iso_3166_1: 'US', release_dates: [entry('2026-03-10', 3), entry('2026-05-20', 4), entry('2026-06-20', 5)] },
+        { iso_3166_1: 'JP', release_dates: [entry('2026-04-01', 3), entry('2026-05-01', 4), entry('2026-07-01', 5)] },
+      ],
+    });
+
+    expect(await client.movieReleaseDates(1)).toEqual({
+      earliest: '2026-03-10',
+      theatrical: '2026-03-10',
+      digital: '2026-05-01',
+      physical: '2026-06-20',
+    });
+  });
+
+  it('leaves a type with no entry anywhere null', async () => {
+    mockFetchOnce({
+      results: [{ iso_3166_1: 'US', release_dates: [entry('2026-03-10', 3)] }],
+    });
+
+    const dates = await client.movieReleaseDates(1);
+
+    expect(dates.digital).toBeNull();
+    expect(dates.physical).toBeNull();
+  });
+
+  it('counts premiere, TV, unknown and missing types toward earliest only', async () => {
+    mockFetchOnce({
+      results: [
+        {
+          iso_3166_1: 'US',
+          release_dates: [entry('2026-01-01', 1), entry('2026-01-02', 6), entry('2026-01-03', 99), entry('2026-01-04')],
+        },
+      ],
+    });
+
+    expect(await client.movieReleaseDates(1)).toEqual({
+      earliest: '2026-01-01',
+      theatrical: null,
+      digital: null,
+      physical: null,
+    });
   });
 });
 

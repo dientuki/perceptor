@@ -1,7 +1,7 @@
 ---
 title: Movie Refresh Sweep — Tasks
 last_updated: 2026-09-26
-status: Draft
+status: Done
 ---
 
 # TASKS: Movie Refresh Sweep (`tasks.md`)
@@ -27,7 +27,7 @@ and report.
 Three genuinely parallel tasks: the migration, the TMDB client and the pure closure rule touch
 disjoint files and none reads the others.
 
-- [ ] **T001** `[api] [P]` Add the five nullable columns to `model Movie` in
+- [x] **T001** `[api] [P]` Add the five nullable columns to `model Movie` in
       `services/api/prisma/schema.prisma` — `theatricalReleaseDate`, `digitalReleaseDate`,
       `physicalReleaseDate` (`DateTime?`), `tmdbStatus` (`String?`), `catalogClosedAt` (`DateTime?`) —
       and generate the migration with `bin/npm api run prisma:migrate`. `tmdbStatus`, never `status`:
@@ -35,7 +35,7 @@ disjoint files and none reads the others.
       *Done when:* `git status --short services/api/prisma` shows a modified `schema.prisma` **and**
       exactly one new migration directory, and `bin/cli api npx prisma migrate status` reports no
       pending migration. (AC-13)
-- [ ] **T002** `[api] [P]` Replace `TmdbClient.earliestMovieReleaseDate()` in
+- [x] **T002** `[api] [P]` Replace `TmdbClient.earliestMovieReleaseDate()` in
       `services/api/src/clients/tmdb/client.ts` with a method returning all four days from the same
       single `GET movie/{id}/release_dates` request, and add the `MovieReleaseDates` shape plus the
       `MovieDBClient` signature change to `services/api/src/clients/types.ts`. TMDB release types `2`
@@ -46,7 +46,7 @@ disjoint files and none reads the others.
       *Done when:* `grep -rn "earliestMovieReleaseDate" services/api/src` returns nothing, and
       `bin/cli api npx --no tsc --noEmit` reports errors only at the two former call sites in
       `movies.service.ts` (fixed by T004/T005) and nowhere else.
-- [ ] **T003** `[api] [P]` Add `services/api/src/movies/release-window.ts`: one pure function
+- [x] **T003** `[api] [P]` Add `services/api/src/movies/release-window.ts`: one pure function
       answering whether a film is closed, from the four days, the TMDB status and a `now`. Rule per
       `../spec.md` REQ-8 — closed when the status is `Canceled`; closed when nothing is in the future
       **and** the newest known date is more than 365 days before `now`; open when any date is in the
@@ -56,7 +56,7 @@ disjoint files and none reads the others.
       `isShortRuntime` helper.
       *Done when:* the file exports the function, imports nothing from Prisma or the TMDB client, and
       `bin/cli api npx --no tsc --noEmit` reports nothing new in it.
-- [ ] **T004** `[api]` Add `services/api/src/movies/release-window.spec.ts` — the one test this
+- [x] **T004** `[api]` Add `services/api/src/movies/release-window.spec.ts` — the one test this
       feature genuinely owes (Article IX): a wrong closure rule produces no error, no log and no UI,
       the film simply stops being refreshed forever. Open with the header paragraph naming that
       failure. Cover both sides of the 365-day boundary, a future date sitting beside old ones (open),
@@ -70,7 +70,7 @@ disjoint files and none reads the others.
 `refreshCatalog` and `register()` live in the same file, so T005 and T006 are sequential, not
 parallel. Both need Group 1.
 
-- [ ] **T005** `[api]` In `services/api/src/movies/movies.service.ts`, make `refreshCatalog` public
+- [x] **T005** `[api]` In `services/api/src/movies/movies.service.ts`, make `refreshCatalog` public
       and extend its existing `try` to write the three typed dates and `tmdbStatus` alongside the
       fields it already writes, then evaluate T003's rule against the values just read and write
       `catalogClosedAt` — a timestamp when closed, `null` when open, on every successful refresh (that
@@ -83,7 +83,7 @@ parallel. Both need Group 1.
       *Done when:* `bin/cli api npx --no tsc --noEmit` reports 0 errors, and pressing Refresh on
       `/movies/<id>` of a film whose dates are all old writes a `catalogClosedAt`, while the same
       press on a film with a future date leaves it `NULL`. (AC-8)
-- [ ] **T006** `[api]` In the same file, carry the four days and TMDB's production status on the
+- [x] **T006** `[api]` In the same file, carry the four days and TMDB's production status on the
       cached entry: extend `topUpCatalogFacts`'s `needsRelease` branch to store all four days and its
       `needsDetails` branch to carry the status, add a **new, distinctly named** optional field to the
       cached `MediaSearchResult` in `clients/types.ts` for it — `MediaSearchResult.status` is already
@@ -95,14 +95,14 @@ parallel. Both need Group 1.
       (`bin/mysql -e "select title, releaseDate, theatricalReleaseDate, digitalReleaseDate, physicalReleaseDate, tmdbStatus from movies"`),
       and a registration served from a warm cache makes the same number of TMDB calls it makes today.
       (AC-1)
-- [ ] **T007** `[api] [P]` Extend `services/api/src/clients/tmdb/client.spec.ts`: retarget the
+- [x] **T007** `[api] [P]` Extend `services/api/src/clients/tmdb/client.spec.ts`: retarget the
       existing `earliestMovieReleaseDate` cases at T002's method and keep them proving `earliest` is
       unchanged — a regression there silently moves every film in `062`'s calendar. Add type `2` and
       type `3` both landing in `theatrical`, earliest-across-countries per type, a type with no entry
       anywhere staying `null`, and an unrecognised or missing type counting toward `earliest` only.
       → T002
       *Done when:* `bin/npm api test -- tmdb/client` passes with strictly more cases than before.
-- [ ] **T008** `[api] [P]` Extend `services/api/src/movies/movies.service.spec.ts` with two
+- [x] **T008** `[api] [P]` Extend `services/api/src/movies/movies.service.spec.ts` with two
       assertions: the TMDB call budget of a warm-cache registration is unchanged (REQ-3), and a failed
       `refreshCatalog` leaves `catalogClosedAt` untouched (REQ-9 — whose live check needs an invalid
       TMDB key and so will rarely be run). → T006
@@ -111,7 +111,7 @@ parallel. Both need Group 1.
 
 ### Group 3 — the sweep
 
-- [ ] **T009** `[api]` Replace `RefreshMoviesTask.run()`'s stub body in
+- [x] **T009** `[api]` Replace `RefreshMoviesTask.run()`'s stub body in
       `services/api/src/scheduler/tasks/refresh-movies.task.ts`. Inject `PrismaService` and
       `MoviesService`; select `{ status: { not: COMPLETED }, catalogClosedAt: null }` taking `id` and
       `tmdbId` only; return `{ itemsProcessed: 0 }` immediately on an empty selection (NFR-2); loop
@@ -125,7 +125,7 @@ parallel. Both need Group 1.
       *Done when:* the handler no longer returns a hardcoded zero, and `scheduler.registry.ts` and
       `prisma/seeds/settings.ts` are absent from the diff (`git diff --stat` on both) — the task id,
       its cron and its Settings rows already exist and are correct.
-- [ ] **T010** `[api]` Add `MoviesModule` to `SchedulerModule`'s imports in
+- [x] **T010** `[api]` Add `MoviesModule` to `SchedulerModule`'s imports in
       `services/api/src/scheduler/scheduler.module.ts`, then boot the stack and read the log. If Nest
       reports a circular dependency or hands the task an `undefined` `MoviesService`, wrap it as
       `forwardRef(() => MoviesModule)` — `settings.module.ts` has the pattern and the comment
@@ -134,7 +134,7 @@ parallel. Both need Group 1.
       *Done when:* the stack boots with no Nest resolution error, and triggering `refresh_movies` from
       Settings → Scheduling ("Ejecutar ahora") produces a run row rather than a `FAILED` row naming an
       injection error. (AC-2)
-- [ ] **T011** `[api]` Add `services/api/src/scheduler/tasks/refresh-movies.task.spec.ts`, modelled on
+- [x] **T011** `[api]` Add `services/api/src/scheduler/tasks/refresh-movies.task.spec.ts`, modelled on
       `refresh-episodes.task.spec.ts` (including its Article IX header). Three silent failures to
       cover: a selection that includes `COMPLETED` or closed films quietly spends the TMDB budget this
       feature exists to protect and makes REQ-10 unverifiable from outside; a `Promise.all` instead of
@@ -147,7 +147,7 @@ parallel. Both need Group 1.
 
 ### Group 4 — verification and docs
 
-- [ ] **T012** `[api]` Run the full slice verification from `api/plan.md` § Done when.
+- [x] **T012** `[api]` Run the full slice verification from `api/plan.md` § Done when.
       → T004, T006, T007, T008, T010, T011
       *Done when:* `bin/cli api npx --no tsc --noEmit` reports 0 errors; `bin/npm api test` is green
       with a strictly higher test count than the 735/52 in the root `CLAUDE.md` (re-measure, do not
@@ -155,7 +155,7 @@ parallel. Both need Group 1.
       `git diff --stat services/web services/worker` prints nothing (AC-14); and
       `services/api/src/schema.gql` is absent from the diff — no decorator changed, so there is
       nothing to regenerate (Article IV).
-- [ ] **T013** `[docs]` Update the root `CLAUDE.md` "Register title in DB" pipeline row and the
+- [x] **T013** `[docs]` Update the root `CLAUDE.md` "Register title in DB" pipeline row and the
       `scheduler/` and `movies/` notes in `services/api/CLAUDE.md`: `refresh_movies` is no longer a
       stub, a film now carries three typed release dates, a TMDB production status and a closure
       marker, and the sweep never acquires anything. Record the re-measured test counts from T012 in
@@ -163,7 +163,7 @@ parallel. Both need Group 1.
       *Done when:* neither file still describes `refresh_movies` as a stub, and the count of stubbed
       scheduler tasks named in `services/api/CLAUDE.md` matches reality (`acquire_pending` and
       `refresh_shows`, until `074` lands).
-- [ ] **T014** `[docs]` Walk the manual pass in `../plan.md` § Verification against a dev stack with
+- [x] **T014** `[docs]` Walk the manual pass in `../plan.md` § Verification against a dev stack with
       at least three registered films — one upcoming, one released within the last year, one released
       more than a year ago with no digital or physical date — ticking AC-1 to AC-14 in `spec.md`.
       AC-11 (invalid TMDB key: `FAILED`, counts in the error, nothing closed, nothing blanked) and

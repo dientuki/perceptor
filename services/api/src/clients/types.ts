@@ -8,10 +8,18 @@ export interface MovieDBSearch {
   <T>(thing: string, query: string, page?: number): Promise<T[]>;
 }
 
+export interface MovieReleaseDates {
+  earliest: string | null;
+  theatrical: string | null;
+  digital: string | null;
+  physical: string | null;
+}
+
 export interface MovieDBClient {
   search: MovieDBSearch;
   details(thing: MediaType, id: number): Promise<MediaDetail>;
   seasonDetails(id: number, seasonNumber: number): Promise<EpisodeDetail[]>;
+  movieReleaseDates(id: number): Promise<MovieReleaseDates>;
   // 057-content-kind-classification: TMDB's own keywords response asymmetry
   // (a film body nests them under `keywords`, a series body under `results`)
   // is absorbed here — the caller always gets a flat list of keyword ids, or
@@ -98,4 +106,8 @@ export interface MediaSearchResult {
   genreIds?: number[];
   keywordIds?: number[];
   earliestReleaseDate?: string | null;
+  theatricalReleaseDate?: string | null;
+  digitalReleaseDate?: string | null;
+  physicalReleaseDate?: string | null;
+  tmdbStatus?: string | null;
 }

@@ -6,6 +6,7 @@ import { SettingsModule } from '@/settings/settings.module';
 import { IndexerModule } from '@/indexer/indexer.module';
 import { EpisodesModule } from '@/episodes/episodes.module';
 import { ShowsModule } from '@/shows/shows.module';
+import { MoviesModule } from '@/movies/movies.module';
 import { SchedulerResolver } from './scheduler.resolver';
 import { SchedulerService } from './scheduler.service';
 import { RefreshMoviesTask } from './tasks/refresh-movies.task';
@@ -22,6 +23,7 @@ import { AcquirePendingTask } from './tasks/acquire-pending.task';
     IndexerModule,
     EpisodesModule,
     ShowsModule,
+    MoviesModule,
   ],
   providers: [
     SchedulerResolver,

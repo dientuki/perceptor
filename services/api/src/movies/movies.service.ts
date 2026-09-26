@@ -11,6 +11,7 @@ import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
 import { ContentKind as PrismaContentKind } from '@prisma/client';
+import { isReleaseWindowClosed } from './release-window';
 import { classifyContentKind } from '@/media/content-kind';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
@@ -235,6 +236,18 @@ export class MoviesService implements MediaTypeService {
             ? new Date((topped.earliestReleaseDate || cached.releaseDate)!)
             : undefined,
         originalLanguage: cached.originalLanguage,
+        // 075: typed days and TMDB status, only from what the top-up already
+        // fetched; undefined leaves NULL for the sweep. Never catalogClosedAt.
+        theatricalReleaseDate: topped.theatricalReleaseDate
+          ? new Date(topped.theatricalReleaseDate)
+          : undefined,
+        digitalReleaseDate: topped.digitalReleaseDate
+          ? new Date(topped.digitalReleaseDate)
+          : undefined,
+        physicalReleaseDate: topped.physicalReleaseDate
+          ? new Date(topped.physicalReleaseDate)
+          : undefined,
+        tmdbStatus: topped.tmdbStatus || undefined,
         isShort,
         contentKind,
       },
@@ -339,16 +352,18 @@ export class MoviesService implements MediaTypeService {
     }
   }
 
-  private async refreshCatalog(
+  async refreshCatalog(
     id: number,
     tmdbId: number,
   ): Promise<RefreshCatalogOutcome> {
     try {
+      const now = new Date();
       const detail = (await this.tmdb.details(
         MEDIA_TYPE.MOVIE,
         tmdbId,
       )) as MovieDetail;
-      const earliestReleaseDate = await this.tmdb.earliestMovieReleaseDate(tmdbId);
+      const windows = await this.tmdb.movieReleaseDates(tmdbId);
+      const earliestReleaseDate = windows.earliest;
       const releaseDate = earliestReleaseDate || detail.releaseDate || null;
 
       const entry: MediaSearchResult = {
@@ -372,6 +387,26 @@ export class MoviesService implements MediaTypeService {
           posterUrl: entry.posterUrl ?? undefined,
           releaseDate: releaseDate ? new Date(releaseDate) : undefined,
           originalLanguage: entry.originalLanguage,
+          theatricalReleaseDate: windows.theatrical
+            ? new Date(windows.theatrical)
+            : undefined,
+          digitalReleaseDate: windows.digital
+            ? new Date(windows.digital)
+            : undefined,
+          physicalReleaseDate: windows.physical
+            ? new Date(windows.physical)
+            : undefined,
+          tmdbStatus: detail.status || undefined,
+          catalogClosedAt: isReleaseWindowClosed({
+            earliestReleaseDate: earliestReleaseDate || null,
+            theatricalReleaseDate: windows.theatrical,
+            digitalReleaseDate: windows.digital,
+            physicalReleaseDate: windows.physical,
+            status: detail.status || null,
+            now,
+          })
+            ? now
+            : null,
         },
       });
       void this.cacheMovies([entry]);
@@ -512,17 +547,20 @@ export class MoviesService implements MediaTypeService {
           ...topped,
           runtime: detail.runtime ?? null,
           genreIds: detail.genreIds ?? [],
+          tmdbStatus: detail.status || null,
         };
       } catch {
       }
     }
     if (needsRelease) {
       try {
+        const windows = await this.tmdb.movieReleaseDates(cached.id);
         topped = {
           ...topped,
-          earliestReleaseDate: await this.tmdb.earliestMovieReleaseDate(
-            cached.id,
-          ),
+          earliestReleaseDate: windows.earliest,
+          theatricalReleaseDate: windows.theatrical,
+          digitalReleaseDate: windows.digital,
+          physicalReleaseDate: windows.physical,
         };
       } catch {
       }

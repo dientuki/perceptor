@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-26
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 services: [api]
 ---
 
@@ -209,7 +209,7 @@ per-title timestamp to bound it (NFR-3).
 - [ ] **AC-3**: Given the same film with `status` set to `COMPLETED` by hand, when the task is
       triggered, then the run reads `SUCCESS` with `itemsProcessed: 0` and the film's row is
       unchanged.
-- [ ] **AC-4 (closes on age)**: Given a film with no future date and whose newest date of the four is
+- [x] **AC-4 (closes on age)**: Given a film with no future date and whose newest date of the four is
       more than 365 days in the past, when the task is triggered, then it is refreshed once
       (`itemsProcessed: 1`) and `catalogClosedAt` is now; when the task is triggered a second time,
       the same film is not selected (`itemsProcessed: 0`) and `catalogClosedAt` is unchanged.
@@ -232,18 +232,18 @@ per-title timestamp to bound it (NFR-3).
 - [ ] **AC-10**: Given an eligible film with a `MediaSource` in `DOWNLOADING` and a `ProcessJob`, when
       the task runs, then no `movies.status`, `movies.filePath`, `media_sources` or `process_jobs` row
       changed — only catalog columns, the typed dates, `tmdbStatus` and possibly `catalogClosedAt`.
-- [ ] **AC-11 (failure)**: Given two eligible films and the TMDB key set to an invalid value in
+- [x] **AC-11 (failure)**: Given two eligible films and the TMDB key set to an invalid value in
       Settings, when the task is triggered, then the run reads `FAILED`, its error names 2 of 2 films
       failed, neither film's catalog columns nor `catalogClosedAt` changed (in particular, an
       aged-out film was **not** closed — REQ-9), and no column was blanked. Triggering it again with
       a valid key then refreshes both and reads `SUCCESS`.
-- [ ] **AC-12 (failure)**: Given `movies_enabled` set to `false`, when `refresh_movies` is triggered
+- [x] **AC-12 (failure)**: Given `movies_enabled` set to `false`, when `refresh_movies` is triggered
       manually, then the existing `error.schedule.task_unavailable` refusal is shown and no run row is
       created — unchanged behaviour from `045`/`035`, verified not to have regressed.
-- [ ] **AC-13**: `git status --short services/api/prisma` shows both a modified `schema.prisma` and
+- [x] **AC-13**: `git status --short services/api/prisma` shows both a modified `schema.prisma` and
       one new migration directory, and `bin/cli api npx prisma migrate status` reports no pending
       migration after `bin/npm api run prisma:migrate`.
-- [ ] **AC-14**: `git diff --stat services/web services/worker` is empty (NFR-7).
+- [x] **AC-14**: `git diff --stat services/web services/worker` is empty (NFR-7).
 
 ## Out of Scope
 
@@ -278,3 +278,9 @@ per-title timestamp to bound it (NFR-3).
 - **A Redis lock for the sweep.** `035`'s in-process `runningTaskIds` guard still prevents a second
   occurrence, and it is still sound only because `api` runs as exactly one container. Nothing here
   changes that, or the day a replica count above one would break it.
+
+### Verification record (2026-09-26)
+
+Seen to hold on the dev stack (one film, Inception, `DOWNLOADING`, a real TMDB key; the handler run through a throwaway Nest context, and `SchedulerService.runTask` for the last two): AC-2 (`itemsProcessed: 1`; theatrical 2010-07-15, digital 2020-08-13, physical 2010-12-03, `tmdbStatus` `Released`), AC-4 (that film, all dates over a year old, got `catalogClosedAt`), AC-3 (set `COMPLETED` and open: `itemsProcessed: 0`, untouched), AC-11 (key set to an invalid value: TMDB 401, the run threw `1 of 1 film(s) failed; 0 refreshed successfully`, `releaseDate`/`tmdbStatus` kept, `catalogClosedAt` stayed `NULL`; key restored), AC-12 (`movies_enabled` false: `This task is not available: its content type is disabled`, no run row), AC-13 and AC-14. A manual `runTask` also wrote a `scheduled_task_runs` row, `SUCCESS`, 1 processed. Status, `filePath`, `isShort` and `contentKind` were unchanged after each refresh.
+
+Not run live, unit tests only: AC-1 (cold-cache registration), AC-5 to AC-7 (no film with a future date, a cancelled one or without dates was available, and TMDB cannot be made to report one), AC-8 (the Refresh button needs a signed-in user), AC-9 and AC-10 in full (no film manually set to `ANIME`, and no `MediaSource`/`ProcessJob` on the film).

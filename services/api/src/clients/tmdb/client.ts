@@ -12,7 +12,7 @@ import {
 } from './types';
 import { mapMultiSearchResults } from './multi';
 import { mapPopularMovies, mapPopularShows } from './popular';
-import { MovieDBClient, MediaDetail, MediaSearchResult, ShowDetail, MovieDetail, EpisodeDetail } from '@/clients/types';
+import { MovieDBClient, MovieReleaseDates, MediaDetail, MediaSearchResult, ShowDetail, MovieDetail, EpisodeDetail } from '@/clients/types';
 import { TmdbHttpError } from './errors';
 import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { HTTP_METHOD } from '@/types/http';
@@ -23,6 +23,14 @@ import { SettingsService } from '@/settings/settings.service';
 const TMDB_ENDPOINT: Record<MediaType, string> = {
   [MEDIA_TYPE.MOVIE]: 'movie',
   [MEDIA_TYPE.SHOW]: 'tv',
+};
+
+// https://developer.themoviedb.org/reference/movie-release-dates
+const RELEASE_TYPE_FIELD: Record<number, 'theatrical' | 'digital' | 'physical'> = {
+  2: 'theatrical',
+  3: 'theatrical',
+  4: 'digital',
+  5: 'physical',
 };
 
 // Size segment for every poster TMDB serves through this client. One constant
@@ -189,20 +197,27 @@ export class TmdbClient implements MovieDBClient {
     return (data.results ?? []).map((keyword) => keyword.id);
   }
 
-  async earliestMovieReleaseDate(id: number): Promise<string | null> {
+  async movieReleaseDates(id: number): Promise<MovieReleaseDates> {
     const data = await this.fetchOne<{
-      results?: { release_dates?: { release_date?: string }[] }[];
+      results?: { release_dates?: { release_date?: string; type?: number }[] }[];
     }>(`movie/${id}/release_dates`);
 
-    let earliest: string | null = null;
+    const dates: MovieReleaseDates = { earliest: null, theatrical: null, digital: null, physical: null };
+    const keepEarlier = (field: keyof MovieReleaseDates, day: string) => {
+      const current = dates[field];
+      if (current === null || day < current) dates[field] = day;
+    };
+
     for (const country of data.results ?? []) {
       for (const entry of country.release_dates ?? []) {
         const day = (entry.release_date ?? '').slice(0, 10);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
-        if (earliest === null || day < earliest) earliest = day;
+        keepEarlier('earliest', day);
+        const field = entry.type === undefined ? undefined : RELEASE_TYPE_FIELD[entry.type];
+        if (field) keepEarlier(field, day);
       }
     }
-    return earliest;
+    return dates;
   }
 
   async seasonDetails(id: number, seasonNumber: number): Promise<EpisodeDetail[]> {

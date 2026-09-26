@@ -354,6 +354,12 @@ model Movie {
   contentKind      ContentKind @default(LIVE_ACTION)
   isShort          Boolean   @default(false)
 
+  theatricalReleaseDate DateTime?
+  digitalReleaseDate    DateTime?
+  physicalReleaseDate   DateTime?
+  tmdbStatus            String?
+  catalogClosedAt       DateTime?
+
   // Estado consolidado para mostrar rápido en tarjetas/listados de la App
   status   MediaStatus @default(MISSING)
   filePath String?     @db.VarChar(500) // Ruta al archivo final procesado

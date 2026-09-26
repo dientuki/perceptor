@@ -986,4 +986,152 @@ describe('MoviesService', () => {
       expectNoWrites();
     });
   });
+
+  // 075-movie-refresh-sweep: these cases exist because two regressions here
+  // are silent. A registration that gained a TMDB request would multiply the
+  // shared key's budget across every add with no error anywhere; and a
+  // refreshCatalog that evaluates the closure outside its try (or writes
+  // catalogClosedAt on failure) would close or reopen films on a TMDB outage,
+  // so the sweep either stops refreshing them forever or never stops.
+  describe('release windows (075-movie-refresh-sweep)', () => {
+    const windows = {
+      earliest: '2021-09-03',
+      theatrical: '2021-09-03',
+      digital: '2021-11-16',
+      physical: null,
+    };
+
+    function detail(status: string | null) {
+      return {
+        id: 42,
+        title: 'Dune',
+        releaseDate: '2021-10-21',
+        posterPath: null,
+        originalLanguage: 'en',
+        overview: 'Sand.',
+        runtime: 155,
+        genreIds: [35],
+        status,
+      };
+    }
+
+    beforeEach(() => {
+      (tmdb as Record<string, jest.Mock>).movieReleaseDates = jest.fn();
+      prisma.movie.findUnique.mockResolvedValue(null);
+      prisma.movie.create.mockResolvedValue({ id: 9, tmdbId: 42, title: 'Dune' });
+      prisma.userMovie.upsert.mockResolvedValue({ userId: 'user-1', movieId: 9 });
+      prisma.movie.update.mockResolvedValue({});
+      const pipelineSet = jest.fn().mockReturnThis();
+      const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
+      redis.pipeline.mockReturnValue({ set: pipelineSet, exec: pipelineExec });
+    });
+
+    const releaseDates = () =>
+      (tmdb as Record<string, jest.Mock>).movieReleaseDates;
+
+    it('makes no TMDB request for a warm-cache registration', async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify({
+          id: 42,
+          title: 'Dune',
+          releaseDate: '2021-10-21',
+          posterUrl: null,
+          originalLanguage: 'en',
+          overview: 'Sand.',
+          type: MEDIA_TYPE.MOVIE,
+          runtime: 155,
+          genreIds: [35],
+          earliestReleaseDate: '2021-09-03',
+        }),
+      );
+
+      await service.register(42, 'user-1');
+
+      expect(tmdb.details).not.toHaveBeenCalled();
+      expect(releaseDates()).not.toHaveBeenCalled();
+      expect(prisma.movie.create.mock.calls[0][0].data.catalogClosedAt).toBeUndefined();
+    });
+
+    it('fetches release dates exactly once on a cold cache and writes the typed dates and status', async () => {
+      redis.get.mockResolvedValue(
+        JSON.stringify({
+          id: 42,
+          title: 'Dune',
+          releaseDate: '2021-10-21',
+          posterUrl: null,
+          originalLanguage: 'en',
+          overview: 'Sand.',
+          type: MEDIA_TYPE.MOVIE,
+        }),
+      );
+      tmdb.details.mockResolvedValue(detail('Released'));
+      releaseDates().mockResolvedValue(windows);
+
+      await service.register(42, 'user-1');
+
+      expect(releaseDates()).toHaveBeenCalledTimes(1);
+      expect(tmdb.details).toHaveBeenCalledTimes(1);
+      const data = prisma.movie.create.mock.calls[0][0].data;
+      expect(data.theatricalReleaseDate).toEqual(new Date('2021-09-03'));
+      expect(data.digitalReleaseDate).toEqual(new Date('2021-11-16'));
+      expect(data.physicalReleaseDate).toBeUndefined();
+      expect(data.tmdbStatus).toBe('Released');
+      expect(data.catalogClosedAt).toBeUndefined();
+    });
+
+    describe('refreshCatalog', () => {
+      it.each([
+        ['details rejects', () => tmdb.details.mockRejectedValue(new Error('down'))],
+        [
+          'movieReleaseDates rejects',
+          () => {
+            tmdb.details.mockResolvedValue(detail('Released'));
+            releaseDates().mockRejectedValue(new Error('down'));
+          },
+        ],
+      ])('returns FAILED and never writes when %s', async (_label, arrange) => {
+        arrange();
+
+        const outcome = await service.refreshCatalog(9, 42);
+
+        expect(outcome).toBe('FAILED');
+        expect(prisma.movie.update).not.toHaveBeenCalled();
+      });
+
+      it('writes a closure timestamp when every date is over a year old', async () => {
+        tmdb.details.mockResolvedValue(detail('Released'));
+        releaseDates().mockResolvedValue({
+          earliest: '2001-01-01',
+          theatrical: '2001-01-01',
+          digital: null,
+          physical: null,
+        });
+
+        await service.refreshCatalog(9, 42);
+
+        const data = prisma.movie.update.mock.calls[0][0].data;
+        expect(data.catalogClosedAt).toBeInstanceOf(Date);
+      });
+
+      it('writes null when a date is still in the future', async () => {
+        const future = new Date(Date.now() + 30 * 86400000)
+          .toISOString()
+          .slice(0, 10);
+        tmdb.details.mockResolvedValue(detail('Post Production'));
+        releaseDates().mockResolvedValue({
+          earliest: '2001-01-01',
+          theatrical: '2001-01-01',
+          digital: future,
+          physical: null,
+        });
+
+        await service.refreshCatalog(9, 42);
+
+        const data = prisma.movie.update.mock.calls[0][0].data;
+        expect(data.catalogClosedAt).toBeNull();
+        expect(data.digitalReleaseDate).toEqual(new Date(future));
+        expect(data.tmdbStatus).toBe('Post Production');
+      });
+    });
+  });
 });
