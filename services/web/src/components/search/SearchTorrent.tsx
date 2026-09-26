@@ -8,7 +8,6 @@ import {
   addTorrentToMovieAction,
   searchTorrentsAction,
 } from "@/actions/indexer";
-import { getPreferences } from "@/actions/preferences";
 import {
   addTorrentToEpisodeAction,
   addTorrentToSeasonAction,
@@ -19,14 +18,8 @@ import {
   buildAcquisitionTargetLabel,
   isAcquisitionTargetCompleted,
 } from "@/lib/acquisition-target";
-import type {
-  LanguageRequirement,
-  RankedTorrentResult,
-} from "@/lib/torrent-ranking";
-import { rankTorrentResults } from "@/lib/torrent-ranking";
-import type { TorrentResult } from "@/types/indexer";
+import type { SearchTarget, TorrentResult } from "@/types/indexer";
 import type { AcquisitionResult, AcquisitionTarget } from "@/types/media";
-import type { UserPreferences } from "@/types/preferences";
 
 interface SearchTorrentProps {
   target: AcquisitionTarget | null;
@@ -64,16 +57,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
   const [addError, setAddError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState<TorrentResult | null>(null);
-  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const router = useRouter();
-
-  // Fetched once per mount, independent of `target` — the caller's own preferences are what a
-  // title with nothing configured of its own falls back to (see the language/group merge below).
-  useEffect(() => {
-    getPreferences()
-      .then(setPreferences)
-      .catch(() => setPreferences(null));
-  }, []);
 
   useEffect(() => {
     if (!target) return;
@@ -102,64 +86,10 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     }
   }, [target]);
 
-  // REQ-25 — the mandatory audio-language requirement of the title being acquired, read off
-  // `target` itself: the movie's own fields for a film, the parent series' fields (threaded
-  // through the episode branch, see T011) for an episode. When the title carries no audio
-  // languages of its own, fall back to the caller's global `/preferences` (downloadLanguages tab)
-  // instead of ranking as if no requirement existed at all — a title's per-title config and the
-  // user's own default are two different tables (UserMovie/UserMovieLanguage vs UserPreferences)
-  // with nothing merging them anywhere else, so this is the one place that does. `undefined` for a
-  // null target keeps `rankTorrentResults` on its no-op path rather than passing an armed-looking
-  // empty object.
-  const titleAudio = target
-    ? target.kind === "movie"
-      ? {
-          mandatory: target.movie.audioMandatory,
-          languages: target.movie.audioLanguages,
-        }
-      : {
-          mandatory: target.audioMandatory,
-          languages: target.audioLanguages,
-        }
-    : null;
-  const usingGlobalLanguages =
-    titleAudio !== null && titleAudio.languages.length === 0;
-  const languageRequirement: LanguageRequirement | undefined = titleAudio
-    ? usingGlobalLanguages && preferences
-      ? {
-          mandatory: preferences.audioMandatory,
-          languages: preferences.audioLanguages,
-        }
-      : titleAudio
-    : undefined;
-
-  // Same idea for the preferred-groups tiebreak — `UserPreferences.movieTorrentGroups`/
-  // `showTorrentGroups`, picked by this target's kind. There is no per-title override for
-  // groups, only the user's global preference.
-  const preferredGroups = preferences
-    ? (target?.kind === "movie"
-        ? preferences.movieTorrentGroups
-        : preferences.showTorrentGroups
-      ).map((g) => g.name)
-    : [];
-
-  // `true` for an episode, a season or no target means "the cinema-capture veto does not apply to
-  // this target kind" (REQ-4c) — it is not "the user allows captures". Only a movie consults the
-  // user's own `allowCinemaReleases` preference.
-  const allowCinemaReleases =
-    target?.kind === "movie"
-      ? (preferences?.allowCinemaReleases ?? false)
-      : true;
-
-  // The candidate view derives from `results` without ever mutating it — REQ-16/AC-5 depend on
-  // `results` surviving in the API's original order for as long as the modal is open.
-  const candidateResults: (TorrentResult | RankedTorrentResult)[] = showBest
-    ? rankTorrentResults(
-        results,
-        languageRequirement,
-        preferredGroups,
-        allowCinemaReleases,
-      )
+  const candidateResults: TorrentResult[] = showBest
+    ? results
+        .filter((r) => r.candidate)
+        .sort((a, b) => (a.candidateRank ?? 0) - (b.candidateRank ?? 0))
     : results;
 
   const filteredResults = candidateResults.filter((res) =>
@@ -175,7 +105,14 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     setResults([]);
     setShowBest(false);
     try {
-      const data = await searchTorrentsAction(query);
+      const searchTarget: SearchTarget | null = !target
+        ? null
+        : target.kind === "movie"
+          ? { movieId: Number(target.movie.id) }
+          : target.kind === "season"
+            ? { seasonId: Number(target.season.id) }
+            : { episodeId: Number(target.episode.id) };
+      const data = await searchTorrentsAction(query, searchTarget);
       setResults(data);
     } catch (error) {
       console.error({ error, query }, "Error al buscar torrents");
@@ -400,7 +337,7 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
                           ),
                       )}
                     </div>
-                    {showBest && "ranking" in res && (
+                    {showBest && (
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         {(
                           [

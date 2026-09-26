@@ -68,6 +68,9 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'schedule_refresh_shows_cron', value: '0 5 * * *' },
     { key: 'schedule_refresh_episodes_enabled', value: 'false' },
     { key: 'schedule_refresh_episodes_cron', value: '0 6 * * *' },
+    { key: 'schedule_acquire_episodes_enabled', value: 'false' },
+    { key: 'schedule_acquire_episodes_cron', value: '0 3 * * *' },
+    { key: 'auto_acquire_episodes_since', value: '' },
     { key: 'schedule_acquire_pending_enabled', value: 'false' },
     { key: 'schedule_acquire_pending_cron', value: '0 * * * *' },
 

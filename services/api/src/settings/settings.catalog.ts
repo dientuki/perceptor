@@ -80,6 +80,8 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   schedule_refresh_shows_cron: { kind: 'cron' },
   schedule_refresh_episodes_enabled: { kind: 'boolean' },
   schedule_refresh_episodes_cron: { kind: 'cron' },
+  schedule_acquire_episodes_enabled: { kind: 'boolean' },
+  schedule_acquire_episodes_cron: { kind: 'cron' },
   schedule_acquire_pending_enabled: { kind: 'boolean' },
   schedule_acquire_pending_cron: { kind: 'cron' },
 };

@@ -1,6 +1,7 @@
 import { Type } from '@nestjs/common';
 
 import { MediaType } from '@/types/media';
+import { AcquireEpisodesTask } from './tasks/acquire-episodes.task';
 import { AcquirePendingTask } from './tasks/acquire-pending.task';
 import { RefreshEpisodesTask } from './tasks/refresh-episodes.task';
 import { RefreshMoviesTask } from './tasks/refresh-movies.task';
@@ -31,6 +32,8 @@ export interface ScheduledTaskHandler {
   run(): Promise<{ itemsProcessed: number }>;
 }
 
+export const AUTO_ACQUIRE_EPISODES_SINCE_KEY = 'auto_acquire_episodes_since';
+
 /** Derives the Settings key that holds a task's enabled flag from its id. */
 export function scheduleEnabledSettingKey(taskId: string): string {
   return `schedule_${taskId}_enabled`;
@@ -58,6 +61,12 @@ export const SCHEDULED_TASKS: readonly ScheduledTaskDefinition[] = [
     id: 'refresh_episodes',
     defaultCron: '0 6 * * *',
     handler: RefreshEpisodesTask,
+    mediaType: 'show',
+  },
+  {
+    id: 'acquire_episodes',
+    defaultCron: '0 3 * * *',
+    handler: AcquireEpisodesTask,
     mediaType: 'show',
   },
   {

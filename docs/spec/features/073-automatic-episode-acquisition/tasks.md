@@ -1,7 +1,7 @@
 ---
 title: Automatic Episode Acquisition — Tasks
 last_updated: 2026-09-26
-status: Draft
+status: In Progress
 ---
 
 # TASKS: Automatic Episode Acquisition (`tasks.md`)
@@ -190,7 +190,7 @@ Everything here depends on T003: `web` retypes the schema by hand, so the delta 
 
 ### Group 4 — verification and docs
 
-- [ ] **T010** `[docs]` Update the affected `CLAUDE.md` files. Root: the **Find release** row — the
+- [x] **T010** `[docs]` Update the affected `CLAUDE.md` files. Root: the **Find release** row — the
       ranking is no longer a client-side re-rank of an already-fetched list, it is server-side on
       `searchTorrents` (`073`); and the **Detect completion, enqueue** / **Browse library** story
       gains the daily `acquire_episodes` sweep as a new *entry point* into existing stages (no new

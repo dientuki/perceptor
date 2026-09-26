@@ -58,6 +58,9 @@
       "unavailable": "No se pudo conectar con el indexer",
       "no_infohash": "No se pudo determinar el infoHash de este release"
     },
+    "search": {
+      "target_ambiguous": "Indicá un solo destino de búsqueda"
+    },
     "download": {
       "not_a_torrent": "Esta descarga no tiene un torrent asociado",
       "torrent_client_rejected": "El cliente de torrents rechazó la solicitud ({status})",
@@ -607,6 +610,10 @@
         "acquire_pending": {
           "label": "Buscar pendientes",
           "description": "Busca una release para títulos que todavía no tienen ninguna."
+        },
+        "acquire_episodes": {
+          "label": "Bajar episodios nuevos",
+          "description": "Busca y descarga un release para los episodios recién estrenados."
         }
       }
     },

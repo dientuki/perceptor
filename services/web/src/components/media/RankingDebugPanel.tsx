@@ -1,7 +1,7 @@
 import type { Language } from "@/types/languages";
 import type { UserPreferences } from "@/types/preferences";
 
-// Debug: the resolution tiers `torrent-ranking.ts`'s `resolution()` recognises, best first —
+// Debug: the resolution tiers the server ranking recognises, best first —
 // static, so it never needs fetching, but it's the first line of "what are we filtering by".
 const RESOLUTION_ORDER = ["4K", "1080p", "720p", "480p", "360p"];
 

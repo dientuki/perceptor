@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ProwlarrClient } from '@/clients/indexer/client';
 import { TorrentResult } from '@/clients/indexer/types';
 import { RedisService } from '@/redis/redis.service';
+import { RankedTorrentResult, RankingContext, rankTorrentResults } from './ranking';
 
 const INDEXER_SEARCH_TTL_SECONDS = 60 * 10;
 
@@ -35,6 +36,10 @@ export class IndexerService {
     void this.writeCache(key, results);
 
     return results;
+  }
+
+  async searchRanked(query: string, context: RankingContext): Promise<RankedTorrentResult[]> {
+    return rankTorrentResults(await this.search(query), context);
   }
 
   private async readCache(key: string): Promise<TorrentResult[] | undefined> {

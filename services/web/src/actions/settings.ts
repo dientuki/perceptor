@@ -106,6 +106,7 @@ const BOOLEAN_KEYS = [
   "schedule_refresh_shows_enabled",
   "schedule_refresh_episodes_enabled",
   "schedule_acquire_pending_enabled",
+  "schedule_acquire_episodes_enabled",
 ] as const;
 
 const LIST_KEYS = [

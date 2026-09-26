@@ -69,6 +69,7 @@ describe('SettingsResolver updateSettings re-arm guard', () => {
     } as unknown as MediaServerIndexService;
     const schedulerService = {
       arm: jest.fn().mockResolvedValue(undefined),
+      stampAcquireEpisodesCutoff: jest.fn().mockResolvedValue(undefined),
     } as unknown as SchedulerService;
 
     const resolver = new SettingsResolver(
@@ -111,5 +112,56 @@ describe('SettingsResolver updateSettings re-arm guard', () => {
     await resolver.updateSettings([{ key: 'some_other_key', value: 'y' }]);
 
     expect(schedulerService.arm).not.toHaveBeenCalled();
+  });
+});
+
+// This suite exists because every Settings tab re-submits every boolean key:
+// if an unrelated save moved the acquire_episodes backlog cutoff, the window
+// would quietly slide forward and yesterday's episodes would stop being
+// eligible, with no error anywhere.
+describe('SettingsResolver updateSettings acquire_episodes cutoff stamp', () => {
+  const key = 'schedule_acquire_episodes_enabled';
+
+  const buildResolver = (before: Record<string, string>) => {
+    const settingsService = {
+      getMap: jest.fn().mockResolvedValue(before),
+      updateMany: jest.fn().mockResolvedValue([]),
+    } as unknown as SettingsService;
+    const schedulerService = {
+      arm: jest.fn().mockResolvedValue(undefined),
+      stampAcquireEpisodesCutoff: jest.fn().mockResolvedValue(undefined),
+    } as unknown as SchedulerService;
+    const resolver = new SettingsResolver(
+      settingsService,
+      { setSavePath: jest.fn() } as unknown as QbittorrentClient,
+      { resolveFromRoot: jest.fn() } as unknown as MediaRootsService,
+      { rebuild: jest.fn() } as unknown as MediaServerIndexService,
+      schedulerService,
+    );
+    return { resolver, schedulerService };
+  };
+
+  it('stamps the cutoff when the switch flips from off to on', async () => {
+    const { resolver, schedulerService } = buildResolver({ [key]: 'false' });
+    await resolver.updateSettings([{ key, value: 'true' }]);
+    expect(schedulerService.stampAcquireEpisodesCutoff).toHaveBeenCalledTimes(1);
+  });
+
+  it('stamps the cutoff when the row was never stored', async () => {
+    const { resolver, schedulerService } = buildResolver({});
+    await resolver.updateSettings([{ key, value: 'true' }]);
+    expect(schedulerService.stampAcquireEpisodesCutoff).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not move the cutoff when an already-on switch is re-submitted', async () => {
+    const { resolver, schedulerService } = buildResolver({ [key]: 'true' });
+    await resolver.updateSettings([{ key, value: 'true' }]);
+    expect(schedulerService.stampAcquireEpisodesCutoff).not.toHaveBeenCalled();
+  });
+
+  it('does not stamp when the switch is turned off', async () => {
+    const { resolver, schedulerService } = buildResolver({ [key]: 'true' });
+    await resolver.updateSettings([{ key, value: 'false' }]);
+    expect(schedulerService.stampAcquireEpisodesCutoff).not.toHaveBeenCalled();
   });
 });

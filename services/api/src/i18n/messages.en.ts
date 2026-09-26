@@ -98,6 +98,7 @@ export const MESSAGES_EN: Record<string, string> = {
     'Configure a media server before syncing the library.',
   [ERROR_KEYS.INDEXER_UNAVAILABLE]: 'Could not reach the indexer',
   [ERROR_KEYS.INDEXER_NO_INFOHASH]: 'Could not resolve an infoHash',
+  [ERROR_KEYS.SEARCH_TARGET_AMBIGUOUS]: 'Specify a single search target',
 
   // media-sources, process-jobs, downloads
   [ERROR_KEYS.SOURCE_NOT_FOUND]: 'Media source {id} does not exist',

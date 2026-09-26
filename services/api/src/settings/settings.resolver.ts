@@ -134,6 +134,17 @@ export class SettingsResolver {
       }
     }
 
+    const acquireEpisodesKey = scheduleEnabledSettingKey('acquire_episodes');
+    const acquireEpisodesTurnedOn = entries.some(
+      (entry) =>
+        entry.key === acquireEpisodesKey &&
+        entry.value === 'true' &&
+        before[acquireEpisodesKey] !== 'true',
+    );
+    if (acquireEpisodesTurnedOn) {
+      await this.schedulerService.stampAcquireEpisodesCutoff();
+    }
+
     // REQ-3: a cadence or enable/disable flip must take effect on the next
     // tick, not only after a restart. Re-arm only when a `schedule_*` key
     // genuinely changed — same before/after guard as the two blocks above,

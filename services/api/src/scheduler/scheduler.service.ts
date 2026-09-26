@@ -14,6 +14,7 @@ import {
   findScheduledTask,
   scheduleCronSettingKey,
   scheduleEnabledSettingKey,
+  AUTO_ACQUIRE_EPISODES_SINCE_KEY,
 } from './scheduler.registry';
 import { ScheduledTask } from './entities/scheduled-task.entity';
 import { ScheduledTaskOutcome } from './entities/scheduled-task-outcome.enum';
@@ -69,6 +70,15 @@ export class SchedulerService implements OnModuleInit {
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly moduleRef: ModuleRef,
   ) {}
+
+  async stampAcquireEpisodesCutoff(): Promise<void> {
+    const value = new Date().toISOString();
+    await this.prisma.setting.upsert({
+      where: { key: AUTO_ACQUIRE_EPISODES_SINCE_KEY },
+      update: { value },
+      create: { key: AUTO_ACQUIRE_EPISODES_SINCE_KEY, value },
+    });
+  }
 
   async onModuleInit(): Promise<void> {
     await this.reconcileOrphanedRuns();

@@ -472,77 +472,26 @@ kind fails to compile rather than silently falling through. `AcquisitionResult`'
 which has no `status`, and every caller already refreshes the page rather than reading `id`/`status`
 off a success.
 
-## Torrent ranking heuristic (`036-torrent-ranking-heuristic`)
+## Torrent ranking heuristic (`036-torrent-ranking-heuristic`, moved to `api` by `073-automatic-episode-acquisition`)
 
-`src/lib/torrent-ranking.ts` exports one pure function,
-`rankTorrentResults(results: TorrentResult[], requirement?: LanguageRequirement | null)
-: RankedTorrentResult[]`, called from `SearchTorrent.tsx`'s "Best candidates" toggle. It never
-persists anything and never crosses the GraphQL boundary — it re-ranks the exact list the search
-button already fetched, client-side only. Three passes: veto (`av1`/`vp9`, boundary-anchored, **plus dead
-swarms** — zero seeders and under five leechers, since nothing will ever finish downloading from
-one, **plus upscales** — `Upscaled`/`AI Upscale`/`aiupscale`, boundary-anchored, since a fake 2160p
-release would otherwise set the tier and evict every genuine 1080p one), tier (keep only the highest surviving resolution tier — bare digits like `1080` match
-alongside `1080p`/`1080i`, `10800` must not), then order.
+`web` no longer owns a comparator: `src/lib/torrent-ranking.ts` was deleted. `searchTorrents` now
+returns, on every row, a non-null `ranking` (numeric rank plus a human-readable label per
+criterion), `candidate` (survived every veto and sits in the best resolution tier) and
+`candidateRank` (1-based position among candidates, `null` otherwise — normal data, never an error
+and never coerced to 0). Rows arrive in the indexer's order. `SearchTorrent.tsx`'s "Best candidates"
+toggle filters on `candidate` and sorts on `candidateRank`; toggled off it shows the response as-is.
+It passes the modal's own target (`movieId`, `seasonId` or `episodeId`, at most one) to
+`searchTorrentsAction`, and `api` resolves the language requirement, preferred groups and the
+cinema-capture veto from that target and the caller's preferences — `web` assembles none of it, and
+no longer fetches `/preferences` for the modal. A `*_NOT_FOUND` error from the search lands in
+`searchError` with the modal open, never as an empty list.
 
-**It is a lexicographic comparator, not a weighted score** — this is the one thing to understand
-before touching it. Criteria are ranked, not weighted, and each is consulted only to break a tie in
-the one above it: **resolución → grupo preferido → fuente (ajustada, ver abajo) → codec → rango
-dinámico → audio → idioma de audio obligatorio → tamaño (desc) → seeders (desc) → leechers (asc)**.
-Nothing lower can compensate for a loss higher up, so a UHD BluRay Remux can never be overtaken by a
-WEB-DL on size or seeder count at any margin. The original 0–102 weighted sum was replaced precisely
-because an additive model cannot express that — every weight is an exchange rate between criteria,
-and for these criteria no exchange rate exists. Do not reintroduce a score, and do not "simplify" the
-comparator chain into a sum.
-
-**`spec_version` 0.5.0 — the mandatory audio language (`036`).** The second, optional argument is
-the target title's audio requirement — `Movie.audioMandatory`/`audioLanguages` for a film, the
-parent `Show`'s pair for an episode (an episode has no preference of its own). Absent, `mandatory:
-false`, or an empty `languages` list is a complete no-op: the function returns exactly the 0.4.0
-ordering. When armed, a release whose name advertises one of the required languages (matched by
-`iso3`/`iso2` plus a hardcoded alias table — `esp`/`castellano`/`cast`/`latino`/`lat` for Spanish;
-`MULTI`/`DUAL` are deliberately **not** in that table, since they assert "more than one language,
-unspecified" rather than evidence of the specific one required) gets **+1 to its source rank,
-capped at the ceiling of its own source family** — remux caps at `UHD BluRay Remux` (8), disc
-non-remux at `UHD BluRay` (6), web at `WEB-DL` (4), unrecognised never promotes. The cap is not an
-optimisation: an uncapped `+1` would let `WEB-DL` (4) reach `BluRay`'s rank (5), smuggling a web
-source into disc territory — exactly the additive trade the lexicographic model exists to forbid. A
-release already at its family's ceiling is unaffected by the promotion itself, which is what the new
-low-priority comparator criterion (advertised-language-first, between audio and size) is for — it
-settles the pairs the promotion could not. **That criterion is *not* skipped between two disc
-sources**, unlike codec and audio: a disc source implies HEVC and a lossless track, but implies
-nothing about which languages are on it, so the tag is real information for a remux too. The
-`sourceLabel` shown in the UI is deliberately never adjusted — a promoted `BluRay Remux` still reads
-`BluRay Remux`, with a separate `sourcePromoted` marker (rendered as a small arrow icon next to the
-source chip in `SearchTorrent.tsx`) so it is never mistaken for a genuine `UHD BluRay Remux`. None of
-this reads anything new from `api` — both fields were already fetched by `039-per-title-language-
-split`'s `GetMovie`/`GetShow` queries; `AcquisitionTarget`'s episode branch (`src/types/media.ts`)
-just needed the series' two fields threaded through `SeasonAccordion.tsx` alongside it.
-
-Several placements are deliberate and easy to get backwards. **The preferred group ranks above
-source** — it is a reputation signal standing in for what the release name cannot say, so a
-preferred-group WEB-DL beats an unknown-group UHD BluRay Remux. **Resolution both filters and leads
-the chain**: it can never actually differ among candidates, since the tier pass already removed the
-rest, but it stays in the comparator so the function is correct for a caller that does not filter.
-**`HDR` and `HDR10` rank equally** (HDR10 is the baseline every UHD source carries, so the short
-spelling must not cost a place) while keeping distinct labels. And **codec and audio are skipped
-between two disc sources** — a UHD BluRay is HEVC with the disc's lossless track whether the name
-says so or not, so comparing on them would reward a verbose title over an identical terse one; both
-still decide between two web sources. That skip cannot leak an AV1 rip: the veto runs in pass 1,
-before any source is inspected.
-
-**Match `remux` without a leading word boundary.** `BDRemux` is one token, and requiring `\bremux`
-made every `UHD BDRemux` release parse as *unrecognised* — the worst source rank instead of the
-best. That was a real bug found against live results, not a hypothetical.
-
-Each candidate carries a `ranking` object with both the numeric rank and a human-readable label per
-criterion; `SearchTorrent.tsx` renders the labels as badges under the title so a misparse is visible
-against the release name on the same row (a real `DS4K` tag once read as 4K). Those labels are
-format identifiers — `HEVC`, `HDR10`, `UHD BluRay Remux` — the same in every locale, and
-deliberately not catalog keys; unrecognised reads render `—`. `PREFERRED_GROUPS` and
-`STREAMING_SERVICES` are constants that grow as real release names appear — no entry in the latter
-may be ambiguous with a non-service token (`ma` collides with DTS-HD MA, `max` with a title word).
-Written to be reusable outside this modal — an eventual automatic picker (no user toggle) is meant
-to call the same function.
+The algorithm, its vetoes, the lexicographic ordering and the mandatory-audio-language rules
+(`036`'s spec, `services/api/src/indexer/ranking.ts`) are documented in `services/api/CLAUDE.md`.
+Do not reintroduce a comparator here: the automatic sweep and this modal must agree on "best", and
+they can only do so from one implementation. The labels stay format identifiers (`HEVC`, `HDR10`,
+`UHD BluRay Remux`), identical in every locale; `sourcePromoted` still renders as the small arrow
+next to the source chip.
 
 ## Language pickers: `LanguagePickerField`, three call sites
 

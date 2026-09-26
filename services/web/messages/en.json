@@ -58,6 +58,9 @@
       "unavailable": "Could not reach the indexer",
       "no_infohash": "Could not resolve an infoHash"
     },
+    "search": {
+      "target_ambiguous": "Provide a single search target"
+    },
     "download": {
       "not_a_torrent": "This download has no associated torrent",
       "torrent_client_rejected": "The torrent client rejected the request ({status})",
@@ -604,6 +607,10 @@
         "acquire_pending": {
           "label": "Acquire pending",
           "description": "Searches for a release for titles that still have none."
+        },
+        "acquire_episodes": {
+          "label": "Acquire episodes",
+          "description": "Searches for and downloads a release for newly aired episodes."
         }
       }
     },

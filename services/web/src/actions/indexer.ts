@@ -3,12 +3,12 @@
 import { redirectIfUnauthenticated } from '@/lib/auth-session';
 import { fetchGraphQL } from '@/lib/graphql-client';
 import { toActionError, translateGraphQLError } from '@/lib/graphql-error';
-import { TorrentResult } from '@/types/indexer';
+import type { SearchTarget, TorrentResult } from '@/types/indexer';
 import type { AcquisitionResult } from '@/types/media';
 
 const SEARCH_TORRENTS_QUERY = `
-  query SearchTorrents($query: String!) {
-    searchTorrents(query: $query) {
+  query SearchTorrents($query: String!, $movieId: Int, $seasonId: Int, $episodeId: Int) {
+    searchTorrents(query: $query, movieId: $movieId, seasonId: $seasonId, episodeId: $episodeId) {
       id
       infoHash
       title
@@ -17,16 +17,37 @@ const SEARCH_TORRENTS_QUERY = `
       leechers
       items { downloadUrl }
       infoUrl { downloadUrl }
+      ranking {
+        resolutionTier
+        resolutionLabel
+        preferredGroup
+        groupLabel
+        sourceRank
+        sourceLabel
+        codecRank
+        codecLabel
+        dynamicRangeRank
+        dynamicRangeLabel
+        audioRank
+        audioLabel
+        matchedLanguage
+        sourcePromoted
+      }
+      candidate
+      candidateRank
     }
   }
 `;
 
-export async function searchTorrentsAction(query: string): Promise<TorrentResult[]> {
+export async function searchTorrentsAction(
+  query: string,
+  target: SearchTarget | null = null,
+): Promise<TorrentResult[]> {
   if (!query.trim()) return [];
 
   const { data, errors } = await fetchGraphQL<{ searchTorrents: TorrentResult[] }>(
     SEARCH_TORRENTS_QUERY,
-    { query },
+    { query, ...target },
   );
 
   if (errors && errors.length > 0) {

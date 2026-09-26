@@ -11,5 +11,6 @@ import { PreferencesService } from './preferences.service';
 @Module({
   imports: [LanguagesModule, UsersModule],
   providers: [PreferencesResolver, PreferencesService],
+  exports: [PreferencesService],
 })
 export class PreferencesModule {}

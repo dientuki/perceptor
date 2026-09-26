@@ -597,7 +597,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   provider ids natively, e.g. Emby, never implements it, and a rebuild is a no-op for it); every
   factory now takes a second argument, `MediaServerIndexPort`, the one-method port a client reaches
   for when it cannot resolve a TMDB id against the server itself.
-- **`indexer/`** — Prowlarr search surface. `entities/torrent-result.entity.ts`'s `TorrentResult`
+- **`indexer/`** — Prowlarr search surface. Since `073-automatic-episode-acquisition` it also owns the release ranking, moved from `web`: `ranking.ts`'s `rankTorrentResults(results, context)` is a **lexicographic comparator, not a weighted score** (resolution → preferred group → adjusted source → codec → dynamic range → audio → mandatory audio language → size → seeders → leechers; never reintroduce a sum). Vetoes: `av1`/`vp9`, dead swarms (0 seeders and under 5 leechers), upscales, and cinema captures (film only). Only the best surviving resolution tier is a candidate; a mandatory audio language promotes the source rank by one, capped at its family ceiling, and is never applied to `sourceLabel`. It returns every row in indexer order annotated with `ranking`, `candidate` and `candidateRank`. `RankingContextService` (`forCaller`, `forShowOwners`) is the single definition of what arms the ranking, used by `searchTorrents` and by the `acquire_episodes` sweep. Rationale: `036`'s spec. `entities/torrent-result.entity.ts`'s `TorrentResult`
   carries a non-null `id` (display/grouping identity, never sent back) and a nullable `infoHash` —
   a search groups every Prowlarr row instead of dropping the ones missing a hash
   (`037-indexer-result-loss`); see `clients/indexer/` below for where the grouping and the
@@ -639,8 +639,8 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   losing side of an upload-versus-upload race: what used to be a `console.log` and a silent early
   return is now `throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED)` — the browser sees a
   real error instead of a completed-looking upload that never starts encoding.
-- **`scheduler/`** (`035-scheduled-tasks`) — a cron-driven registry of four tasks (`refresh_movies`,
-  `refresh_shows`, `refresh_episodes`, `acquire_pending`). Three still stub `run()` returning
+- **`scheduler/`** (`035-scheduled-tasks`) — a cron-driven registry of five tasks (`refresh_movies`,
+  `refresh_shows`, `refresh_episodes`, `acquire_episodes`, `acquire_pending`). `acquire_episodes` is real since `073-automatic-episode-acquisition` (`mediaType: 'show'`, disabled by default): it walks episodes aired at least one full UTC day ago, on or after the calendar day of the `auto_acquire_episodes_since` Setting (stamped by `SettingsResolver.updateSettings` on the switch's off→on transition, not editable through `updateSettings`), whose derived status is `MISSING`, at most 20 per run, sequentially; it searches `<Series> SxxEyy`, attaches the `candidateRank === 1` release through `EpisodesService.addTorrentToEpisode` as the series' oldest owner, and throws only when every attempt failed. Of the rest, two still stub `run()` returning
   `{ itemsProcessed: 0 }` — the per-task logic is deliberately out of scope for those; this module
   only owns the schedule itself. `refresh_episodes` is real since `041-episode-info-refresh`:
   `RefreshEpisodesTask.run()` selects every `Episode` whose `releaseDate` is `NULL` or on/after a
