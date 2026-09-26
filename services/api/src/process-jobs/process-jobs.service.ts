@@ -76,6 +76,7 @@ export class ProcessJobsService {
       compressionEnabled,
       compressionResolution,
       allowedSubtitleFormats: resolveAllowedSubtitleFormats(settingsMap),
+      libraryLayout: this.mediaServer.resolveLibraryLayout(settingsMap),
     };
 
     if (processJob.movie) {

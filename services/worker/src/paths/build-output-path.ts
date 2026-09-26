@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import { ERROR_ENCODE_EPISODE_NUMBERS_MISSING } from '../i18n/error-keys';
+import type { LibraryLayout } from './library-layout';
 
 // Subconjunto de EncodeJobDetails (services/worker/src/jobs/encode.job.ts) que
 // hace falta para armar la ruta — tipado acá en vez de importado para no atar
@@ -19,6 +20,7 @@ export type OutputPathInput = {
   // — reemplaza al viejo process.env.DESTINATIONS_DIR. El worker sólo hace
   // join()/mkdir() sobre esto, nunca vuelve a leer env para el destino.
   outputRoot: string;
+  layout: LibraryLayout;
 };
 
 // Reglas portadas tal cual de services/worker/src/ffmpeg/buildOutputPath.ts
@@ -49,27 +51,56 @@ function pad2(n: number): string {
 // `outputRoot`, que el api arma resolviendo path_movies/path_shows contra la
 // raíz "library" (ver media-roots/ del api) — así el usuario elige el
 // nombre de esa carpeta (o incluso "Series" en vez de "Shows") desde Settings.
-export function buildOutputPath(details: OutputPathInput): string {
-  const cleanTitle = sanitize(details.title);
-  // '0000' en vez de omitir el año cuando no se conoce: mismo comportamiento
-  // que el repo viejo, mantiene la carpeta parseable por Jellyfin.
-  const year = details.year ? String(details.year) : '0000';
-  const titledFolder = `${cleanTitle} (${year}) [tmdbid=${details.tmdbId}]`;
+type EpisodeNumbers = { season: number; episode: number };
 
-  if (details.kind === 'MOVIE') {
-    return join(details.outputRoot, titledFolder, `${cleanTitle} (${year}).mkv`);
-  }
-
+function requireEpisodeNumbers(details: OutputPathInput): EpisodeNumbers {
   if (details.seasonNumber === null || details.episodeNumber === null) {
     throw new KeyedError(
       ERROR_ENCODE_EPISODE_NUMBERS_MISSING,
       renderMessage(ERROR_ENCODE_EPISODE_NUMBERS_MISSING),
     );
   }
+  return { season: details.seasonNumber, episode: details.episodeNumber };
+}
 
-  const seasonFolder = `Season ${pad2(details.seasonNumber)}`;
+function yearOf(details: OutputPathInput): string {
+  return details.year ? String(details.year) : '0000';
+}
+
+function jellyfinPath(details: OutputPathInput): string {
+  const cleanTitle = sanitize(details.title);
+  const year = yearOf(details);
+  const titledFolder = `${cleanTitle} (${year}) [tmdbid=${details.tmdbId}]`;
+
+  if (details.kind === 'MOVIE') {
+    return join(details.outputRoot, titledFolder, `${cleanTitle} (${year}).mkv`);
+  }
+
+  const { season, episode } = requireEpisodeNumbers(details);
+  const seasonFolder = `Season ${pad2(season)}`;
   const episodeTitle = details.episodeTitle ? sanitize(details.episodeTitle) : '';
-  const episodeFile = `${cleanTitle} S${pad2(details.seasonNumber)}E${pad2(details.episodeNumber)}${episodeTitle ? ` ${episodeTitle}` : ''}.mkv`;
+  const episodeFile = `${cleanTitle} S${pad2(season)}E${pad2(episode)}${episodeTitle ? ` ${episodeTitle}` : ''}.mkv`;
 
   return join(details.outputRoot, titledFolder, seasonFolder, episodeFile);
+}
+
+function plexPath(details: OutputPathInput): string {
+  const cleanTitle = sanitize(details.title);
+  const year = yearOf(details);
+  const titledName = `${cleanTitle} (${year}) {tmdb-${details.tmdbId}}`;
+
+  if (details.kind === 'MOVIE') {
+    return join(details.outputRoot, titledName, `${titledName}.mkv`);
+  }
+
+  const { season, episode } = requireEpisodeNumbers(details);
+  const seasonFolder = `Season ${pad2(season)}`;
+  const episodeTitle = details.episodeTitle ? sanitize(details.episodeTitle) : '';
+  const episodeFile = `${cleanTitle} - S${pad2(season)}E${pad2(episode)}${episodeTitle ? ` - ${episodeTitle}` : ''}.mkv`;
+
+  return join(details.outputRoot, titledName, seasonFolder, episodeFile);
+}
+
+export function buildOutputPath(details: OutputPathInput): string {
+  return details.layout === 'plex' ? plexPath(details) : jellyfinPath(details);
 }

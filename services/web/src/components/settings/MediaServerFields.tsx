@@ -118,6 +118,16 @@ export default function MediaServerFields({
 }: MediaServerFieldsProps) {
   const t = useTranslations("settings.mediaServer");
   const [selected, setSelected] = useState(client || NONE);
+  const [portValue, setPortValue] = useState(port);
+  const selectedOption = options.find((option) => option.id === selected);
+
+  const handleClientChange = (id: string) => {
+    setSelected(id);
+    const next = options.find((option) => option.id === id);
+    if (next?.defaultPort != null) {
+      setPortValue(String(next.defaultPort));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -127,7 +137,7 @@ export default function MediaServerFields({
           id="media_server_client"
           name="media_server_client"
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
+          onChange={(e) => handleClientChange(e.target.value)}
           options={options.map((option) => ({
             value: option.id,
             label: option.label,
@@ -150,21 +160,35 @@ export default function MediaServerFields({
 
           <div>
             <Label htmlFor="media_server_port">{t("portLabel")}</Label>
-            <Input
+            <input
               id="media_server_port"
               name="media_server_port"
-              defaultValue={port}
+              type="text"
+              value={portValue}
+              onChange={(e) => setPortValue(e.target.value)}
+              className="h-11 w-full rounded-lg border appearance-none px-4 py-2.5 shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 bg-transparent text-gray-800 border-gray-300 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:focus:border-brand-800"
             />
           </div>
 
           <div>
-            <Label htmlFor="media_server_api_key">{t("apiKeyLabel")}</Label>
+            <Label htmlFor="media_server_api_key">{selectedOption?.credentialLabel || t("apiKeyLabel")}
+            </Label>
             <Input
               id="media_server_api_key"
               name="media_server_api_key"
               type="password"
               defaultValue={apiKey}
             />
+            {selectedOption?.credentialHelpUrl && (
+              <a
+                href={selectedOption.credentialHelpUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1.5 inline-block text-brand-500 hover:underline"
+              >
+                {t("credentialHelp")}
+              </a>
+            )}
           </div>
 
           <MediaServerIndexPanel status={indexStatus} />

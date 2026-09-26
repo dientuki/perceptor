@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID } from '@nestjs/graphql';
+import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 
 // Una opción del combo de Settings — 'Ninguno' + una por cada media server
 // del registro (ver clients/media-server/registry.ts). Sin esta query el
@@ -10,4 +10,13 @@ export class MediaServerOption {
 
   @Field()
   label: string;
+
+  @Field(() => Int, { nullable: true })
+  defaultPort: number | null;
+
+  @Field(() => String, { nullable: true })
+  credentialLabel: string | null;
+
+  @Field(() => String, { nullable: true })
+  credentialHelpUrl: string | null;
 }

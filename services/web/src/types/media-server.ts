@@ -5,6 +5,9 @@
 export type MediaServerOption = {
   id: string; // 'none' | 'jellyfin' | ...
   label: string;
+  defaultPort?: number | null;
+  credentialLabel?: string | null;
+  credentialHelpUrl?: string | null;
 };
 
 // `state` is deliberately `string`, not a union of the four literals api

@@ -637,6 +637,7 @@
       "hostHint": "Empty by default on purpose: 'localhost' here would be this same server, not your media server. If it runs on your PC, use host.docker.internal; if it runs in another container of this stack, use that service's name.",
       "portLabel": "Port",
       "apiKeyLabel": "API key",
+      "credentialHelp": "How to find this",
       "index": {
         "statusLabel": "Library index",
         "state": {

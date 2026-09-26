@@ -1869,6 +1869,40 @@ type Query {
 - Errors: `error.calendar.invalid_date` (params `{ value }`) and `error.calendar.invalid_range`.
 - `worker` does not consume this query.
 
+### A second media server, and the library layout the worker names its files by (`072-plex-media-server`)
+
+```graphql
+type MediaServerOption {
+  id: ID!
+  label: String!
+  defaultPort: Int
+  credentialLabel: String
+  credentialHelpUrl: String
+}
+
+type EncodeJobDetails {
+  libraryLayout: String!
+}
+```
+
+`MediaServerOption`'s three new fields are nullable because `none` is a real row of the list and has no
+connection settings. `web` leaves the port alone on a null `defaultPort` and falls back to its own
+credential label on a null `credentialLabel`. All three arrive from `api` as literals, like `label` —
+product nouns and URLs, not i18n keys.
+
+`EncodeJobDetails.libraryLayout` is a layout name (`jellyfin` or `plex`), never a client id and never
+rendered path tokens: the worker knows naming conventions, not media servers. It is a `String!`, not an
+enum, for the same reason as `compressionResolution` and `contentKind` — an enum breaks a `worker`
+that predates a new value at query validation. It is resolved at query time from the configured
+client and never snapshotted onto the `ProcessJob`; `none`, an unset or an unknown client resolve to
+`jellyfin`.
+
+- **`worker`** retypes `libraryLayout` by hand and adds it to the `processJob` selection set in the same
+  edit — asking for a field the schema does not yet expose is a validation error that fails every
+  encode. It defaults an absent or unrecognised value to `jellyfin` and logs, never throwing.
+- **`web`** does not select `libraryLayout`.
+- The Plex token travels only in the `X-Plex-Token` header, never in a GraphQL response.
+
 ### The one non-GraphQL route
 
 `POST/PATCH/HEAD /uploads` on `api` (`services/api/src/uploads/`) is the project's only REST

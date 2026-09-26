@@ -16,6 +16,9 @@ const MEDIA_SERVER_CLIENTS_QUERY = `
     mediaServerClients {
       id
       label
+      defaultPort
+      credentialLabel
+      credentialHelpUrl
     }
   }
 `;

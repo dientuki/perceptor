@@ -122,4 +122,7 @@ export class EncodeJobDetails {
 
   @Field(() => [String])
   allowedSubtitleFormats: string[];
+
+  @Field()
+  libraryLayout: string;
 }

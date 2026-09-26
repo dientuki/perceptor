@@ -30,7 +30,7 @@ describe('ProcessJobsService', () => {
   };
   let settings: { getMap: jest.Mock };
   let mediaRoots: { resolveFromRoot: jest.Mock };
-  let mediaServer: { notifyCreated: jest.Mock };
+  let mediaServer: { notifyCreated: jest.Mock; resolveLibraryLayout: jest.Mock };
   let torrentClient: { remove: jest.Mock };
   let mediaCapabilities: { isShortsEnabled: jest.Mock };
   let encodeQueue: { addEncode: jest.Mock; removeEncode: jest.Mock };
@@ -52,7 +52,12 @@ describe('ProcessJobsService', () => {
     };
     settings = { getMap: jest.fn().mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' }) };
     mediaRoots = { resolveFromRoot: jest.fn().mockResolvedValue('/library/Movies') };
-    mediaServer = { notifyCreated: jest.fn().mockResolvedValue(undefined) };
+    mediaServer = {
+      notifyCreated: jest.fn().mockResolvedValue(undefined),
+      resolveLibraryLayout: jest.fn((map: Record<string, string>) =>
+        MediaServerService.prototype.resolveLibraryLayout.call(null, map),
+      ),
+    };
     torrentClient = { remove: jest.fn().mockResolvedValue(undefined) };
     mediaCapabilities = { isShortsEnabled: jest.fn().mockResolvedValue(false) };
     encodeQueue = { addEncode: jest.fn().mockResolvedValue(undefined), removeEncode: jest.fn().mockResolvedValue(undefined) };
@@ -362,6 +367,52 @@ describe('ProcessJobsService', () => {
 
       expect(movie.allowedSubtitleFormats).toEqual(['srt', 'ass', 'webvtt', 'mov_text']);
       expect(episode.allowedSubtitleFormats).toEqual(['srt', 'ass', 'webvtt', 'mov_text']);
+    });
+  });
+
+  // REQ-15 (072-plex-media-server): the layout rides `base`, so a refactor
+  // that moved it into one branch would leave the other job type without it
+  // and every such encode would be filed under the wrong naming scheme with
+  // no error anywhere.
+  describe('getEncodeJobDetails — libraryLayout', () => {
+    const arrange = (extra: Record<string, string>) => {
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      prisma.userShow.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', ...extra });
+    };
+
+    it('is plex on both branches when plex is configured', async () => {
+      arrange({ media_server_client: 'plex' });
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      const movie = await service.getEncodeJobDetails(1);
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      const episode = await service.getEncodeJobDetails(2);
+
+      expect(movie.libraryLayout).toBe('plex');
+      expect(episode.libraryLayout).toBe('plex');
+    });
+
+    it('is jellyfin on both branches when jellyfin is configured', async () => {
+      arrange({ media_server_client: 'jellyfin' });
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      const movie = await service.getEncodeJobDetails(1);
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      const episode = await service.getEncodeJobDetails(2);
+
+      expect(movie.libraryLayout).toBe('jellyfin');
+      expect(episode.libraryLayout).toBe('jellyfin');
+    });
+
+    it('is jellyfin when no media server is configured', async () => {
+      arrange({ media_server_client: 'none' });
+      prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
+      const movie = await service.getEncodeJobDetails(1);
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+      const episode = await service.getEncodeJobDetails(2);
+
+      expect(movie.libraryLayout).toBe('jellyfin');
+      expect(episode.libraryLayout).toBe('jellyfin');
     });
   });
 

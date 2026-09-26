@@ -2,8 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerIndexService } from '@/media-server-index/media-server-index.service';
-import { createMediaServerClient } from '@/clients/media-server/registry';
-import { MEDIA_SERVER_NONE } from '@/clients/media-server/types';
+import {
+  createMediaServerClient,
+  MEDIA_SERVERS,
+} from '@/clients/media-server/registry';
+import {
+  DEFAULT_LIBRARY_LAYOUT,
+  LibraryLayout,
+  MEDIA_SERVER_NONE,
+  MediaServerRegistryEntry,
+} from '@/clients/media-server/types';
 
 @Injectable()
 export class MediaServerService {
@@ -12,6 +20,16 @@ export class MediaServerService {
     private readonly mediaRoots: MediaRootsService,
     private readonly index: MediaServerIndexService,
   ) {}
+
+  resolveLibraryLayout(settingsMap: Record<string, string>): LibraryLayout {
+    const clientId = settingsMap.media_server_client;
+    if (!clientId || !Object.hasOwn(MEDIA_SERVERS, clientId)) {
+      return DEFAULT_LIBRARY_LAYOUT;
+    }
+    const entry: MediaServerRegistryEntry =
+      MEDIA_SERVERS[clientId as keyof typeof MEDIA_SERVERS];
+    return entry.layout;
+  }
 
   // Aviso de "hay un archivo nuevo" al media server configurado. NUNCA tira:
   // lo llama encodeCompleted, y una excepción acá haría que el worker reciba

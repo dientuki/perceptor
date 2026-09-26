@@ -62,3 +62,16 @@ export type MediaServerFactory = (
 
 // 'none' no es un cliente: es la ausencia de uno. Vive fuera del registro.
 export const MEDIA_SERVER_NONE = 'none';
+
+export type LibraryLayout = 'jellyfin' | 'plex';
+
+export const DEFAULT_LIBRARY_LAYOUT: LibraryLayout = 'jellyfin';
+
+export type MediaServerRegistryEntry = {
+  label: string;
+  create: MediaServerFactory;
+  layout: LibraryLayout;
+  defaultPort: number;
+  credentialLabel: string;
+  credentialHelpUrl?: string;
+};
