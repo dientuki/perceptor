@@ -1,3 +1,6 @@
+jest.mock('@tus/server', () => ({ Server: class {} }));
+jest.mock('@tus/file-store', () => ({ FileStore: class {} }));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { SchedulerRegistry } from '@nestjs/schedule';

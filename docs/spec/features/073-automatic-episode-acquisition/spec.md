@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-26
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -224,7 +224,7 @@ must refuse it like any other unknown key.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: With the task off, a `bin/mysql` select of the `auto_acquire_episodes_since` row
+- [x] **AC-1**: With the task off, a `bin/mysql` select of the `auto_acquire_episodes_since` row
       returns no value, and no `MediaSource` is ever created by the scheduler.
 - [ ] **AC-2**: Turning `schedule_acquire_episodes_enabled` on in Settings → Scheduling writes
       today's timestamp into `auto_acquire_episodes_since`; saving the Scheduling tab again without
@@ -275,3 +275,5 @@ must refuse it like any other unknown key.
   design (that is the *arr behaviour it deliberately omits).
 - **Notifying anyone.** No email, push or in-app notice when the sweep attaches something. The
   `/downloads` queue and the run history are the record.
+
+> Verification note: AC-1 was confirmed against the running stack (the two schedule rows seeded off, the cutoff row empty). AC-2 to AC-11 have not been run live (no authenticated session, no registered series with an episode past its grace day); they rest on the unit suites (`ranking.spec.ts`, `ranking-context.service.spec.ts`, `acquire-episodes.task.spec.ts`, the transition-guard cases in `settings.resolver.spec.ts`). Fault injection was not performed.

@@ -1,3 +1,6 @@
+jest.mock('@tus/server', () => ({ Server: class {} }));
+jest.mock('@tus/file-store', () => ({ FileStore: class {} }));
+
 import { NotFoundException } from '@nestjs/common';
 
 import { RankingContextService } from './ranking-context.service';

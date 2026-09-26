@@ -2,7 +2,7 @@
 title: Automatic Episode Acquisition — web slice
 service: web
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Automatic Episode Acquisition — `web` (`web/plan.md`)

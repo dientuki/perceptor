@@ -2,7 +2,7 @@
 title: Automatic Episode Acquisition — api slice
 service: api
 last_updated: 2026-09-26
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Automatic Episode Acquisition — `api` (`api/plan.md`)

@@ -1,3 +1,6 @@
+jest.mock('@tus/server', () => ({ Server: class {} }));
+jest.mock('@tus/file-store', () => ({ FileStore: class {} }));
+
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { AdminGuard } from '@/auth/guards/admin.guard';
 import { IS_PUBLIC_KEY } from '@/auth/decorators/public.decorator';

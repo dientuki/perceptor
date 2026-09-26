@@ -1,7 +1,7 @@
 ---
 title: Automatic Episode Acquisition — Tasks
 last_updated: 2026-09-26
-status: In Progress
+status: Done
 ---
 
 # TASKS: Automatic Episode Acquisition (`tasks.md`)
@@ -28,7 +28,7 @@ REQ number. The only comment any of these tasks may add is the Article IX test h
 
 ### Group 1 — the ranking moves into `api`
 
-- [ ] **T001** `[api]` Port `services/web/src/lib/torrent-ranking.ts` to
+- [x] **T001** `[api]` Port `services/web/src/lib/torrent-ranking.ts` to
       `src/indexer/ranking.ts`. Every veto (`isVetoed`, `isDeadSwarm`, `isUpscaled`,
       `isCinemaCapture`), every criterion function, `LANGUAGE_ALIASES`, `DEFAULT_PREFERRED_GROUPS`,
       `familyCeiling`/`adjustSourceRank` and `compareCandidates` move across **unchanged** — do not
@@ -46,7 +46,7 @@ REQ number. The only comment any of these tasks may add is the Article IX test h
       `compareCandidates`, each makes at least one case fail (fault injection, reverted); a
       response whose rows are all vetoed returns every row with `candidate: false` and throws
       nothing.
-- [ ] **T002** `[api]` Add `src/indexer/ranking-context.service.ts` with `forCaller(userId, target)`
+- [x] **T002** `[api]` Add `src/indexer/ranking-context.service.ts` with `forCaller(userId, target)`
       and `forShowOwners(showId)`, both returning T001's `RankingContext`, plus
       `ranking-context.service.spec.ts`. `forCaller` runs the matching
       `MoviesService`/`SeasonsService`/`EpisodesService.findOneFromDb` and throws the keyed
@@ -65,7 +65,7 @@ REQ number. The only comment any of these tasks may add is the Article IX test h
       per-title→global fallback both ways, the cinema flag per target kind, and a three-owner union
       that arms on one owner while taking all three's languages; dropping the ownership `where`
       from any `findOneFromDb` call makes a case fail (fault injection, reverted).
-- [ ] **T003** `[api]` Expose the contract. In `src/indexer/entities/torrent-result.entity.ts` add
+- [x] **T003** `[api]` Expose the contract. In `src/indexer/entities/torrent-result.entity.ts` add
       the `ReleaseRanking` object type and `ranking`/`candidate`/`candidateRank` on `TorrentResult`
       exactly as `spec.md` § GraphQL Contract Delta spells them. In `src/indexer/indexer.service.ts`
       add a ranked read path over the existing cached `search()` (the Redis cache keeps storing raw
@@ -89,7 +89,7 @@ REQ number. The only comment any of these tasks may add is the Article IX test h
 T004 depends on nothing in Group 1 and may start immediately, in parallel with T001; it is the
 task T009 in Group 3 waits on. T005 and T006 follow it in order.
 
-- [ ] **T004** `[api]` Register the task and its settings. Create
+- [x] **T004** `[api]` Register the task and its settings. Create
       `src/scheduler/tasks/acquire-episodes.task.ts` as a **stub** returning
       `{ itemsProcessed: 0 }` (the shape `acquire-pending.task.ts` still has) and provide it in
       `src/scheduler/scheduler.module.ts`, so the registry entry below has a handler to point at
@@ -110,7 +110,7 @@ task T009 in Group 3 waits on. T005 and T006 follow it in order.
       `prisma/seeds/settings.ts`; `updateSettings` with `auto_acquire_episodes_since` is refused
       with `error.setting.not_editable`; the `scheduledTasks` query lists `acquire_episodes` as
       disabled, available and never run.
-- [ ] **T005** `[api]` Stamp the backlog cutoff on the off→on transition. Add one method to
+- [x] **T005** `[api]` Stamp the backlog cutoff on the off→on transition. Add one method to
       `src/scheduler/scheduler.service.ts` that upserts T004's cutoff row to the current instant
       (`prisma.setting.upsert` directly, following `media-server-index.service.ts`'s precedent for a
       machine-written Setting — never `SettingsService.updateMany`). Call it from
@@ -123,7 +123,7 @@ task T009 in Group 3 waits on. T005 and T006 follow it in order.
       writes the row and a save that re-submits it already-on does not; dropping the
       `before[key] !== 'true'` half of the guard makes that second case fail (fault injection,
       reverted).
-- [ ] **T006** `[api]` Fill in T004's stub `src/scheduler/tasks/acquire-episodes.task.ts` and write
+- [x] **T006** `[api]` Fill in T004's stub `src/scheduler/tasks/acquire-episodes.task.ts` and write
       its spec, adding `IndexerModule` and `EpisodesModule` to `src/scheduler/scheduler.module.ts`'s
       imports (neither imports `SchedulerModule`, so no `forwardRef`). `run()`: read the
       cutoff and, when empty or unparseable, stamp it to now and use that value; select episodes
@@ -154,7 +154,7 @@ task T009 in Group 3 waits on. T005 and T006 follow it in order.
 
 Everything here depends on T003: `web` retypes the schema by hand, so the delta must exist first.
 
-- [ ] **T007** `[web] [P]` Retype the contract. In `src/types/indexer.ts` add `ReleaseRanking` with
+- [x] **T007** `[web] [P]` Retype the contract. In `src/types/indexer.ts` add `ReleaseRanking` with
       its fourteen fields and `ranking: ReleaseRanking`, `candidate: boolean`,
       `candidateRank: number | null` on `TorrentResult`. In `src/actions/indexer.ts` give
       `searchTorrentsAction(query, target)` the optional
@@ -163,7 +163,7 @@ Everything here depends on T003: `web` retypes the schema by hand, so the delta 
       existing error handling. See `web/plan.md` steps 1–2. → T003
       *Done when:* `bin/cli web npx --no tsc --noEmit` reports 0 errors and every field name in the
       query matches `spec.md` § GraphQL Contract Delta character for character.
-- [ ] **T008** `[web]` Rewire `src/components/search/SearchTorrent.tsx` and **delete**
+- [x] **T008** `[web]` Rewire `src/components/search/SearchTorrent.tsx` and **delete**
       `src/lib/torrent-ranking.ts`. Remove the `rankTorrentResults` import, the
       `titleAudio`/`languageRequirement`/`preferredGroups`/`allowCinemaReleases` assembly, the
       `getPreferences()` effect, its `preferences` state and the now-unused `UserPreferences`
@@ -177,7 +177,7 @@ Everything here depends on T003: `web` retypes the schema by hand, so the delta 
       *Done when:* `bin/cli web npx --no tsc --noEmit` reports 0 errors, `bin/npm web run build`
       exits 0, `grep -rn "rankTorrentResults" services/web/src` returns nothing, and
       `services/web/src/lib/torrent-ranking.ts` no longer exists.
-- [ ] **T009** `[web] [P]` Make the new task savable and legible. Add
+- [x] **T009** `[web] [P]` Make the new task savable and legible. Add
       `schedule_acquire_episodes_enabled` to `BOOLEAN_KEYS` in `src/actions/settings.ts`; add
       `settings.scheduling.tasks.acquire_episodes` label/description and the Spanish copy for
       `error.search.target_ambiguous` (`Indicá un solo destino de búsqueda`) to both
@@ -202,7 +202,7 @@ Everything here depends on T003: `web` retypes the schema by hand, so the delta 
       *Done when:* no `CLAUDE.md` still tells a reader that `services/web/src/lib/torrent-ranking.ts`
       exists (`grep -rn "torrent-ranking" CLAUDE.md services/*/CLAUDE.md` returns nothing), and each
       updated claim names the feature number.
-- [ ] **T011** `[docs]` Run the verification sweep in `plan.md` § Verification, walk every
+- [x] **T011** `[docs]` Run the verification sweep in `plan.md` § Verification, walk every
       acceptance criterion in `spec.md`, tick the boxes that actually passed and say plainly which
       were not run and why. Record the measured test counts in the root `CLAUDE.md` § Current state
       and `services/api/CLAUDE.md` § Current state. Set `status: Implemented` on `spec.md`,

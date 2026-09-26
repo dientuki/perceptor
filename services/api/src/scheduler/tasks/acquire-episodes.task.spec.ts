@@ -1,3 +1,6 @@
+jest.mock('@tus/server', () => ({ Server: class {} }));
+jest.mock('@tus/file-store', () => ({ FileStore: class {} }));
+
 import { AcquireEpisodesTask, buildEpisodeQuery, MAX_EPISODES_PER_RUN } from './acquire-episodes.task';
 import { AUTO_ACQUIRE_EPISODES_SINCE_KEY } from '../scheduler.registry';
 
