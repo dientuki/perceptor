@@ -19,6 +19,25 @@ jobs:
   api:
     name: api — typecheck and test
     runs-on: ubuntu-latest
+    # Two suites — auth/session.service.spec.ts and uploads/upload-tickets.service.spec.ts —
+    # run against a real Redis on purpose, not a mock: the property each one asserts is that a
+    # key actually left the store (a logout that stops authenticating, a ticket that cannot be
+    # replayed), which a mock can only assert by construction. See the comment at the head of
+    # either file. The job does not run in a container, so the service is reachable on
+    # localhost through the published port rather than under its label.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
     defaults:
       run:
         working-directory: services/api
