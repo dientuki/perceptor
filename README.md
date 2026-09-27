@@ -33,7 +33,7 @@ a release, download, scan, transcode, file, notify and browse. It has no product
 no users besides its author. The published images are release candidates (`v0.1.0-rc1` through
 `v0.2.0-rc4`); there is no stable release yet.
 
-Seventy-six feature specs (`001` through `076`) live in `docs/spec/features/`. The root `CLAUDE.md`
+Seventy-seven feature specs (`001` through `077`) live in `docs/spec/features/`. The root `CLAUDE.md`
 has a stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -112,7 +112,9 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
 - 🗣️ **Language preferences you choose**, at three levels that merge rather than override: the
   installation default, your own account preferences, and extra languages on one specific title.
   **Audio and subtitles are chosen separately** — original audio plus Spanish subtitles is a thing
-  you can actually ask for.
+  you can actually ask for. Each title's page states which languages will *actually* be used and
+  marks the ones it inherited from your account, so the answer isn't buried in three settings
+  screens.
 - 🌎 **Regional variants are first-class.** `es-419` and `es-ES` are different preferences, and the
   encode picks the right one instead of guessing from the track title.
 - 🧠 **Decisions made from the container, not the filename.** Remux vs. web-grade quality comes from
@@ -145,6 +147,9 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
   to what your media server actually sees, plus a local index you can re-sync on demand.
 - 🖥️ **Library browsing** for films and series, with a billboard home, a per-series season accordion
   and actions per episode and per season (search, import, add a torrent or a magnet).
+- 🪟 **A title page laid out by intent.** Poster, then what you can add to it and what it's about,
+  then how it's managed — refresh, remove, how it's classified and which languages apply. The
+  language form opens in a modal when you want it instead of taking up the page when you don't.
 - 🗓️ **Catalog data stays current on its own.** Opt-in sweeps re-sync a series' whole catalog
   (monthly while it continues, every six months once ended, so a revived series' new season
   appears) and re-read films not yet complete, tracking their theatrical, digital and physical
