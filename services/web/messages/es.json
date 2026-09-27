@@ -428,12 +428,25 @@
       "chosenLabel": "Idiomas elegidos",
       "emptyChosen": "No elegiste ningún idioma.",
       "removeLanguage": "Quitar {name}",
-      "saved": "Idiomas guardados.",
       "save": "Guardar",
       "saving": "Guardando...",
       "audioLabel": "Idiomas de audio",
       "subtitleLabel": "Idiomas de subtítulos",
       "audioMandatoryLabel": "Audio obligatorio"
+    },
+    "languagesPanel": {
+      "title": "Idiomas",
+      "audioLabel": "Audio",
+      "subtitlesLabel": "Subtítulos",
+      "mandatoryYes": "El audio es obligatorio",
+      "mandatoryNo": "El audio no es obligatorio",
+      "inheritedNote": "(de tus preferencias)",
+      "empty": "Ninguno definido",
+      "changeButton": "Cambiar"
+    },
+    "languagesModal": {
+      "title": "Idiomas",
+      "dismiss": "Cerrar"
     },
     "refreshTitle": {
       "button": "Actualizar",
@@ -462,7 +475,6 @@
       "magnetButton": "Magnet",
       "synopsisTitle": "Sinopsis",
       "noOverview": "Sin sinopsis disponible.",
-      "languagesTitle": "Idiomas",
       "shortLabel": "Registrado como corto",
       "contentKindLabel": "Tipo de contenido"
     }

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, unstable_rethrow } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { cache } from "react";
 import { getShowDownloads } from "@/actions/downloads";
 import { getLanguages } from "@/actions/languages";
+import { getPreferences } from "@/actions/preferences";
 import { getShowById } from "@/actions/shows";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import DownloadsPanel from "@/components/downloads/DownloadsPanel";
@@ -66,10 +67,14 @@ export default async function ShowDetailsPage({ params }: PageProps) {
     notFound();
   }
 
-  const [show, languageOptions, downloads] = await Promise.all([
+  const [show, languageOptions, downloads, preferences] = await Promise.all([
     getShow(showId),
     getLanguages(),
     getShowDownloads(showId),
+    getPreferences().catch((error) => {
+      unstable_rethrow(error);
+      return null;
+    }),
   ]);
 
   if (!show) {
@@ -87,7 +92,11 @@ export default async function ShowDetailsPage({ params }: PageProps) {
       <PageBreadcrumb pageTitle={show.title} />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
-          <Show show={show} languageOptions={languageOptions} />
+          <Show
+            show={show}
+            languageOptions={languageOptions}
+            preferences={preferences}
+          />
           <DownloadsPanel downloads={downloads} />
         </div>
       </div>

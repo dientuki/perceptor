@@ -27,7 +27,7 @@ export default function AdminShell({
   const mainContentMargin = isMobileOpen
     ? "ml-0"
     : isExpanded || isHovered
-      ? "lg:ml-[290px]"
+      ? "lg:ml-[250px]"
       : "lg:ml-[90px]";
 
   return (

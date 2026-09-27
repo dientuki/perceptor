@@ -330,7 +330,7 @@
           </div>
           <div class="qrow">
             <span class="st ok">Done</span>
-            <span class="nm">Series · S02E03 — filed, Jellyfin notified</span>
+            <span class="nm">Series · S02E03 — filed, media server notified</span>
             <span class="prog"><i style="width:100%"></i></span><span class="sp">3.4 GB</span>
           </div>
         </div>
@@ -463,7 +463,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg></div>
         <h3>Nothing is downloaded twice</h3>
-        <p>Registering a title checks your media server first. If Jellyfin already has it — or half the episodes — they come in as done.</p>
+        <p>Registering a title checks your media server first. If your media server already has it — or half the episodes — they come in as done.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></div>
@@ -476,6 +476,11 @@
         <p>Set them once for the whole install, tweak them for your account, add one more for a single title. Audio and subtitles are chosen separately — original audio with your subtitles is a normal thing to ask for.</p>
       </div>
       <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <h3>Optionally, it grabs releases for you</h3>
+        <p>Turn on the daily sweeps and newly aired episodes are picked up on their own. For films, choose which window you want — cinema, digital or physical release — and a quality floor keeps the poor rips out.</p>
+      </div>
+      <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>
         <h3>A calendar of what's coming</h3>
         <p>A month grid of films and episodes, grouped per series, coloured by what's already in your library and what isn't.</p>
@@ -484,6 +489,11 @@
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
         <h3>One queue, one vocabulary</h3>
         <p>Queued, downloading, encoding, done — the same words everywhere, with live speed from the downloader and the encoder. Two screens never disagree.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></div>
+        <h3>The catalogue keeps itself current</h3>
+        <p>Air dates, episode titles and release dates are re-read on their own, so a series that comes back after three years brings its new season with it.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3 4 7v6c0 4.4 3.4 7.6 8 8 4.6-.4 8-3.6 8-8V7z"/><path d="m9 12 2 2 4-4"/></svg></div>
@@ -541,7 +551,7 @@
       </details>
       <details>
         <summary>What does it plug into?</summary>
-        <p>qBittorrent and Prowlarr ship inside the stack — you don't install or configure them separately. TMDB provides the catalog, and Jellyfin gets told when something new lands. Everything else runs on your machine.</p>
+        <p>qBittorrent and Prowlarr ship inside the stack — you don't install or configure them separately. TMDB provides the catalog, and Jellyfin or Plex gets told when something new lands. Everything else runs on your machine.</p>
       </details>
       <details>
         <summary>What does it send out about me?</summary>

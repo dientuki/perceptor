@@ -98,6 +98,7 @@ export default function SeasonAccordion({
   audioLanguages: Language[];
 }) {
   const t = useTranslations("shows.seasonAccordion");
+  const hasEpisodes = season.episodes.length > 0;
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [activeTarget, setActiveTarget] = useState<AcquisitionTarget | null>(
     null,
@@ -196,32 +197,40 @@ export default function SeasonAccordion({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-      <div className="flex w-full items-center justify-between px-5 py-4">
-        <button
-          type="button"
-          onClick={() => setIsOpen((open) => !open)}
-          className="flex flex-1 items-center justify-between text-left"
-        >
+      {hasEpisodes ? (
+        <div className="flex w-full items-center justify-between px-5 py-4">
+          <button
+            type="button"
+            onClick={() => setIsOpen((open) => !open)}
+            className="flex flex-1 items-center justify-between text-left"
+          >
+            <h4 className="text-base font-semibold text-gray-800 dark:text-white/90">
+              {t("seasonLabel", { number: season.seasonNumber })}
+            </h4>
+            <ChevronDown
+              size={20}
+              className={`text-gray-400 transition-transform ${
+                isOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+          <div className="ml-4">
+            <SeasonAcquisitionButtons
+              onSearch={handleOpenSeasonSearchModal}
+              onImportFile={handleOpenSeasonFileModal}
+              onMagnet={handleOpenSeasonMagnetModal}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="flex w-full items-center px-5 py-4">
           <h4 className="text-base font-semibold text-gray-800 dark:text-white/90">
             {t("seasonLabel", { number: season.seasonNumber })}
           </h4>
-          <ChevronDown
-            size={20}
-            className={`text-gray-400 transition-transform ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-        <div className="ml-4">
-          <SeasonAcquisitionButtons
-            onSearch={handleOpenSeasonSearchModal}
-            onImportFile={handleOpenSeasonFileModal}
-            onMagnet={handleOpenSeasonMagnetModal}
-          />
         </div>
-      </div>
+      )}
 
-      {isOpen && (
+      {hasEpisodes && isOpen && (
         <div className="overflow-x-auto border-t border-gray-200 dark:border-gray-800">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead className="bg-gray-50 dark:bg-white/[0.02]">

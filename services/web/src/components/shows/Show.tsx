@@ -13,16 +13,20 @@ import {
 import ContentKindSelect from "@/components/media/ContentKindSelect";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
 import RemoveTitleButton from "@/components/media/RemoveTitleButton";
-import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
+import TitleLanguagesPanel from "@/components/media/TitleLanguagesPanel";
 import StatusBadge from "@/components/status/StatusBadge";
+import { effectiveLanguages } from "@/lib/effective-languages";
 import type { Language } from "@/types/languages";
+import type { UserPreferences } from "@/types/preferences";
 
 export default async function Show({
   show,
   languageOptions,
+  preferences,
 }: {
   show: ShowRecord;
   languageOptions: Language[];
+  preferences: UserPreferences | null;
 }) {
   const t = await getTranslations("shows.detail");
   const setShowAudioLanguages = setShowPreferredTrackLanguagesAction.bind(
@@ -41,10 +45,17 @@ export default async function Show({
     Number(show.id),
   );
 
+  const audioLanguages = show.audioLanguages ?? [];
+  const subtitleLanguages = show.subtitleLanguages ?? [];
+  const audioMandatory = show.audioMandatory ?? false;
+  const effective = effectiveLanguages(
+    { audioLanguages, subtitleLanguages, audioMandatory },
+    preferences,
+  );
+
   return (
-    <div className="flex flex-col gap-8 md:flex-row">
-      {/* Poster a la izquierda */}
-      <div className="w-full shrink-0 md:w-64 lg:w-72">
+    <div className="grid grid-cols-1 gap-8 md:grid-cols-[16rem_minmax(0,1fr)_20rem]">
+      <div className="min-w-0">
         {show.posterUrl ? (
           // El posterUrl del api es w300 (300px de ancho); pedir más grande lo escala y se ve borroso
           <Image
@@ -62,8 +73,7 @@ export default async function Show({
         )}
       </div>
 
-      {/* Información a la derecha */}
-      <div className="flex-1 space-y-6">
+      <div className="min-w-0 space-y-6">
         <div>
           <h3 className="mb-2 text-2xl font-bold text-gray-800 dark:text-white/90">
             {show.title}
@@ -77,6 +87,17 @@ export default async function Show({
           </p>
         </div>
 
+        <div className="space-y-2">
+          <h4 className="font-semibold uppercase tracking-wider text-gray-400">
+            {t("synopsisTitle")}
+          </h4>
+          <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">
+            {show.overview || t("noOverview")}
+          </p>
+        </div>
+      </div>
+
+      <div className="min-w-0 space-y-6">
         <div className="flex flex-wrap gap-3">
           <RefreshTitleButton
             onRefresh={refreshShowAction.bind(null, show.id)}
@@ -92,32 +113,22 @@ export default async function Show({
           />
         </div>
 
-        <div className="space-y-2">
-          <h4 className="font-semibold uppercase tracking-wider text-gray-400">
-            {t("synopsisTitle")}
-          </h4>
-          <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">
-            {show.overview || t("noOverview")}
-          </p>
-        </div>
-
         <ContentKindSelect
           value={show.contentKind}
           onSave={setShowContentKind}
           label={t("contentKindLabel")}
         />
 
-        <div className="space-y-2">
-          <TitleLanguagesForm
-            options={languageOptions}
-            audioSelected={show.audioLanguages ?? []}
-            subtitleSelected={show.subtitleLanguages ?? []}
-            audioMandatory={show.audioMandatory ?? false}
-            setAudioAction={setShowAudioLanguages}
-            setSubtitleAction={setShowSubtitleLanguages}
-            setAudioMandatoryAction={setShowAudioMandatory}
-          />
-        </div>
+        <TitleLanguagesPanel
+          effective={effective}
+          options={languageOptions}
+          audioSelected={audioLanguages}
+          subtitleSelected={subtitleLanguages}
+          audioMandatory={audioMandatory}
+          setAudioAction={setShowAudioLanguages}
+          setSubtitleAction={setShowSubtitleLanguages}
+          setAudioMandatoryAction={setShowAudioMandatory}
+        />
       </div>
     </div>
   );

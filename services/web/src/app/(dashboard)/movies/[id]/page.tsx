@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, unstable_rethrow } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { cache } from "react";
 import { getMovieDownloads } from "@/actions/downloads";
 import { getLanguages } from "@/actions/languages";
 import { getMediaCapabilities } from "@/actions/media";
 import { getMovieById } from "@/actions/movies";
+import { getPreferences } from "@/actions/preferences";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import DownloadsPanel from "@/components/downloads/DownloadsPanel";
 import Movie from "@/components/movies/Movie";
@@ -68,12 +69,17 @@ export default async function MovieDetailsPage({ params }: PageProps) {
     notFound();
   }
 
-  const [movie, languages, downloads, capabilities] = await Promise.all([
-    getMovie(movieId),
-    getLanguages(),
-    getMovieDownloads(movieId),
-    getMediaCapabilities(),
-  ]);
+  const [movie, languages, downloads, capabilities, preferences] =
+    await Promise.all([
+      getMovie(movieId),
+      getLanguages(),
+      getMovieDownloads(movieId),
+      getMediaCapabilities(),
+      getPreferences().catch((error) => {
+        unstable_rethrow(error);
+        return null;
+      }),
+    ]);
 
   if (!movie) {
     notFound();
@@ -90,6 +96,7 @@ export default async function MovieDetailsPage({ params }: PageProps) {
             movie={movie}
             languageOptions={languages}
             shortsEnabled={capabilities.shortsEnabled}
+            preferences={preferences}
           />
           <DownloadsPanel downloads={downloads} />
           <SearchTorrent target={target} />

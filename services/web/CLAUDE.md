@@ -321,8 +321,16 @@ and for a title the caller does not own, and **these pages cannot and must not t
   `Recurso no disponible para este usuario` as a real HTTP 404. Deliberately not an app-wide 404 —
   `/users`'s `notFound()` is untouched.
 
+Since `077-title-detail-three-column-layout`, both headers are three columns (stacked below `md`):
+poster on the left; on the centre the heading (title, year, original language, `StatusBadge`), then a
+film's file and magnet buttons, then the synopsis; on the right Refresh and Remove, then a film's
+short switch, `ContentKindSelect` and `TitleLanguagesPanel`. Both pages join `getPreferences()` into
+their existing `Promise.all`, wrapped so a rejection yields `null` with `unstable_rethrow(error)` as
+the catch's first statement — without it an expired session is swallowed and the panel stays
+unmarked forever, with no error anywhere. The rows below the header are unchanged.
+
 `/shows/[id]` renders `src/components/shows/Show.tsx` (`Movie.tsx`'s twin minus the acquisition
-buttons — a series has none at that level), then one `SeasonAccordion.tsx` per season, the highest
+buttons — a series has none at that level, so its centre column is the synopsis alone), then one `SeasonAccordion.tsx` per season, the highest
 `seasonNumber` expanded by default (computed once via `Math.max`, not per-season inside the loop).
 Each episode row carries the same three buttons `Movie.tsx` uses (buscar / importar archivo / añadir
 torrent).
@@ -521,12 +529,20 @@ revert only the field that failed" shape** (established by `PreferencesForm.tsx`
 - `/preferences`'s `downloadLanguages` tab (`PreferencesForm.tsx`) — two `LanguagePickerField`s
   (audio, subtitle) plus, since `039`, a `Checkbox` for `UserPreferences.audioMandatory` inside the
   audio column, saved together with the rest of that screen's now-seven-entry `Promise.all`.
-- `src/components/media/TitleLanguagesForm.tsx` (new in `039`) — the per-title twin: two
-  `LanguagePickerField`s under one *Guardar*, plus the same `audioMandatory` `Checkbox` under the
-  audio pane's badge list, submitting `set{Movie,Show}PreferredTrackLanguagesAction` (once per kind)
-  and `set{Movie,Show}AudioMandatoryAction` together. `Movie.tsx` and `Show.tsx` each render one,
-  bound to their own title id; `Show.tsx` stays a Server Component with `TitleLanguagesForm` as its
-  client child, same as `LanguagePicker` was before it.
+- `src/components/media/TitleLanguagesPanel.tsx` (new in `077`) — where a title's audio and subtitle
+  preference is *shown*: read-only effective values, each category marked as inherited from
+  `/preferences` on its own flag, language names through `Intl.DisplayNames`, and a Change button that
+  opens `TitleLanguagesModal.tsx`, which hosts `TitleLanguagesForm.tsx` (new in `039`, the per-title
+  twin of `PreferencesForm`'s tab: two `LanguagePickerField`s under one *Guardar* plus the
+  `audioMandatory` `Checkbox`, submitting `set{Movie,Show}PreferredTrackLanguagesAction` and
+  `set{Movie,Show}AudioMandatoryAction` together). The form fires `onSaved` only when all three
+  actions succeed; the modal closes and the panel calls `router.refresh()`. A refusal keeps the modal
+  open. Do not lift the form's state above the modal: `Modal` returns `null` when closed, and that
+  unmount is what discards an abandoned selection. `Movie.tsx` and `Show.tsx` each render one panel;
+  `Show.tsx` stays a Server Component.
+- `src/lib/effective-languages.ts` (new in `077`) is the one authority for the effective-language
+  merge in `web`: a title with no audio of its own inherits the caller's audio languages *and*
+  `audioMandatory` together, subtitles inherit independently, each with its own inherited flag.
 
 **The installation-wide `default_languages` setting is untouched on the `api` side but has no `web`
 editor any more**: `021-user-preferences` REQ-6 deleted `DownloadPanel.tsx`, `SettingsForm`'s Descarga

@@ -48,7 +48,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user, capabilities }) => {
   }, []);
 
   return (
-    <header className="sticky top-0 flex w-full bg-white border-gray-200 z-99999 dark:border-gray-800 dark:bg-gray-900 lg:border-b">
+    <header className="sticky top-0 flex w-full bg-white border-gray-200 z-99999 dark:border-gray-800 dark:bg-gray-900 lg:h-19 lg:border-b">
       <div className="flex w-full items-center gap-3 px-3 py-3 sm:gap-4 lg:px-6 lg:py-4">
         <button
           type="button"

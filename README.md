@@ -33,7 +33,7 @@ a release, download, scan, transcode, file, notify and browse. It has no product
 no users besides its author. The published images are release candidates (`v0.1.0-rc1` through
 `v0.2.0-rc4`); there is no stable release yet.
 
-Seventy-one feature specs (`001` through `071`) live in `docs/spec/features/`. The root `CLAUDE.md`
+Seventy-six feature specs (`001` through `076`) live in `docs/spec/features/`. The root `CLAUDE.md`
 has a stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -47,8 +47,8 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
 - **Infrastructure:** Docker Compose (runtime, build and dev overlays), multi-stage Dockerfiles,
   Traefik v3.7 (optional), GitHub Actions release workflow publishing to GHCR
 - **Integrations:** qBittorrent (download client), Prowlarr (indexer aggregation), FlareSolverr
-  (Cloudflare challenge proxy for Prowlarr), TMDB API v3 (catalog), Jellyfin (media server, runs
-  outside the stack)
+  (Cloudflare challenge proxy for Prowlarr), TMDB API v3 (catalog), Jellyfin or Plex (media
+  server, runs outside the stack)
 
 ## What it does today
 
@@ -65,7 +65,7 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
   browser: one file for a film or an episode, or a whole season's episodes at once from the season
   header, matched to their episodes by `SxxEyy` like any season pack.
 - 🪞 **A title you already own isn't re-downloaded.** Registering something reconciles it against
-  your media server first: if Jellyfin already has the film — or some of the episodes — they come
+  your media server first: if your media server already has the film — or some of the episodes — they come
   in as complete, not missing.
 - 🎬 **Shorts are sorted for you.** A film under 40 minutes on TMDB is registered as a short and
   filed in its own library folder; you can reclassify it from its detail page.
@@ -81,6 +81,11 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
   survives the trip: nothing is dropped for missing metadata.
 - 🏆 **"Best candidates"** re-ranks the results the way an automatic picker would, so you can see
   the shortlist instead of reading release names one by one.
+- 🤖 **Optional automatic acquisition.** Two daily sweeps an admin can enable pick the top-ranked
+  release and attach it for you. For series, newly aired episodes are picked up on their own. For
+  films, each user marks which windows they care about in `/preferences`: theatrical (2 days after
+  release, any quality), digital (1 day, WEB-DL or better) and physical (5 days, UHD or remux). A
+  quality floor vetoes releases below it before the best tier is chosen.
 - ⚡ **Repeat searches are cached** for ten minutes, so re-opening the modal doesn't hammer your
   trackers.
 - ⬇️ **Downloads through qBittorrent**, each with its own save path, with live progress and speed in
@@ -135,10 +140,15 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
 
 ### Enjoy
 - 🗂️ **Automatic filing** into your library layout.
-- 🔔 **Media server notification** — Jellyfin today, opt-in from Settings — with the path translated
+- 🔔 **Media server notification** — Jellyfin or Plex, opt-in from Settings, with the library
+  layout (Jellyfin or Plex naming) following your choice — with the path translated
   to what your media server actually sees, plus a local index you can re-sync on demand.
 - 🖥️ **Library browsing** for films and series, with a billboard home, a per-series season accordion
   and actions per episode and per season (search, import, add a torrent or a magnet).
+- 🗓️ **Catalog data stays current on its own.** Opt-in sweeps re-sync a series' whole catalog
+  (monthly while it continues, every six months once ended, so a revived series' new season
+  appears) and re-read films not yet complete, tracking their theatrical, digital and physical
+  release dates. They refresh only; they never download anything.
 - 🔄 **Refresh a title from its detail page.** It re-reads the catalog from TMDB — for a series,
   every season and episode, adding what's new without deleting anything — and re-checks the media
   server, marking as complete what it holds and as missing what it no longer does. What changed is
@@ -320,13 +330,13 @@ A one-shot `backup` service dumps the database before `api` starts, and, with HT
    audio to Opus, tracks selected by language preference. With compression
    off, the file is only renamed and moved.
 9. **File and notify.** The output lands in the library, the worker reports `encodeCompleted`, and
-   `api` notifies Jellyfin with the host-side path.
+   `api` notifies your media server with the host-side path.
 
 The two decisions stay with a person on purpose:
 
 - **The title**, because libraries are per user and nothing downstream runs — indexer queries, disk,
   hours of encoding — until someone decides the title belongs in theirs.
-- **The release**, because automatic selection is the goal but not yet trusted to act unattended.
+- **The release**, because automatic selection is the goal but not yet trusted to act unattended, apart from the opt-in daily sweeps.
   "Best candidates" shows the set the picker would choose from, so its behaviour can be checked
   against real result lists first. Since the output is re-encoded anyway, the question is which
   release is the best input to the transcoder, not the best file to watch.
@@ -422,16 +432,16 @@ bin/cli api npx prisma studio
 
 Rough edges, stated plainly:
 
-- **Releases are never picked automatically.** "Best candidates" shows the shortlist an automatic
-  picker would produce, but a human still clicks. Nothing in the stack acquires a title unattended.
-- **The scheduler does one real job.** `035` built the scheduling machinery and registered four task
-  ids; only `refresh_episodes` has a body. The other three are still stubs.
+- **Automatic acquisition is opt-in and basic.** The daily sweeps take the top-ranked release
+  ("best candidate") for newly aired episodes and for films inside a window you marked; there is
+  no manual review step and no upgrade later. Everything else is still picked by a human.
 - **AV1 encoding is CPU-bound by design** — no current consumer GPU encodes AV1 in hardware, and
   the pipeline has no GPU-accelerated stage of any kind.
 - **Which indexers sit behind Cloudflare is a manual call.** The FlareSolverr proxy is registered
   automatically, but tagging the indexers that need it stays a step in Prowlarr's UI.
-- **Jellyfin is the only media server client** implemented so far, and it's expected to run outside
-  this stack.
+- **Jellyfin and Plex are the only media server clients**, and both are expected to run outside
+  this stack. Plex is index-backed and falls back to a full refresh when a path-scoped scan can't
+  be done.
 - **Libraries don't overlap.** Each user sees only their own titles; a title someone else registered
   answers "not available for this user" rather than rendering. There is no shared or household
   library. The one exception is the `/downloads` queue, which shows every title's sources to any

@@ -10,7 +10,6 @@ import {
   Tv,
   Users,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -42,7 +41,6 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
   const t = useTranslations("nav");
-  const tCommon = useTranslations("common");
 
   const baseNavItems: NavItem[] = [
     {
@@ -315,9 +313,9 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
       className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 dark:border-gray-800 text-gray-900 h-screen transition-all duration-300 ease-in-out z-50 border-r border-gray-200 
         ${
           isExpanded || isMobileOpen
-            ? "w-[290px]"
+            ? "w-[250px]"
             : isHovered
-              ? "w-[290px]"
+              ? "w-[250px]"
               : "w-[90px]"
         }
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
@@ -326,36 +324,17 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
-        className={`py-8 flex  ${
-          !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
+        className={`-mx-5 mb-4 flex h-19 shrink-0 items-center px-5 ${
+          !isExpanded && !isHovered && !isMobileOpen
+            ? "lg:justify-center"
+            : "justify-start"
         }`}
       >
-        <Link href="/" className="w-100">
-          {isExpanded || isHovered || isMobileOpen ? (
-            <>
-              <Image
-                className="dark:hidden"
-                src="/images/logo.svg"
-                alt={tCommon("altLogo")}
-                width={250}
-                height={62}
-              />
-              <Image
-                className="hidden dark:block"
-                src="/images/logo-dark.svg"
-                alt={tCommon("altLogo")}
-                width={250}
-                height={62}
-              />
-            </>
-          ) : (
-            <Image
-              src="/images/logo-icon.svg"
-              alt={tCommon("altLogo")}
-              width={32}
-              height={32}
-            />
-          )}
+        <Link
+          href="/"
+          className="font-[family-name:var(--font-inter)] text-[36px] leading-none font-black tracking-tight text-gray-900 dark:text-white"
+        >
+          {isExpanded || isHovered || isMobileOpen ? "Perceptor" : "P"}
         </Link>
       </div>
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">

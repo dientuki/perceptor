@@ -28,6 +28,7 @@ interface TitleLanguagesFormProps {
   setAudioAction: LanguageAction;
   setSubtitleAction: LanguageAction;
   setAudioMandatoryAction: AudioMandatoryAction;
+  onSaved?: () => void;
 }
 
 // Two LanguagePickerField panes, side by side, under one Guardar (REQ-1) —
@@ -44,11 +45,11 @@ export default function TitleLanguagesForm({
   setAudioAction,
   setSubtitleAction,
   setAudioMandatoryAction,
+  onSaved,
 }: TitleLanguagesFormProps) {
   const t = useTranslations("media.languagePicker");
   const [isPending, startTransition] = useTransition();
   const [errors, setErrors] = useState<string[]>([]);
-  const [saved, setSaved] = useState(false);
 
   const [audioTags, setAudioTags] = useState<string[]>(() =>
     tagsFrom(audioSelected),
@@ -60,7 +61,6 @@ export default function TitleLanguagesForm({
 
   const handleSubmit = () => {
     setErrors([]);
-    setSaved(false);
 
     startTransition(async () => {
       const audioForm = new FormData();
@@ -98,7 +98,9 @@ export default function TitleLanguagesForm({
       }
 
       setErrors(newErrors);
-      setSaved(newErrors.length === 0);
+      if (newErrors.length === 0) {
+        onSaved?.();
+      }
     });
   };
 
@@ -136,8 +138,6 @@ export default function TitleLanguagesForm({
           ))}
         </div>
       )}
-
-      {saved && <p className="text-success-500">{t("saved")}</p>}
 
       <div>
         <Button size="sm" disabled={isPending} onClick={handleSubmit}>

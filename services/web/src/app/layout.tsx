@@ -1,4 +1,4 @@
-import { Outfit } from "next/font/google";
+import { Inter, Outfit } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import "@/app/globals.css";
@@ -7,6 +7,12 @@ import { ThemeProvider } from "@/context/ThemeContext";
 
 const outfit = Outfit({
   subsets: ["latin"],
+});
+
+// The wordmark's face, the same one the marketing site uses.
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
 });
 
 export default async function RootLayout({
@@ -24,7 +30,7 @@ export default async function RootLayout({
         <meta name="application-name" content="Perceptor" />
       </head>
 
-      <body className={`${outfit.className} dark:bg-gray-900`}>
+      <body className={`${outfit.className} ${inter.variable} dark:bg-gray-900`}>
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider>
             <SidebarProvider>{children}</SidebarProvider>

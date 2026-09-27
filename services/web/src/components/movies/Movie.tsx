@@ -2,7 +2,7 @@
 import { FileVideo, Magnet } from "lucide-react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   setMovieAudioMandatoryAction,
   setMoviePreferredTrackLanguagesAction,
@@ -14,7 +14,6 @@ import {
   setMovieContentKindAction,
   setMovieShortAction,
 } from "@/actions/movies";
-import { getPreferences } from "@/actions/preferences";
 import Switch from "@/components/form/switch/Switch";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
@@ -22,10 +21,11 @@ import ContentKindSelect from "@/components/media/ContentKindSelect";
 import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
 import RemoveTitleButton from "@/components/media/RemoveTitleButton";
-import TitleLanguagesForm from "@/components/media/TitleLanguagesForm";
+import TitleLanguagesPanel from "@/components/media/TitleLanguagesPanel";
 import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
+import { effectiveLanguages } from "@/lib/effective-languages";
 import type { Language } from "@/types/languages";
 import type { AcquisitionTarget, ContentKind } from "@/types/media";
 import type { UserPreferences } from "@/types/preferences";
@@ -34,10 +34,12 @@ export default function Movie({
   movie,
   languageOptions,
   shortsEnabled,
+  preferences,
 }: {
   movie: MovieRecord;
   languageOptions: Language[];
   shortsEnabled: boolean;
+  preferences: UserPreferences | null;
 }) {
   const t = useTranslations("movies.detail");
   const [isShort, setIsShort] = useState(movie.isShort);
@@ -56,32 +58,10 @@ export default function Movie({
   } = useModal();
   const target: AcquisitionTarget = { kind: "movie", movie };
 
-  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-  useEffect(() => {
-    getPreferences()
-      .then(setPreferences)
-      .catch(() => setPreferences(null));
-  }, []);
-
-  // Same merge SearchTorrent.tsx does before ranking: a title with no languages of its own falls
-  // back to the caller's global /preferences instead of ranking unarmed.
-  const usingGlobalLanguages = movie.audioLanguages.length === 0;
-  const effectiveAudioMandatory =
-    usingGlobalLanguages && preferences
-      ? preferences.audioMandatory
-      : movie.audioMandatory;
-  const effectiveAudioLanguages =
-    usingGlobalLanguages && preferences
-      ? preferences.audioLanguages
-      : movie.audioLanguages;
+  const effective = effectiveLanguages(movie, preferences);
   const effectiveGroups = preferences
     ? preferences.movieTorrentGroups.map((g) => g.name)
     : [];
-  const usingGlobalSubtitles = movie.subtitleLanguages.length === 0;
-  const effectiveSubtitleLanguages =
-    usingGlobalSubtitles && preferences
-      ? preferences.subtitleLanguages
-      : movie.subtitleLanguages;
   const setMovieAudioLanguages = setMoviePreferredTrackLanguagesAction.bind(
     null,
     movie.id,
@@ -118,9 +98,8 @@ export default function Movie({
   };
 
   return (
-    <div className="flex flex-col gap-8 md:flex-row">
-      {/* Poster a la izquierda */}
-      <div className="w-full shrink-0 md:w-64 lg:w-72">
+    <div className="grid grid-cols-1 gap-8 md:grid-cols-[16rem_minmax(0,1fr)_20rem]">
+      <div className="min-w-0">
         {movie.posterUrl ? (
           // El posterUrl del api es w300 (300px de ancho); pedir más grande lo escala y se ve borroso
           <Image
@@ -138,8 +117,7 @@ export default function Movie({
         )}
       </div>
 
-      {/* Información a la derecha */}
-      <div className="flex-1 space-y-6">
+      <div className="min-w-0 space-y-6">
         <div>
           <h3 className="mb-2 text-2xl font-bold text-gray-800 dark:text-white/90">
             {movie.title}
@@ -162,6 +140,34 @@ export default function Movie({
             <Magnet size={18} className="text-red-500" />
             {t("magnetButton")}
           </Button>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="font-semibold uppercase tracking-wider text-gray-400">
+            {t("synopsisTitle")}
+          </h4>
+          <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">
+            {movie.overview || t("noOverview")}
+          </p>
+        </div>
+
+        <RankingDebugPanel
+          scopeLabel="MOVIE"
+          preferences={preferences}
+          effectiveGroups={effectiveGroups}
+          usingGlobalLanguages={effective.audioInherited}
+          effectiveAudioLanguages={effective.audioLanguages}
+          effectiveAudioMandatory={effective.audioMandatory}
+          usingGlobalSubtitles={effective.subtitlesInherited}
+          effectiveSubtitleLanguages={effective.subtitleLanguages}
+          titleAudioMandatory={movie.audioMandatory}
+          titleAudioLanguages={movie.audioLanguages}
+          titleSubtitleLanguages={movie.subtitleLanguages}
+        />
+      </div>
+
+      <div className="min-w-0 space-y-6">
+        <div className="flex flex-wrap gap-3">
           <RefreshTitleButton
             onRefresh={refreshMovieAction.bind(null, movie.id)}
           />
@@ -193,43 +199,16 @@ export default function Movie({
           label={t("contentKindLabel")}
         />
 
-        <div className="space-y-2">
-          <h4 className="font-semibold uppercase tracking-wider text-gray-400">
-            {t("synopsisTitle")}
-          </h4>
-          <p className="text-gray-600 dark:text-gray-300 leading-relaxed italic">
-            {movie.overview || t("noOverview")}
-          </p>
-        </div>
-
-        <RankingDebugPanel
-          scopeLabel="MOVIE"
-          preferences={preferences}
-          effectiveGroups={effectiveGroups}
-          usingGlobalLanguages={usingGlobalLanguages}
-          effectiveAudioLanguages={effectiveAudioLanguages}
-          effectiveAudioMandatory={effectiveAudioMandatory}
-          usingGlobalSubtitles={usingGlobalSubtitles}
-          effectiveSubtitleLanguages={effectiveSubtitleLanguages}
-          titleAudioMandatory={movie.audioMandatory}
-          titleAudioLanguages={movie.audioLanguages}
-          titleSubtitleLanguages={movie.subtitleLanguages}
+        <TitleLanguagesPanel
+          effective={effective}
+          options={languageOptions}
+          audioSelected={movie.audioLanguages}
+          subtitleSelected={movie.subtitleLanguages}
+          audioMandatory={movie.audioMandatory}
+          setAudioAction={setMovieAudioLanguages}
+          setSubtitleAction={setMovieSubtitleLanguages}
+          setAudioMandatoryAction={setMovieAudioMandatory}
         />
-
-        <div className="space-y-2 max-w-lg">
-          <h4 className="font-semibold uppercase tracking-wider text-gray-400">
-            {t("languagesTitle")}
-          </h4>
-          <TitleLanguagesForm
-            options={languageOptions}
-            audioSelected={movie.audioLanguages}
-            subtitleSelected={movie.subtitleLanguages}
-            audioMandatory={movie.audioMandatory}
-            setAudioAction={setMovieAudioLanguages}
-            setSubtitleAction={setMovieSubtitleLanguages}
-            setAudioMandatoryAction={setMovieAudioMandatory}
-          />
-        </div>
       </div>
 
       <ImportFileModal
