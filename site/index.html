@@ -127,7 +127,7 @@
   }
   .cmd button:hover{border-color:var(--cyan)}
 
-  /* ===== app mockup ===== */
+  /* ===== hero screenshot ===== */
   .shot{
     position:relative;margin:66px auto -110px;max-width:1000px;
     border-radius:16px;border:1px solid rgba(255,255,255,.12);
@@ -135,49 +135,19 @@
     box-shadow:0 60px 140px rgba(0,0,0,.7), 0 0 0 1px rgba(140,228,255,.06), 0 0 90px rgba(114,165,219,.12);
   }
   .shot .bar{display:flex;align-items:center;gap:8px;padding:11px 14px;background:#12102240;border-bottom:1px solid var(--line)}
+  .shot img{display:block;width:100%;height:auto}
+  .shot .cap{padding:12px 16px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);text-align:center}
+  /* A screenshot inside a section, rather than the one bleeding out of the hero. */
+  .figure{max-width:940px;margin:44px auto 0;border-radius:14px;overflow:hidden;
+    border:1px solid rgba(255,255,255,.1);background:#0b0918;
+    box-shadow:0 40px 90px rgba(0,0,0,.55)}
+  .figure img{display:block;width:100%;height:auto}
+  .figure figcaption{padding:12px 16px;font-size:13px;color:var(--muted);border-top:1px solid var(--line)}
   .dot{width:10px;height:10px;border-radius:99px;background:#2c2b3d}
   .shot .url{
     margin-left:10px;flex:1;background:rgba(255,255,255,.04);border-radius:7px;
     padding:5px 12px;font-size:12px;color:#7d87a3;font-family:'JetBrains Mono',monospace;
   }
-  .app{display:grid;grid-template-columns:186px 1fr;min-height:400px}
-  .side{border-right:1px solid var(--line);padding:16px 12px;background:rgba(255,255,255,.015)}
-  .side .it{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;font-size:13.5px;color:var(--muted)}
-  .side .it.on{background:rgba(140,228,255,.1);color:var(--text);font-weight:600}
-  .side .it .badge{margin-left:auto;background:var(--cyan);color:#06121c;border-radius:99px;font-size:11px;font-weight:800;padding:1px 7px}
-  .side .ic{width:15px;height:15px;opacity:.85}
-  .main{padding:18px 20px 22px}
-  .searchbar{
-    display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);
-    border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13.5px;color:#8a93ad;
-  }
-  .searchbar .caret{width:1.5px;height:15px;background:var(--cyan);animation:blink 1.1s steps(1) infinite}
-  @keyframes blink{50%{opacity:0}}
-  .rowhead{display:flex;align-items:baseline;gap:10px;margin:20px 0 11px}
-  .rowhead b{font-size:14px;font-weight:700}
-  .rowhead span{font-size:12px;color:var(--muted)}
-  .posters{display:grid;grid-template-columns:repeat(6,1fr);gap:11px}
-  .poster{position:relative;aspect-ratio:2/3;border-radius:9px;overflow:hidden;border:1px solid rgba(255,255,255,.07)}
-  .poster i{position:absolute;inset:0;display:block}
-  .poster .tag{
-    position:absolute;left:6px;bottom:6px;font-size:10px;font-weight:800;letter-spacing:.02em;
-    padding:2px 7px;border-radius:99px;background:rgba(6,10,20,.78);backdrop-filter:blur(4px);
-  }
-  .tag.ok{color:var(--good)} .tag.enc{color:var(--cyan)} .tag.dl{color:#ffd88a}
-  @media(max-width:860px){.posters{grid-template-columns:repeat(4,1fr)} .app{grid-template-columns:1fr} .side{display:none}}
-  @media(max-width:560px){.posters{grid-template-columns:repeat(3,1fr)}}
-  .qrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line);font-size:13px}
-  .qrow .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .qrow .st{font-size:11px;font-weight:800;padding:2px 9px;border-radius:99px;border:1px solid}
-  .st.enc{color:var(--cyan);border-color:rgba(140,228,255,.35);background:rgba(140,228,255,.08)}
-  .st.dl{color:#ffd88a;border-color:rgba(255,216,138,.3);background:rgba(255,216,138,.07)}
-  .st.ok{color:var(--good);border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.07)}
-  .prog{width:132px;height:5px;border-radius:99px;background:rgba(255,255,255,.09);overflow:hidden;flex:none}
-  .prog i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--b3),var(--cyan))}
-  .prog.anim i{animation:fill 4.2s ease-in-out infinite}
-  @keyframes fill{0%{width:18%}50%{width:72%}100%{width:18%}}
-  .qrow .sp{color:var(--muted);font-size:12px;width:74px;text-align:right}
-  @media(max-width:560px){.qrow .sp,.qrow .prog{display:none}}
 
   /* ===== sections ===== */
   section{padding:120px 0;position:relative}
@@ -290,52 +260,15 @@
       <span>🔒 <b>No account</b>, no cloud, no tracking</span>
     </div>
 
-    <div class="shot" aria-hidden="true">
+    <figure class="shot">
       <div class="bar">
         <i class="dot"></i><i class="dot"></i><i class="dot"></i>
         <div class="url">perceptor.local</div>
       </div>
-      <div class="app">
-        <aside class="side">
-          <div class="it on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5V21H3z"/></svg> Home</div>
-          <div class="it"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16"/></svg> Movies</div>
-          <div class="it"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="m8 3 4 4 4-4"/></svg> Series</div>
-          <div class="it"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg> Downloads <em class="badge">3</em></div>
-          <div class="it"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg> Calendar</div>
-          <div class="it"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg> Settings</div>
-        </aside>
-        <div class="main">
-          <div class="searchbar">🔎 <span>the one about the</span><i class="caret"></i></div>
-
-          <div class="rowhead"><b>Your library</b><span>42 titles · 6 in flight</span></div>
-          <div class="posters">
-            <div class="poster"><i style="background:linear-gradient(150deg,#3c2a68,#7a4ea8)"></i><em class="tag ok">4K</em></div>
-            <div class="poster"><i style="background:linear-gradient(150deg,#1f3f63,#72a5db)"></i><em class="tag ok">1080p</em></div>
-            <div class="poster"><i style="background:linear-gradient(150deg,#5a2748,#c06a7e)"></i><em class="tag enc">Encoding</em></div>
-            <div class="poster"><i style="background:linear-gradient(150deg,#1d4f47,#5fbfa6)"></i><em class="tag ok">1080p</em></div>
-            <div class="poster"><i style="background:linear-gradient(150deg,#4a3a1c,#c9a35c)"></i><em class="tag dl">62%</em></div>
-            <div class="poster"><i style="background:linear-gradient(150deg,#2b2350,#556cb2)"></i><em class="tag ok">S01</em></div>
-          </div>
-
-          <div class="rowhead"><b>In flight</b><span>live from qBittorrent and the encoder</span></div>
-          <div class="qrow">
-            <span class="st enc">Encoding</span>
-            <span class="nm">Series · S02E04 — AV1 1080p · Japanese + English subs</span>
-            <span class="prog anim"><i></i></span><span class="sp">2.1×</span>
-          </div>
-          <div class="qrow">
-            <span class="st dl">Downloading</span>
-            <span class="nm">Film · 2160p HDR remux</span>
-            <span class="prog"><i style="width:62%"></i></span><span class="sp">11 MB/s</span>
-          </div>
-          <div class="qrow">
-            <span class="st ok">Done</span>
-            <span class="nm">Series · S02E03 — filed, media server notified</span>
-            <span class="prog"><i style="width:100%"></i></span><span class="sp">3.4 GB</span>
-          </div>
-        </div>
-      </div>
-    </div>
+      <img src="shots/home.webp" width="2000" height="1250"
+           alt="Perceptor's browse screen, with films and series in one list">
+      <figcaption class="cap">Films and series in one place. Your library, on your hardware.</figcaption>
+    </figure>
   </div>
 </div>
 
@@ -451,6 +384,11 @@
         <p>It downloads, re-encodes, renames, files it in your library and tells your media server. You get a notification-free, finished title.</p>
       </div>
     </div>
+    <figure class="figure">
+      <img src="shots/downloads.webp" width="2000" height="750" loading="lazy"
+           alt="The downloads queue: one title encoding, one downloading">
+      <figcaption>The queue while it works: one title being re-encoded, one still coming down.</figcaption>
+    </figure>
     <p class="lede" style="margin-top:40px">A series arrives with its seasons and episodes. Season packs split into episodes by themselves. A title you already own isn't downloaded twice.</p>
   </div>
 </section>
@@ -501,6 +439,11 @@
         <p>Removing a title, deleting a source, cleaning up a download — none of them touch the finished file. That rule is written into the project's constitution.</p>
       </div>
     </div>
+    <figure class="figure">
+      <img src="shots/calendar.webp" width="2000" height="1250" loading="lazy"
+           alt="The release calendar, a month grid coloured by what is already in the library">
+      <figcaption>The calendar: green is already in your library, grey hasn't aired yet.</figcaption>
+    </figure>
   </div>
 </section>
 
