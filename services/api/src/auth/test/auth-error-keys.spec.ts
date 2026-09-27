@@ -176,6 +176,20 @@ describe('auth throw sites carry the frozen i18n keys', () => {
   });
 
   describe('JwtStrategy.validate', () => {
+    const originalSecret = process.env.JWT_SECRET;
+
+    beforeAll(() => {
+      process.env.JWT_SECRET = 'test-secret';
+    });
+
+    afterAll(() => {
+      if (originalSecret === undefined) {
+        delete process.env.JWT_SECRET;
+      } else {
+        process.env.JWT_SECRET = originalSecret;
+      }
+    });
+
     it('emits error.auth.unauthenticated for a user-typed payload with no jti', async () => {
       const strategy = new JwtStrategy({ exists: jest.fn() } as never);
 

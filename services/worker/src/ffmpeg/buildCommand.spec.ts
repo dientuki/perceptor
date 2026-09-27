@@ -59,7 +59,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
     delete process.env.ENCODE_SAMPLE_SECONDS;
   });
 
-  it('uses -crf 20 for an ANIME title even on a remux (pre-existing mismatch, unrelated to this feature — see report)', () => {
+  it('uses -crf 22 for an ANIME title on a remux (contentKind does not decide CRF)', () => {
     const metadata = {
       streams: [
         videoStream({ bit_rate: '1000' }), // deliberately low, must not matter
@@ -74,7 +74,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       details({ contentKind: 'ANIME' }),
     );
 
-    expect(crfOf(args)).toBe('20');
+    expect(crfOf(args)).toBe('22');
   });
 
   it('uses -crf 22 for a CGI title on a remux (contentKind no longer decides CRF, out of scope)', () => {
