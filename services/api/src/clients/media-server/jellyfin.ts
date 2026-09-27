@@ -101,6 +101,11 @@ export const createJellyfinClient = (
   const { host, port, apiKey } = config;
 
   const baseUrl = `http://${host}:${port}/`;
+  // Jellyfin 12 dropped the legacy `X-MediaBrowser-Token`/`X-Emby-Token`
+  // headers (deprecated since 10.10): every request authenticated that way
+  // answers 401 with an empty body, key valid or not. The scheme below is
+  // the only one 12 accepts, and 10.x has accepted it all along.
+  const authHeader = `MediaBrowser Token="${apiKey}"`;
 
   async function fetchItemsPage(
     includeItemTypes: 'Movie' | 'Series',
@@ -118,7 +123,7 @@ export const createJellyfinClient = (
     endpoint.searchParams.set('limit', String(LIBRARY_PAGE_SIZE));
 
     const response = await fetch(endpoint, {
-      headers: { 'X-MediaBrowser-Token': apiKey },
+      headers: { Authorization: authHeader },
       signal: AbortSignal.timeout(LIST_LIBRARY_TIMEOUT_MS),
     });
 
@@ -166,7 +171,7 @@ export const createJellyfinClient = (
       const response = await fetch(endpoint, {
         method: HTTP_METHOD.POST,
         headers: {
-          'X-MediaBrowser-Token': apiKey,
+          Authorization: authHeader,
         },
       });
 
@@ -190,7 +195,7 @@ export const createJellyfinClient = (
         method: HTTP_METHOD.POST,
         headers: {
           'Content-Type': 'application/json',
-          'X-MediaBrowser-Token': apiKey,
+          Authorization: authHeader,
         },
         body: JSON.stringify({
           Updates: [
@@ -226,7 +231,7 @@ export const createJellyfinClient = (
       endpoint.searchParams.set('fields', 'Path');
 
       const response = await fetch(endpoint, {
-        headers: { 'X-MediaBrowser-Token': apiKey },
+        headers: { Authorization: authHeader },
         signal: AbortSignal.timeout(READ_TIMEOUT_MS),
       });
 
