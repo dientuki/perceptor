@@ -24,7 +24,11 @@ export function SearchInput({ onSearch, loading, type }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="relative flex items-center gap-3">
+    <form
+      method="post"
+      onSubmit={handleSubmit}
+      className="relative flex items-center gap-3"
+    >
       <div className="relative flex-1">
         <input
           name="query"

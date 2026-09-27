@@ -92,7 +92,12 @@ export default function ProfileModal({
             {t("title")}
           </h4>
         </div>
-        <form ref={formRef} className="flex flex-col" onSubmit={handleSubmit}>
+        <form
+          ref={formRef}
+          method="post"
+          className="flex flex-col"
+          onSubmit={handleSubmit}
+        >
           <div className="px-2 space-y-5 overflow-y-auto custom-scrollbar">
             {error && <p className={ERROR_CLASS}>{error}</p>}
 

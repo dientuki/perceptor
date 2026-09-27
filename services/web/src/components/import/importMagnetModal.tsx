@@ -126,7 +126,7 @@ export default function ImportMagnetModal({
             })}
           </p>
         </div>
-        <form className="flex flex-col" onSubmit={handleSubmit}>
+        <form method="post" className="flex flex-col" onSubmit={handleSubmit}>
           <div className="px-2 overflow-y-auto custom-scrollbar">
             {isCompleted && <ReplaceWarning target={targetLabel} />}
             <Label>{t("label")}</Label>

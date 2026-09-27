@@ -60,6 +60,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user, capabilities }) => {
         </button>
 
         <form
+          method="post"
           className="flex-grow"
           onSubmit={(e) => {
             e.preventDefault();

@@ -38,5 +38,9 @@ export default function StatefulForm({
     startTransition(() => action(formData));
   };
 
-  return <form {...rest} onSubmit={handleSubmit} />;
+  // `method="post"` matters even though this form has no `action`: the
+  // submit is handled in JS and prevented, but a submit that lands before
+  // hydration is a native one, and a native GET would put every field —
+  // password, API key — into the query string. POST keeps them in the body.
+  return <form method="post" {...rest} onSubmit={handleSubmit} />;
 }

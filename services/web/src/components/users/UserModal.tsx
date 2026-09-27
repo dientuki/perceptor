@@ -87,7 +87,7 @@ export default function UserModal({ isOpen, onClose, user }: UserModalProps) {
             {isEditMode ? t("editTitle") : t("createTitle")}
           </h4>
         </div>
-        <form className="flex flex-col" onSubmit={handleSubmit}>
+        <form method="post" className="flex flex-col" onSubmit={handleSubmit}>
           <div className="px-2 space-y-5 overflow-y-auto custom-scrollbar">
             {error && <p className={ERROR_CLASS}>{error}</p>}
 
