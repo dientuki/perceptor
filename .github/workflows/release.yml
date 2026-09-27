@@ -1,8 +1,11 @@
 # Publishes the five own images to GHCR (dientuki/perceptor namespace) on every vX.Y.Z tag —
-# REQ-1/REQ-2/NFR-1. web/api/worker build from their `prod` stage; torrent/indexer are
+# REQ-1/REQ-2/NFR-1 — and on every vX.Y.Z-<prerelease> tag (a release candidate, cut from
+# `stage`). A prerelease publishes under its exact tag ONLY: `latest` is what an installation
+# with no PERCEPTOR_TAG resolves to (docker-compose.yaml's `${PERCEPTOR_TAG:-latest}`), so
+# moving it to an RC would hand every such installation an untested build.
+# web/api/worker build from their `prod` stage; torrent/indexer are
 # single-stage Dockerfiles (linuxserver/qbittorrent, linuxserver/prowlarr bases) with no target
-# to name. All five build for linux/amd64 only and push under two tags: the exact version and
-# `latest`. One workflow run publishes all five or none —
+# to name. All five build for linux/amd64 only. One workflow run publishes all five or none —
 # a partial publish would let an installation end up with a mixed set (plan.md § Contract Freeze),
 # which is exactly what NFR-6 forbids.
 name: Release
@@ -11,6 +14,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+      - "v*.*.*-*"
 
 env:
   REGISTRY: ghcr.io
@@ -45,9 +49,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Resolve image tags
+        id: tags
+        # SemVer: anything after the first hyphen is a prerelease identifier, so `v0.8.0-rc.1`
+        # is an RC and `v0.8.0` is final. An RC gets its exact tag and nothing else; only a
+        # final release also moves `latest`.
+        run: |
+          image="${REGISTRY}/${NAMESPACE}/perceptor-${{ matrix.service }}"
+          tags="${image}:${GITHUB_REF_NAME}"
+          case "${GITHUB_REF_NAME}" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)
+              tags="${tags}"$'\n'"${image}:latest"
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+          {
+            echo "tags<<TAGS_EOF"
+            echo "${tags}"
+            echo "TAGS_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -66,9 +87,7 @@ jobs:
           target: ${{ matrix.target }}
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/perceptor-${{ matrix.service }}:${{ github.ref_name }}
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/perceptor-${{ matrix.service }}:latest
+          tags: ${{ steps.tags.outputs.tags }}
 
       - name: Make package public
         # A fresh package on GHCR is created private by default even with GITHUB_TOKEN's
