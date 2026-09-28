@@ -2,7 +2,7 @@
 title: First-step page — TMDB key plus indexer setup — api slice
 service: api
 last_updated: 2026-09-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: First-step page — TMDB key plus indexer setup — `api` (`api/plan.md`)

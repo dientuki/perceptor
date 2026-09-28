@@ -9,10 +9,11 @@ import {
   Globe,
   Library,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useState } from "react";
 import { updateSettingsAction } from "@/actions/settings";
+import StatefulForm from "@/components/form/StatefulForm";
 import CompressionPanel from "@/components/settings/CompressionPanel";
 import EnvironmentPanel from "@/components/settings/EnvironmentPanel";
 import GeneralPanel from "@/components/settings/GeneralPanel";
@@ -20,7 +21,6 @@ import MediaManagerPanel from "@/components/settings/MediaManagerPanel";
 import MediaServerFields from "@/components/settings/MediaServerFields";
 import SchedulingPanel from "@/components/settings/SchedulingPanel";
 import TorrentManagerPanel from "@/components/settings/TorrentManagerPanel";
-import StatefulForm from "@/components/form/StatefulForm";
 import Button from "@/components/ui/button/Button";
 import TabNav, { type TabNavItem } from "@/components/ui/tabs/TabNav";
 import type { EnvironmentInfo } from "@/types/environment";

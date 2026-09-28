@@ -604,7 +604,16 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   now-lazy resolution actually happen. The read-through Redis cache (10-minute TTL, normalized
   query as key) lives in `IndexerService.search()`, not `ProwlarrClient` — `client.ts` stays a
   pure adapter, mirroring how `TmdbClient` sits below `PopularMediaService`'s own cache
-  (`040-indexer-search-cache`).
+  (`040-indexer-search-cache`). Since `078-first-step-tutorial`, `IndexerService.status()` and the
+  admin-only `indexerStatus` query (`AdminGuard` on the method, `PrismaService` resolving through
+  the already-`@Global()` `PrismaModule` with no local re-provide) answer "is Prowlarr configured
+  and reachable" for `web`'s `/first-step` page: `countIndexers()` on `ProwlarrClient` calls
+  `GET /api/v1/indexer` and validates the body with `Array.isArray` (the same bug class
+  `client.spec.ts` already guards `search()` against — a failed response parsed as a list would
+  read as "zero indexers" instead of "Prowlarr is down"). A thrown `INDEXER_UNAVAILABLE` is caught
+  in `status()`, logged, and mapped to `{ configuredIndexers: 0, reachable: false }` rather than
+  propagated — an outcome, not an error, so an unreachable indexer never blocks the page that
+  explains how to fix it.
 - **`uploads/`** — the project's only REST route (tus); see the root `CLAUDE.md` for why.
   Authenticated **by ticket, not by `JwtAuthGuard`** (which skips non-GraphQL contexts): a signed-in
   user mints one via `createUploadTicket`, the browser sends it as `Authorization: Bearer <ticket>` on

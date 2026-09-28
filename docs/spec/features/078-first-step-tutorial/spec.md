@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-09-28
 last_updated: 2026-09-28
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -161,21 +161,21 @@ None.
       zero-indexer notice, not an error page, not a 500.
 - [ ] **AC-3 (failure)**: Given a non-admin session, opening `/first-step` returns 404, and the api
       log shows no `indexerStatus` and no `environmentInfo` call for that request.
-- [ ] **AC-4**: After adding one indexer in Prowlarr and reloading `/first-step`, the notice is
+- [x] **AC-4**: After adding one indexer in Prowlarr and reloading `/first-step`, the notice is
       replaced by the confirmation naming the count `1`; the five steps are still shown.
 - [ ] **AC-5**: With `USE_TRAEFIK=true` and a domain, step 1 links to `http(s)://indexer.<domain>`
       and that link opens Prowlarr. With `USE_TRAEFIK=false`, step 1 shows `INDEXER_PORT` with no
       link and no invented hostname.
-- [ ] **AC-6**: Given a TMDB key already configured, `/first-step` still shows the whole TMDB block,
+- [x] **AC-6**: Given a TMDB key already configured, `/first-step` still shows the whole TMDB block,
       marked as already configured, and `/` still shows the billboard (REQ-4, REQ-5).
-- [ ] **AC-7**: The three screenshots load on `/first-step`, each field label in them is readable at
+- [x] **AC-7**: The three screenshots load on `/first-step`, each field label in them is readable at
       the rendered size, and each opens full size when clicked.
 - [ ] **AC-8**: The sidebar shows the `/first-step` entry for an admin and not for a non-admin.
 - [ ] **AC-9**: Following step 4 on a Cloudflare-fronted indexer (tag `flaresolverr` in its Tags
       field), a `searchTorrents` for a title that tracker carries returns rows — proving the
       screenshot documents the step that actually works.
-- [ ] **AC-10**: `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift.
-- [ ] **AC-11**: `git status --short services/api/prisma` is empty and
+- [x] **AC-10**: `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift.
+- [x] **AC-11**: `git status --short services/api/prisma` is empty and
       `git diff --stat services/worker` is empty (NFR-4, NFR-5).
 
 ## Out of Scope

@@ -4,6 +4,61 @@ import { ProwlarrClient } from '@/clients/indexer/client';
 import { RedisService } from '@/redis/redis.service';
 import { TorrentResult } from '@/clients/indexer/types';
 
+// This suite exists because `status()`'s mapping of a Prowlarr failure to
+// `{ configuredIndexers: 0, reachable: false }` (078-first-step-tutorial) has two distinct wrong
+// ways to fail with no error anywhere: a catch too wide would report a healthy Prowlarr as
+// unreachable whenever `countIndexers()` throws for any reason, including a bug in this service
+// itself; a catch too narrow — or one that swallows silently — would make the one page meant to
+// explain a broken indexer fail to render, or fail to explain why. Each of the three outcomes is
+// asserted on its own so a regression in any one of them shows up here rather than on `/first-step`.
+describe('IndexerService.status', () => {
+  let service: IndexerService;
+  let prowlarr: { countIndexers: jest.Mock };
+  let redis: { get: jest.Mock; set: jest.Mock };
+
+  beforeEach(async () => {
+    prowlarr = { countIndexers: jest.fn() };
+    redis = { get: jest.fn(), set: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        IndexerService,
+        { provide: ProwlarrClient, useValue: prowlarr },
+        { provide: RedisService, useValue: redis },
+      ],
+    }).compile();
+
+    service = module.get<IndexerService>(IndexerService);
+  });
+
+  it('reports zero configured indexers as reachable, not as a failure', async () => {
+    prowlarr.countIndexers.mockResolvedValue(0);
+
+    await expect(service.status()).resolves.toEqual({
+      configuredIndexers: 0,
+      reachable: true,
+    });
+  });
+
+  it('reports a positive count as reachable', async () => {
+    prowlarr.countIndexers.mockResolvedValue(3);
+
+    await expect(service.status()).resolves.toEqual({
+      configuredIndexers: 3,
+      reachable: true,
+    });
+  });
+
+  it('maps a thrown INDEXER_UNAVAILABLE to an unreachable outcome instead of rethrowing', async () => {
+    prowlarr.countIndexers.mockRejectedValue(new Error('error.indexer.unavailable'));
+
+    await expect(service.status()).resolves.toEqual({
+      configuredIndexers: 0,
+      reachable: false,
+    });
+  });
+});
+
 // This suite exists because 040-indexer-search-cache's read-through sits on
 // top of four invariants that a perfectly successful response cannot reveal
 // on its own — every failure mode below leaves the caller's list looking

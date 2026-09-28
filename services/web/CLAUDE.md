@@ -274,6 +274,57 @@ without affecting the other carousel.
 this service's Tailwind 4 `@theme` only defines `--color-brand-*`. Do not reintroduce a `primary`
 token; reuse the shared component.
 
+## Onboarding and `/first-step` (`071-tmdb-key-onboarding`, `078-first-step-tutorial`)
+
+`TmdbKeyOnboarding.tsx` lives in `src/components/onboarding/`, not `src/components/billboard/`
+where `071` first placed it — `078` moved it when a second consumer appeared, and its translation
+namespace moved with it: `billboard.tmdbOnboarding` is gone from both `messages/{en,es}.json`,
+replaced by `onboarding.tmdb`. `(dashboard)/page.tsx` renders it in place of the billboard carousels
+when `getMediaCapabilities()`'s `catalogKeyConfigured` is `false`, or the same panel preceded by a
+rejected-key notice when `popularMedia` fails with `error.media.catalog_unauthorized` — unchanged
+behaviour, only the import path and `t()` namespace changed. The component also takes an
+`alreadyConfigured` prop (default `false`, so `/`'s two call sites need no change): when true it
+renders a small marker near the title instead of hiding any of the reason or the five steps, since
+`/first-step` always shows the whole panel even with a working key.
+
+`/first-step` (`src/app/(dashboard)/first-step/page.tsx`) is admin-only — `notFound()` from a
+sequential `getCurrentUser()` check *before* the page's `Promise.all`, the same ordering
+`users/page.tsx`/`settings/page.tsx` use to keep a non-admin's request a clean 404 rather than a
+race into a 500 from a guarded resolver. It repeats the TMDB onboarding block (so a fresh install's
+whole setup lives in one place) and adds `IndexerSetupGuide.tsx` (same `onboarding/` directory):
+sign in to Prowlarr, add an indexer, add a second one tagged `flaresolverr` for a Cloudflare-fronted
+tracker, then confirm from a title's detail page — fed by the new `getIndexerStatus()` action
+(`src/actions/indexer.ts`) and the indexer's URL/port read off `getEnvironmentInfo()`'s `endpoints`
+entry with `id === "indexer"` (`url` linked when non-null, otherwise the bare port with no
+constructed hostname). `IndexerSetupGuide` branches on `reachable` before `configuredIndexers`, so
+an unreachable Prowlarr never reads as "zero indexers configured". A short `about` paragraph opens
+the block explaining what an indexer is and why one is needed, before the reachable/zero/count
+notice. The four step screenshots live under `public/images/first-step/` (`indexer-login-2.png`,
+`indexer-filter-2.png`, `indexer-add-2.png`, `indexer-flaresolverr-2.png` — the `-2` suffix is a
+cache-buster, bumped on every replacement since Next 16 refuses a query string on a local
+`next/image` source unless allow-listed in `images.localPatterns`, and a same-named overwrite left
+every browser serving the old file from its own disk cache), captured live against the dev stack's
+own Prowlarr at `localhost:9696`: signing in, the "Add Indexer" list filtered to Public trackers for
+Movies (step 3, before picking one), the settings dialog for a chosen indexer with Test/Save, and
+the same dialog with the `flaresolverr` tag added in Tags. NFR-6 still applies if Prowlarr's UI
+changes and they go stale. The sidebar entry sits inside `AppSidebar.tsx`'s existing `isAdmin`
+branch, alongside Settings/Users — and, like the Settings help link below, only while setup looks
+incomplete (same `!catalogKeyConfigured || configuredIndexers === 0` condition): the page itself
+stays reachable by direct URL either way, only the nav entry hides. The admin-only `indexerStatus`
+query backing it is fetched once, in `(dashboard)/layout.tsx` — every request through this layout
+hits it, admin or not, so the call is gated on `user.isAdmin` (`Promise.resolve(null)` otherwise)
+to avoid handing a non-admin's page load an `AdminGuard` refusal it has no reason to see; `null`
+threads down through `AdminShell.tsx` to `AppSidebar.tsx` as a plain prop and reads as "indexer
+count unknown", which for a non-admin is moot (`isAdmin` already hides the whole nav branch).
+
+`/settings`'s Torrent Manager tab also carries a `CircleHelp` icon next to the "Indexer API key"
+field (`TorrentManagerPanel.tsx`), a plain `<a href="/first-step" target="_blank"
+rel="noopener noreferrer">` — it opens `/first-step` in a new tab rather than embedding the guide
+in a popup. Unlike the sidebar entry above, **this one is unconditional**: an admin can always
+reach the tutorial from here, even once TMDB and every indexer are already configured — a
+deliberate difference from the sidebar (`settings/page.tsx` fetches no `indexerStatus` and
+`TorrentManagerPanel` takes no visibility props for this).
+
 ## Media type availability (`045-media-type-availability`)
 
 The installation-wide `movies_enabled`/`shows_enabled` settings are readable by every signed-in user

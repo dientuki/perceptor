@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { CircleHelp, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import {
@@ -75,7 +75,21 @@ export default function TorrentManagerPanel({
       />
 
       <div>
-        <Label htmlFor="tracker_api_key">{t("indexerApiKeyLabel")}</Label>
+        <div className="mb-1.5 flex items-center gap-1.5">
+          <Label htmlFor="tracker_api_key" className="mb-0">
+            {t("indexerApiKeyLabel")}
+          </Label>
+          <a
+            href="/first-step"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t("indexerHelpButton")}
+            title={t("indexerHelpButton")}
+            className="inline-flex text-gray-400 transition-colors hover:text-brand-500 dark:text-gray-500 dark:hover:text-brand-400"
+          >
+            <CircleHelp size={16} />
+          </a>
+        </div>
         <Input
           id="tracker_api_key"
           name="tracker_api_key"

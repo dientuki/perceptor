@@ -180,7 +180,8 @@
     "downloads": "Downloads",
     "downloadsBadge": "{count} active downloads",
     "settings": "Settings",
-    "users": "Users"
+    "users": "Users",
+    "firstStep": "First step"
   },
   "userMenu": {
     "editProfile": "Edit profile",
@@ -277,6 +278,11 @@
       "title": "Downloads",
       "metadataTitle": "Downloads | Perceptor",
       "metadataDescription": "Every download across your library"
+    },
+    "firstStep": {
+      "title": "First step",
+      "metadataTitle": "First step | Perceptor",
+      "metadataDescription": "Connect Perceptor to TMDB and add an indexer so searches return results"
     }
   },
   "notFound": {
@@ -387,27 +393,7 @@
   "billboard": {
     "moviesHeading": "Popular movies",
     "showsHeading": "Popular series",
-    "unavailable": "Movies and series are both disabled on this system.",
-    "tmdbOnboarding": {
-      "rejectedTitle": "Your TMDB key does not work",
-      "rejectedBody": "TMDB rejected the configured API key. Replace it with a valid one by following the steps below.",
-      "title": "Connect Perceptor to TMDB",
-      "whyTitle": "Why you need your own key",
-      "why": "Perceptor has no central server and no shared key. With your own TMDB key, catalog requests go straight from your installation to TMDB, under your own account. Perceptor keeps no data about you in any way.",
-      "adminOnly": "Only an administrator can complete the last step.",
-      "stepsTitle": "How to get a key",
-      "step1": "Create a free TMDB account.",
-      "step1Link": "Sign up at TMDB",
-      "step2": "Confirm the e-mail TMDB sends you, then sign in.",
-      "step2Link": "Sign in to TMDB",
-      "step3": "Open the API page and request a key: choose type \"Developer\", personal / non-commercial use, and accept the terms.",
-      "step3Link": "Open the TMDB API page",
-      "step3Terms": "TMDB terms of use",
-      "step4": "Copy the \"API Read Access Token\" from that same page. It is the long token, not the short \"API Key\".",
-      "step5Admin": "Paste it in the TMDB API key field of Settings and save.",
-      "step5Link": "Open Settings",
-      "step5User": "Ask an administrator to paste it in Settings, in the TMDB API key field, and save."
-    }
+    "unavailable": "Movies and series are both disabled on this system."
   },
   "media": {
     "card": {
@@ -682,6 +668,7 @@
       "downloadsFolderLabel": "Downloads folder",
       "indexerSection": "Indexer",
       "indexerApiKeyLabel": "Indexer API key",
+      "indexerHelpButton": "Help: how to set up an indexer",
       "groupNameLabel": "Torrent groups",
       "groupNamePlaceholder": "Group name",
       "addGroup": "Add",
@@ -794,5 +781,50 @@
     "kindMovie": "Film",
     "kindShort": "Short",
     "kindEpisodes": "Episodes"
+  },
+  "onboarding": {
+    "tmdb": {
+      "rejectedTitle": "Your TMDB key does not work",
+      "rejectedBody": "TMDB rejected the configured API key. Replace it with a valid one by following the steps below.",
+      "title": "Connect Perceptor to TMDB",
+      "whyTitle": "Why you need your own key",
+      "why": "Perceptor has no central server and no shared key. With your own TMDB key, catalog requests go straight from your installation to TMDB, under your own account. Perceptor keeps no data about you in any way.",
+      "adminOnly": "Only an administrator can complete the last step.",
+      "stepsTitle": "How to get a key",
+      "step1": "Create a free TMDB account.",
+      "step1Link": "Sign up at TMDB",
+      "step2": "Confirm the e-mail TMDB sends you, then sign in.",
+      "step2Link": "Sign in to TMDB",
+      "step3": "Open the API page and request a key: choose type \"Developer\", personal / non-commercial use, and accept the terms.",
+      "step3Link": "Open the TMDB API page",
+      "step3Terms": "TMDB terms of use",
+      "step4": "Copy the \"API Read Access Token\" from that same page. It is the long token, not the short \"API Key\".",
+      "step5Admin": "Paste it in the TMDB API key field of Settings and save.",
+      "step5Link": "Open Settings",
+      "step5User": "Ask an administrator to paste it in Settings, in the TMDB API key field, and save.",
+      "alreadyConfigured": "Already configured"
+    },
+    "indexer": {
+      "title": "Set up an indexer",
+      "about": "Indexers are the torrent sites Prowlarr searches for you — every title search in Perceptor asks Prowlarr, and Prowlarr asks every indexer you've added. With none configured, a search finds nothing no matter how popular the title is; that's the whole reason this page exists.",
+      "unreachable": "The indexer could not be reached.",
+      "zeroNotice": "No indexer is configured yet. Every release search will return nothing until you add one.",
+      "countNotice": "{count, plural, one {# indexer is configured.} other {# indexers are configured.}}",
+      "stepsTitle": "How to add one",
+      "step1": "Open the indexer's web UI.",
+      "step1LinkLabel": "Open Prowlarr",
+      "step1PortOnly": "Available at port {port} (no domain is configured for it).",
+      "step2": "Sign in with the same username and password as Perceptor's administrator account — one login serves Perceptor, the torrent client and the indexer.",
+      "step2ImageAlt": "Prowlarr's sign-in screen",
+      "step3": "Browse the list that opens. Filter Privacy to \"Public\" (no account needed, easiest to start with) and Categories to \"Movies\" or \"TV\" to narrow it down to trackers that actually carry what you search for in Perceptor.",
+      "step3ImageAlt": "Prowlarr's \"Add Indexer\" list filtered to Public trackers for Movies",
+      "step4": "Click the orange \"Add Indexer\" button in the top-left toolbar. Type a public tracker's name (for example \"1337x\") into the search box that opens, click the matching row to open its settings, then click \"Test\" and \"Save\" at the bottom of that dialog.",
+      "step4ImageAlt": "Prowlarr's \"Add Indexer\" dialog with Test and Save buttons",
+      "step5": "Click \"Add Indexer\" again for a tracker that sits behind Cloudflare. In the same settings dialog, scroll down to the \"Tags\" field, click it, type flaresolverr and pick the existing tag from the suggestions that appear — that's what routes this indexer's requests through the in-stack FlareSolverr proxy, already set up for you. Then click \"Test\" and \"Save\" as before.",
+      "step5ImageAlt": "Prowlarr's \"Add Indexer\" dialog with the flaresolverr tag added in the Tags field",
+      "step6": "Return to Perceptor and search a title from its detail page — releases now appear.",
+      "apiKeyNote": "You don't need to copy the indexer API key anywhere — the installer already wired it in.",
+      "viewFullSize": "View full size"
+    }
   }
 }

@@ -1,11 +1,14 @@
 import { Resolver, Query, Args, Int } from '@nestjs/graphql';
+import { UseGuards } from '@nestjs/common';
 import { IndexerService } from './indexer.service';
 import { RankingContextService, SearchTarget } from './ranking-context.service';
 import { TorrentResult } from './entities/torrent-result.entity';
+import { IndexerStatus } from './entities/indexer-status.entity';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
+import { AdminGuard } from '@/auth/guards/admin.guard';
 
 @Resolver(() => TorrentResult)
 export class IndexerResolver {
@@ -38,5 +41,15 @@ export class IndexerResolver {
     const userId = principal.type === 'user' ? principal.id : '';
     const context = await this.rankingContext.forCaller(userId, target);
     return this.indexerService.searchRanked(query, context);
+  }
+
+  @UseGuards(AdminGuard)
+  @Query(() => IndexerStatus, {
+    name: 'indexerStatus',
+    description:
+      'How many indexers the configured Prowlarr holds, and whether Prowlarr answered at all.',
+  })
+  indexerStatus(): Promise<IndexerStatus> {
+    return this.indexerService.status();
   }
 }

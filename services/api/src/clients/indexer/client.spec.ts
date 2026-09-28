@@ -257,3 +257,71 @@ describe('ProwlarrClient.search — hash casing', () => {
     expect(result[0].id).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
   });
 });
+
+// This test exists because otherwise a Prowlarr response `countIndexers` cannot make sense of —
+// a non-2xx status, a dropped connection, or a 200 whose body is an error object rather than the
+// indexer array — would be reported as some count of indexers instead of the failure it actually
+// is, exactly the class of bug `getData`'s own header paragraph names for `search()`.
+describe('ProwlarrClient.countIndexers', () => {
+  const settings = {
+    getMap: jest.fn().mockResolvedValue({
+      tracker_host: 'indexer',
+      tracker_port: '9696',
+      tracker_api_key: 'a-key',
+    }),
+  } as unknown as SettingsService;
+
+  let client: ProwlarrClient;
+  let fetchSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    client = new ProwlarrClient(settings);
+    fetchSpy = jest.spyOn(global, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('raises on a non-2xx response', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ message: 'Internal Server Error' }),
+    });
+
+    await expect(client.countIndexers()).rejects.toThrow(
+      'Could not reach the indexer',
+    );
+  });
+
+  it('raises when fetch itself fails', async () => {
+    fetchSpy.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    await expect(client.countIndexers()).rejects.toThrow(
+      'Could not reach the indexer',
+    );
+  });
+
+  it('raises when a 200 body is not an array', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ error: 'not what you expected' }),
+    });
+
+    await expect(client.countIndexers()).rejects.toThrow(
+      'Could not reach the indexer',
+    );
+  });
+
+  it('returns the length of a JSON array', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [{ id: 1 }, { id: 2 }, { id: 3 }],
+    });
+
+    await expect(client.countIndexers()).resolves.toBe(3);
+  });
+});
