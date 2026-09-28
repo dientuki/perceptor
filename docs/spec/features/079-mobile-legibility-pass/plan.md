@@ -2,7 +2,7 @@
 title: Mobile Legibility Pass — Implementation Plan
 spec_version: 0.2.0
 last_updated: 2026-09-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Mobile Legibility Pass (`plan.md`)

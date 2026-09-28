@@ -2,7 +2,7 @@
 title: Mobile Legibility Pass — web slice
 service: web
 last_updated: 2026-09-28
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Mobile Legibility Pass — `web` (`web/plan.md`)
