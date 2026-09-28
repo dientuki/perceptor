@@ -22,7 +22,7 @@ export default async function Login() {
     <>
       <div className="relative hidden overflow-hidden bg-gray-50 dark:bg-gray-900 lg:flex lg:w-1/2 lg:flex-col lg:justify-between lg:px-12 lg:pt-16">
         <div className="flex flex-col items-start text-left">
-          <span className="mb-4 inline-flex items-center gap-2 rounded-full bg-brand-50 px-4 py-1.5 text-theme-xs font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
+          <span className="mb-4 inline-flex items-center gap-2 rounded-full bg-brand-50 px-4 py-1.5 text-theme-sm font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
             {t("badge")}
           </span>
           <h1 className="text-title-md font-bold text-gray-800 dark:text-white/90 sm:text-title-lg">

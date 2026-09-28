@@ -570,7 +570,10 @@
       "howToChangeDescription": "Editá estas variables en el .env del host:",
       "howToChangeRecreate": "El cambio recién toma efecto después de recrear los contenedores afectados:",
       "hostGuidanceLabel": "Dirección del host en modo puerto",
-      "hostGuidanceDescription": "El endpoint de subida tiene que llevar una dirección a la que el navegador pueda llegar — la dirección LAN del host, nunca \"localhost\", ya que el navegador que abre esta app puede ser otra máquina distinta a la que corre el stack. Ningún contenedor puede determinar esa dirección por sí solo, así que PUBLIC_UPLOAD_URL se configura a mano en el .env."
+      "hostGuidanceDescription": "El endpoint de subida tiene que llevar una dirección a la que el navegador pueda llegar — la dirección LAN del host, nunca \"localhost\", ya que el navegador que abre esta app puede ser otra máquina distinta a la que corre el stack. Ningún contenedor puede determinar esa dirección por sí solo, así que PUBLIC_UPLOAD_URL se configura a mano en el .env.",
+      "installableLabel": "Instalable como app",
+      "installableAvailable": "Disponible",
+      "installableUnavailable": "No disponible — requiere HTTPS"
     },
     "general": {
       "uiLocaleLabel": "Idioma de la aplicación"
@@ -826,5 +829,10 @@
       "apiKeyNote": "No hace falta que copies la clave de API del indexer a ningún lado — el instalador ya la configuró.",
       "viewFullSize": "Ver tamaño completo"
     }
+  },
+  "offline": {
+    "heading": "Estás sin conexión",
+    "body": "No se puede contactar al servidor de Perceptor en este momento. Verificá que el stack esté corriendo y volvé a intentar.",
+    "retry": "Reintentar"
   }
 }

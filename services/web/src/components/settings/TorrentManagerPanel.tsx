@@ -85,7 +85,7 @@ export default function TorrentManagerPanel({
             rel="noopener noreferrer"
             aria-label={t("indexerHelpButton")}
             title={t("indexerHelpButton")}
-            className="inline-flex text-gray-400 transition-colors hover:text-brand-500 dark:text-gray-500 dark:hover:text-brand-400"
+            className="inline-flex max-md:min-h-11 max-md:min-w-11 items-center justify-center text-gray-400 transition-colors hover:text-brand-500 dark:text-gray-500 dark:hover:text-brand-400"
           >
             <CircleHelp size={16} />
           </a>
@@ -114,7 +114,7 @@ export default function TorrentManagerPanel({
             }}
             disabled={pending}
             placeholder={t("groupNamePlaceholder")}
-            className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+            className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-base text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
           />
           <button
             type="button"
@@ -123,7 +123,7 @@ export default function TorrentManagerPanel({
               e.preventDefault();
               handleAdd();
             }}
-            className="inline-flex shrink-0 items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:bg-brand-300"
+            className="inline-flex shrink-0 items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-base font-medium text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:bg-brand-300"
           >
             {t("addGroup")}
           </button>

@@ -781,13 +781,30 @@ parity check with an exit code.
   `Number(...)` at the call site, as `SearchTorrent.tsx` and `importMagnetModal.tsx` do.
 - **Errors render inline**, never through `alert()` or `window.confirm()`. The import modals are the
   reference.
-- **`text-sm` and `text-theme-sm` are banned.** Since `025-header-redesign`, `body` declares an
-  explicit `text-base` (16px) as the site's base size, and both classes were swept out of
-  `services/web/src`. The `--text-theme-sm` / `--text-theme-sm--line-height` tokens stay defined in
-  `globals.css`'s `@theme` block — `text-theme-xs` and `text-theme-xl` still resolve against that
-  scale — only their *use* is gone. Do not reintroduce either class, and do not compensate for a
-  page that now reads larger with a one-off `text-[14px]`: that drift is accepted, and each screen
-  gets re-tuned as the broader visual pass reaches it.
+- **The text scale is closed — only two sizes exist below the display sizes.** Since
+  `079-mobile-legibility-pass`, `globals.css`'s `@theme` declares `--text-*: initial` (the same
+  namespace-closing idiom as `--font-*: initial`/`--breakpoint-*: initial` four lines above it),
+  so a class naming a size outside the declared scale emits **no CSS rule at all** — the element
+  silently inherits its ancestor's size, which is `body`'s explicit `text-base` (16px, REQ-1) unless
+  something closer overrides it. The scale: `text-base` (16px, the reading floor — REQ-1) and
+  `text-theme-sm` (14px, the one accessory step for helper text, badges, table `<th>` labels and
+  timestamps — REQ-2), plus the pre-existing display sizes (`text-lg`, `text-theme-xl`,
+  `text-title-*`). **`text-xs`, `text-sm` and `text-theme-xs` no longer exist as utilities** —
+  do not reintroduce any of them; a stray one compiles silently and just renders at the inherited
+  floor rather than failing, which is the point (forgetting yields compliance, not smallness).
+  **The one loud exception is `@apply`**: Tailwind 4 errors at build time on an unknown utility
+  named inside `@apply` (unlike a class attribute), so a component using `@apply text-xs` fails
+  `bin/npm web run build` outright — treat that build failure as the scale working as designed, fix
+  the `@apply` site onto `text-theme-sm`, and re-run.
+- **Every interactive control needs a 44×44 hit area below `md`** (`--breakpoint-md`, 768px),
+  via `max-md:min-h-11 max-md:min-w-11` (or `max-md:min-h-11 max-md:py-2` for a label-driven
+  row) — the icon or label inside stays its current size, only the padding/min-size grows
+  (`079-mobile-legibility-pass`, REQ-6). This applies to `Button.tsx` and every form primitive
+  under `components/form/`, but also caught two vendored/shared elements that are easy to miss
+  because no single task's file list names them: the shared modal close button
+  (`components/ui/modal/index.tsx`) and `MediaCarousel.tsx`'s prev/next arrows. When adding a new
+  icon button or a new carousel/toolbar control, check it against this rule explicitly — it will
+  not fail loudly if you don't.
 - **`next build` must run under `NODE_ENV=production`** — `package.json`'s `build` script sets it
   explicitly, because the dev container passes `NODE_ENV=development` in. Building under
   `development` resolves React's development export conditions and produces a mismatched React
@@ -815,6 +832,13 @@ confirms `en.json`/`es.json` match exactly (422 keys — the new `contentKind` n
 `bin/npm web run lint` is **not** a usable gate: `biome check` reports ~1519 errors and ~65 warnings
 across the pre-existing template, with or without any given change. Judge a new file by running Biome
 on that file, never on the repo.
+
+As of 2026-09-28 (`079-mobile-legibility-pass`): `bin/cli web npx --no tsc --noEmit` reports **0
+errors**, `bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs`
+confirms `en.json`/`es.json` match exactly (594 keys — this feature added none; the 594 reflects
+`078-first-step-tutorial`, landed just before it). `grep -rEn "text-xs|text-theme-xs"
+services/web/src` returns nothing tree-wide. This feature touched no message catalog, no schema, no
+`api`/`worker` file — presentation-only, per its own contract delta ("None").
 
 ## Settings → Compression carries the subtitle format choice (`070-subtitle-format-selection`)
 

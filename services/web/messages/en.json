@@ -570,7 +570,10 @@
       "howToChangeDescription": "Edit these variables in the host's .env:",
       "howToChangeRecreate": "The edit takes effect only after the affected containers are recreated:",
       "hostGuidanceLabel": "Port mode host address",
-      "hostGuidanceDescription": "The upload endpoint must carry an address the browser itself can reach — the host's own LAN address, never \"localhost\", since the browser opening this app may be a different machine than the one running the stack. No container can determine that address on its own, so PUBLIC_UPLOAD_URL is set by hand in .env."
+      "hostGuidanceDescription": "The upload endpoint must carry an address the browser itself can reach — the host's own LAN address, never \"localhost\", since the browser opening this app may be a different machine than the one running the stack. No container can determine that address on its own, so PUBLIC_UPLOAD_URL is set by hand in .env.",
+      "installableLabel": "Installable as an app",
+      "installableAvailable": "Available",
+      "installableUnavailable": "Unavailable — requires HTTPS"
     },
     "scheduling": {
       "timezoneNote": "Schedules are evaluated in the API container's timezone (UTC unless the host sets TZ). \"03:00\" refers to that timezone, not yours.",
@@ -826,5 +829,10 @@
       "apiKeyNote": "You don't need to copy the indexer API key anywhere — the installer already wired it in.",
       "viewFullSize": "View full size"
     }
+  },
+  "offline": {
+    "heading": "You're offline",
+    "body": "Perceptor's server can't be reached right now. Check that the stack is running and try again.",
+    "retry": "Retry"
   }
 }

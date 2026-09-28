@@ -21,7 +21,7 @@ const Checkbox: React.FC<CheckboxProps> = ({
 }) => {
   return (
     <label
-      className={`flex items-center space-x-3 group cursor-pointer ${
+      className={`flex items-center space-x-3 group cursor-pointer max-md:min-h-11 max-md:py-2 ${
         disabled ? "cursor-not-allowed opacity-60" : ""
       }`}
     >

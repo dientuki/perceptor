@@ -77,13 +77,13 @@ export default function DownloadRow({
       <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
         <div className="font-medium">{displayName}</div>
         {download.releaseTitle && (
-          <div className="mt-1 line-clamp-1 text-xs text-gray-500 dark:text-gray-400">
+          <div className="mt-1 break-words text-base text-gray-500 dark:text-gray-400">
             {download.releaseTitle}
           </div>
         )}
         {download.lastError && <DownloadErrorLine error={download.lastError} />}
         {rowError && (
-          <div className="mt-1 text-xs text-error-500">{rowError}</div>
+          <div className="mt-1 text-base text-error-500">{rowError}</div>
         )}
       </td>
       <td className="px-4 py-3">

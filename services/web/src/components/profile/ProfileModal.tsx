@@ -12,7 +12,7 @@ import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
 
 const ERROR_CLASS =
-  "text-sm text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
+  "text-base text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
 
 const INPUT_CLASS =
   "h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30";
@@ -140,7 +140,7 @@ export default function ProfileModal({
                 onChange={(e) => setPassword(e.target.value)}
                 className={INPUT_CLASS}
               />
-              <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1.5 text-theme-sm text-gray-500 dark:text-gray-400">
                 {t("passwordHint")}
               </p>
             </div>

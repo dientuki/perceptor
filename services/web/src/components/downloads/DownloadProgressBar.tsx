@@ -15,7 +15,7 @@ export default function DownloadProgressBar({
           style={{ width: `${progress ?? 0}%` }}
         />
       </div>
-      <span className="shrink-0 whitespace-nowrap text-xs">
+      <span className="shrink-0 whitespace-nowrap text-theme-sm">
         {formatProgress(progress)}
       </span>
     </div>

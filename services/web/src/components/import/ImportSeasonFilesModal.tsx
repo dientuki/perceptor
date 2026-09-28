@@ -584,7 +584,7 @@ export default function ImportSeasonFilesModal({
                           style={{ width: `${percent}%` }}
                         />
                       </div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                      <span className="text-theme-sm text-gray-500 dark:text-gray-400">
                         {row.state === "queued" && t("statusQueued")}
                         {row.state === "uploading" &&
                           t("statusUploading", { percent })}

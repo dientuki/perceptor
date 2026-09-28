@@ -155,19 +155,19 @@ export default function DownloadsPanel({
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead className="bg-gray-50 dark:bg-white/[0.02]">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("targetHeader")}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("statusHeader")}
                 </th>
-                <th className="w-[14rem] px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="w-[14rem] px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("progressHeader")}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("speedHeader")}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("actionsHeader")}
                 </th>
               </tr>

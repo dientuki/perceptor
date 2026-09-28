@@ -298,7 +298,7 @@ export default function ImportFileModal({
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="text-theme-sm text-gray-500 dark:text-gray-400">
                   {status === "uploading" && t("statusUploading", { percent })}
                   {status === "paused" && t("statusPaused")}
                   {status === "error" && (error || t("statusErrorDefault"))}
