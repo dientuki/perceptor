@@ -3,7 +3,7 @@ title: Torrent Ranking Heuristic — api slice
 service: api
 spec_version: 0.9.0
 last_updated: 2026-09-27
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Torrent Ranking Heuristic — `api` (`api/plan.md`)

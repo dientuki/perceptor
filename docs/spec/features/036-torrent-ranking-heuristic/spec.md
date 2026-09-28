@@ -4,7 +4,7 @@ spec_version: 0.9.0
 author: Juan "Dientuki" Farias
 created_at: 2026-08-31
 last_updated: 2026-09-27
-status: Approved
+status: Implemented
 services: [web]
 ---
 
@@ -234,7 +234,7 @@ behaviour it has; `web` gains a view over its results.
       the `acquire_movies` sweep passes the **AND** over the film's owners (`forMovieOwners`, `076`
       REQ-7). The rule stands as written for any future caller that cannot read the column.
 
-- [ ] **REQ-4d (4K AVC Veto)** *(`0.9.0`, see § Post-Implementation Amendments)*: A release whose
+- [x] **REQ-4d (4K AVC Veto)** *(`0.9.0`, see § Post-Implementation Amendments)*: A release whose
       resolution tier is 5 (REQ-5) **and** whose name identifies it as `avc`/`x264`/`h264` (REQ-8's
       regexes, unchanged) is discarded in pass 1 alongside REQ-4, REQ-4a and REQ-4b. It is the only
       veto in the list that is conditional on another parsed value rather than on a token alone.
@@ -290,8 +290,9 @@ behaviour it has; `web` gains a view over its results.
       subtitle tracks, no botched HDR pass. The user trusts it more than the source label, so a
       2160p release from a preferred group outranks a 2160p UHD BluRay Remux from an unknown one.
 
-- [ ] **REQ-7 (Criterion 3 — Source)** *(the ladder below is implemented and correct; **unticked for
-      REQ-7b alone**, which changes how UHD-ness is *decided* without moving a single rung — see
+- [x] **REQ-7 (Criterion 3 — Source)** *(the ladder below is implemented and correct; **had been
+      unticked for REQ-7b alone**, which changes how UHD-ness is *decided* without moving a single
+      rung — REQ-7b is now implemented too, T030/T031, see
       § Post-Implementation Amendments (2026-09-27, second pass))*: Highest match wins: UHD BluRay Remux → 8, BluRay Remux → 7,
       UHD BluRay → 6, BluRay/BDRip → 5, WEB-DL → 4, WEBRip → 3, HDRip → 2, nothing recognised
       → 0. Nothing is discarded for its source; an unrecognised one simply ranks last.
@@ -324,7 +325,7 @@ behaviour it has; `web` gains a view over its results.
       `ma` would collide with DTS-HD MA and `max` with an ordinary title word, so neither is
       listed.
 
-- [ ] **REQ-7b (UHD-ness Is Read From The Tier, Not The Title)** *(`0.9.0`, second pass — see
+- [x] **REQ-7b (UHD-ness Is Read From The Tier, Not The Title)** *(`0.9.0`, second pass — see
       § Post-Implementation Amendments)*: Whether a disc source counts as **UHD** for REQ-7's ladder
       is decided by the release's own resolution tier (REQ-5), **not** by the presence of a `uhd`
       token in its name. A disc source at tier 5 is a UHD one — `UHD BluRay Remux` (8) if it is a
@@ -373,13 +374,13 @@ behaviour it has; `web` gains a view over its results.
       wins here wins on seeders and size, and that it is the IMAX one is a coincidence worth naming
       precisely so nobody later mistakes it for evidence that the token is read.
 
-- [ ] **REQ-8 (Criterion 4 — Codec)** *(amended in `0.8.0`, corrected in `0.8.1`, superseded at
-      tier 5 by `0.9.0`, see § Post-Implementation Amendments; unticked for one row only —
-      `0.8.0`'s two tables are **on disk and tested** in `ranking.ts`/`ranking.spec.ts`, shipped in
+- [x] **REQ-8 (Criterion 4 — Codec)** *(amended in `0.8.0`, corrected in `0.8.1`, superseded at
+      tier 5 by `0.9.0`, see § Post-Implementation Amendments; had been unticked for one row only —
+      `0.8.0`'s two tables were **on disk and tested** in `ranking.ts`/`ranking.spec.ts`, shipped in
       `de41706` on 2026-09-26 in the same commit that wrote the amendment, which is why the box was
-      left unticked. What remains is `0.9.0`'s tier-5 row: an unrecognised codec at tier 5 still
-      ranks 0 and still reads `—`. `0.8.1`'s `avc` 1 / unrecognised 2 was never written and never
-      will be)*: The
+      left unticked. `0.9.0`'s tier-5 row — an unrecognised codec at tier 5 now inferred `HEVC` rank
+      3, not `—` rank 0 — is implemented too, 2026-09-28, T027/T028. `0.8.1`'s `avc` 1 / unrecognised
+      2 was never written and never will be)*: The
       codec rank **depends on the resolution tier** (REQ-5), because what a codec says about *a
       source to recompress* is not the same at 4K as below it:
 
@@ -880,7 +881,7 @@ document or anything under `services/api/`, they have left scope and must stop a
       release winning is the whole amendment in one assertion. *`ranking.spec.ts`'s
       `'prefers AVC over a larger HEVC between two 1080p web sources (AC-19)'`.*
 
-- [ ] **AC-20** *(`0.8.0`, superseded by `0.9.0`)*: Given the same shape at 2160p — two `WEB-DL`
+- [x] **AC-20** *(`0.8.0`, superseded by `0.9.0`)*: Given the same shape at 2160p — two `WEB-DL`
       releases, the `x265` one **smaller** — the `x265` one leads. Since `0.9.0` it leads by being
       the only one left: its `x264` peer is vetoed by REQ-4d, so the assertion is that the candidate
       set holds one row, not that HEVC outranked AVC. The tier is still what decides which rule
@@ -910,7 +911,7 @@ document or anything under `services/api/`, they have left scope and must stop a
       "prefer AVC". *`ranking.spec.ts`'s `'orders x264, untagged, x265 at 1080p BluRay whatever the
       sizes (AC-23)'`.*
 
-- [ ] **AC-24** *(`0.8.1`, rewritten by `0.9.0`)*: Given three `2160p WEB-DL` releases — one
+- [x] **AC-24** *(`0.8.1`, rewritten by `0.9.0`)*: Given three `2160p WEB-DL` releases — one
       `x265`, one naming no codec, one `x264` — the `x264` one is **absent** (REQ-4d) and the other
       two are ordered by **size**, both showing the chip `HEVC`. This is what replaces `0.8.1`'s
       three-way ordering: at tier 5 the two survivors carry the same codec rank, so criterion 4
@@ -918,40 +919,40 @@ document or anything under `services/api/`, they have left scope and must stop a
       three-way tier-5 ordering was never written, which is the one thing that saved the work
       `0.9.0` would have thrown away. T028 writes it once, in its `0.9.0` form.*
 
-- [ ] **AC-25** *(`0.9.0`, the veto reaches what a rank could not)*: Given a candidate set whose best
+- [x] **AC-25** *(`0.9.0`, the veto reaches what a rank could not)*: Given a candidate set whose best
       tier is 2160p and which contains a `2160p BluRay x264` release **larger** than every other
       disc release in the set, that release is absent from the candidate view. It is the case no
       ranking answer could reach: REQ-11 skips criterion 4 between two disc sources at tier 5, so
       before `0.9.0` this release placed on **size** whatever rank REQ-8 gave it.
 
-- [ ] **AC-26** *(`0.9.0`, the inferred label)*: Given a `2160p UHD BluRay Remux` release whose name
+- [x] **AC-26** *(`0.9.0`, the inferred label)*: Given a `2160p UHD BluRay Remux` release whose name
       names no codec, its codec chip reads `HEVC`, not `—`. Given a `1080p BluRay` release whose name
       names no codec, its codec chip still reads `—`. Both rows in one list, so the tier and not the
       parse is visibly what decides.
 
-- [ ] **AC-27** *(`0.9.0`, failure path — the veto cannot empty the set)*: Given a list whose only
+- [x] **AC-27** *(`0.9.0`, failure path — the veto cannot empty the set)*: Given a list whose only
       2160p releases all name `x264`, when the button is pressed the candidate set is **non-empty**
       and is drawn from the next tier down, with no 2160p row in it. Same shape as AC-4 and AC-4c,
       third trigger: REQ-4d runs before the tier pass, so removing every 4K row demotes the film's
       candidate tier instead of returning nothing.
 
-- [ ] **AC-28** *(`0.9.0`, the inference does not outlive its precondition)*: Given a
+- [x] **AC-28** *(`0.9.0`, the inference does not outlive its precondition)*: Given a
       `2160p WEB-DL AV1` release, it is absent from the candidate set (REQ-4, unchanged) and its
       codec chip is never rendered as `HEVC` anywhere in the view. The inference of REQ-8 is only
       sound downstream of REQ-4's veto, and this is the assertion that pins the order of the two.
 
-- [ ] **AC-29** *(`0.9.0` second pass, REQ-7b — the token is not required)*: Given two `2160p` remux
+- [x] **AC-29** *(`0.9.0` second pass, REQ-7b — the token is not required)*: Given two `2160p` remux
       releases identical but for the literal token — one named `… 2160p REMUX …`, the other
       `… UHD BDRemux 2160p …` — both report `sourceRank` 8 and the chip `UHD BluRay Remux`, and the
       larger of the two leads. Before REQ-7b the first reported 7 and placed behind the second
       whatever its size. This is the *Interstellar* defect reduced to two rows.
 
-- [ ] **AC-30** *(`0.9.0` second pass, REQ-7b — the token does not suffice either)*: Given a
+- [x] **AC-30** *(`0.9.0` second pass, REQ-7b — the token does not suffice either)*: Given a
       `1080p UHD BluRay … x265` release and a `1080p BluRay Remux` release, the remux leads and the
       first reports `sourceRank` 5 with the chip `BluRay`, not 6 and `UHD BluRay`. This is the
       failure direction: a name claiming a medium the resolution contradicts.
 
-- [ ] **AC-31** *(`0.9.0` second pass, failure path — REQ-7b resizes nothing)*: Given any list, the
+- [x] **AC-31** *(`0.9.0` second pass, failure path — REQ-7b resizes nothing)*: Given any list, the
       set of rows reported `candidate` is **identical** before and after REQ-7b, and so is the best
       resolution tier; only `candidateRank`, `sourceRank` and `sourceLabel` may differ. A source
       rank is criterion 3 of a comparator, never a veto and never the tier, so a change here that
@@ -1224,6 +1225,11 @@ What stays unticked, and why:
   message). `web` has no test runner, which is why both wait on a live pass.
 - **Group 4 (`0.5.0`), AC-18** — untouched here; already recorded in `tasks.md` § Blocked.
 
+**Update, 2026-09-28: REQ-8's tier-5 row, AC-20, AC-24 … AC-31 and REQ-7/REQ-7b are now
+implemented and ticked** (T027/T028/T030/T031, `tasks.md` Group 8) — the two bullets above about
+them are left as the record of what this normalization pass found, not as the current state; see
+§ Post-Implementation Amendments' opening note for the implementation itself.
+
 **One correction of substance, not a tick.** REQ-4d had been inserted *inside* REQ-4c, leaving
 REQ-4c's last two paragraphs ("Scope: films only", "When the flag is not known") reading as part of
 REQ-4d, which has no flag and no film-only scope. The paragraphs are back under REQ-4c, and the
@@ -1232,9 +1238,13 @@ window it describes cannot occur in `api`.
 
 ## Post-Implementation Amendments (2026-09-27, `spec_version` 0.9.0 — second pass)
 
-**No version bump.** `0.9.0` has not been implemented yet, so this pass folds into it rather than
-opening a `0.10.0`: one amendment, one implementation, one verification. Everything below lands with
-REQ-4d and REQ-8's tier-5 row in the same edit to `ranking.ts`.
+**No version bump.** `0.9.0` had not been implemented yet at the time this section was written, so
+this pass folded into it rather than opening a `0.10.0`: one amendment, one implementation, one
+verification. Everything below landed with REQ-4d and REQ-8's tier-5 row in the same edit to
+`ranking.ts` — **done 2026-09-28**, T027/T028/T030/T031 (`tasks.md`), all of REQ-4d, REQ-8's tier-5
+row and REQ-7b implemented and tested together, 56/56 `src/indexer` tests green. The narrative below
+is left exactly as written at the time (before implementation), as the record of how the defect was
+found and why the fix takes the shape it does.
 
 - **REQ-7b (new), REQ-7 unticked, REQ-11 row 3, REQ-22, AC-29 … AC-31.** `source()` decided UHD-ness
   by testing the title for a `uhd` token. It now reads the resolution tier. The ladder, the families
