@@ -849,3 +849,33 @@ restores what the administrator had. The controls carry no `name`; five hidden i
 values. `actions/settings.ts` sends the two list keys through `LIST_KEYS`, always, the empty string
 included — `EDITABLE_KEYS`' blank filter would silently drop an empty list. `web` never selects
 `EncodeJobDetails.allowedSubtitleFormats`.
+
+## Installable PWA (`080-installable-pwa`)
+
+`web` is installable — `src/app/manifest.json` carries `id`/`start_url`/`scope` all `/`, both
+`any` and `maskable` icons, and `layout.tsx`'s `metadata`/`viewport` exports cover
+`applicationName`/`appleWebApp`/the light-dark `themeColor` pair — but the feature is deliberately
+LAN-scoped: `src/components/pwa/ServiceWorkerRegistration.tsx` only registers
+`public/sw.js` inside `window.isSecureContext`, so plain HTTP (the default without
+`066-https-local-ca`'s `USE_HTTPS`) never shows a worker or a console error.
+
+**The worker caches exactly one document, `/offline`, and nothing else, ever.** No build asset, no
+stylesheet, no script, no API response is precached or runtime-cached — a precache of build output
+is forbidden here because it is exactly how an updated image would keep serving yesterday's
+interface after a deploy, which is the one failure mode this feature's spec explicitly ruled out
+(REQ-3). `sw.js`'s `fetch` handler only calls `respondWith` for a navigation; everything else
+passes through untouched. Do not add a second cache or a broader `fetch` branch as a "nice to have"
+— that is scope creep this spec froze against.
+
+**Staleness bound (NFR-4)**: the cached `/offline` document is refreshed at `activate` (every
+worker update) and once more per worker lifetime, on the first successful navigation afterward.
+Between those two points a locale switch followed immediately by going offline can show the
+previous language's offline copy once — bounded and accepted, not a bug to fix.
+
+`/sw.js`, `/manifest.json` and `/offline` are all exempted in `src/proxy.ts`'s `PUBLIC_ROUTES` —
+a manifest or worker fetch carries no session cookie, so without the exemption every one of them
+307s to `/login` with no visible error anywhere (this was the feature's actual first task, not an
+afterthought). `services/settings/EnvironmentPanel.tsx`'s installability row is pure client-side
+`isSecureContext && "serviceWorker" in navigator` detection — it has no GraphQL field of its own
+and reuses the tab's existing `EnvironmentInfo.useHttps` fetch only for phrasing the "why not"
+reason.

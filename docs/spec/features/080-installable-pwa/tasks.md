@@ -75,7 +75,7 @@ rather than racing it.
       scheme or port.
       *Done when:* DevTools → Application → Manifest lists every field and reports no installability
       error over HTTPS. → T001
-- [ ] **T006** `[web]` Replace the two hand-written `<head>` metas in
+- [x] **T006** `[web]` Replace the two hand-written `<head>` metas in
       `services/web/src/app/layout.tsx` with Next's `metadata` export (`applicationName`,
       `appleWebApp: { capable, title, statusBarStyle }`) and a `viewport` export carrying the
       light/dark `themeColor` pair (`#ffffff` / `#101828`). Do not hand-write icon links — Next
@@ -83,7 +83,7 @@ rather than racing it.
       *Done when:* the rendered page's `<head>` carries `application-name`,
       `apple-mobile-web-app-capable`, `apple-mobile-web-app-title`, `apple-mobile-web-app-status-bar-style`
       and both `theme-color` entries, with no duplicates. → T004, T005
-- [ ] **T007** `[web] [P]` Add the installability row to
+- [x] **T007** `[web] [P]` Add the installability row to
       `services/web/src/components/settings/EnvironmentPanel.tsx`, after the HTTPS row: a
       `useState<boolean | null>(null)` set in a `useEffect` from
       `window.isSecureContext && "serviceWorker" in navigator`, rendered with the existing `Badge`
@@ -95,13 +95,13 @@ rather than racing it.
 
 ### Group 4 — verification and docs
 
-- [ ] **T008** `[web]` Run the slice's checks and fix anything they surface.
+- [x] **T008** `[web]` Run the slice's checks and fix anything they surface.
       *Done when:* `bin/cli web npx --no tsc --noEmit` reports 0 errors,
       `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift,
       `bin/npm web run lint` is no worse than it was before this feature (Biome already fails on
       pre-existing formatting in this service — compare, do not reformat unrelated files), and
       `git diff --stat services/api services/worker` is empty. → T004, T006, T007
-- [ ] **T009** `[docs]` Add the cache policy to `services/web/CLAUDE.md`: the worker caches exactly
+- [x] **T009** `[docs]` Add the cache policy to `services/web/CLAUDE.md`: the worker caches exactly
       one document, `/offline`; nothing else is ever stored, and a precache of build assets is
       forbidden because it is how an updated image serves yesterday's interface. Record the NFR-4
       staleness bound there too (refreshed on activate and once per worker lifetime after a

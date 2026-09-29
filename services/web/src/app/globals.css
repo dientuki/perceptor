@@ -587,14 +587,14 @@ span.flatpickr-weekday,
   @apply text-gray-400 dark:text-white/30;
 }
 .event-fc-color {
-  @apply rounded-lg border border-gray-300 px-1 py-0.5 text-gray-700 whitespace-normal;
+  @apply rounded-lg border border-gray-300 px-1 py-0.5 text-gray-700 whitespace-normal dark:border-gray-700 dark:text-white/90;
 }
 .event-fc-color {
   min-width: 0;
   max-width: 100%;
 }
 .event-fc-color .fc-event-title {
-  @apply min-w-0 p-0 text-base font-normal text-gray-700 whitespace-normal;
+  @apply min-w-0 p-0 text-base font-normal text-gray-700 whitespace-normal dark:text-white/90;
   overflow-wrap: normal;
   word-break: normal;
   overflow: hidden;
@@ -609,7 +609,7 @@ span.flatpickr-weekday,
   white-space: nowrap;
 }
 .event-fc-color .fc-event-count {
-  @apply text-theme-sm text-gray-500;
+  @apply text-theme-sm text-gray-500 dark:text-gray-400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -645,16 +645,16 @@ span.flatpickr-weekday,
   @apply !ml-3;
 }
 .event-fc-color.fc-bg-success {
-  @apply border-success-500 bg-success-50;
+  @apply border-success-500 bg-success-50 dark:bg-success-500/15;
 }
 .event-fc-color.fc-bg-danger {
-  @apply border-error-500 bg-error-50;
+  @apply border-error-500 bg-error-50 dark:bg-error-500/15;
 }
 .event-fc-color.fc-bg-primary {
-  @apply border-brand-500 bg-brand-50;
+  @apply border-brand-500 bg-brand-50 dark:bg-brand-500/15;
 }
 .event-fc-color.fc-bg-warning {
-  @apply border-orange-50 bg-orange-50;
+  @apply border-orange-50 bg-orange-50 dark:bg-orange-500/15;
 }
 .event-fc-color.fc-bg-success .fc-daygrid-event-dot {
   @apply bg-success-500;
