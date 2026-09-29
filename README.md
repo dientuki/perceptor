@@ -28,13 +28,17 @@ Perceptor is the whole path as a single product:
 
 ## Status
 
-Perceptor is an MVP. The pipeline runs end to end for both films and series: search, register, find
-a release, download, scan, transcode, file, notify and browse. It has no production deployment and
-no users besides its author. The published images are release candidates (`v0.1.0-rc1` through
-`v0.2.0-rc4`); there is no stable release yet.
+**Perceptor is in closed alpha: the feature set is frozen.** The pipeline runs end to end for both
+films and series — search, register, find a release, download, scan, transcode, file, notify and
+browse — and from here the work is stabilising what exists, not adding to it. New feature requests
+are not being taken; bug reports are. It has no production deployment and no users besides its
+author.
 
-Seventy-seven feature specs (`001` through `077`) live in `docs/spec/features/`. The root `CLAUDE.md`
-has a stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
+The published images are release candidates (`v0.1.0-rc1` through `v0.4.0-rc2`); there is no stable
+release yet, so `latest` resolves to the newest release candidate rather than to a final version.
+
+Eighty feature specs (`001` through `080`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
+stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
 
@@ -74,6 +78,11 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
 - 🗝️ **No TMDB key yet? The home page walks you through getting one.** A fresh install shows a
   short, privacy-first tutorial instead of an empty screen, and a key TMDB rejects brings the same
   guide back with a notice.
+- 🚦 **A first-step page for a fresh install.** `/first-step`, admin only, puts both setup jobs in
+  one place: getting a TMDB key, and getting Prowlarr usable — sign in, add an indexer, and add a
+  second one tagged `flaresolverr` for a Cloudflare-fronted tracker. It reports how many indexers
+  are configured and whether Prowlarr answers at all, without ever treating "not reachable yet" as
+  an error.
 
 ### Acquire
 - 🌐 **Indexer search through Prowlarr**, for a film, one specific episode or a whole season, with a
@@ -150,6 +159,9 @@ has a stage-by-stage table, and [Known limitations](#known-limitations) lists th
 - 🪟 **A title page laid out by intent.** Poster, then what you can add to it and what it's about,
   then how it's managed — refresh, remove, how it's classified and which languages apply. The
   language form opens in a modal when you want it instead of taking up the page when you don't.
+- 📱 **It reads on a phone.** Every screen was gone over at 375px in both themes: no page-level
+  horizontal scrolling, no text below 14px, no form field small enough to make iOS Safari zoom, and
+  touch targets sized to be hit with a thumb.
 - 🗓️ **Catalog data stays current on its own.** Opt-in sweeps re-sync a series' whole catalog
   (monthly while it continues, every six months once ended, so a revived series' new season
   appears) and re-read films not yet complete, tracking their theatrical, digital and physical

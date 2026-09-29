@@ -1,8 +1,11 @@
 # Publishes the five own images to GHCR (dientuki/perceptor namespace) on every vX.Y.Z tag —
 # REQ-1/REQ-2/NFR-1 — and on every vX.Y.Z-<prerelease> tag (a release candidate, cut from
-# `stage`). A prerelease publishes under its exact tag ONLY: `latest` is what an installation
-# with no PERCEPTOR_TAG resolves to (docker-compose.yaml's `${PERCEPTOR_TAG:-latest}`), so
-# moving it to an RC would hand every such installation an untested build.
+# `stage`). `latest` is what an installation with no PERCEPTOR_TAG resolves to
+# (docker-compose.yaml's `${PERCEPTOR_TAG:-latest}`). While the project is in closed alpha there
+# is no final release for it to point at, so the newest release candidate is deliberately the
+# best thing a default installation can run and every tag, RC or final, moves `latest`. Revisit
+# this the moment a final vX.Y.Z ships: from then on an RC must publish under its exact tag only,
+# or `latest` hands every default installation an untested build.
 # web/api/worker build from their `prod` stage; torrent/indexer are
 # single-stage Dockerfiles (linuxserver/qbittorrent, linuxserver/prowlarr bases) with no target
 # to name. All five build for linux/amd64 only. One workflow run publishes all five or none —
@@ -52,17 +55,14 @@ jobs:
       - name: Resolve image tags
         id: tags
         # SemVer: anything after the first hyphen is a prerelease identifier, so `v0.8.0-rc.1`
-        # is an RC and `v0.8.0` is final. An RC gets its exact tag and nothing else; only a
-        # final release also moves `latest`.
+        # is an RC and `v0.8.0` is final. During the closed alpha both also move `latest` — see
+        # the note at the top of this file for when that has to stop.
         run: |
           image="${REGISTRY}/${NAMESPACE}/perceptor-${{ matrix.service }}"
-          tags="${image}:${GITHUB_REF_NAME}"
+          tags="${image}:${GITHUB_REF_NAME}"$'\n'"${image}:latest"
           case "${GITHUB_REF_NAME}" in
             *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
-            *)
-              tags="${tags}"$'\n'"${image}:latest"
-              echo "prerelease=false" >> "$GITHUB_OUTPUT"
-              ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
           esac
           {
             echo "tags<<TAGS_EOF"
