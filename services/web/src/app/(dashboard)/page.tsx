@@ -4,8 +4,8 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
 import { getMediaCapabilities, getPopularMedia } from "@/actions/media";
 import { PopularCarousel } from "@/components/billboard/PopularCarousel";
-import TmdbKeyOnboarding from "@/components/billboard/TmdbKeyOnboarding";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+import TmdbKeyOnboarding from "@/components/onboarding/TmdbKeyOnboarding";
 import type { MediaSearchResult } from "@/types/search";
 
 export async function generateMetadata(): Promise<Metadata> {

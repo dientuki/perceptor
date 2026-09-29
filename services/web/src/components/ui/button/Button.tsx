@@ -30,10 +30,12 @@ const Button: React.FC<ButtonProps> = ({
   ariaLabel,
   ariaPressed,
 }) => {
-  // Size Classes
+  // Size Classes — the max-md: pair guarantees a 44x44 CSS-pixel hit area below the
+  // md breakpoint (768px, --breakpoint-md in globals.css) without changing the size
+  // at md and above, where the existing padding already clears the floor.
   const sizeClasses = {
-    sm: "px-4 py-3",
-    md: "px-5 py-3.5",
+    sm: "px-4 py-3 max-md:min-h-11 max-md:min-w-11",
+    md: "px-5 py-3.5 max-md:min-h-11 max-md:min-w-11",
   };
 
   // Variant Classes
@@ -48,7 +50,7 @@ const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
-      className={`inline-flex items-center justify-center font-medium gap-2 rounded-lg transition ${className} ${
+      className={`inline-flex items-center justify-center font-medium text-base gap-2 rounded-lg transition ${className} ${
         sizeClasses[size]
       } ${variantClasses[variant]} ${
         disabled ? "cursor-not-allowed opacity-50" : ""

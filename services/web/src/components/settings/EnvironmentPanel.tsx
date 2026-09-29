@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import Label from "@/components/form/Label";
 import Badge from "@/components/ui/badge/Badge";
 import type { EnvironmentInfo } from "@/types/environment";
@@ -32,7 +33,16 @@ export default function EnvironmentPanel({
   webDomain,
 }: EnvironmentPanelProps) {
   const t = useTranslations("settings.environment");
-  const { useTraefik, useHttps, domain, endpoints, expectedUploadEndpoint } = environment;
+  const { useTraefik, useHttps, domain, endpoints, expectedUploadEndpoint } =
+    environment;
+
+  // REQ-6/AC-9 of 080-installable-pwa: browser-side secure-context detection,
+  // not a server-known value — null until the client effect runs.
+  const [installable, setInstallable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setInstallable(window.isSecureContext && "serviceWorker" in navigator);
+  }, []);
 
   // REQ-6: only meaningful with routing on and a derivable expected value.
   // Comparison is exact — no trailing-slash or case normalization.
@@ -73,6 +83,17 @@ export default function EnvironmentPanel({
               {t("caDownload")}
             </a>
           )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>{t("installableLabel")}</Label>
+        <div>
+          <Badge color={installable ? "success" : "light"}>
+            {installable
+              ? t("installableAvailable")
+              : t("installableUnavailable")}
+          </Badge>
         </div>
       </div>
 

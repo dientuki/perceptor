@@ -20,7 +20,7 @@ interface RemoveTitleModalProps {
 }
 
 const ERROR_CLASS =
-  "text-sm text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
+  "text-base text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
 
 export default function RemoveTitleModal({
   isOpen,

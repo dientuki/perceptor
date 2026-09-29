@@ -67,7 +67,7 @@ export function MediaCarousel({ heading, children }: MediaCarouselProps) {
             onClick={() => scrollByScreen(-1)}
             disabled={atStart}
             aria-label="previous"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-theme-xs transition disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-theme-xs transition max-md:min-h-11 max-md:min-w-11 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -76,7 +76,7 @@ export function MediaCarousel({ heading, children }: MediaCarouselProps) {
             onClick={() => scrollByScreen(1)}
             disabled={atEnd}
             aria-label="next"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-theme-xs transition disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-theme-xs transition max-md:min-h-11 max-md:min-w-11 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white"
           >
             <ChevronRight className="h-5 w-5" />
           </button>

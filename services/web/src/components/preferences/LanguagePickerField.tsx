@@ -107,7 +107,7 @@ export default function LanguagePickerField({
         {groups.map((group) => (
           <div key={group.iso2} className="mb-1 last:mb-0">
             {group.rows.length > 1 && (
-              <div className="px-2 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <div className="px-2 pt-2 pb-1 text-base font-semibold uppercase tracking-wide text-gray-400">
                 {group.baseName}
               </div>
             )}
@@ -125,7 +125,7 @@ export default function LanguagePickerField({
                     aria-pressed={isSelected}
                     onClick={() => toggle(row.tag)}
                     disabled={disabled}
-                    className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                    className={`flex w-full min-h-11 items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors md:min-h-0 ${
                       isSelected
                         ? "bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"
                         : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5"

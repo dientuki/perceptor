@@ -22,6 +22,11 @@ export type ReleaseRanking = {
   sourcePromoted: boolean;
 };
 
+export type IndexerStatus = {
+  configuredIndexers: number;
+  reachable: boolean;
+};
+
 export type SearchTarget =
   | { movieId: number }
   | { seasonId: number }

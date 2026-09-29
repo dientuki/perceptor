@@ -40,7 +40,7 @@ export default function DownloadErrorLine({ error }: DownloadErrorLineProps) {
     : null;
 
   return (
-    <div className="mt-1 text-xs text-error-500">
+    <div className="mt-1 text-base text-error-500">
       {stageLabel && <span className="font-medium">{stageLabel}: </span>}
       {message}
     </div>

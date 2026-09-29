@@ -51,7 +51,7 @@ export default function StatusBadge({ status }: { status: string }) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold uppercase tracking-wider ${statusBadgeClass(
+      className={`inline-flex items-center rounded-full px-2 py-1 text-theme-sm font-bold uppercase tracking-wider ${statusBadgeClass(
         status,
       )}`}
     >

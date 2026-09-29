@@ -1,17 +1,19 @@
 "use client";
 
+import type React from "react";
+import type { CurrentUser } from "@/actions/auth";
 import { useSidebar } from "@/context/SidebarContext";
 import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
 import Backdrop from "@/layout/Backdrop";
-import React from "react";
-import type { CurrentUser } from "@/actions/auth";
+import type { IndexerStatus } from "@/types/indexer";
 import type { MediaCapabilities } from "@/types/media";
 
 interface AdminShellProps {
   user: CurrentUser;
   capabilities: MediaCapabilities;
   activeDownloadCount: number;
+  indexerStatus: IndexerStatus | null;
   children: React.ReactNode;
 }
 
@@ -19,6 +21,7 @@ export default function AdminShell({
   user,
   capabilities,
   activeDownloadCount,
+  indexerStatus,
   children,
 }: AdminShellProps) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
@@ -37,6 +40,7 @@ export default function AdminShell({
         isAdmin={user.isAdmin}
         capabilities={capabilities}
         activeDownloadCount={activeDownloadCount}
+        indexerStatus={indexerStatus}
       />
       <Backdrop />
       {/* Main Content Area */}

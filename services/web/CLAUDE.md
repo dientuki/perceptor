@@ -274,6 +274,57 @@ without affecting the other carousel.
 this service's Tailwind 4 `@theme` only defines `--color-brand-*`. Do not reintroduce a `primary`
 token; reuse the shared component.
 
+## Onboarding and `/first-step` (`071-tmdb-key-onboarding`, `078-first-step-tutorial`)
+
+`TmdbKeyOnboarding.tsx` lives in `src/components/onboarding/`, not `src/components/billboard/`
+where `071` first placed it — `078` moved it when a second consumer appeared, and its translation
+namespace moved with it: `billboard.tmdbOnboarding` is gone from both `messages/{en,es}.json`,
+replaced by `onboarding.tmdb`. `(dashboard)/page.tsx` renders it in place of the billboard carousels
+when `getMediaCapabilities()`'s `catalogKeyConfigured` is `false`, or the same panel preceded by a
+rejected-key notice when `popularMedia` fails with `error.media.catalog_unauthorized` — unchanged
+behaviour, only the import path and `t()` namespace changed. The component also takes an
+`alreadyConfigured` prop (default `false`, so `/`'s two call sites need no change): when true it
+renders a small marker near the title instead of hiding any of the reason or the five steps, since
+`/first-step` always shows the whole panel even with a working key.
+
+`/first-step` (`src/app/(dashboard)/first-step/page.tsx`) is admin-only — `notFound()` from a
+sequential `getCurrentUser()` check *before* the page's `Promise.all`, the same ordering
+`users/page.tsx`/`settings/page.tsx` use to keep a non-admin's request a clean 404 rather than a
+race into a 500 from a guarded resolver. It repeats the TMDB onboarding block (so a fresh install's
+whole setup lives in one place) and adds `IndexerSetupGuide.tsx` (same `onboarding/` directory):
+sign in to Prowlarr, add an indexer, add a second one tagged `flaresolverr` for a Cloudflare-fronted
+tracker, then confirm from a title's detail page — fed by the new `getIndexerStatus()` action
+(`src/actions/indexer.ts`) and the indexer's URL/port read off `getEnvironmentInfo()`'s `endpoints`
+entry with `id === "indexer"` (`url` linked when non-null, otherwise the bare port with no
+constructed hostname). `IndexerSetupGuide` branches on `reachable` before `configuredIndexers`, so
+an unreachable Prowlarr never reads as "zero indexers configured". A short `about` paragraph opens
+the block explaining what an indexer is and why one is needed, before the reachable/zero/count
+notice. The four step screenshots live under `public/images/first-step/` (`indexer-login-2.png`,
+`indexer-filter-2.png`, `indexer-add-2.png`, `indexer-flaresolverr-2.png` — the `-2` suffix is a
+cache-buster, bumped on every replacement since Next 16 refuses a query string on a local
+`next/image` source unless allow-listed in `images.localPatterns`, and a same-named overwrite left
+every browser serving the old file from its own disk cache), captured live against the dev stack's
+own Prowlarr at `localhost:9696`: signing in, the "Add Indexer" list filtered to Public trackers for
+Movies (step 3, before picking one), the settings dialog for a chosen indexer with Test/Save, and
+the same dialog with the `flaresolverr` tag added in Tags. NFR-6 still applies if Prowlarr's UI
+changes and they go stale. The sidebar entry sits inside `AppSidebar.tsx`'s existing `isAdmin`
+branch, alongside Settings/Users — and, like the Settings help link below, only while setup looks
+incomplete (same `!catalogKeyConfigured || configuredIndexers === 0` condition): the page itself
+stays reachable by direct URL either way, only the nav entry hides. The admin-only `indexerStatus`
+query backing it is fetched once, in `(dashboard)/layout.tsx` — every request through this layout
+hits it, admin or not, so the call is gated on `user.isAdmin` (`Promise.resolve(null)` otherwise)
+to avoid handing a non-admin's page load an `AdminGuard` refusal it has no reason to see; `null`
+threads down through `AdminShell.tsx` to `AppSidebar.tsx` as a plain prop and reads as "indexer
+count unknown", which for a non-admin is moot (`isAdmin` already hides the whole nav branch).
+
+`/settings`'s Torrent Manager tab also carries a `CircleHelp` icon next to the "Indexer API key"
+field (`TorrentManagerPanel.tsx`), a plain `<a href="/first-step" target="_blank"
+rel="noopener noreferrer">` — it opens `/first-step` in a new tab rather than embedding the guide
+in a popup. Unlike the sidebar entry above, **this one is unconditional**: an admin can always
+reach the tutorial from here, even once TMDB and every indexer are already configured — a
+deliberate difference from the sidebar (`settings/page.tsx` fetches no `indexerStatus` and
+`TorrentManagerPanel` takes no visibility props for this).
+
 ## Media type availability (`045-media-type-availability`)
 
 The installation-wide `movies_enabled`/`shows_enabled` settings are readable by every signed-in user
@@ -730,13 +781,30 @@ parity check with an exit code.
   `Number(...)` at the call site, as `SearchTorrent.tsx` and `importMagnetModal.tsx` do.
 - **Errors render inline**, never through `alert()` or `window.confirm()`. The import modals are the
   reference.
-- **`text-sm` and `text-theme-sm` are banned.** Since `025-header-redesign`, `body` declares an
-  explicit `text-base` (16px) as the site's base size, and both classes were swept out of
-  `services/web/src`. The `--text-theme-sm` / `--text-theme-sm--line-height` tokens stay defined in
-  `globals.css`'s `@theme` block — `text-theme-xs` and `text-theme-xl` still resolve against that
-  scale — only their *use* is gone. Do not reintroduce either class, and do not compensate for a
-  page that now reads larger with a one-off `text-[14px]`: that drift is accepted, and each screen
-  gets re-tuned as the broader visual pass reaches it.
+- **The text scale is closed — only two sizes exist below the display sizes.** Since
+  `079-mobile-legibility-pass`, `globals.css`'s `@theme` declares `--text-*: initial` (the same
+  namespace-closing idiom as `--font-*: initial`/`--breakpoint-*: initial` four lines above it),
+  so a class naming a size outside the declared scale emits **no CSS rule at all** — the element
+  silently inherits its ancestor's size, which is `body`'s explicit `text-base` (16px, REQ-1) unless
+  something closer overrides it. The scale: `text-base` (16px, the reading floor — REQ-1) and
+  `text-theme-sm` (14px, the one accessory step for helper text, badges, table `<th>` labels and
+  timestamps — REQ-2), plus the pre-existing display sizes (`text-lg`, `text-theme-xl`,
+  `text-title-*`). **`text-xs`, `text-sm` and `text-theme-xs` no longer exist as utilities** —
+  do not reintroduce any of them; a stray one compiles silently and just renders at the inherited
+  floor rather than failing, which is the point (forgetting yields compliance, not smallness).
+  **The one loud exception is `@apply`**: Tailwind 4 errors at build time on an unknown utility
+  named inside `@apply` (unlike a class attribute), so a component using `@apply text-xs` fails
+  `bin/npm web run build` outright — treat that build failure as the scale working as designed, fix
+  the `@apply` site onto `text-theme-sm`, and re-run.
+- **Every interactive control needs a 44×44 hit area below `md`** (`--breakpoint-md`, 768px),
+  via `max-md:min-h-11 max-md:min-w-11` (or `max-md:min-h-11 max-md:py-2` for a label-driven
+  row) — the icon or label inside stays its current size, only the padding/min-size grows
+  (`079-mobile-legibility-pass`, REQ-6). This applies to `Button.tsx` and every form primitive
+  under `components/form/`, but also caught two vendored/shared elements that are easy to miss
+  because no single task's file list names them: the shared modal close button
+  (`components/ui/modal/index.tsx`) and `MediaCarousel.tsx`'s prev/next arrows. When adding a new
+  icon button or a new carousel/toolbar control, check it against this rule explicitly — it will
+  not fail loudly if you don't.
 - **`next build` must run under `NODE_ENV=production`** — `package.json`'s `build` script sets it
   explicitly, because the dev container passes `NODE_ENV=development` in. Building under
   `development` resolves React's development export conditions and produces a mismatched React
@@ -765,6 +833,13 @@ confirms `en.json`/`es.json` match exactly (422 keys — the new `contentKind` n
 across the pre-existing template, with or without any given change. Judge a new file by running Biome
 on that file, never on the repo.
 
+As of 2026-09-28 (`079-mobile-legibility-pass`): `bin/cli web npx --no tsc --noEmit` reports **0
+errors**, `bin/npm web run build` exits 0, and `bin/cli web node scripts/check-messages.mjs`
+confirms `en.json`/`es.json` match exactly (594 keys — this feature added none; the 594 reflects
+`078-first-step-tutorial`, landed just before it). `grep -rEn "text-xs|text-theme-xs"
+services/web/src` returns nothing tree-wide. This feature touched no message catalog, no schema, no
+`api`/`worker` file — presentation-only, per its own contract delta ("None").
+
 ## Settings → Compression carries the subtitle format choice (`070-subtitle-format-selection`)
 
 `CompressionPanel.tsx` renders a "no subtitles" checkbox and two groups (text: SRT, ASS/SSA, WebVTT,
@@ -774,3 +849,33 @@ restores what the administrator had. The controls carry no `name`; five hidden i
 values. `actions/settings.ts` sends the two list keys through `LIST_KEYS`, always, the empty string
 included — `EDITABLE_KEYS`' blank filter would silently drop an empty list. `web` never selects
 `EncodeJobDetails.allowedSubtitleFormats`.
+
+## Installable PWA (`080-installable-pwa`)
+
+`web` is installable — `src/app/manifest.json` carries `id`/`start_url`/`scope` all `/`, both
+`any` and `maskable` icons, and `layout.tsx`'s `metadata`/`viewport` exports cover
+`applicationName`/`appleWebApp`/the light-dark `themeColor` pair — but the feature is deliberately
+LAN-scoped: `src/components/pwa/ServiceWorkerRegistration.tsx` only registers
+`public/sw.js` inside `window.isSecureContext`, so plain HTTP (the default without
+`066-https-local-ca`'s `USE_HTTPS`) never shows a worker or a console error.
+
+**The worker caches exactly one document, `/offline`, and nothing else, ever.** No build asset, no
+stylesheet, no script, no API response is precached or runtime-cached — a precache of build output
+is forbidden here because it is exactly how an updated image would keep serving yesterday's
+interface after a deploy, which is the one failure mode this feature's spec explicitly ruled out
+(REQ-3). `sw.js`'s `fetch` handler only calls `respondWith` for a navigation; everything else
+passes through untouched. Do not add a second cache or a broader `fetch` branch as a "nice to have"
+— that is scope creep this spec froze against.
+
+**Staleness bound (NFR-4)**: the cached `/offline` document is refreshed at `activate` (every
+worker update) and once more per worker lifetime, on the first successful navigation afterward.
+Between those two points a locale switch followed immediately by going offline can show the
+previous language's offline copy once — bounded and accepted, not a bug to fix.
+
+`/sw.js`, `/manifest.json` and `/offline` are all exempted in `src/proxy.ts`'s `PUBLIC_ROUTES` —
+a manifest or worker fetch carries no session cookie, so without the exemption every one of them
+307s to `/login` with no visible error anywhere (this was the feature's actual first task, not an
+afterthought). `services/settings/EnvironmentPanel.tsx`'s installability row is pure client-side
+`isSecureContext && "serviceWorker" in navigator` detection — it has no GraphQL field of its own
+and reuses the tab's existing `EnvironmentInfo.useHttps` fetch only for phrasing the "why not"
+reason.

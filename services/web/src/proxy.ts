@@ -6,7 +6,15 @@ import { CONFIG } from "@/lib/config";
 const AUTH_ROUTES = ["/login"];
 
 // Rutas explícitamente públicas (ejemplo: landing, términos, etc.)
-const PUBLIC_ROUTES = ["/perceptor", "/terms", "/privacy", "/ca.crt"];
+const PUBLIC_ROUTES = [
+  "/perceptor",
+  "/terms",
+  "/privacy",
+  "/ca.crt",
+  "/sw.js",
+  "/manifest.json",
+  "/offline",
+];
 
 export function proxy(request: NextRequest) {
   const token = request.cookies.get(CONFIG.authCookie)?.value;

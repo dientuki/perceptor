@@ -60,12 +60,12 @@ export default function RefreshTitleButton({
         {t("button")}
       </Button>
       {error && (
-        <p role="alert" className="w-full text-sm text-error-500">
+        <p role="alert" className="w-full text-base text-error-500">
           {error}
         </p>
       )}
       {result && (
-        <p className="w-full text-sm text-gray-500 dark:text-gray-400">
+        <p className="w-full text-base text-gray-500 dark:text-gray-400">
           {failures.length > 0 && (
             <span className="text-warning-500">{failures.join(". ")}. </span>
           )}

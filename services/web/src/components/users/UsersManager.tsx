@@ -14,10 +14,10 @@ const ERROR_CLASS =
   "text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
 
 const ICON_BUTTON_CLASS =
-  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset ring-gray-300 bg-white text-gray-500 transition hover:bg-gray-50 hover:text-brand-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-white/[0.03] dark:hover:text-brand-400";
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 max-md:min-h-11 text-base font-medium ring-1 ring-inset ring-gray-300 bg-white text-gray-500 transition hover:bg-gray-50 hover:text-brand-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-white/[0.03] dark:hover:text-brand-400";
 
 const ICON_BUTTON_DANGER_CLASS =
-  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset ring-error-300 bg-white text-error-500 transition hover:bg-error-50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:ring-error-500/30 dark:hover:bg-error-500/10";
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 max-md:min-h-11 text-base font-medium ring-1 ring-inset ring-error-300 bg-white text-error-500 transition hover:bg-error-50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:ring-error-500/30 dark:hover:bg-error-500/10";
 
 interface UsersManagerProps {
   users: AdminUser[];
@@ -80,19 +80,19 @@ function UsersTable({
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-800">
-              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
+              <th className="py-3 pr-4 text-theme-sm font-medium text-gray-500 dark:text-gray-400">
                 {t("nameHeader")}
               </th>
-              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
+              <th className="py-3 pr-4 text-theme-sm font-medium text-gray-500 dark:text-gray-400">
                 {t("usernameHeader")}
               </th>
-              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
+              <th className="py-3 pr-4 text-theme-sm font-medium text-gray-500 dark:text-gray-400">
                 {t("roleHeader")}
               </th>
-              <th className="py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
+              <th className="py-3 pr-4 text-theme-sm font-medium text-gray-500 dark:text-gray-400">
                 {t("statusHeader")}
               </th>
-              <th className="w-px py-3 pr-4 font-medium text-gray-500 dark:text-gray-400">
+              <th className="w-px py-3 pr-4 text-theme-sm font-medium text-gray-500 dark:text-gray-400">
                 {" "}
               </th>
             </tr>
@@ -154,22 +154,22 @@ function UserRow({ user, isSelf, onEdit, onDelete }: UserRowProps) {
         </td>
         <td className="py-3 pr-4">
           {user.isAdmin ? (
-            <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-500 dark:bg-brand-500/10">
+            <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-theme-sm font-medium text-brand-500 dark:bg-brand-500/10">
               {t("roleAdmin")}
             </span>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-success-50 px-2.5 py-0.5 text-xs font-medium text-success-500 dark:bg-success-500/10">
+            <span className="inline-flex items-center rounded-full bg-success-50 px-2.5 py-0.5 text-theme-sm font-medium text-success-500 dark:bg-success-500/10">
               {t("roleUser")}
             </span>
           )}
         </td>
         <td className="py-3 pr-4">
           {user.isEnabled ? (
-            <span className="inline-flex items-center rounded-full bg-success-50 px-2.5 py-0.5 text-xs font-medium text-success-500 dark:bg-success-500/10">
+            <span className="inline-flex items-center rounded-full bg-success-50 px-2.5 py-0.5 text-theme-sm font-medium text-success-500 dark:bg-success-500/10">
               {t("statusEnabled")}
             </span>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-500 dark:bg-brand-500/10">
+            <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-theme-sm font-medium text-brand-500 dark:bg-brand-500/10">
               {t("statusDisabled")}
             </span>
           )}

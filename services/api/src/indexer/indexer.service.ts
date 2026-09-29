@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ProwlarrClient } from '@/clients/indexer/client';
 import { TorrentResult } from '@/clients/indexer/types';
 import { RedisService } from '@/redis/redis.service';
 import { RankedTorrentResult, RankingContext, rankTorrentResults } from './ranking';
+import { IndexerStatus } from './entities/indexer-status.entity';
 
 const INDEXER_SEARCH_TTL_SECONDS = 60 * 10;
 
@@ -16,10 +17,26 @@ function cacheKeyFor(query: string): string {
 
 @Injectable()
 export class IndexerService {
+  private readonly logger = new Logger(IndexerService.name);
+
   constructor(
     private readonly prowlarr: ProwlarrClient,
     private readonly redis: RedisService,
   ) {}
+
+  // Prowlarr being unreachable is an outcome for this query, not an error (078-first-step-tutorial
+  // NFR-2): the page whose entire job is explaining how to fix a broken indexer must still render
+  // when the indexer is broken. The caught error is logged so a genuine defect here (a typo in the
+  // URL, a parsing bug) stays findable rather than being silently reported as "indexer down".
+  async status(): Promise<IndexerStatus> {
+    try {
+      const count = await this.prowlarr.countIndexers();
+      return { configuredIndexers: count, reachable: true };
+    } catch (err) {
+      this.logger.error('Failed to reach the indexer for indexerStatus', err as Error);
+      return { configuredIndexers: 0, reachable: false };
+    }
+  }
 
   // Buscar releases es indistinto para movie o show: la consulta es un string y
   // el resultado tiene la misma forma. De ahí que sea un único método.

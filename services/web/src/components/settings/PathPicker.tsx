@@ -73,11 +73,13 @@ export default function PathPicker({
       <input type="hidden" name={settingKey} value={submittedValue} />
 
       {!hostPathIsAbsolute && (
-        <p className="mt-1.5 text-xs text-gray-500">{t("relativeHint")}</p>
+        <p className="mt-1.5 text-theme-sm text-gray-500">
+          {t("relativeHint")}
+        </p>
       )}
 
       {!root.available && (
-        <p className="mt-1.5 text-xs text-error-500">{t("notMountedHint")}</p>
+        <p className="mt-1.5 text-base text-error-500">{t("notMountedHint")}</p>
       )}
     </div>
   );

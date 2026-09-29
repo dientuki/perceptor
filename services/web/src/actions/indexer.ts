@@ -1,10 +1,37 @@
 'use server'
 
-import { redirectIfUnauthenticated } from '@/lib/auth-session';
+import {
+  redirectIfUnauthenticated,
+  redirectToClearSession,
+} from '@/lib/auth-session';
 import { fetchGraphQL } from '@/lib/graphql-client';
 import { toActionError, translateGraphQLError } from '@/lib/graphql-error';
-import type { SearchTarget, TorrentResult } from '@/types/indexer';
+import type { IndexerStatus, SearchTarget, TorrentResult } from '@/types/indexer';
 import type { AcquisitionResult } from '@/types/media';
+
+const INDEXER_STATUS_QUERY = `
+  query IndexerStatus {
+    indexerStatus {
+      configuredIndexers
+      reachable
+    }
+  }
+`;
+
+// Called from a Server Component's render pass (the first-step page) —
+// cookie mutation is illegal there, so hand off to the Route Handler instead.
+export async function getIndexerStatus(): Promise<IndexerStatus> {
+  const { data, errors } = await fetchGraphQL<{ indexerStatus: IndexerStatus }>(
+    INDEXER_STATUS_QUERY,
+  );
+
+  if (errors && errors.length > 0) {
+    redirectToClearSession(errors);
+    throw new Error(await translateGraphQLError(errors[0]));
+  }
+
+  return data?.indexerStatus ?? { configuredIndexers: 0, reachable: false };
+}
 
 const SEARCH_TORRENTS_QUERY = `
   query SearchTorrents($query: String!, $movieId: Int, $seasonId: Int, $episodeId: Int) {

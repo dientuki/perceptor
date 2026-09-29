@@ -247,6 +247,14 @@ type TorrentResult {
   candidateRank: Int
 }
 
+type IndexerStatus {
+  """Indexers currently configured in Prowlarr. 0 when reachable is false."""
+  configuredIndexers: Int!
+
+  """Whether Prowlarr answered this request at all."""
+  reachable: Boolean!
+}
+
 type Episode {
   id: ID!
   episodeNumber: Int!
@@ -534,6 +542,11 @@ type Query {
 
   """Busca releases en el indexer (Prowlarr)"""
   searchTorrents(query: String!, movieId: Int, seasonId: Int, episodeId: Int): [TorrentResult!]!
+
+  """
+  How many indexers the configured Prowlarr holds, and whether Prowlarr answered at all.
+  """
+  indexerStatus: IndexerStatus!
   shows: [Show!]!
   show(id: Int!): Show
   preferences: UserPreferences!

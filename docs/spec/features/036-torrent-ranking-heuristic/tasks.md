@@ -1,7 +1,7 @@
 ---
 title: Torrent Ranking Heuristic — Tasks
 last_updated: 2026-09-27
-status: In Progress
+status: Done
 ---
 
 # TASKS: Torrent Ranking Heuristic (`tasks.md`)
@@ -448,7 +448,7 @@ the one expression that arms it, T022 is the live pass, T023 closes the amendmen
       as before this group** (REQ-4c adds no copy), and
       `git diff --stat services/web` names exactly two modified files.
 
-- [ ] **T022** `[web]` Run the `spec_version` 0.7.0 live pass, against a film still in cinemas whose
+- [x] **T022** `[web]` Run the `spec_version` 0.7.0 live pass, against a film still in cinemas whose
       result list actually contains captures. **Narrowed by the 2026-09-27 normalization:** AC-4d,
       AC-4f and AC-4g are closed against the module itself and are ticked, so what this pass still
       owes is **AC-4e** — an all-captures list producing REQ-17's empty-candidate message and not the
@@ -462,8 +462,47 @@ the one expression that arms it, T022 is the live pass, T023 closes the amendmen
       *Done when:* the report names the exact release titles vetoed and the exact titles that
       survived, plus the before/after row counts. A criterion the live indexer could not produce is
       recorded in § Blocked with what it would need — **not** ticked.
+      *Done, 2026-09-28, against `Spider-Man: Brand New Day` (2026, still in cinemas) on a live
+      dev stack (real Prowlarr/torrent trackers, not a fixture). "All results" returned **19** rows;
+      "Best candidates" returned **5**.
+      **Vetoed (11, cinema-capture, AC-4d confirmed across real-world spelling variance)**:
+      `Spider-Man.Brand.New.Day.2026.1080p.TELESYNC.x264-DKS`,
+      `Spider-Man: Brand New Day 2026 1080p TELESYNC HEVC [Ukr Dub]`,
+      `Spider-Man: Brand New Day 2026 720p TELESYNC HEVC [Ukr Dub]`,
+      `Spider-Man Brand New Day 2026 V3 1080p TELESYNC x264-DKS` (both near-duplicate hashes),
+      `Spider-Man Brand New Day 2026 1080p HDTS DD2 0 H 264-LMNTRY`,
+      `Spider-Man Brand New Day 2026 1080p HDTS DUAL H264-LMNTRY`,
+      `Spider-Man: Brand New Day 2026 TELESYNC HEVC [Ukr Dub]` (3.38 GB),
+      `Spider-Man Brand New Day 2026 V3 1080P TELESYNC. X265`,
+      `Spider-Man Brand New Day 2026 CAM H264-OnlyFlix`,
+      `Spider-Man Brand New Day (2026) 1080P HQ HDTS x265 AAC2.0 MULTI ESub - MAZE`.
+      **Vetoed (2, unrelated — REQ-4b upscale, not this group's concern)**:
+      `Spider-Man Brand New Day.2160p.WEB.h264-GRACE` (1.17 GB, too small for a real 2160p) and
+      `Spider-Man Brand New Day 2160pHD (2026) MeGusta EZTV` (1.07 GB) — confirms these vetoes don't
+      interfere with each other's evidence.
+      **Vetoed (1, dead swarm)**: `Amazing_Spider-Man_v2_546_-_Brand_New_Day.cbr` (0/0, also not a
+      video file — belongs to a different comic-numbering franchise entirely, an indexer false
+      match REQ-4c has no opinion on).
+      **Survived (5, AC-4f — the false-positive check holds on real names)**:
+      `Spider-Man: Brand New Day 2026.1080p.HQ Pre.Multi.AAC 2.0.x264` (no TS/CAM/HDTS token despite
+      "HQ Pre"), `Marvels Spider-Man S02E20 Brand New Day 1080p DSNP WEB-DL DDP5 1 H 264-LAZY`,
+      `Spider-Man Brand New Day 1080p HD WEB ENG EZTV`,
+      `Spider-Man Brand New Day 2026 1080p WEB-DL DDP5 1 x265 NTb`,
+      `Spider-Man Brand New Day.1080p.WEB.h264-GRACE`.
+      The toggle worked cleanly both directions, no console errors observed via
+      `read_console_messages`. **AC-4e could not be produced**: tried this title (mixed set, not
+      all-captures) and `Toy Story 5` (130 results, a long-established franchise with years of
+      WEB-DL/BluRay already indexed — nowhere near an all-captures set either). Recorded in
+      § Blocked, not ticked, same reasoning as T006's AV1 case below.*
 
-- [ ] **T022b** `[api]` In `services/api/src/indexer/ranking.spec.ts`, add the one case
+      **Environment note, unrelated to the ranking code**: this pass first hit "Could not reach the
+      indexer" — `perceptor-indexer-1` and `perceptor-torrent-1` had lost their `perceptor-net`
+      attachment (stale `docker network connect`, no compose-managed DNS alias). Fixed by
+      reconnecting both with `--alias` matching the compose service name and restarting `api` to
+      refresh its embedded-DNS cache. Infra housekeeping, not a `036` change — nothing under
+      `services/` touched for this.
+
+- [x] **T022b** `[api]` In `services/api/src/indexer/ranking.spec.ts`, add the one case
       **AC-4f** has no test for: a list holding `… 1080p BluRay DTS-HD MA 5.1 …`,
       `Ghosts.of.Mars.1080p.BluRay`, `Catch.Me.If.You.Can.1080p` and `Camelot.1080p.WEB-DL`, ranked
       with `allowCinemaReleases: false`, asserting all four survive. The criterion is ticked on a
@@ -472,7 +511,7 @@ the one expression that arms it, T022 is the live pass, T023 closes the amendmen
       release instead of demoting it. Touch nothing else; this is one `it()`.
       *Done when:* `bin/npm api run test -- src/indexer` is green and the report names the new test.
 
-- [ ] **T023** `[docs]` Close `0.7.0`. **Narrowed by the 2026-09-27 normalization**, which ticked
+- [x] **T023** `[docs]` Close `0.7.0`. **Narrowed by the 2026-09-27 normalization**, which ticked
       REQ-4c and AC-4d/AC-4f/AC-4g and found the veto already documented: `services/api/CLAUDE.md`'s
       `indexer/` paragraph names "cinema captures (film only)" among the vetoes, and
       `services/web/CLAUDE.md` § "Torrent ranking heuristic" correctly says `web` owns no comparator
@@ -484,6 +523,12 @@ the one expression that arms it, T022 is the live pass, T023 closes the amendmen
       once Groups 7 and 8 also close. → T022, T022b
       *Done when:* the root `CLAUDE.md` row names the conditional veto, AC-4e is ticked or blocked,
       and no "outstanding"/"unticked" marker for `0.7.0` remains in any of the four feature files.
+      *Done 2026-09-28.* Root `CLAUDE.md`'s "Find release" row now names the conditional veto (see
+      the edit beside the `073`/`candidateRank` sentence). AC-4e is recorded in § Blocked, not
+      ticked, per T022's report above. Both `api`/`web` `CLAUDE.md` confirmed unchanged, as the
+      2026-09-27 normalization found. Groups 7 and 8 both closed this session (T024–T031 all
+      ticked), so this also closes out `0.7.0`'s remaining condition — `status: Implemented`/`Done`
+      applied below.
 
 ### Group 7 — `spec_version` 0.8.0/`0.8.1`: the codec ranks depend on the resolution tier
 
@@ -559,7 +604,7 @@ amendment. No `[P]` in this group.
       container carries no `jest` — so each criterion was re-measured directly against the on-disk
       module instead, and `bin/npm api run test -- src/indexer` is still Group 8's gate.
 
-- [ ] **T026** `[docs]` Update `services/api/CLAUDE.md`'s `indexer/` paragraph: the codec rank
+- [x] **T026** `[docs]` Update `services/api/CLAUDE.md`'s `indexer/` paragraph: the codec rank
       depends on the resolution tier (HEVC first at 4K, AVC first below it, unrecognised second at
       both), and the codec skip between two disc sources now applies at
       4K only while the audio skip still applies at every tier. `services/web/CLAUDE.md` and the
@@ -594,7 +639,7 @@ release that names `UHD` — and it is the one rule here found on a live search 
 The order matters once: T027 and T030 are the module, T028 and T031 the tests, T029 the docs. No
 `[P]` — T027 and T030 edit the same file, so they are one agent's sequential work, not two.
 
-- [ ] **T027** `[api]` In `services/api/src/indexer/ranking.ts`, add the veto and the inference. Two
+- [x] **T027** `[api]` In `services/api/src/indexer/ranking.ts`, add the veto and the inference. Two
       edits, no more:
       **(a)** in `codec()`, at `resolutionTier >= UHD_RESOLUTION_TIER`, return
       `{ rank: 3, label: 'HEVC' }` where nothing is recognised — and leave the `AVC` branch returning
@@ -612,7 +657,7 @@ The order matters once: T027 and T030 are the module, T028 and T031 the tests, T
       `git diff --name-only`, and `git diff --stat services/web services/worker` is empty.
       → T024 *(done — the branch this task edits is the `uhd ? 0 : 2` one already on disk)*
 
-- [ ] **T028** `[api]` In `services/api/src/indexer/ranking.spec.ts`, cover **AC-25 … AC-28** and
+- [x] **T028** `[api]` In `services/api/src/indexer/ranking.spec.ts`, cover **AC-25 … AC-28** and
       rewrite the two criteria `0.9.0` changed:
       **AC-20** (the 2160p `WEB-DL` pair) now asserts the `x264` peer is absent rather than
       outranked; **AC-24** (the three 2160p `WEB-DL` rows) asserts the `x264` absent and the other two
@@ -629,7 +674,7 @@ The order matters once: T027 and T030 are the module, T028 and T031 the tests, T
       *Done when:* `bin/npm api run test -- src/indexer` is green, the report names the test carrying
       each of AC-20, AC-24 … AC-28, and the suite/test counts before and after are both stated.
 
-- [ ] **T030** `[api]` Same file, `services/api/src/indexer/ranking.ts`, same diff as T027 —
+- [x] **T030** `[api]` Same file, `services/api/src/indexer/ranking.ts`, same diff as T027 —
       **REQ-7b**. Give `source()` a second parameter, `resolutionTier`, and replace its first line
       `const uhd = /\buhd\b/.test(title);` with `const uhd = resolutionTier >= UHD_RESOLUTION_TIER;`.
       Pass `res.tier` at the one call site in `buildRanking`, exactly as T024 did for `codec()`. Keep
@@ -646,7 +691,7 @@ The order matters once: T027 and T030 are the module, T028 and T031 the tests, T
       *Done when:* the grep above is clean, `bin/cli api npx --no tsc --noEmit` is at 0 errors, and
       `git diff --stat services/api` still names exactly the two files of Group 8.
 
-- [ ] **T031** `[api]` In `services/api/src/indexer/ranking.spec.ts`, cover **AC-29 … AC-31**.
+- [x] **T031** `[api]` In `services/api/src/indexer/ranking.spec.ts`, cover **AC-29 … AC-31**.
       Two 2160p remuxes differing only in the `uhd` token → both `sourceRank` 8 and label
       `UHD BluRay Remux`, the larger leading (**AC-29**); a 1080p release naming `UHD BluRay` against a
       1080p `BluRay Remux` → the first is rank 5 with the chip `BluRay` and the remux leads
@@ -661,7 +706,7 @@ The order matters once: T027 and T030 are the module, T028 and T031 the tests, T
       each of AC-29 … AC-31, any pre-existing case rewritten is named with the reason, and the
       suite/test counts before and after are both stated.
 
-- [ ] **T029** `[docs]` Update `services/api/CLAUDE.md`'s `indexer/` paragraph, in the same edit as
+- [x] **T029** `[docs]` Update `services/api/CLAUDE.md`'s `indexer/` paragraph, in the same edit as
       T026 rather than as a second pass: pass 1 now has a **fourth** unconditional veto (tier-5 AVC,
       beside AV1/VP9, dead swarms and upscales) plus REQ-4c's conditional one, and at 4K the codec
       chip is an **inference** — a release naming no codec reads `HEVC`, and the criterion decides
@@ -691,6 +736,7 @@ entry is a decision waiting for a human.
 | :-- | :-- | :-- | :-- |
 | T006 (AC-6, partial) | web | Live indexer search for `Spider-Man AV1` returned 51 real releases; the boundary-anchored veto correctly rejected 49 and correctly spared 2 (genuine 2160p BluRay releases with no boundary-matched `av1` token), so the live UI never rendered `candidateResults.length === 0` — the closest live approximation was 2 survivors, not 0. The exact empty-array path **is** proven: a harness run against the compiled `torrent-ranking.ts` (`rankTorrentResults([av1-only, vp9-only])`) returns `[]` with no throw, and the `showBest && candidateResults.length === 0 && results.length > 0 ? rankEmpty : …` JSX branch was code-reviewed and is a plain boolean condition. This same live search is what surfaced and confirmed the fix for the `DS4K` boundary bug below. | A search query (or seeded fixture) that returns real releases 100% boundary-matched as `av1`/`vp9` with nothing else, to observe `rankEmpty` render live — or accept the harness + code review as sufficient, since forcing this against real trackers is not reliably repeatable. |
 | T014 (AC-18, partial) | web | Live search of `Reacher` returned 550 real releases (52 at the 2160p tier) for episode S04E08 with the parent series armed (*Audio mandatory* + *Latin American Spanish*); the requirement reached the episode's modal and `rankTorrentResults` ran over all of it with no error, but **no release among the 550 named Spanish in any spelling**, so no promotion ever fired — the mechanism is proven live, the specific promoted-episode-row case is not. The ranking function itself is caller-agnostic and already proven correct against the literal AC-12 five-remux dataset by T009/T010/T013's harness, but that dataset was built for the film case and was not re-run through the episode branch specifically. | A real (or seeded) episode release naming Spanish under an armed series, to see it climb a rank live — or accept the harness (film case) plus the live plumbing/no-crash confirmation (episode case) as sufficient, since today's live trackers hold no Spanish-tagged `Reacher` release. |
+| T022 (AC-4e) | web | Live search of `Spider-Man: Brand New Day` (2026, still in cinemas — the obvious candidate for an all-captures set) returned 19 releases, 11 of them vetoed as cinema captures, but 5 genuine WEB-DL releases (down to 915 MB) survived alongside them — never an all-captures list. `Toy Story 5` was tried next on the theory that a Disney tentpole might be more locked down; it returned 130 releases spanning the whole franchise's BluRay/WEB-DL history, further from an all-captures set, not closer. Same shape as T006's AV1 case: the veto itself is thoroughly confirmed live (11/19 correctly dropped, 5/19 correctly spared, no false positive on `HQ Pre.Multi.AAC 2.0.x264`'s letters), but the specific zero-candidates render is not. The JSX branch this needs (`showBest && candidateResults.length === 0 && results.length > 0 ? rankEmpty : …`) is the same one T006 already code-reviewed and proved with a harness — it does not distinguish which veto emptied the set, so that proof already covers this case. | A title whose every real release is a capture, to see `rankEmpty` render live for this specific veto — or accept T006's harness + code review (the same JSX branch, veto-agnostic) as sufficient, for the same reason: forcing an all-captures list against real trackers is not reliably repeatable, and two attempts this session confirm it. |
 
 **Bug found and fixed during T006, not blocked.** The same live `Spider-Man AV1` search returned two
 real releases tagged `DS4K` ("downscaled from 4K", a common scene tag for an upscaled/downscaled

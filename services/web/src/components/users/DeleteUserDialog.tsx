@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import type { AdminUser } from "@/types/users";
 
 const ERROR_CLASS =
-  "text-sm text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
+  "text-base text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
 
 interface DeleteUserDialogProps {
   isOpen: boolean;

@@ -196,8 +196,11 @@ function preferredGroup(
     : { preferred: false, label: null };
 }
 
-function source(title: string): { rank: number; label: string } {
-  const uhd = /\buhd\b/.test(title);
+function source(
+  title: string,
+  resolutionTier: number,
+): { rank: number; label: string } {
+  const uhd = resolutionTier >= UHD_RESOLUTION_TIER;
   const remux = /remux/.test(title);
   const bluray =
     /\bblu-?ray\b/.test(title) ||
@@ -248,7 +251,9 @@ function codec(
   ) {
     return { rank: uhd ? 2 : 3, label: 'AVC' };
   }
-  return { rank: uhd ? 0 : 2, label: UNKNOWN_LABEL };
+  return uhd
+    ? { rank: 3, label: 'HEVC' }
+    : { rank: 2, label: UNKNOWN_LABEL };
 }
 
 function dynamicRange(title: string): { rank: number; label: string } {
@@ -292,7 +297,7 @@ function buildRanking(
 ): ReleaseRankingData {
   const res = resolution(title);
   const group = preferredGroup(title, groups);
-  const src = source(title);
+  const src = source(title, res.tier);
   const cod = codec(title, res.tier);
   const range = dynamicRange(title);
   const aud = audio(title);
@@ -375,6 +380,10 @@ export function rankTorrentResults(
       !isDeadSwarm(entry) &&
       !isUpscaled(lowerTitle(entry)) &&
       !(!context.allowCinemaReleases && isCinemaCapture(lowerTitle(entry))) &&
+      !(
+        entry.ranking.resolutionTier >= UHD_RESOLUTION_TIER &&
+        entry.ranking.codecLabel === 'AVC'
+      ) &&
       !(
         context.minSourceRank != null &&
         entry.ranking.sourceRank < context.minSourceRank

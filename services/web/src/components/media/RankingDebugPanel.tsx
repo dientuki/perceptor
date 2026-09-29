@@ -38,7 +38,7 @@ export default function RankingDebugPanel({
   if (process.env.NODE_ENV === "production") return null;
 
   return (
-    <div className="space-y-1 rounded-lg border border-dashed border-gray-300 p-3 font-mono text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+    <div className="space-y-1 rounded-lg border border-dashed border-gray-300 p-3 font-mono text-theme-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
       <p className="font-semibold text-gray-600 dark:text-gray-300">
         Debug — filtros de ranking, en orden
       </p>
