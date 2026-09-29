@@ -39,7 +39,7 @@ function EpisodeRow({
             t("episodeDefaultTitle", { number: episode.episodeNumber })}
         </div>
         {episode.overview && (
-          <div className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
+          <div className="mt-1 line-clamp-2 text-base text-gray-500 dark:text-gray-400">
             {episode.overview}
           </div>
         )}
@@ -235,19 +235,19 @@ export default function SeasonAccordion({
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead className="bg-gray-50 dark:bg-white/[0.02]">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("numberHeader")}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("titleHeader")}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("releaseDateHeader")}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("statusHeader")}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("actionsHeader")}
                 </th>
               </tr>

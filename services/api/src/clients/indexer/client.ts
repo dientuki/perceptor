@@ -87,11 +87,16 @@ async function filterData(items: Item[]): Promise<TorrentResult[]> {
 export class ProwlarrClient implements IndexerClient {
   constructor(private readonly settings: SettingsService) {}
 
-  private async getData(query: string): Promise<any[]> {
+  private async request(
+    path: string,
+    searchParams?: Record<string, string>,
+  ): Promise<any> {
     const config = await this.settings.getMap();
     const baseUrl = `http://${config.tracker_host}:${config.tracker_port}/`;
-    const url = new URL('/api/v1/search', baseUrl);
-    url.searchParams.set('query', query);
+    const url = new URL(path, baseUrl);
+    for (const [key, value] of Object.entries(searchParams ?? {})) {
+      url.searchParams.set(key, value);
+    }
 
     let res: Response;
     try {
@@ -111,14 +116,27 @@ export class ProwlarrClient implements IndexerClient {
       });
     }
 
-    const data = await res.json();
+    return res.json();
+  }
 
-    return data;
+  private async getData(query: string): Promise<any[]> {
+    return this.request('/api/v1/search', { query });
   }
 
   async search(query: string): Promise<TorrentResult[]> {
     const data = await this.getData(query);
     const filteredData = await filterData(data);
     return filteredData;
+  }
+
+  // https://api.prowlarr.com/docs#/Indexer/get_api_v1_indexer — the configured-indexer list.
+  async countIndexers(): Promise<number> {
+    const data = await this.request('/api/v1/indexer');
+
+    if (!Array.isArray(data)) {
+      throw i18nError.serviceUnavailable(ERROR_KEYS.INDEXER_UNAVAILABLE);
+    }
+
+    return data.length;
   }
 }

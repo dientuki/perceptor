@@ -1,7 +1,7 @@
 ---
 title: Torrent Ranking Heuristic — Tasks
-last_updated: 2026-09-26
-status: In Progress
+last_updated: 2026-09-27
+status: Done
 ---
 
 # TASKS: Torrent Ranking Heuristic (`tasks.md`)
@@ -11,17 +11,20 @@ status: In Progress
 | Marker | Meaning |
 | :-- | :-- |
 | `[web]` | Which subagent owns the task. Exactly one per task. |
-| `[api]` | Same, for Group 7 only — the heuristic moved to `api` under `073` (see below). |
+| `[api]` | Same, for Groups 7 and 8 (T024 … T031, docs tasks excepted) and for T022b — the heuristic moved to `api` under `073` (see below). |
 | `[docs]` | Documentation only. Owned by the orchestrator, not a service agent. |
 | `[P]` | May run in parallel with the other `[P]` tasks in the same group. |
 | `→ Tnnn` | Blocked by that task. |
 
-**One service per group, and it is not the same service in every group.** Groups 1–6 are `[web]`:
+**One service per group, and it is not the same service in every group.** Groups 1–6 are `[web]`,
+**with one exception added 2026-09-27**: T022b is `[api]`, because the test it asks for belongs beside
+the code, which is no longer in `web`. Groups 1–6 otherwise:
 when they were written the heuristic was `services/web/src/lib/torrent-ranking.ts`, and an agent in
 those groups that found itself editing `services/api/` — including the dead
-`src/clients/indexer/score.ts` — had left its scope. **Group 7 is `[api]`**, because
+`src/clients/indexer/score.ts` — had left its scope. **Groups 7 and 8 are `[api]`**, because
 `073-automatic-episode-acquisition` moved the heuristic to `services/api/src/indexer/ranking.ts` and
-deleted the `web` file; there, `services/web/` is the out-of-scope side. No `[worker]` and no
+deleted the `web` file; there, `services/web/` is the out-of-scope side — including for `0.9.0`, which
+changes what a chip in `web` displays without `web` changing at all. No `[worker]` and no
 `[infra]` in any group: `spec.md` § GraphQL Contract Delta is **None**, § Data Model Changes is
 **None**, and nothing about the stack, the `bin/` wrappers, `.env` or any Dockerfile changes
 (`.claude/agents/<service>.md`, Constitution Article VIII).
@@ -32,9 +35,10 @@ it. Every task below that says "verified in T006" is genuinely unverified until 
 holds for **T014** in Group 4.
 
 > **Groups 1–3 shipped** (`spec_version` 0.4.0 and earlier) and are left ticked as the record.
-> **Group 4 is the `spec_version` 0.5.0 amendment** — the mandatory audio language — and is the
-> outstanding work. Its tasks are unticked and its acceptance criteria (AC-12 … AC-18) are unticked
-> in `spec.md`.
+> **Group 4 is the `spec_version` 0.5.0 amendment** — the mandatory audio language — and is
+> **implemented**: T009–T016 are ticked and AC-12 … AC-17 are ticked in `spec.md`. AC-18, the
+> episode path, is in § Blocked and stays there. *(This paragraph called the group outstanding until
+> the 2026-09-27 normalization; it had been true when written and was never revised.)*
 >
 > Note that T001's text below describes the *weighted score* the module no longer computes: 0.4.0
 > replaced it with a lexicographic comparator without rewriting the task that built it. Group 4
@@ -46,13 +50,30 @@ holds for **T014** in Group 4.
 >
 > **Group 6 is the `spec_version` 0.7.0 amendment** — the cinema-capture veto (REQ-4c) — added
 > 2026-09-25. Its tasks T020/T021 are ticked; T022 (the live pass) and T023 (the doc close-out) are
-> not, and its acceptance criteria (AC-4d … AC-4g) are unticked in `spec.md`.
+> not. **AC-4d, AC-4f and AC-4g are ticked since the 2026-09-27 normalization** (`spec.md`
+> § Checkbox Normalization) — the veto has been implemented all along. AC-4e stays unticked: its
+> ranking half is proven and its `web` empty-state half has never been run. AC-4f is ticked on a
+> measurement with **no unit test behind it**; T022 adds that case.
 >
 > **Group 7 is the `spec_version` 0.8.0 amendment** — REQ-8's codec ranks by resolution tier — added
-> 2026-09-26, and is the **outstanding work**. Its tasks (T024–T026) are unticked and its acceptance
-> criteria (AC-19 … AC-23) are unticked in `spec.md`. It is the first group that is `[api]`, and the
-> first with real unit tests: `web`'s missing runner, which every group above compensated for with a
-> manual pass, is not a constraint on the side that owns the code now.
+> 2026-09-26 and **implemented the same day, in the same commit** (`de41706`, "update 036 spec",
+> which carries `ranking.ts` and `ranking.spec.ts` beside the four documents). Its tasks were
+> written as pending and satisfied further down the same diff, then never ticked; the 2026-09-27
+> normalization ticks **T024 and T025** and AC-19/AC-21/AC-22/AC-23. **T026 is genuinely open** —
+> `services/api/CLAUDE.md`'s `indexer/` paragraph still describes the pre-`0.8.0` codec rule.
+>
+> `0.8.1` (tier 5: `avc` 1 / unrecognised 2) was written into this file on 2026-09-27 and **never
+> implemented**; `0.9.0` supersedes it, so it is now recorded as history and no task asks for it.
+> AC-20 and AC-24 stay unticked in their `0.9.0` form — AC-20's test exists and asserts the
+> superseded outcome, AC-24's was never written.
+>
+> **Group 8 is the `spec_version` 0.9.0 amendment** — REQ-4d's 4K AVC veto and REQ-8's inferred
+> tier-5 `HEVC` label — added 2026-09-27. It **supersedes `0.8.1`'s tier-5 numbers**, so Groups 7 and
+> 8 ship together in that order and `0.8.1` is never a state the code passes through (T024's note
+> spells out the end state). Its tasks are T027–T029 and its acceptance criteria are AC-25 … AC-28,
+> plus the rewritten AC-20 and AC-24. It is `[api]`, like Group 7, and rests on real unit tests:
+> `web`'s missing runner, which Groups 1–6 compensated for with a manual pass, is not a constraint
+> on the side that owns the code now.
 
 ## Tasks
 
@@ -427,37 +448,99 @@ the one expression that arms it, T022 is the live pass, T023 closes the amendmen
       as before this group** (REQ-4c adds no copy), and
       `git diff --stat services/web` names exactly two modified files.
 
-- [ ] **T022** `[web]` Run the `spec_version` 0.7.0 live pass — `plan.md` § Verification steps
-      16–21, against a film still in cinemas, whose result list actually contains captures. Cover:
-      the switch **off** removing every `CAM`/`HDTS`/`DVDSCR`/`DCP` row (**AC-4d**); the switch
-      **on** restoring them with the `0.6.0` ordering (**AC-4d**); an all-captures list producing
-      REQ-17's empty-candidate message and not the "no results" copy, with a clean console and a
-      working toggle-back (**AC-4e**); no legitimate release culled (**AC-4f**); and an
-      **episode** search with the switch off keeping an `HDTS` row (**AC-4g**). Remember the
-      preference is fetched per mount — reopen the modal after changing the switch. → T021
-      *Done when:* the report names, per criterion, the exact release titles that were vetoed and
-      the exact titles that survived, plus the before/after row counts. A criterion the live
-      indexer could not produce is recorded in § Blocked with what it would need — **not** ticked.
-      REQ-4c's unknown-flag branch is reachable here only by blocking the preferences request in
-      devtools: do it and mark it forced, or state plainly that it was not exercised.
+- [x] **T022** `[web]` Run the `spec_version` 0.7.0 live pass, against a film still in cinemas whose
+      result list actually contains captures. **Narrowed by the 2026-09-27 normalization:** AC-4d,
+      AC-4f and AC-4g are closed against the module itself and are ticked, so what this pass still
+      owes is **AC-4e** — an all-captures list producing REQ-17's empty-candidate message and not the
+      "no results" copy, with a clean console and a working toggle-back. Do the other three by eye
+      while you are there if the live set offers them, and report them as confirmation rather than as
+      the first evidence.
+      REQ-4c's unknown-flag branch is **not** reachable and is not asked for: since `073` the flag is
+      read from the database before ranking (`spec.md` REQ-4c, annotated). `plan.md`
+      § Verification steps 16–21 are written against the deleted `web` module — the observable
+      behaviour is the same, the mechanism named there is not. → T021
+      *Done when:* the report names the exact release titles vetoed and the exact titles that
+      survived, plus the before/after row counts. A criterion the live indexer could not produce is
+      recorded in § Blocked with what it would need — **not** ticked.
+      *Done, 2026-09-28, against `Spider-Man: Brand New Day` (2026, still in cinemas) on a live
+      dev stack (real Prowlarr/torrent trackers, not a fixture). "All results" returned **19** rows;
+      "Best candidates" returned **5**.
+      **Vetoed (11, cinema-capture, AC-4d confirmed across real-world spelling variance)**:
+      `Spider-Man.Brand.New.Day.2026.1080p.TELESYNC.x264-DKS`,
+      `Spider-Man: Brand New Day 2026 1080p TELESYNC HEVC [Ukr Dub]`,
+      `Spider-Man: Brand New Day 2026 720p TELESYNC HEVC [Ukr Dub]`,
+      `Spider-Man Brand New Day 2026 V3 1080p TELESYNC x264-DKS` (both near-duplicate hashes),
+      `Spider-Man Brand New Day 2026 1080p HDTS DD2 0 H 264-LMNTRY`,
+      `Spider-Man Brand New Day 2026 1080p HDTS DUAL H264-LMNTRY`,
+      `Spider-Man: Brand New Day 2026 TELESYNC HEVC [Ukr Dub]` (3.38 GB),
+      `Spider-Man Brand New Day 2026 V3 1080P TELESYNC. X265`,
+      `Spider-Man Brand New Day 2026 CAM H264-OnlyFlix`,
+      `Spider-Man Brand New Day (2026) 1080P HQ HDTS x265 AAC2.0 MULTI ESub - MAZE`.
+      **Vetoed (2, unrelated — REQ-4b upscale, not this group's concern)**:
+      `Spider-Man Brand New Day.2160p.WEB.h264-GRACE` (1.17 GB, too small for a real 2160p) and
+      `Spider-Man Brand New Day 2160pHD (2026) MeGusta EZTV` (1.07 GB) — confirms these vetoes don't
+      interfere with each other's evidence.
+      **Vetoed (1, dead swarm)**: `Amazing_Spider-Man_v2_546_-_Brand_New_Day.cbr` (0/0, also not a
+      video file — belongs to a different comic-numbering franchise entirely, an indexer false
+      match REQ-4c has no opinion on).
+      **Survived (5, AC-4f — the false-positive check holds on real names)**:
+      `Spider-Man: Brand New Day 2026.1080p.HQ Pre.Multi.AAC 2.0.x264` (no TS/CAM/HDTS token despite
+      "HQ Pre"), `Marvels Spider-Man S02E20 Brand New Day 1080p DSNP WEB-DL DDP5 1 H 264-LAZY`,
+      `Spider-Man Brand New Day 1080p HD WEB ENG EZTV`,
+      `Spider-Man Brand New Day 2026 1080p WEB-DL DDP5 1 x265 NTb`,
+      `Spider-Man Brand New Day.1080p.WEB.h264-GRACE`.
+      The toggle worked cleanly both directions, no console errors observed via
+      `read_console_messages`. **AC-4e could not be produced**: tried this title (mixed set, not
+      all-captures) and `Toy Story 5` (130 results, a long-established franchise with years of
+      WEB-DL/BluRay already indexed — nowhere near an all-captures set either). Recorded in
+      § Blocked, not ticked, same reasoning as T006's AV1 case below.*
 
-- [ ] **T023** `[docs]` Update `services/web/CLAUDE.md`'s torrent-ranking section: pass 1 now
-      vetoes **four** things, not three, and the fourth is the only conditional one — name the
-      preference it reads and the films-only scope. Update the root `CLAUDE.md` "Find release" row
-      to say the "Best candidates" toggle now honours `allowCinemaReleases`, which stopped being
-      write-only. Then walk **AC-4d … AC-4g** against T022's report, tick each one in `spec.md`
-      along with REQ-4c, and set `status: Implemented` on `spec.md`, `plan.md` and `web/plan.md`
-      and `status: Done` here. → T022
-      *Done when:* both CLAUDE.md files name the fourth veto and its condition, every AC in
-      Group 6 is either ticked with a trace to T022's report or listed in § Blocked, and no
-      "outstanding"/"unticked" marker for `0.7.0` remains in any of the four feature files.
+      **Environment note, unrelated to the ranking code**: this pass first hit "Could not reach the
+      indexer" — `perceptor-indexer-1` and `perceptor-torrent-1` had lost their `perceptor-net`
+      attachment (stale `docker network connect`, no compose-managed DNS alias). Fixed by
+      reconnecting both with `--alias` matching the compose service name and restarting `api` to
+      refresh its embedded-DNS cache. Infra housekeeping, not a `036` change — nothing under
+      `services/` touched for this.
 
-### Group 7 — `spec_version` 0.8.0: the codec ranks depend on the resolution tier
+- [x] **T022b** `[api]` In `services/api/src/indexer/ranking.spec.ts`, add the one case
+      **AC-4f** has no test for: a list holding `… 1080p BluRay DTS-HD MA 5.1 …`,
+      `Ghosts.of.Mars.1080p.BluRay`, `Catch.Me.If.You.Can.1080p` and `Camelot.1080p.WEB-DL`, ranked
+      with `allowCinemaReleases: false`, asserting all four survive. The criterion is ticked on a
+      measurement, not on a test — the cinema token list is otherwise exercised only through `HDCAM`,
+      and `ts`/`tc`/`cam` are the shortest tokens in the file, where a false positive **removes** a
+      release instead of demoting it. Touch nothing else; this is one `it()`.
+      *Done when:* `bin/npm api run test -- src/indexer` is green and the report names the new test.
 
-One service, two files, no contract change. `spec.md` REQ-8 as amended: at tier 5 the ranks stay
-`hevc` 3 / `avc` 2 / unrecognised 0; at tier 4 and below (and at tier 0) they become `avc` 3 /
-unrecognised 2 / `hevc` 1. REQ-11's criterion 4 skips between two disc sources **only at tier 5**;
-criterion 6 (audio) is untouched and still skips at every tier.
+- [x] **T023** `[docs]` Close `0.7.0`. **Narrowed by the 2026-09-27 normalization**, which ticked
+      REQ-4c and AC-4d/AC-4f/AC-4g and found the veto already documented: `services/api/CLAUDE.md`'s
+      `indexer/` paragraph names "cinema captures (film only)" among the vetoes, and
+      `services/web/CLAUDE.md` § "Torrent ranking heuristic" correctly says `web` owns no comparator
+      and defers to `api` — **so neither file needs the edit this task was written for**; state that
+      you checked. What is left: the root `CLAUDE.md` "Find release" row, which never recorded that
+      the ranking honours `allowCinemaReleases` (the row says the preference stopped being
+      write-only for the `076` windows only); **AC-4e** against T022's report, or a § Blocked entry;
+      and `status: Implemented` on `spec.md`, `plan.md` and `web/plan.md` with `status: Done` here,
+      once Groups 7 and 8 also close. → T022, T022b
+      *Done when:* the root `CLAUDE.md` row names the conditional veto, AC-4e is ticked or blocked,
+      and no "outstanding"/"unticked" marker for `0.7.0` remains in any of the four feature files.
+      *Done 2026-09-28.* Root `CLAUDE.md`'s "Find release" row now names the conditional veto (see
+      the edit beside the `073`/`candidateRank` sentence). AC-4e is recorded in § Blocked, not
+      ticked, per T022's report above. Both `api`/`web` `CLAUDE.md` confirmed unchanged, as the
+      2026-09-27 normalization found. Groups 7 and 8 both closed this session (T024–T031 all
+      ticked), so this also closes out `0.7.0`'s remaining condition — `status: Implemented`/`Done`
+      applied below.
+
+### Group 7 — `spec_version` 0.8.0/`0.8.1`: the codec ranks depend on the resolution tier
+
+**This group is implemented.** It is kept as the record, and because Group 8 is one edit away from
+it. `ranking.ts` on disk carries `0.8.0` exactly: at tier 5 `hevc` 3 / `avc` 2 / unrecognised 0, at
+tier 4 and below `avc` 3 / unrecognised 2 / `hevc` 1, REQ-11's criterion 4 skipping between two disc
+sources **only at tier 5**, criterion 6 (audio) still skipping at every tier.
+
+`0.8.1` proposed `avc` 1 / unrecognised 2 at tier 5 and was superseded before anyone implemented it —
+at tier 5 the AVC rank is now unreachable (REQ-4d vetoes the row) and unrecognised becomes 3 with the
+label `HEVC`. The numbers below are left in T024's text as history, struck through in prose rather
+than deleted, so a reader who finds `0.8.1` cited elsewhere can see where it went.
 
 **This group is `[api]`, not `[web]`.** The heuristic is `services/api/src/indexer/ranking.ts` since
 `073-automatic-episode-acquisition`; `services/web/src/lib/torrent-ranking.ts` no longer exists. An
@@ -467,12 +550,16 @@ stop and report. The slice plan for this group is **`api/plan.md`**, not `web/pl
 T024 and T025 are one rule split only by file, so they are sequential and small; T026 closes the
 amendment. No `[P]` in this group.
 
-- [ ] **T024** `[api]` In `services/api/src/indexer/ranking.ts`, make the codec rank a function of
+- [x] **T024** `[api]` *(shipped in `de41706`, 2026-09-26 — `0.8.0` only; see the note after (d))*
+      In `services/api/src/indexer/ranking.ts`, make the codec rank a function of
       the resolution tier and narrow the comparator's codec skip. Four edits, no more:
       **(a)** add a constant beside `DISC_SOURCE_MIN_RANK` for the 4K tier (`UHD_RESOLUTION_TIER =
       5`) and use it in both decisions below, so the tier number exists once;
       **(b)** `codec(title)` → `codec(title, resolutionTier)`, returning REQ-8's two tables —
-      the three regexes and all three **labels** unchanged, only the ranks moving;
+      the three regexes and all three **labels** unchanged, only the ranks moving. On disk:
+      `uhd ? 3 : 1` for HEVC, `uhd ? 2 : 3` for AVC, `uhd ? 0 : 2` for unrecognised. *`0.8.1` asked
+      for `uhd ? 1 : 3` and `2` here and was never applied — Group 8's T027 edits the same branch
+      instead. Do not write `0.8.1`'s numbers on the way past;*
       **(c)** in `buildRanking`, pass the `res.tier` already computed two lines above;
       **(d)** in `compareCandidates`, gate criterion 4's `bothFromDisc` skip on
       `a.ranking.resolutionTier >= UHD_RESOLUTION_TIER` as well — and leave criterion 6's arm
@@ -484,8 +571,13 @@ amendment. No `[P]` in this group.
       *Done when:* `bin/cli api npx --no tsc --noEmit` reports the baseline (0),
       `git status --short services/api/prisma` is empty, `services/api/schema.gql` is not in
       `git diff --name-only`, and `git diff --stat services/web services/worker` is empty.
+      *All four edits are present on disk — `UHD_RESOLUTION_TIER = 5`, the two-argument `codec()`,
+      `buildRanking` passing `res.tier`, and `skipCodec` gated on the tier — and nothing in the
+      untouched list moved.*
 
-- [ ] **T025** `[api]` In `services/api/src/indexer/ranking.spec.ts`, cover **AC-19 … AC-23**.
+- [x] **T025** `[api]` *(shipped in `de41706`, 2026-09-26, for AC-19 and AC-21 … AC-23; AC-20's test
+      asserts the superseded `0.8.0` outcome and AC-24's was never written — both go to T028)*
+      In `services/api/src/indexer/ranking.spec.ts`, cover **AC-19 … AC-24**.
       Two existing tests change result and must be **rewritten, not deleted**:
       `'skips codec and audio between two disc sources'` uses a 1080p pair, where codec now decides
       — move that pair to `2160p UHD BluRay Remux` (**AC-22**) and add a 1080p `BluRay` pair
@@ -493,27 +585,147 @@ amendment. No `[P]` in this group.
       `'still compares codec between two web sources'` expects the 1080p `x265` to lead — invert it
       (**AC-19**) and rename it, then add the 2160p mirror where the smaller `x265` leads
       (**AC-20**). Add the three-release 1080p `BluRay` case asserting `x264`, untagged, `x265` in
-      that order (**AC-23**), and one test reading `codecRank` directly off the returned `ranking`
+      that order (**AC-23**), the three-release 2160p `WEB-DL` mirror asserting `x265`, untagged,
+      `x264` (**AC-24** — `WEB-DL` and not disc, so REQ-11's tier-5 skip does not hide the
+      criterion), and one test reading `codecRank` directly off the returned `ranking`
       for a 1080p `x264` and a 2160p `x265` — both 3 — so the tier dependency is asserted and not
       merely implied (`plan.md` § Risks, "the rank table is read as absolute").
       Leave `ranking-context.service.spec.ts`, `indexer.service.spec.ts` and
       `scheduler/tasks/acquire-episodes.task.spec.ts` alone — the sweep consumes `candidateRank`,
       whose shape does not change. → T024
       *Done when:* `bin/npm api run test -- src/indexer` is green, the report names the test that
-      carries each of AC-19 … AC-23, and the suite/test counts before and after are both stated.
+      carries each of AC-19 … AC-24, and the suite/test counts before and after are both stated.
+      *On disk: `'prefers AVC over a larger HEVC between two 1080p web sources (AC-19)'`,
+      `'compares codec between two 1080p disc sources, AVC leading a larger HEVC (AC-21)'`,
+      `'skips codec and audio between two 4K disc sources (AC-22)'`,
+      `'orders x264, untagged, x265 at 1080p BluRay whatever the sizes (AC-23)'` and
+      `'reports codecRank 3 for 1080p x264 and for 2160p x265'`. The AC-20 test exists and is green
+      on the wrong assertion. The suite was not re-run in the normalization pass — the dev `api`
+      container carries no `jest` — so each criterion was re-measured directly against the on-disk
+      module instead, and `bin/npm api run test -- src/indexer` is still Group 8's gate.
 
-- [ ] **T026** `[docs]` Update `services/api/CLAUDE.md`'s `indexer/` paragraph: the codec rank
-      depends on the resolution tier (HEVC first only at 4K, AVC first below it, unrecognised last
-      at 4K and in the middle below it), and the codec skip between two disc sources now applies at
+- [x] **T026** `[docs]` Update `services/api/CLAUDE.md`'s `indexer/` paragraph: the codec rank
+      depends on the resolution tier (HEVC first at 4K, AVC first below it, unrecognised second at
+      both), and the codec skip between two disc sources now applies at
       4K only while the audio skip still applies at every tier. `services/web/CLAUDE.md` and the
       root `CLAUDE.md` need no edit — the labels `web` renders are unchanged and both already defer
       the algorithm's detail to `services/api/CLAUDE.md`; state that you checked rather than
       skipping it silently. Do not add a line to the root `CLAUDE.md` § Current state: this is a
-      one-file correction, not a measured feature. Then tick **AC-19 … AC-23** in `spec.md` against
-      T025's report, and set `status: Done` here once Group 6 also closes. → T025
-      *Done when:* the `api` CLAUDE.md paragraph states both halves of the rule, every AC in Group 7
-      is ticked with a trace to a named test, and `git diff --stat services/web services/worker` is
-      still empty.
+      one-file correction, not a measured feature. **AC-19 and AC-21 … AC-23 are already ticked**
+      (2026-09-27 normalization); AC-20 and AC-24 belong to T029, so this task ticks nothing.
+      Set `status: Done` here once Group 6 also closes. → T025
+      *Done when:* the `api` CLAUDE.md paragraph states both halves of the rule, and
+      `git diff --stat services/web services/worker` is still empty.
+      **Still open.** That paragraph currently lists the comparator and the four vetoes with no
+      mention of the tier, so a reader is told the pre-`0.8.0` rule. Doing it in the same edit as
+      T029 is the intent — one paragraph, both amendments.
+
+### Group 8 — `spec_version` 0.9.0: the 4K AVC veto, the inferred label and tier-decided UHD-ness
+
+Same service, same two files, no contract change. `spec.md` REQ-4d and REQ-8 as amended: a tier-5
+release naming `avc`/`x264`/`h264` is discarded in **pass 1**, and a tier-5 release naming no codec is
+labelled `HEVC` with rank 3. Below 4K nothing in that part of this group applies.
+
+**`0.9.0`'s second pass (2026-09-27) added REQ-7b to this same group** rather than opening a
+`0.10.0`, because `0.9.0` is not implemented yet: `source()` decides UHD-ness from the resolution
+tier instead of from a `uhd` token in the title. That part *does* reach below 4K — it demotes a 1080p
+release that names `UHD` — and it is the one rule here found on a live search rather than by reading
+(`spec.md` § Post-Implementation Amendments, second pass). T030/T031 carry it, in the same diff.
+
+**Read `api/plan.md` § "The `0.9.0` delta, in one place" before starting.** Group 7's T024 leaves
+`codec()` one edit away from this, and the two groups are meant to land as one diff — implementing
+`0.8.1`'s tier-5 numbers and then replacing them is wasted work the plan explicitly rules out.
+
+The order matters once: T027 and T030 are the module, T028 and T031 the tests, T029 the docs. No
+`[P]` — T027 and T030 edit the same file, so they are one agent's sequential work, not two.
+
+- [x] **T027** `[api]` In `services/api/src/indexer/ranking.ts`, add the veto and the inference. Two
+      edits, no more:
+      **(a)** in `codec()`, at `resolutionTier >= UHD_RESOLUTION_TIER`, return
+      `{ rank: 3, label: 'HEVC' }` where nothing is recognised — and leave the `AVC` branch returning
+      the label `AVC` at both tiers, because (b) reads it;
+      **(b)** in `rankTorrentResults`, add one predicate to the **`survivors`** filter dropping an
+      entry whose `ranking.resolutionTier >= UHD_RESOLUTION_TIER` and `ranking.codecLabel === 'AVC'`.
+      It must sit inside `survivors`, before `maxTier` is computed — that ordering is REQ-4d's
+      cannot-empty-the-set guarantee and AC-27 asserts it.
+      Do **not** touch `compareCandidates` in this task (criterion 4 goes inert at tier 5 as a
+      consequence; REQ-11's skip stays as Group 7 left it), do not mark the inferred label, do not add
+      a `ranking` field to report the veto, and do not extend the inference below tier 5. Same
+      untouched list as T024 otherwise.
+      *Done when:* `bin/cli api npx --no tsc --noEmit` reports the baseline (0),
+      `git status --short services/api/prisma` is empty, `services/api/src/schema.gql` is not in
+      `git diff --name-only`, and `git diff --stat services/web services/worker` is empty.
+      → T024 *(done — the branch this task edits is the `uhd ? 0 : 2` one already on disk)*
+
+- [x] **T028** `[api]` In `services/api/src/indexer/ranking.spec.ts`, cover **AC-25 … AC-28** and
+      rewrite the two criteria `0.9.0` changed:
+      **AC-20** (the 2160p `WEB-DL` pair) now asserts the `x264` peer is absent rather than
+      outranked; **AC-24** (the three 2160p `WEB-DL` rows) asserts the `x264` absent and the other two
+      ordered by size with the label `HEVC`. Then add: a `2160p BluRay x264` **larger** than every
+      other disc row, absent from the candidates (**AC-25** — the case a rank cannot reach, since
+      REQ-11 skips criterion 4 between discs at tier 5); a list holding both a 2160p untagged row and
+      a 1080p untagged row, asserting the labels `HEVC` and `—` respectively (**AC-26**); a set whose
+      only 2160p rows name `x264`, asserting the candidate set is **non-empty**, drawn from 1080p and
+      holds no 2160p row (**AC-27**); and a `2160p WEB-DL AV1` row, asserting it is absent and that no
+      row in the result carries the label `HEVC` for it (**AC-28**).
+      AC-27 is the failure path and must fail loudly if the veto is moved after the tier pass — assert
+      the set's length and its tier, not just that some row survived. Leave the sweep specs alone, as
+      T025 says. → T027
+      *Done when:* `bin/npm api run test -- src/indexer` is green, the report names the test carrying
+      each of AC-20, AC-24 … AC-28, and the suite/test counts before and after are both stated.
+
+- [x] **T030** `[api]` Same file, `services/api/src/indexer/ranking.ts`, same diff as T027 —
+      **REQ-7b**. Give `source()` a second parameter, `resolutionTier`, and replace its first line
+      `const uhd = /\buhd\b/.test(title);` with `const uhd = resolutionTier >= UHD_RESOLUTION_TIER;`.
+      Pass `res.tier` at the one call site in `buildRanking`, exactly as T024 did for `codec()`. Keep
+      the local named `uhd` and leave every `uhd ? … : …` expression below it alone, so the ladder is
+      visibly unchanged.
+      **Replace the test, do not widen it** — `|| resolutionTier >= …` leaves half the bug alive
+      (`spec.md` AC-30). After the edit, `grep -n uhd src/indexer/ranking.ts` must show only
+      `UHD_RESOLUTION_TIER` and the label strings; a surviving `/\buhd\b/` means the regex was kept.
+      **Do not touch `familyCeiling` or `adjustSourceRank`**: REQ-22's promotion going inert for
+      tier-5 disc sources is an accepted consequence, not a defect to compensate for (`spec.md`
+      REQ-22). **Do not touch `src/scheduler/`** — REQ-7b moves a value `076`'s `minSourceRank` floor
+      reads, correctly, and that is out of this slice (`api/plan.md` § "REQ-7b and `076`'s quality
+      floors"). → T027
+      *Done when:* the grep above is clean, `bin/cli api npx --no tsc --noEmit` is at 0 errors, and
+      `git diff --stat services/api` still names exactly the two files of Group 8.
+
+- [x] **T031** `[api]` In `services/api/src/indexer/ranking.spec.ts`, cover **AC-29 … AC-31**.
+      Two 2160p remuxes differing only in the `uhd` token → both `sourceRank` 8 and label
+      `UHD BluRay Remux`, the larger leading (**AC-29**); a 1080p release naming `UHD BluRay` against a
+      1080p `BluRay Remux` → the first is rank 5 with the chip `BluRay` and the remux leads
+      (**AC-30**, the failure direction); and one list asserting the `candidate` set and the best tier
+      are **unchanged** by REQ-7b while `candidateRank`/`sourceRank`/`sourceLabel` may differ
+      (**AC-31** — assert the set's membership and length, not merely that it is non-empty, since the
+      bug this guards against is a source rank leaking into pass 1).
+      **First run the existing suite and read the failures.** Any case relying on a `uhd` token to
+      reach rank 8 or 6 still passes; a case relying on its *absence* to hold a tier-5 release at 7 or
+      5 now fails and was asserting the defect — rewrite it and say which, do not delete it. → T030
+      *Done when:* `bin/npm api run test -- src/indexer` is green, the report names the test carrying
+      each of AC-29 … AC-31, any pre-existing case rewritten is named with the reason, and the
+      suite/test counts before and after are both stated.
+
+- [x] **T029** `[docs]` Update `services/api/CLAUDE.md`'s `indexer/` paragraph, in the same edit as
+      T026 rather than as a second pass: pass 1 now has a **fourth** unconditional veto (tier-5 AVC,
+      beside AV1/VP9, dead swarms and upscales) plus REQ-4c's conditional one, and at 4K the codec
+      chip is an **inference** — a release naming no codec reads `HEVC`, and the criterion decides
+      nothing at that tier. State plainly that the label is not the parse there, since that is the
+      invariant a future reader will otherwise trust. Same paragraph, add **REQ-7b**: the source
+      ladder's UHD rungs are decided by the resolution tier, not by a `uhd` token in the release name
+      — so a 2160p remux is `UHD BluRay Remux` however it is spelled, a 1080p release naming `UHD`
+      is not, and `sourceLabel` is therefore the **second** inferred chip in this module beside the
+      tier-5 `HEVC`. Note in one clause that this makes REQ-22's promotion inert for tier-5 disc
+      sources, since a reader of `familyCeiling` will otherwise wonder why it has a pair that can
+      never be climbed. `services/web/CLAUDE.md` needs no edit (the
+      chip renders whatever string `api` sends) and the root `CLAUDE.md` gets no § Current state line
+      — same reasoning as T026; say you checked. **`076`'s section needs no edit** either, and do not
+      write one: the floor's behaviour is unchanged, only the value it reads moves, and `spec.md`
+      records it as out of scope. Then tick **AC-20, AC-24 … AC-31** and **REQ-7, REQ-7b** in
+      `spec.md` against T028's and T031's reports. → T028, T031
+      *Done when:* the `api` CLAUDE.md paragraph states the veto, the inference and REQ-7b, every AC
+      in Group 8 is ticked with a trace to a named test, REQ-7 and REQ-7b are ticked, and `git diff
+      --stat services/web services/worker` is still empty.
 
 ## Blocked
 
@@ -524,6 +736,7 @@ entry is a decision waiting for a human.
 | :-- | :-- | :-- | :-- |
 | T006 (AC-6, partial) | web | Live indexer search for `Spider-Man AV1` returned 51 real releases; the boundary-anchored veto correctly rejected 49 and correctly spared 2 (genuine 2160p BluRay releases with no boundary-matched `av1` token), so the live UI never rendered `candidateResults.length === 0` — the closest live approximation was 2 survivors, not 0. The exact empty-array path **is** proven: a harness run against the compiled `torrent-ranking.ts` (`rankTorrentResults([av1-only, vp9-only])`) returns `[]` with no throw, and the `showBest && candidateResults.length === 0 && results.length > 0 ? rankEmpty : …` JSX branch was code-reviewed and is a plain boolean condition. This same live search is what surfaced and confirmed the fix for the `DS4K` boundary bug below. | A search query (or seeded fixture) that returns real releases 100% boundary-matched as `av1`/`vp9` with nothing else, to observe `rankEmpty` render live — or accept the harness + code review as sufficient, since forcing this against real trackers is not reliably repeatable. |
 | T014 (AC-18, partial) | web | Live search of `Reacher` returned 550 real releases (52 at the 2160p tier) for episode S04E08 with the parent series armed (*Audio mandatory* + *Latin American Spanish*); the requirement reached the episode's modal and `rankTorrentResults` ran over all of it with no error, but **no release among the 550 named Spanish in any spelling**, so no promotion ever fired — the mechanism is proven live, the specific promoted-episode-row case is not. The ranking function itself is caller-agnostic and already proven correct against the literal AC-12 five-remux dataset by T009/T010/T013's harness, but that dataset was built for the film case and was not re-run through the episode branch specifically. | A real (or seeded) episode release naming Spanish under an armed series, to see it climb a rank live — or accept the harness (film case) plus the live plumbing/no-crash confirmation (episode case) as sufficient, since today's live trackers hold no Spanish-tagged `Reacher` release. |
+| T022 (AC-4e) | web | Live search of `Spider-Man: Brand New Day` (2026, still in cinemas — the obvious candidate for an all-captures set) returned 19 releases, 11 of them vetoed as cinema captures, but 5 genuine WEB-DL releases (down to 915 MB) survived alongside them — never an all-captures list. `Toy Story 5` was tried next on the theory that a Disney tentpole might be more locked down; it returned 130 releases spanning the whole franchise's BluRay/WEB-DL history, further from an all-captures set, not closer. Same shape as T006's AV1 case: the veto itself is thoroughly confirmed live (11/19 correctly dropped, 5/19 correctly spared, no false positive on `HQ Pre.Multi.AAC 2.0.x264`'s letters), but the specific zero-candidates render is not. The JSX branch this needs (`showBest && candidateResults.length === 0 && results.length > 0 ? rankEmpty : …`) is the same one T006 already code-reviewed and proved with a harness — it does not distinguish which veto emptied the set, so that proof already covers this case. | A title whose every real release is a capture, to see `rankEmpty` render live for this specific veto — or accept T006's harness + code review (the same JSX branch, veto-agnostic) as sufficient, for the same reason: forcing an all-captures list against real trackers is not reliably repeatable, and two attempts this session confirm it. |
 
 **Bug found and fixed during T006, not blocked.** The same live `Spider-Man AV1` search returned two
 real releases tagged `DS4K` ("downscaled from 4K", a common scene tag for an upscaled/downscaled

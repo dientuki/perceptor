@@ -52,7 +52,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user, capabilities }) => {
       <div className="flex w-full items-center gap-3 px-3 py-3 sm:gap-4 lg:px-6 lg:py-4">
         <button
           type="button"
-          className="flex items-center justify-center w-10 h-10 text-gray-500 border-gray-200 rounded-lg z-99999 dark:border-gray-800 dark:text-gray-400 lg:hidden"
+          className="flex min-w-11 min-h-11 items-center justify-center w-10 h-10 text-gray-500 border-gray-200 rounded-lg z-99999 dark:border-gray-800 dark:text-gray-400 lg:hidden"
           onClick={toggleMobileSidebar}
           aria-label={t("toggleSidebar")}
         >
@@ -91,7 +91,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user, capabilities }) => {
               className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-14 text-base text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />
 
-            <span className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-[7px] py-[4.5px] text-xs -tracking-[0.2px] text-gray-500 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 sm:inline-flex">
+            <span className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-[7px] py-[4.5px] text-theme-sm -tracking-[0.2px] text-gray-500 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 sm:inline-flex">
               <span> ⌘ </span>
               <span> K </span>
             </span>

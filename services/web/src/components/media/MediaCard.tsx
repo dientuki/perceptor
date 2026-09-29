@@ -43,7 +43,7 @@ export function MediaCard({
       className="object-cover transition-transform duration-300 group-hover:scale-105"
     />
   ) : (
-    <span className="flex h-full items-center justify-center text-xs text-gray-400">
+    <span className="flex h-full items-center justify-center text-theme-sm text-gray-400">
       {t("noPoster")}
     </span>
   );
@@ -54,7 +54,7 @@ export function MediaCard({
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
         {showTypeBadge && (
           <span
-            className={`absolute left-2 top-2 z-10 rounded-full px-2 py-0.5 text-xs font-semibold uppercase text-white ${
+            className={`absolute left-2 top-2 z-10 rounded-full px-2 py-0.5 text-theme-sm font-semibold uppercase text-white ${
               isShow ? "bg-purple-500" : "bg-brand-500"
             }`}
           >
@@ -62,7 +62,7 @@ export function MediaCard({
           </span>
         )}
         {isShort && (
-          <span className="absolute right-2 top-2 z-10 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold uppercase text-white">
+          <span className="absolute right-2 top-2 z-10 rounded-full bg-amber-500 px-2 py-0.5 text-theme-sm font-semibold uppercase text-white">
             {t("typeShort")}
           </span>
         )}
@@ -95,13 +95,13 @@ export function MediaCard({
           </h3>
           {item.overview && (
             <p
-              className="line-clamp-3 text-xs text-gray-500 dark:text-gray-400"
+              className="line-clamp-3 text-base text-gray-500 dark:text-gray-400"
               title={item.overview}
             >
               {item.overview}
             </p>
           )}
-          <p className="text-xs text-gray-500 dark:text-gray-400">{year}</p>
+          <p className="text-base text-gray-500 dark:text-gray-400">{year}</p>
         </div>
       )}
     </div>

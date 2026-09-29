@@ -25,11 +25,13 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
 export default async function TmdbKeyOnboarding({
   isAdmin,
   keyRejected,
+  alreadyConfigured = false,
 }: {
   isAdmin: boolean;
   keyRejected: boolean;
+  alreadyConfigured?: boolean;
 }) {
-  const t = await getTranslations("billboard.tmdbOnboarding");
+  const t = await getTranslations("onboarding.tmdb");
 
   return (
     <div className="space-y-6">
@@ -48,9 +50,16 @@ export default async function TmdbKeyOnboarding({
       )}
 
       <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-white/90">
-          {t("title")}
-        </h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-white/90">
+            {t("title")}
+          </h2>
+          {alreadyConfigured && (
+            <span className="rounded-full bg-success-50 px-3 py-1 text-sm font-medium text-success-700 dark:bg-success-500/10 dark:text-success-400">
+              {t("alreadyConfigured")}
+            </span>
+          )}
+        </div>
 
         <h3 className="mt-5 font-semibold text-gray-800 dark:text-white/90">
           {t("whyTitle")}

@@ -192,11 +192,90 @@ describe('rankTorrentResults', () => {
     expect(ordered([hevc, avc], UNARMED)[0]).toBe(avc.title);
   });
 
-  it('still prefers a smaller HEVC over AVC between two 2160p web sources (AC-20)', () => {
+  it('vetoes the AVC peer of a 2160p WEB-DL pair instead of merely outranking it (AC-20)', () => {
     const avc = release('Show.S01E01.2160p.WEB-DL.x264-GRP', { size: 5_000 });
     const hevc = release('Show.S01E01.2160p.WEB-DL.x265-GRP', { size: 1_000 });
 
-    expect(ordered([avc, hevc], UNARMED)[0]).toBe(hevc.title);
+    const out = rankTorrentResults([avc, hevc], UNARMED);
+    const candidates = out.filter((r) => r.candidate);
+
+    expect(candidates.map((r) => r.title)).toEqual([hevc.title]);
+    expect(out.find((r) => r.title === avc.title)?.candidate).toBe(false);
+  });
+
+  it('vetoes the x264 row among three 2160p WEB-DL releases, ordering the survivors by size with the label HEVC (AC-24)', () => {
+    const x265 = release('Show.S01E01.2160p.WEB-DL.x265-GRP', { size: 3_000 });
+    const untagged = release('Show.S01E01.2160p.WEB-DL-GRP', { size: 5_000 });
+    const x264 = release('Show.S01E01.2160p.WEB-DL.x264-GRP', { size: 9_000 });
+
+    const out = rankTorrentResults([x265, untagged, x264], UNARMED);
+    const candidates = out
+      .filter((r) => r.candidate)
+      .sort((a, b) => a.candidateRank! - b.candidateRank!);
+
+    expect(candidates.map((r) => r.title)).toEqual([untagged.title, x265.title]);
+    expect(candidates.every((r) => r.ranking.codecLabel === 'HEVC')).toBe(true);
+    expect(out.find((r) => r.title === x264.title)?.candidate).toBe(false);
+  });
+
+  it('vetoes a 2160p BluRay x264 release larger than every other disc row (AC-25)', () => {
+    const avc = release('Movie.2026.2160p.BluRay.x264-GRP', { size: 90_000 });
+    const remux = release('Movie.2026.2160p.UHD.BluRay.Remux.x265-GRP', {
+      size: 40_000,
+    });
+    const bluray = release('Movie.2026.2160p.BluRay.x265-GRP', { size: 30_000 });
+
+    const out = rankTorrentResults([avc, remux, bluray], UNARMED);
+
+    expect(out.find((r) => r.title === avc.title)?.candidate).toBe(false);
+    expect(out.filter((r) => r.candidate).map((r) => r.title).sort()).toEqual(
+      [remux.title, bluray.title].sort(),
+    );
+  });
+
+  it('labels an untagged 2160p row HEVC and an untagged 1080p row — in one list (AC-26)', () => {
+    const uhd = release('Movie.2026.2160p.UHD.BluRay.Remux-GRP');
+    const hd = release('Movie.2026.1080p.BluRay-GRP');
+
+    const out = rankTorrentResults([uhd, hd], UNARMED);
+
+    expect(out.find((r) => r.title === uhd.title)?.ranking.codecLabel).toBe(
+      'HEVC',
+    );
+    expect(out.find((r) => r.title === hd.title)?.ranking.codecLabel).toBe(
+      '—',
+    );
+  });
+
+  it('falls back to 1080p rather than emptying the set when every 2160p row is x264 (AC-27)', () => {
+    const out = rankTorrentResults(
+      [
+        release('Movie.2026.2160p.BluRay.x264-GRP'),
+        release('Movie.2026.2160p.WEB-DL.x264-GRP'),
+        release('Movie.2026.1080p.BluRay.x265-GRP'),
+        release('Movie.2026.1080p.WEB-DL.x264-GRP'),
+      ],
+      UNARMED,
+    );
+
+    const candidates = out.filter((r) => r.candidate);
+
+    expect(candidates).toHaveLength(2);
+    expect(candidates.every((r) => r.ranking.resolutionTier === 4)).toBe(true);
+  });
+
+  it('never labels a vetoed 2160p AV1 row HEVC anywhere in the view (AC-28)', () => {
+    const av1 = release('Show.S01E01.2160p.WEB-DL.AV1-GRP');
+    const honest = release('Show.S01E01.2160p.WEB-DL.x265-GRP');
+
+    const out = rankTorrentResults([av1, honest], UNARMED);
+    const candidates = out.filter((r) => r.candidate);
+
+    expect(out.find((r) => r.title === av1.title)?.candidate).toBe(false);
+    expect(candidates.map((r) => r.title)).toEqual([honest.title]);
+    expect(candidates.every((r) => r.ranking.codecLabel === 'HEVC')).toBe(
+      true,
+    );
   });
 
   it('orders x264, untagged, x265 at 1080p BluRay whatever the sizes (AC-23)', () => {
@@ -327,14 +406,79 @@ describe('rankTorrentResults', () => {
     expect(out[0].ranking.matchedLanguage).toBeNull();
   });
 
-  it('reads a BDRemux as a remux and DS4K as 1080p', () => {
+  it('reads a BDRemux as a remux and DS4K as 1080p — not UHD, since the tier is 4 (REQ-7b)', () => {
+    // Rewritten for REQ-7b: this release names `UHD` but its resolution tier is 4
+    // (`DS4K` does not parse as 4K, `1080p` does), so it is no longer a UHD disc —
+    // it used to report sourceRank 8 by trusting the token; it must now report 7.
     const out = rankTorrentResults(
       [release('Movie.2026.DS4K.1080p.UHD.BDRemux-GRP')],
       UNARMED,
     );
 
-    expect(out[0].ranking.sourceRank).toBe(8);
+    expect(out[0].ranking.sourceRank).toBe(7);
+    expect(out[0].ranking.sourceLabel).toBe('BluRay Remux');
     expect(out[0].ranking.resolutionTier).toBe(4);
+  });
+
+  it('reports sourceRank 8 for a 2160p remux whether or not it names UHD, larger leading (AC-29)', () => {
+    const tagged = release('Movie.2014.UHD.BDRemux.2160p.HDR10-GRP', {
+      size: 40_000,
+    });
+    const untagged = release('Movie.2014.2160p.PROPER.IMAX.REMUX.DV.HDR10-GRP', {
+      size: 90_000,
+    });
+
+    const out = rankTorrentResults([tagged, untagged], UNARMED);
+
+    expect(out.every((r) => r.ranking.sourceRank === 8)).toBe(true);
+    expect(out.every((r) => r.ranking.sourceLabel === 'UHD BluRay Remux')).toBe(
+      true,
+    );
+    expect(ordered([tagged, untagged], UNARMED)[0]).toBe(untagged.title);
+  });
+
+  it('does not let a 1080p release claim UHD, ranking it BluRay behind an honest remux (AC-30)', () => {
+    const fakeUhd = release(
+      'Movie.2026.IMAX.Hybrid.1080p.UHD.BluRay.DD+5.1.DV.HDR.x265-GRP',
+      { size: 20_000 },
+    );
+    const remux = release('Movie.2026.1080p.BluRay.Remux-GRP', {
+      size: 10_000,
+    });
+
+    const out = rankTorrentResults([fakeUhd, remux], UNARMED);
+    const fakeRanking = out.find((r) => r.title === fakeUhd.title)!.ranking;
+
+    expect(fakeRanking.sourceRank).toBe(5);
+    expect(fakeRanking.sourceLabel).toBe('BluRay');
+    expect(ordered([fakeUhd, remux], UNARMED)[0]).toBe(remux.title);
+  });
+
+  it('leaves the candidate set and best tier unchanged by REQ-7b — only sourceRank/sourceLabel move (AC-31)', () => {
+    const taggedRemux = release('Movie.2026.2160p.UHD.BluRay.Remux.x265-GRP', {
+      size: 40_000,
+    });
+    const untaggedRemux = release('Movie.2026.2160p.BluRay.Remux-GRP', {
+      size: 90_000,
+    });
+    const lowerTier = release('Movie.2026.1080p.WEB-DL.x264-GRP', {
+      size: 5_000,
+    });
+
+    const out = rankTorrentResults(
+      [taggedRemux, untaggedRemux, lowerTier],
+      UNARMED,
+    );
+    const candidates = out.filter((r) => r.candidate);
+
+    expect(candidates.map((r) => r.title).sort()).toEqual(
+      [taggedRemux.title, untaggedRemux.title].sort(),
+    );
+    expect(candidates).toHaveLength(2);
+    expect(
+      new Set(candidates.map((r) => r.ranking.resolutionTier)),
+    ).toEqual(new Set([5]));
+    expect(candidates.map((r) => r.ranking.sourceRank).sort()).toEqual([8, 8]);
   });
 
   it('drops rows below minSourceRank before the best tier is chosen', () => {
@@ -346,6 +490,22 @@ describe('rankTorrentResults', () => {
     const out = rankTorrentResults(input, { ...UNARMED, minSourceRank: 6 });
 
     expect(out.map((r) => r.candidateRank)).toEqual([null, 1]);
+  });
+
+  it('does not false-positive the cinema veto on DTS-HD MA, Ghosts, Catch or Camelot (AC-4f)', () => {
+    const input = [
+      release('Movie.2026.1080p.BluRay.DTS-HD.MA.5.1-GRP'),
+      release('Ghosts.of.Mars.1080p.BluRay-GRP'),
+      release('Catch.Me.If.You.Can.1080p-GRP'),
+      release('Camelot.1080p.WEB-DL-GRP'),
+    ];
+
+    const out = rankTorrentResults(input, {
+      ...UNARMED,
+      allowCinemaReleases: false,
+    });
+
+    expect(out.every((r) => r.candidate)).toBe(true);
   });
 
   it('ranks identically when minSourceRank is absent, null or zero', () => {

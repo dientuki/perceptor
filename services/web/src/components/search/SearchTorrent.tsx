@@ -297,127 +297,129 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
       )}
 
       <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-        <table className="w-full flex-1 flex flex-col min-h-0 divide-y divide-gray-200 dark:divide-gray-800">
-          <thead className="block flex-shrink-0 bg-gray-50 dark:bg-white/[0.02]">
-            <tr className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center w-full">
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                {t("releaseNameHeader", { count: filteredResults.length })}
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
-                {t("sizeHeader")}
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
-                {t("slHeader")}
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                {t("actionHeader")}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="block flex-1 min-h-0 divide-y divide-gray-200 overflow-y-auto dark:divide-gray-800">
-            {filteredResults.length > 0 ? (
-              filteredResults.map((res) => (
-                <tr
-                  key={res.id}
-                  className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center hover:bg-gray-50 dark:hover:bg-white/[0.01]"
-                >
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                    <span className="font-medium line-clamp-2">
-                      {res.title || t("unknownRelease")}
-                    </span>
-                    <div className="mt-1 flex flex-col gap-0.5 overflow-hidden">
-                      {res.infoUrl.map(
-                        (indexerItem, idx) =>
-                          indexerItem.downloadUrl && (
-                            <a
-                              key={idx}
-                              href={indexerItem.downloadUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] text-blue-500 hover:underline dark:text-blue-400 line-clamp-1"
-                            >
-                              {indexerItem.downloadUrl}
-                            </a>
-                          ),
-                      )}
-                    </div>
-                    {showBest && (
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        {(
-                          [
-                            ["resolution", res.ranking.resolutionLabel],
-                            ["group", res.ranking.groupLabel],
-                            ["source", res.ranking.sourceLabel],
-                            ["codec", res.ranking.codecLabel],
-                            ["range", res.ranking.dynamicRangeLabel],
-                            ["audio", res.ranking.audioLabel],
-                            ["language", res.ranking.matchedLanguage],
-                          ] as [string, string | null][]
-                        )
-                          .filter(
-                            (entry): entry is [string, string] =>
-                              entry[1] !== null,
-                          )
-                          .map(([criterion, label]) => (
-                            <span
-                              key={criterion}
-                              className="inline-flex items-center gap-0.5 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400"
-                            >
-                              {label}
-                              {criterion === "source" &&
-                                res.ranking.sourcePromoted && (
-                                  <span title={t("sourcePromoted")}>
-                                    <ArrowUp
-                                      className="h-2.5 w-2.5"
-                                      aria-label={t("sourcePromoted")}
-                                    />
-                                  </span>
-                                )}
-                            </span>
-                          ))}
+        <div className="flex-1 min-h-0 overflow-x-auto">
+          <table className="w-full flex-1 flex flex-col min-h-0 divide-y divide-gray-200 dark:divide-gray-800">
+            <thead className="block flex-shrink-0 bg-gray-50 dark:bg-white/[0.02]">
+              <tr className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center w-full">
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  {t("releaseNameHeader", { count: filteredResults.length })}
+                </th>
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  {t("sizeHeader")}
+                </th>
+                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  {t("slHeader")}
+                </th>
+                <th className="px-4 py-3 text-right text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  {t("actionHeader")}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="block flex-1 min-h-0 divide-y divide-gray-200 overflow-y-auto dark:divide-gray-800">
+              {filteredResults.length > 0 ? (
+                filteredResults.map((res) => (
+                  <tr
+                    key={res.id}
+                    className="grid grid-cols-[minmax(0,1fr)_100px_100px_80px] items-center hover:bg-gray-50 dark:hover:bg-white/[0.01]"
+                  >
+                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                      <span className="text-base font-medium">
+                        {res.title || t("unknownRelease")}
+                      </span>
+                      <div className="mt-1 flex flex-col gap-0.5 overflow-hidden">
+                        {res.infoUrl.map(
+                          (indexerItem, idx) =>
+                            indexerItem.downloadUrl && (
+                              <a
+                                key={idx}
+                                href={indexerItem.downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-blue-500 hover:underline dark:text-blue-400 line-clamp-1"
+                              >
+                                {indexerItem.downloadUrl}
+                              </a>
+                            ),
+                        )}
                       </div>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-gray-500 dark:text-gray-400">
-                    {formatBytes(res.size)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <span className="text-green-500">{res.seeders}</span> /{" "}
-                    <span className="text-gray-400">{res.leechers}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleAddTorrent(res)}
-                      disabled={addingId === res.id}
-                    >
-                      {addingId === res.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="h-4 w-4" />
+                      {showBest && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {(
+                            [
+                              ["resolution", res.ranking.resolutionLabel],
+                              ["group", res.ranking.groupLabel],
+                              ["source", res.ranking.sourceLabel],
+                              ["codec", res.ranking.codecLabel],
+                              ["range", res.ranking.dynamicRangeLabel],
+                              ["audio", res.ranking.audioLabel],
+                              ["language", res.ranking.matchedLanguage],
+                            ] as [string, string | null][]
+                          )
+                            .filter(
+                              (entry): entry is [string, string] =>
+                                entry[1] !== null,
+                            )
+                            .map(([criterion, label]) => (
+                              <span
+                                key={criterion}
+                                className="inline-flex items-center gap-0.5 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400"
+                              >
+                                {label}
+                                {criterion === "source" &&
+                                  res.ranking.sourcePromoted && (
+                                    <span title={t("sourcePromoted")}>
+                                      <ArrowUp
+                                        className="h-2.5 w-2.5"
+                                        aria-label={t("sourcePromoted")}
+                                      />
+                                    </span>
+                                  )}
+                              </span>
+                            ))}
+                        </div>
                       )}
-                    </Button>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-500 dark:text-gray-400">
+                      {formatBytes(res.size)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span className="text-green-500">{res.seeders}</span> /{" "}
+                      <span className="text-gray-400">{res.leechers}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAddTorrent(res)}
+                        disabled={addingId === res.id}
+                      >
+                        {addingId === res.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr className="flex w-full">
+                  <td className="flex-1 px-4 py-10 text-center text-gray-500 dark:text-gray-400">
+                    {isLoading
+                      ? t("searchingTrackers")
+                      : showBest &&
+                          candidateResults.length === 0 &&
+                          results.length > 0
+                        ? t("rankEmpty")
+                        : results.length > 0
+                          ? t("noFilterMatch")
+                          : t("noResultsYet")}
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr className="flex w-full">
-                <td className="flex-1 px-4 py-10 text-center text-gray-500 dark:text-gray-400">
-                  {isLoading
-                    ? t("searchingTrackers")
-                    : showBest &&
-                        candidateResults.length === 0 &&
-                        results.length > 0
-                      ? t("rankEmpty")
-                      : results.length > 0
-                        ? t("noFilterMatch")
-                        : t("noResultsYet")}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

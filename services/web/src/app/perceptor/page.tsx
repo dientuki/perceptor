@@ -15,7 +15,7 @@ export default async function Home() {
 
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center gap-12 px-6 py-16 lg:flex-row lg:gap-8 lg:py-0">
         <div className="flex w-full flex-col items-center text-center lg:w-1/2 lg:items-start lg:text-left">
-          <span className="mb-4 inline-flex items-center gap-2 rounded-full bg-brand-50 px-4 py-1.5 text-theme-xs font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
+          <span className="mb-4 inline-flex items-center gap-2 rounded-full bg-brand-50 px-4 py-1.5 text-theme-sm font-medium text-brand-600 dark:bg-brand-500/10 dark:text-brand-400">
             {t("badge")}
           </span>
 

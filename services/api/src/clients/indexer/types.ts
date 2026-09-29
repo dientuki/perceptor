@@ -23,5 +23,6 @@ export interface TorrentResult {
 
 export type IndexerClient = {
   search: (query: string) => Promise<TorrentResult[]>;
+  countIndexers: () => Promise<number>;
   //searchIA: (query: string) => Promise<TorrentResult[]>;
 };

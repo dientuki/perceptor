@@ -6,6 +6,7 @@ import {
   CloudDownload,
   Film,
   Popcorn,
+  Rocket,
   Settings,
   Tv,
   Users,
@@ -15,9 +16,10 @@ import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSidebar } from "../context/SidebarContext";
 import Badge from "@/components/ui/badge/Badge";
+import type { IndexerStatus } from "@/types/indexer";
 import type { MediaCapabilities } from "@/types/media";
+import { useSidebar } from "../context/SidebarContext";
 
 type NavItem = {
   name: string;
@@ -31,12 +33,14 @@ interface AppSidebarProps {
   isAdmin?: boolean;
   capabilities: MediaCapabilities;
   activeDownloadCount?: number;
+  indexerStatus?: IndexerStatus | null;
 }
 
 const AppSidebar: React.FC<AppSidebarProps> = ({
   isAdmin = false,
   capabilities,
   activeDownloadCount = 0,
+  indexerStatus = null,
 }) => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
@@ -92,12 +96,24 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
   // The real control is api's AdminGuard; this is cosmetic, per
   // 029-settings-screen-tabs' web/plan.md (settings is now admin-only,
   // same as users).
+  // First step stays a reference link only while setup looks incomplete —
+  // no TMDB key, or Prowlarr holds zero indexers (also true when it's
+  // unreachable, since the contract resolves that as configuredIndexers: 0
+  // rather than throwing). `indexerStatus` is only ever non-null for an
+  // admin (the layout skips the admin-gated query otherwise).
+  const showFirstStep =
+    !capabilities.catalogKeyConfigured ||
+    (indexerStatus?.configuredIndexers ?? 0) === 0;
+
   const navItems: NavItem[] = isAdmin
     ? [
         ...baseNavItems,
         //icon: <UserCircleIcon />,
         { icon: <Settings />, name: t("settings"), path: "/settings" },
         { icon: <Users />, name: t("users"), path: "/users" },
+        ...(showFirstStep
+          ? [{ icon: <Rocket />, name: t("firstStep"), path: "/first-step" }]
+          : []),
       ]
     : baseNavItems;
 

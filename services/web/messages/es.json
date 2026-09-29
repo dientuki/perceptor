@@ -180,7 +180,8 @@
     "downloads": "Descargas",
     "downloadsBadge": "{count} descargas activas",
     "settings": "Configuración",
-    "users": "Usuarios"
+    "users": "Usuarios",
+    "firstStep": "Primer paso"
   },
   "userMenu": {
     "editProfile": "Editar perfil",
@@ -277,6 +278,11 @@
       "title": "Descargas",
       "metadataTitle": "Descargas | Perceptor",
       "metadataDescription": "Todas las descargas de tu biblioteca"
+    },
+    "firstStep": {
+      "title": "Primer paso",
+      "metadataTitle": "Primer paso | Perceptor",
+      "metadataDescription": "Conectá Perceptor a TMDB y agregá un indexer para que las búsquedas devuelvan resultados"
     }
   },
   "notFound": {
@@ -387,27 +393,7 @@
   "billboard": {
     "moviesHeading": "Películas populares",
     "showsHeading": "Series populares",
-    "unavailable": "Las películas y las series están deshabilitadas en este sistema.",
-    "tmdbOnboarding": {
-      "rejectedTitle": "Tu clave de TMDB no funciona",
-      "rejectedBody": "TMDB rechazó la clave de API configurada. Reemplazala por una válida siguiendo los pasos de abajo.",
-      "title": "Conectá Perceptor con TMDB",
-      "whyTitle": "Por qué necesitás tu propia clave",
-      "why": "Perceptor no tiene un servidor central ni una clave compartida. Con tu propia clave de TMDB, las consultas al catálogo van directo desde tu instalación a TMDB, con tu propia cuenta. Perceptor no guarda ningún dato tuyo de ninguna forma.",
-      "adminOnly": "Solo un administrador puede completar el último paso.",
-      "stepsTitle": "Cómo conseguir una clave",
-      "step1": "Creá una cuenta gratuita en TMDB.",
-      "step1Link": "Registrarse en TMDB",
-      "step2": "Confirmá el e-mail que te manda TMDB y después iniciá sesión.",
-      "step2Link": "Iniciar sesión en TMDB",
-      "step3": "Abrí la página de API y pedí una clave: elegí el tipo \"Developer\", uso personal / no comercial, y aceptá los términos.",
-      "step3Link": "Abrir la página de API de TMDB",
-      "step3Terms": "Términos de uso de TMDB",
-      "step4": "Copiá el \"API Read Access Token\" de esa misma página. Es el token largo, no la \"API Key\" corta.",
-      "step5Admin": "Pegalo en el campo de clave de API de TMDB en Ajustes y guardá.",
-      "step5Link": "Abrir Ajustes",
-      "step5User": "Pedile a un administrador que lo pegue en Ajustes, en el campo de clave de API de TMDB, y guarde."
-    }
+    "unavailable": "Las películas y las series están deshabilitadas en este sistema."
   },
   "media": {
     "card": {
@@ -584,7 +570,10 @@
       "howToChangeDescription": "Editá estas variables en el .env del host:",
       "howToChangeRecreate": "El cambio recién toma efecto después de recrear los contenedores afectados:",
       "hostGuidanceLabel": "Dirección del host en modo puerto",
-      "hostGuidanceDescription": "El endpoint de subida tiene que llevar una dirección a la que el navegador pueda llegar — la dirección LAN del host, nunca \"localhost\", ya que el navegador que abre esta app puede ser otra máquina distinta a la que corre el stack. Ningún contenedor puede determinar esa dirección por sí solo, así que PUBLIC_UPLOAD_URL se configura a mano en el .env."
+      "hostGuidanceDescription": "El endpoint de subida tiene que llevar una dirección a la que el navegador pueda llegar — la dirección LAN del host, nunca \"localhost\", ya que el navegador que abre esta app puede ser otra máquina distinta a la que corre el stack. Ningún contenedor puede determinar esa dirección por sí solo, así que PUBLIC_UPLOAD_URL se configura a mano en el .env.",
+      "installableLabel": "Instalable como app",
+      "installableAvailable": "Disponible",
+      "installableUnavailable": "No disponible — requiere HTTPS"
     },
     "general": {
       "uiLocaleLabel": "Idioma de la aplicación"
@@ -682,6 +671,7 @@
       "downloadsFolderLabel": "Carpeta de descargas",
       "indexerSection": "Indexer",
       "indexerApiKeyLabel": "API key del indexer",
+      "indexerHelpButton": "Ayuda: cómo configurar un indexer",
       "groupNameLabel": "Grupos de torrents",
       "groupNamePlaceholder": "Nombre del grupo",
       "addGroup": "Agregar",
@@ -794,5 +784,55 @@
     "kindMovie": "Película",
     "kindShort": "Corto",
     "kindEpisodes": "Episodios"
+  },
+  "onboarding": {
+    "tmdb": {
+      "rejectedTitle": "Tu clave de TMDB no funciona",
+      "rejectedBody": "TMDB rechazó la clave de API configurada. Reemplazala por una válida siguiendo los pasos de abajo.",
+      "title": "Conectá Perceptor con TMDB",
+      "whyTitle": "Por qué necesitás tu propia clave",
+      "why": "Perceptor no tiene un servidor central ni una clave compartida. Con tu propia clave de TMDB, las consultas al catálogo van directo desde tu instalación a TMDB, con tu propia cuenta. Perceptor no guarda ningún dato tuyo de ninguna forma.",
+      "adminOnly": "Solo un administrador puede completar el último paso.",
+      "stepsTitle": "Cómo conseguir una clave",
+      "step1": "Creá una cuenta gratuita en TMDB.",
+      "step1Link": "Registrarse en TMDB",
+      "step2": "Confirmá el e-mail que te manda TMDB y después iniciá sesión.",
+      "step2Link": "Iniciar sesión en TMDB",
+      "step3": "Abrí la página de API y pedí una clave: elegí el tipo \"Developer\", uso personal / no comercial, y aceptá los términos.",
+      "step3Link": "Abrir la página de API de TMDB",
+      "step3Terms": "Términos de uso de TMDB",
+      "step4": "Copiá el \"API Read Access Token\" de esa misma página. Es el token largo, no la \"API Key\" corta.",
+      "step5Admin": "Pegalo en el campo de clave de API de TMDB en Ajustes y guardá.",
+      "step5Link": "Abrir Ajustes",
+      "step5User": "Pedile a un administrador que lo pegue en Ajustes, en el campo de clave de API de TMDB, y guarde.",
+      "alreadyConfigured": "Ya configurada"
+    },
+    "indexer": {
+      "title": "Configurá un indexer",
+      "about": "Los indexers son los sitios de torrents que Prowlarr consulta por vos — cada búsqueda de un título en Perceptor le pregunta a Prowlarr, y Prowlarr le pregunta a cada indexer que agregaste. Sin ninguno configurado, una búsqueda no encuentra nada por más popular que sea el título; para eso existe esta página.",
+      "unreachable": "No se pudo contactar al indexer.",
+      "zeroNotice": "Todavía no hay ningún indexer configurado. Ninguna búsqueda de releases va a devolver resultados hasta que agregues uno.",
+      "countNotice": "{count, plural, one {Hay # indexer configurado.} other {Hay # indexers configurados.}}",
+      "stepsTitle": "Cómo agregar uno",
+      "step1": "Abrí la interfaz web del indexer.",
+      "step1LinkLabel": "Abrir Prowlarr",
+      "step1PortOnly": "Disponible en el puerto {port} (no tiene un dominio configurado).",
+      "step2": "Iniciá sesión con el mismo usuario y contraseña que la cuenta de administrador de Perceptor — un solo login sirve para Perceptor, el cliente de torrents y el indexer.",
+      "step2ImageAlt": "Pantalla de inicio de sesión de Prowlarr",
+      "step3": "Recorré la lista que se abre. Filtrá Privacy en \"Public\" (no hace falta cuenta, es lo más fácil para empezar) y Categories en \"Movies\" o \"TV\" para acotarla a los trackers que realmente tienen lo que buscás en Perceptor.",
+      "step3ImageAlt": "Lista \"Add Indexer\" de Prowlarr filtrada a trackers públicos de Movies",
+      "step4": "Hacé clic en el botón naranja \"Add Indexer\" de la barra superior izquierda. Escribí el nombre de un indexer público (por ejemplo \"1337x\") en el buscador que aparece, hacé clic en la fila que coincide para abrir su configuración, y después clic en \"Test\" y \"Save\" al pie de ese diálogo.",
+      "step4ImageAlt": "Diálogo \"Add Indexer\" de Prowlarr con los botones Test y Save",
+      "step5": "Hacé clic de nuevo en \"Add Indexer\", esta vez para un tracker que está detrás de Cloudflare. En el mismo diálogo de configuración, bajá hasta el campo \"Tags\", hacé clic ahí, escribí flaresolverr y elegí la tag que ya existe entre las sugerencias — eso enruta los pedidos de ese indexer a través del proxy de FlareSolverr que ya corre en el stack. Después clic en \"Test\" y \"Save\" igual que antes.",
+      "step5ImageAlt": "Diálogo \"Add Indexer\" de Prowlarr con la tag flaresolverr agregada en el campo Tags",
+      "step6": "Volvé a Perceptor y buscá un título desde su página de detalle — ahora aparecen releases.",
+      "apiKeyNote": "No hace falta que copies la clave de API del indexer a ningún lado — el instalador ya la configuró.",
+      "viewFullSize": "Ver tamaño completo"
+    }
+  },
+  "offline": {
+    "heading": "Estás sin conexión",
+    "body": "No se puede contactar al servidor de Perceptor en este momento. Verificá que el stack esté corriendo y volvé a intentar.",
+    "retry": "Reintentar"
   }
 }
