@@ -221,7 +221,7 @@ across services; within a service the tasks are ordered only where noted.
       remaining passage tells a reader to read or preserve a comment that no longer exists (AC-16),
       and the queue-separation, umask and error-swallowing rationales are all still stated in the
       document itself. → T013
-- [ ] **T017** `[web] [P]` Sweep `services/web/src` end to end — the Spanish comments (~78 lines)
+- [x] **T017** `[web] [P]` Sweep `services/web/src` end to end — the Spanish comments (~78 lines)
       and the 44 ad-hoc references (39 of them bare) in one pass, since the slice is an order of
       magnitude smaller than the other two. `components/import/importFileModal.tsx:167`'s bare
       `(NFR-1)` becomes `// Spec 010, NFR-1; Spec 006, NFR-1b` (blame: `try to implement 010
