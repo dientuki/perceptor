@@ -21,25 +21,14 @@ const MEDIA_CAPABILITIES_QUERY = `
   }
 `;
 
-// The actual round trip, cache()-wrapped so multiple components asking
-// within the same request/render pass dedupe to a single GraphQL call
-// (NFR-6), matching fetchMe()'s idiom in src/actions/auth.ts.
+// Spec 045, NFR-6
 const fetchMediaCapabilities = cache(() =>
   fetchGraphQL<{ mediaCapabilities: MediaCapabilities }>(
     MEDIA_CAPABILITIES_QUERY,
   ),
 );
 
-// Read from the dashboard layout's Server Component render pass, where
-// cookie mutation is illegal — an auth failure hands off to the Route
-// Handler via redirectToClearSession, mirroring getCurrentUser()'s use of
-// fetchMe() in src/actions/auth.ts, rather than redirectIfUnauthenticated
-// (which mutates cookies and is only legal from a Server Action / Route
-// Handler context).
-//
-// A failed read must never fall back to { moviesEnabled: false, showsEnabled:
-// false } — that would render the product as uninstalled rather than as
-// broken (NFR-4). Every failure throws a translated error instead.
+// Spec 045, NFR-4
 export async function getMediaCapabilities(): Promise<MediaCapabilities> {
   const { data, errors } = await fetchMediaCapabilities();
 
@@ -76,7 +65,6 @@ export async function searchMedia(
   query: string,
   type: MediaType,
 ): Promise<MediaSearchResult[]> {
-  // El API ya corta con [] en query vacía, pero evitamos el round trip
   if (!query.trim()) return [];
 
   const { data, errors } = await fetchGraphQL<{
@@ -100,7 +88,6 @@ export async function searchMediaForPage(
   query: string,
   type: MediaType,
 ): Promise<MediaSearchResult[]> {
-  // El API ya corta con [] en query vacía, pero evitamos el round trip
   if (!query.trim()) return [];
 
   const { data, errors } = await fetchGraphQL<{
@@ -140,7 +127,6 @@ const SEARCH_ALL_MEDIA_QUERY = `
 export async function searchAllMedia(
   query: string,
 ): Promise<MediaSearchResult[]> {
-  // El API ya corta con [] en query vacía, pero evitamos el round trip
   if (!query.trim()) return [];
 
   const { data, errors } = await fetchGraphQL<{

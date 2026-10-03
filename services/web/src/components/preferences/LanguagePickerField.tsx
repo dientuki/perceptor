@@ -20,10 +20,7 @@ interface LanguageGroup {
   rows: Language[];
 }
 
-// Controlled sibling of components/media/LanguagePicker.tsx — same
-// pick-and-badge visual, but no <form>, no action and no save button of its
-// own, because REQ-8's single Guardar button owns the submit here rather
-// than each field.
+// Spec 021, REQ-8
 export default function LanguagePickerField({
   options,
   value,

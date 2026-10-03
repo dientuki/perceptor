@@ -9,7 +9,7 @@ import { MEDIA_TYPE } from "@/types/media";
 interface MediaCardProps {
   item: any;
   renderAction?: (item: any) => React.ReactNode;
-  showLink: boolean; // Nueva propiedad para controlar si se muestra el enlace
+  showLink: boolean;
   mediaType?: (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
   showTypeBadge?: boolean; // Opt-in: a mixed grid needs it, a single-type grid doesn't
   showMeta?: boolean; // Opt-in: hide title/overview/year when the card renders its own caption
@@ -81,7 +81,6 @@ export function MediaCard({
           poster
         )}
       </div>
-      {/* Slot para el Botón (encima del poster o donde prefieras) */}
       {renderAction && renderAction(item)}
 
       {/* Info */}

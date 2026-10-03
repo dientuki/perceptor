@@ -19,12 +19,7 @@ export type CreateUploadTicketResult =
   | { success: true; ticket: UploadTicket }
   | { error: string; errorKey?: string };
 
-// CHANGED: both arguments are now nullable on the API side — exactly one must
-// be supplied. Sent by name below, never positionally, since a bare
-// positional id is how a film upload could silently mint a ticket for
-// `undefined` once `movieId` stopped being required. `force` is minted into
-// the ticket itself (REQ-7 — `onUploadFinish` reads the decision off the
-// verified ticket, not off anything the browser sends).
+// Spec 027, REQ-7
 const CREATE_UPLOAD_TICKET_MUTATION = `
   mutation CreateUploadTicket($movieId: Int, $episodeId: Int, $force: Boolean) {
     createUploadTicket(movieId: $movieId, episodeId: $episodeId, force: $force) {

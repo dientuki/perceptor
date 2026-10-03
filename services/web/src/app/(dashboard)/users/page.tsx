@@ -19,11 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function UsersPage() {
   const t = await getTranslations("pages.users");
-  // Deliberately sequential, not Promise.all: getUsers() throws for a
-  // non-admin (AdminGuard refuses it), which would race the isAdmin check
-  // below and surface as an uncaught 500 instead of a clean 404. Checking
-  // isAdmin first — defense in depth, the real control is api's AdminGuard
-  // (REQ-2) — means getUsers() is never even called for a non-admin.
+  // Spec 003, REQ-2
   const user = await getCurrentUser();
 
   if (!user.isAdmin) {

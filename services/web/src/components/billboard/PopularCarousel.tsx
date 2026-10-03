@@ -13,10 +13,7 @@ interface PopularCarouselProps {
   initialError?: string | null;
 }
 
-// Client half of one billboard strip: owns the per-card add state exactly as
-// MultiSearchResults does for /search, but renders through MediaCarousel
-// instead of MediaList, and cards hide their metadata block (poster + badge
-// + action only, per 033-billboard-and-navigation REQ-6).
+// Spec 033, REQ-6
 export function PopularCarousel({
   items,
   heading,

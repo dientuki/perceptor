@@ -11,7 +11,7 @@ export interface DownloadError {
 
 export interface Download {
   mediaSourceId: number;
-  // null for a LOCAL_FILE upload racing alongside torrents (REQ-18).
+  // Spec 022, REQ-18
   infoHash: string | null;
   // SourceKind as a plain string — for display only, never for branching.
   // Use `infoHash != null` to decide whether a row is controllable.

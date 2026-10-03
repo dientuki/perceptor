@@ -101,7 +101,6 @@ export default function Movie({
     <div className="grid grid-cols-1 gap-8 md:grid-cols-[16rem_minmax(0,1fr)_20rem]">
       <div className="min-w-0">
         {movie.posterUrl ? (
-          // El posterUrl del api es w300 (300px de ancho); pedir más grande lo escala y se ve borroso
           <Image
             src={movie.posterUrl}
             alt={movie.title}

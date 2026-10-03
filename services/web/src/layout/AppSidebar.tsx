@@ -92,15 +92,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     },
   ];
 
-  // Only the administrator sees the entry point — REQ-11's usability half.
-  // The real control is api's AdminGuard; this is cosmetic, per
-  // 029-settings-screen-tabs' web/plan.md (settings is now admin-only,
-  // same as users).
-  // First step stays a reference link only while setup looks incomplete —
-  // no TMDB key, or Prowlarr holds zero indexers (also true when it's
-  // unreachable, since the contract resolves that as configuredIndexers: 0
-  // rather than throwing). `indexerStatus` is only ever non-null for an
-  // admin (the layout skips the admin-gated query otherwise).
+  // Spec 029, REQ-11; Spec 078, REQ-2
   const showFirstStep =
     !capabilities.catalogKeyConfigured ||
     (indexerStatus?.configuredIndexers ?? 0) === 0;

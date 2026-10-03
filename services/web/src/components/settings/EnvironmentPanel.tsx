@@ -23,10 +23,7 @@ function stripScheme(url: string): string {
 const RECREATE_COMMAND = "docker compose up -d --force-recreate";
 const RECREATE_API_WEB_COMMAND = `${RECREATE_COMMAND} api web`;
 
-// Read-only Environment tab (REQ-1..REQ-11 of 055-environment-panel). No
-// form control anywhere in this file — SettingsForm.tsx renders it as a
-// sibling of the main <form>, never inside it, and the shared save action
-// never reads anything from here (REQ-10).
+// Spec 055, REQ-10
 export default function EnvironmentPanel({
   environment,
   uploadEndpoint,
@@ -36,24 +33,21 @@ export default function EnvironmentPanel({
   const { useTraefik, useHttps, domain, endpoints, expectedUploadEndpoint } =
     environment;
 
-  // REQ-6/AC-9 of 080-installable-pwa: browser-side secure-context detection,
-  // not a server-known value — null until the client effect runs.
+  // Spec 080, REQ-6 AC-9
   const [installable, setInstallable] = useState<boolean | null>(null);
 
   useEffect(() => {
     setInstallable(window.isSecureContext && "serviceWorker" in navigator);
   }, []);
 
-  // REQ-6: only meaningful with routing on and a derivable expected value.
-  // Comparison is exact — no trailing-slash or case normalization.
+  // Spec 055, REQ-6
   const uploadConsistent =
     useTraefik && expectedUploadEndpoint !== null
       ? uploadEndpoint !== null &&
         stripScheme(expectedUploadEndpoint) === stripScheme(uploadEndpoint)
       : null;
 
-  // REQ-7: the observable signature of an .env edit applied to one
-  // container and not the other.
+  // Spec 055, REQ-7
   const domainsDisagree =
     domain !== null && webDomain !== null && domain !== webDomain;
 

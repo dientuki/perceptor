@@ -75,11 +75,6 @@ function Feature({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-/**
- * Ilustración original inspirada en un robot transformable estilo G1,
- * en modo microscopio/tanque, como guiño decorativo al nombre del proyecto.
- * No reproduce el diseño registrado de ningún personaje.
- */
 function PerceptorIllustration({
   className,
   alt,
@@ -147,7 +142,6 @@ function PerceptorIllustration({
         strokeWidth="3"
       />
 
-      {/* panel de pecho */}
       <rect
         x="150"
         y="195"
@@ -215,7 +209,6 @@ function PerceptorIllustration({
       <rect x="176" y="101" width="20" height="8" rx="4" fill="#7cd4fd" />
       <rect x="204" y="101" width="20" height="8" rx="4" fill="#7cd4fd" />
 
-      {/* antenas tipo "microscopio" homenajeando el modo alterno del personaje */}
       <line
         x1="170"
         y1="70"
@@ -251,7 +244,6 @@ function PerceptorIllustration({
         strokeWidth="2"
       />
 
-      {/* lente central en el pecho, como guiño al "modo microscopio" */}
       <circle
         cx="200"
         cy="180"

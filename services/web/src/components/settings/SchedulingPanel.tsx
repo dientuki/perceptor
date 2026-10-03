@@ -98,9 +98,7 @@ function TaskRow({ task }: { task: ScheduledTask }) {
           {isUnavailable && (
             <p className="mt-1 text-error-500">{t("unavailableReason")}</p>
           )}
-          {/* Always emits the task's stored value, even while unavailable —
-              dropping this or forcing "false" would silently disable the
-              task for good the next time any setting is saved (REQ-9). */}
+          {/* Spec 045, REQ-9 */}
           <input
             type="hidden"
             name={`schedule_${current.id}_enabled`}

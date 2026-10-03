@@ -20,22 +20,7 @@ export interface GraphQLErrorLike {
 /** Every key in the frozen vocabulary starts with this; the rest is the catalog path. */
 const ERROR_KEY_PREFIX = "error.";
 
-/**
- * Turns a raw GraphQL error into a string safe to render on screen.
- *
- * `extensions.i18n.key` (e.g. `error.auth.unauthenticated`) is looked up in the
- * `errors` namespace of the active locale's catalog, dropping the leading
- * `error.` — so `error.auth.unauthenticated` resolves to `errors.auth.unauthenticated`
- * in `messages/<locale>.json`. `extensions.i18n.params`, when present, is interpolated
- * into the translation as-is — it arrives as a plain object, not a JSON-encoded
- * string (`docs/spec/graphql-contract.md`'s error envelope example, and
- * `importFileModal.tsx`'s REST-path reading of the same shape, agree on this).
- *
- * Falls back to the English `message` api always sends (REQ-8) whenever there is
- * no key or the key has no catalog entry (a key `web`'s catalogs have not caught up
- * with yet — see `018-ui-i18n/plan.md`'s "Key drift" risk). This function must never
- * return the raw key string.
- */
+// Spec 018, REQ-8
 export interface ErrorTranslator {
   (path: string, values?: Record<string, string | number | Date>): string;
   has(path: string): boolean;
@@ -83,15 +68,7 @@ export async function translateGraphQLError(
   );
 }
 
-/**
- * Turns a raw GraphQL error into the `{ error, errorKey }` shape a Server
- * Action returns instead of throwing. `errorKey` is `extensions.i18n.key`
- * passed through untouched — no `error.` prefix strip, unlike
- * `translateGraphQLError`'s internal lookup — because components compare
- * against the full `error.movie.already_completed` form to decide which
- * confirmation to offer (REQ-11). A plain `throw new Error(...)` loses this
- * key at the boundary, which is why a Server Action returns it instead.
- */
+// Spec 027, REQ-11
 export async function toActionError(
   error: GraphQLErrorLike,
 ): Promise<{ error: string; errorKey?: string }> {
