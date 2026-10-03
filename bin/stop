@@ -1,0 +1,102 @@
+#!/bin/bash
+# Stops this directory's stack, and then any Perceptor container still running outside it.
+#
+# `docker compose stop` on its own is not enough: it only knows the containers labelled with
+# *this* Compose project (the directory name, or COMPOSE_PROJECT_NAME), so a stack started from
+# another checkout, from an end-user install directory, or from this one before it was renamed
+# keeps running — holding the host ports and the library bind mount, which is exactly what makes
+# the next `bin/dev` fail in a way that looks like nothing to do with a leftover container.
+#
+# Usage: bin/stop [-y]
+#   -y, --yes   stop the leftovers found outside this project without asking.
+#
+# Stop only, never down: no container is removed, no volume is touched, no data is lost, and
+# `bin/dev` brings everything back where it was.
+set -e
+cd "$(dirname "$0")/.."
+
+assume_yes=false
+case "$1" in
+  -y|--yes) assume_yes=true ;;
+  "") ;;
+  *)
+    echo "Usage: bin/stop [-y|--yes]" >&2
+    exit 1
+    ;;
+esac
+
+. "$(dirname "$0")/_docker.sh"
+require_docker
+
+if [ ! -f .env ]; then
+  echo ".env no existe. Corré bin/install primero."
+  exit 1
+fi
+
+set -a; . ./.env; set +a
+
+project="$(compose_project_name)"
+
+echo "Stopping the stack in this directory (project '${project}')..."
+docker compose -f docker-compose.yaml stop
+
+# Every service of every Perceptor stack joins the perceptor-net bridge, which Compose names
+# <project>_perceptor-net. That is a far better marker than the container name — it catches the
+# db, redis and traefik containers of another project too, whose images say nothing about
+# Perceptor — and the image match beside it covers a container that somehow lost the network.
+seeds=$(docker ps --format '{{.Names}}\t{{.Label "com.docker.compose.project"}}\t{{.Networks}}\t{{.Image}}' \
+  | awk -F'\t' -v self="$project" '($3 ~ /perceptor-net/ || $4 ~ /perceptor/) && $2 != self { print $1 "\t" $2 }')
+
+if [ -z "$seeds" ]; then
+  echo "No Perceptor containers left running outside this project."
+  echo "Done."
+  exit 0
+fi
+
+# A seed proves its whole project is still up, so pull in every running container of that project
+# rather than just the one that matched. A seed with no project label was started by hand, outside
+# Compose: that single container is all there is to stop.
+leftovers=""
+while IFS=$'\t' read -r name other_project; do
+  [ -z "$name" ] && continue
+  if [ -n "$other_project" ]; then
+    leftovers="$leftovers
+$(docker ps --filter "label=com.docker.compose.project=${other_project}" --format '{{.Names}}')"
+  else
+    leftovers="$leftovers
+$name"
+  fi
+done <<EOF
+$seeds
+EOF
+
+leftovers=$(echo "$leftovers" | grep -v '^$' | sort -u)
+
+echo
+echo "Perceptor containers still running outside this project:"
+echo "$leftovers" | sed 's/^/  /'
+
+if [ "$assume_yes" = false ]; then
+  if [ ! -t 0 ]; then
+    echo
+    echo "Not stopping them: no terminal to ask on. Re-run as 'bin/stop -y' to stop them too."
+    exit 0
+  fi
+  echo
+  printf "Stop these too? [Y/n] "
+  read -r answer
+  case "$answer" in
+    [nN]*)
+      echo "Left running."
+      exit 0
+      ;;
+  esac
+fi
+
+echo
+# One docker stop for the whole set: these containers belong to other projects, so there is no
+# single `docker compose` invocation that covers them.
+echo "$leftovers" | xargs -r docker stop
+
+echo
+echo "Done."
