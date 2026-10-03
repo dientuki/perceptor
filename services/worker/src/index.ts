@@ -17,30 +17,16 @@ import { fetchGraphQL } from './api/graphql-client';
 import { ERROR_ENCODE_UNEXPECTED } from './i18n/error-keys';
 import { renderMessage } from './i18n/messages.en';
 
-// El container corre como PUID:PGID (ver docker-compose.yaml, "user:"), no
-// root: sin esto el umask por defecto (022) deja carpetas 755/root y archivos
-// 644, que Jellyfin (mismo grupo, pero otro uid) no puede escribir — necesita
-// meter folder.jpg/.nfo/.trickplay adentro de cada carpeta que arma el
-// worker. Con 002, sobre carpetas setgid (la biblioteca real ya lo tiene)
-// queda 2775/664: mismo dueño de grupo, escribible por el grupo entero. Se
-// hereda a ffmpeg/mkvmerge como hijos, así que no hace falta tocar runner.ts.
 process.umask(0o002);
 
-// Conexión con opciones planas, igual que los productores (process-queue.service.ts
-// y encode-queue.service.ts en la api): BullMQ arma su propia conexión con los
-// settings que necesita.
 const connection = {
   host: process.env.REDIS_HOST ?? 'redis',
   port: Number(process.env.REDIS_PORT ?? 6379),
 };
 
-// This service is "type": "commonjs" — no top-level await. The probe result
-// must be memoized before either Worker starts pulling encode jobs (REQ-1,
-// NFR-1), so the whole startup is wrapped in this async bootstrap rather
-// than switching the package to ESM as a side effect of this feature.
+// Spec 017, REQ-1 NFR-1
 async function main() {
-  // 054-interrupted-encode-recovery (REQ-1, NFR-4): sound only because exactly
-  // one worker container runs — "I just booted" and "nothing is encoding" coincide.
+  // Spec 054, REQ-1 NFR-4
   const reconciledCount = await deliverReport('encodeWorkerStarted', () =>
     reportEncodeWorkerStarted(),
   );
@@ -58,17 +44,10 @@ async function main() {
     },
     {
       connection,
-      // Un escaneo es IO sobre una carpeta y un encode no debe arrancar N veces
-      // por accidente.
       concurrency: 1,
     },
   );
 
-  // Worker separado, no un job name más en `process`: un encode puede tardar
-  // horas, y con concurrency:1 en una sola cola compartida o los escaneos
-  // quedan bloqueados detrás de FFmpeg, o se arriesgan N FFmpeg simultáneos.
-  // Cada Worker abre su propia conexión bloqueante, así que este puede estar
-  // horas ocupado sin frenar al de arriba.
   const encodeWorker = new Worker<EncodeJob>(
     ENCODE_QUEUE,
     async (job) => {
@@ -85,9 +64,7 @@ async function main() {
     },
   );
 
-  // 047-source-deletion: encode:cancel is a Redis pub/sub channel, not a
-  // queue — only meaningful to a worker running the job right now, so no
-  // separate BullMQ connection is warranted here, just a plain subscriber.
+  // Spec 047, REQ-4
   const cancelSubscriber = new Redis(connection);
   await cancelSubscriber.subscribe(ENCODE_CANCEL_CHANNEL);
 
@@ -126,17 +103,7 @@ async function main() {
   encodeWorker.on('failed', (job, err) => {
     console.error(`[worker] encode falló ${job?.id}:`, err);
 
-    // 054-interrupted-encode-recovery (REQ-10): this listener only reacts to
-    // a BullMQ-level outcome, never to a plain diagnosed failure. If `err` is
-    // an UnrecoverableError, encode.job.ts already decided whether to report
-    // (KeyedError -> encodeFailed already sent; EncodeCancelledError ->
-    // deliberately nothing, per REQ-8) before converting its error, so there
-    // is nothing left to do here. Only an unclassified, still-plain throw
-    // reaches this branch, and only once BullMQ has actually exhausted every
-    // configured attempt (job.attemptsMade >= job.opts.attempts) does it mean
-    // "nobody will retry this" rather than "a retry is already queued" — the
-    // latter must never be reported, or a title would turn red while its
-    // encode is still coming.
+    // Spec 054, REQ-10 REQ-8
     if (err instanceof UnrecoverableError) return;
     if (!job) return;
 

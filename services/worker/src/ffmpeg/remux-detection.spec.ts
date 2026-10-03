@@ -1,11 +1,3 @@
-// Defends REQ-10: isRemux must classify from ffprobe metadata, not the
-// filename, and must parse avg_frame_rate as the rational string ffprobe
-// actually reports ("24000/1001"). Number("24000/1001") is NaN, which makes
-// bits-per-pixel-per-frame NaN, every comparison false, and every file —
-// including real 1080p remuxes — classify as non-remux forever, with the
-// job still completing and no error in any log (the archetypal Article IX
-// bug this suite exists to catch).
-
 import { describe, expect, it } from 'vitest';
 import { isRemux, type RemuxMetadata } from './remux-detection';
 
@@ -28,6 +20,13 @@ function audioStream(overrides: Record<string, any> = {}) {
   };
 }
 
+// Defends Spec 011, REQ-10: isRemux must classify from ffprobe metadata, not
+// the filename, and must parse avg_frame_rate as the rational string
+// ffprobe actually reports ("24000/1001"). Number("24000/1001") is NaN,
+// which makes bits-per-pixel-per-frame NaN, every comparison false, and
+// every file — including real 1080p remuxes — classify as non-remux
+// forever, with the job still completing and no error in any log (the
+// archetypal Article IX bug this suite exists to catch).
 describe('isRemux', () => {
   it('treats a truehd audio track as a remux regardless of video bitrate', () => {
     const metadata: RemuxMetadata = {

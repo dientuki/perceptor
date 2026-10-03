@@ -34,10 +34,7 @@ type SourceScannedMutationResult = {
   };
 };
 
-// Picks the scan mode from data the API returns, never from the shape of the
-// download directory (REQ-1). A source targeting neither a film, an episode
-// nor a season is an error — the job fails loudly rather than silently
-// scanning nothing.
+// Spec 013, REQ-1
 function selectMode(mediaSource: NonNullable<MediaSourceQueryResult['mediaSource']>): SelectMatchesMode {
   if (mediaSource.movieId !== null || mediaSource.episodeId !== null) {
     return { kind: 'single' };

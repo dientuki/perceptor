@@ -1,12 +1,4 @@
-// Defends REQ-10/REQ-11/REQ-12: cleanup-source.ts is the one place in this
-// service that is allowed to swallow errors, and the one place a wrong
-// branch produces a job marked completed with nothing to show for it in any
-// log. Three ways this used to fail (services/worker/src/jobs/encode.job.ts
-// before this feature): the cleanup ran only when `infoHash` was set, so a
-// LOCAL_FILE (a tus upload) was never cleaned up at all; it ran inside the
-// encode's try, so a cleanup failure demoted an already-completed job to
-// ERROR; and it deleted `downloadPath` straight off the database with no
-// check that it was even inside the downloads root.
+// Spec 012, REQ-10 REQ-11 REQ-12
 
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -232,7 +224,7 @@ describe('cleanupSource — TORRENT_SEARCH / TORRENT_FILE', () => {
   });
 });
 
-describe('cleanupSource — containment (REQ-12)', () => {
+describe('cleanupSource — containment (Spec 012, REQ-12)', () => {
   it('deletes nothing when downloadPath is outside downloadsRoot', async () => {
     const outside = await mkdtemp(join(tmpdir(), 'cleanup-outside-'));
     const filePath = join(outside, 'movie.mkv');
@@ -406,7 +398,7 @@ describe('cleanupSource — per-flag gating (013-season-pack-processing)', () =>
   });
 });
 
-describe('cleanupSource — error isolation (REQ-11)', () => {
+describe('cleanupSource — error isolation (Spec 012, REQ-11)', () => {
   it('does not propagate a throwing fetchGraphQL (downloadRemove)', async () => {
     const downloadPath = join(root, 'mnop3456');
     await mkdir(downloadPath, { recursive: true });

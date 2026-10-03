@@ -1,10 +1,3 @@
-// Defends the path assembly behind REQ-3/REQ-4/REQ-5: this is the join that
-// fails silently and totally per 052's plan § Risks. A mismatch here means a
-// deselected placeholder is never excluded (the reported bug reproduces), or
-// every candidate is wrongly excluded (a good source fails with no video
-// found). `null` vs `[]` is the other silent trap: only `null` means "nobody
-// knows" — an empty array is a real answer and must flag every file `false`.
-
 import { describe, expect, it } from 'vitest';
 import type { ScannedFile } from './scan-folder';
 import { markDownloaded } from './mark-downloaded';
@@ -19,6 +12,13 @@ function file(overrides: Partial<ScannedFile>): ScannedFile {
   };
 }
 
+// Defends the path assembly behind Spec 052, REQ-3 REQ-4 REQ-5: this is the
+// join that fails silently and totally per the plan's § Risks. A mismatch
+// here means a deselected placeholder is never excluded (the reported bug
+// reproduces), or every candidate is wrongly excluded (a good source fails
+// with no video found). `null` vs `[]` is the other silent trap: only
+// `null` means "nobody knows" — an empty array is a real answer and must
+// flag every file `false`.
 describe('markDownloaded', () => {
   it('flags every file downloaded, including non-video ones, when the list is null', () => {
     const files = [

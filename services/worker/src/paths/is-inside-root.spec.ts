@@ -1,13 +1,12 @@
-// Defends REQ-12: cleanup-source.ts must never delete anything outside
-// `downloadsRoot`. A containment check that treats a shared-prefix sibling
-// ("/media/downloads-old" vs "/media/downloads") as "inside", or that reads
-// a missing/relative root as "everything passes", would let the worker
-// delete arbitrary paths with no error in any log — the exact failure mode
-// this suite exists to catch.
-
 import { describe, expect, it } from 'vitest';
 import { isInsideRoot } from './is-inside-root';
 
+// Defends Spec 012, REQ-12: cleanup-source.ts must never delete anything
+// outside `downloadsRoot`. A containment check that treats a shared-prefix
+// sibling ("/media/downloads-old" vs "/media/downloads") as "inside", or
+// that reads a missing/relative root as "everything passes", would let the
+// worker delete arbitrary paths with no error in any log — the exact
+// failure mode this suite exists to catch.
 describe('isInsideRoot', () => {
   it('accepts the root itself', () => {
     expect(isInsideRoot('/media/downloads', '/media/downloads')).toBe(true);

@@ -23,16 +23,10 @@ export const ERROR_ENCODE_MKVMERGE_FAILED = 'error.encode.mkvmerge_failed';
 export const ERROR_ENCODE_EPISODE_NUMBERS_MISSING = 'error.encode.episode_numbers_missing';
 export const ERROR_ENCODE_UNKNOWN_DRIVER = 'error.encode.unknown_driver';
 
-// Added by 032-optional-compression's passthrough path (REQ-15): the source
-// file could not be placed at its destination with compression off — a
-// permissions error, a full disk or an unreadable source. `detail` carries
-// the underlying message.
+// Spec 032, REQ-15
 export const ERROR_ENCODE_MOVE_FAILED = 'error.encode.move_failed';
 
-// Not in ../spec.md's error table — added by T033 as the mandatory fallback
-// for a throw that is not a KeyedError (a bug, an uncaught library error).
-// encodeFailed's errorKey is required (REQ-11): there is no path where a
-// failure reports with no key, so an unexpected throw still needs one.
+// Spec 018, REQ-11 T033
 export const ERROR_ENCODE_UNEXPECTED = 'error.encode.unexpected';
 
 // api-owned — spelled identically to services/api/src/i18n/error-keys.ts.

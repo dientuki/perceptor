@@ -1,14 +1,13 @@
-// Defends REQ-2/REQ-3/NFR-2 of 038-encode-report-durability at the retry
-// primitive itself: deliverReport must retry an ApiUnreachableError forever
-// (never give up on a long outage), must rethrow anything else on the first
-// attempt without retrying (a rejection api actually answered is terminal),
-// and must actually wait between attempts rather than spinning at full
-// speed. Fake timers drive the backoff so the suite doesn't sleep for real.
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deliverReport, INITIAL_DELAY_MS, MAX_DELAY_MS } from './deliver-report';
 import { ApiUnreachableError } from './graphql-client';
 
+// Defends Spec 038, REQ-2 REQ-3 NFR-2 at the retry primitive itself:
+// deliverReport must retry an ApiUnreachableError forever (never give up on
+// a long outage), must rethrow anything else on the first attempt without
+// retrying (a rejection api actually answered is terminal), and must
+// actually wait between attempts rather than spinning at full speed. Fake
+// timers drive the backoff so the suite doesn't sleep for real.
 describe('deliverReport', () => {
   beforeEach(() => {
     vi.useFakeTimers();

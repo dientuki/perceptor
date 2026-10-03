@@ -1,5 +1,3 @@
-// src/core/ffmpeg/params.ts
-
 import { normalizeIso3 } from './iso639';
 import { detectVariant, narrowToVariants, preferring, requestedVariants, titleWords, variantTitle } from './variants';
 import { KeyedError } from '../i18n/keyed-error';
@@ -20,10 +18,7 @@ function getQuality(contentKind: ContentKind, quality: quality) {
   return "24";
 }
 
-// REQ-11: the SVT-AV1 tuning that differs per content kind. LIVE_ACTION,
-// ANIME and CGI are each a full, independently editable list — ANIME and CGI
-// produce equal values today but must not collapse into one shared branch,
-// since the author intends to tune them apart from each other later.
+// Spec 057, REQ-11
 function svtav1KindParams(contentKind: ContentKind): string[] {
   switch (contentKind) {
     case 'LIVE_ACTION':
@@ -98,13 +93,12 @@ const HLG_BT2020_COLOR_TAGS = [
   "-color_trc", "arib-std-b67",
 ];
 
-// REQ-10: recognized codecs always become AV1 — everything else falls back
-// to copy (REQ-12).
+// Spec 058, REQ-10 REQ-12
 const RECOGNIZED_VIDEO_CODECS = ['h264', 'hevc', 'h265', 'vc1', 'av1'];
 
 type ResolutionBox = { width: number; height: number; label: string };
 
-// REQ-6: the bounding box each tier names. '4k' imposes no ceiling at all.
+// Spec 058, REQ-6
 const RESOLUTION_BOXES: Record<CompressionResolution, ResolutionBox | null> = {
   '4k': null,
   '1080p': { width: 1920, height: 1080, label: '1080p' },
@@ -113,9 +107,7 @@ const RESOLUTION_BOXES: Record<CompressionResolution, ResolutionBox | null> = {
   '360p': { width: 640, height: 360, label: '360p' },
 };
 
-// REQ-14: ordered smallest to largest, used only to label a downscaled
-// source by the smallest tier it fits within tolerance — never to decide
-// whether to scale, which is RESOLUTION_BOXES[compressionResolution] alone.
+// Spec 058, REQ-14
 const SOURCE_TIER_BOXES: ResolutionBox[] = [
   { width: 640, height: 360, label: '360p' },
   { width: 854, height: 480, label: '480p' },
@@ -123,8 +115,7 @@ const SOURCE_TIER_BOXES: ResolutionBox[] = [
   { width: 1920, height: 1080, label: '1080p' },
 ];
 
-// REQ-7: width and height compared independently, 2% tolerance, against
-// ffprobe's coded dimensions.
+// Spec 058, REQ-7
 const BOX_TOLERANCE = 1.02;
 
 function exceedsBox(width: number, height: number, box: ResolutionBox | null): boolean {
@@ -150,8 +141,7 @@ function codecLabel(codec: string): string {
 
 type HdrForm = 'DoVi' | 'HDR10' | 'HLG' | 'SDR';
 
-// REQ-13: Dolby Vision and HDR10 keep smpte2084; HLG (arib-std-b67) is its
-// own form so it is never mislabelled with HDR10's transfer.
+// Spec 058, REQ-13
 function hdrFormOf(videoStream: any): HdrForm {
   const hasDolbyVision = Array.isArray(videoStream.side_data_list) &&
     videoStream.side_data_list.some((sideData: any) => sideData.side_data_type === "DOVI configuration record");
@@ -183,9 +173,7 @@ function colorTagsFor(form: HdrForm): string[] {
   }
 }
 
-// REQ-14: always plain "AV1", never the target tier. The HDR form is
-// deliberately not part of the title text — Jellyfin mishandles the file
-// when it's present — even though it still drives colour tag selection above.
+// Spec 058, REQ-14
 function videoTitle(codec: string, scaled: boolean, sourceLabel: string): string {
   const codec_ = codecLabel(codec);
   if (!scaled) return `AV1 (Converted from ${codec_})`;
@@ -206,8 +194,6 @@ export function getVideoParams(
   compressionResolution: CompressionResolution,
   quality: quality = 'web',
 ) {
-  // Sin stream de video no hay nada que codificar (archivo corrupto o sólo
-  // audio) — mejor un error claro acá que un TypeError al leer .codec_name.
   if (!videoStream) {
     throw new KeyedError(
       ERROR_ENCODE_NO_VIDEO_STREAM,
@@ -221,9 +207,7 @@ export function getVideoParams(
   const box = RESOLUTION_BOXES[compressionResolution] ?? null;
   const exceeds = exceedsBox(width, height, box);
 
-  // REQ-12: an unrecognized codec is always copied at its own resolution.
-  // The ceiling is never applied to it — only worth a warning when it
-  // actually would have mattered.
+  // Spec 058, REQ-12
   if (!RECOGNIZED_VIDEO_CODECS.includes(codec)) {
     console.warn(
       exceeds
@@ -233,8 +217,7 @@ export function getVideoParams(
     return copyVideoArgs();
   }
 
-  // REQ-11: an AV1 source that already fits the box is copied, never
-  // re-encoded — re-encoding AV1 to AV1 only loses quality.
+  // Spec 058, REQ-11
   if (codec === 'av1' && !exceeds) {
     return copyVideoArgs();
   }
@@ -251,13 +234,7 @@ export function getVideoParams(
   });
 }
 
-// src/core/ffmpeg/params.ts
-//
-// REQ-4/REQ-6/REQ-7: the caller (buildFfmpegCommand) resolves the allow-list
-// server-side (api merges every owner's preference — see spec.md § REQ-3)
-// and hands it here already deduplicated, alongside the one language that is
-// mandatory. This function never derives its own list — see
-// docs/spec/features/011-av1-transcode/worker/plan.md, step 5.
+// Spec 011, REQ-3 REQ-4 REQ-6 REQ-7
 export function getAudioParams(
   audioStreams: any[],
   allowedLanguagesIso3: string[],
@@ -277,16 +254,13 @@ export function getAudioParams(
   const blacklistWords = ['commentary', 'description', 'visual', 'sdh'];
   const priority = ['truehd', 'dts', 'eac3', 'ac3'];
 
-  // 1. Filtrado inicial
   const candidates = audioStreams.filter(s => {
     const lang = normalizeIso3(s.tags?.language || "");
     const title = (s.tags?.title || "").toLowerCase();
     return allowedLangs.includes(lang) && !blacklistWords.some(word => title.includes(word));
   });
 
-  // 2. REQ-6: the original language is the only mandatory one. Its absence
-  // after filtering is a hard failure — no more copy-all fallback, which
-  // used to ship a file with the wrong audio and report success.
+  // Spec 011, REQ-6
   const hasOriginal = candidates.some(s => normalizeIso3(s.tags?.language || "") === originalLang);
 
   if (!hasOriginal) {
@@ -298,8 +272,7 @@ export function getAudioParams(
     );
   }
 
-  // 3. Selección: un mejor stream por variante pedida (REQ-9), o el mejor
-  // de todo el idioma cuando no se pidió ninguna variante regional.
+  // Spec 031, REQ-9
   const selectedStreams: any[] = [];
   const selectBest = (streams: any[]): any =>
     [...streams].sort((a, b) => {
@@ -309,15 +282,12 @@ export function getAudioParams(
       const rankA = priority.indexOf(codecA) === -1 ? 99 : priority.indexOf(codecA);
       const rankB = priority.indexOf(codecB) === -1 ? 99 : priority.indexOf(codecB);
 
-      // 1. Mejor Codec (Fuente)
       if (rankA !== rankB) return rankA - rankB;
 
-      // 2. Más Canales (Preferimos 7.1 > 5.1 > 2.0)
       const chanA = Number(a.channels || 0);
       const chanB = Number(b.channels || 0);
       if (chanA !== chanB) return chanB - chanA;
 
-      // 3. Más Bitrate
       const bitA = Number(a.bit_rate || 0);
       const bitB = Number(b.bit_rate || 0);
       return bitB - bitA;
@@ -331,9 +301,7 @@ export function getAudioParams(
   allowedLangs.forEach(langCode => {
     const langStreams = candidates.filter(s => normalizeIso3(s.tags?.language || "") === langCode);
 
-    // REQ-7: a requested language with no track present is not a failure —
-    // log it and move on. Only the original language (checked above) is
-    // mandatory.
+    // Spec 011, REQ-7
     if (langStreams.length === 0 && langCode !== originalLang) {
       console.warn(`[ffmpeg] idioma permitido "${langCode}" no tiene pista de audio en el archivo; se continúa sin él.`);
     }
@@ -342,8 +310,7 @@ export function getAudioParams(
 
     const requestedForLang = requestedVariants(langCode, allowedLanguageTags);
 
-    // REQ-6: no requested variant for this language — quality decides alone,
-    // exactly as before this feature.
+    // Spec 031, REQ-6
     if (requestedForLang.length === 0) {
       addSelected(selectBest(langStreams));
       return;
@@ -351,27 +318,24 @@ export function getAudioParams(
 
     const narrowed = narrowToVariants(langStreams, requestedForLang);
 
-    // REQ-5: nothing in the file matched a requested variant — every
-    // surviving stream of the language is kept rather than reduced to one.
+    // Spec 031, REQ-5
     if (!narrowed.matched) {
       narrowed.streams.forEach(addSelected);
       return;
     }
 
-    // REQ-9: one best stream per matched requested variant.
+    // Spec 031, REQ-9
     narrowed.groups.forEach((group) => {
       addSelected(selectBest(group.streams));
     });
   });
 
-  // 4. Generar parámetros finales
   const params: string[] = [];
   
   selectedStreams.forEach((s, index) => {
     const lang = (s.tags?.language || "und").toLowerCase();
     const channels = Number(s.channels || 0);
-    // REQ-12: the same resolver the subtitle titles use, prefixed onto the
-    // channel-layout label below — see trackLanguageTitle.
+    // Spec 031, REQ-12
     const languageTitle = trackLanguageTitle(s, trackTitles);
 
     params.push("-map", `0:${s.index}`);
@@ -394,19 +358,16 @@ export function getAudioParams(
         params.push(`-metadata:s:a:${index}`, `title=${languageTitle} Surround 5.1 (Opus)`);
         
     } else {
-        // Stereo o inferior
+        // Stereo or less
         params.push(`-b:a:${index}`, "128k");
         params.push(`-metadata:s:a:${index}`, `title=${languageTitle} Stereo (Opus)`);
     }
 
-    // 3. Lenguaje
     params.push(`-metadata:s:a:${index}`, `language=${lang}`);
   });
 
   return params;
 }
-
-// src/core/ffmpeg/params.ts
 
 type SubtitleGroup = 'text' | 'image';
 

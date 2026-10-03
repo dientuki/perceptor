@@ -52,9 +52,7 @@ describe('selectMatches', () => {
       expect(selectMatches(files, { kind: 'single' })).toEqual([]);
     });
 
-    // AC-7: a deselected torrent file still reports its full announced size on
-    // disk. Without the `isDownloaded` term in the filter, the larger, empty
-    // file would win the "largest video" race — exactly the reported bug.
+    // Spec 052, AC-7
     it('picks the smaller downloaded video over a larger one that was never downloaded', () => {
       const files: InventoriedFile[] = [
         file({ fileName: 'B.mkv', size: 900_000_000, isVideo: true, isDownloaded: false }),
@@ -120,8 +118,7 @@ describe('selectMatches', () => {
       expect(selectMatches(files, { kind: 'season' })).toEqual([]);
     });
 
-    // AC-7, season mode: `bestByEpisode` has its own size comparison, so the
-    // narrowing must apply before it runs too, not just in `single` mode.
+    // Spec 052, AC-7
     it('picks the smaller downloaded video over a larger one that was never downloaded', () => {
       const files: InventoriedFile[] = [
         file({ fileName: 'Show.S01E01.B.mkv', size: 900_000_000, isVideo: true, isDownloaded: false }),

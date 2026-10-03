@@ -1,23 +1,6 @@
-// Misma forma que services/web/src/lib/graphql-client.ts (fetch, POST, JSON),
-// con dos diferencias: lee INTERNAL_GRAPHQL_URL, y tira si viene json.errors.
-// Web renderiza los errores; un worker que se los tragara marcaría el job como
-// completed sin haber escrito nada. Es el único manejo de errores que hace
-// falta acá.
-//
-// Under 018-ui-i18n / REQ-11, an api error carries its i18n key on
-// extensions.i18n (see docs/spec/graphql-contract.md). That key is lifted
-// onto a KeyedError so it round-trips as a key instead of getting flattened
-// into unreadable JSON in ProcessJob.errorMessage. The three infrastructure
-// errors below (missing env, non-2xx HTTP) stay plain unkeyed Errors — they
-// are boot-time operator failures no user ever sees.
-
 import { KeyedError } from '../i18n/keyed-error';
 
-// 038-encode-report-durability (REQ-1..REQ-4): the one distinguishable "no
-// response was received" failure. Only this class is retried by
-// deliverReport (src/api/deliver-report.ts) — everything else fetchGraphQL
-// can throw (a non-2xx status, invalid JSON, an unkeyed GraphQL error, a
-// KeyedError) is a response api actually gave us, and stays terminal.
+// Spec 038, REQ-1 REQ-2 REQ-3 REQ-4
 export class ApiUnreachableError extends Error {
   constructor(cause: unknown) {
     super(

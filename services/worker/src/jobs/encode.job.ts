@@ -46,10 +46,7 @@ export type EncodeJobDetails = {
   downloadPath: string | null;
   outputRoot: string;
   downloadsRoot: string;
-  // 032-optional-compression (REQ-6, NFR-2): resolved by the api at query
-  // time, not frozen onto the ProcessJob row at enqueue time. `=== false` is
-  // the only valid test — an `undefined` from a dropped field or an older
-  // api must compress, never silently stop.
+  // Spec 032, REQ-6 NFR-2
   compressionEnabled: boolean;
 };
 
@@ -57,11 +54,7 @@ type ProcessJobQueryResult = {
   processJob: EncodeJobDetails | null;
 };
 
-// Retyped from EncodeCompletedResult (docs/spec/graphql-contract.md,
-// 013-season-pack-processing). The three booleans are instructions computed
-// server-side from sibling ProcessJob rows and hasUnmatchedFiles — the
-// worker cannot see either, so it never approximates them, only executes
-// whichever arrive true (NFR-2/NFR-3, see below).
+// Spec 013, NFR-2 NFR-3
 type EncodeCompletedResult = {
   message: string;
   removeTorrent: boolean;
@@ -73,9 +66,6 @@ type EncodeCompletedMutationResult = {
   encodeCompleted: EncodeCompletedResult;
 };
 
-// Mínimo salto de progreso entre mutations a la api. Con el mock (10 pasos)
-// esto ya viene grueso; con FFmpeg real (stderr cada pocos ms) es lo que evita
-// convertir un encode de 2 horas en una mutation por línea de log.
 const PROGRESS_STEP = 5;
 
 export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
@@ -97,9 +87,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     throw new Error(`processJob ${processJobId} no existe`);
   }
 
-  // NFR-2: `=== false` is the only valid test, so this log names the exact
-  // branch taken rather than paraphrasing it — an `undefined` here reads as
-  // "compressing", which is the safe default and must be visible as such.
+  // Spec 032, NFR-2
   const compressing = details.compressionEnabled !== false;
   const contentKind = normalizeContentKind(details.contentKind);
   const compressionResolution = normalizeCompressionResolution(details.compressionResolution);
@@ -127,22 +115,12 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       );
 
       let lastReported = -1;
-      // Awaited, no fire-and-forget: dos updates concurrentes sobre el mismo
-      // ProcessJob (un progreso todavía en vuelo + el encodeCompleted de más
-      // abajo) chocan contra el PrismaService singleton (una sola conexión vía
-      // PrismaMariaDb) con "Record has changed since last read" (MariaDB 1020).
-      // Esperar cada mutation antes de seguir el loop del encode lo evita del
-      // todo. Un progreso perdido sí se traga (no debe frenar el encode).
       const onProgress = async (progress: number, speed: number | null) => {
         if (progress !== 100 && progress - lastReported < PROGRESS_STEP) return;
         lastReported = progress;
 
         try {
-          // $s: Float, not Float! — the mutation's own optional argument
-          // (053-downloads-panel-repair). speed is sent explicitly, including
-          // explicit null, rather than omitted: an omitted variable against a
-          // declared $s is a different wire shape than an explicit null, and
-          // the two must stay distinguishable in api's log.
+          // Spec 053, AC-8
           await fetchGraphQL(
             `mutation ($id: Int!, $p: Int!, $s: Float) { encodeProgress(processJobId: $id, progress: $p, speed: $s) }`,
             { id: processJobId, p: progress, s: speed },
@@ -152,10 +130,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         }
       };
 
-      // Recorded once per encode, before FFmpeg starts (REQ-1, 023-ffprobe-log).
-      // The try/catch below covers only the fetchGraphQL call — widening it
-      // would swallow a real ffprobe failure and let the encode continue with
-      // no metadata (worker/plan.md § Steps 5).
+      // Spec 023, REQ-1
       const onProbe = async (file: string, ffprobe: string) => {
         try {
           await fetchGraphQL(
@@ -169,16 +144,12 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         }
       };
 
-      // 032-optional-compression (REQ-9..REQ-13): `=== false` only, per NFR-2 —
-      // an `undefined` compressionEnabled (dropped field, or an api that
-      // predates this feature) must compress, never silently skip FFmpeg.
+      // Spec 032, REQ-9 REQ-10 REQ-11 REQ-12 REQ-13 NFR-2
       let finalOutputPath = outputPath;
       let ffmpegCommand: string;
 
       if (details.compressionEnabled === false) {
-        // REQ-12: the relaxed path is not the one that skips the containment
-        // check the encode path applies today (indirectly, via cleanup-source's
-        // own guard) — check it up front here, before anything touches the file.
+        // Spec 032, REQ-12
         if (!isInsideRoot(details.downloadsRoot, details.inputFilePath)) {
           const detail = `input file ${details.inputFilePath} is not inside downloadsRoot ${details.downloadsRoot}`;
           throw new KeyedError(ERROR_ENCODE_MOVE_FAILED, renderMessage(ERROR_ENCODE_MOVE_FAILED, { detail }), {
@@ -233,37 +204,18 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         ffmpegCommand = encodeResult.ffmpegCommand;
       }
 
-      // 038-encode-report-durability (REQ-1): the try ends here, once the
-      // encode/passthrough has actually produced the output file. Reporting
-      // that outcome to api is a separate concern from producing it — a
-      // transport failure below must never be read by the catch as "the
-      // encode itself failed".
+      // Spec 038, REQ-1
       finalOutputPathForReport = finalOutputPath;
       ffmpegCommandForReport = ffmpegCommand;
     } catch (error) {
-      // REQ-6 (047-source-deletion): a job abandoned because its source was
-      // deleted reports nothing — no encodeCompleted, no encodeFailed, no
-      // deliverReport, no cleanupSource. Checked before the KeyedError branch
-      // below, since EncodeCancelledError is deliberately not one.
+      // Spec 047, REQ-6
       if (error instanceof EncodeCancelledError) {
         console.log(`[encode] ${processJobId}: cancelled, reporting nothing`);
-        // REQ-8 (054-interrupted-encode-recovery): a cancellation must never
-        // consume one of REQ-7's retry attempts — BullMQ retries any plain
-        // throw, which would restart the exact encode `047-source-deletion`
-        // cancelled the source to stop. UnrecoverableError is BullMQ's own
-        // signal to mark the job failed without retrying it, regardless of
-        // attempts remaining. The message is preserved; the "report nothing"
-        // decision above it is unchanged — this only changes what leaves the
-        // handler, never whether api hears about it.
+        // Spec 054, REQ-8
         throw new UnrecoverableError(error.message);
       }
 
-      // encodeFailed's errorKey is required (REQ-11, docs/spec/graphql-contract.md):
-      // there is no path where this reports a failure with no key. A KeyedError
-      // (every throw site in ffmpeg/, paths/, encode/ and graphql-client.ts) carries
-      // its own key/params; anything else — a bug, an uncaught library error — still
-      // needs one, so it falls back to the catch-all ERROR_ENCODE_UNEXPECTED with the
-      // raw message carried as a param rather than silently reporting no key at all.
+      // Spec 018, REQ-11
       const keyed = error instanceof KeyedError;
       const errorKey = keyed ? error.key : ERROR_ENCODE_UNEXPECTED;
       const errorParams = keyed
@@ -271,11 +223,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         : { detail: error instanceof Error ? error.message : String(error) };
       const errorMessage = renderMessage(errorKey, errorParams);
 
-      // 038-encode-report-durability (REQ-1, REQ-2): held until api
-      // acknowledges it, retried only while unreachable (deliverReport). No
-      // longer .catch(console.error)'d — swallowing this call is exactly the
-      // bug that lost the incident's report; the throw below still carries
-      // the original encode error regardless of how the report went.
+      // Spec 038, REQ-1 REQ-2
       await deliverReport(`encodeFailed(${processJobId})`, () =>
         fetchGraphQL(
           `mutation ($id: Int!, $key: String!, $params: String, $msg: String!) {
@@ -290,14 +238,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         ),
       );
 
-      // REQ-9 (054-interrupted-encode-recovery): a KeyedError is a diagnosed
-      // failure that will recur identically (no video stream, an unreadable
-      // source, a probe failure) — retrying it under REQ-7's attempts would
-      // cost hours of CPU to reach the same diagnosis. encodeFailed has
-      // already been reported above with the error's own key; only what
-      // leaves the handler changes here, marking it non-retryable to BullMQ.
-      // An unclassified throw (neither this nor EncodeCancelledError) falls
-      // through unchanged and stays a plain, retryable throw (REQ-7).
+      // Spec 054, REQ-9
       if (keyed) {
         throw new UnrecoverableError(error.message);
       }
@@ -305,12 +246,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       throw error;
     }
 
-    // 038-encode-report-durability (REQ-1, REQ-2): outside the try/catch above
-    // on purpose — the encode has already produced its output file at this
-    // point, so a transport failure delivering the report must never be read
-    // as an encode failure. deliverReport holds this call until api
-    // acknowledges it; the encode queue's concurrency: 1 (src/index.ts) is
-    // what makes that blocking acceptable (REQ-4).
+    // Spec 038, REQ-1 REQ-2 REQ-4
     const result = await deliverReport(`encodeCompleted(${processJobId})`, () =>
       fetchGraphQL<EncodeCompletedMutationResult>(
         `mutation ($id: Int!, $out: String!, $cmd: String!) {
@@ -328,23 +264,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
 
     console.log(`[encode] ${processJobId}: ${encodeCompleted.message} -> ${finalOutputPathForReport}`);
 
-    // El aviso al media server (Jellyfin, si está configurado) lo dispara el
-    // api dentro de encodeCompleted — tiene las settings y las raíces, el
-    // worker no necesita enterarse.
-
-    // Cleanup runs after the encode's try/catch has already closed: the job is
-    // already reported completed at this point, and nothing here may flip it
-    // back to failed. cleanupSource itself never throws (see its header
-    // comment), but this second try is a deliberate line of defence in case it
-    // ever does despite that contract.
-    //
-    // The three instructions below are computed server-side (sibling
-    // ProcessJob rows, hasUnmatchedFiles) and the worker cannot see either
-    // (013-season-pack-processing). If any arrives undefined — the field was
-    // dropped from the mutation selection, or api predates this feature —
-    // cleanup is skipped entirely and the missing field is named loudly: never
-    // read a missing instruction as false (leaks torrents/files forever) and
-    // never as true (deletes something nobody decided to delete).
+    // Spec 013, NFR-2 NFR-3
     try {
       if (!encodeCompleted) {
         console.error(`[encode] ${processJobId}: encodeCompleted no devolvió resultado — cleanup omitido`);

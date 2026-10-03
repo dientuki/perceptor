@@ -30,8 +30,7 @@ export function registerEncode(processJobId: number): AbortSignal {
   return controller.signal;
 }
 
-// No-op returning false for an id nobody registered — a message for a job
-// not running on this worker is expected and correct, not an error (NFR-1).
+// Spec 047, NFR-1
 export function cancelEncode(processJobId: number): boolean {
   const controller = registry.get(processJobId);
   if (!controller) {

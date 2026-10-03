@@ -1,8 +1,4 @@
-// src/ffmpeg/remux-detection.ts
-//
-// REQ-10: whether a source is a remux must be decided from its ffprobe
-// metadata, not its filename. Consumes the shape `getMetadata`
-// (src/ffmpeg/metadata.ts) already returns — no second ffprobe call here.
+// Spec 011, REQ-10
 
 interface FfprobeStream {
   codec_type?: 'video' | 'audio' | 'subtitle';
@@ -66,10 +62,7 @@ function parseFrameRate(raw: string | undefined): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-// Falling-back chain, per REQ-10: the video stream's own bit_rate, then its
-// BPS tag (the same fallback getSubtitleParams already relies on for
-// per-stream bitrate in an MKV — src/ffmpeg/params.ts), then a bitrate
-// derived from the container's overall size and duration.
+// Spec 011, REQ-10
 function resolveVideoBitRate(
   videoStream: FfprobeStream,
   format: FfprobeFormat | undefined,
