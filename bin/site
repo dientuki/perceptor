@@ -1,0 +1,39 @@
+#!/bin/bash
+# Generates the static landing page (site/index.html and site/es/index.html) from
+# tools/site/template.html plus the locale catalogs, by running tools/site/build.mjs
+# inside the web service's image (Article I: nothing runs on the host). Unlike
+# bin/dev, it bind-mounts the whole repo root, not just services/web, since the
+# generator reads site/ and writes back into it. Arguments are forwarded as-is —
+# this is what lets `bin/site --serve` reach build.mjs later.
+set -e
+cd "$(dirname "$0")/.."
+
+. "$(dirname "$0")/_docker.sh"
+require_docker
+
+if [ ! -f .env ]; then
+  echo ".env no existe. Corré bin/install primero."
+  exit 1
+fi
+
+set -a; . ./.env; set +a
+
+COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml -f docker-compose.dev.yaml"
+
+SITE_SERVE_PORT="${SITE_SERVE_PORT:-8089}"
+PUBLISH_ARGS=()
+for arg in "$@"; do
+  if [ "$arg" = "--serve" ]; then
+    PUBLISH_ARGS=(-p "${SITE_SERVE_PORT}:${SITE_SERVE_PORT}")
+    break
+  fi
+done
+
+BUILD_TARGET=dev docker compose $COMPOSE_FILES run --rm --no-deps \
+  --user "$(id -u):$(id -g)" \
+  -v "$(pwd):/repo" \
+  --workdir /repo \
+  -e "SITE_SERVE_PORT=${SITE_SERVE_PORT}" \
+  "${PUBLISH_ARGS[@]}" \
+  --entrypoint node \
+  web tools/site/build.mjs "$@"

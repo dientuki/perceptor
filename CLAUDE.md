@@ -137,6 +137,7 @@ also holds `compose_project_name`.
 | `bin/dbinit` | grants global privileges to `${DB_USER}` so Prisma can create its shadow database | once after a fresh `db` volume |
 | `bin/dbreset` | `prisma migrate reset --force` + seed + Redis `FLUSHALL` — resets dev state without rerunning `bin/install` | `bin/dbreset` |
 | `bin/reset-password <username>` | resets a user's password interactively; for `ADMIN_USER` also qBittorrent and Prowlarr (end users: `docker compose exec api node dist/scripts/reset-password.js <username>`) | the recovery path when no admin can sign in |
+| `bin/site [--serve]` | regenerates the public landing page (`site/index.html`, `site/es/index.html`) from `tools/site/template.html` plus one flat string catalog per locale, running `node tools/site/build.mjs` inside the `web` image with the repo root bind-mounted (`084-landing-page-i18n`); `--serve` adds a static server over `site/` so the English/Spanish pass can be browsed at `http://localhost:8089/` | `bin/site --serve` |
 
 Without Traefik, each service is still reachable directly on its published port (`WEB_PORT`,
 `API_PORT`, …) — Traefik only adds domain-based routing.
@@ -489,6 +490,13 @@ value and the supported list — both exiting `1` and leaving the directory empt
 need an Apple Silicon machine — none of that has been run from this development host, which has no
 `binfmt`/QEMU registered and cannot emulate arm64 even for a smoke test.** Push a release tag and
 run the manual pass in `plan.md` § Verification before telling anyone the Mac install works.
+— and again 2026-10-03 after `084-landing-page-i18n` (no service touched, `infra`/`docs` only): the
+public landing page (`site/index.html`) is now generated from `tools/site/template.html` plus one
+flat string catalog per locale (`tools/site/en.json`/`es.json`) via the new `bin/site`, with
+`site/es/index.html` published alongside it — no pipeline stage changed status, `git diff --stat
+services/` is empty, no migration, `schema.gql` untouched. A `site` job in `.github/workflows/ci.yml`
+regenerates and diffs `site/` on every push/PR so the committed output can't go stale unnoticed;
+`.github/workflows/pages.yml` is unchanged — it still just uploads `site/` as-is.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

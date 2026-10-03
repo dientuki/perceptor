@@ -1,44 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{lang}}">
 <head>
-<script>
-(function () {
-  function getStored() { try { return localStorage.getItem('perceptor-lang'); } catch (e) { return null; } }
-  function setStored(v) { try { localStorage.setItem('perceptor-lang', v); } catch (e) {} }
-  var params = null;
-  try { params = new URLSearchParams(location.search); } catch (e) {}
-  var explicit = params ? params.get('lang') : null;
-  if (explicit === 'es') { setStored('es'); location.replace('es/'); return; }
-  if (explicit === 'en') {
-    setStored('en');
-    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
-    return;
-  }
-  // An explicit but unrecognized ?lang= (e.g. "fr") is ignored outright: no record, no
-  // redirect, fall through as if it had never been there (AC-7).
-  var stored = getStored();
-  if (stored === 'es') { location.replace('es/'); return; }
-  if (stored === 'en') { return; }
-  var langs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ''];
-  var first = (langs[0] || '').toLowerCase();
-  if (first.indexOf('es') === 0) { location.replace('es/'); }
-})();
-</script>
+{{detect}}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Perceptor — search it now, watch it tonight</title>
-<meta name="description" content="Type a title. Perceptor finds it, downloads it, shrinks it and files it in your library — already playable on everything you own. Self-hosted, no account, no tracking, one command to install.">
-<link rel="canonical" href="https://dientuki.github.io/perceptor/">
-<link rel="alternate" hreflang="en" href="https://dientuki.github.io/perceptor/">
-<link rel="alternate" hreflang="es" href="https://dientuki.github.io/perceptor/es/">
-<link rel="alternate" hreflang="x-default" href="https://dientuki.github.io/perceptor/">
-<link rel="icon" href="mark-192.png" type="image/png" sizes="192x192">
-<link rel="apple-touch-icon" href="mark.png">
+<title>{{head.title}}</title>
+<meta name="description" content="{{head.description}}">
+<link rel="canonical" href="{{canonicalUrl}}">
+{{hreflangBlock}}
+<link rel="icon" href="{{base}}mark-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="{{base}}mark.png">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Perceptor — search it now, watch it tonight">
-<meta property="og:description" content="Search a title, and it shows up in your library the same evening — already playable on everything you own.">
-<meta property="og:locale" content="en_US">
-<meta property="og:url" content="https://dientuki.github.io/perceptor/">
+<meta property="og:title" content="{{head.ogTitle}}">
+<meta property="og:description" content="{{head.ogDescription}}">
+<meta property="og:locale" content="{{ogLocale}}">
+<meta property="og:url" content="{{canonicalUrl}}">
 <meta property="og:site_name" content="Perceptor">
 <!-- WhatsApp and the other crawlers need an absolute URL, and they use the declared
      dimensions to decide between a large card and a thumbnail. JPEG rather than PNG:
@@ -47,21 +23,21 @@
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Perceptor, surrounded by the panels of a media pipeline">
+<meta property="og:image:alt" content="{{head.ogImageAlt}}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Perceptor — search it now, watch it tonight">
-<meta name="twitter:description" content="Search a title, and it shows up in your library the same evening — already playable on everything you own.">
+<meta name="twitter:title" content="{{head.ogTitle}}">
+<meta name="twitter:description" content="{{head.ogDescription}}">
 <meta name="twitter:image" content="https://dientuki.github.io/perceptor/og.jpg">
 <style>
   /* Fonts are served from this site, not from a font CDN: opening this page contacts nobody but
      GitHub. See fonts/README.txt — both are SIL OFL 1.1. */
   @font-face{
     font-family:Inter;font-style:normal;font-weight:400 900;font-display:swap;
-    src:url("fonts/inter-latin-var.woff2") format("woff2");
+    src:url("{{base}}fonts/inter-latin-var.woff2") format("woff2");
   }
   @font-face{
     font-family:'JetBrains Mono';font-style:normal;font-weight:400 700;font-display:swap;
-    src:url("fonts/jetbrains-mono-latin-var.woff2") format("woff2");
+    src:url("{{base}}fonts/jetbrains-mono-latin-var.woff2") format("woff2");
   }
   :root{
     --ink:#08060f;
@@ -302,34 +278,34 @@
 <header>
   <div class="wrap nav">
     <a class="brand" href="#top">
-      <img src="mark-192.png" alt="" width="26" height="26" decoding="async">
+      <img src="{{base}}mark-192.png" alt="" width="26" height="26" decoding="async">
       Perceptor
     </a>
     <div class="links">
-      <a class="hide-sm" href="#how">How it works</a>
-      <a class="hide-sm" href="#privacy">Privacy</a>
-      <a class="hide-sm" href="#features">Features</a>
-      <a class="hide-sm" href="#faq">FAQ</a>
-      <a class="hide-sm" href="https://github.com/dientuki/perceptor">GitHub</a>
-      <a class="lang" href="es/?lang=es">ES</a>
-      <a class="btn sm" href="#install">Install</a>
+      <a class="hide-sm" href="#how">{{nav.how}}</a>
+      <a class="hide-sm" href="#privacy">{{nav.privacy}}</a>
+      <a class="hide-sm" href="#features">{{nav.features}}</a>
+      <a class="hide-sm" href="#faq">{{nav.faq}}</a>
+      <a class="hide-sm" href="https://github.com/dientuki/perceptor">{{nav.github}}</a>
+      <a class="lang" href="{{otherLocaleUrl}}">{{nav.switchLabel}}</a>
+      <a class="btn sm" href="#install">{{nav.install}}</a>
     </div>
   </div>
 </header>
 
 <div class="hero" id="top">
   <div class="wrap">
-    <h1>Search it now.<br><span class="hl">Watch it tonight.</span></h1>
-    <p class="sub">Perceptor finds it, downloads it, shrinks it and files it away — already playable on the TV, the phone and the old laptop. You do the typing. It does the rest.</p>
-    <p class="note" style="margin:0">Closed alpha · the feature set is frozen while it's stabilised</p>
+    <h1>{{hero.title}}</h1>
+    <p class="sub">{{hero.sub}}</p>
+    <p class="note" style="margin:0">{{hero.note}}</p>
     <div class="cta">
-      <a class="btn" href="#install">Install in one command</a>
-      <a class="btn ghost" href="#how">See how it works</a>
+      <a class="btn" href="#install">{{hero.ctaInstall}}</a>
+      <a class="btn ghost" href="#how">{{hero.ctaHow}}</a>
     </div>
     <div class="trust">
-      <span>🐳 <b>Docker</b>, nothing else</span>
-      <span>🏠 <b>Your</b> hardware, your files</span>
-      <span>🔒 <b>No account</b>, no cloud, no tracking</span>
+      <span>{{hero.trustDocker}}</span>
+      <span>{{hero.trustHardware}}</span>
+      <span>{{hero.trustAccount}}</span>
     </div>
 
     <figure class="shot">
@@ -337,34 +313,34 @@
         <i class="dot"></i><i class="dot"></i><i class="dot"></i>
         <div class="url">perceptor.local</div>
       </div>
-      <img src="shots/home.webp" width="2000" height="1250"
-           alt="Perceptor's browse screen, with films and series in one list">
-      <figcaption class="cap">Films and series in one place. Your library, on your hardware.</figcaption>
+      <img src="{{base}}shots/home.webp" width="2000" height="1250"
+           alt="{{hero.shotAlt}}">
+      <figcaption class="cap">{{hero.shotCaption}}</figcaption>
     </figure>
   </div>
 </div>
 
 <section id="why" style="padding-top:170px">
   <div class="wrap center">
-    <p class="kicker">Why it exists</p>
-    <h2>You wanted to watch something.<br>Not run five apps.</h2>
-    <p class="lede">One app to track it, one to search, one to download, one to rename — and then a 60&nbsp;GB file with eleven audio tracks your TV refuses to play. Perceptor is that whole path as a single thing.</p>
+    <p class="kicker">{{why.kicker}}</p>
+    <h2>{{why.title}}</h2>
+    <p class="lede">{{why.lede}}</p>
 
     <div class="grid g3">
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg></div>
-        <h3>One search box</h3>
-        <p>Films and series in the same list. Pick it, and nothing else needs your attention until it's ready.</p>
+        <h3>{{why.searchTitle}}</h3>
+        <p>{{why.searchBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg></div>
-        <h3>One library, yours</h3>
-        <p>Every user gets their own films and series. Nobody else's clutter shows up in your home screen.</p>
+        <h3>{{why.libraryTitle}}</h3>
+        <p>{{why.libraryBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v10m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
-        <h3>Files that just play</h3>
-        <p>The transcode isn't a bonus feature bolted onto a downloader. It's the entire point.</p>
+        <h3>{{why.filesTitle}}</h3>
+        <p>{{why.filesBody}}</p>
       </div>
     </div>
   </div>
@@ -372,214 +348,214 @@
 
 <section id="squeeze">
   <div class="wrap center">
-    <p class="kicker">The part nobody else does</p>
-    <h2>Every download comes out watchable</h2>
-    <p class="lede">Perceptor re-encodes what it downloads to AV1 — keeping the languages you watch in, throwing away the ten you don't, and leaving HDR exactly as it was.</p>
+    <p class="kicker">{{squeeze.kicker}}</p>
+    <h2>{{squeeze.title}}</h2>
+    <p class="lede">{{squeeze.lede}}</p>
 
     <div class="squeeze">
       <div class="file">
-        <div class="lbl">What the tracker gave you</div>
+        <div class="lbl">{{squeeze.beforeLabel}}</div>
         <div class="sz">61 GB</div>
         <div class="nm">2160p HDR10 remux</div>
         <ul>
-          <li>11 audio tracks, none of them yours</li>
-          <li>Subtitles in a format your TV ignores</li>
-          <li>Stutters on anything but the good machine</li>
+          <li>{{squeeze.beforeLi1}}</li>
+          <li>{{squeeze.beforeLi2}}</li>
+          <li>{{squeeze.beforeLi3}}</li>
         </ul>
       </div>
       <div class="arrow"><svg viewBox="0 0 24 24"><path d="M4 12h15m0 0-6-6m6 6-6 6"/></svg></div>
       <div class="file after">
-        <div class="lbl">What lands in your library</div>
+        <div class="lbl">{{squeeze.afterLabel}}</div>
         <div class="sz">3.4 GB</div>
         <div class="nm">AV1 1080p · HDR intact</div>
         <ul>
-          <li>Your languages, audio and subtitles picked separately</li>
-          <li>Tracks labelled English, 日本語, 한국어 — readable in any player</li>
-          <li>Plays on the TV, the phone, the old laptop</li>
+          <li>{{squeeze.afterLi1}}</li>
+          <li>{{squeeze.afterLi2a}}English, 日本語, 한국어{{squeeze.afterLi2b}}</li>
+          <li>{{squeeze.afterLi3}}</li>
         </ul>
       </div>
     </div>
-    <p class="note" style="margin-top:26px">You pick the ceiling — 4K, 1080p, 720p, 480p or 360p. Nothing is ever upscaled, and you can turn the whole thing off if you'd rather keep the original.</p>
+    <p class="note" style="margin-top:26px">{{squeeze.noteA}}4K, 1080p, 720p, 480p{{squeeze.noteOr}}360p{{squeeze.noteB}}</p>
   </div>
 </section>
 
 <section id="privacy">
   <div class="wrap center">
-    <p class="kicker">Privacy</p>
-    <h2>Nobody is in the middle.</h2>
-    <p class="lede">Streaming apps hand you a catalogue and keep the plumbing. You get an account you didn't want, a server you don't control, and a list of everything you watched sitting on somebody else's disk. Perceptor is software you run — there is no service behind it to sign up for.</p>
+    <p class="kicker">{{privacy.kicker}}</p>
+    <h2>{{privacy.title}}</h2>
+    <p class="lede">{{privacy.lede}}</p>
 
     <div class="grid g2" style="text-align:left">
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
-        <h3>No Perceptor account</h3>
-        <p>There is nothing to register for, no login server, no password reset email from us. Your admin account exists on your machine and nowhere else.</p>
+        <h3>{{privacy.accountTitle}}</h3>
+        <p>{{privacy.accountBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 3l18 18"/><circle cx="12" cy="12" r="3.2"/><path d="M2 12s3.6-7 10-7c1.6 0 3 .4 4.2 1M22 12s-3.6 7-10 7c-1.7 0-3.1-.5-4.4-1.2"/></svg></div>
-        <h3>No telemetry, no analytics</h3>
-        <p>No usage pings, no crash reporting, no third-party scripts. What you searched for and what you watched never leaves the machine you installed it on.</p>
+        <h3>{{privacy.telemetryTitle}}</h3>
+        <p>{{privacy.telemetryBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></div>
-        <h3>One outside service, and it's yours to point at</h3>
-        <p>Perceptor asks TMDB for titles, posters and air dates with a key you create yourself — that's the whole outbound list. Your indexers, your downloader and your media server are all things you already run.</p>
+        <h3>{{privacy.outsideTitle}}</h3>
+        <p>{{privacy.outsideBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"/><path d="M9 7V4h6v3M9 13h6"/></svg></div>
-        <h3>Private from the people you share it with</h3>
-        <p>Each account has its own library. What someone else added isn't on your home screen, in your search results or in your calendar — same install, separate shelves.</p>
+        <h3>{{privacy.privateTitle}}</h3>
+        <p>{{privacy.privateBody}}</p>
       </div>
     </div>
-    <p class="note" style="margin-top:28px">Being honest about the limit: Perceptor is not a VPN and doesn't pretend to be one. Your downloader talks to peers the way it always did — if that matters where you live, put it behind the VPN you already trust.</p>
+    <p class="note" style="margin-top:28px">{{privacy.note}}</p>
   </div>
 </section>
 
 <section id="how">
   <div class="wrap center">
-    <p class="kicker">How it works</p>
-    <h2>Three things you do.<br>The rest runs itself.</h2>
+    <p class="kicker">{{how.kicker}}</p>
+    <h2>{{how.title}}</h2>
     <div class="steps">
       <div class="stepc">
         <span class="n"></span>
-        <h3>Search a title</h3>
-        <p>Type it in the header from any screen. Films and series come back together — no deciding first which one you meant.</p>
+        <h3>{{how.step1Title}}</h3>
+        <p>{{how.step1Body}}</p>
       </div>
       <div class="stepc">
         <span class="n"></span>
-        <h3>Pick a release</h3>
-        <p>Your indexers, ranked with the best candidates on top. Or paste a magnet. Or upload the file you already have.</p>
+        <h3>{{how.step2Title}}</h3>
+        <p>{{how.step2Body}}</p>
       </div>
       <div class="stepc">
         <span class="n"></span>
-        <h3>Press play</h3>
-        <p>It downloads, re-encodes, renames, files it in your library and tells your media server. You get a notification-free, finished title.</p>
+        <h3>{{how.step3Title}}</h3>
+        <p>{{how.step3Body}}</p>
       </div>
     </div>
     <div class="tour" id="tour">
-      <div class="tabs" role="tablist" aria-label="What using it looks like">
-        <button type="button" role="tab" aria-controls="slide-0" aria-selected="true"><span>1</span> Search</button>
-        <button type="button" role="tab" aria-controls="slide-1" aria-selected="false"><span>2</span> The title</button>
-        <button type="button" role="tab" aria-controls="slide-2" aria-selected="false"><span>3</span> The release</button>
-        <button type="button" role="tab" aria-controls="slide-3" aria-selected="false"><span>4</span> The work</button>
-        <button type="button" role="tab" aria-controls="slide-4" aria-selected="false"><span>5</span> A whole series</button>
+      <div class="tabs" role="tablist" aria-label="{{how.tourAriaLabel}}">
+        <button type="button" role="tab" aria-controls="slide-0" aria-selected="true"><span>1</span> {{how.tab1}}</button>
+        <button type="button" role="tab" aria-controls="slide-1" aria-selected="false"><span>2</span> {{how.tab2}}</button>
+        <button type="button" role="tab" aria-controls="slide-2" aria-selected="false"><span>3</span> {{how.tab3}}</button>
+        <button type="button" role="tab" aria-controls="slide-3" aria-selected="false"><span>4</span> {{how.tab4}}</button>
+        <button type="button" role="tab" aria-controls="slide-4" aria-selected="false"><span>5</span> {{how.tab5}}</button>
       </div>
       <div class="frame">
       <figure class="slide" id="slide-0" role="tabpanel">
-        <img src="shots/search.webp" width="2000" height="1000" loading="lazy" alt="Search results for a film, with one copy already in the library and one to add">
-        <figcaption>One box for films and series. What you already own says <b>Go</b>; what you don't says <b>Add</b>.</figcaption>
+        <img src="{{base}}shots/search.webp" width="2000" height="1000" loading="lazy" alt="{{how.slide0Alt}}">
+        <figcaption>{{how.slide0Caption}}</figcaption>
       </figure>
       <figure class="slide" id="slide-1" role="tabpanel" hidden>
-        <img src="shots/movie.webp" width="2000" height="1000" loading="lazy" alt="A film's detail page: poster, synopsis, languages and its download panel">
-        <figcaption>Registered. Your audio and subtitle preferences are already applied to it, per title.</figcaption>
+        <img src="{{base}}shots/movie.webp" width="2000" height="1000" loading="lazy" alt="{{how.slide1Alt}}">
+        <figcaption>{{how.slide1Caption}}</figcaption>
       </figure>
       <figure class="slide" id="slide-2" role="tabpanel" hidden>
-        <img src="shots/candidates.webp" width="2000" height="1000" loading="lazy" alt="The release list filtered to the best candidates, each row parsed into badges">
-        <figcaption>401 releases came back. <b>Best candidates</b> leaves 47 — the top resolution tier, parsed and ranked, vetoes dropped.</figcaption>
+        <img src="{{base}}shots/candidates.webp" width="2000" height="1000" loading="lazy" alt="{{how.slide2Alt}}">
+        <figcaption>401{{how.slide2CaptionB}}47{{how.slide2CaptionC}}</figcaption>
       </figure>
       <figure class="slide" id="slide-3" role="tabpanel" hidden>
-        <img src="shots/downloads.webp" width="2000" height="1000" loading="lazy" alt="The downloads queue: one title encoding, three downloading">
-        <figcaption>It downloads and re-encodes on its own. This is the only screen you'd ever check.</figcaption>
+        <img src="{{base}}shots/downloads.webp" width="2000" height="1000" loading="lazy" alt="{{how.slide3Alt}}">
+        <figcaption>{{how.slide3Caption}}</figcaption>
       </figure>
       <figure class="slide" id="slide-4" role="tabpanel" hidden>
-        <img src="shots/series.webp" width="2000" height="1000" loading="lazy" alt="A season's episode list, every episode marked completed">
-        <figcaption>A series arrives with its seasons and episodes. Season packs split themselves apart.</figcaption>
+        <img src="{{base}}shots/series.webp" width="2000" height="1000" loading="lazy" alt="{{how.slide4Alt}}">
+        <figcaption>{{how.slide4Caption}}</figcaption>
       </figure>
-        <button class="arrow prev" type="button" aria-label="Previous step">&#8249;</button>
-        <button class="arrow next" type="button" aria-label="Next step">&#8250;</button>
+        <button class="arrow prev" type="button" aria-label="{{how.arrowPrev}}">&#8249;</button>
+        <button class="arrow next" type="button" aria-label="{{how.arrowNext}}">&#8250;</button>
       </div>
     </div>
-    <p class="lede" style="margin-top:40px">A series arrives with its seasons and episodes. Season packs split into episodes by themselves. A title you already own isn't downloaded twice.</p>
+    <p class="lede" style="margin-top:40px">{{how.closingLede}}</p>
   </div>
 </section>
 
 <section id="features">
   <div class="wrap center">
-    <p class="kicker">What you get</p>
-    <h2>Set it up once. Stop thinking about it.</h2>
+    <p class="kicker">{{features.kicker}}</p>
+    <h2>{{features.title}}</h2>
     <div class="grid g3" style="text-align:left">
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg></div>
-        <h3>Nothing is downloaded twice</h3>
-        <p>Registering a title checks your media server first. If your media server already has it — or half the episodes — they come in as done.</p>
+        <h3>{{features.nodupeTitle}}</h3>
+        <p>{{features.nodupeBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></div>
-        <h3>A bad release isn't a dead end</h3>
-        <p>Wrong cut, broken encode, missing language? Point a new source at it and the new one takes over. Failed downloads resume where they broke.</p>
+        <h3>{{features.badReleaseTitle}}</h3>
+        <p>{{features.badReleaseBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3a4 4 0 0 0-4 4v4a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
-        <h3>Your languages, not the release's</h3>
-        <p>Set them once for the whole install, tweak them for your account, add one more for a single title. Audio and subtitles are chosen separately — original audio with your subtitles is a normal thing to ask for. Every title's page tells you which ones will actually be used, and which it inherited from you.</p>
+        <h3>{{features.languagesTitle}}</h3>
+        <p>{{features.languagesBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
-        <h3>Optionally, it grabs releases for you</h3>
-        <p>Turn on the daily sweeps and newly aired episodes are picked up on their own. For films, choose which window you want — cinema, digital or physical release — and a quality floor keeps the poor rips out.</p>
+        <h3>{{features.autoGrabTitle}}</h3>
+        <p>{{features.autoGrabBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>
-        <h3>A calendar of what's coming</h3>
-        <p>A month grid of films and episodes, grouped per series, coloured by what's already in your library and what isn't.</p>
+        <h3>{{features.calendarTitle}}</h3>
+        <p>{{features.calendarBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
-        <h3>One queue, one vocabulary</h3>
-        <p>Queued, downloading, encoding, done — the same words everywhere, with live speed from the downloader and the encoder. Two screens never disagree.</p>
+        <h3>{{features.queueTitle}}</h3>
+        <p>{{features.queueBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></div>
-        <h3>The catalogue keeps itself current</h3>
-        <p>Air dates, episode titles and release dates are re-read on their own, so a series that comes back after three years brings its new season with it.</p>
+        <h3>{{features.catalogTitle}}</h3>
+        <p>{{features.catalogBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
-        <h3>Usable from the couch</h3>
-        <p>Every screen was gone over on a phone: nothing scrolls sideways, nothing is too small to read, and nothing is too small to tap. Light or dark, whichever your phone is set to.</p>
+        <h3>{{features.mobileTitle}}</h3>
+        <p>{{features.mobileBody}}</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3 4 7v6c0 4.4 3.4 7.6 8 8 4.6-.4 8-3.6 8-8V7z"/><path d="m9 12 2 2 4-4"/></svg></div>
-        <h3>Your library is never deleted</h3>
-        <p>Removing a title, deleting a source, cleaning up a download — none of them touch the finished file. That rule is written into the project's constitution.</p>
+        <h3>{{features.neverDeletedTitle}}</h3>
+        <p>{{features.neverDeletedBody}}</p>
       </div>
     </div>
     <figure class="figure">
-      <img src="shots/calendar.webp" width="2000" height="1250" loading="lazy"
-           alt="The release calendar, a month grid coloured by what is already in the library">
-      <figcaption>The calendar: green is already in your library, grey hasn't aired yet.</figcaption>
+      <img src="{{base}}shots/calendar.webp" width="2000" height="1250" loading="lazy"
+           alt="{{features.figureAlt}}">
+      <figcaption>{{features.figureCaption}}</figcaption>
     </figure>
   </div>
 </section>
 
 <section id="install">
   <div class="wrap center">
-    <p class="kicker">Install</p>
-    <h2>An empty folder and Docker</h2>
-    <p class="lede">No Node, no clone, no compiling. Make a directory, run one line, answer five questions.</p>
+    <p class="kicker">{{install.kicker}}</p>
+    <h2>{{install.title}}</h2>
+    <p class="lede">{{install.lede}}</p>
 
     <div class="cmd" style="margin-top:34px">
       <div class="t mono"><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/dientuki/perceptor/master/install.sh | bash</div>
-      <button id="copy" type="button" data-label="Copy" data-copied-label="Copied">Copy</button>
+      <button id="copy" type="button" data-label="{{install.copyButton}}" data-copied-label="{{script.copiedLabel}}">{{install.copyButton}}</button>
     </div>
-    <p class="note" style="margin-top:14px">Download folder, library folder, admin user and password, domain — that's it. Ports, permissions, timezone and every secret are worked out for you.</p>
+    <p class="note" style="margin-top:14px">{{install.note}}</p>
 
     <div class="grid g3" style="text-align:left;margin-top:48px">
       <div class="card">
-        <h3>Updates are one line</h3>
-        <p>Name the version, <code class="mono">docker compose pull &amp;&amp; up -d</code>. The database is backed up and migrated on the way, every time.</p>
+        <h3>{{install.updatesTitle}}</h3>
+        <p>{{install.updatesBodyA}}<code class="mono">docker compose pull &amp;&amp; up -d</code>{{install.updatesBodyB}}</p>
       </div>
       <div class="card">
-        <h3>HTTPS on your LAN</h3>
-        <p>Optional local certificate authority, issued once. Trust it on your devices and the padlock is real — no public domain needed.</p>
+        <h3>{{install.httpsTitle}}</h3>
+        <p>{{install.httpsBody}}</p>
       </div>
       <div class="card">
-        <h3>It tells you what's left</h3>
-        <p>First sign-in lands on a setup page that walks you through the two things the installer can't do for you: a TMDB key, and adding an indexer in Prowlarr.</p>
+        <h3>{{install.setupTitle}}</h3>
+        <p>{{install.setupBody}}</p>
       </div>
       <div class="card">
-        <h3>Re-running it is safe</h3>
-        <p>Run the installer over a live install and it repairs what's missing. Titles, settings, users and passwords are left alone.</p>
+        <h3>{{install.rerunTitle}}</h3>
+        <p>{{install.rerunBody}}</p>
       </div>
     </div>
   </div>
@@ -587,35 +563,35 @@
 
 <section id="faq">
   <div class="wrap">
-    <div class="center"><p class="kicker">FAQ</p><h2>The usual questions</h2></div>
+    <div class="center"><p class="kicker">{{faq.kicker}}</p><h2>{{faq.title}}</h2></div>
     <div class="faq">
       <details open>
-        <summary>Is it ready to use?</summary>
-        <p>It's a <b>closed alpha</b>, and honest about it. The whole pipeline runs end to end for films and series, and the feature set is now frozen — from here the work is making what exists solid, not adding to it. There's no stable release yet: the published images are release candidates, and its only user so far is the person who wrote it. If you like living slightly ahead of the curve, it works today.</p>
+        <summary>{{faq.ready.q}}</summary>
+        <p>{{faq.ready.a}}</p>
       </details>
       <details>
-        <summary>What do I need to run it?</summary>
-        <p>Docker with the Compose plugin, somewhere to put files, and a TMDB API key (free — the app walks you through getting one). A CPU that can encode video is a good idea; everything runs on CPU, on every host, with no special setup.</p>
+        <summary>{{faq.requirements.q}}</summary>
+        <p>{{faq.requirements.a}}</p>
       </details>
       <details>
-        <summary>Does it replace Sonarr, Radarr and friends?</summary>
-        <p>It replaces the stack, not the philosophy. There are no quality profiles and no upgrade chasing — Perceptor normalizes everything to one output you can actually play, which is a different goal from keeping the best possible source file around.</p>
+        <summary>{{faq.replace.q}}</summary>
+        <p>{{faq.replace.a}}</p>
       </details>
       <details>
-        <summary>What does it plug into?</summary>
-        <p>qBittorrent and Prowlarr ship inside the stack — you don't install or configure them separately. TMDB provides the catalog, and Jellyfin or Plex gets told when something new lands. Everything else runs on your machine.</p>
+        <summary>{{faq.integrations.q}}</summary>
+        <p>{{faq.integrations.a}}</p>
       </details>
       <details>
-        <summary>What does it send out about me?</summary>
-        <p>Titles you search for go to TMDB, because that's where the catalogue is — with an API key you created, not one shared by everyone. Release searches go to the indexers you configured. That's the complete list: there's no Perceptor server, no account, no telemetry and no analytics script on any screen. Your library, your history and your files stay on your hardware.</p>
+        <summary>{{faq.outbound.q}}</summary>
+        <p>{{faq.outbound.a}}</p>
       </details>
       <details>
-        <summary>Can several people use it?</summary>
-        <p>Yes. An admin creates the accounts — there's no public signup — and each person gets their own library, their own languages and their own interface language (English or Spanish). A title one person owns isn't visible to anyone else.</p>
+        <summary>{{faq.multiUser.q}}</summary>
+        <p>{{faq.multiUser.a}}</p>
       </details>
       <details>
-        <summary>Will it delete my files?</summary>
-        <p>No. Removing a title, deleting a download or cleaning up a source never touches what's already in your library. It's one of the twelve rules the project can't break.</p>
+        <summary>{{faq.delete.q}}</summary>
+        <p>{{faq.delete.a}}</p>
       </details>
     </div>
   </div>
@@ -623,20 +599,20 @@
 
 <div class="final">
   <div class="wrap">
-    <h2>Stop babysitting downloads.</h2>
-    <p class="lede" style="margin-bottom:34px">One folder, one command, and the next thing you want to watch just shows up.</p>
-    <a class="btn" href="#install">Install Perceptor</a>
-    <p class="note" style="margin-top:24px">Free · self-hosted · no account, no tracking · <a href="https://github.com/dientuki/perceptor" style="color:var(--cyan)">source on GitHub</a></p>
+    <h2>{{final.title}}</h2>
+    <p class="lede" style="margin-bottom:34px">{{final.lede}}</p>
+    <a class="btn" href="#install">{{final.cta}}</a>
+    <p class="note" style="margin-top:24px">{{final.note}}</p>
   </div>
 </div>
 
 <footer>
   <div class="wrap foot">
     <span>Perceptor</span>
-    <a href="https://github.com/dientuki/perceptor">GitHub</a>
-    <a href="https://github.com/dientuki/perceptor/issues">Issues</a>
-    <a href="https://github.com/dientuki/perceptor#readme">Docs</a>
-    <span class="sp">Built by <a href="https://github.com/dientuki" style="color:var(--cyan)">dientuki</a></span>
+    <a href="https://github.com/dientuki/perceptor">{{footer.github}}</a>
+    <a href="https://github.com/dientuki/perceptor/issues">{{footer.issues}}</a>
+    <a href="https://github.com/dientuki/perceptor#readme">{{footer.docs}}</a>
+    <span class="sp">{{footer.builtBy}}</span>
   </div>
 </footer>
 

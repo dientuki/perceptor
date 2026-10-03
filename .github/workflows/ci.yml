@@ -99,3 +99,17 @@ jobs:
       - run: npx tsc --noEmit
 
       - run: npx vitest run
+
+  site:
+    name: site — regenerate and diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - run: node tools/site/build.mjs
+
+      - run: git diff --exit-code site/
