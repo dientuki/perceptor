@@ -2,7 +2,7 @@
 title: Dependency Update Cadence — web slice
 service: web
 last_updated: 2026-10-03
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Dependency Update Cadence — `web` (`web/plan.md`)

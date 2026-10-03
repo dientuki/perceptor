@@ -2,7 +2,7 @@
 title: Dependency Update Cadence — infra slice
 service: infra
 last_updated: 2026-10-03
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Dependency Update Cadence — `infra` (`infra/plan.md`)

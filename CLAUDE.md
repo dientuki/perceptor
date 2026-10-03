@@ -138,6 +138,7 @@ also holds `compose_project_name`.
 | `bin/dbreset` | `prisma migrate reset --force` + seed + Redis `FLUSHALL` — resets dev state without rerunning `bin/install` | `bin/dbreset` |
 | `bin/reset-password <username>` | resets a user's password interactively; for `ADMIN_USER` also qBittorrent and Prowlarr (end users: `docker compose exec api node dist/scripts/reset-password.js <username>`) | the recovery path when no admin can sign in |
 | `bin/site [--serve]` | regenerates the public landing page (`site/index.html`, `site/es/index.html`) from `tools/site/template.html` plus one flat string catalog per locale, running `node tools/site/build.mjs` inside the `web` image with the repo root bind-mounted (`084-landing-page-i18n`); `--serve` adds a static server over `site/` so the English/Spanish pass can be browsed at `http://localhost:8089/` | `bin/site --serve` |
+| `bin/audit [service]` | runs the production npm advisory gate (`tools/audit/check.mjs`) against `api`/`web`/`worker` — or just the one named — inside the `web` image with the repo root bind-mounted; reconciles `npm audit --json --omit=dev` per service against `tools/audit/allowlist.json` and exits non-zero on any unallowlisted `high`/`critical` finding, a stale entry, or an entry with no reachability argument (`085-dependency-update-cadence`) | `bin/audit api` |
 
 Without Traefik, each service is still reachable directly on its published port (`WEB_PORT`,
 `API_PORT`, …) — Traefik only adds domain-based routing.
@@ -497,6 +498,22 @@ flat string catalog per locale (`tools/site/en.json`/`es.json`) via the new `bin
 services/` is empty, no migration, `schema.gql` untouched. A `site` job in `.github/workflows/ci.yml`
 regenerates and diffs `site/` on every push/PR so the committed output can't go stale unnoticed;
 `.github/workflows/pages.yml` is unchanged — it still just uploads `site/` as-is.
+— and again 2026-10-03 after `085-dependency-update-cadence` (`api`/`web`/`infra` plus docs, no
+schema or contract change): `.github/dependabot.yml` now watches five ecosystems (`npm` at each of
+`services/api`, `services/web`, `services/worker`; `github-actions` at `/`; `docker` across all five
+service Dockerfiles plus `docker-compose.yaml`), every one opening PRs against `dev` and the
+`docker` one excluding the project's own `ghcr.io/dientuki/perceptor-*` images. `ci.yml` gained an
+`audit` job (`tools/audit/check.mjs`, invoked locally via the new `bin/audit`) that reconciles each
+service's production `npm audit` against `tools/audit/allowlist.json` and fails the build on any
+unallowlisted `high`/`critical` finding, a stale allowlist entry, or an entry with no reachability
+argument — sitting inside `release.yml`'s existing `verify` → `build` chain, so a tag cannot publish
+past it (confirmed live: a scratch tag pinning `next` back to a vulnerable version failed `verify`
+and left `build`/`merge` skipped, publishing no image). Measured outcome: `api`'s production advisory
+count dropped from 15 to 6, all six now accepted and documented in `tools/audit/allowlist.json` (the
+remaining Prisma-family transitives have no fixed release upstream; reachability rests on the
+`perceptor-net` bridge carrying no external traffic); `web` dropped from 4 to 0 via `next` 16.2.12 →
+16.3.8; `worker` stays at 0, untouched. No pipeline stage changed status — this feature is process,
+not product.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

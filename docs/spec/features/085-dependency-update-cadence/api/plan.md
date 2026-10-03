@@ -2,7 +2,7 @@
 title: Dependency Update Cadence — api slice
 service: api
 last_updated: 2026-10-03
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Dependency Update Cadence — `api` (`api/plan.md`)
