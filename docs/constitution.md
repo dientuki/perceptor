@@ -1,8 +1,8 @@
 ---
 title: Perceptor Constitution
-version: 1.2.0
+version: 1.3.0
 ratified_at: 2026-08-09
-last_amended: 2026-09-05
+last_amended: 2026-10-03
 ---
 
 # Perceptor Constitution
@@ -83,7 +83,9 @@ a GraphQL response or in `services/web/src`. `media-roots.service.spec.ts` cover
 ## Article VI — Language
 
 Code comments are **English**. Identifiers, type names, documentation, spec files and commit
-messages are **English**. Test descriptions follow the code: English `it(...)` strings.
+messages are **English**. Test descriptions follow the code: English `it(...)` strings. A comment
+found in Spanish is not grandfathered — it is either translated or, more often, replaced by
+Article XI's fourth exception, the spec locator.
 
 Commits are `[scope] lowercase message`, scope being the service (`[api]`, `[web]`, `[worker]`,
 `[docs]`).
@@ -167,7 +169,7 @@ Code carries no explanatory comments, no docblocks, no TODO/FIXME notes, no supp
 and no commented-out code. Intent is expressed through names, structure and tests; rationale belongs
 in the commit message, the PR, or the feature spec.
 
-Three exceptions, and only these:
+Four exceptions, and only these:
 
 1. **A link to external documentation.** A URL for a third-party API or format that the code
    implements against — the qBittorrent WebUI endpoint above each method in
@@ -179,12 +181,18 @@ Three exceptions, and only these:
    `it(...)` strings.
 3. **Doc comments on a security guard** — `MediaRootsService.resolveFromRoot()` is the one that
    exists today. The reasoning a traversal guard defends against cannot live in its name.
+4. **A locator to the spec that explains the code**, in exactly the form
+   `// Spec NNN, <ref>[ <ref>…]` (`<ref>` one of `REQ-n`, `NFR-n`, `AC-n`, `Tnnn`; `;` between
+   specs), with no other text on the line. It replaces the design detail rather than carrying it —
+   the detail lives in `docs/spec/features/NNN-*/`, which is where a reader goes next. The same
+   spelling may also appear inline, alongside prose, inside an exception-2 test header or an
+   exception-3 guard doc comment, where the prose is the point and the locator is what makes it
+   easy to find again (`086-comment-locator-convention`).
 
-Shebangs are not comments. Existing comments outside these three cases are legacy: leave them until
-you are editing that code for another reason, since translating or deleting them wholesale creates
-noisy diffs (same rule Article VI applies to Spanish comments).
+Shebangs are not comments.
 
-**Check** — a new file has no comment that is not a URL, a test header, or a guard's doc comment.
+**Check** — a new file has no comment that is not a URL, a test header, a guard's doc comment, or a
+well-formed spec locator.
 
 ## Article XII — The library is never deleted
 
@@ -218,3 +226,4 @@ destinations root is a violation.
 | 1.0.0 | 2026-08-09 | Ratified. Articles I–VI codify rules already in `CLAUDE.md`; VII–IX introduce spec-driven development. |
 | 1.1.0 | 2026-08-20 | Articles X (prefer simplification) and XI (no comments) added. XI names the three cases where a comment is still owed; Article VI is unchanged, since it governs the language of a comment, not whether one exists. |
 | 1.2.0 | 2026-09-05 | Article XII (the library is never deleted) added, ratified alongside `047-source-deletion`, which needed the boundary written down: a delete unwinds the downloads side of the pipeline and stops there. Frontmatter `version` also corrected — it had stayed at 1.0.0 through the 1.1.0 amendment. |
+| 1.3.0 | 2026-10-03 | Article XI gains a fourth exception, the spec locator (`// Spec NNN, <ref>`), ratified alongside `086-comment-locator-convention`. Its "leave them until you are editing that code for another reason" sentence is retired — Spanish comments were the last bloc of legacy drift the exemption covered, and the fourth exception is what they become instead of staying ungoverned. Article VI's matching Spanish-comment carve-out is retired for the same reason. |

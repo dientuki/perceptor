@@ -1,7 +1,7 @@
 ---
 title: Comment Locator Convention — Tasks
 last_updated: 2026-10-03
-status: Draft
+status: In Progress
 ---
 
 # TASKS: Comment Locator Convention (`tasks.md`)
@@ -38,7 +38,7 @@ Nothing else can start. Until Article XI admits the locator, every line the swee
 the constitution as written, and an agent reading `docs/constitution.md` mid-sweep would be right to
 stop.
 
-- [ ] **T001** `[docs]` Amend `docs/constitution.md` through `/constitution`: add the REQ-1
+- [x] **T001** `[docs]` Amend `docs/constitution.md` through `/constitution`: add the REQ-1
       locator as Article XI's fourth exception, with REQ-1b's narrowing (inline prose around a
       reference is legal only inside an exception-2 test header or an exception-3 guard doc
       comment). Retire Article XI's "leave them until you are editing that code for another reason"
