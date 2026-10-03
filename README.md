@@ -199,7 +199,12 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
 
 ## Install
 
-You need Docker with the Compose plugin. Nothing else — no Node, no git checkout, no clone.
+You need Docker with the Compose plugin, **running** — on macOS and Windows that means Docker
+Desktop open and reporting `Engine running`, on Linux `systemctl start docker`. Nothing else — no
+Node, no git checkout, no clone. The published images are built for **`linux/amd64` and
+`linux/arm64`** natively — this covers Apple Silicon Macs, Windows on ARM, Raspberry Pi 5 and
+ARM VPS instances alike, with no emulation. The installer checks the Docker engine's own
+architecture before asking anything and stops with a clear message on anything else.
 
 Make an empty directory and run:
 
@@ -415,7 +420,9 @@ service can never shadow each other. `torrent` and `indexer` are single-stage an
 ## Day-to-day commands
 
 These are for a source checkout — an installation made with `install.sh` has no `bin/` and uses
-`docker compose` directly. Nothing runs on the host, so always go through the wrappers:
+`docker compose` directly. Nothing runs on the host, so always go through the wrappers — each one
+checks for a reachable Docker engine first (`bin/_docker.sh`), so a stopped daemon says so instead
+of failing halfway through:
 
 | Command | What it does |
 | :-- | :-- |
@@ -423,6 +430,7 @@ These are for a source checkout — an installation made with `install.sh` has n
 | `bin/build <dev\|prod> [service]` | Build images without starting anything; no service builds all five |
 | `bin/dev [args…]` | Bring the stack up in dev mode from the existing `local-dev` images; extra arguments go to `docker compose up` (pass `-d` yourself to detach) |
 | `bin/prod` | Bring the stack up in prod mode (`prod` stage, rebuilds first) |
+| `bin/stop [-y]` | Stop this directory's stack, then offer to stop any Perceptor container still running outside it (another checkout, an end-user install directory). Stop only — nothing is removed, no volume touched |
 | `bin/cli <service> <cmd…>` | Run any command inside a running container |
 | `bin/npm [service] <args…>` | npm inside a service (defaults to `web`) |
 | `bin/bash <service>` | Interactive shell in a container |
@@ -444,6 +452,98 @@ bin/cli api npx prisma migrate dev --name your_migration_name
 ```bash
 bin/cli api npx prisma studio
 ```
+
+## Troubleshooting
+
+### `Cannot connect to the Docker daemon` — Docker is installed but not running
+
+The installer stops before asking anything:
+
+```
+Docker is installed but its engine is not running.
+```
+
+Having the `docker` command is not the same as having the engine behind it: both the CLI and the
+Compose plugin answer perfectly well with the daemon stopped, which is why the installer checks for
+the engine itself rather than trusting `docker compose version`. Start it and run the installer
+again:
+
+- **Docker Desktop (macOS, Windows):** open the app and wait until the status reads
+  `Engine running`. Installing Docker Desktop does not start it, and it does not start at login
+  unless you turn that on in **Settings → General**.
+- **Linux:** `sudo systemctl start docker`, plus `sudo systemctl enable docker` so it comes back
+  after a reboot.
+
+`docker run hello-world` is the one-line confirmation that the engine is reachable before you try
+again. An older installer (before this check existed) would ask all five questions first and only
+then fail on `Cannot connect to the Docker daemon at unix:///var/run/docker.sock` — the cause is the
+same, and re-running the installer after starting Docker picks up where it left off without losing
+the answers already written to `.env`.
+
+### `no matching manifest for linux/arm64/v8 in the manifest list entries` — unsupported engine architecture
+
+This came from a pre-`083` installer pulling images that only existed for `linux/amd64`. The
+current installer checks the Docker engine's own reported architecture (not the host CPU, since
+the engine may be remote) before asking anything, and stops with:
+
+```
+Docker's engine reports an architecture Perceptor does not publish images for: <detected>.
+Supported architectures: x86_64, aarch64.
+```
+
+The published images cover `linux/amd64` and `linux/arm64`, which is every Mac, Windows machine
+and ARM host in ordinary use — Windows on x86 runs containers through WSL2 (`linux/amd64`, already
+published) and does not need the arm64 image at all. If you still see the raw `no matching
+manifest` error on a current installer, re-run `curl -fsSL
+https://raw.githubusercontent.com/dientuki/perceptor/master/install.sh | bash` in the same
+directory — it is reentrant and will not overwrite anything already written to `.env`.
+
+### `EACCES: permission denied, mkdir '/media/library/...'` — the library is a separate disk
+
+An encode finishes and then fails at the very last step, when it creates the destination folder:
+
+```
+[worker] encode falló job-300: Error: EACCES: permission denied, mkdir '/media/library/Movies'
+```
+
+This is a risk on any host where `HOST_DESTINATIONS_DIR` is not on the same filesystem as the rest
+of the installation — a second internal disk, an external or USB drive, an NFS/SMB share. An
+external drive is the likeliest case of all: it mounts later than an internal one, and it may not
+be plugged in when the machine boots at all. Check what the container actually sees:
+
+```bash
+docker compose exec worker ls -lan /media/library
+```
+
+An empty, `root:root` directory means the containers are not looking at that disk at all. Docker
+bind-mounts a path, not a filesystem: if the stack starts before the disk is mounted, it binds the
+empty mountpoint stub underneath, and the container stays pinned to it for its whole life — the
+disk mounted a minute later is invisible inside it. On a reboot this is a race between
+`docker.service` and the mount unit, and an `fstab` entry marked `nofail` is not ordered before
+Docker, so it can lose. `journalctl -b` shows it:
+
+```
+01:26:34  dockerd  starting container   <- binds /mnt/perceptor
+01:27:43  systemd  Mounted /mnt/perceptor.
+```
+
+Restarting the containers with the disk already mounted fixes it — the mounts are rebuilt on every
+start, not only when the container is created:
+
+```bash
+docker compose restart
+```
+
+To stop it happening on the next boot, order Docker after the mount (`sudo systemctl edit
+docker.service`, substituting your own path):
+
+```ini
+[Unit]
+RequiresMountsFor=/mnt/perceptor
+```
+
+The `api` mounts the same path read-only, so while this is broken it also reports an empty library
+when reconciling against the media server.
 
 ## Known limitations
 
@@ -468,8 +568,6 @@ Rough edges, stated plainly:
 - **The installer only knows how to repair a *finished* installation.** Re-running `install.sh`
   treats "there is a `.env`" as "the previous run completed", so an install interrupted partway
   leaves a `.env` it will skip rather than finish. Delete the directory and start over.
-- **`linux/amd64` only.** The published images are built for one platform; an ARM host has to build
-  from source.
 
 ## Responsible use
 

@@ -116,12 +116,20 @@ services/worker/         BullMQ + FFmpeg consumer        -> services/worker/CLAU
 MariaDB/Redis. Do not run `npm`, `npx`, `nest`, `prisma`, or `next` directly — always go through the
 wrappers in `bin/`, which shell into the running containers.
 
+Every wrapper that talks to Docker sources `bin/_docker.sh` and calls `require_docker` first: the
+`docker` command, the Compose plugin, **and** a reachable engine. The third check is the one that
+matters — the CLI and the plugin both answer with the daemon stopped, so without it a wrapper dies
+later on `Cannot connect to the Docker daemon` (and `install.sh`, which ships with no `bin/` beside
+it, used to ask all five questions before getting there). `bin/_docker.sh` is sourced, not run, and
+also holds `compose_project_name`.
+
 | Script | What it does | Example |
 | :-- | :-- | :-- |
 | `bin/install` | generates `.env` from `.env.example`, asking Traefik y/n + domain — the **developer** installer, builds from source | run once, first checkout |
 | `bin/dev [args…]` | `docker compose up` in dev mode, reads `USE_TRAEFIK` from `.env`, always adds `docker-compose.build.yaml` then `docker-compose.dev.yaml`; starts the existing `local-dev` images with no build pass — run `bin/build dev` first if a `Dockerfile` or dependency changed; any arguments are forwarded to `docker compose up` before the service list — pass `-d` yourself for detached, omit it to stream logs in the foreground | `bin/dev -d` |
 | `bin/prod` | same, `BUILD_TARGET=prod`, rebuilds and runs the image it built (via `docker-compose.build.yaml`) — no dev overlay | `bin/prod` |
 | `bin/build <dev\|prod> [service]` | builds the `dev` or `prod` images without starting containers, under their own `local-dev`/`local-prod` tags; no service argument builds all five own services | `bin/build prod web` |
+| `bin/stop [-y]` | `docker compose stop` for this directory's project, then lists any Perceptor container still running under **another** Compose project — an unrelated checkout or an end-user install directory holding the host ports, detected by the shared `perceptor-net` network so another install's `db`/`traefik` count too — and stops those as well; interactively it asks, `-y` skips the prompt. Stop only, never `down`: nothing removed, no volume touched | `bin/stop -y` |
 | `bin/cli <service> <cmd…>` | `docker compose exec -it <service> <cmd…>` | `bin/cli api npx prisma migrate status` |
 | `bin/npm [service] <args…>` | npm inside a service; **defaults to `web`** when the first arg is not `web`/`api`/`worker` | `bin/npm api run test` |
 | `bin/bash <service>` | interactive `sh` in a container | `bin/bash api` |
@@ -129,6 +137,7 @@ wrappers in `bin/`, which shell into the running containers.
 | `bin/dbinit` | grants global privileges to `${DB_USER}` so Prisma can create its shadow database | once after a fresh `db` volume |
 | `bin/dbreset` | `prisma migrate reset --force` + seed + Redis `FLUSHALL` — resets dev state without rerunning `bin/install` | `bin/dbreset` |
 | `bin/reset-password <username>` | resets a user's password interactively; for `ADMIN_USER` also qBittorrent and Prowlarr (end users: `docker compose exec api node dist/scripts/reset-password.js <username>`) | the recovery path when no admin can sign in |
+| `bin/site [--serve]` | regenerates the public landing page (`site/index.html`, `site/es/index.html`) from `tools/site/template.html` plus one flat string catalog per locale, running `node tools/site/build.mjs` inside the `web` image with the repo root bind-mounted (`084-landing-page-i18n`); `--serve` adds a static server over `site/` so the English/Spanish pass can be browsed at `http://localhost:8089/` | `bin/site --serve` |
 
 Without Traefik, each service is still reachable directly on its published port (`WEB_PORT`,
 `API_PORT`, …) — Traefik only adds domain-based routing.
@@ -157,7 +166,13 @@ writes `docker-compose.yaml` and `.env` into an empty directory, asks five quest
 rest, and starts the stack from the published images. Updating is naming a new `PERCEPTOR_TAG` in
 `.env` and `docker compose pull && docker compose up -d`; `api` applies its own pending migrations
 and production seed before it starts listening (see `services/api/CLAUDE.md`), gated behind a
-`backup` service that dumps the database to `./backups` first.
+`backup` service that dumps the database to `./backups` first. Since `083`, the five published
+images are built for both `linux/amd64` and `linux/arm64`, each architecture built natively on a
+runner of its own kind (`.github/workflows/release.yml`'s `build` + `merge` split) rather than
+emulated — this covers Apple Silicon Macs, Windows on ARM, Raspberry Pi 5 and ARM VPS hosts; `install.sh`
+checks the Docker engine's own reported architecture (`x86_64`/`aarch64`, the kernel spelling, not
+the manifest one) before asking anything and refuses an unsupported one with a clear message rather
+than letting Docker fail nine times with `no matching manifest`.
 
 ## Environment
 
@@ -206,10 +221,11 @@ Rules that are not obvious from the variable names:
   That is why `MediaServerService.notifyCreated` translates the container output path to the host path
   via `MediaRootsService.containerToHostPath()` before sending it.
 - **`PERCEPTOR_TAG`** is the one version that applies to all five published images
-  (`ghcr.io/dientuki/perceptor-<svc>:${PERCEPTOR_TAG:-latest}`); a checkout building from source
-  never reads it, since `docker-compose.build.yaml` overrides `image:` to a local tag instead.
-  There is no per-service tag — `web`/`worker` retype the GraphQL schema by hand with no codegen
-  (Article VIII), so a mixed set fails at runtime with no compile error anywhere.
+  (`ghcr.io/dientuki/perceptor-<svc>:${PERCEPTOR_TAG:-latest}`), each a multi-arch manifest list
+  covering `linux/amd64` and `linux/arm64` under that single tag (`083`); a checkout building from
+  source never reads it, since `docker-compose.build.yaml` overrides `image:` to a local tag
+  instead. There is no per-service tag — `web`/`worker` retype the GraphQL schema by hand with no
+  codegen (Article VIII), so a mixed set fails at runtime with no compile error anywhere.
 - **`TMDB_API_KEY`** backfills the `movie_db_api_key` Setting on `api`'s first boot when that row is
   still empty, the same way `INDEXER_API_KEY` backfills `tracker_api_key`. It is not a Settings write
   path beyond that — leaving it unset just leaves the key editable later from the Settings screen.
@@ -441,6 +457,46 @@ reports 0 errors, `bin/cli web node scripts/check-messages.mjs` confirms no `en`
 keys, and `git diff --stat services/api services/worker` is empty (no pipeline stage changed, no
 contract delta — REQ-3's "cache nothing but `/offline`" and NFR-1's "no new dependency" both hold as
 written).
+— and again 2026-10-02 after `082-docker-engine-preflight` (`infra` plus docs only): there is
+nothing to measure on the service side — `git diff --stat services/` is empty, no migration, no
+`schema.gql` delta, so the api/worker/web numbers above still stand untouched. What this feature is
+verified by instead is its own acceptance criteria, all runnable:
+`for f in bin/*; do [ -f "$f" ] && bash -n "$f"; done` and `bash -n install.sh` parse clean;
+`DOCKER_HOST=unix:///nonexistent.sock` against `install.sh` (in an empty directory, which stays
+empty), `bin/install`, `bin/dev`, `bin/prod`, `bin/build`, `bin/cli`, `bin/log` and `bin/stop`
+prints the engine message and exits non-zero; `bin/log db` and
+`bin/cli db sh -c 'echo inside-container-ok'` are unaffected with the engine up;
+`. bin/_docker.sh && compose_project_name` prints `perceptor`, which is the REQ-8 regression — it
+used to print `perceptor-`, so `install.sh`'s guard against installing fresh over an existing
+`perceptor_mariadb_data` volume had never once fired. `bin/stop` was verified against a dry-run
+copy with its two mutating lines echoed (the development host had a second live install under
+project `ptor`); AC-9, `bin/stop` followed by `bin/dev`, has not been run.
+— and again 2026-10-02 after `083-multi-arch-images` (`infra` plus docs only): `git diff --stat
+services/` is empty, no migration, no `schema.gql` delta — the same posture as `082`, since this
+feature crosses no service boundary either. `.github/workflows/release.yml`'s single
+`build-and-push` job is now `build` (a `service × platform` matrix, ten legs, each pushing by
+digest only, native on `ubuntu-24.04-arm` for `linux/arm64` and `ubuntu-latest` for `linux/amd64`)
+and `merge` (a matrix over the five services, `needs: build`, assembling each one's two digests
+into one manifest list with `docker buildx imagetools create` and applying both tags) — confirmed
+by parsing the file (`jobs` keys are exactly `verify`/`build`/`merge`, the `build` matrix expands
+to ten legs, no `tags:` key inside `build`, `merge` declares `needs: build`, and the digest
+artifact name carries both `matrix.service` and the platform). `install.sh`'s preflight block
+gained a fourth check reusing the same `docker info` call `082` already made
+(`--format '{{.Architecture}}'`), confirmed with `DOCKER_HOST=unix:///nonexistent.sock bash
+install.sh` still printing `082`'s exact engine message and not an architecture one, and a
+scratch copy with the captured value hand-substituted to an unsupported one printing the detected
+value and the supported list — both exiting `1` and leaving the directory empty.
+**AC-1 to AC-5 need a real release-candidate tag pushed to GitHub and AC-2, AC-3, AC-3b and AC-6c
+need an Apple Silicon machine — none of that has been run from this development host, which has no
+`binfmt`/QEMU registered and cannot emulate arm64 even for a smoke test.** Push a release tag and
+run the manual pass in `plan.md` § Verification before telling anyone the Mac install works.
+— and again 2026-10-03 after `084-landing-page-i18n` (no service touched, `infra`/`docs` only): the
+public landing page (`site/index.html`) is now generated from `tools/site/template.html` plus one
+flat string catalog per locale (`tools/site/en.json`/`es.json`) via the new `bin/site`, with
+`site/es/index.html` published alongside it — no pipeline stage changed status, `git diff --stat
+services/` is empty, no migration, `schema.gql` untouched. A `site` job in `.github/workflows/ci.yml`
+regenerates and diffs `site/` on every push/PR so the committed output can't go stale unnoticed;
+`.github/workflows/pages.yml` is unchanged — it still just uploads `site/` as-is.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

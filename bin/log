@@ -1,4 +1,7 @@
 #!/bin/bash
+. "$(dirname "$0")/_docker.sh"
+require_docker
+
 CONTAINER=$1
 shift
 docker compose logs "$CONTAINER" "$@"
