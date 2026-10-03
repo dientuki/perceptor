@@ -175,7 +175,7 @@ across services; within a service the tasks are ordered only where noted.
       paragraph, untouched (REQ-13).
       *Done when:* `grep -n "still have Spanish" services/api/CLAUDE.md` returns nothing and the
       § testing section still names both reference suites as the convention. → T010
-- [ ] **T012** `[worker] [P]` Sweep the Spanish comments in `services/worker/src` **except
+- [x] **T012** `[worker] [P]` Sweep the Spanish comments in `services/worker/src` **except
       `src/ffmpeg/runner.ts`** (REQ-3, REQ-4) — roughly 142 lines across
       `encode/encode.mock.ts` (25), `paths/build-output-path.ts` (18), `encode/encode.ffmpeg.ts`
       (18), `index.ts` (17), `jobs/encode.job.ts` (11), `scan/scan-folder.ts` (8),
@@ -187,7 +187,7 @@ across services; within a service the tasks are ordered only where noted.
       *Done when:* `bin/comments worker` reports zero Spanish findings outside `runner.ts`,
       `bin/cli worker npx --no tsc --noEmit` is 0 errors, `bin/npm worker test` reports unchanged
       counts, and the resolution table is in the report. → T007
-- [ ] **T013** `[worker] [P]` Sweep `src/ffmpeg/runner.ts` (58 Spanish lines, a third of the slice)
+- [x] **T013** `[worker] [P]` Sweep `src/ffmpeg/runner.ts` (58 Spanish lines, a third of the slice)
       and write `src/ffmpeg/runner.spec.ts`. The signal comment at `runner.ts:100` resolves to no
       requirement — `047-source-deletion` mentions `SIGINT`/`SIGTERM` once, in its Context, only to
       say process signals are shutdown rather than per-job cancellation — so it is a REQ-4 deletion
@@ -201,13 +201,13 @@ across services; within a service the tasks are ordered only where noted.
       `bin/npm worker test` passes with the new suite and no other count changed,
       `bin/npm worker run build` exits 0, and the report lists every REQ-4 deletion whose knowledge
       you judged load-bearing with what you did with it (test, `CLAUDE.md`, or URL). → T012
-- [ ] **T014** `[worker] [P]` Normalize the 124 ad-hoc references in `services/worker/src` to
+- [x] **T014** `[worker] [P]` Normalize the 124 ad-hoc references in `services/worker/src` to
       `// Spec NNN, <ref>` (REQ-5) — 110 carry no spec number and are resolved by `git blame`.
       `src/encode/cancellation.spec.ts`'s header `(NFR-1)` is one of them.
       *Done when:* `bin/comments worker` exits 0,
       `grep -rEn "REQ-|NFR-|AC-|T[0-9]{3}" services/worker/src` shows every reference preceded by
       `Spec NNN, `, and the resolution table is in the report. → T013
-- [ ] **T015** `[worker] [P]` Rewrite the one Spanish `it(...)`/`describe(...)` string in
+- [x] **T015** `[worker] [P]` Rewrite the one Spanish `it(...)`/`describe(...)` string in
       `services/worker/src` in English (REQ-12).
       *Done when:* `bin/npm worker test` reports the same counts as before and
       `bin/comments worker` reports no Spanish-string finding. → T007
