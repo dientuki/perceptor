@@ -3,6 +3,9 @@
 # Asegura que estamos en la raíz del proyecto
 cd "$(dirname "$0")/.."
 
+. "$(dirname "$0")/_docker.sh"
+require_docker
+
 # Carga las variables del .env
 if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)

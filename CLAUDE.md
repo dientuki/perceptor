@@ -116,12 +116,20 @@ services/worker/         BullMQ + FFmpeg consumer        -> services/worker/CLAU
 MariaDB/Redis. Do not run `npm`, `npx`, `nest`, `prisma`, or `next` directly — always go through the
 wrappers in `bin/`, which shell into the running containers.
 
+Every wrapper that talks to Docker sources `bin/_docker.sh` and calls `require_docker` first: the
+`docker` command, the Compose plugin, **and** a reachable engine. The third check is the one that
+matters — the CLI and the plugin both answer with the daemon stopped, so without it a wrapper dies
+later on `Cannot connect to the Docker daemon` (and `install.sh`, which ships with no `bin/` beside
+it, used to ask all five questions before getting there). `bin/_docker.sh` is sourced, not run, and
+also holds `compose_project_name`.
+
 | Script | What it does | Example |
 | :-- | :-- | :-- |
 | `bin/install` | generates `.env` from `.env.example`, asking Traefik y/n + domain — the **developer** installer, builds from source | run once, first checkout |
 | `bin/dev [args…]` | `docker compose up` in dev mode, reads `USE_TRAEFIK` from `.env`, always adds `docker-compose.build.yaml` then `docker-compose.dev.yaml`; starts the existing `local-dev` images with no build pass — run `bin/build dev` first if a `Dockerfile` or dependency changed; any arguments are forwarded to `docker compose up` before the service list — pass `-d` yourself for detached, omit it to stream logs in the foreground | `bin/dev -d` |
 | `bin/prod` | same, `BUILD_TARGET=prod`, rebuilds and runs the image it built (via `docker-compose.build.yaml`) — no dev overlay | `bin/prod` |
 | `bin/build <dev\|prod> [service]` | builds the `dev` or `prod` images without starting containers, under their own `local-dev`/`local-prod` tags; no service argument builds all five own services | `bin/build prod web` |
+| `bin/stop [-y]` | `docker compose stop` for this directory's project, then lists any Perceptor container still running under **another** Compose project — an unrelated checkout or an end-user install directory holding the host ports, detected by the shared `perceptor-net` network so another install's `db`/`traefik` count too — and stops those as well; interactively it asks, `-y` skips the prompt. Stop only, never `down`: nothing removed, no volume touched | `bin/stop -y` |
 | `bin/cli <service> <cmd…>` | `docker compose exec -it <service> <cmd…>` | `bin/cli api npx prisma migrate status` |
 | `bin/npm [service] <args…>` | npm inside a service; **defaults to `web`** when the first arg is not `web`/`api`/`worker` | `bin/npm api run test` |
 | `bin/bash <service>` | interactive `sh` in a container | `bin/bash api` |
@@ -441,6 +449,20 @@ reports 0 errors, `bin/cli web node scripts/check-messages.mjs` confirms no `en`
 keys, and `git diff --stat services/api services/worker` is empty (no pipeline stage changed, no
 contract delta — REQ-3's "cache nothing but `/offline`" and NFR-1's "no new dependency" both hold as
 written).
+— and again 2026-10-02 after `082-docker-engine-preflight` (`infra` plus docs only): there is
+nothing to measure on the service side — `git diff --stat services/` is empty, no migration, no
+`schema.gql` delta, so the api/worker/web numbers above still stand untouched. What this feature is
+verified by instead is its own acceptance criteria, all runnable:
+`for f in bin/*; do [ -f "$f" ] && bash -n "$f"; done` and `bash -n install.sh` parse clean;
+`DOCKER_HOST=unix:///nonexistent.sock` against `install.sh` (in an empty directory, which stays
+empty), `bin/install`, `bin/dev`, `bin/prod`, `bin/build`, `bin/cli`, `bin/log` and `bin/stop`
+prints the engine message and exits non-zero; `bin/log db` and
+`bin/cli db sh -c 'echo inside-container-ok'` are unaffected with the engine up;
+`. bin/_docker.sh && compose_project_name` prints `perceptor`, which is the REQ-8 regression — it
+used to print `perceptor-`, so `install.sh`'s guard against installing fresh over an existing
+`perceptor_mariadb_data` volume had never once fired. `bin/stop` was verified against a dry-run
+copy with its two mutating lines echoed (the development host had a second live install under
+project `ptor`); AC-9, `bin/stop` followed by `bin/dev`, has not been run.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

@@ -25,6 +25,18 @@ if ! docker compose version >/dev/null 2>&1; then
   echo "Docker is installed but the Compose plugin (docker compose) is missing. Install it and try again."
   exit 1
 fi
+# Both checks above are client-side only: the docker CLI and the compose plugin answer with the
+# engine stopped, so without this third check the installer asks every question and only then dies
+# on "Cannot connect to the Docker daemon" at the first `docker compose pull`.
+if ! docker info >/dev/null 2>&1; then
+  echo "Docker is installed but its engine is not running."
+  echo
+  echo "  Docker Desktop (macOS/Windows): open Docker Desktop and wait until it says \"Engine running\"."
+  echo "  Linux: sudo systemctl start docker   (and 'sudo systemctl enable docker' to start it at boot)"
+  echo
+  echo "Then run this script again. 'docker run hello-world' confirms the engine is reachable."
+  exit 1
+fi
 
 # fresh_install es el gate de todo lo que sigue: distingue "recién copié .env.example, cada
 # valor ahí es un default de plantilla que hay que reemplazar" de "ya hay un .env de una
@@ -281,7 +293,10 @@ fi
 # crea MARIADB_USER cuando el volumen está vacío — si ya existe un volumen de este proyecto,
 # las credenciales que tenga son las que valen, y no se tocan acá.
 if [ "$fresh_install" = true ]; then
-  project="$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-')"
+  # printf, not echo: `tr -c` would turn basename's trailing newline into a trailing '-' too,
+  # and the volume inspect below would look for perceptor-_mariadb_data — a name that cannot
+  # exist, silently turning this warning off.
+  project="$(printf '%s' "$(basename "$PWD")" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-')"
   if docker volume inspect "${project}_mariadb_data" >/dev/null 2>&1; then
     echo "Warning: a database volume from a previous installation exists but there is no .env."
     echo "Its credentials cannot be guessed — restore the original .env or delete the volume"

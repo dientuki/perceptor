@@ -7,6 +7,9 @@
 set -e
 cd "$(dirname "$0")/.."
 
+. "$(dirname "$0")/_docker.sh"
+require_docker
+
 if [ ! -f .env ]; then
   echo ".env no existe. Corré bin/install primero."
   exit 1
