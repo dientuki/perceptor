@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-02
 last_updated: 2026-10-02
-status: Approved
+status: Implemented
 services: [infra]
 ---
 
@@ -74,22 +74,22 @@ documentation in `README.md` and the root `CLAUDE.md`.
 
 ### Functional Requirements
 
-- [ ] **REQ-1 (Two architectures)**: Each of the five published images must resolve for both
+- [x] **REQ-1 (Two architectures)**: Each of the five published images must resolve for both
       `linux/amd64` and `linux/arm64` under the tag an installation pulls — the version tag and
       `latest` alike. A client on either platform must complete `docker compose pull` with no
       `--platform` override and no emulation.
-- [ ] **REQ-2 (One tag, one manifest list)**: The two architectures must be reachable through a
+- [x] **REQ-2 (One tag, one manifest list)**: The two architectures must be reachable through a
       single image reference, not through separate `-amd64`/`-arm64` tags. `.env`'s
       `PERCEPTOR_TAG` stays one value for the whole stack, and `docker-compose.yaml` keeps its
       current `image:` lines unchanged.
-- [ ] **REQ-3 (All or nothing per image)**: A tag must not be published for one architecture
+- [x] **REQ-3 (All or nothing per image)**: A tag must not be published for one architecture
       alone. If either architecture's build fails, that image's version tag and `latest` must be
       left pointing wherever they pointed before the run — an installation must never pull a tag
       that exists for one platform and 404s for the other.
-- [ ] **REQ-4 (Native build per architecture)**: Each architecture must be built on a runner of
+- [x] **REQ-4 (Native build per architecture)**: Each architecture must be built on a runner of
       that architecture rather than emulated, so that adding arm64 does not make a release take an
       order of magnitude longer than it does today.
-- [ ] **REQ-5 (Installer architecture check)**: `install.sh` must determine the architecture
+- [x] **REQ-5 (Installer architecture check)**: `install.sh` must determine the architecture
       the Docker **engine** reports — not the host CPU, since the engine may be remote — and, when
       that architecture is not one Perceptor publishes, stop with a message naming the detected
       architecture and the supported ones, instead of letting Docker report `no matching manifest`
@@ -99,50 +99,50 @@ documentation in `README.md` and the root `CLAUDE.md`.
       engine names architectures the way the kernel does, not the way a manifest does — it answers
       `x86_64` and `aarch64`, never `amd64` and `arm64` — so the accepted set is those two values,
       and a check written against the manifest spelling would reject every host.
-- [ ] **REQ-6 (The arm64 worker can actually encode)**: The arm64 `perceptor-worker` image must
+- [x] **REQ-6 (The arm64 worker can actually encode)**: The arm64 `perceptor-worker` image must
       ship a working SVT-AV1 encoder, not merely build and start. An image that pulls natively and
       then fails every job at `ffmpeg` is a worse outcome than today's honest `no matching
       manifest`, because the failure surfaces per title, in the pipeline, long after the install
       looked successful.
-- [ ] **REQ-7 (A failed pre-083 install repairs itself)**: An installation directory left behind by
+- [x] **REQ-7 (A failed pre-083 install repairs itself)**: An installation directory left behind by
       a pre-083 run on arm64 — one where `install.sh` already wrote `.env` and
       `docker-compose.yaml` and then died at `docker compose pull` — must complete on a re-run of
       the same one-line command, with no manual cleanup and no change to the values already
       written. This is `049` REQ-8's reentrancy, but it has never been exercised after a *pull*
       failure, and it is the exact state every alpha tester on a Mac is in right now.
-- [ ] **REQ-8 (Documented support)**: The published architectures must be stated where a
+- [x] **REQ-8 (Documented support)**: The published architectures must be stated where a
       prospective user looks before installing (`README.md`) and where an agent looks before
       changing the release workflow (root `CLAUDE.md`, and the header comment of `release.yml`
       which currently asserts amd64-only as if deliberate).
 
 ### Non-Functional & Operational Requirements
 
-- [ ] **NFR-1 (No source change)**: No file under `services/*/src`, no Dockerfile stage, and no
+- [x] **NFR-1 (No source change)**: No file under `services/*/src`, no Dockerfile stage, and no
       Prisma schema may change. If a service turns out to need an architecture-conditional branch
       to build on arm64, this feature stops and reports rather than introducing one.
-- [ ] **NFR-2 (Existing installs untouched)**: An amd64 installation that pulls a tag published
+- [x] **NFR-2 (Existing installs untouched)**: An amd64 installation that pulls a tag published
       after this feature must get a byte-for-byte equivalent image to what it gets today — same
       base, same stage, same entrypoint. Adding an architecture is additive; it may not alter what
       amd64 resolves to beyond the rebuild itself.
-- [ ] **NFR-3 (CI unchanged in scope)**: `ci.yml` keeps running typecheck and tests on amd64 only.
+- [x] **NFR-3 (CI unchanged in scope)**: `ci.yml` keeps running typecheck and tests on amd64 only.
       Running the test suites on both architectures is not part of this feature — the thing being
       extended is what we publish, not what we verify.
-- [ ] **NFR-4 (Dev and local builds unchanged)**: `bin/dev`, `bin/prod` and `bin/build` keep
+- [x] **NFR-4 (Dev and local builds unchanged)**: `bin/dev`, `bin/prod` and `bin/build` keep
       building for the host's native architecture with no `platforms:` argument anywhere. A
       developer on arm64 gets arm64 local images by building natively, which already works.
-- [ ] **NFR-5 (Release still atomic across the five)**: The existing operational rule from
+- [x] **NFR-5 (Release still atomic across the five)**: The existing operational rule from
       `049-published-images-install` NFR-6 — the five images move together or the release is not
       done — is unchanged by this feature. REQ-3 tightens it per image; it does not replace it.
-- [ ] **NFR-6 (Installer preflight stays one round trip)**: REQ-5 must learn the engine's
+- [x] **NFR-6 (Installer preflight stays one round trip)**: REQ-5 must learn the engine's
       architecture from the `docker info` call the preflight already makes, not from a second one
       (`082` NFR-4), and must stay POSIX-ish shell plus the `docker` CLI — no `jq`, no Python, no
       Node on the host (`082` NFR-1, Constitution Article I).
-- [ ] **NFR-7 (The check is the installer's alone)**: The architecture check must live inline in
+- [x] **NFR-7 (The check is the installer's alone)**: The architecture check must live inline in
       `install.sh` and must not be added to `require_docker` in `bin/_docker.sh`. `install.sh`
       cannot source the helper (`082` NFR-2), and the `bin/` wrappers must keep working on any
       architecture that can build the images from source, which is the developer's case and has
       nothing to do with what GHCR publishes (NFR-4).
-- [ ] **NFR-8 (Transcode performance is per host)**: Perceptor makes no claim about encode speed on
+- [x] **NFR-8 (Transcode performance is per host)**: Perceptor makes no claim about encode speed on
       arm64. The worker runs SVT-AV1 on CPU on every host (root `CLAUDE.md`, Transcode stage); an
       arm64 image that runs natively is the deliverable, a performance target is not.
 
@@ -179,12 +179,12 @@ None.
       pushing a tag from a branch with a deliberate compile error in that service), the release run
       finishes red and `docker manifest inspect ghcr.io/dientuki/perceptor-<svc>:<that tag>` fails
       with a not-found rather than returning a single-platform manifest (REQ-3).
-- [ ] **AC-6 (failure path)**: Running `install.sh` in an empty directory on a host whose engine
+- [x] **AC-6 (failure path)**: Running `install.sh` in an empty directory on a host whose engine
       reports an architecture Perceptor does not publish — simulated by overriding the detected
       value — exits `1` with a message naming the detected architecture and the supported list,
       asks no question, pulls nothing, and leaves the directory empty: no `.env`, no
       `docker-compose.yaml` (REQ-5, `082` NFR-6).
-- [ ] **AC-6b (regression against `082`)**: With the engine unreachable
+- [x] **AC-6b (regression against `082`)**: With the engine unreachable
       (`DOCKER_HOST=unix:///nonexistent.sock bash install.sh`), the installer still prints
       `082`'s engine message and not an architecture one — the architecture check never runs
       against an engine that answered nothing. `grep -n 'Architecture\|uname' bin/_docker.sh`
@@ -194,9 +194,23 @@ None.
       and `git diff`-style comparison of the `.env` before and after shows no changed value —
       `PERCEPTOR_TAG`, the generated secrets and the admin user are all left as they were
       (REQ-7).
-- [ ] **AC-7**: `README.md` states which architectures are published, and the header comment of
+- [x] **AC-7**: `README.md` states which architectures are published, and the header comment of
       `release.yml` no longer asserts `linux/amd64` only (REQ-8).
-- [ ] **AC-8**: `git diff --stat services/` for this feature is empty (NFR-1).
+- [x] **AC-8**: `git diff --stat services/` for this feature is empty (NFR-1).
+
+**Verification status, recorded plainly rather than papered over**: AC-6, AC-6b and AC-7/AC-8 were
+actually run and observed on 2026-10-02 — `DOCKER_HOST=unix:///nonexistent.sock bash install.sh`
+printed `082`'s exact engine message and not an architecture one, exited `1`, left the directory
+empty; a scratch copy with the captured architecture hand-substituted to an unsupported value
+printed the detected value and the supported list, exited `1`, left the directory empty;
+`grep -n 'Architecture\|uname' bin/_docker.sh` returned nothing; `README.md` and `release.yml`'s
+header were confirmed by reading them back. AC-6b's clause about `bin/dev` on an arm64 *development*
+host was **not** exercised — this host is `x86_64` — and rests on NFR-7 holding by construction
+(`bin/_docker.sh` untouched) rather than on a live arm64 dev run. **AC-1 through AC-5, AC-2/AC-3/
+AC-3b and AC-6c have not been run at all**: they need a real release-candidate tag pushed to
+GitHub and, for AC-2/AC-3/AC-3b/AC-6c, an Apple Silicon machine — this development host has no
+`binfmt`/QEMU registered and cannot emulate arm64 even for a smoke test. Push a release tag and
+walk `plan.md` § Verification before telling anyone the Mac install works.
 
 ## Out of Scope
 

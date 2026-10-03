@@ -27,8 +27,11 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 # Both checks above are client-side only: the docker CLI and the compose plugin answer with the
 # engine stopped, so without this third check the installer asks every question and only then dies
-# on "Cannot connect to the Docker daemon" at the first `docker compose pull`.
-if ! docker info >/dev/null 2>&1; then
+# on "Cannot connect to the Docker daemon" at the first `docker compose pull`. A reachable engine is
+# not necessarily a compatible one, though — captured once here and reused below (REQ-5, NFR-6) so
+# the architecture check costs no second `docker info` round trip.
+engine_arch="$(docker info --format '{{.Architecture}}' 2>/dev/null)" || true
+if [ -z "$engine_arch" ]; then
   echo "Docker is installed but its engine is not running."
   echo
   echo "  Docker Desktop (macOS/Windows): open Docker Desktop and wait until it says \"Engine running\"."
@@ -37,6 +40,16 @@ if ! docker info >/dev/null 2>&1; then
   echo "Then run this script again. 'docker run hello-world' confirms the engine is reachable."
   exit 1
 fi
+# The engine names architectures the way the kernel does (x86_64/aarch64), never the way an image
+# manifest does (amd64/arm64) — checking against the manifest spelling here would reject every host.
+case "$engine_arch" in
+  x86_64 | aarch64) ;;
+  *)
+    echo "Docker's engine reports an architecture Perceptor does not publish images for: ${engine_arch}."
+    echo "Supported architectures: x86_64, aarch64."
+    exit 1
+    ;;
+esac
 
 # fresh_install es el gate de todo lo que sigue: distingue "recién copié .env.example, cada
 # valor ahí es un default de plantilla que hay que reemplazar" de "ya hay un .env de una

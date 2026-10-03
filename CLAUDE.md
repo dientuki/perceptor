@@ -165,7 +165,13 @@ writes `docker-compose.yaml` and `.env` into an empty directory, asks five quest
 rest, and starts the stack from the published images. Updating is naming a new `PERCEPTOR_TAG` in
 `.env` and `docker compose pull && docker compose up -d`; `api` applies its own pending migrations
 and production seed before it starts listening (see `services/api/CLAUDE.md`), gated behind a
-`backup` service that dumps the database to `./backups` first.
+`backup` service that dumps the database to `./backups` first. Since `083`, the five published
+images are built for both `linux/amd64` and `linux/arm64`, each architecture built natively on a
+runner of its own kind (`.github/workflows/release.yml`'s `build` + `merge` split) rather than
+emulated — this covers Apple Silicon Macs, Windows on ARM, Raspberry Pi 5 and ARM VPS hosts; `install.sh`
+checks the Docker engine's own reported architecture (`x86_64`/`aarch64`, the kernel spelling, not
+the manifest one) before asking anything and refuses an unsupported one with a clear message rather
+than letting Docker fail nine times with `no matching manifest`.
 
 ## Environment
 
@@ -214,10 +220,11 @@ Rules that are not obvious from the variable names:
   That is why `MediaServerService.notifyCreated` translates the container output path to the host path
   via `MediaRootsService.containerToHostPath()` before sending it.
 - **`PERCEPTOR_TAG`** is the one version that applies to all five published images
-  (`ghcr.io/dientuki/perceptor-<svc>:${PERCEPTOR_TAG:-latest}`); a checkout building from source
-  never reads it, since `docker-compose.build.yaml` overrides `image:` to a local tag instead.
-  There is no per-service tag — `web`/`worker` retype the GraphQL schema by hand with no codegen
-  (Article VIII), so a mixed set fails at runtime with no compile error anywhere.
+  (`ghcr.io/dientuki/perceptor-<svc>:${PERCEPTOR_TAG:-latest}`), each a multi-arch manifest list
+  covering `linux/amd64` and `linux/arm64` under that single tag (`083`); a checkout building from
+  source never reads it, since `docker-compose.build.yaml` overrides `image:` to a local tag
+  instead. There is no per-service tag — `web`/`worker` retype the GraphQL schema by hand with no
+  codegen (Article VIII), so a mixed set fails at runtime with no compile error anywhere.
 - **`TMDB_API_KEY`** backfills the `movie_db_api_key` Setting on `api`'s first boot when that row is
   still empty, the same way `INDEXER_API_KEY` backfills `tracker_api_key`. It is not a Settings write
   path beyond that — leaving it unset just leaves the key editable later from the Settings screen.
@@ -463,6 +470,25 @@ used to print `perceptor-`, so `install.sh`'s guard against installing fresh ove
 `perceptor_mariadb_data` volume had never once fired. `bin/stop` was verified against a dry-run
 copy with its two mutating lines echoed (the development host had a second live install under
 project `ptor`); AC-9, `bin/stop` followed by `bin/dev`, has not been run.
+— and again 2026-10-02 after `083-multi-arch-images` (`infra` plus docs only): `git diff --stat
+services/` is empty, no migration, no `schema.gql` delta — the same posture as `082`, since this
+feature crosses no service boundary either. `.github/workflows/release.yml`'s single
+`build-and-push` job is now `build` (a `service × platform` matrix, ten legs, each pushing by
+digest only, native on `ubuntu-24.04-arm` for `linux/arm64` and `ubuntu-latest` for `linux/amd64`)
+and `merge` (a matrix over the five services, `needs: build`, assembling each one's two digests
+into one manifest list with `docker buildx imagetools create` and applying both tags) — confirmed
+by parsing the file (`jobs` keys are exactly `verify`/`build`/`merge`, the `build` matrix expands
+to ten legs, no `tags:` key inside `build`, `merge` declares `needs: build`, and the digest
+artifact name carries both `matrix.service` and the platform). `install.sh`'s preflight block
+gained a fourth check reusing the same `docker info` call `082` already made
+(`--format '{{.Architecture}}'`), confirmed with `DOCKER_HOST=unix:///nonexistent.sock bash
+install.sh` still printing `082`'s exact engine message and not an architecture one, and a
+scratch copy with the captured value hand-substituted to an unsupported one printing the detected
+value and the supported list — both exiting `1` and leaving the directory empty.
+**AC-1 to AC-5 need a real release-candidate tag pushed to GitHub and AC-2, AC-3, AC-3b and AC-6c
+need an Apple Silicon machine — none of that has been run from this development host, which has no
+`binfmt`/QEMU registered and cannot emulate arm64 even for a smoke test.** Push a release tag and
+run the manual pass in `plan.md` § Verification before telling anyone the Mac install works.
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change
 added nothing, not as a fact to cite.
 

@@ -2,7 +2,7 @@
 title: Multi-architecture published images — Implementation Plan
 spec_version: 0.2.0
 last_updated: 2026-10-02
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Multi-architecture published images (`plan.md`)

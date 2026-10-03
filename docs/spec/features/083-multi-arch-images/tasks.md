@@ -1,7 +1,7 @@
 ---
 title: Multi-architecture published images — Tasks
 last_updated: 2026-10-02
-status: Draft
+status: Done
 ---
 
 # TASKS: Multi-architecture published images (`tasks.md`)
@@ -30,7 +30,7 @@ watched.
 
 ### Group 1 — the release pipeline
 
-- [ ] **T001** `[infra]` Split `build-and-push` in `.github/workflows/release.yml` into two jobs.
+- [x] **T001** `[infra]` Split `build-and-push` in `.github/workflows/release.yml` into two jobs.
       `build`: matrix over `service × platform` (`linux/amd64` on `ubuntu-latest`, `linux/arm64` on
       `ubuntu-24.04-arm`), keeping `needs: verify`, `fail-fast: false` and the existing `include:`
       that gives `web`/`api`/`worker` their `target: prod`; the build step loses `tags:` entirely
@@ -45,7 +45,7 @@ watched.
       contains both `matrix.service` and the platform. That last clause is not a detail — a name
       that collides across services tags `perceptor-web` with `api`'s digest, and the result pulls,
       starts and runs the wrong program with no error anywhere (`plan.md` § Risks).
-- [ ] **T002** `[infra]` Rewrite the two prose blocks in `.github/workflows/release.yml`: the header
+- [x] **T002** `[infra]` Rewrite the two prose blocks in `.github/workflows/release.yml`: the header
       comment that states `All five build for linux/amd64 only` as a decision, and the operational
       note at the foot claiming nothing in this repository can prevent a half-published tag — under
       T001 the common case is prevented structurally, so it must say what is now guaranteed rather
@@ -59,7 +59,7 @@ Independent of Group 1 as code: a different file, no shared symbol. It is marked
 reason, not because the two can be verified together — AC-2 cannot run until Group 1 has shipped a
 tag.
 
-- [ ] **T003** `[infra] [P]` Add the architecture check to the preflight block at `install.sh:20-38`.
+- [x] **T003** `[infra] [P]` Add the architecture check to the preflight block at `install.sh:20-38`.
       Replace `docker info >/dev/null 2>&1` with a capture of
       `docker info --format '{{.Architecture}}'` — an empty result is the engine-not-running branch
       and must print the existing message **verbatim** (`082` AC-1 asserts that string and README
@@ -79,16 +79,16 @@ tag.
 
 Both describe what shipped, so both wait on the two changes above.
 
-- [ ] **T004** `[docs] [P]` `README.md`: state the published architectures in § *Install*, and add a
+- [x] **T004** `[docs] [P]` `README.md`: state the published architectures in § *Install*, and add a
       § *Troubleshooting* entry for `no matching manifest` beside the existing daemon one — that is
       where someone who already hit the error will look. → T001, T003
-- [ ] **T005** `[docs] [P]` Root `CLAUDE.md`: name the published architectures in § *Docker-first
+- [x] **T005** `[docs] [P]` Root `CLAUDE.md`: name the published architectures in § *Docker-first
       workflow* and on the `PERCEPTOR_TAG` bullet of § *Environment*, and append this feature to
       § *Current state* in the existing form — what was measured, and what was not run. → T001, T003
 
 ### Group 4 — close
 
-- [ ] **T006** `[docs]` Walk the acceptance criteria in `spec.md`, ticking only what was actually
+- [x] **T006** `[docs]` Walk the acceptance criteria in `spec.md`, ticking only what was actually
       observed and naming what was not, then set `status: Implemented` on `spec.md`, `plan.md` and
       `infra/plan.md`. → T001, T002, T003, T004, T005
 

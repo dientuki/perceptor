@@ -2,7 +2,7 @@
 title: Multi-architecture published images — infra slice
 service: infra
 last_updated: 2026-10-02
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Multi-architecture published images — `infra` (`infra/plan.md`)

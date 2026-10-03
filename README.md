@@ -201,7 +201,10 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
 
 You need Docker with the Compose plugin, **running** — on macOS and Windows that means Docker
 Desktop open and reporting `Engine running`, on Linux `systemctl start docker`. Nothing else — no
-Node, no git checkout, no clone.
+Node, no git checkout, no clone. The published images are built for **`linux/amd64` and
+`linux/arm64`** natively — this covers Apple Silicon Macs, Windows on ARM, Raspberry Pi 5 and
+ARM VPS instances alike, with no emulation. The installer checks the Docker engine's own
+architecture before asking anything and stops with a clear message on anything else.
 
 Make an empty directory and run:
 
@@ -477,6 +480,24 @@ then fail on `Cannot connect to the Docker daemon at unix:///var/run/docker.sock
 same, and re-running the installer after starting Docker picks up where it left off without losing
 the answers already written to `.env`.
 
+### `no matching manifest for linux/arm64/v8 in the manifest list entries` — unsupported engine architecture
+
+This came from a pre-`083` installer pulling images that only existed for `linux/amd64`. The
+current installer checks the Docker engine's own reported architecture (not the host CPU, since
+the engine may be remote) before asking anything, and stops with:
+
+```
+Docker's engine reports an architecture Perceptor does not publish images for: <detected>.
+Supported architectures: x86_64, aarch64.
+```
+
+The published images cover `linux/amd64` and `linux/arm64`, which is every Mac, Windows machine
+and ARM host in ordinary use — Windows on x86 runs containers through WSL2 (`linux/amd64`, already
+published) and does not need the arm64 image at all. If you still see the raw `no matching
+manifest` error on a current installer, re-run `curl -fsSL
+https://raw.githubusercontent.com/dientuki/perceptor/master/install.sh | bash` in the same
+directory — it is reentrant and will not overwrite anything already written to `.env`.
+
 ### `EACCES: permission denied, mkdir '/media/library/...'` — the library is a separate disk
 
 An encode finishes and then fails at the very last step, when it creates the destination folder:
@@ -547,8 +568,6 @@ Rough edges, stated plainly:
 - **The installer only knows how to repair a *finished* installation.** Re-running `install.sh`
   treats "there is a `.env`" as "the previous run completed", so an install interrupted partway
   leaves a `.env` it will skip rather than finish. Delete the directory and start over.
-- **`linux/amd64` only.** The published images are built for one platform; an ARM host has to build
-  from source.
 
 ## Responsible use
 

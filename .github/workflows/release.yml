@@ -8,9 +8,13 @@
 # or `latest` hands every default installation an untested build.
 # web/api/worker build from their `prod` stage; torrent/indexer are
 # single-stage Dockerfiles (linuxserver/qbittorrent, linuxserver/prowlarr bases) with no target
-# to name. All five build for linux/amd64 only. One workflow run publishes all five or none —
-# a partial publish would let an installation end up with a mixed set (plan.md § Contract Freeze),
-# which is exactly what NFR-6 forbids.
+# to name. All five build for both linux/amd64 and linux/arm64 (083-multi-arch-images), each
+# architecture built natively on a runner of its own kind rather than emulated — `build` is a
+# matrix over service x platform that pushes by digest only, and `merge` is a matrix over the
+# five services that assembles each one's two digests into a single manifest list and applies
+# the tags. `merge` needs `build`, so a single failed leg — one service, one architecture —
+# blocks every tag from moving, not only the broken image's: see the note at the foot of this
+# file for what that guarantees.
 name: Release
 
 on:
@@ -28,19 +32,20 @@ jobs:
     name: Verify
     uses: ./.github/workflows/ci.yml
 
-  build-and-push:
-    name: Build and push ${{ matrix.service }}
+  build:
+    name: Build ${{ matrix.service }} (${{ matrix.platform }})
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
     strategy:
-      # One failed service must not stop the workflow from reporting every other failure, but a
+      # One failed leg must not stop the workflow from reporting every other failure, but a
       # partial publish is still not a "done" release — see the note at the end of this file.
       fail-fast: false
       matrix:
         service: [web, api, worker, torrent, indexer]
+        platform: [linux/amd64, linux/arm64]
         include:
           - service: web
             target: prod
@@ -52,6 +57,60 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: services/${{ matrix.service }}
+          target: ${{ matrix.target }}
+          platforms: ${{ matrix.platform }}
+          # No tag is set here on purpose — applying one is `merge`'s job, once both
+          # architectures' digests exist. The image name lives inside `outputs`, not as a tag;
+          # nothing reachable by a tag exists at the end of this job.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/perceptor-${{ matrix.service }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Sanitize platform for artifact name
+        id: platform
+        run: echo "pair=$(echo '${{ matrix.platform }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digest
+          echo "${{ steps.build.outputs.digest }}" > /tmp/digest/digest.txt
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          # Name carries both the service and the platform — the one genuinely silent failure
+          # risk in this workflow (plan.md § Risks): a collision across services would tag
+          # `perceptor-web` with `api`'s digest, and the result pulls, starts and runs the wrong
+          # program with no error anywhere.
+          name: digest-${{ matrix.service }}-${{ steps.platform.outputs.pair }}
+          path: /tmp/digest/digest.txt
+          retention-days: 1
+
+  merge:
+    name: Merge ${{ matrix.service }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [web, api, worker, torrent, indexer]
+    steps:
       - name: Resolve image tags
         id: tags
         # SemVer: anything after the first hyphen is a prerelease identifier, so `v0.8.0-rc.1`
@@ -80,14 +139,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v7
+      - name: Download digests
+        uses: actions/download-artifact@v4
         with:
-          context: services/${{ matrix.service }}
-          target: ${{ matrix.target }}
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          pattern: digest-${{ matrix.service }}-*
+          path: /tmp/digests
+          merge-multiple: false
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          image="${REGISTRY}/${NAMESPACE}/perceptor-${{ matrix.service }}"
+          sources=()
+          for dir in digest-${{ matrix.service }}-*/; do
+            digest="$(cat "${dir}/digest.txt")"
+            sources+=("${image}@${digest}")
+          done
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -n "${tag}" ] && tag_args+=(--tag "${tag}")
+          done <<< "${{ steps.tags.outputs.tags }}"
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
 
       - name: Make package public
         # A fresh package on GHCR is created private by default even with GITHUB_TOKEN's
@@ -104,9 +176,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-# NOTE (NFR-6, "the five images must always move together"): GitHub Actions has no built-in
-# all-or-nothing matrix — a matrix job failure does not roll back the tags the other jobs already
-# pushed. Nothing this repository controls can fully prevent a half-published tag once GHCR has
-# accepted a push; the mitigation is operational, not code: watch this workflow's run to
-# completion before telling anyone to pull the tag, and re-run the failed matrix leg (or push a
-# corrected tag) before considering the release done.
+# NOTE (NFR-6, "the five images must always move together"): `merge` declares `needs: build`, and
+# GitHub skips a matrix job once any leg of its `needs` matrix has failed — no tag is ever applied
+# anywhere inside `build`, only inside `merge`, once both architectures' digests already exist.
+# So the common case — one broken leg, one service, one architecture — blocks every tag from
+# moving, not only the broken image's: a half-published tag cannot reach GHCR through this
+# workflow. What is still not guaranteed is a partial `merge`: if one `merge` leg fails after
+# `build` has gone fully green (for example a transient registry error), the other four services
+# can still move while the fifth does not, leaving a mixed set across the five images. That case
+# remains operational, not structural — watch this workflow's run to completion before telling
+# anyone to pull the tag, and re-run the failed `merge` leg (or push a corrected tag) before
+# considering the release done.
