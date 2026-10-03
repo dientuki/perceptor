@@ -58,7 +58,7 @@ Spanish findings and 613 malformed references. That red run is the deliverable: 
 Group 3 consumes. The CI job is deliberately not here — it comes in Group 4, after the tree is
 green, because a gate that is red for the duration of the work teaches everyone to ignore it.
 
-- [ ] **T002** `[infra]` Create `tools/comments/check.mjs` in the house style of
+- [x] **T002** `[infra]` Create `tools/comments/check.mjs` in the house style of
       `tools/audit/check.mjs`: plain ESM, `node:fs` only, no dependency, `repoRoot` via
       `fileURLToPath(import.meta.url)`, optional first positional argument naming one service,
       accumulating into a `hadFailure` flag so every finding prints before it exits. Walk
@@ -75,7 +75,7 @@ green, because a gate that is red for the duration of the work teaches everyone 
       *Done when:* `bin/cli web node tools/comments/check.mjs` runs to completion, exits non-zero,
       and prints findings that each carry a file, a line and a named rule — plus a resolved
       requirement line for each well-formed locator. → T001
-- [ ] **T003** `[infra]` Add the Spanish detector to `check.mjs`, and the REQ-12 rule beside it (a
+- [x] **T003** `[infra]` Add the Spanish detector to `check.mjs`, and the REQ-12 rule beside it (a
       Spanish `it(...)`/`describe(...)`/`test(...)` string in a `*.spec.ts` fails, which is a string
       check, not a comment check). **Strip every quoted run — `'…'`, `"…"`, `` `…` `` — from the
       comment text before testing for Spanish**: two comments in the tree are English Article IX
@@ -90,7 +90,7 @@ green, because a gate that is red for the duration of the work teaches everyone 
       `services/api/src/media-roots/media-roots.service.ts`'s `resolveFromRoot` neighbourhood.
       *Done when:* the two named lines above produce **no** finding, a plain Spanish comment
       produces one, and `// the guard runs before the first write` produces none (REQ-7, AC-6). → T002
-- [ ] **T004** `[infra]` Create `tools/comments/check.spec.mjs`: a plain `node`-runnable fixture
+- [x] **T004** `[infra]` Create `tools/comments/check.spec.mjs`: a plain `node`-runnable fixture
       script (there is no test runner at the repo root), opening with the Article IX header naming
       what it defends against — a detector that drifts broad breaks honest builds and gets disabled,
       one that drifts narrow passes Spanish under a green check. Export the detector and the
@@ -100,7 +100,7 @@ green, because a gate that is red for the duration of the work teaches everyone 
       reference-rule failure.
       *Done when:* `bin/cli web node tools/comments/check.spec.mjs` exits 0, and exits non-zero with
       a named fixture when the quote-stripping line in `check.mjs` is commented out (NFR-5). → T003
-- [ ] **T005** `[infra] [P]` Create `bin/comments`, copied from `bin/audit`: `set -e`,
+- [x] **T005** `[infra] [P]` Create `bin/comments`, copied from `bin/audit`: `set -e`,
       `require_docker`, the `.env` guard, then
       `docker compose $COMPOSE_FILES run --rm --no-deps --user "$(id -u):$(id -g)" -v "$(pwd):/repo"
       --workdir /repo --entrypoint node web tools/comments/check.mjs "$@"`. The whole repo root is
@@ -108,12 +108,12 @@ green, because a gate that is red for the duration of the work teaches everyone 
       `docs/spec/features/`. `chmod +x`.
       *Done when:* `bash -n bin/comments` parses, `bin/comments` reproduces T002's output, and
       `bin/comments api` scopes to one service. → T002
-- [ ] **T006** `[infra]` Run `bin/comments` against the unswept tree and **paste the real output**:
+- [x] **T006** `[infra]` Run `bin/comments` against the unswept tree and **paste the real output**:
       the finding count per service broken down by rule. Report the three per-service worklists —
       the orchestrator hands them to the Group 3 agents.
       *Done when:* the report carries the actual per-service, per-rule counts, non-zero exit, and a
       sample of each of the five rules firing on a real line of the repo. → T004, T005
-- [ ] **T007** `[infra]` Exercise every failure path for real: append each line below to a file
+- [x] **T007** `[infra]` Exercise every failure path for real: append each line below to a file
       under `services/api/src`, run `bin/comments`, paste the actual output, revert. Then confirm
       AC-6b by reading `services/api/src/media-roots/media-roots.service.ts:57` — its guard doc
       comment must be accepted as prose once its reference reads `Spec 047, REQ-10`, while the same
