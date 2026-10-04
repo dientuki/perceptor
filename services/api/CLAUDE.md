@@ -799,8 +799,8 @@ Follow `src/media-roots/media-roots.service.spec.ts` and `src/clients/torrent/ma
 `describe` for the unit, `it(...)` strings in the indicative (`it('rejects a symlink pointing outside
 the root')`), a header comment stating *what class of bug this defends against*, and real fixtures
 where mocking would defeat the purpose — `media-roots.service.spec.ts` runs against a real `mkdtemp`
-with real symlinks because a bug there is a real path traversal. Both files still have Spanish
-`it(...)` strings predating Article VI: copy their *structure*, write new prose in English.
+with real symlinks because a bug there is a real path traversal. Copy their *structure* for a new
+suite, in English.
 
 The house technique is **fault injection** — a case earns its place by being verified to fail when
 the rule it covers is removed (an ownership `where` clause dropped, a `select` switched from `iso3`

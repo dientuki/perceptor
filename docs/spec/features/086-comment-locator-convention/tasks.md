@@ -135,7 +135,7 @@ Everything here depends on Group 2: an agent sweeping without the validator cann
 work. The three services share no file and no contract, so all of Group 3 is genuinely parallel
 across services; within a service the tasks are ordered only where noted.
 
-- [ ] **T008** `[api] [P]` Sweep the Spanish comments in `services/api/src` (REQ-3, REQ-4) —
+- [x] **T008** `[api] [P]` Sweep the Spanish comments in `services/api/src` (REQ-3, REQ-4) —
       roughly 417 lines, concentrated in `media-sources/media-sources.service.ts` (43),
       `movies/movies.service.ts` (38), `media-roots/media-roots.service.ts` (29),
       `shows/shows.service.ts` (21), `process-jobs/process-jobs.service.ts` (19). Resolve or delete
@@ -149,7 +149,7 @@ across services; within a service the tasks are ordered only where noted.
       *Done when:* `bin/comments api` reports zero Spanish findings (reference findings may remain),
       `bin/cli api npx --no tsc --noEmit` is 0 errors, `bin/npm api run test` reports unchanged test
       and suite counts, and the resolution table is in the report. → T007
-- [ ] **T009** `[api] [P]` Normalize the 445 ad-hoc references in `services/api/src` to
+- [x] **T009** `[api] [P]` Normalize the 445 ad-hoc references in `services/api/src` to
       `// Spec NNN, <ref>` (REQ-5) — 348 of them carry no spec number on their line and are
       resolved by `git blame`, not by reading. `src/app.module.ts`'s four-line
       `(018-ui-i18n REQ-7)` block collapsing to `// Spec 018, REQ-7` is the archetype;
@@ -160,7 +160,7 @@ across services; within a service the tasks are ordered only where noted.
       shows every reference preceded by `Spec NNN, ` with no bare id surviving (AC-7),
       `git status --short services/api/prisma` and `git diff services/api/src/schema.gql` are both
       empty (AC-10), and the resolution table is in the report. → T008
-- [ ] **T010** `[api] [P]` Rewrite the 34 Spanish `it(...)`/`describe(...)` strings in
+- [x] **T010** `[api] [P]` Rewrite the 34 Spanish `it(...)`/`describe(...)` strings in
       `services/api/src` in English (REQ-12), indicative mood, matching the style
       `services/api/CLAUDE.md` § testing names (`it('rejects a symlink pointing outside the
       root')`). Change only the string — the two suites Article IX cites as the standard,
@@ -169,7 +169,7 @@ across services; within a service the tasks are ordered only where noted.
       *Done when:* `bin/npm api run test` reports the **same** test and suite counts as before the
       task, `bin/comments api` reports no Spanish-string finding, and
       `grep -rEn "it\('[^']*[áéíóúñ]" services/api/src` returns nothing. → T007
-- [ ] **T011** `[api]` Correct the passage in `services/api/CLAUDE.md` § testing that records
+- [x] **T011** `[api]` Correct the passage in `services/api/CLAUDE.md` § testing that records
       "Both files still have Spanish `it(...)` strings predating Article VI" — false after T010.
       Keep the surrounding guidance to copy those suites' structure, and the fault-injection
       paragraph, untouched (REQ-13).
