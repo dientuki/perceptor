@@ -19,8 +19,8 @@ jest.mock('@tus/file-store', () => ({ FileStore: class {} }));
 const mockResolveInfoHash = resolveInfoHash as jest.MockedFunction<typeof resolveInfoHash>;
 
 // This suite mirrors episodes.service.spec.ts's central concern one relation
-// shallower: a season-pack acquisition is the entry point 013-season-pack-
-// processing needs to exercise the rest of the pipeline at all (REQ-14), so
+// shallower: a season-pack acquisition is the entry point Spec 013, REQ-14
+// needs to exercise the rest of the pipeline at all, so
 // a bug here is invisible anywhere else — it either lets an unowned season
 // be attacked, or lets a race between two "active" sources for the same
 // season go unnoticed.
@@ -144,10 +144,7 @@ describe('SeasonsService', () => {
       force: false,
     };
 
-    // AC-4's silent-orphan failure: a search result with no infoHash whose
-    // URL cannot be resolved must reject before ever calling qBittorrent or
-    // writing a MediaSource — otherwise a release nobody could re-derive a
-    // hash for would download and dangle with no way to identify it later.
+    // Spec 059, AC-4
     it('propagates a resolveInfoHash failure without calling qbittorrent.add or writing a MediaSource', async () => {
       mockResolveInfoHash.mockRejectedValue(new Error('No se pudo determinar el infoHash de este release'));
 
@@ -220,11 +217,7 @@ describe('SeasonsService', () => {
       });
     });
 
-    // REQ-7: the guard's trigger changed from "has an active source" to "at
-    // least one COMPLETED episode" — a merely-busy season (no COMPLETED
-    // episode) must accept a second acquisition with no conflict at all
-    // (REQ-6). Re-introducing the old "has an active source" condition
-    // would make this reject again with no other test catching it.
+    // Spec 022, REQ-7 REQ-6
     it('no longer conflicts for a merely-busy season without force', async () => {
       prisma.season.findFirst.mockResolvedValue(season);
       prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, seasonId: 42, status: 'DOWNLOADING' });

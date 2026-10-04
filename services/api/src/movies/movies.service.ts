@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
-import { PrismaService } from '@/prisma/prisma.service'; // Ajustá la ruta según tu estructura
+import { PrismaService } from '@/prisma/prisma.service';
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
 import { RedisService } from '@/redis/redis.service';
@@ -28,7 +28,6 @@ import {
   TitleRefresh,
 } from '@/media/entities/title-refresh.entity';
 
-// TTL de la cache de resultados de TMDB en Redis (24hs)
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
 
 // TTL of the refresh claim key; the `finally` in refresh() deletes it on
@@ -49,29 +48,21 @@ function episodeDisplayTitle(episode: {
   return `${episode.season.show.title} S${season}E${ep}`;
 }
 
-// REQ-5: a comma is qBittorrent's tag separator, so it is replaced with a
-// space before whitespace is collapsed and trimmed — never sent raw. A
-// title that sanitises to nothing (rare, but not impossible) falls back to
-// a stable, non-empty tag derived from the target row's id, never the
-// MediaSource's, so every source of the same film keeps sharing one tag
-// (REQ-4) and the same fallback is reproducible later from the film alone.
+// Spec 022, REQ-5
 function sanitizeTag(title: string, fallbackId: number): string {
   const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
   return cleaned || `id-${fallbackId}`;
 }
 
-// REQ-1: a film's torrent carries exactly one tag, the sanitised title.
+// Spec 022, REQ-1
 function movieTags(movie: { id: number; title: string }): string[] {
   return [sanitizeTag(movie.title, movie.id)];
 }
 
-// 056-shorts-runtime-classification NFR-3: the boundary is a constant, never
-// a Settings row. Strictly under this many minutes is a short.
+// Spec 056, NFR-3
 const SHORT_MAX_RUNTIME_MINUTES = 40;
 
-// REQ-5: `0`, `null` and `undefined` all mean "TMDB has no duration for this
-// title" and must never classify as a short — a truthiness check would treat
-// `0` as falsy-but-still-"a duration", which is the wrong silent failure.
+// Spec 056, REQ-5
 function isShortRuntime(runtime: number | null | undefined): boolean {
   return (
     typeof runtime === 'number' &&
@@ -80,12 +71,7 @@ function isShortRuntime(runtime: number | null | undefined): boolean {
   );
 }
 
-// 057-content-kind-classification REQ-2: the same TMDB genre id
-// `content-kind.ts` uses to decide "is this title animated at all" — kept
-// here too (not exported from there) only so this service can decide
-// *whether a keywords call is worth making* before delegating the actual
-// genre-then-keywords precedence rule to `classifyContentKind`, which owns
-// REQ-2..REQ-5 exclusively.
+// Spec 057, REQ-2
 const ANIMATION_GENRE_ID = 16;
 
 @Injectable()
@@ -116,7 +102,7 @@ export class MoviesService implements MediaTypeService {
         users: { some: { userId } },
         ...(isShort === undefined ? {} : { isShort }),
       },
-      orderBy: { createdAt: 'desc' }, // Las más recientes primero
+      orderBy: { createdAt: 'desc' },
       include: {
         mediaSources: true,
         processJobs: true,
@@ -154,11 +140,7 @@ export class MoviesService implements MediaTypeService {
     return movie ? this.withDerivedStatus(movie) : null;
   }
 
-  // REQ-4's title-altitude derivation, mapped onto a Prisma row that already
-  // carries mediaSources/processJobs (findAll/findOneFromDb's own include —
-  // no extra query here). Done in the service, not a @ResolveField, since the
-  // Prisma result is where those relations are typed; the entity type never
-  // declares them.
+  // Spec 043, REQ-4
   private withDerivedStatus<
     T extends {
       status: import('@prisma/client').MediaStatus;
@@ -186,28 +168,17 @@ export class MoviesService implements MediaTypeService {
     });
   }
 
-  // Única definición de la clave de cache, compartida por el write de la búsqueda
-  // y el read del add: evita que ambos lados se desincronicen.
   private cacheKey(tmdbId: number): string {
     return `tmdb:movie:${tmdbId}`;
   }
 
-  // Registra en MariaDB una película ya vista en una búsqueda de TMDB. Idempotente:
-  // si ya está en la biblioteca (por cualquier usuario), devuelve el registro
-  // existente sin reescribir nada. En ambas ramas nos aseguramos de que exista
-  // el vínculo con el usuario que llama (REQ-3): la fila de la película es
-  // compartida, pero cada usuario necesita su propio user_movies.
+  // Spec 005, REQ-3
   async register(tmdbId: number, userId: string): Promise<MediaRef> {
     const existing = await this.prisma.movie.findUnique({ where: { tmdbId } });
     if (existing) {
-      // 048-shorts-category REQ-6: an already-registered film keeps its
-      // stored isShort as-is — the detail-page toggle is the only way to
-      // change it, registering again never rewrites the flag.
+      // Spec 048, REQ-6
       await this.linkUserToMovie(userId, existing.id);
-      // Awaited (NFR-3): one indexed DB read and no HTTP unless a media
-      // server is actually configured, so the caller sees the right status
-      // immediately instead of a MISSING that corrects itself later with no
-      // visible signal.
+      // Spec 034, NFR-3
       await this.mediaServerReconcile.reconcileMovie(existing.id, tmdbId);
       return { id: existing.id, type: MEDIA_TYPE.MOVIE };
     }
@@ -220,11 +191,6 @@ export class MoviesService implements MediaTypeService {
     const isShort = await this.deriveIsShort(topped);
     const contentKind = await this.deriveContentKind(topped);
 
-    // status queda en su default de Prisma (MISSING): es lo correcto para una
-    // película recién registrada y sin archivo todavía. Not routed through
-    // this.create()/CreateMovieDto — that DTO does not yet carry
-    // `contentKind` (out of this task's scope) and a plain Prisma call needs
-    // no cast for the type-check to stay clean.
     const movie = await this.prisma.movie.create({
       data: {
         tmdbId: cached.id,
@@ -258,10 +224,7 @@ export class MoviesService implements MediaTypeService {
     return { id: movie.id, type: MEDIA_TYPE.MOVIE };
   }
 
-  // The caller's own `audioMandatory` flag for this film, read off the
-  // ownership row (039-per-title-language-split REQ-9). Callers must already
-  // hold a row that passed findOneFromDb — no fallback default here, since a
-  // missing row means the caller has no business asking.
+  // Spec 039, REQ-9
   async findAudioMandatoryFor(userId: string, movieId: number): Promise<boolean> {
     const row = await this.prisma.userMovie.findUnique({
       where: { userId_movieId: { userId, movieId } },
@@ -292,13 +255,7 @@ export class MoviesService implements MediaTypeService {
     });
   }
 
-  // 067-title-removal: shared title drops only the caller's ownership row
-  // (its per-title language rows cascade with it); the last owner unwinds
-  // every source first — the torrent client step can throw, so it runs
-  // before any row is deleted (NFR-2) — then deletes the title, whose
-  // cascades take seasons/sources/jobs. Library files are never touched.
-  // findOneFromDb returns null for a missing id and a foreign one alike, so
-  // a second removal is the ordinary refusal (NFR-5).
+  // Spec 067, NFR-2; Spec 067, NFR-5
   async remove(id: number, userId: string): Promise<{ deleted: boolean; remainingOwners: number }> {
     const movie = await this.findOneFromDb(id, userId);
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
@@ -417,12 +374,7 @@ export class MoviesService implements MediaTypeService {
     }
   }
 
-  // 048-shorts-category REQ-6: the only way an already-registered film gets
-  // reclassified. Ownership check first — findOneFromDb() returns null both
-  // for a missing id and for a film the caller does not own, and the two
-  // stay indistinguishable from here on (same stance as setAudioMandatoryFor
-  // above). isShort is a property of the film itself (REQ-1), so this is a
-  // plain `movie.update`, not scoped through UserMovie.
+  // Spec 048, REQ-6; Spec 048, REQ-1
   async setShort(id: number, userId: string, isShort: boolean) {
     const movie = await this.findOneFromDb(id, userId);
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
@@ -438,12 +390,7 @@ export class MoviesService implements MediaTypeService {
     return this.withDerivedStatus(updated);
   }
 
-  // 057-content-kind-classification REQ-8: the only way an already-registered
-  // film gets reclassified, following setShort's exact template — ownership
-  // check first (findOneFromDb returns null both for a missing id and for a
-  // film the caller does not own), then a plain `movie.update` since
-  // contentKind is a property of the title itself (REQ-1), not scoped
-  // through UserMovie.
+  // Spec 057, REQ-8; Spec 057, REQ-1
   async setContentKind(id: number, userId: string, contentKind: PrismaContentKind) {
     const movie = await this.findOneFromDb(id, userId);
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
@@ -459,10 +406,7 @@ export class MoviesService implements MediaTypeService {
     return this.withDerivedStatus(updated);
   }
 
-  // upsert en vez de create: un segundo addMovie del mismo usuario para la misma
-  // película no debe explotar con un P2002 sobre la primary key compuesta — el
-  // botón que dispara esto en el UI puede volver a llamarse antes de que
-  // desaparezca (REQ-8/T004).
+  // Spec 005, T004
   private async linkUserToMovie(
     userId: string,
     movieId: number,
@@ -474,28 +418,17 @@ export class MoviesService implements MediaTypeService {
     });
   }
 
-  // A diferencia de cacheMovies, acá Redis es la fuente de datos (no un cache
-  // oportunista): un error no se silencia, se propaga como error de GraphQL.
   private async getCachedMovie(tmdbId: number): Promise<MediaSearchResult> {
     const raw = await this.redis.get(this.cacheKey(tmdbId));
     if (raw) return JSON.parse(raw) as MediaSearchResult;
 
     const fetched = await this.fetchMovieFromTMDB(tmdbId);
-    // REQ-6: a cold registration leaves the cache populated with the
-    // runtime included, so a later registration of the same film within the
-    // TTL never has to ask TMDB for it again.
+    // Spec 056, REQ-6
     void this.cacheMovies([fetched]);
     return fetched;
   }
 
-  // Falls back to the catalog itself when the Redis cache has expired,
-  // been evicted, or never got written (the best-effort save in
-  // cacheMovies() can silently fail). This is not a second search path: it
-  // re-fetches the one film addMovie asked for, via the same
-  // TmdbClient.details() the rest of the client uses, and reuses posterUrl()
-  // so this path and searchMovies() can never disagree on image size for the
-  // same film (REQ-2). Only a tmdbId the catalog itself does not know about
-  // reaches the caller as an error.
+  // Spec 005, REQ-2
   private async fetchMovieFromTMDB(tmdbId: number): Promise<MediaSearchResult> {
     let detail: MovieDetail;
     try {
@@ -519,15 +452,7 @@ export class MoviesService implements MediaTypeService {
     };
   }
 
-  // 057-content-kind-classification: the single top-up `register()` shares
-  // between `deriveIsShort` and `deriveContentKind` — one `tmdb.details()`
-  // call, at most, whenever either `runtime` or `genreIds` is missing from
-  // the cached entry (both come back on the same TMDB response, so one call
-  // always suffices). A failure here (TMDB unreachable, rate-limited,
-  // missing a field) must never fail the registration (NFR-2): the caller
-  // gets the cache entry back exactly as it was, and nothing is written to
-  // Redis — caching a partial/null answer produced by an outage would pin it
-  // for the full 24h TTL.
+  // Spec 057, NFR-2
   private async topUpCatalogFacts(
     cached: MediaSearchResult,
   ): Promise<MediaSearchResult> {
@@ -569,24 +494,13 @@ export class MoviesService implements MediaTypeService {
     return topped;
   }
 
-  // 056-shorts-runtime-classification: the initial value for a film's
-  // isShort, derived once at registration (REQ-4) and never again (REQ-7 —
-  // the early-return branch in register() never calls this). The capability
-  // is still checked before reading `runtime` (REQ-8) — the top-up itself no
-  // longer gates on it (057's contentKind derivation needs the same catalog
-  // facts unconditionally), but a disabled installation must still never
-  // classify anything as a short.
+  // Spec 056, REQ-4 REQ-7 REQ-8
   private async deriveIsShort(topped: MediaSearchResult): Promise<boolean> {
     if (!(await this.mediaCapabilities.isShortsEnabled())) return false;
     return isShortRuntime(topped.runtime);
   }
 
-  // 057-content-kind-classification REQ-2..REQ-5: derived once at
-  // registration, from the same top-up `deriveIsShort` uses. No capability
-  // gate — content kind has no installation-wide on/off switch. A film whose
-  // genres are not (yet) known classifies as LIVE_ACTION (NFR-2's first
-  // case); an animated film whose keywords cannot be read classifies as CGI
-  // (NFR-2's second case, same fallback REQ-5 gives an empty keyword list).
+  // Spec 057, REQ-2 REQ-3 REQ-4 REQ-5 NFR-2
   private async deriveContentKind(
     topped: MediaSearchResult,
   ): Promise<PrismaContentKind> {
@@ -607,7 +521,6 @@ export class MoviesService implements MediaTypeService {
           keywordIds = await this.tmdb.keywords(MEDIA_TYPE.MOVIE, topped.id);
           void this.cacheMovies([{ ...topped, keywordIds }]);
         } catch {
-          // NFR-2: genres say animated, keywords could not be read -> CGI.
           return 'CGI' as PrismaContentKind;
         }
       }
@@ -617,7 +530,6 @@ export class MoviesService implements MediaTypeService {
         keywordIds,
       }) as unknown as PrismaContentKind;
     } catch {
-      // NFR-2: genres could not be established at all -> LIVE_ACTION.
       return 'LIVE_ACTION' as PrismaContentKind;
     }
   }
@@ -628,10 +540,8 @@ export class MoviesService implements MediaTypeService {
   ): Promise<MediaSearchResultEntity[]> {
     if (!query.trim()) return [];
 
-    // 1. Consultar TMDB.
     const items = await this.tmdb.search<TmdbMovie>('movie', query);
 
-    // 2. Traducir la respuesta cruda de TMDB a nuestro formato
     const results: MediaSearchResult[] = items.map((item) => ({
       id: item.id,
       title: item.title,
@@ -653,21 +563,12 @@ export class MoviesService implements MediaTypeService {
     results: MediaSearchResult[],
     userId: string,
   ): Promise<MediaSearchResultEntity[]> {
-    // 3. Disparar el upsert en Redis en BACKGROUND (sin 'await'). This MUST
-    // run on the catalog-only `results` before ownership is attached below:
-    // cacheMovies() serialises whatever it is handed into a shared, global
-    // Redis key (tmdb:movie:<id>, 24h TTL) read by every user who searches
-    // this film. Enriching first would leak this caller's inLibrary/movieId
-    // into that cache and serve it to everyone else for the next 24 hours,
-    // with no error anywhere.
+    // Spec 005, NFR-5
     void this.cacheMovies(results);
 
-    // 4. Enriquecer con la ownership del usuario que llama, en una sola
-    // query por página (no una por resultado). movieId/inLibrary son
-    // per-request y nunca tocan el objeto cacheado en el paso anterior.
+    // Spec 005, NFR-5
     const enriched = await this.enrichWithOwnership(results, userId);
 
-    // 5. Responder INMEDIATAMENTE al cliente GraphQL
     return enriched;
   }
 
@@ -726,16 +627,12 @@ export class MoviesService implements MediaTypeService {
     );
   }
 
-  // Magnet pegado a mano por el usuario, en vez de un release elegido del
-  // indexer. El infoHash sale del propio magnet (parseMagnet no pega a la
-  // red) — a partir de acá el flujo es idéntico a addTorrentToMovie.
   async addMagnetToMovie(
     movieId: number,
     input: { magnet: string; force: boolean },
     userId: string,
   ) {
-    // parseMagnet already throws a keyed BadRequestException (018 T010) — no
-    // re-wrap needed, just let it propagate so `extensions.i18n` survives.
+    // Spec 018, T010
     const parsed = parseMagnet(input.magnet);
 
     return this.attachTorrentSource(
@@ -751,12 +648,7 @@ export class MoviesService implements MediaTypeService {
     );
   }
 
-  // Same NotFoundException the resolver already threw for an unknown id, now
-  // also covering a film the caller has not registered (REQ-6). One lookup
-  // scoped by both id and the caller's user_movies link, one message: an
-  // unowned film and a missing one are indistinguishable from here on, by
-  // design — see spec.md § Errors for why no second "no es tuya" string
-  // exists.
+  // Spec 005, REQ-6
   private async attachTorrentSource(
     movieId: number,
     input: {
@@ -775,15 +667,6 @@ export class MoviesService implements MediaTypeService {
     if (!movie)
       throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
-    // infoHash es @unique: si ya existe una fila con este hash, no podemos
-    // crear otra (P2002). De otra película es una colisión real que sólo
-    // decide el usuario; de esta misma película es un reintento — se reusa
-    // la fila en vez de duplicarla. Since 010-episode-acquisition a
-    // MediaSource can also be owned by an episode: checking only `.movie`
-    // here would let a hash already attached to an episode fall through the
-    // guard and get silently re-pointed at this film below, with no error
-    // anywhere (see EpisodesService.attachTorrentSource for the mirror-image
-    // check on the episode side).
     const existingSource = await this.prisma.mediaSource.findUnique({
       where: { infoHash: input.infoHash },
       include: {
@@ -815,8 +698,7 @@ export class MoviesService implements MediaTypeService {
       return this.prisma.movie.findUniqueOrThrow({ where: { id: movieId } });
     }
 
-    // REQ-7: only a COMPLETED target refuses. A merely-downloading film no
-    // longer conflicts at all — REQ-6 makes a second acquisition normal.
+    // Spec 022, REQ-7 REQ-6
     if (movie.status === 'COMPLETED' && !input.force) {
       throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
     }
@@ -850,9 +732,6 @@ export class MoviesService implements MediaTypeService {
       }
     }
 
-    // El savepath lo decide el client al agregar el torrent, así cada descarga cae
-    // en su propia carpeta y sabemos dónde están los archivos desde el arranque
-    // (los torrents de un solo archivo, si no, quedan sueltos en la raíz).
     const downloadPath = await this.qbittorrent.add(
       input.urls,
       movieTags(movie),
@@ -877,9 +756,6 @@ export class MoviesService implements MediaTypeService {
             kind: input.kind,
             status: 'QUEUED',
             infoHash: input.infoHash,
-            // La URL con la que se pidió el release. Guardamos la primera —la misma
-            // que hashea add() para armar la carpeta— y no el join de todas, así el
-            // downloadPath se puede reconstruir desde esta fila.
             downloadUrl: input.urls[0] ?? null,
             releaseTitle: input.releaseTitle,
             downloadPath,
@@ -893,9 +769,6 @@ export class MoviesService implements MediaTypeService {
     });
   }
 
-  // Guarda/actualiza (upsert) cada película en Redis con TTL. No bloquea la
-  // respuesta al cliente y no debe poder tirar abajo el proceso: cualquier
-  // error se loguea y se descarta acá mismo.
   private async cacheMovies(results: MediaSearchResult[]): Promise<void> {
     if (!results.length) return;
 

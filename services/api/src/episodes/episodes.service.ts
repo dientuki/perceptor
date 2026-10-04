@@ -9,20 +9,13 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { DownloadsService } from '@/downloads/downloads.service';
 
-// REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw
-// since a comma is qBittorrent's tag separator. A title that sanitises to
-// nothing falls back to a stable tag derived from the target row's id, not
-// the MediaSource's, so it is reproducible later from the target alone and
-// shared by every source of it (REQ-4). Kept local rather than shared with
-// MoviesService's copy — see attachTorrentSource's own comment for why.
+// Spec 022, REQ-5; Spec 022, REQ-4
 function sanitizeTag(title: string, fallbackId: number): string {
   const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
   return cleaned || `id-${fallbackId}`;
 }
 
-// REQ-2: an episode's torrent carries three tags — the show's title,
-// `Season <n>` and `Episode <n>`, English keywords, unpadded numbers,
-// deliberately different from the zero-padded S03E08 form used elsewhere.
+// Spec 022, REQ-2
 function episodeTags(episode: {
   episodeNumber: number;
   season: { seasonNumber: number; show: { id: number; title: string } };
@@ -54,13 +47,7 @@ export class EpisodesService {
     });
   }
 
-  // Every owner relation is symmetric since 022-download-status-tags
-  // (MediaSource.movieId is now a real column too), so "has an active
-  // source" is the same query shape for a film, an episode or a season.
-  // Reused by `attachTorrentSource` below and by
-  // `UploadsResolver.createUploadTicket`'s pre-flight conflict check
-  // (027-replace-completed-media REQ-6), so both entry points agree on the
-  // same definition of "busy".
+  // Spec 027, REQ-6
   async findActiveSource(episodeId: number) {
     return this.prisma.mediaSource.findFirst({
       where: { episodeId, status: { not: 'ERROR' } },
@@ -72,18 +59,13 @@ export class EpisodesService {
     input: { infoHash: string | null; urls: string[]; releaseTitle: string | null; force: boolean },
     userId: string,
   ) {
-    // REQ-4: the search response may not carry an infoHash — resolve it here, once, before
-    // anything reaches qBittorrent, so a failure never leaves a half-applied download behind.
+    // Spec 037, REQ-4
     const infoHash = input.infoHash ?? (await resolveInfoHash(input.urls));
     return this.attachTorrentSource(episodeId, { kind: 'TORRENT_SEARCH', ...input, infoHash }, userId);
   }
 
-  // Magnet pegado a mano por el usuario — mismo flujo que
-  // MoviesService.addMagnetToMovie de acá en más, una vez parseado el
-  // infoHash del propio magnet.
   async addMagnetToEpisode(episodeId: number, input: { magnet: string; force: boolean }, userId: string) {
-    // parseMagnet already throws a keyed BadRequestException (018 T010) — no
-    // re-wrap needed, just let it propagate so `extensions.i18n` survives.
+    // Spec 018, T010
     const parsed = parseMagnet(input.magnet);
 
     return this.attachTorrentSource(
@@ -99,14 +81,7 @@ export class EpisodesService {
     );
   }
 
-  // Structural twin of MoviesService.attachTorrentSource
-  // (src/movies/movies.service.ts), deliberately not extracted into a shared
-  // helper — see 010-episode-acquisition's api/plan.md § Approach for why.
-  // Since 022-download-status-tags REQ-7, "already downloading" no longer
-  // conflicts at all here (or for a film) — only a COMPLETED target does;
-  // `force` going through still means demoting every active row to
-  // ERROR *before* creating the replacement — that demotion is what makes a
-  // late torrentCompleted for the superseded infoHash harmless.
+  // Spec 022, REQ-7
   private async attachTorrentSource(
     episodeId: number,
     input: { kind: SourceKind; infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
@@ -143,10 +118,7 @@ export class EpisodesService {
       return this.prisma.episode.findUniqueOrThrow({ where: { id: episodeId } });
     }
 
-    // REQ-7: only a COMPLETED target refuses. A merely-downloading episode
-    // no longer conflicts — REQ-6 makes a second acquisition normal. The
-    // `activeSource` query stays: it still drives the demote-on-force block
-    // below regardless of the episode's status.
+    // Spec 022, REQ-7; Spec 022, REQ-6
     if (episode.status === 'COMPLETED' && !input.force) {
       throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
     }
@@ -187,10 +159,6 @@ export class EpisodesService {
       }
     }
 
-    // El savepath lo decide el client al agregar el torrent, así cada
-    // descarga cae en su propia carpeta. Corre antes de cualquier escritura
-    // en la DB: si qBittorrent rechaza el torrent no debe quedar ninguna
-    // fila QUEUED colgada, ni la fila activa demovida sin reemplazo.
     const downloadPath = await this.qbittorrent.add(input.urls, episodeTags(episode), 'show');
 
     // Demote *before* creating the replacement, and only after qBittorrent

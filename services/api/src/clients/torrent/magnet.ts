@@ -7,7 +7,6 @@ const HEX_40 = /^[0-9a-f]{40}$/i;
 const BASE32_32 = /^[A-Z2-7]{32}$/i;
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-// RFC 4648 sin padding: 32 chars base32 = 160 bits = 20 bytes = el infoHash.
 function base32ToHex(value: string): string {
   let bits = '';
   for (const char of value.toUpperCase()) {
@@ -22,22 +21,13 @@ function base32ToHex(value: string): string {
   return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-// Saca el infoHash v1 (xt=urn:btih:) y el nombre (dn=) de un magnet link.
-// Sin red: sólo parseo de string, pero SÍ importa de src/i18n — es un
-// `clients/` module, no un módulo Nest con DI, así que no hay ciclo ni
-// acoplamiento raro en tirar una i18nError real acá (018 T010). Tira una
-// BadRequestException ya keyed — nunca devuelve un hash a medias, porque un
-// hash que no coincide con el que reporta qBittorrent deja la descarga
-// colgada para siempre y sin ningún error (ver
-// downloads.service.ts::handleTorrentCompleted, que sólo matchea por hash).
+// Spec 018, T010
 export function parseMagnet(magnet: string): ParsedMagnet {
   if (!magnet.startsWith('magnet:?')) {
     throw i18nError.badRequest(ERROR_KEYS.MAGNET_NOT_A_MAGNET);
   }
 
   const params = new URLSearchParams(magnet.slice('magnet:?'.length));
-  // Un magnet híbrido v1+v2 trae varios `xt`: uno urn:btih (v1) y otro
-  // urn:btmh (v2). URLSearchParams.getAll conserva el orden de aparición.
   const xts = params.getAll('xt');
 
   const btih = xts

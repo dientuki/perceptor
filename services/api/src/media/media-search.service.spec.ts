@@ -5,26 +5,26 @@ import { MediaCapabilitiesService } from './media-capabilities.service';
 import { TmdbClient } from '@/clients/tmdb/client';
 import { MEDIA_TYPE } from '@/types/media';
 
-// This suite exists because 026-multi-search's fan-out sits directly on top
+// This suite exists because Spec 026's fan-out sits directly on top
 // of three invariants that already fail with a perfectly successful response
 // and nothing to notice:
 //
 //  - handing a service the enriched (post-ownership) object instead of the
 //    catalog-only one to cache leaks this caller's inLibrary/mediaId into a
-//    Redis key shared by every other user for 24h (006-media-search NFR-3,
+//    Redis key shared by every other user for 24h (Spec 006, NFR-3,
 //    restated here because this is a third code path that writes the same
 //    keys) — the returned list looks identical either way, so only asserting
 //    on what each per-type service is actually handed to cache can catch it;
 //  - rebuilding the response by grouping instead of walking the original
 //    catalog order silently reshuffles a mixed page (films first, then
-//    series) instead of preserving the ranking TMDB returned (REQ-1);
+//    series) instead of preserving the ranking TMDB returned (Spec 026, REQ-1);
 //  - looking a result up by its bare TMDB id after regrouping collides a
 //    film and a series that happen to share an id — the wrong one's
 //    ownership (or the wrong one entirely) lands on a card with no error
 //    anywhere, since both are valid MediaSearchResult shapes;
 //  - a caller-scoping bug in ownership enrichment reports someone else's
 //    library as the caller's own, a successful response with wrong contents
-//    (NFR-2).
+//    (Spec 026, NFR-2).
 describe('MediaSearchService', () => {
   let service: MediaSearchService;
   let tmdb: { searchMulti: jest.Mock };
@@ -167,11 +167,7 @@ describe('MediaSearchService', () => {
     expect(tmdb.searchMulti).not.toHaveBeenCalled();
   });
 
-  // 045-media-type-availability § REQ-10: filtering the disabled type's rows
-  // out of the *response* is not enough — cacheAndEnrich must never be
-  // called for it, because that call is what writes the disabled type's rows
-  // into its Redis cache. Moving the filter after the grouping loop would
-  // still pass on the returned list while failing this assertion.
+  // Spec 045, REQ-10
   it('never calls cacheAndEnrich for a disabled type', async () => {
     capabilities.enabledTypes.mockResolvedValue([MEDIA_TYPE.MOVIE]);
     const film = filmRow();

@@ -8,10 +8,6 @@ import type { AuthPrincipal } from '@/auth/auth.types';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
-// Canal de comunicación worker <-> api para el paso 3 del pipeline (encode).
-// Todo lo que el worker necesita para armar el comando y la ruta de salida
-// sale de `processJob`; el resto son notificaciones de progreso/resultado,
-// igual de "avisos de un hecho ya ocurrido" que torrentCompleted/sourceScanned.
 // Every one of these six carries the AllowService decorator — the worker
 // calls them with the machine credential (SERVICE_TOKEN), not a user session.
 @Resolver()
@@ -76,10 +72,7 @@ export class ProcessJobsResolver {
     return this.processJobsService.encodeFailed(processJobId, errorKey, errorParams, errorMessage);
   }
 
-  // 054-interrupted-encode-recovery, NFR-3: @AllowService() alone widens
-  // access to service principals, it does not narrow it away from users —
-  // this is the first service-only operation in the schema, so the
-  // user-rejection below is load-bearing, not defensive boilerplate.
+  // Spec 054, NFR-3
   @AllowService()
   @Mutation(() => Int, {
     name: 'encodeWorkerStarted',

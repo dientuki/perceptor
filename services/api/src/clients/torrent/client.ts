@@ -29,11 +29,7 @@ const COMPLETED_STATES = new Set([
   "moving",      // Torrent is moving to another location (considered “active/completed” depending on context)
 ]);
 
-// 5.0 renamed the paused states to stopped; both spellings are still emitted
-// by the running container depending on how the torrent got there, so both
-// are recognised (spec.md NFR-7). forcedDL/forcedMetaDL are recognised in
-// DOWNLOADING_STATES above too, even though nothing in this codebase sets
-// the force flag — a user can set it from qBittorrent's own UI.
+// Spec 022, NFR-7
 const PAUSED_STATES = new Set([
   "pausedDL",     // Torrent is paused and has NOT finished downloading (pre-5.0 name)
   "pausedUP",     // Torrent is paused and has finished downloading (pre-5.0 name)
@@ -63,11 +59,7 @@ function mapTorrentState(state: string, completion: number): SourceStatus {
   return SourceStatus.DOWNLOADING;
 }
 
-// Carries the HTTP status alongside the message so a caller (DownloadsService,
-// NFR-6/T006) can translate a rejection into TORRENT_CLIENT_REJECTED with
-// `{status}` as an interpolation param, rather than parsing it back out of a
-// string. `status` is 0 for a fetch()-level failure — the client unreachable
-// entirely, not merely answering with a non-2xx.
+// Spec 022, NFR-6 T006
 export type TorrentCategory = 'movie' | 'short' | 'show';
 
 export class TorrentClientError extends Error {
@@ -115,7 +107,7 @@ export class QbittorrentClient implements TorrentClient {
   }
 
   /**
-   * Obtiene la lista de torrents activos en qbittorrent, opcionalmente filtrada por tag.
+   * Lists the active torrents in qBittorrent, optionally filtered by tag.
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-torrent-list
    * @param {string} tag Optional tag to filter server-side; omitted returns every torrent.
    * @returns Promise<TorrentClientInfo[]>
@@ -189,15 +181,10 @@ export class QbittorrentClient implements TorrentClient {
    */
   async add(urls: string[], tags?: string[], category?: TorrentCategory): Promise<string> {
     const config = await this.settings.getMap();
-    // path_downloads se guarda relativo a la raíz "downloads" (ver
-    // media-roots/): acá se resuelve a la ruta absoluta que qBittorrent
-    // necesita — corre en su propio container, pero monta el mismo
-    // CONTAINER_DOWNLOADS_DIR, así que la ruta absoluta es válida ahí también.
     const basePath = await this.mediaRoots.resolveFromRoot('downloads', config.path_downloads ?? '.');
     const endpoint = new URL("add", await this.baseUrl());
 
     const firstUrl = urls[0] ?? "";
-    // Generamos un hash a partir de la primera URL para asegurar una carpeta única
     const folder = crypto.createHash("sha256").update(firstUrl).digest("hex").substring(0, 16);
 
     const savepath = join(basePath, folder);
@@ -206,8 +193,7 @@ export class QbittorrentClient implements TorrentClient {
       urls: urls.join("\n"),
       savepath,
     };
-    // qBittorrent's tags param is comma-separated on the wire (REQ-5's
-    // sanitisation exists because of this exact separator).
+    // Spec 022, REQ-5
     if (tags && tags.length > 0) body.tags = tags.join(",");
     if (category) body.category = category;
 
@@ -216,10 +202,6 @@ export class QbittorrentClient implements TorrentClient {
       body: new URLSearchParams(body),
     });
 
-    // Con urls que vienen de Prowlarr esto casi nunca falla; con un magnet
-    // tipeado a mano por el usuario, qBittorrent puede rechazarlo (415). Sin
-    // este chequeo se crea igual un MediaSource en QUEUED que nunca baja —
-    // hay que fallar acá, antes de que el caller cree nada en la DB.
     if (!response.ok) {
       throw new TorrentClientError(`qBittorrent rechazó el torrent (${response.status}): ${await response.text()}`, response.status);
     }
@@ -263,8 +245,7 @@ export class QbittorrentClient implements TorrentClient {
       }),
     });
 
-    // An unacknowledged stop leaves a loser downloading while the database
-    // says PAUSED (NFR-6) — silently swallowing this is worse than throwing.
+    // Spec 022, NFR-6
     if (!response.ok) {
       throw new TorrentClientError(`qBittorrent rechazó el stop (${response.status}): ${await response.text()}`, response.status);
     }
@@ -287,17 +268,16 @@ export class QbittorrentClient implements TorrentClient {
       }),
     });
 
-    // An unacknowledged delete leaves the user's file on disk after the row
-    // is gone (NFR-6) — the caller must see this fail rather than assume it.
+    // Spec 022, NFR-6
     if (!response.ok) {
       throw new TorrentClientError(`qBittorrent rechazó el delete (${response.status}): ${await response.text()}`, response.status);
     }
   }
 
   /**
-   * Cambia la carpeta de descarga (save path) de qbittorrent.
+   * Changes qBittorrent's download folder (save path).
    * https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#set-application-preferences
-   * @param {string} path Ruta absoluta, dentro del contenedor de qbittorrent
+   * @param {string} path Absolute path, inside qBittorrent's own container
    */
   async setSavePath(path: string): Promise<void> {
     const endpoint = new URL("../app/setPreferences", await this.baseUrl());

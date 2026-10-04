@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { RedisService } from '../redis/redis.service';
 import { UploadTicketMismatchError, UploadTicketsService } from './upload-tickets.service';
 
-// This is the entire mechanism behind REQ-11/AC-11/AC-12: a tus POST is only
+// This is the entire mechanism behind Spec 002, REQ-11 AC-11 AC-12: a tus POST is only
 // allowed to create an upload if it carries a ticket minted by an
 // authenticated user for that exact movie, and that ticket must not be
 // reusable. A non-atomic spend (GET-then-SET instead of `SET ... NX`) would
@@ -14,7 +14,7 @@ import { UploadTicketMismatchError, UploadTicketsService } from './upload-ticket
 // actually get consumed") can only be asserted by construction against a
 // mock.
 //
-// 027-replace-completed-media: the `force`/replace-marker cases below defend
+// Spec 027, REQ-7: the `force`/replace-marker cases below defend
 // against a forged replacement — a `force: false` ticket must never yield a
 // `true` decision from `isReplaceAuthorised`, whatever a browser later sends
 // as tus metadata. This fails silently in the worst way: the upload succeeds,
@@ -76,8 +76,7 @@ describe('UploadTicketsService', () => {
 
     await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID + 1 })).rejects.toThrow();
 
-    // The mismatch above must not have burned the ticket — the correct
-    // movieId still works afterwards (AC-12's whole point).
+    // Spec 002, AC-12
     await expect(service.verifyAndSpend(ticket.token, { movieId: MOVIE_ID })).resolves.toEqual({ userId: 'user-1', force: false });
   });
 
@@ -112,7 +111,7 @@ describe('UploadTicketsService', () => {
     });
   });
 
-  // The forged-replacement defence itself (REQ-7): the marker must exist
+  // The forged-replacement defence itself (Spec 027, REQ-7): the marker must exist
   // ONLY when the ticket that authorised this upload id carried force: true.
   // If `onUploadCreate` were changed to trust `upload.metadata` instead of
   // this signed payload, a force: false ticket would still leave no marker
@@ -136,14 +135,14 @@ describe('UploadTicketsService', () => {
     });
   });
 
-  // 068-season-multi-file-upload: the `{ mediaSourceId }` target names an open
+  // Spec 068: the `{ mediaSourceId }` target names an open
   // season upload session, and one ticket is minted per file of a batch. If a
   // mismatch burned the ticket, a client that mis-addressed one file would lose
   // the ticket it needed and the batch would stall with a generic "already
   // used" error far from the cause; if a session ticket verified for another
   // session, or for a movie/episode target, a file would be written into the
   // wrong folder with a 200 and nothing anywhere would say so. These cases pin
-  // AC-7 (mismatch before spend) and the cross-target isolation.
+  // Spec 068, AC-7
   describe('the session target', () => {
     const SESSION_ID = 900;
 

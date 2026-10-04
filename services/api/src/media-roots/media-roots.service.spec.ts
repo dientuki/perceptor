@@ -5,11 +5,11 @@ import { join, sep } from 'node:path';
 import { MediaRootsService } from './media-roots.service';
 import { MEDIA_ROOTS, MediaRootConfig } from './media-roots.types';
 
-// La raíz de este test es media-roots.service.ts::resolveFromRoot: es el
-// único lugar del sistema que decide si una ruta escrita por el usuario en
-// el form de settings puede usarse. Un bug acá es un path traversal real
-// contra el filesystem del container. Por eso corre contra un mkdtemp de
-// verdad (con symlinks reales), no contra mocks.
+// The root of this test is media-roots.service.ts::resolveFromRoot: it is the
+// only place in the system that decides whether a path the user typed into
+// the settings form may be used. A bug here is a real path traversal against
+// the container's filesystem. That is why it runs against a real mkdtemp
+// (with real symlinks), not against mocks.
 describe('MediaRootsService', () => {
   let service: MediaRootsService;
   let baseDir: string;
@@ -22,8 +22,8 @@ describe('MediaRootsService', () => {
     baseDir = await mkdtemp(join(tmpdir(), 'media-roots-spec-'));
     libraryRoot = join(baseDir, 'library');
     downloadsRoot = join(baseDir, 'downloads');
-    // Comparte el prefijo de string con downloadsRoot a propósito: es el caso
-    // que rompe una comparación ingenua con `startsWith(root)` sin el `+ sep`.
+    // Deliberately shares a string prefix with downloadsRoot: it is the case
+    // that breaks a naive `startsWith(root)` comparison with no `+ sep`.
     siblingWithPrefix = join(baseDir, 'downloads-evil');
     outsideDir = join(baseDir, 'outside');
 
@@ -33,9 +33,9 @@ describe('MediaRootsService', () => {
     await mkdir(siblingWithPrefix, { recursive: true });
     await mkdir(outsideDir, { recursive: true });
 
-    // Symlink adentro de la raíz que apunta afuera de ella.
+    // Symlink inside the root pointing outside it.
     await symlink(outsideDir, join(libraryRoot, 'Escape'));
-    // Symlink adentro de la raíz que apunta a un hermano con prefijo compartido.
+    // Symlink inside the root pointing at a sibling with a shared prefix.
     await symlink(siblingWithPrefix, join(libraryRoot, 'EscapeSibling'));
 
     const roots: MediaRootConfig[] = [
@@ -55,19 +55,19 @@ describe('MediaRootsService', () => {
   });
 
   describe('getRoots', () => {
-    it('expone hostPath pero nunca containerPath', async () => {
+    it('exposes hostPath but never containerPath', async () => {
       const roots = service.getRoots();
       const library = roots.find((r) => r.id === 'library');
       expect(library?.hostPath).toBe('/host/library');
       expect(library).not.toHaveProperty('containerPath');
     });
 
-    it('marca available=true cuando el mount existe', () => {
+    it('marks available=true when the mount exists', () => {
       const roots = service.getRoots();
       expect(roots.every((r) => r.available)).toBe(true);
     });
 
-    it('marca available=false cuando el mount falta', async () => {
+    it('marks available=false when the mount is missing', async () => {
       const missingRoots: MediaRootConfig[] = [
         { id: 'library', label: 'Biblioteca', hostPath: '/host/library', containerPath: join(baseDir, 'no-existe') },
       ];
@@ -79,85 +79,85 @@ describe('MediaRootsService', () => {
     });
   });
 
-  describe('resolveFromRoot — casos válidos', () => {
-    it('resuelve un segmento simple', async () => {
+  describe('resolveFromRoot — valid cases', () => {
+    it('resolves a simple segment', async () => {
       const resolved = await service.resolveFromRoot('library', 'Movies');
       expect(resolved).toBe(join(libraryRoot, 'Movies'));
     });
 
-    it('input vacío resuelve a la raíz misma', async () => {
+    it('resolves an empty input to the root itself', async () => {
       const resolved = await service.resolveFromRoot('library', '');
       expect(resolved).toBe(libraryRoot);
     });
 
-    it('"." resuelve a la raíz misma', async () => {
+    it('resolves "." to the root itself', async () => {
       const resolved = await service.resolveFromRoot('library', '.');
       expect(resolved).toBe(libraryRoot);
     });
 
-    it('permite una hoja que todavía no existe cuando mustExist no se pide', async () => {
+    it('allows a leaf that does not exist yet when mustExist is not requested', async () => {
       const resolved = await service.resolveFromRoot('library', 'Nueva/Subcarpeta');
       expect(resolved).toBe(join(libraryRoot, 'Nueva', 'Subcarpeta'));
     });
 
-    it('rechaza una hoja inexistente cuando mustExist=true', async () => {
+    it('rejects a non-existent leaf when mustExist=true', async () => {
       await expect(
         service.resolveFromRoot('library', 'NoExiste', { mustExist: true }),
       ).rejects.toThrow();
     });
 
-    it('acepta una hoja existente cuando mustExist=true', async () => {
+    it('accepts an existing leaf when mustExist=true', async () => {
       const resolved = await service.resolveFromRoot('library', 'Movies', { mustExist: true });
       expect(resolved).toBe(join(libraryRoot, 'Movies'));
     });
   });
 
   describe('resolveFromRoot — escapes', () => {
-    it('rechaza ".."', async () => {
+    it('rejects ".."', async () => {
       await expect(service.resolveFromRoot('library', '..')).rejects.toThrow();
     });
 
-    it('rechaza un traversal compuesto que termina fuera de la raíz', async () => {
+    it('rejects a composite traversal that ends up outside the root', async () => {
       await expect(
         service.resolveFromRoot('library', 'Movies/../../downloads'),
       ).rejects.toThrow();
     });
 
-    it('rechaza una ruta absoluta', async () => {
+    it('rejects an absolute path', async () => {
       await expect(service.resolveFromRoot('library', '/etc')).rejects.toThrow();
     });
 
-    it('rechaza un byte NUL', async () => {
+    it('rejects a NUL byte', async () => {
       await expect(service.resolveFromRoot('library', 'Movies\0evil')).rejects.toThrow();
     });
 
-    it('rechaza un symlink que apunta afuera de la raíz', async () => {
+    it('rejects a symlink pointing outside the root', async () => {
       await expect(service.resolveFromRoot('library', 'Escape')).rejects.toThrow();
     });
 
-    it('rechaza un symlink que apunta a un hermano con prefijo compartido', async () => {
-      // Este es el caso que exige el "+ sep" en la comparación de prefijos:
-      // sin él, downloadsRoot siendo prefijo string de siblingWithPrefix
-      // haría que este symlink pasara el chequeo por error.
+    it('rejects a symlink pointing at a sibling with a shared prefix', async () => {
+      // This is the case that demands the "+ sep" in the prefix comparison:
+      // without it, downloadsRoot being a string prefix of siblingWithPrefix
+      // would make this symlink pass the check by mistake.
       await expect(service.resolveFromRoot('library', 'EscapeSibling')).rejects.toThrow();
     });
 
-    it('un hermano con prefijo compartido no es alcanzable ni por composición directa', async () => {
-      // downloadsRoot y siblingWithPrefix comparten prefijo de string; nada
-      // en el modelo relativo permite escribir una ruta que salga de
-      // libraryRoot, pero lo verificamos igual como red de seguridad.
+    it('a sibling with a shared prefix is unreachable even by direct composition', async () => {
+      // downloadsRoot and siblingWithPrefix share a string prefix; nothing
+      // in the relative model lets anyone write a path that escapes
+      // libraryRoot, but it is still verified here as a safety net.
       const resolved = await service.resolveFromRoot('downloads', '.');
       expect(resolved).toBe(downloadsRoot);
       expect(resolved.startsWith(siblingWithPrefix)).toBe(false);
     });
   });
 
-  describe('resolveFromRoot — raíz desconocida o no montada', () => {
-    it('rechaza un rootId inexistente', async () => {
+  describe('resolveFromRoot — unknown or unmounted root', () => {
+    it('rejects a non-existent rootId', async () => {
       await expect(service.resolveFromRoot('nope', 'x')).rejects.toThrow();
     });
 
-    it('rechaza cuando el mount no está disponible', async () => {
+    it('rejects when the mount is unavailable', async () => {
       const missingRoots: MediaRootConfig[] = [
         { id: 'library', label: 'Biblioteca', hostPath: '/host/library', containerPath: join(baseDir, 'no-existe') },
       ];
@@ -169,35 +169,35 @@ describe('MediaRootsService', () => {
     });
   });
 
-  it('toHostPath devuelve el hostPath de la raíz', () => {
+  it('toHostPath returns the root\'s hostPath', () => {
     expect(service.toHostPath('library')).toBe('/host/library');
   });
 
   describe('containerToHostPath', () => {
-    it('traduce un path adentro de la raíz', () => {
+    it('translates a path inside the root', () => {
       const result = service.containerToHostPath('library', join(libraryRoot, 'Movies', 'x.mkv'));
       expect(result).toBe(join('/host/library', 'Movies', 'x.mkv'));
     });
 
-    it('traduce la raíz misma', () => {
+    it('translates the root itself', () => {
       expect(service.containerToHostPath('library', libraryRoot)).toBe('/host/library');
     });
 
-    it('devuelve null para un hermano con prefijo compartido', () => {
-      // downloadsRoot vs siblingWithPrefix ("downloads-evil"): sin el "+ sep"
-      // en la comparación, esto matchearía por error.
+    it('returns null for a sibling with a shared prefix', () => {
+      // downloadsRoot vs siblingWithPrefix ("downloads-evil"): without the
+      // "+ sep" in the comparison, this would match by mistake.
       expect(service.containerToHostPath('downloads', siblingWithPrefix)).toBeNull();
     });
 
-    it('devuelve null para un path de otra raíz', () => {
+    it('returns null for a path belonging to another root', () => {
       expect(service.containerToHostPath('library', downloadsRoot)).toBeNull();
     });
 
-    it('devuelve null para un path totalmente afuera', () => {
+    it('returns null for a path entirely outside', () => {
       expect(service.containerToHostPath('library', outsideDir)).toBeNull();
     });
 
-    it('devuelve null cuando hostPath es relativo', async () => {
+    it('returns null when hostPath is relative', async () => {
       const relativeRoots: MediaRootConfig[] = [
         { id: 'library', label: 'Biblioteca', hostPath: './data/library', containerPath: libraryRoot },
       ];
@@ -209,14 +209,14 @@ describe('MediaRootsService', () => {
     });
   });
 
-  // Sanity check de que `sep` es el separador esperado en este entorno (todo
-  // el análisis de arriba asume POSIX porque el api corre en Linux dentro
-  // del container).
-  it('corre en un filesystem POSIX', () => {
+  // Sanity check that `sep` is the separator expected in this environment
+  // (all of the analysis above assumes POSIX because `api` runs on Linux
+  // inside the container).
+  it('runs on a POSIX filesystem', () => {
     expect(sep).toBe('/');
   });
 
-  // 047-source-deletion: isInsideRoot is the check that guards a recursive rm
+  // Spec 047, REQ-10: isInsideRoot is the check that guards a recursive rm
   // against a MediaSource.downloadPath the api itself no longer trusts. Wrong
   // in either direction is a real bug — true-when-outside deletes something
   // outside the downloads root, false-when-inside leaves every delete on disk

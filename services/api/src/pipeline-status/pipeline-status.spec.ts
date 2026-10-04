@@ -70,9 +70,7 @@ describe('deriveSourceStatus', () => {
   });
 
   it('falls back to the column with null progress when no live reading exists (AC-6)', () => {
-    // NFR-4: an unreachable torrent client must not throw and must not invent a percentage.
-    // If rule 6 defaulted downloadProgress to 0 instead of null, this would still pass a naive
-    // "truthy" check but fail this exact equality.
+    // Spec 043, NFR-4
     const result = deriveSourceStatus({
       sourceStatus: 'QUEUED',
       jobs: [],
@@ -198,7 +196,7 @@ describe('deriveSourceStatus', () => {
   });
 });
 
-// REQ-17 (069-title-refresh) bug class: a title demoted to MISSING (its file left the media
+// Spec 069, REQ-17 bug class: a title demoted to MISSING (its file left the media
 // server) still reading COMPLETED/DOWNLOADED because a finished SCANNED source or COMPLETED job
 // lifted it back, so the refresh looks like a no-op; and the opposite, an active job/source no
 // longer lifting a title so a real download reads MISSING. Neither throws anywhere.
@@ -254,13 +252,7 @@ describe('deriveTitleStatus', () => {
   });
 
   it('reads COMPLETED when the column is COMPLETED, one source is ERROR and one is SCANNED with a COMPLETED job (AC-8)', () => {
-    // This is the highest-value case in the suite (plan.md flags it explicitly). ERROR must come
-    // from the stored column alone. `038-encode-report-durability` REQ-9 moves a demoted source's
-    // own non-terminal ProcessJob rows to ERROR too, so the demoted source's job is included here
-    // deliberately: if ERROR were instead read off the raw job set — i.e. any ERROR job anywhere
-    // on the title short-circuits to ERROR — this would wrongly resolve to ERROR, because the
-    // demoted source's failed job would poison an otherwise-completed title. Both the demoted
-    // source *and* its own ERROR job must be filtered out, per REQ-4/plan.md decision 1.
+    // Spec 038, REQ-9; Spec 043, REQ-4
     const result = deriveTitleStatus({
       status: 'COMPLETED',
       sources: [{ status: 'ERROR' }, { status: 'SCANNED' }],
@@ -400,7 +392,7 @@ describe('deriveEpisodeStatus', () => {
   });
 });
 
-// 047-source-deletion REQ-12: the eight-value vocabulary written back into the
+// Spec 047, REQ-12: the eight-value vocabulary written back into the
 // five-value MediaStatus column after a delete recomputes a title's status. A
 // value this collapse gets wrong either rejects the Prisma write outright (a
 // PipelineStatus with no matching MediaStatus member) or writes a value no

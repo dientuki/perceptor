@@ -14,12 +14,12 @@ jest.mock('node:fs/promises', () => ({
 }));
 
 // This suite exists because two failure classes here produce no error
-// anywhere (spec.md NFR-5 (a)/(b)):
+// anywhere (Spec 022, NFR-5):
 //
 //  - a loser's torrentCompleted arriving after the winner already reached
 //    READY still marking that loser READY and enqueuing a second
 //    bull:process — the target ends up with two ProcessJobs writing the
-//    same output path, and nothing logs a problem (REQ-13);
+//    same output path, and nothing logs a problem (Spec 022, REQ-13);
 //  - the global downloads list reading `owned: true` for a title the caller
 //    never added, which makes the page offer controls the mutations then
 //    refuse, and the sidebar badge counting sources or paused work instead
@@ -28,7 +28,7 @@ jest.mock('node:fs/promises', () => ({
 //    writing a paused loser's status as ERROR instead of PAUSED — either
 //    would be silently read by this very function as "superseded, ignore"
 //    on the next completion notice, indistinguishable from a legitimately
-//    discarded source (REQ-12, NFR-7's whole reason for existing).
+//    discarded source (Spec 022, REQ-12 NFR-7).
 //
 // The arbiter (resolveRace) is covered once here, directly, rather than a
 // second near-identical suite driving it through UploadsService — both
@@ -138,9 +138,7 @@ describe('DownloadsService', () => {
       expect(prisma.mediaSource.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { status: 'PAUSED' } });
     });
 
-    // REQ-13: this is the exact case a loser's late completion must be
-    // ignored — if this guard were removed, a second source of the same
-    // target would sail through to READY/ENCODING with nothing to catch it.
+    // Spec 022, REQ-13
     it('reports "ignorado" and pauses nothing when a sibling already won', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 2,
@@ -160,9 +158,7 @@ describe('DownloadsService', () => {
       expect(prisma.mediaSource.update).not.toHaveBeenCalled();
     });
 
-    // 065 REQ-13: a SCANNED sibling whose only job failed must not count as
-    // the target's winner; otherwise a second source is ignored with no error
-    // anywhere and the title is wedged.
+    // Spec 065, REQ-13
     it('does not let a SCANNED sibling whose only job is ERROR block the race', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 2,
@@ -222,9 +218,7 @@ describe('DownloadsService', () => {
 
       const result = await service.resolveRace(1);
 
-      // NFR-6: an unacknowledged stop must not be written to the DB as
-      // PAUSED — that would leave the sibling downloading while the row
-      // lies about it.
+      // Spec 022, NFR-6
       expect(prisma.mediaSource.update).not.toHaveBeenCalled();
       expect(result).toMatch(/^ganador.*0 pausado/);
     });
@@ -622,11 +616,7 @@ describe('DownloadsService', () => {
   });
 
   describe('movieDownloads — job grouping', () => {
-    // T003: two MediaSource rows on the same title must not pool each
-    // other's ProcessJob rows into one derivation. Fault injection: group
-    // the jobs query result by index/order instead of by
-    // `sourceFile.mediaSourceId` and this case starts asserting the wrong
-    // status/encodeProgress for source 2.
+    // Spec 043, T003
     it('derives each source from only its own jobs, never a sibling source on the same title', async () => {
       prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Dos Fuentes' });
       prisma.mediaSource.findMany.mockResolvedValue([

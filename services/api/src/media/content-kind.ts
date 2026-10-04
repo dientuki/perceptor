@@ -1,8 +1,4 @@
-/**
- * Content kind classification (REQ-2..REQ-5): genre-then-keywords, derived once at registration.
- * A plain, dependency-free module by design — no Nest, no Prisma client, no injection, following
- * `src/pipeline-status/pipeline-status.ts`'s precedent for a rule as a plain exported function.
- */
+// Spec 057, REQ-2 REQ-3 REQ-4 REQ-5
 import { ContentKind } from './entities/content-kind.enum';
 
 /** TMDB genre id for "Animation". */
@@ -18,13 +14,7 @@ export type ClassifyContentKindInput = {
   keywordIds: number[] | undefined;
 };
 
-/**
- * REQ-2: not animated (genre 16 absent) -> LIVE_ACTION, no keyword lookup needed.
- * REQ-4: animated and `3d-animation` present -> CGI. Checked first — precedence matters.
- * REQ-3: animated and (`anime` or `cartoon`) present -> ANIME.
- * REQ-5: animated with no usable/matching keyword (empty, undefined, or none of the three known
- * ids) -> CGI, the fallback default for animated content with an undecided style.
- */
+// Spec 057, REQ-2 REQ-3 REQ-4 REQ-5
 export function classifyContentKind({ genreIds, keywordIds }: ClassifyContentKindInput): ContentKind {
   const isAnimated = (genreIds ?? []).includes(ANIMATION_GENRE_ID);
   if (!isAnimated) {

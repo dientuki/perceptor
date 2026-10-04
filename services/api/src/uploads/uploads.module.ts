@@ -22,9 +22,7 @@ import { SessionService } from './session.service';
     RedisModule,
     MoviesModule,
     EpisodesModule,
-    // DownloadsService.resolveRace — the shared race arbiter REQ-19 wires
-    // the tus upload path into, so an upload competes in the same race as
-    // torrents rather than reimplementing the guard/pause locally.
+    // Spec 022, REQ-19
     DownloadsModule,
   ],
   controllers: [UploadsController],

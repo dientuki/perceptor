@@ -17,15 +17,7 @@ import { TorrentGroup } from './entities/torrent-group.entity';
 import { TorrentGroupScope } from './entities/torrent-group-scope.enum';
 import { LanguageTrackKind } from './entities/language-track-kind.enum';
 
-// Most operations here are rooted at @CurrentUser() and reject a non-user
-// principal the same way AuthResolver's setUiLocale/me do — no operation
-// takes a user id and none carries @AllowService() (REQ-9). The two
-// exceptions are createTorrentGroup and deleteTorrentGroup: they curate the
-// shared catalog, not a caller's own selection, so they take AdminGuard
-// instead and an id/name argument rather than @CurrentUser(). The
-// torrentGroups query stays JwtAuthGuard-only despite sitting next to those
-// two — /preferences (not an admin screen) is what reads it, so any
-// signed-in user must be able to see the whole catalog to pick from it.
+// Spec 021, REQ-9
 @Resolver()
 export class PreferencesResolver {
   constructor(

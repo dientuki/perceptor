@@ -18,16 +18,13 @@ import { ProcessQueueService } from '@/queue/process-queue.service';
 import { SessionService } from '@/uploads/session.service';
 import { UploadsService } from '@/uploads/uploads.service';
 
-// REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw.
-// Fallback derived from the target row's id, not the MediaSource's — see
-// EpisodesService's copy of this same helper for why it stays local.
+// Spec 022, REQ-5
 function sanitizeTag(title: string, fallbackId: number): string {
   const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
   return cleaned || `id-${fallbackId}`;
 }
 
-// REQ-3: a season pack's torrent carries two tags — the show's title and
-// `Season <n>` — following REQ-2's vocabulary (English, unpadded).
+// Spec 022, REQ-3; Spec 022, REQ-2
 function seasonTags(season: { seasonNumber: number; show: { id: number; title: string } }): string[] {
   return [sanitizeTag(season.show.title, season.show.id), `Season ${season.seasonNumber}`];
 }
@@ -61,11 +58,6 @@ export class SeasonsService {
     });
   }
 
-  // Release elegido desde la búsqueda del indexer — twin of
-  // EpisodesService.addTorrentToEpisode. Resolves the infoHash before ever
-  // reaching attachTorrentSource, so a release the indexer never returned a
-  // hash for (and cannot be resolved from its URLs either) never reaches
-  // qBittorrent and never creates a MediaSource row.
   async addTorrentToSeason(
     seasonId: number,
     input: { infoHash: string | null; urls: string[]; releaseTitle: string | null; force: boolean },
@@ -75,12 +67,8 @@ export class SeasonsService {
     return this.attachTorrentSource(seasonId, { kind: 'TORRENT_SEARCH', ...input, infoHash }, userId);
   }
 
-  // Magnet pegado a mano por el usuario — mismo flujo que
-  // EpisodesService.addMagnetToEpisode de acá en más, una vez parseado el
-  // infoHash del propio magnet.
   async addMagnetToSeason(seasonId: number, input: { magnet: string; force: boolean }, userId: string) {
-    // parseMagnet already throws a keyed BadRequestException (018 T010) — no
-    // re-wrap needed, just let it propagate so `extensions.i18n` survives.
+    // Spec 018, T010
     const parsed = parseMagnet(input.magnet);
 
     return this.attachTorrentSource(
@@ -150,10 +138,7 @@ export class SeasonsService {
       where: { seasonId, status: { not: 'ERROR' } },
     });
 
-    // REQ-7: only a season with at least one COMPLETED episode refuses. A
-    // merely-downloading season no longer conflicts — REQ-6 makes a second
-    // acquisition normal. `activeSource` still drives the demote-on-force
-    // block below regardless of this check.
+    // Spec 022, REQ-7; Spec 022, REQ-6
     if (!input.force) {
       const hasCompletedEpisode =
         (await this.prisma.episode.count({ where: { seasonId, status: 'COMPLETED' } })) > 0;
@@ -194,10 +179,6 @@ export class SeasonsService {
 
     if (reactivated) return this.findSeasonWithEpisodes(seasonId);
 
-    // El savepath lo decide el client al agregar el torrent, así cada
-    // descarga cae en su propia carpeta. Corre antes de cualquier escritura
-    // en la DB: si qBittorrent rechaza el torrent no debe quedar ninguna
-    // fila QUEUED colgada, ni la fila activa demovida sin reemplazo.
     const downloadPath = await this.qbittorrent.add(input.urls, seasonTags(season), 'show');
 
     // Demote *before* creating the replacement, and only after qBittorrent

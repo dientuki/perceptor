@@ -2,11 +2,7 @@ import { EncodeStatus, MediaStatus, SourceStatus } from '@prisma/client';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 
-/**
- * The one normalized vocabulary every status a consumer reads must reduce to (REQ-1/REQ-2).
- * A plain, dependency-free module by design: no Nest, no Prisma client, no injection — every
- * input here is a plain row, so this is testable without a database.
- */
+// Spec 043, REQ-1 REQ-2
 export const PIPELINE_STATUSES = [
   'MISSING',
   'QUEUED',
@@ -20,10 +16,7 @@ export const PIPELINE_STATUSES = [
 
 export type PipelineStatus = (typeof PIPELINE_STATUSES)[number];
 
-/**
- * REQ-4's rank ladder. `ERROR` is deliberately absent — it never participates in a "most
- * advanced of" comparison, it always wins outright wherever it is checked.
- */
+// Spec 043, REQ-4
 const RANK: Record<Exclude<PipelineStatus, 'ERROR'>, number> = {
   MISSING: 0,
   QUEUED: 1,
@@ -92,7 +85,7 @@ export type DerivedProgress = {
   status: PipelineStatus;
   downloadProgress: number | null; // 0..100 or null
   encodeProgress: number | null; // 0..100 or null
-  encodeSpeed: number | null; // FFmpeg's realtime multiplier, non-null only from Rule 3 (REQ-10)
+  encodeSpeed: number | null; // Spec 053, REQ-10
 };
 
 const ACTIVE_ENCODE_STATUSES: EncodeStatus[] = ['WAITING', 'QUEUED', 'ENCODING'];
@@ -102,9 +95,7 @@ function meanProgress(jobs: SourceAltitudeJob[]): number {
   return Math.floor(sum / jobs.length);
 }
 
-// Rule 3 only (REQ-10): the mean of the non-null speeds of jobs *currently* ENCODING — a
-// WAITING/QUEUED job is not running and has nothing to report, and a COMPLETED/ERROR job's
-// stored value is stale by construction. Null when no job is actively encoding.
+// Spec 053, REQ-10
 function meanEncodeSpeed(jobs: SourceAltitudeJob[]): number | null {
   const running = jobs.filter(
     (job): job is SourceAltitudeJob & { encodeSpeed: number } =>
@@ -117,20 +108,12 @@ function meanEncodeSpeed(jobs: SourceAltitudeJob[]): number | null {
   return sum / running.length;
 }
 
-// The only place the 0..1 -> 0..100 conversion happens (REQ-3). The adapter boundary
-// (clients/torrent) keeps 0..1; nothing downstream of this function should multiply again.
-// Floored, never rounded: 99.9% must not read as 100% while bytes are still missing. The
-// epsilon absorbs float error (0.29 * 100 === 28.999999999999996) so floor does not lose 1%.
+// Spec 043, REQ-3
 function liveProgressToPercent(live: LiveTorrentReading): number {
   return Math.floor(live.progress * 100 + 1e-9);
 }
 
-/**
- * Source-altitude derivation (REQ-3): given one `MediaSource`, its `ProcessJob` rows and
- * optionally a live torrent reading for its `infoHash`, decide the normalized status and the
- * two progress numbers. The six rules run as **ordered early returns** — the order is the
- * specification, not an implementation detail. Do not reorder or collapse them into a switch.
- */
+// Spec 043, REQ-3
 export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress {
   const { sourceStatus, jobs, live } = input;
 
@@ -183,14 +166,7 @@ export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress 
   };
 }
 
-/**
- * Collapse of the eight-value vocabulary back to the five-value `MediaStatus` column
- * (`047-source-deletion` REQ-12). `QUEUED`/`PAUSED`/`DOWNLOADING`/`DOWNLOADED` all mean "some
- * source is still being acquired" from the title's perspective, so they collapse to
- * `DOWNLOADING`; the rest already spell the same word. Exhaustive `switch`, no `default` — a
- * future `PipelineStatus` member must fail to compile here, not silently fall through into a
- * column value nothing understands.
- */
+// Spec 047, REQ-12
 export function toMediaStatus(status: PipelineStatus): MediaStatus {
   switch (status) {
     case 'QUEUED':
@@ -245,18 +221,7 @@ export type TitleAltitudeInput = {
   jobs: TitleAltitudeJob[];
 };
 
-/**
- * Title-altitude derivation (REQ-4): `ERROR` if and only if the stored column is `ERROR`;
- * otherwise the maximum over the ladder of (a) the column, (b) each source's translated status
- * except `ERROR` and `SCANNED` ones, and (c) `ENCODING` when any job is WAITING/QUEUED/ENCODING.
- * A `SCANNED` source and a `COMPLETED` job are finished history, not live work (REQ-17,
- * `069-title-refresh`): they contribute nothing, so the stored column alone says whether a
- * finished run still counts (a refresh that demotes the column to `MISSING` must stick). Reads only the database
- * (REQ-5, no live reading) and does not group jobs by source — `plan.md` § Approach decision 1
- * is explicit that `Movie.processJobs`/`Episode.processJobs` are denormalized precisely so this
- * join is unnecessary. Taking `ERROR` from the raw job set instead of the column would let a
- * superseded (demoted) source's failed job poison an otherwise-completed title — the AC-8 case.
- */
+// Spec 043, REQ-4; Spec 069, REQ-17; Spec 043, REQ-5; Spec 043, AC-8
 export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
   const { status, sources, jobs } = input;
 

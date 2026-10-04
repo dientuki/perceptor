@@ -6,7 +6,7 @@ import { FfprobeLogsResolver } from './ffprobe-logs.resolver';
 // This suite exists because otherwise a guard miswiring on this resolver
 // fails with no error anywhere: AdminGuard reaching recordFfprobe would
 // reject the worker's SERVICE_TOKEN, and the worker swallows that rejection
-// by design (NFR-1) — the table would just silently stay empty forever.
+// by design (Spec 023, NFR-1) — the table would just silently stay empty forever.
 // The inverse is just as dangerous: @AllowService() leaking onto a read
 // would let the worker's machine credential read or delete admin-only rows.
 // Asserting this by calling the resolver would not catch it — a mock guard

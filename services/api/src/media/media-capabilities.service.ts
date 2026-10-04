@@ -5,20 +5,12 @@ import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
-// The one place `movies_enabled` / `shows_enabled` get read as booleans —
-// everything downstream of registration (library listings, acquisition
-// mutations, worker jobs) never calls this (045-media-type-availability
-// spec.md § REQ-11). `assertEnabled` is the enforcement half of REQ-10;
-// `read()`/`enabledTypes()` back the `mediaCapabilities` query and the
-// `searchAllMedia` narrowing respectively.
+// Spec 045, REQ-11; Spec 045, REQ-10
 @Injectable()
 export class MediaCapabilitiesService {
   constructor(private readonly settingsService: SettingsService) {}
 
-  // `shortsEnabled` deliberately uses `=== 'true'`, the opposite of the
-  // `!== 'false'` idiom below — an absent `shorts_enabled` row must read as
-  // OFF, so an install that predates 048-shorts-category never grows a
-  // category nobody enabled (spec NFR-3).
+  // Spec 048, NFR-3
   async read(): Promise<MediaCapabilities> {
     const map = await this.settingsService.getMap();
     const moviesEnabled = this.isEnabledInMap(map, MEDIA_TYPE.MOVIE);
@@ -50,19 +42,13 @@ export class MediaCapabilitiesService {
     }
   }
 
-  // 048-shorts-category REQ-3/REQ-4: the effective capability, already
-  // folding in `movies_enabled` — read() computes it once, this just names
-  // it for callers that only care about the boolean.
+  // Spec 048, REQ-3 REQ-4
   async isShortsEnabled(): Promise<boolean> {
     const capabilities = await this.read();
     return capabilities.shortsEnabled;
   }
 
-  // REQ-14: enforcement, not just hiding. Thrown by setMovieShort before it
-  // touches a row (048-shorts-category; the sibling call site this used to
-  // guard on addMedia's registration-time argument was removed by
-  // 056-shorts-runtime-classification, which replaced that argument with a
-  // derivation).
+  // Spec 048, REQ-14
   async assertShortsEnabled(): Promise<void> {
     const enabled = await this.isShortsEnabled();
     if (!enabled) {
@@ -82,11 +68,7 @@ export class MediaCapabilitiesService {
     return types;
   }
 
-  // REQ-7 / ../plan.md § Risks: an absent row must read as enabled, never
-  // `=== 'true'` — that reads a hand-edited or pre-seed install as fully
-  // switched off with no error anywhere. Same idiom as
-  // process-jobs.service.ts:42 / downloads.service.ts:90 for
-  // `compression_enabled`.
+  // Spec 045, REQ-7
   private isEnabledInMap(map: Record<string, string>, type: MediaType): boolean {
     const key = type === MEDIA_TYPE.MOVIE ? 'movies_enabled' : 'shows_enabled';
     return map[key] !== 'false';

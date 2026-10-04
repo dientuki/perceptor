@@ -8,7 +8,7 @@ import { JwtStrategy } from '../strategies/jwt.strategy';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import type { I18nExceptionResponse } from '@/i18n/i18n-error';
 
-// REQ-14 depends entirely on `web`'s `auth-session.ts` recognising exactly
+// Spec 018, REQ-14 depends entirely on `web`'s `auth-session.ts` recognising exactly
 // two keys — `error.auth.unauthenticated` and `error.auth.session_expired`
 // — off `extensions.i18n.key`. No compiler crosses the GraphQL seam, so a
 // throw site here that silently reverts to a raw string (or the wrong key)
@@ -17,9 +17,9 @@ import type { I18nExceptionResponse } from '@/i18n/i18n-error';
 // nothing logged anywhere (plan.md § Risks, "Auth detection breaks"). This
 // suite exercises the real guard/service/strategy code paths — not a
 // re-assertion of a constant against itself — for every throw site the spec's
-// `auth` error table lists, and specifically pins the two REQ-14 keys onto
-// exactly the sites that mean "no credential" vs. "credential no longer
-// valid".
+// `auth` error table lists, and specifically pins the two Spec 018, REQ-14
+// keys onto exactly the sites that mean "no credential" vs. "credential no
+// longer valid".
 describe('auth throw sites carry the frozen i18n keys', () => {
   function i18nKeyOf(fn: () => unknown): string {
     try {

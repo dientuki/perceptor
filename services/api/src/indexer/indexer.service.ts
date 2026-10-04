@@ -24,10 +24,7 @@ export class IndexerService {
     private readonly redis: RedisService,
   ) {}
 
-  // Prowlarr being unreachable is an outcome for this query, not an error (078-first-step-tutorial
-  // NFR-2): the page whose entire job is explaining how to fix a broken indexer must still render
-  // when the indexer is broken. The caught error is logged so a genuine defect here (a typo in the
-  // URL, a parsing bug) stays findable rather than being silently reported as "indexer down".
+  // Spec 078, NFR-2
   async status(): Promise<IndexerStatus> {
     try {
       const count = await this.prowlarr.countIndexers();
@@ -38,8 +35,6 @@ export class IndexerService {
     }
   }
 
-  // Buscar releases es indistinto para movie o show: la consulta es un string y
-  // el resultado tiene la misma forma. De ahí que sea un único método.
   async search(query: string): Promise<TorrentResult[]> {
     if (!query.trim()) return [];
 

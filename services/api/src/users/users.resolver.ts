@@ -8,9 +8,7 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 
-// All five operations here are administrator-only (REQ-2) — applied once at
-// class level rather than per-method so a new operation added later cannot
-// forget the guard.
+// Spec 003, REQ-2
 @Resolver(() => User)
 @UseGuards(AdminGuard)
 export class UsersResolver {

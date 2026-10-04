@@ -36,15 +36,7 @@ function renderUploadMessage(key: ErrorKey, params?: UploadErrorParams): string 
   });
 }
 
-// onUploadFinish and onUploadCreate both run inside tus's own request
-// handling, not Nest's HTTP pipeline — a plain ConflictException/
-// NotFoundException thrown there lands as just another Error and tus
-// answers with a generic 500. tus does know how to read
-// error.status_code/error.body (see @tus/server/dist/server.js::onError),
-// so both hooks throw this shape instead, and the browser gets the real
-// status code. `body` is now the REST twin of the GraphQL error envelope
-// (REQ-10): `{ message, i18n: { key, params? } }`, so `web`'s upload modal
-// can resolve it through the same catalog lookup as any other api error.
+// Spec 018, REQ-10
 class UploadHttpError extends Error {
   status_code: number;
   body: string;
@@ -60,13 +52,6 @@ class UploadHttpError extends Error {
   }
 }
 
-/**
- * Arma y expone el server de tus (protocolo de subida reanudable) para que
- * UploadsController le delegue el request crudo. Se construye recién en
- * onModuleInit porque el directorio destino sale de `settings.path_downloads`
- * (async, vía Prisma) — Nest espera todos los onModuleInit antes de escuchar,
- * así que el server ya está listo para cuando llega el primer request.
- */
 @Injectable()
 export class UploadsService implements OnModuleInit {
   server!: Server;
@@ -83,22 +68,12 @@ export class UploadsService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // Staging FIJO en la raíz completa del mount, no en la setting: tus
-    // necesita un directorio estable durante toda la vida del proceso — no se
-    // puede reconstruir el Server en cada cambio de path_downloads sin romper
-    // las subidas resumibles que estén en curso. Como updateMany() (ver
-    // settings.service.ts) garantiza que path_downloads siempre resuelve
-    // ADENTRO de esta misma raíz, anclar acá no le saca alcance a la setting
-    // — y de paso mantiene el rename() de más abajo dentro del mismo
-    // filesystem siempre, nunca cruza de dispositivo.
     const downloadsRoot = await this.mediaRoots.resolveFromRoot('downloads', '.');
     this.uploadsDir = join(downloadsRoot, 'uploads');
 
     this.server = new Server({
       path: '/uploads',
       datastore: new FileStore({ directory: this.uploadsDir }),
-      // Traefik está adelante: sin esto el Location que arma tus sale con el
-      // host/proto internos del container en vez de los que vio el browser.
       respectForwardedHeaders: true,
       // Lets the browser's tus client actually send the header the ticket
       // travels in.
@@ -116,16 +91,7 @@ export class UploadsService implements OnModuleInit {
     });
   }
 
-  // Wired into the `Server` options above, alongside registering the global
-  // GraphQL guard — both halves of the boundary close in the same commit
-  // (plan.md § Phase C). Verified via upload-tickets.service.spec.ts against
-  // the ticket logic; this method itself is thin request plumbing on top of it.
-  //
-  // 010-episode-acquisition (T006): reads whichever id the metadata carries.
-  // Exactly one of movieId/episodeId is expected — createUploadTicket only
-  // ever mints a ticket for one target, so metadata carrying both or neither
-  // means the browser sent something a legitimate ticket flow never produces;
-  // verifyAndSpend below rejects it the same way a mismatched target does.
+  // Spec 010, T006
   async onUploadCreate(req: Request, upload: { id: string; metadata?: Record<string, string | null> }) {
     const authorization = req.headers.get('authorization');
     const token = authorization?.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : null;
@@ -181,10 +147,7 @@ export class UploadsService implements OnModuleInit {
       throw err;
     }
 
-    // 027-replace-completed-media: the ticket's own signed `force` is the
-    // only source of this decision (REQ-7) — record it here, keyed by tus
-    // upload id, so handleUploadFinish can read it without ever touching
-    // upload.metadata.
+    // Spec 027, REQ-7
     if (force) {
       await this.uploadTickets.markReplaceAuthorised(upload.id);
     }
@@ -192,12 +155,7 @@ export class UploadsService implements OnModuleInit {
     return {};
   }
 
-  // 010-episode-acquisition (T006): branches on whichever id the metadata
-  // carries. The `movieId` metadata key keeps its name and meaning (NFR-1);
-  // `episodeId` sits beside it. Both branches validate everything that can
-  // throw — missing metadata, missing parent row, an already-active source —
-  // before the file is moved off tus's staging directory, mirroring the film
-  // path's existing ordering.
+  // Spec 010, T006; Spec 010, NFR-1
   private async handleUploadFinish(upload: {
     id: string;
     metadata?: Record<string, string | null>;
@@ -240,28 +198,14 @@ export class UploadsService implements OnModuleInit {
       const episode = await this.prisma.episode.findUnique({ where: { id: episodeId } });
       if (!episode) throw new UploadHttpError(404, ERROR_KEYS.EPISODE_NOT_FOUND, { id: episodeId });
 
-      // 027-replace-completed-media: the mid-upload race guard. The ticket's
-      // own decision (never upload.metadata — REQ-7) governs whether this
-      // conflict is skipped; createUploadTicket already refused an
-      // unconfirmed replacement before the upload started, so reaching here
-      // with the episode COMPLETED and no authorisation means the target
-      // became busy while the upload was in flight. A merely-downloading
-      // episode no longer conflicts (022-download-status-tags REQ-7/REQ-19)
-      // — it becomes one more competitor in the race.
+      // Spec 027, REQ-7; Spec 022, REQ-7; Spec 022, REQ-19
       if (episode.status === 'COMPLETED' && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
         throw new UploadHttpError(409, ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
       }
 
       const destPath = await this.moveUploadedFile(upload.id, rawPath, filename);
 
-      // 027-replace-completed-media: an authorised replacement demotes the
-      // source it supersedes *before* the replacement row exists — the same
-      // demote-on-force EpisodesService.attachTorrentSource does for a
-      // forced torrent. Without it the superseded READY/SCANNED row is still
-      // a live sibling, and resolveRace below reads it as "this target
-      // already has a winner" and drops the upload the user just confirmed
-      // (AC-7). Only the finished rows are demoted: a still-downloading
-      // sibling is a legitimate competitor that resolveRace pauses itself.
+      // Spec 027, AC-7
       await this.demoteSupersededSources({ episodeId }, upload.id);
 
       const mediaSource = await this.prisma.mediaSource.create({
@@ -274,20 +218,13 @@ export class UploadsService implements OnModuleInit {
         },
       });
 
-      // REQ-19: this upload is one more competitor in the episode's race,
-      // subject to REQ-13's one-winner guard exactly like a completed
-      // torrent — the same shared method handleTorrentCompleted calls, so
-      // the guard and the pause of any downloading siblings can never drift
-      // between the two entry points (../plan.md § Approach).
+      // Spec 022, REQ-19; Spec 022, REQ-13
       const raceResult = await this.downloads.resolveRace(mediaSource.id);
       // resolveRace (read-only in this slice) answers with exactly one of two
       // prefixes; "not a winner" is checked as the absence of "ganador"
       // rather than by name-matching its other outcome.
       if (!raceResult.startsWith('ganador')) {
-        // REQ-7: reachable only when a concurrent upload demoted this row
-        // between its create and this race resolution — the loser of an
-        // upload-versus-upload race, which is genuinely a 409, not a silent
-        // no-op the caller never hears about.
+        // Spec 022, REQ-7
         throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED);
       }
 
@@ -311,10 +248,7 @@ export class UploadsService implements OnModuleInit {
     const movie = await this.prisma.movie.findUnique({ where: { id: movieId } });
     if (!movie) throw new UploadHttpError(404, ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
-    // 027-replace-completed-media: same mid-upload race guard as the episode
-    // branch above, governed by the ticket's own decision (REQ-7). A
-    // merely-downloading film no longer conflicts (022-download-status-tags
-    // REQ-7/REQ-19) — it becomes one more competitor in the race.
+    // Spec 027, REQ-7; Spec 022, REQ-7; Spec 022, REQ-19
     if (movie.status === 'COMPLETED' && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
       throw new UploadHttpError(409, ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
     }
@@ -334,13 +268,10 @@ export class UploadsService implements OnModuleInit {
       },
     });
 
-    // REQ-19: same shared arbiter as the episode branch above — see its
-    // comment. An upload that arrives after a torrent already reached
-    // READY/SCANNED is ignored here exactly like a losing torrent's late
-    // completion (AC-22).
+    // Spec 022, REQ-19 AC-22
     const raceResult = await this.downloads.resolveRace(mediaSource.id);
     if (!raceResult.startsWith('ganador')) {
-      // REQ-7: same reasoning as the episode branch above.
+      // Spec 022, REQ-7
       throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED);
     }
 
@@ -354,13 +285,7 @@ export class UploadsService implements OnModuleInit {
     console.log(`[uploads] ${upload.id}: completado -> mediaSource ${mediaSource.id}, encolado`);
   }
 
-  // Shared by both branches of handleUploadFinish. REQ-6: a completed upload
-  // is a deliberate statement of intent, not a coincidence of timing, so it
-  // always demotes its target's finished sources — READY/SCANNED, the two
-  // statuses DownloadsService.resolveRace treats as an existing winner —
-  // whether or not the ticket carried `force`. A DOWNLOADING/QUEUED/PAUSED
-  // sibling is deliberately left alone: it is a racer, and resolveRace stops
-  // and pauses it as one.
+  // Spec 038, REQ-6
   async demoteSupersededSources(
     target: { movieId: number } | { episodeId: number } | { seasonId: number },
     uploadId: string,
@@ -385,11 +310,7 @@ export class UploadsService implements OnModuleInit {
         },
       });
 
-      // REQ-9: a demotion must leave no ProcessJob of that source in a
-      // non-terminal state — otherwise the row is wedged exactly like the
-      // incident this feature exists to prevent, just with nothing left
-      // that will ever report on it. ProcessJob reaches its source through
-      // sourceFile.mediaSourceId, not a direct column.
+      // Spec 038, REQ-9
       const { count: jobsClosed } = await tx.processJob.updateMany({
         where: {
           sourceFile: { mediaSourceId: { in: demotedIds } },

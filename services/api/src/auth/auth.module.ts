@@ -26,8 +26,7 @@ import { UsersService } from '@/users/users.service';
     }),
   ],
   providers: [AuthService, AuthResolver, JwtStrategy, SessionService, UsersService],
-  // SessionService is exported so UsersModule can revoke a disabled user's
-  // live sessions (004-user-disable REQ-3) without a second Redis wrapper.
+  // Spec 004, REQ-3
   exports: [JwtModule, SessionService],
 })
 export class AuthModule {}

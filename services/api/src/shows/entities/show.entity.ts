@@ -62,9 +62,7 @@ export class Show {
   @Field(() => [Language])
   subtitleLanguages: Language[];
 
-  // The calling user's own audio-mandatory flag for this series, read off
-  // the ownership row (039-per-title-language-split REQ-9). Inert this cycle
-  // — nothing consumes it yet (REQ-11).
+  // Spec 039, REQ-9; Spec 039, REQ-11
   @Field()
   audioMandatory: boolean;
 

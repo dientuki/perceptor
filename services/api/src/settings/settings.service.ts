@@ -21,8 +21,6 @@ export class SettingsService {
     return this.prisma.setting.findMany({ orderBy: { key: 'asc' } });
   }
 
-  // Shape exacto que ya esperan los clients: TmdbClient, ProwlarrClient y
-  // QbittorrentClient resuelven esto como Record<string, string> por request.
   async getMap(): Promise<Record<string, string>> {
     const settings = await this.findAll();
     return settings.reduce<Record<string, string>>((map, setting) => {
@@ -31,12 +29,6 @@ export class SettingsService {
     }, {});
   }
 
-  // Valida TODAS las entries antes de escribir cualquiera — si una falla, no
-  // queda un update parcial a mitad de camino. Las keys de tipo 'path' se
-  // resuelven contra media-roots (rechaza absolutas, traversal y symlinks
-  // que se escapan) y lo que se persiste es el relativo NORMALIZADO, nunca
-  // el input crudo del usuario ni el absoluto que devuelve el resolver — así
-  // un valor guardado nunca arrastra un ".." ni una forma rara ("Movies/./").
   async updateMany(entries: SettingInput[]) {
     const normalizedEntries: SettingInput[] = [];
 
@@ -58,8 +50,6 @@ export class SettingsService {
       }
 
       if (catalogEntry.kind === 'path') {
-        // No hace falta que exista todavía: el worker crea la carpeta en el
-        // primer encode (ver build-output-path.ts / encode.ffmpeg.ts).
         await this.mediaRootsService.resolveFromRoot(catalogEntry.rootId!, entry.value);
         normalizedEntries.push({ key: entry.key, value: normalize(entry.value) });
         continue;

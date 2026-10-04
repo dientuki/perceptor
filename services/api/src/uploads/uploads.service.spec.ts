@@ -13,12 +13,11 @@ jest.mock('@tus/file-store', () => ({ FileStore: class {} }));
 import { UploadsService } from './uploads.service';
 
 // Defends the confirmed replacement of an already-downloaded title through
-// the file entry point (027-replace-completed-media AC-7), against the race
-// arbiter added later by 022-download-status-tags, and — since
-// 038-encode-report-durability — that an upload always wins its target's
-// race whether or not a replace ticket authorised it (REQ-6), that a
-// demotion closes every ProcessJob it orphans (REQ-9), and that a loser of
-// an upload-versus-upload race gets a 409 instead of a silent no-op (REQ-7).
+// the file entry point (Spec 027, AC-7), against the race
+// arbiter added later, and that an upload always wins its target's
+// race whether or not a replace ticket authorised it (Spec 038, REQ-6), that a
+// demotion closes every ProcessJob it orphans (Spec 038, REQ-9), and that a loser of
+// an upload-versus-upload race gets a 409 instead of a silent no-op (Spec 038, REQ-7).
 //
 // The bug this covers is silent and total: the upload finishes, the file is
 // staged, the MediaSource row is created — and then resolveRace sees the
@@ -83,9 +82,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
           return row;
         }),
       },
-      // REQ-9: the demotion must close every non-terminal ProcessJob of the
-      // sources it demotes — reached through sourceFile.mediaSourceId, never
-      // a status-blind updateMany over the whole table.
+      // Spec 038, REQ-9
       processJob: {
         updateMany: jest.fn(async ({ where, data }: any) => {
           const mediaSourceIds: number[] = where.sourceFile.mediaSourceId.in;
@@ -227,7 +224,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
     expect(queue.addSourceReady).not.toHaveBeenCalled();
   });
 
-  // 038-encode-report-durability, T007: this is the incident REQ-6 exists to
+  // Spec 038, T007: this is the incident Spec 038, REQ-6 exists to
   // close. The pre-fix code opened demoteSupersededSources with
   // `if (!(await this.uploadTickets.isReplaceAuthorised(uploadId))) return;`
   // — an upload against a target whose status never reached COMPLETED (so no
@@ -258,8 +255,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       });
     });
 
-    // AC-6: no `ignorado` outcome reaches the caller silently — REQ-7's two
-    // permitted outcomes (queued job, or an error) are the only ones left.
+    // Spec 038, AC-6; Spec 038, REQ-7
     it('never resolves to the losing race outcome for the target’s own new upload', async () => {
       const { service, downloads } = build({
         replaceAuthorised: false,
@@ -276,11 +272,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
     });
   });
 
-  // AC-9: a demotion must leave no ProcessJob of the demoted source in a
-  // non-terminal state — a row left WAITING/QUEUED/ENCODING is exactly the
-  // wedged state this feature exists to prevent, just re-created by its own
-  // fix. Delete the processJob.updateMany call inside demoteSupersededSources
-  // and this case goes red: `WAITING`/`ENCODING` never flip to `ERROR`.
+  // Spec 038, AC-9
   describe('REQ-9: demotion closes the ProcessJob rows it orphans', () => {
     it('moves every non-terminal ProcessJob of the demoted source to ERROR, leaving a terminal one alone', async () => {
       const { service, jobRows } = build({
@@ -300,18 +292,12 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       const byId = (id: number) => jobRows.find((job) => job.id === id)!;
       expect(byId(1).status).toBe('ERROR');
       expect(byId(2).status).toBe('ERROR');
-      // A job that had already reported is left exactly as it was — REQ-9
-      // closes non-terminal jobs, it does not rewrite history.
+      // Spec 038, REQ-9
       expect(byId(3).status).toBe('COMPLETED');
     });
   });
 
-  // AC-10: reachable only when a *concurrent* upload demotes this row
-  // between its own `create` and its own `resolveRace` call — the loser of
-  // an upload-versus-upload race. The pre-fix code returned silently here
-  // (`if (raceResult.startsWith('ignorado')) { console.log(...); return; }`),
-  // leaving the caller's request looking like a success with nothing behind
-  // it. Restore that silent return and this case goes red: the promise
+  // Spec 038, AC-10
   // resolves instead of rejecting with a 409.
   describe('REQ-7/AC-10: a row demoted out from under its own resolveRace', () => {
     it('throws 409 with error.upload.superseded rather than returning silently', async () => {

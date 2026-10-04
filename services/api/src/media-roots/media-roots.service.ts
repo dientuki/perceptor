@@ -7,10 +7,6 @@ import { i18nError } from '@/i18n/i18n-error';
 import { MediaRoot } from './entities/media-root.entity';
 import { MediaRootConfig, MEDIA_ROOTS } from './media-roots.types';
 
-// Único dueño de la pregunta "¿esta ruta está adentro de una raíz declarada?".
-// Todo lo demás (validación de settings, resolución de savepath de
-// qBittorrent, la carpeta de salida del worker) pasa por acá — ver el
-// contexto completo en el plan de "rutas configurables desde la UI".
 @Injectable()
 export class MediaRootsService {
   constructor(@Inject(MEDIA_ROOTS) private readonly roots: MediaRootConfig[]) {}
@@ -24,19 +20,10 @@ export class MediaRootsService {
     }));
   }
 
-  // Sólo para armar mensajes de error claros ("La ruta se escapa de <hostPath>")
-  // sin que cada caller tenga que ir a buscar la config — getRoots() ya expone
-  // hostPath igual, esto es puro azúcar interno.
   toHostPath(rootId: string): string {
     return this.getRootConfig(rootId).hostPath;
   }
 
-  // Inversa de resolveFromRoot: toma una ruta absoluta DE CONTAINER y devuelve
-  // la ruta equivalente del lado del host. La necesita el media server, que
-  // corre afuera del stack y sólo entiende rutas del host.
-  // Devuelve null si `containerAbsolutePath` no cae adentro de la raíz, o si
-  // hostPath es relativo (./data/library, el default de .env.example): en ese
-  // caso no hay ninguna ruta absoluta honesta que mandar.
   containerToHostPath(rootId: string, containerAbsolutePath: string): string | null {
     const root = this.getRootConfig(rootId);
 
@@ -56,7 +43,7 @@ export class MediaRootsService {
 
   // Containment check for a path the api itself already computed and stored (a
   // MediaSource.downloadPath), not one typed by a user — hence returning false
-  // rather than throwing for every failure mode (047-source-deletion REQ-10): the
+  // rather than throwing for every failure mode (Spec 047, REQ-10): the
   // caller's job is to log and skip the delete, not to blow up the mutation. Reuses
   // the same realpath-of-deepest-existing-ancestor check resolveFromRoot ends with,
   // because a plain prefix/".." guard alone does not catch a symlinked segment.
@@ -97,12 +84,11 @@ export class MediaRootsService {
     return root;
   }
 
-  // Busca el ancestro existente más profundo de `path` y le hace realpath.
-  // No hace falta que `path` exista entero: un segmento como "Movies/Nueva"
-  // puede apuntar a una carpeta que el worker todavía no creó (ver
-  // encode.ffmpeg.ts, que hace mkdir recursive antes de escribir). Lo que
-  // importa es que ninguno de los tramos que SÍ existen sea un symlink que
-  // se escape de la raíz.
+  // Finds the deepest existing ancestor of `path` and realpaths it. `path`
+  // does not need to exist in full: a segment like "Movies/New" can point at
+  // a folder the worker has not created yet (see encode.ffmpeg.ts, which
+  // does a recursive mkdir before writing). What matters is that none of the
+  // segments that DO exist is a symlink escaping the root.
   private async realpathOfDeepestExisting(path: string): Promise<string> {
     let current = path;
     // eslint-disable-next-line no-constant-condition
@@ -113,8 +99,8 @@ export class MediaRootsService {
       } catch {
         const parent = dirname(current);
         if (parent === current) {
-          // Nunca debería pasar: '/' siempre existe. Si llegamos acá, algo
-          // más grave está roto (el filesystem del container, no la ruta).
+          // Should never happen: '/' always exists. If we get here,
+          // something worse is broken (the container's filesystem, not the path).
           throw new Error(`No se encontró ningún ancestro existente para "${path}"`);
         }
         current = parent;
@@ -122,15 +108,15 @@ export class MediaRootsService {
     }
   }
 
-  // El límite de seguridad real. `relPath` es texto libre tipeado por el
-  // usuario en el form de settings — nunca confiar en que ya viene sano.
+  // The real security boundary. `relPath` is free text typed by the user in
+  // the settings form — never trust that it already arrives sane.
   //
-  // Con el modelo relativo (la DB guarda "Movies", no "/media/library/Movies")
-  // el traversal con ".." se rechaza con una comparación de strings — no hace
-  // falta canonicalizar para eso. Lo que SÍ hace falta igual es el chequeo de
-  // symlinks: el guard de ".." impide que el usuario ESCRIBA una fuga, pero no
-  // impide que un segmento válido (p. ej. "Movies") ya sea, en el filesystem,
-  // un symlink que apunta afuera de la raíz.
+  // With the relative model (the DB stores "Movies", not
+  // "/media/library/Movies") a ".." traversal is rejected with a string
+  // comparison — no need to canonicalize for that. What IS still needed is
+  // the symlink check: the ".." guard stops the user from WRITING an
+  // escape, but it does not stop a valid segment (e.g. "Movies") from
+  // already being, on the filesystem, a symlink pointing outside the root.
   async resolveFromRoot(
     rootId: string,
     relPath: string,

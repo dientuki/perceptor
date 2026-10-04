@@ -3,7 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
-import { AppResolver } from './app.resolver'; // Lo creamos en el paso 2
+import { AppResolver } from './app.resolver';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { UsersModule } from './users/users.module';
@@ -33,27 +33,18 @@ import { formatGraphQLError } from './i18n/graphql-error.formatter';
   imports: [
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      // Genera el archivo schema.gql automáticamente en la raíz
-      // In production the runner image has no `src/` (only `dist`, `prisma`, `node_modules` and
-      // `package*.json` are copied), so the schema is built in memory instead of written to disk.
       autoSchemaFile:
         process.env.NODE_ENV === 'production' ? true : join(process.cwd(), 'src/schema.gql'),
-      // Pasa el request y response de Express al contexto de GraphQL
       context: ({ req, res }) => ({ req, res }),
-      // Muestra el Sandbox/Playground de Apollo solo si NO estás en prod
       playground: process.env.NODE_ENV !== 'production',
-      // Desactiva la intro en producción por seguridad
       introspection: process.env.NODE_ENV !== 'production',
-      // Lifts `extensions.i18n` from a keyed HttpException onto the GraphQL
-      // error (018-ui-i18n REQ-7). See graphql-error.formatter.ts for why the
-      // key has to be read off `error.originalError` rather than anything
-      // @nestjs/apollo may have already transformed.
+      // Spec 018, REQ-7
       formatError: formatGraphQLError,
     }),
     PrismaModule,
     AuthModule,
     UsersModule,
-    MoviesModule, // Asegúrate de importar el módulo de películas
+    MoviesModule,
     IndexerModule,
     MediaRootsModule,
     SettingsModule,

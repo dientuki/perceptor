@@ -28,9 +28,7 @@ export class Movie {
   @Field(() => ContentKind)
   contentKind: ContentKind;
 
-  // 048-shorts-category REQ-1: a property of the film, shared by every user
-  // who has it in their library — straight off the Prisma row, no
-  // @ResolveField (api/plan.md step 11).
+  // Spec 048, REQ-1
   @Field()
   isShort: boolean;
 
@@ -56,9 +54,7 @@ export class Movie {
   @Field(() => [Language])
   subtitleLanguages: Language[];
 
-  // The calling user's own audio-mandatory flag for this film, read off the
-  // ownership row (039-per-title-language-split REQ-9). Inert this cycle —
-  // nothing consumes it yet (REQ-11). Never populated by MoviesService itself.
+  // Spec 039, REQ-9; Spec 039, REQ-11
   @Field()
   audioMandatory: boolean;
 

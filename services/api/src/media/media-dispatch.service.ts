@@ -6,9 +6,7 @@ import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
-// The boundary that turns a media type into a choice of service. Nothing
-// media-type-specific lives here beyond the lookup table itself — adding a
-// third type is one new entry, with no edit to resolve() (spec.md § AC-16).
+// Spec 006, AC-16
 @Injectable()
 export class MediaDispatchService {
   private readonly services: Partial<Record<MediaType, MediaTypeService>>;

@@ -126,12 +126,7 @@ export const ERROR_KEYS = {
   CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
   CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',
 
-  // class-validator DTO constraints (018 REQ-9). Not part of `spec.md`'s error
-  // tables — spec.md doesn't name these eight, so the keys are named here,
-  // consistently with the rest of the vocabulary. `main.ts`'s
-  // `ValidationPipe.exceptionFactory` uses the `message` option's value on
-  // each decorator (below) as the key itself and renders it through
-  // `MESSAGES_EN`.
+  // Spec 018, REQ-9
   VALIDATION_SETTING_KEY_REQUIRED: 'error.validation.setting_key_required',
   VALIDATION_SETTING_VALUE_REQUIRED: 'error.validation.setting_value_required',
   VALIDATION_USER_ID_REQUIRED: 'error.validation.user_id_required',

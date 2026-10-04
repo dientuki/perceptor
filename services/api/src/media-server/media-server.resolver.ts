@@ -54,10 +54,7 @@ export class MediaServerResolver {
       throw i18nError.badRequest(ERROR_KEYS.MEDIA_SERVER_NOT_CONFIGURED);
     }
 
-    // Never awaited (NFR-6): the mutation answers with whatever state holds
-    // right now, not after the rebuild finishes. rebuild() is itself a
-    // try/catch/finally, so nothing here can turn into an unhandled
-    // rejection.
+    // Spec 034, NFR-6
     void this.index.rebuild(clientId, {
       host: config.media_server_host,
       port: config.media_server_port,

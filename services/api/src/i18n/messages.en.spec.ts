@@ -2,7 +2,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 
 /**
- * REQ-8's English `message` is the only thing standing between a `web`
+ * Spec 018, REQ-8's English `message` is the only thing standing between a `web`
  * catalog gap and a raw `error.movie.not_found` rendered verbatim on a
  * user's screen (`graphql-error.formatter.ts`'s `renderMessage` falls back
  * to the key itself when a template is missing, on purpose — it stays

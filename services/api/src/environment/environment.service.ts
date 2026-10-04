@@ -29,9 +29,7 @@ export class EnvironmentService {
       useHttps,
       domain,
       endpoints,
-      // <scheme>://api.<domain>/uploads — what REQ-6 compares the loaded
-      // PUBLIC_UPLOAD_URL (web-only) against. No fallback host, ever: null
-      // is the specified answer in port mode or with no domain (NFR-1).
+      // Spec 055, REQ-6; Spec 055, NFR-1
       expectedUploadEndpoint: canDeriveUrls ? `${scheme}://api.${domain}/uploads` : null,
     };
   }

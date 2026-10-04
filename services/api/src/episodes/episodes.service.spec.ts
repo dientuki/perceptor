@@ -4,7 +4,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
 
-// This suite exists because 010-episode-acquisition's central bug class is
+// This suite exists because Spec 010's central bug class is
 // silent by construction: an episode's acquisition landing on a film, or an
 // episode's source being silently stolen by another title, raises no
 // exception anywhere and leaves the caller looking at a success response.
@@ -12,7 +12,7 @@ import { DownloadsService } from '@/downloads/downloads.service';
 //  - `attachTorrentSource` must write `episodeId` and never `movieId` on the
 //    `MediaSource` it creates. Both are plain numbers, so a swapped field
 //    compiles and returns 200 — only asserting on what was actually handed
-//    to Prisma catches it (NFR-5).
+//    to Prisma catches it (Spec 010, NFR-5).
 //  - `findOneFromDb` dropping (or never applying) its ownership join through
 //    season -> show -> UserShow would resolve any authenticated caller's
 //    episode, not just the one linked to it — same failure class
@@ -154,11 +154,7 @@ describe('EpisodesService', () => {
       });
     });
 
-    // REQ-7: the guard's trigger changed from "has an active source" to "is
-    // COMPLETED" — a merely-downloading episode must accept a second
-    // acquisition with no conflict at all (REQ-6). Re-introducing the old
-    // "has an active source" condition would make this reject again with no
-    // other test catching it.
+    // Spec 022, REQ-7 REQ-6
     it('no longer conflicts for a merely-busy episode without force', async () => {
       prisma.episode.findFirst.mockResolvedValue({ ...episode, status: 'DOWNLOADING' });
       prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, episodeId: 42, status: 'DOWNLOADING' });

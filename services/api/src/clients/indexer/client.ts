@@ -26,10 +26,7 @@ function extractInfoHashFromGuid(guid?: string): string | null {
   return match ? match[1].toLowerCase() : null;
 }
 
-// A derived group key for a release with no infoHash and no hash embedded in its guid. Built
-// from the normalized title plus the size, so a byte-exact duplicate reported by several
-// indexers still collapses to one row (REQ-2, AC-6), while two genuinely different releases that
-// merely share a title do not collide.
+// Spec 037, REQ-2 AC-6
 function deriveGroupKey(item: Item): string {
   const normalizedTitle = (item.title ?? '')
     .toLowerCase()
@@ -38,11 +35,7 @@ function deriveGroupKey(item: Item): string {
   return `NOHASH:${normalizedTitle}:${item.size ?? 0}`;
 }
 
-// Groups Prowlarr's rows into one output row per release. A row carries an infoHash directly, a
-// hash embeddable from its `guid`, or neither — in which case it falls back to a derived key so
-// it is still returned (REQ-1) instead of being resolved (and possibly discarded) here. No
-// outbound fetch is ever issued during a search (REQ-3); the infoHash for a hash-less row is
-// resolved lazily, once, when the release is actually added.
+// Spec 037, REQ-1; Spec 037, REQ-3
 async function filterData(items: Item[]): Promise<TorrentResult[]> {
   const grouped: GroupedItems = {};
 

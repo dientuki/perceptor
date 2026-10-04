@@ -6,10 +6,7 @@ import { MediaServerConfig } from '@/clients/media-server/types';
 import { MediaType } from '@/types/media';
 
 const REBUILD_CLAIM_KEY = 'mediaserver:index:rebuild';
-// Long enough to cover a slow enumeration of a large library (NFR-2 gives
-// listLibrary itself 5 minutes) with headroom, short enough that a crashed
-// process does not wedge readState()'s derived "syncing" for too long before
-// the backstop below flips it to "failed" — see readState().
+// Spec 034, NFR-2
 const REBUILD_CLAIM_TTL_SECONDS = 60 * 20;
 
 const STATE_KEY = 'media_server_index_state';
@@ -60,12 +57,7 @@ export class MediaServerIndexService {
     return row?.externalId ?? null;
   }
 
-  // Enumerates the configured client's whole library and replaces the index
-  // wholesale. REQ-7: a rebuild already in flight is not restarted — the
-  // caller (resyncMediaServerIndex, or the settings-change trigger) gets
-  // back whatever state already holds. Never awaited by its callers (NFR-6);
-  // the whole body is try/catch/finally so nothing here can escape as an
-  // unhandled rejection.
+  // Spec 034, REQ-7; Spec 034, NFR-6
   async rebuild(
     clientId: string,
     config: MediaServerConfig,
@@ -84,10 +76,7 @@ export class MediaServerIndexService {
         lookup: (mediaType, tmdbId) => this.lookup(mediaType, tmdbId),
       });
 
-      // REQ-8: a client with no listLibrary resolves findByTmdbId natively
-      // and never populates this index — a rebuild is a no-op for it, and
-      // the recorded state is left exactly as it was (most installations:
-      // "never", meaning the index concept simply does not apply).
+      // Spec 034, REQ-8
       if (!client?.listLibrary) return this.readState();
 
       await this.writeState('syncing');
@@ -114,10 +103,7 @@ export class MediaServerIndexService {
 
       await this.writeState('ready', entries.length, new Date());
     } catch (err) {
-      // On failure the table and media_server_index_synced_at are left
-      // untouched (REQ-4/REQ-5) — only the state row moves to "failed", so a
-      // stale-but-real previous index keeps answering lookups rather than
-      // being wiped by a rebuild that never finished.
+      // Spec 034, REQ-4 REQ-5
       console.error('[media-server-index] rebuild falló:', err);
       await this.writeState('failed');
     } finally {

@@ -16,7 +16,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 const MAGNET =
   'magnet:?xt=urn:btih:5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c&dn=Test';
 
-// This suite exists because 005-movie-search's four riskiest paths all fail
+// This suite exists because Spec 005's four riskiest paths all fail
 // with a perfectly successful response and nothing to notice:
 //
 //  - a reordering that enriches search results with this caller's ownership
@@ -26,8 +26,8 @@ const MAGNET =
 //    either way, so only asserting on what is actually handed to the Redis
 //    pipeline can catch it;
 //  - a `movies` query that drops (or never had) its `user_movies` filter
-//    returns every user's films instead of the caller's — REQ-4, and the
-//    exact class of bug Article IX exists for;
+//    returns every user's films instead of the caller's — Spec 005, REQ-4,
+//    and the exact class of bug Article IX exists for;
 //  - `addMovie` on a film someone else already registered either creates a
 //    second `Movie` row (a second, redundant download of the same film) or
 //    throws a raw Prisma P2002 the second time the same user clicks it;
@@ -262,12 +262,7 @@ describe('MoviesService', () => {
       });
     });
 
-    // 048-shorts-category REQ-8: the where clause must only carry `isShort`
-    // when the resolver was actually given the argument — a version that
-    // always adds `isShort: undefined` looks the same to Prisma today but
-    // would silently break the moment someone tightens the mock, and a
-    // version that defaults to `false` would wrongly exclude every short
-    // from the unfiltered `/movies` listing (REQ-11).
+    // Spec 048, REQ-8 REQ-11
     it('adds isShort to the where clause only when the argument is given', async () => {
       prisma.movie.findMany.mockResolvedValue([]);
 
@@ -339,9 +334,7 @@ describe('MoviesService', () => {
     });
 
     it('returns the same null for an id that does not exist', async () => {
-      // REQ-3: an unowned film and a missing one must be indistinguishable
-      // from the caller's side — both resolve through the identical query
-      // shape above and both come back null.
+      // Spec 008, REQ-3
       prisma.movie.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -481,9 +474,7 @@ describe('MoviesService', () => {
       });
     });
 
-    // REQ-7: a derivation that overrode a user's manual reclassification on
-    // every other user's add would be silent — the film simply flips back
-    // and forth depending on who registers it last.
+    // Spec 056, REQ-7
     it('never reaches deriveIsShort for an already-registered film', async () => {
       const existing = { id: 5, tmdbId: 42, title: 'Dune' };
       prisma.movie.findUnique.mockResolvedValue(existing);
@@ -613,9 +604,7 @@ describe('MoviesService', () => {
       expect(prisma.movie.create.mock.calls[0][0].data.isShort).toBe(false);
     });
 
-    // NFR-2 plus the cache-poisoning guard: a registration must never fail
-    // over a decoration, and a transient failure must never be written back
-    // — that would pin "not a short" for the film for the full 24h TTL.
+    // Spec 057, NFR-2
     it('still registers the film as not a short, writing nothing to Redis, when the top-up rejects', async () => {
       warmCacheEntry(undefined);
       tmdb.details.mockRejectedValue(new Error('TMDB unreachable'));
@@ -687,8 +676,7 @@ describe('MoviesService', () => {
       );
     });
 
-    // (b) NFR-2, first case: the genres could not be established at all
-    // (details() itself failed) — the film still registers, as LIVE_ACTION.
+    // Spec 057, NFR-2
     it('still registers the film, as LIVE_ACTION, when the genre top-up rejects', async () => {
       redis.get.mockResolvedValue(
         JSON.stringify(baseEntry({ runtime: undefined, genreIds: undefined })),
@@ -704,8 +692,7 @@ describe('MoviesService', () => {
       );
     });
 
-    // (b) NFR-2, second case: the genres say animated but the keywords call
-    // fails — the film still registers, as CGI (REQ-5's fallback).
+    // Spec 057, NFR-2 REQ-5
     it('still registers the film, as CGI, when an animated title\'s keywords call rejects', async () => {
       redis.get.mockResolvedValue(
         JSON.stringify(baseEntry({ genreIds: [16] })), // 16 = Animation
@@ -745,10 +732,8 @@ describe('MoviesService', () => {
   describe('TMDB fallback (cold Redis cache)', () => {
     it('maps MovieDetail.posterPath to the same absolute posterUrl the search path uses', async () => {
       prisma.movie.findUnique.mockResolvedValue(null); // not registered yet
-      redis.get.mockResolvedValue(null); // expired/evicted — REQ-2
-      // getCachedMovie's cold branch now writes the fetched object back
-      // through cacheMovies() (REQ-6) — give the pipeline mock a shape to
-      // write into rather than letting it throw into cacheMovies' own catch.
+      redis.get.mockResolvedValue(null); // Spec 005, REQ-2
+      // Spec 005, REQ-6
       const pipelineSet = jest.fn().mockReturnThis();
       const pipelineExec = jest.fn().mockResolvedValue([[null, 'OK']]);
       redis.pipeline.mockReturnValue({ set: pipelineSet, exec: pipelineExec });
@@ -793,10 +778,10 @@ describe('MoviesService', () => {
   // This suite exists because two different bugs are both silent: a
   // `COMPLETED` film answering the wrong key would show the mild "a
   // download is already running" copy to someone about to destroy a
-  // finished file with nothing failing anywhere (022-download-status-tags
-  // REQ-7 retired that key, so today the only wrong answer left is raising
-  // no error at all); and a merely-downloading film that still conflicts
-  // would silently defeat REQ-6's "several active sources at once".
+  // finished file with nothing failing anywhere (Spec 022, REQ-7 retired
+  // that key, so today the only wrong answer left is raising no error at
+  // all); and a merely-downloading film that still conflicts would silently
+  // defeat Spec 022, REQ-6's "several active sources at once".
   describe('addMagnetToMovie (attachTorrentSource conflict key)', () => {
     function expectI18nKey(
       promise: Promise<unknown>,
@@ -829,11 +814,7 @@ describe('MoviesService', () => {
       );
     });
 
-    // REQ-7: the guard's trigger changed from "has a source" to "is
-    // COMPLETED" — a second acquisition against a merely-downloading film
-    // must succeed with no conflict at all, no confirmation and no error.
-    // Re-introducing the old "has a source" condition would make this
-    // reject again with no other test catching it.
+    // Spec 022, REQ-7
     it('no longer conflicts for a merely-busy film without force', async () => {
       prisma.movie.findFirst.mockResolvedValue({
         id: 7,

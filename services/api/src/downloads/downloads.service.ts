@@ -24,12 +24,7 @@ import {
 } from '@/pipeline-status/pipeline-status';
 import { Download } from './entities/download.entity';
 
-// REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw.
-// Fallback derived from the target row's id, not the MediaSource's — this
-// is the exact same algorithm movies/episodes/seasons each keep their own
-// copy of when tagging on `add()`; a title's tag has to be reproducible
-// here, at read time, or the `info(tag)` narrowing below would silently
-// stop matching what was actually sent to qBittorrent.
+// Spec 022, REQ-5
 function sanitizeTag(title: string, fallbackId: number): string {
   const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
   return cleaned || `id-${fallbackId}`;
@@ -164,9 +159,7 @@ export class DownloadsService {
     private readonly mediaRoots: MediaRootsService,
   ) {}
 
-  // REQ-9/REQ-10: DB-first, joined to qBittorrent on infoHash. A torrent
-  // client that is unreachable on a *query* is not an error (unlike on a
-  // mutation) — the row still renders, with the three live fields null.
+  // Spec 022, REQ-9 REQ-10
   private async liveInfoByHash(tag?: string): Promise<Map<string, TorrentClientInfo>> {
     try {
       const rows = await this.qbittorrent.info(tag);
@@ -177,12 +170,7 @@ export class DownloadsService {
     }
   }
 
-  // REQ-2/../plan.md § Approach: the single join point every reader of the
-  // live map must go through — an indexer-sourced row's infoHash is stored
-  // uppercase (until the migration and the write-path fix land), while
-  // qBittorrent reports and is keyed here lowercase. A raw `live.get(source
-  // .infoHash)` at a call site is exactly the bug this feature exists to
-  // fix (../plan.md § Risks: "one call site keeps its raw live.get(...)").
+  // Spec 053, REQ-2
   private liveFor(
     source: { infoHash: string | null },
     live: Map<string, TorrentClientInfo>,
@@ -190,10 +178,7 @@ export class DownloadsService {
     return source.infoHash ? live.get(source.infoHash.toLowerCase()) : undefined;
   }
 
-  // REQ-3: one query per page/mutation, never one per row — see
-  // movieDownloads/showDownloads/downloadStart/downloadStop/downloadStart
-  // for the callers, each of which loads the jobs for its own set of
-  // mediaSourceIds and passes the matching group in here.
+  // Spec 043, REQ-3
   private async jobsBySourceId(mediaSourceIds: number[]): Promise<Map<number, JobsForSource>> {
     const rows = await this.prisma.processJob.findMany({
       where: { sourceFile: { mediaSourceId: { in: mediaSourceIds } } },
@@ -300,10 +285,7 @@ export class DownloadsService {
     };
   }
 
-  // REQ-17: same ownership clause MoviesService.findOneFromDb uses, written
-  // locally rather than imported — see api/plan.md § Existing code to reuse
-  // for why (the triplication this codebase already accepted three times
-  // over for attachTorrentSource).
+  // Spec 022, REQ-17
   async movieDownloads(movieId: number, userId: string): Promise<Download[]> {
     const movie = await this.prisma.movie.findFirst({
       where: { id: movieId, users: { some: { userId } } },
@@ -316,9 +298,7 @@ export class DownloadsService {
       include: targetInclude(userId),
     });
 
-    // REQ-4: every server-side lookup of a title's torrents uses the title
-    // tag only — never the season/episode tags, which are flat and shared
-    // across shows on purpose.
+    // Spec 022, REQ-4
     const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
       this.liveInfoByHash(sanitizeTag(movie.title, movie.id)),
       this.jobsBySourceId(sources.map((source) => source.id)),
@@ -379,8 +359,7 @@ export class DownloadsService {
     });
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
 
-    // The whole show, not one season: every season-pack and every
-    // single-episode download (REQ-8).
+    // Spec 022, REQ-8
     const sources = await this.prisma.mediaSource.findMany({
       where: {
         OR: [{ season: { showId } }, { episode: { season: { showId } } }],
@@ -406,9 +385,7 @@ export class DownloadsService {
     );
   }
 
-  // REQ-17: the source exists but belongs to a title the caller does not
-  // own answers identically to a missing id — same SOURCE_NOT_FOUND, same
-  // message, indistinguishable, per 008-movie-detail's rule extended here.
+  // Spec 022, REQ-17
   private async findOwnedSource(mediaSourceId: number, userId: string): Promise<MediaSourceRow & TargetSource> {
     const source = await this.prisma.mediaSource.findUnique({
       where: { id: mediaSourceId },
@@ -428,9 +405,7 @@ export class DownloadsService {
     return source;
   }
 
-  // REQ-18: the interface not offering start/stop/delete on an upload is
-  // not a guarantee — every control mutation refuses a non-torrent source
-  // server-side, before any call reaches the torrent client.
+  // Spec 022, REQ-18
   private requireTorrent(source: MediaSourceRow): string {
     if (!source.infoHash) {
       throw i18nError.badRequest(ERROR_KEYS.DOWNLOAD_NOT_A_TORRENT);
@@ -438,9 +413,7 @@ export class DownloadsService {
     return source.infoHash;
   }
 
-  // NFR-6: every torrent-client call a mutation makes is wrapped so a
-  // rejection or an unreachable client surfaces as TORRENT_CLIENT_REJECTED
-  // — thrown before any DB write, never silently swallowed (AC-17).
+  // Spec 022, NFR-6
   private async callTorrentClient<T>(action: () => Promise<T>): Promise<T> {
     try {
       return await action();
@@ -450,13 +423,7 @@ export class DownloadsService {
     }
   }
 
-  // REQ-7/../plan.md § Approach decision 2: the write is a guarded
-  // `updateMany`, never a read-then-write, so a concurrent transition (the
-  // race arbiter, a completion notice) can't be clobbered by a stale read.
-  // The `where` only matches the non-terminal statuses — a source already
-  // at READY/SCANNED/ERROR is left untouched, so a `downloadStart` on a
-  // finished-but-still-seeding torrent cannot walk the title's derived
-  // status backwards (NFR-3).
+  // Spec 043, REQ-7; Spec 043, NFR-3
   private static readonly NON_TERMINAL_STATUSES: SourceStatus[] = ['PENDING', 'QUEUED', 'DOWNLOADING', 'PAUSED'];
 
   // Returns whether the guard matched, so the caller can keep the in-memory
@@ -661,11 +628,7 @@ export class DownloadsService {
     );
   }
 
-  // 047-source-deletion: the orchestrator for the whole unwind. Order is the
-  // contract (api/plan.md § Steps 6) — torrent client first (the only step
-  // that can fail the mutation, NFR-2), then queued/running work withdrawn,
-  // then disk, then the row, then the target's status. REQ-1: no
-  // requireTorrent here — an upload is accepted the same as a torrent.
+  // Spec 047, NFR-2; Spec 047, REQ-1
   async downloadDelete(mediaSourceId: number, userId: string): Promise<boolean> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
 
@@ -689,15 +652,11 @@ export class DownloadsService {
 
     if (opts.removeTorrent && source.infoHash) {
       const infoHash = source.infoHash;
-      // REQ-2/REQ-11: always with its files — this is the user-facing
-      // sibling of downloadRemove, which is @AllowService()-only and always
-      // deletes with deleteFiles:false. Different defaults, deliberately
-      // never shared.
+      // Spec 047, REQ-2; Spec 047, REQ-11
       await this.callTorrentClient(() => this.qbittorrent.remove(infoHash, true));
     }
 
-    // REQ-3/REQ-4: cancel before withdraw so a job mid-transition is caught
-    // by one or the other; withdrawal alone can't stop one already active.
+    // Spec 047, REQ-3; Spec 047, REQ-4
     for (const job of jobs) {
       await this.encodeQueue.publishCancel(job.id);
       await this.encodeQueue.removeEncode(job.id);
@@ -710,11 +669,7 @@ export class DownloadsService {
     await this.prisma.mediaSource.delete({ where: { id: mediaSourceId } });
   }
 
-  // 067-title-removal: unwinds every source of a title. ALL torrents leave
-  // the client in ONE call before anything else moves, so a rejection
-  // aborts with nothing removed (NFR-2). No recomputeStatus: the target is
-  // about to be deleted. deleteResidue never throws, so one bad path does
-  // not stop the remaining sources (NFR-3).
+  // Spec 067, NFR-2; Spec 067, NFR-3
   async unwindSourcesForTitle(scope: { movieId: number } | { showId: number }): Promise<void> {
     const where =
       'movieId' in scope
@@ -737,10 +692,7 @@ export class DownloadsService {
     }
   }
 
-  // T006/REQ-8/REQ-9/REQ-10: deletes whatever the source left on disk under
-  // the downloads root. Never throws — the torrent is already gone from the
-  // client by the time this runs, so a failure here must not leave the user
-  // unable to retry the delete.
+  // Spec 047, T006; Spec 047, REQ-8; Spec 047, REQ-9; Spec 047, REQ-10
   private async deleteResidue(source: MediaSourceRow): Promise<void> {
     const downloadPath = source.downloadPath;
     if (!downloadPath) {
@@ -787,10 +739,7 @@ export class DownloadsService {
     }
   }
 
-  // T007/REQ-12: recomputes the target's status from the rows that remain
-  // after the delete. A season has no status column — it recomputes every
-  // episode of it instead (see the comment above ShowsService.findOneFromDb
-  // for why a season-pack episode carries its own processJobs).
+  // Spec 047, T007; Spec 047, REQ-12
   private async recomputeStatus(source: MediaSourceRow): Promise<void> {
     if (source.movieId) {
       await this.recomputeMovieStatus(source.movieId);
@@ -818,8 +767,7 @@ export class DownloadsService {
     });
     if (!movie) return;
 
-    // REQ-13/AC-12: a title already delivered to the library never walks
-    // backwards — checked before deriveTitleStatus is even called.
+    // Spec 047, REQ-13; Spec 047, AC-12
     if (movie.filePath != null) {
       await this.prisma.movie.update({ where: { id: movieId }, data: { status: 'COMPLETED' } });
       return;
@@ -859,17 +807,7 @@ export class DownloadsService {
     }
   }
 
-  // REQ-12/13/14: given a winning mediaSourceId, decide whether it is
-  // actually the winner (REQ-13's one-winner guard) and, if so, stop and
-  // pause every other non-terminal sibling of the same target (REQ-12),
-  // selected by movieId/episodeId/seasonId — never by tag (REQ-14): a tag
-  // is a title string shared across users and titles, carrying no
-  // ownership and no identity.
-  //
-  // ONE shared method: both handleTorrentCompleted (torrents) below and
-  // UploadsService.onUploadFinish (uploads, REQ-19) call this exact same
-  // logic, so the guard and the pause can never drift into two copies that
-  // disagree on the first change to either (../plan.md § Approach).
+  // Spec 022, REQ-12; Spec 022, REQ-13; Spec 022, REQ-14; Spec 022, REQ-19
   async resolveRace(mediaSourceId: number): Promise<string> {
     const winner = await this.prisma.mediaSource.findUnique({ where: { id: mediaSourceId } });
     if (!winner) {
@@ -903,10 +841,7 @@ export class DownloadsService {
       where: { ...targetWhere, id: { not: mediaSourceId } },
     });
 
-    // REQ-13: a completion notice for a target that already has a source in
-    // READY or SCANNED is ignored — this is what protects a loser that
-    // finishes inside the window between the winner completing and the
-    // pause taking effect, and what makes REQ-15's row deletion safe.
+    // Spec 022, REQ-13; Spec 022, REQ-15
     const siblingJobs = await this.jobsBySourceId(siblings.map((sibling) => sibling.id));
     const alreadyWon = siblings.some((sibling) =>
       isRaceWinner(sibling.status, siblingJobs.get(sibling.id)?.jobs ?? []),
@@ -926,9 +861,7 @@ export class DownloadsService {
         try {
           await this.qbittorrent.stop(loser.infoHash);
         } catch (err) {
-          // NFR-6: an unacknowledged stop must not be written to the DB as
-          // PAUSED — that would leave the loser downloading while the row
-          // lies about it.
+          // Spec 022, NFR-6
           console.error(`[torrentCompleted] resolveRace: no se pudo pausar mediaSource ${loser.id} en el cliente de torrents:`, err);
           continue;
         }
@@ -947,16 +880,11 @@ export class DownloadsService {
       include: { movie: true, episode: true },
     });
 
-    // El AutoRun dispara para TODOS los torrents del cliente, incluso los que no
-    // agregó Perceptor (hay varios previos en este qBittorrent). Un hash
-    // desconocido no es un error: se ignora y se avisa.
     if (!mediaSource) {
       console.log(`[torrentCompleted] ignorado: ${infoHash} no corresponde a ningún MediaSource`);
       return `ignorado: ${infoHash} no corresponde a ningún MediaSource`;
     }
 
-    // Idempotencia: el AutoRun puede volver a disparar, por ejemplo si se fuerza
-    // un re-check del torrent.
     if (mediaSource.status === 'READY' || mediaSource.status === 'SCANNED') {
       console.log(
         `[torrentCompleted] ya procesado: mediaSource ${mediaSource.id} en estado ${mediaSource.status}`,
@@ -964,11 +892,9 @@ export class DownloadsService {
       return `ya procesado: mediaSource ${mediaSource.id} en estado ${mediaSource.status}`;
     }
 
-    // Una fila ya degradada a ERROR (por ejemplo, reemplazada con force) fue
-    // superada por un pedido más nuevo. Un torrentCompleted tardío para ese hash
-    // no debe mover nada. Deliberately still runs before resolveRace below:
-    // resolveRace pauses this source's *siblings*, and an ERROR source's late
-    // completion must never pause whatever superseded it.
+    // Deliberately still runs before resolveRace below: resolveRace pauses
+    // this source's *siblings*, and an ERROR source's late completion must
+    // never pause whatever superseded it.
     if (mediaSource.status === 'ERROR') {
       console.log(
         `[torrentCompleted] ignorado: mediaSource ${mediaSource.id} está en ERROR (reemplazado)`,
@@ -976,9 +902,6 @@ export class DownloadsService {
       return `ignorado: mediaSource ${mediaSource.id} está en ERROR (reemplazado)`;
     }
 
-    // Las filas viejas (previas al savepath por torrent) no tienen path, así que
-    // no hay nada que decirle al worker. Se marca ERROR para que no quede colgada
-    // en DOWNLOADING para siempre.
     if (!mediaSource.downloadPath) {
       const errorMessage = MESSAGES_EN[ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH];
       await this.prisma.mediaSource.update({
@@ -994,11 +917,7 @@ export class DownloadsService {
       return `error: mediaSource ${mediaSource.id} sin downloadPath, marcado ERROR`;
     }
 
-    // REQ-12/13: resolve the race before touching this source's own status.
-    // If another sibling already won, this is a late-arriving loser — REQ-13
-    // says no status change and no second bull:process job, so it is
-    // reported and returned immediately, exactly like every other ignored
-    // branch above.
+    // Spec 022, REQ-12; Spec 022, REQ-13
     const raceResult = await this.resolveRace(mediaSource.id);
     if (raceResult.startsWith('ignorado')) {
       return raceResult;

@@ -20,16 +20,7 @@ export class UploadsResolver {
     private readonly sessions: SessionService,
   ) {}
 
-  // Deliberately no @AllowService() — an upload ticket is delegated from a
-  // user session (REQ-11), and a service principal has no user to delegate
-  // for. The guard's missing @AllowService() already keeps a service
-  // principal out; the `principal.type` narrowing below is for TypeScript.
-  //
-  // 010-episode-acquisition: both arguments are nullable and exactly one
-  // must be supplied — a required-one-of has no expression in GraphQL's
-  // type system, so it is a runtime check here, deliberately (see
-  // api/plan.md § Contract Freeze — do not "fix" this with a second
-  // mutation, and do not let one argument silently win over the other).
+  // Spec 002, REQ-11
   @UseGuards(JwtAuthGuard)
   @Mutation(() => UploadTicket)
   async createUploadTicket(
@@ -55,11 +46,7 @@ export class UploadsResolver {
         throw new NotFoundException(`La película ${movieId} no existe`);
       }
 
-      // Pre-flight conflict check (027-replace-completed-media): reported
-      // here, before a single byte is uploaded, rather than at
-      // onUploadFinish after the browser spent minutes/hours on a
-      // multi-gigabyte tus upload. REQ-7: only a COMPLETED target refuses —
-      // a merely-downloading film no longer conflicts (REQ-6/REQ-19).
+      // Spec 022, REQ-7 REQ-6 REQ-19
       if (movie.status === 'COMPLETED' && !force) {
         throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
       }
@@ -72,8 +59,7 @@ export class UploadsResolver {
       throw new NotFoundException(`El episodio ${episodeId} no existe`);
     }
 
-    // Episode's twin of the film check above (REQ-7): only a COMPLETED
-    // episode refuses.
+    // Spec 022, REQ-7
     if (episode.status === 'COMPLETED' && !force) {
       throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
     }
