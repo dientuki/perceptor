@@ -211,7 +211,7 @@ across services; within a service the tasks are ordered only where noted.
       `services/worker/src` in English (REQ-12).
       *Done when:* `bin/npm worker test` reports the same counts as before and
       `bin/comments worker` reports no Spanish-string finding. → T007
-- [ ] **T016** `[worker]` Correct the three passages in `services/worker/CLAUDE.md` that point a
+- [x] **T016** `[worker]` Correct the three passages in `services/worker/CLAUDE.md` that point a
       reader at comments T012 and T013 removed (REQ-13): line ~21's "The reasoning is in the
       comments in `index.ts` — don't collapse them" (the reasoning is already written in English
       three lines above it — keep that paragraph, stop pointing at the comments), § *Errors must not

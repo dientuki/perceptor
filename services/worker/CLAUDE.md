@@ -18,7 +18,7 @@ per the root Docker-first workflow.
 They are not two job names on one queue. An encode can run for hours; sharing a queue at
 `concurrency: 1` would either block every scan behind FFmpeg or risk N simultaneous FFmpegs. Each
 `Worker` opens its own blocking connection, so the encode side can be busy for hours without
-stalling the scan side. The reasoning is in the comments in `index.ts` — don't collapse them.
+stalling the scan side.
 
 `process.umask(0o002)` at the top of `index.ts` is load-bearing: the container runs as `PUID:PGID`,
 and over the setgid library directories this yields `2775`/`664`, which is what lets a media server
@@ -372,7 +372,7 @@ internationalization" for the full envelope and vocabulary.
 
 ## Errors must not be swallowed
 
-`src/api/graphql-client.ts` throws on `json.errors`, and the comment at the top says why: `web`
+`src/api/graphql-client.ts` throws on `json.errors`: `web`
 renders errors to a user, but a worker that swallowed one would mark the job completed without
 having written anything. Preserve that. A caught-and-logged error that lets a job report success is
 this service's central failure mode. Since `018-ui-i18n`, if the incoming error carries
@@ -406,8 +406,7 @@ job, never anyone else's.
 a throwing `fetchGraphQL` (torrent client unreachable) or a throwing `rm`/`rmdir` — instead of
 letting it propagate. This is deliberate, not an oversight: cleanup runs after the encode has
 already succeeded and the `ProcessJob` already reports `COMPLETED`; letting a cleanup failure
-propagate would demote a job that produced a perfectly good file. The reasoning is written as a
-comment at the top of the file itself.
+propagate would demote a job that produced a perfectly good file.
 
 Second, `jobs/encode.job.ts`'s `onProbe` catches every error `recordFfprobe` can produce — `api`
 unreachable, a stale `SERVICE_TOKEN`, the mutation rejecting the payload — logs one line and
