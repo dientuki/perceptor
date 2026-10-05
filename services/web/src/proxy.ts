@@ -5,7 +5,6 @@ import { CONFIG } from "@/lib/config";
 const AUTH_ROUTES = ["/login"];
 
 const PUBLIC_ROUTES = [
-  "/perceptor",
   "/terms",
   "/privacy",
   "/ca.crt",
