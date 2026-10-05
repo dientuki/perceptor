@@ -258,14 +258,14 @@ stops being read.
 
 ### Group 5 — verification and docs
 
-- [ ] **T020** `[docs]` Create `docs/spec/history.md` and move the root `CLAUDE.md`'s
+- [x] **T020** `[docs]` Create `docs/spec/history.md` and move the root `CLAUDE.md`'s
       `## Current state` section into it verbatim, **newest first** (REQ-10) — the section is 213
       lines today, `CLAUDE.md:306–519`. Open the file with the cadence rule: a new measurement is
       appended here and never to `CLAUDE.md` (REQ-11), plus the commands an agent runs to re-measure
       all three services.
       *Done when:* `docs/spec/history.md` contains every measurement that was in `## Current state`,
       ordered newest first, and the commands it names run as written (AC-12). → T019
-- [ ] **T021** `[docs]` Edit the root `CLAUDE.md`: replace `## Current state` with a pointer of at
+- [x] **T021** `[docs]` Edit the root `CLAUDE.md`: replace `## Current state` with a pointer of at
       most 15 lines to `docs/spec/history.md` plus the re-measure commands and the
       never-append-here rule (REQ-10, REQ-11); correct "the eleven rules" to agree with the twelve
       articles the constitution holds, or drop the count rather than restate a number that goes
