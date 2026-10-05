@@ -125,3 +125,17 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - run: node tools/audit/check.mjs
+
+  comments:
+    name: comments — locator convention gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - run: node tools/comments/check.mjs
+
+      - run: node tools/comments/check.spec.mjs

@@ -242,7 +242,7 @@ across services; within a service the tasks are ordered only where noted.
 Only now, with the tree at zero. Added earlier, the job is red for the length of the feature and
 stops being read.
 
-- [ ] **T018** `[infra]` Add a `comments` job to `.github/workflows/ci.yml`, matching the existing
+- [x] **T018** `[infra]` Add a `comments` job to `.github/workflows/ci.yml`, matching the existing
       `site` and `audit` jobs: `actions/checkout@v5`, `actions/setup-node@v5` with
       `${{ env.NODE_VERSION }}`, then `node tools/comments/check.mjs` and
       `node tools/comments/check.spec.mjs` as two `run:` steps. No `npm ci` — the script has no
