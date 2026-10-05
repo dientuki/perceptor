@@ -20,7 +20,7 @@ export function registerEncode(processJobId: number): AbortSignal {
   const existing = registry.get(processJobId);
   if (existing) {
     console.log(
-      `[cancellation] ${processJobId} ya estaba registrado, se mantiene el controller existente`,
+      `[cancellation] ${processJobId} was already registered, keeping the existing controller`,
     );
     return existing.signal;
   }
