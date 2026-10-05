@@ -67,3 +67,4 @@ import { formatGraphQLError } from './i18n/graphql-error.formatter';
   providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })
 export class AppModule {}
+// esto arranca el encode cuando el torrent ya bajó
