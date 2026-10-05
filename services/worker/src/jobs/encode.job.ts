@@ -126,7 +126,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             { id: processJobId, p: progress, s: speed },
           );
         } catch (err) {
-          console.error(`[encode] no se pudo reportar progreso de ${processJobId}:`, err);
+          console.error(`[encode] could not report progress for ${processJobId}:`, err);
         }
       };
 
@@ -267,7 +267,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     // Spec 013, NFR-2 NFR-3
     try {
       if (!encodeCompleted) {
-        console.error(`[encode] ${processJobId}: encodeCompleted no devolvió resultado — cleanup omitido`);
+        console.error(`[encode] ${processJobId}: encodeCompleted returned no result — cleanup skipped`);
       } else {
         const { removeTorrent, deleteInputFile, deleteDownloadPath } = encodeCompleted;
         const missing: string[] = [];
@@ -294,7 +294,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         }
       }
     } catch (err) {
-      console.error(`[encode] ${processJobId}: cleanupSource falló inesperadamente:`, err);
+      console.error(`[encode] ${processJobId}: cleanupSource failed unexpectedly:`, err);
     }
   } finally {
     releaseEncode(processJobId);

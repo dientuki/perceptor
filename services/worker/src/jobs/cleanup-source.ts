@@ -37,7 +37,7 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
         { id: mediaSourceId },
       );
     } catch (err) {
-      console.error(`[cleanup] mediaSource ${mediaSourceId}: downloadRemove falló:`, err);
+      console.error(`[cleanup] mediaSource ${mediaSourceId}: downloadRemove failed:`, err);
     }
   }
 
@@ -45,13 +45,13 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
   if (deleteInputFile) {
     if (!isInsideRoot(downloadsRoot, inputFilePath)) {
       console.error(
-        `[cleanup] mediaSource ${mediaSourceId}: inputFilePath ${inputFilePath} no está dentro de downloadsRoot ${downloadsRoot} — no se borra`,
+        `[cleanup] mediaSource ${mediaSourceId}: inputFilePath ${inputFilePath} is not inside downloadsRoot ${downloadsRoot} — not deleting`,
       );
     } else {
       try {
         await rm(inputFilePath, { force: true });
       } catch (err) {
-        console.error(`[cleanup] mediaSource ${mediaSourceId}: no se pudo borrar ${inputFilePath}:`, err);
+        console.error(`[cleanup] mediaSource ${mediaSourceId}: could not delete ${inputFilePath}:`, err);
       }
     }
   }
@@ -61,14 +61,14 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
   }
 
   if (!downloadPath) {
-    console.log(`[cleanup] mediaSource ${mediaSourceId}: sin downloadPath, nada que borrar`);
+    console.log(`[cleanup] mediaSource ${mediaSourceId}: no downloadPath, nothing to delete`);
     return;
   }
 
   // Spec 012, REQ-12
   if (!isInsideRoot(downloadsRoot, downloadPath)) {
     console.error(
-      `[cleanup] mediaSource ${mediaSourceId}: downloadPath ${downloadPath} no está dentro de downloadsRoot ${downloadsRoot} — no se borra nada`,
+      `[cleanup] mediaSource ${mediaSourceId}: downloadPath ${downloadPath} is not inside downloadsRoot ${downloadsRoot} — deleting nothing`,
     );
     return;
   }
@@ -84,7 +84,7 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
       await rm(downloadPath, { force: true });
       await rmdir(dirname(downloadPath)).catch((err) => {
         console.log(
-          `[cleanup] mediaSource ${mediaSourceId}: no se pudo rmdir ${dirname(downloadPath)} (probablemente no está vacío):`,
+          `[cleanup] mediaSource ${mediaSourceId}: could not rmdir ${dirname(downloadPath)} (probably not empty):`,
           err instanceof Error ? err.message : err,
         );
       });
@@ -95,6 +95,6 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
       await rm(downloadPath, { recursive: true, force: true });
     }
   } catch (err) {
-    console.error(`[cleanup] mediaSource ${mediaSourceId}: no se pudo borrar ${downloadPath}:`, err);
+    console.error(`[cleanup] mediaSource ${mediaSourceId}: could not delete ${downloadPath}:`, err);
   }
 }

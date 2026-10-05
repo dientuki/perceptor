@@ -42,7 +42,7 @@ export class MediaServerService {
         !config.media_server_host
       ) {
         console.warn(
-          `[media-server] "${clientId}" configurado sin host — completá media_server_host en Settings`,
+          `[media-server] "${clientId}" configured with no host — set media_server_host in Settings`,
         );
         return;
       }
@@ -76,10 +76,10 @@ export class MediaServerService {
       }
 
       await client.createdMedia(hostFilePath);
-      console.log(`[media-server] avisado: ${hostFilePath}`);
+      console.log(`[media-server] notified: ${hostFilePath}`);
     } catch (err) {
       console.error(
-        `[media-server] falló el aviso de ${containerFilePath}:`,
+        `[media-server] notify failed for ${containerFilePath}:`,
         err,
       );
     }

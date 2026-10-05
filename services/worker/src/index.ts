@@ -76,32 +76,32 @@ async function main() {
         throw new Error('processJobId is not a number');
       }
     } catch (err) {
-      console.error(`[worker] mensaje de cancelación malformado, se descarta: ${message}`, err);
+      console.error(`[worker] malformed cancellation message, discarding: ${message}`, err);
       return;
     }
 
     const cancelled = cancelEncode(parsed.processJobId);
     if (cancelled) {
-      console.log(`[worker] cancelación aplicada al processJob ${parsed.processJobId}`);
+      console.log(`[worker] cancellation applied to processJob ${parsed.processJobId}`);
     } else {
-      console.log(`[worker] cancelación recibida para ${parsed.processJobId}, no está corriendo acá`);
+      console.log(`[worker] cancellation received for ${parsed.processJobId}, not running here`);
     }
   });
 
   scanWorker.on('completed', (job) => {
-    console.log(`[worker] completado ${job.id}`);
+    console.log(`[worker] completed ${job.id}`);
   });
 
   scanWorker.on('failed', (job, err) => {
-    console.error(`[worker] falló ${job?.id}:`, err);
+    console.error(`[worker] failed ${job?.id}:`, err);
   });
 
   encodeWorker.on('completed', (job) => {
-    console.log(`[worker] encode completado ${job.id}`);
+    console.log(`[worker] encode completed ${job.id}`);
   });
 
   encodeWorker.on('failed', (job, err) => {
-    console.error(`[worker] encode falló ${job?.id}:`, err);
+    console.error(`[worker] encode failed ${job?.id}:`, err);
 
     // Spec 054, REQ-10 REQ-8
     if (err instanceof UnrecoverableError) return;

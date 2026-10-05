@@ -83,7 +83,7 @@ export class UploadsService implements OnModuleInit {
         try {
           await this.handleUploadFinish(upload);
         } catch (err) {
-          console.error(`[uploads] ${upload.id}: falló el cierre de la subida:`, err);
+          console.error(`[uploads] ${upload.id}: upload finish failed:`, err);
           throw err;
         }
         return {};
@@ -185,7 +185,7 @@ export class UploadsService implements OnModuleInit {
       }
 
       const destPath = await this.moveIntoSession(upload.id, rawPath, session.downloadPath, filename);
-      console.log(`[uploads] ${upload.id}: completado -> sesión ${mediaSourceId} (${destPath})`);
+      console.log(`[uploads] ${upload.id}: completed -> session ${mediaSourceId} (${destPath})`);
       return;
     }
 
@@ -235,7 +235,7 @@ export class UploadsService implements OnModuleInit {
 
       await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
 
-      console.log(`[uploads] ${upload.id}: completado -> mediaSource ${mediaSource.id} (episode ${episodeId}), encolado`);
+      console.log(`[uploads] ${upload.id}: completed -> mediaSource ${mediaSource.id} (episode ${episodeId}), queued`);
       return;
     }
 
@@ -282,7 +282,7 @@ export class UploadsService implements OnModuleInit {
 
     await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
 
-    console.log(`[uploads] ${upload.id}: completado -> mediaSource ${mediaSource.id}, encolado`);
+    console.log(`[uploads] ${upload.id}: completed -> mediaSource ${mediaSource.id}, queued`);
   }
 
   // Spec 038, REQ-6

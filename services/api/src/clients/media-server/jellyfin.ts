@@ -122,7 +122,7 @@ export const createJellyfinClient = (
 
     if (!response.ok) {
       throw new Error(
-        `Jellyfin respondió ${response.status} al listar ${includeItemTypes}: ${await response.text()}`,
+        `Jellyfin responded ${response.status} while listing ${includeItemTypes}: ${await response.text()}`,
       );
     }
 
@@ -170,7 +170,7 @@ export const createJellyfinClient = (
 
       if (!response.ok) {
         throw new Error(
-          `Jellyfin respondió ${response.status} al refrescar la biblioteca: ${await response.text()}`,
+          `Jellyfin responded ${response.status} while refreshing the library: ${await response.text()}`,
         );
       }
     },
@@ -202,7 +202,7 @@ export const createJellyfinClient = (
 
       if (!response.ok) {
         throw new Error(
-          `Jellyfin respondió ${response.status} al avisar de ${media}: ${await response.text()}`,
+          `Jellyfin responded ${response.status} while notifying about ${media}: ${await response.text()}`,
         );
       }
     },
@@ -230,7 +230,7 @@ export const createJellyfinClient = (
 
       if (!response.ok) {
         throw new Error(
-          `Jellyfin respondió ${response.status} al listar episodios de ${externalSeriesId}: ${await response.text()}`,
+          `Jellyfin responded ${response.status} while listing episodes of ${externalSeriesId}: ${await response.text()}`,
         );
       }
 

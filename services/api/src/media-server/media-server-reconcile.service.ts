@@ -62,7 +62,7 @@ export class MediaServerReconcileService {
       });
     } catch (err) {
       console.error(
-        `[media-server-reconcile] falló reconciliando la película ${movieId}:`,
+        `[media-server-reconcile] failed reconciling movie ${movieId}:`,
         err,
       );
     }
@@ -104,7 +104,7 @@ export class MediaServerReconcileService {
       }
     } catch (err) {
       console.error(
-        `[media-server-reconcile] falló reconciliando la serie ${showId}:`,
+        `[media-server-reconcile] failed reconciling show ${showId}:`,
         err,
       );
     }

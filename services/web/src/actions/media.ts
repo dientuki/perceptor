@@ -38,7 +38,7 @@ export async function getMediaCapabilities(): Promise<MediaCapabilities> {
   }
 
   if (!data?.mediaCapabilities) {
-    throw new Error("El API no devolvió las capacidades de medios");
+    throw new Error("The API did not return media capabilities");
   }
 
   return data.mediaCapabilities;
@@ -203,7 +203,7 @@ export async function addMedia(
 
   const id = data?.addMedia?.id;
   if (id === undefined || id === null)
-    throw new Error("El API no devolvió el id del medio");
+    throw new Error("The API did not return the media id");
 
   return String(id);
 }

@@ -789,7 +789,7 @@ export class MoviesService implements MediaTypeService {
       const failed = (execResults ?? []).filter(([err]) => err);
       if (failed.length) {
         console.error(
-          `Error guardando ${failed.length} película(s) de TMDB en Redis:`,
+          `Error caching ${failed.length} TMDB movie(s) in Redis:`,
           failed.map(([err]) => err?.message),
         );
       }

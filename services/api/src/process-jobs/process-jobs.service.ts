@@ -543,7 +543,7 @@ export class ProcessJobsService {
           await this.torrentClient.remove(loser.infoHash, true);
         } catch (err) {
           // Spec 022, NFR-6
-          console.error(`[downloadRemove] no se pudo borrar mediaSource ${loser.id} en el cliente de torrents:`, err);
+          console.error(`[downloadRemove] could not remove mediaSource ${loser.id} from the torrent client:`, err);
           continue;
         }
       }

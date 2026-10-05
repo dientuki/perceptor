@@ -117,11 +117,11 @@ async function scanSource(mediaSourceId: number): Promise<void> {
 
   if (mediaSource.downloadedFiles === null) {
     console.log(
-      `[source-ready] ${mediaSourceId}: sin información de archivos bajados — se consideran todos`,
+      `[source-ready] ${mediaSourceId}: no downloaded-files info — considering all of them`,
     );
   } else {
     console.log(
-      `[source-ready] ${mediaSourceId}: el cliente de torrents reportó ${mediaSource.downloadedFiles.length} archivo(s) bajado(s)`,
+      `[source-ready] ${mediaSourceId}: torrent client reported ${mediaSource.downloadedFiles.length} downloaded file(s)`,
     );
   }
 
@@ -129,13 +129,13 @@ async function scanSource(mediaSourceId: number): Promise<void> {
   const skipped = files.filter((file) => file.isVideo && !matchedPaths.has(file.filePath));
 
   console.log(
-    `[source-ready] ${mediaSourceId}: ${files.length} archivo(s), ${matches.length} match(es)`,
+    `[source-ready] ${mediaSourceId}: ${files.length} file(s), ${matches.length} match(es)`,
   );
   for (const file of skipped) {
     if (!file.isDownloaded) {
-      console.log(`[source-ready] ${mediaSourceId}: archivo de video no bajado — ${file.fileName}`);
+      console.log(`[source-ready] ${mediaSourceId}: video file not downloaded — ${file.fileName}`);
     } else {
-      console.log(`[source-ready] ${mediaSourceId}: archivo de video no resuelto — ${file.fileName}`);
+      console.log(`[source-ready] ${mediaSourceId}: video file not resolved — ${file.fileName}`);
     }
   }
 

@@ -60,7 +60,7 @@ export class IndexerService {
       if (raw === null) return undefined;
       return JSON.parse(raw) as TorrentResult[];
     } catch (err) {
-      console.error(`Error leyendo cache de búsqueda de indexer (${key}):`, err);
+      console.error(`Error reading indexer search cache (${key}):`, err);
       return undefined;
     }
   }
@@ -69,7 +69,7 @@ export class IndexerService {
     try {
       await this.redis.set(key, JSON.stringify(results), 'EX', INDEXER_SEARCH_TTL_SECONDS);
     } catch (err) {
-      console.error(`Error guardando cache de búsqueda de indexer (${key}):`, err);
+      console.error(`Error writing indexer search cache (${key}):`, err);
     }
   }
 }

@@ -101,7 +101,7 @@ export class MediaRootsService {
         if (parent === current) {
           // Should never happen: '/' always exists. If we get here,
           // something worse is broken (the container's filesystem, not the path).
-          throw new Error(`No se encontró ningún ancestro existente para "${path}"`);
+          throw new Error(`Found no existing ancestor for "${path}"`);
         }
         current = parent;
       }

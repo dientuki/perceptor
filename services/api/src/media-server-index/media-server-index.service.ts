@@ -104,7 +104,7 @@ export class MediaServerIndexService {
       await this.writeState('ready', entries.length, new Date());
     } catch (err) {
       // Spec 034, REQ-4 REQ-5
-      console.error('[media-server-index] rebuild falló:', err);
+      console.error('[media-server-index] rebuild failed:', err);
       await this.writeState('failed');
     } finally {
       await this.redis.del(REBUILD_CLAIM_KEY);

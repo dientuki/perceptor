@@ -26,10 +26,10 @@ export async function fetchGraphQL<T = unknown>(
   variables?: Record<string, unknown>,
 ): Promise<T> {
   const url = process.env.INTERNAL_GRAPHQL_URL;
-  if (!url) throw new Error('INTERNAL_GRAPHQL_URL no está definida');
+  if (!url) throw new Error('INTERNAL_GRAPHQL_URL is not defined');
 
   const token = process.env.SERVICE_TOKEN;
-  if (!token) throw new Error('SERVICE_TOKEN no está definida');
+  if (!token) throw new Error('SERVICE_TOKEN is not defined');
 
   let res: Response;
   try {

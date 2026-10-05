@@ -55,7 +55,7 @@ function mapTorrentState(state: string, completion: number): SourceStatus {
   // vanish from the race arbiter's view. Log it instead, loudly, and fall
   // back to DOWNLOADING: never terminal, so it can neither be mistaken for
   // the winner (READY) nor for a discarded loser (ERROR).
-  console.error(`[QbittorrentClient] estado de torrent no reconocido: "${state}"`);
+  console.error(`[QbittorrentClient] unrecognised torrent state: "${state}"`);
   return SourceStatus.DOWNLOADING;
 }
 
@@ -123,7 +123,7 @@ export class QbittorrentClient implements TorrentClient {
     // Same reasoning as add(): a silent failure here would be read by the
     // caller as "no torrents", never as "qBittorrent is unreachable".
     if (!response.ok) {
-      throw new TorrentClientError(`qBittorrent rechazó la consulta de torrents (${response.status}): ${await response.text()}`, response.status);
+      throw new TorrentClientError(`qBittorrent rejected the torrents query (${response.status}): ${await response.text()}`, response.status);
     }
 
     const torrents = await response.json();
@@ -160,7 +160,7 @@ export class QbittorrentClient implements TorrentClient {
     // does not know this hash" for "nothing was downloaded" — both must
     // surface as a thrown error here, never as an empty array.
     if (!response.ok) {
-      throw new TorrentClientError(`qBittorrent rechazó la consulta de archivos (${response.status}): ${await response.text()}`, response.status);
+      throw new TorrentClientError(`qBittorrent rejected the files query (${response.status}): ${await response.text()}`, response.status);
     }
 
     const files = await response.json();
@@ -203,7 +203,7 @@ export class QbittorrentClient implements TorrentClient {
     });
 
     if (!response.ok) {
-      throw new TorrentClientError(`qBittorrent rechazó el torrent (${response.status}): ${await response.text()}`, response.status);
+      throw new TorrentClientError(`qBittorrent rejected the torrent (${response.status}): ${await response.text()}`, response.status);
     }
 
     return savepath;
@@ -226,7 +226,7 @@ export class QbittorrentClient implements TorrentClient {
     });
 
     if (!response.ok) {
-      throw new TorrentClientError(`qBittorrent rechazó el start (${response.status}): ${await response.text()}`, response.status);
+      throw new TorrentClientError(`qBittorrent rejected the start (${response.status}): ${await response.text()}`, response.status);
     }
   }
 
@@ -247,7 +247,7 @@ export class QbittorrentClient implements TorrentClient {
 
     // Spec 022, NFR-6
     if (!response.ok) {
-      throw new TorrentClientError(`qBittorrent rechazó el stop (${response.status}): ${await response.text()}`, response.status);
+      throw new TorrentClientError(`qBittorrent rejected the stop (${response.status}): ${await response.text()}`, response.status);
     }
   }
 
@@ -270,7 +270,7 @@ export class QbittorrentClient implements TorrentClient {
 
     // Spec 022, NFR-6
     if (!response.ok) {
-      throw new TorrentClientError(`qBittorrent rechazó el delete (${response.status}): ${await response.text()}`, response.status);
+      throw new TorrentClientError(`qBittorrent rejected the delete (${response.status}): ${await response.text()}`, response.status);
     }
   }
 

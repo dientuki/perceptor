@@ -165,7 +165,7 @@ export class DownloadsService {
       const rows = await this.qbittorrent.info(tag);
       return new Map(rows.map((row) => [row.hash.toLowerCase(), row]));
     } catch (err) {
-      console.error(`[DownloadsService] no se pudo leer el estado del cliente de torrents (tag "${tag ?? ''}"):`, err);
+      console.error(`[DownloadsService] could not read torrent client state (tag "${tag ?? ''}"):`, err);
       return new Map();
     }
   }
@@ -696,7 +696,7 @@ export class DownloadsService {
   private async deleteResidue(source: MediaSourceRow): Promise<void> {
     const downloadPath = source.downloadPath;
     if (!downloadPath) {
-      console.log(`[DownloadsService] mediaSource ${source.id}: sin downloadPath, nada que borrar`);
+      console.log(`[DownloadsService] mediaSource ${source.id}: no downloadPath, nothing to delete`);
       return;
     }
 
@@ -705,13 +705,13 @@ export class DownloadsService {
       const config = await this.settings.getMap();
       downloadsRoot = await this.mediaRoots.resolveFromRoot('downloads', config.path_downloads ?? '.');
     } catch (err) {
-      console.error(`[DownloadsService] mediaSource ${source.id}: no se pudo resolver la raíz de downloads:`, err);
+      console.error(`[DownloadsService] mediaSource ${source.id}: could not resolve the downloads root:`, err);
       return;
     }
 
     if (!(await this.mediaRoots.isInsideRoot('downloads', downloadPath))) {
       console.error(
-        `[DownloadsService] mediaSource ${source.id}: downloadPath ${downloadPath} está fuera de la raíz de downloads (${downloadsRoot}) — no se borra nada`,
+        `[DownloadsService] mediaSource ${source.id}: downloadPath ${downloadPath} is outside the downloads root (${downloadsRoot}) — deleting nothing`,
       );
       return;
     }
@@ -724,7 +724,7 @@ export class DownloadsService {
         await rm(downloadPath, { force: true });
         await rmdir(dirname(downloadPath)).catch((err) => {
           console.log(
-            `[DownloadsService] mediaSource ${source.id}: no se pudo rmdir ${dirname(downloadPath)} (probablemente no está vacío):`,
+            `[DownloadsService] mediaSource ${source.id}: could not rmdir ${dirname(downloadPath)} (probably not empty):`,
             err instanceof Error ? err.message : err,
           );
         });
@@ -735,7 +735,7 @@ export class DownloadsService {
         await rm(downloadPath, { recursive: true, force: true });
       }
     } catch (err) {
-      console.error(`[DownloadsService] mediaSource ${source.id}: no se pudo borrar ${downloadPath}:`, err);
+      console.error(`[DownloadsService] mediaSource ${source.id}: could not delete ${downloadPath}:`, err);
     }
   }
 
@@ -802,7 +802,7 @@ export class DownloadsService {
       const wanted = infoHash.toLowerCase();
       return rows.find((row) => row.hash.toLowerCase() === wanted);
     } catch (err) {
-      console.error(`[DownloadsService] no se pudo releer el estado de mediaSource tras la mutación:`, err);
+      console.error(`[DownloadsService] could not reread mediaSource state after the mutation:`, err);
       return undefined;
     }
   }
@@ -811,7 +811,7 @@ export class DownloadsService {
   async resolveRace(mediaSourceId: number): Promise<string> {
     const winner = await this.prisma.mediaSource.findUnique({ where: { id: mediaSourceId } });
     if (!winner) {
-      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} no existe`);
+      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} does not exist`);
       return `ignorado: mediaSource ${mediaSourceId} no existe`;
     }
 
@@ -820,7 +820,7 @@ export class DownloadsService {
     // caller of this method; handleTorrentCompleted below never reaches
     // this with an ERROR source, since its own ERROR rung runs first.
     if (winner.status === 'ERROR') {
-      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} está en ERROR, no es un ganador válido`);
+      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} is in ERROR, not a valid winner`);
       return `ignorado: mediaSource ${mediaSourceId} está en ERROR`;
     }
 
@@ -833,7 +833,7 @@ export class DownloadsService {
           : null;
 
     if (!targetWhere) {
-      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} no tiene target`);
+      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} has no target`);
       return `ignorado: mediaSource ${mediaSourceId} sin target`;
     }
 
@@ -847,7 +847,7 @@ export class DownloadsService {
       isRaceWinner(sibling.status, siblingJobs.get(sibling.id)?.jobs ?? []),
     );
     if (alreadyWon) {
-      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} superado, el target ya tiene un ganador`);
+      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} superseded, the target already has a winner`);
       return `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`;
     }
 
@@ -862,7 +862,7 @@ export class DownloadsService {
           await this.qbittorrent.stop(loser.infoHash);
         } catch (err) {
           // Spec 022, NFR-6
-          console.error(`[torrentCompleted] resolveRace: no se pudo pausar mediaSource ${loser.id} en el cliente de torrents:`, err);
+          console.error(`[torrentCompleted] resolveRace: could not pause mediaSource ${loser.id} in the torrent client:`, err);
           continue;
         }
       }
@@ -870,7 +870,7 @@ export class DownloadsService {
       pausedCount++;
     }
 
-    console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} ganó, ${pausedCount} sibling(s) pausado(s)`);
+    console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} won, ${pausedCount} sibling(s) paused`);
     return `ganador: mediaSource ${mediaSourceId}, ${pausedCount} pausado(s)`;
   }
 
@@ -881,13 +881,13 @@ export class DownloadsService {
     });
 
     if (!mediaSource) {
-      console.log(`[torrentCompleted] ignorado: ${infoHash} no corresponde a ningún MediaSource`);
+      console.log(`[torrentCompleted] ignored: ${infoHash} does not match any MediaSource`);
       return `ignorado: ${infoHash} no corresponde a ningún MediaSource`;
     }
 
     if (mediaSource.status === 'READY' || mediaSource.status === 'SCANNED') {
       console.log(
-        `[torrentCompleted] ya procesado: mediaSource ${mediaSource.id} en estado ${mediaSource.status}`,
+        `[torrentCompleted] already processed: mediaSource ${mediaSource.id} in state ${mediaSource.status}`,
       );
       return `ya procesado: mediaSource ${mediaSource.id} en estado ${mediaSource.status}`;
     }
@@ -897,7 +897,7 @@ export class DownloadsService {
     // never pause whatever superseded it.
     if (mediaSource.status === 'ERROR') {
       console.log(
-        `[torrentCompleted] ignorado: mediaSource ${mediaSource.id} está en ERROR (reemplazado)`,
+        `[torrentCompleted] ignored: mediaSource ${mediaSource.id} is in ERROR (replaced)`,
       );
       return `ignorado: mediaSource ${mediaSource.id} está en ERROR (reemplazado)`;
     }

@@ -303,7 +303,7 @@ export function getAudioParams(
 
     // Spec 011, REQ-7
     if (langStreams.length === 0 && langCode !== originalLang) {
-      console.warn(`[ffmpeg] idioma permitido "${langCode}" no tiene pista de audio en el archivo; se continúa sin él.`);
+      console.warn(`[ffmpeg] allowed language "${langCode}" has no audio track in the file; continuing without it.`);
     }
 
     if (langStreams.length === 0) return;

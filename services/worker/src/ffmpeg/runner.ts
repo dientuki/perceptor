@@ -64,7 +64,7 @@ export function runFfmpeg(
 
     const killHandler = () => {
       if (activeChild && !activeChild.killed) {
-        console.log('[ffmpeg] señal de cierre recibida, matando el proceso activo...');
+        console.log('[ffmpeg] shutdown signal received, killing the active process...');
         activeChild.kill('SIGTERM');
       }
     };
@@ -103,7 +103,7 @@ export function runFfmpeg(
     function abortHandler() {
       cancelled = true;
       if (activeChild && !activeChild.killed) {
-        console.log('[ffmpeg] cancelación recibida, matando el proceso activo...');
+        console.log('[ffmpeg] cancellation received, killing the active process...');
         activeChild.kill('SIGTERM');
         killTimer = setTimeout(() => {
           if (activeChild && !activeChild.killed) {
@@ -158,7 +158,7 @@ export function runFfmpeg(
         const progress = Math.min(99, Math.max(0, Math.round((outTimeSeconds / durationSeconds) * 100)));
         progressInFlight = true;
         onProgress(progress, lastSpeed)
-          .catch((err) => console.error('[ffmpeg] no se pudo reportar progreso:', err))
+          .catch((err) => console.error('[ffmpeg] could not report progress:', err))
           .finally(() => {
             progressInFlight = false;
           });
@@ -209,7 +209,7 @@ export function runFfmpeg(
         return;
       }
 
-      console.log(`[ffmpeg] muxing con mkvmerge hacia el destino (${partPath})...`);
+      console.log(`[ffmpeg] muxing with mkvmerge to the destination (${partPath})...`);
 
       try {
         await mkdir(dirname(partPath), { recursive: true });
@@ -261,7 +261,7 @@ export function runFfmpeg(
       try {
         await rm(workingPath, { force: true });
         await rename(partPath, output);
-        console.log(`[ffmpeg] completado -> ${output}`);
+        console.log(`[ffmpeg] completed -> ${output}`);
         settleResolve();
       } catch (err) {
         settleReject(err instanceof Error ? err : new Error(String(err)));
