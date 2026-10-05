@@ -23,6 +23,28 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-05 — `086-comment-locator-convention`
+
+All three services untouched structurally — `git status --short services/api/prisma` empty (no
+migration, NFR-3) and `git diff services/api/src/schema.gql` empty (no contract change). `bin/comments`
+exits 0 across the whole tree: 801 locators resolved, zero Spanish, zero malformed, zero dangling.
+`api` 903/62 suites, `worker` 317/27 suites (the +3 tests/+1 suite over the pre-feature baseline —
+measured at a throwaway checkout of the commit just before this feature started — is exactly
+`src/ffmpeg/runner.spec.ts`, the one REQ-4 test this feature owed and T013 wrote; nothing else moved),
+`web` typechecks at 0 errors and `check-messages` confirms no `en`/`es` drift at 600 keys — all
+measured live via a disposable PR (dientuki/perceptor#13) that also proved the new `comments` CI job:
+appending the AC-2 Spanish comment failed only that job (`services/api/src/app.module.ts:70`), the
+other five passed, and `release.yml`'s `build` (needs `verify`, which is `ci.yml`) never ran since it
+gates on a tag push, not a PR. All 17 acceptance criteria carry a tick with real command output as
+evidence (the AC-7 tree-wide grep surfaces three lines inside Article IX test-header prose with no
+`Spec NNN,` on that exact line — REQ-1b's inline exception, not a violation; `bin/comments` itself,
+which groups multi-line comments before checking, passes them clean). `## Current state` moved to
+this file (you are reading the result); the root `CLAUDE.md` lost "the eleven rules" (the constitution
+holds twelve articles and growing) and gained a `bin/comments` row plus a Comments convention entry.
+REQ-12's 35 Spanish `it`/`describe` strings and REQ-13's three stale `CLAUDE.md` passages pointing at
+collapsed comments are both done. Not run: nothing — every AC rests on command output pasted during
+this implementation, not a deferred live pass.
+
 ## 2026-10-03 — `085-dependency-update-cadence`
 
 `.github/dependabot.yml` now watches five ecosystems (`npm` at each of `services/api`, `services/web`, `services/worker`; `github-actions` at `/`; `docker` across all five service Dockerfiles plus `docker-compose.yaml`), every one opening PRs against `dev` and the `docker` one excluding the project's own `ghcr.io/dientuki/perceptor-*` images. `ci.yml` gained an `audit` job (`tools/audit/check.mjs`, invoked locally via the new `bin/audit`) that reconciles each service's production `npm audit` against `tools/audit/allowlist.json` and fails the build on any unallowlisted `high`/`critical` finding, a stale allowlist entry, or an entry with no reachability argument — sitting inside `release.yml`'s existing `verify` → `build` chain, so a tag cannot publish past it (confirmed live: a scratch tag pinning `next` back to a vulnerable version failed `verify` and left `build`/`merge` skipped, publishing no image). Measured outcome: `api`'s production advisory count dropped from 15 to 6, all six now accepted and documented in `tools/audit/allowlist.json` (the remaining Prisma-family transitives have no fixed release upstream; reachability rests on the `perceptor-net` bridge carrying no external traffic); `web` dropped from 4 to 0 via `next` 16.2.12 → 16.3.8; `worker` stays at 0, untouched. No pipeline stage changed status — this feature is process, not product. **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a change added nothing, not as a fact to cite.

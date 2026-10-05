@@ -4,7 +4,7 @@ spec_version: 0.2.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-03
 last_updated: 2026-10-03
-status: Approved
+status: Implemented
 services: [api, web, worker, infra]
 ---
 
@@ -161,47 +161,47 @@ changes; `web` and `worker` have nothing to retype.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: `bin/comments` exits 0 and prints the count of resolved locators, with the sweep
+- [x] **AC-1**: `bin/comments` exits 0 and prints the count of resolved locators, with the sweep
       complete on all three services.
-- [ ] **AC-2**: Appending `// esto arranca el encode cuando el torrent ya bajó` to any file under
+- [x] **AC-2**: Appending `// esto arranca el encode cuando el torrent ya bajó` to any file under
       `services/api/src` makes `bin/comments` exit non-zero and name that file and line. Reverting
       it returns the run to 0.
-- [ ] **AC-3**: Appending `// Spec 999, REQ-1` makes `bin/comments` exit non-zero with a message
+- [x] **AC-3**: Appending `// Spec 999, REQ-1` makes `bin/comments` exit non-zero with a message
       saying no `docs/spec/features/999-*` directory exists.
-- [ ] **AC-4**: Appending `// Spec 048, REQ-99` makes `bin/comments` exit non-zero with a message
+- [x] **AC-4**: Appending `// Spec 048, REQ-99` makes `bin/comments` exit non-zero with a message
       saying `REQ-99` does not appear in `docs/spec/features/048-shorts-category/spec.md`.
-- [ ] **AC-5**: Appending `// per 018-ui-i18n REQ-7, the key survives` makes `bin/comments` exit
+- [x] **AC-5**: Appending `// per 018-ui-i18n REQ-7, the key survives` makes `bin/comments` exit
       non-zero as a malformed locator, naming REQ-1's grammar in the message.
-- [ ] **AC-6**: Appending `// the guard runs before the first write` — English, no spec
+- [x] **AC-6**: Appending `// the guard runs before the first write` — English, no spec
       reference — leaves `bin/comments` at 0 (REQ-7).
-- [ ] **AC-6b**: `services/api/src/media-roots/media-roots.service.ts` keeps its
+- [x] **AC-6b**: `services/api/src/media-roots/media-roots.service.ts` keeps its
       `resolveFromRoot` guard doc comment as prose, with its reference reading `Spec 047, REQ-10`,
       and `bin/comments` accepts it; the same prose attached to a non-guard method is rejected
       only if it contains Spanish (REQ-1b, REQ-7).
-- [ ] **AC-7**: `grep -rEn "REQ-|NFR-|AC-|T[0-9]{3}" services/api/src services/web/src
+- [x] **AC-7**: `grep -rEn "REQ-|NFR-|AC-|T[0-9]{3}" services/api/src services/web/src
       services/worker/src` returns only lines where the reference is preceded by `Spec NNN, `, with
       every match resolving to an id that exists in that spec's `spec.md`. No bare `REQ-n` survives.
-- [ ] **AC-8**: The CI run on a pull request shows a `comments` job; a branch carrying the AC-2
+- [x] **AC-8**: The CI run on a pull request shows a `comments` job; a branch carrying the AC-2
       comment fails it, and the jobs after it in `release.yml`'s chain do not run.
-- [ ] **AC-9**: `bin/npm api run test`, `bin/npm worker test` and
+- [x] **AC-9**: `bin/npm api run test`, `bin/npm worker test` and
       `bin/cli web npx --no tsc --noEmit` report the same counts and 0 errors before and after the
       sweep, except for test files added under REQ-4 (NFR-1).
-- [ ] **AC-10**: `git status --short services/api/prisma` is empty and
+- [x] **AC-10**: `git status --short services/api/prisma` is empty and
       `git diff services/api/src/schema.gql` is empty (NFR-3).
-- [ ] **AC-11**: `grep -n "eleven rules" CLAUDE.md` returns nothing, and the surviving mention of the
+- [x] **AC-11**: `grep -n "eleven rules" CLAUDE.md` returns nothing, and the surviving mention of the
       constitution in `CLAUDE.md` agrees with `grep -c '^## Article' docs/constitution.md`.
-- [ ] **AC-12**: `docs/spec/history.md` exists and contains every measurement that was in
+- [x] **AC-12**: `docs/spec/history.md` exists and contains every measurement that was in
       `CLAUDE.md`'s `## Current state`; the section that replaces it in `CLAUDE.md` is 15 lines or
       fewer, and the commands it names run as written.
-- [ ] **AC-13**: `sed -n '/^## Article XI/,/^## Article XII/p' docs/constitution.md` shows four
+- [x] **AC-13**: `sed -n '/^## Article XI/,/^## Article XII/p' docs/constitution.md` shows four
       numbered exceptions and no "leave them until you are editing that code" sentence, and
       `grep -n '1.3.0' docs/constitution.md` returns a Changelog row (REQ-2).
-- [ ] **AC-14**: `bin/cli web node scripts/check-messages.mjs` reports the same key count as it did
+- [x] **AC-14**: `bin/cli web node scripts/check-messages.mjs` reports the same key count as it did
       before this feature and no `en`/`es` drift (NFR-6).
-- [ ] **AC-15**: `bin/comments` exits non-zero on an appended `it('rechaza una ruta absoluta', …)`
+- [x] **AC-15**: `bin/comments` exits non-zero on an appended `it('rechaza una ruta absoluta', …)`
       in any `*.spec.ts`, and `bin/npm api run test` reports the same test and suite counts before
       and after REQ-12's rewrite (a description change moves no count).
-- [ ] **AC-16**: `grep -n "don't collapse them" services/worker/CLAUDE.md` returns nothing, and no
+- [x] **AC-16**: `grep -n "don't collapse them" services/worker/CLAUDE.md` returns nothing, and no
       passage in `services/{api,web,worker}/CLAUDE.md` tells a reader to read or preserve a comment
       that no longer exists (REQ-13).
 

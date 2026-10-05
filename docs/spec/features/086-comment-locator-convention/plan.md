@@ -2,7 +2,7 @@
 title: Comment Locator Convention — Implementation Plan
 spec_version: 0.2.0
 last_updated: 2026-10-03
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Comment Locator Convention (`plan.md`)

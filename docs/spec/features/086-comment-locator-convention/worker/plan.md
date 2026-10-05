@@ -2,7 +2,7 @@
 title: Comment Locator Convention — worker slice
 service: worker
 last_updated: 2026-10-03
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Comment Locator Convention — `worker` (`worker/plan.md`)

@@ -2,7 +2,7 @@
 title: Comment Locator Convention — web slice
 service: web
 last_updated: 2026-10-03
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Comment Locator Convention — `web` (`web/plan.md`)

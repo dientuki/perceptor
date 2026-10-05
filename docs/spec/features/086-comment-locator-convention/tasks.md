@@ -1,7 +1,7 @@
 ---
 title: Comment Locator Convention — Tasks
 last_updated: 2026-10-03
-status: In Progress
+status: Done
 ---
 
 # TASKS: Comment Locator Convention (`tasks.md`)
@@ -275,7 +275,7 @@ stops being read.
       *Done when:* `grep -n "eleven rules" CLAUDE.md` returns nothing (AC-11), the surviving
       constitution reference agrees with `grep -c '^## Article' docs/constitution.md` (12), the
       replacement section is 15 lines or fewer, and `bin/comments` appears in the wrapper table. → T020
-- [ ] **T022** `[docs]` Walk all 17 acceptance criteria in `spec.md`, tick each box against evidence
+- [x] **T022** `[docs]` Walk all 17 acceptance criteria in `spec.md`, tick each box against evidence
       actually produced (and record as unverified anything that was not run, rather than ticking it),
       then set `status: Implemented` on `spec.md`, `plan.md` and all four `<svc>/plan.md`, and
       `status: Done` on this file. Re-run the cross-service parity checks as the final evidence:
