@@ -249,7 +249,7 @@ stops being read.
       dependency (REQ-8).
       *Done when:* `bin/comments` exits 0 on the swept tree (AC-1), the job appears in `ci.yml`
       beside the other five, and the workflow parses. → T009, T011, T014, T016, T017
-- [ ] **T019** `[infra]` Prove the gate bites. Push a branch carrying the AC-2 Spanish comment,
+- [x] **T019** `[infra]` Prove the gate bites. Push a branch carrying the AC-2 Spanish comment,
       confirm the `comments` job fails on it, and confirm by **reading** `release.yml` and `ci.yml`
       that `build` declares `needs: verify` and `verify` is `uses: ./.github/workflows/ci.yml`, so
       `build`/`merge` are skipped behind the failure. Do not edit `release.yml`.
