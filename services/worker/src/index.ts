@@ -11,6 +11,13 @@ import type { SourceReadyJob, EncodeJob, EncodeCancelMessage } from './queue/typ
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
 import { cancelEncode } from './encode/cancellation';
+import {
+  LEASE_RENEW_INTERVAL_MS,
+  acquireWorkerLease,
+  newLeaseId,
+  releaseWorkerLease,
+  renewWorkerLease,
+} from './lease/worker-lease';
 import { reportEncodeWorkerStarted } from './api/encode-worker-started';
 import { deliverReport } from './api/deliver-report';
 import { fetchGraphQL } from './api/graphql-client';
@@ -26,6 +33,45 @@ const connection = {
 
 // Spec 017, REQ-1 NFR-1
 async function main() {
+  // The gate comes before the announcement, not after: announcing is itself the
+  // destructive act, so a second instance must be turned away while it still
+  // has done nothing.
+
+  // Spec 054, NFR-4
+  const leaseClient = new Redis(connection);
+  const leaseId = newLeaseId();
+  const leaseAcquired = await acquireWorkerLease(leaseClient, leaseId, {
+    onWait: (holder) =>
+      console.log(`[worker] worker lease held by ${holder ?? 'another instance'}, retrying`),
+  });
+
+  if (!leaseAcquired) {
+    console.error(
+      '[worker] another worker already holds the singleton lease: Perceptor runs exactly one ' +
+        'worker container, and a second one would reconcile the first one\'s live encodes. Exiting.',
+    );
+    await leaseClient.quit();
+    process.exit(1);
+  }
+
+  // A failed renewal is logged, never fatal: a Redis blip is not worth killing a
+  // multi-hour encode over, and an api unreachable through the same outage would
+  // not be reconciling anything either.
+
+  // Spec 054, NFR-4
+  const leaseRenewal = setInterval(() => {
+    void renewWorkerLease(leaseClient, leaseId)
+      .then((renewed) => {
+        if (!renewed) {
+          console.error('[worker] worker lease renewal rejected, this instance no longer holds it');
+        }
+      })
+      .catch((err) => {
+        console.error('[worker] worker lease renewal failed:', err);
+      });
+  }, LEASE_RENEW_INTERVAL_MS);
+  leaseRenewal.unref();
+
   // Spec 054, REQ-1 NFR-4
   const reconciledCount = await deliverReport('encodeWorkerStarted', () =>
     reportEncodeWorkerStarted(),
@@ -36,7 +82,7 @@ async function main() {
     PROCESS_QUEUE,
     async (job) => {
       if (job.name !== SOURCE_READY_JOB) {
-        console.log(`[worker] job desconocido ${job.name}, se ignora`);
+        console.log(`[worker] unknown job ${job.name}, ignoring`);
         return;
       }
 
@@ -52,7 +98,7 @@ async function main() {
     ENCODE_QUEUE,
     async (job) => {
       if (job.name !== ENCODE_JOB) {
-        console.log(`[worker] job desconocido ${job.name}, se ignora`);
+        console.log(`[worker] unknown job ${job.name}, ignoring`);
         return;
       }
 
@@ -128,7 +174,7 @@ async function main() {
       ),
     ).catch((reportErr) => {
       console.error(
-        `[worker] no se pudo reportar encodeFailed por agotamiento de reintentos (${job.data.processJobId}):`,
+        `[worker] could not report encodeFailed for exhausted retries (${job.data.processJobId}):`,
         reportErr,
       );
     });
@@ -138,14 +184,21 @@ async function main() {
     void scanWorker.close();
     void encodeWorker.close();
     void cancelSubscriber.quit();
+
+    // Releasing on the way out is what makes an orderly restart instant instead
+    // of waiting out the TTL.
+
+    // Spec 054, NFR-4
+    clearInterval(leaseRenewal);
+    void releaseWorkerLease(leaseClient, leaseId).finally(() => leaseClient.quit());
   });
 
-  console.log('[worker] escuchando la cola', PROCESS_QUEUE);
-  console.log('[worker] escuchando la cola', ENCODE_QUEUE);
-  console.log('[worker] escuchando el canal', ENCODE_CANCEL_CHANNEL);
+  console.log('[worker] listening on queue', PROCESS_QUEUE);
+  console.log('[worker] listening on queue', ENCODE_QUEUE);
+  console.log('[worker] listening on channel', ENCODE_CANCEL_CHANNEL);
 }
 
 main().catch((error) => {
-  console.error('[worker] fatal error en el bootstrap:', error);
+  console.error('[worker] fatal error during bootstrap:', error);
   process.exit(1);
 });
