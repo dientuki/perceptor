@@ -1546,6 +1546,14 @@ answers (including the unauthorized case, which cannot actually occur with `SERV
 the bootstrap loudly. See `services/worker/CLAUDE.md` and `services/api/CLAUDE.md` for the
 reconciliation this triggers.
 
+Because the mutation carries no arguments and every worker presents the same `SERVICE_TOKEN`, `api`
+cannot tell one caller from another — which is why the one-worker invariant this mutation rests on
+(`054`'s NFR-4) is enforced on the **worker** side, by the Redis lease in
+`services/worker/src/lease/worker-lease.ts`, and not here. An `api` that wanted to validate it
+itself would need the mutation to carry a worker identity and `ProcessJob` to record which worker
+took it; that is a contract change nobody has needed, since Perceptor runs one encode at a time by
+design.
+
 ### The environment panel is read-only (`055-environment-panel`)
 
 ```graphql

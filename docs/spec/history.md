@@ -23,6 +23,28 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-05 — `054-interrupted-encode-recovery` NFR-4 follow-up (worker singleton lease)
+
+Not an `/implement` run — a bug fix closing the one requirement `054` recorded and deliberately left
+to the deployment. `worker` only, plus one compose declaration: `src/lease/worker-lease.ts` takes a
+Redis lease before `encodeWorkerStarted` is called, so a second worker exits 1 instead of
+reconciling the first one's live encode, and `docker-compose.yaml` declares `deploy: replicas: 1`
+for the worker.
+
+`worker` 323 tests / 28 suites, up from the 317/27 of `086` below — the +6/+1 is exactly
+`src/lease/worker-lease.spec.ts` and nothing else moved. `npx tsc --noEmit` clean in `worker`.
+`node tools/comments/check.mjs worker` PASS at 165 locators resolved (up from 161), zero Spanish,
+zero malformed, zero dangling; every new comment carries `Spec 054, NFR-4`, which is well-formed and
+resolves, since NFR-4 exists in that spec. `docker compose -f docker-compose.yaml config` exits 0.
+No migration (`git status --short services/api/prisma` empty) and no contract change
+(`git diff services/api/src/schema.gql` empty) — `api` and `web` have no changed file at all, so
+their counts are unmeasured and unchanged from `086`.
+
+**Not yet proven live.** The unit suite covers the lease's own asymmetries (expired-lease retake,
+holder-guarded renew and release) against a fake Redis with a virtual clock, but nobody has run
+`--scale worker=2` against a live encode to watch the second container refuse. That is the test this
+work exists for, and it is still owed.
+
 ## 2026-10-05 — `086-comment-locator-convention`
 
 All three services untouched structurally — `git status --short services/api/prisma` empty (no

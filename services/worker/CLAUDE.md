@@ -329,7 +329,19 @@ feature: a `ProcessJob` a dead run left reading `ENCODING` has no other signal t
 is safe to touch, since neither an `api` restart nor a stale `updatedAt` can distinguish "dead" from
 "a six-hour encode mid-`mkvmerge`, still alive." The call is sound only because exactly one `worker`
 container ever runs — "I just booted" and "nothing is encoding" coincide under that assumption
-alone, and a second replica would reconcile the first one's live encodes out from under it. The
+alone, and a second replica would reconcile the first one's live encodes out from under it. That
+assumption is no longer taken on faith: `src/lease/worker-lease.ts` takes a Redis lease
+(`perceptor:worker:lease`, `SET NX PX` 30s, renewed every 10s, released on `SIGTERM`) **before** the
+announcement, since announcing is the destructive act — a second instance never gets that far, logs
+why and exits 1, which `restart: unless-stopped` turns into a visible crash loop rather than a
+silent reset of someone else's encode. The arbiter is Redis rather than Docker because the invariant
+is "one consumer of this queue", not "one container": `deploy: replicas: 1` in
+`docker-compose.yaml` declares the default but `--scale worker=2` overrides it, and nothing in
+Docker sees a one-off `docker compose run worker` or a second stack pointed at the same
+`REDIS_HOST`. The acquisition window (60s) deliberately outlasts the TTL (30s) so a worker killed
+hard can retake its own unexpired lease when Docker restarts it seconds later; a renewal that fails
+mid-encode is logged and never fatal, since a Redis blip is not worth abandoning a multi-hour encode
+and an `api` unreachable through the same outage would not be reconciling anything either. The
 returned count is logged, never branched on — which jobs get skipped, failed or requeued is
 entirely `api`'s decision, made against rows this service cannot see (no Prisma, no database).
 

@@ -3,9 +3,9 @@ title: Interrupted Encode Recovery
 spec_version: 1.0.0
 author: Juan Farias
 created_at: 2026-09-11
-last_updated: 2026-09-11
+last_updated: 2026-10-05
 status: Implemented
-services: [api, worker]
+services: [api, infra, worker]
 ---
 
 # SPEC: Interrupted Encode Recovery (`spec.md`)
@@ -122,6 +122,22 @@ file changes.
       jobs. This is an invariant of the deployment, recorded here so a future scaling change knows
       what it breaks — the same way `035-scheduled-tasks` records the equivalent assumption for
       `SchedulerService`'s in-process guard.
+
+      **Addendum, 2026-10-05 — the invariant is now enforced, not merely recorded.** The paragraph
+      above described the deployment as it stood: nothing stopped `docker compose up --scale
+      worker=2`, and the second container's boot announcement would have reconciled the first one's
+      live encode. `worker` now takes a Redis lease (`perceptor:worker:lease`, `SET NX PX` 30s,
+      renewed every 10s, released on `SIGTERM`) in `src/lease/worker-lease.ts` **before** calling
+      `encodeWorkerStarted`, and a second instance logs why and exits 1 without ever announcing.
+      `docker-compose.yaml` additionally declares `deploy: replicas: 1` for the worker — the
+      declaration of intent, not the enforcement, since a CLI `--scale` overrides the file and
+      Docker sees neither a one-off `docker compose run worker` nor a second stack pointed at the
+      same `REDIS_HOST`. The arbiter is Redis because the invariant is "one consumer of this queue",
+      which is also what keeps two separate installations from interfering. REQ-1 through REQ-10 and
+      every other NFR are unchanged, as is the GraphQL contract: `encodeWorkerStarted` still takes
+      no arguments, and `api` still cannot tell one worker from another — deliberately, per the note
+      added to `docs/spec/graphql-contract.md`. The analogous `SchedulerService` assumption named
+      above remains unenforced and is not addressed here.
 - [ ] **NFR-5 (No library deletion)**: The `.part.mkv` scratch file lives under the **destinations**
       root. Article XII permits exactly one removal there — the cleanup in
       `services/worker/src/ffmpeg/runner.ts` — so REQ-6's cleanup belongs to `worker` and stays

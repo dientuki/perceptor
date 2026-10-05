@@ -31,7 +31,9 @@ completed/failed/cancelled one's last stored value. Since `054`, an encode inter
 crash — the worker container dying mid-FFmpeg with no time to write anything — recovers rather than
 sitting on "encoding" forever: `worker` announces its own boot to `api` (`encodeWorkerStarted`,
 before either BullMQ `Worker` is constructed, sound only because exactly one `worker` container
-runs) and `api` reconciles every `ProcessJob` still reading `ENCODING` at that moment, since a
+runs — enforced since the `054` NFR-4 follow-up by a Redis lease the worker takes before it
+announces, so a second instance exits 1 instead of resetting the first one's live encode) and `api`
+reconciles every `ProcessJob` still reading `ENCODING` at that moment, since a
 process that has just started is encoding nothing. A job is requeued from scratch (its
 `.working.mkv`/`.part.mkv` scratch cleared unconditionally before every encode, not only a
 recovered one) once automatically; a second orphaning of the same job fails it outright rather than
