@@ -6,7 +6,6 @@ import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { SourceKind } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
-import { MESSAGES_EN } from '@/i18n/messages.en';
 import { DownloadsService } from '@/downloads/downloads.service';
 
 // Spec 022, REQ-5; Spec 022, REQ-4
@@ -90,8 +89,6 @@ export class EpisodesService {
     const episode = await this.findOneFromDb(episodeId, userId);
     if (!episode) throw i18nError.notFound(ERROR_KEYS.EPISODE_NOT_FOUND, { id: episodeId });
 
-    const activeSource = await this.findActiveSource(episodeId);
-
     // Symmetric with the check MoviesService.attachTorrentSource now does:
     // an infoHash already owned by a movie, or by a *different* episode,
     // must not be silently re-pointed at this one.
@@ -118,23 +115,13 @@ export class EpisodesService {
       return this.prisma.episode.findUniqueOrThrow({ where: { id: episodeId } });
     }
 
-    // Spec 022, REQ-7; Spec 022, REQ-6
-    if (episode.status === 'COMPLETED' && !input.force) {
+    // Spec 087, REQ-2
+    if (
+      (episode.status === 'COMPLETED' || (await this.downloadsService.hasDeliveredSource({ episodeId }))) &&
+      !input.force
+    ) {
       throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
     }
-
-    const demoteActive = async () => {
-      if (!activeSource || !input.force) return;
-      await this.prisma.mediaSource.updateMany({
-        where: { episodeId, status: { not: 'ERROR' } },
-        data: {
-          status: 'ERROR',
-          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
-          errorKey: ERROR_KEYS.SOURCE_REPLACED,
-          errorParams: null,
-        },
-      });
-    };
 
     if (existingSource && sameTarget) {
       const hash = input.infoHash.toLowerCase();
@@ -144,7 +131,8 @@ export class EpisodesService {
         const finished = held.state === 'READY';
         if (!finished) await this.qbittorrent.start(hash);
 
-        await demoteActive();
+        // Spec 087, REQ-3 REQ-4
+        if (input.force) await this.downloadsService.demoteDeliveredSources({ episodeId }, 'episode replacement');
         await this.prisma.mediaSource.update({
           where: { id: existingSource.id },
           data: { status: 'QUEUED', errorMessage: null, errorKey: null, errorParams: null },
@@ -164,7 +152,9 @@ export class EpisodesService {
     // Demote *before* creating the replacement, and only after qBittorrent
     // has accepted the new torrent — so a rejected add() leaves the
     // previously active source untouched.
-    await demoteActive();
+
+    // Spec 087, REQ-3 REQ-4
+    if (input.force) await this.downloadsService.demoteDeliveredSources({ episodeId }, 'episode replacement');
 
     const mediaSource = existingSource
       ? await this.prisma.mediaSource.update({

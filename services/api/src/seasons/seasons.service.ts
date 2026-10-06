@@ -10,7 +10,6 @@ import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { SourceKind } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
-import { MESSAGES_EN } from '@/i18n/messages.en';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
@@ -138,11 +137,11 @@ export class SeasonsService {
       where: { seasonId, status: { not: 'ERROR' } },
     });
 
-    // Spec 022, REQ-7; Spec 022, REQ-6
+    // Spec 022, REQ-7 REQ-6; Spec 087, REQ-2
     if (!input.force) {
       const hasCompletedEpisode =
         (await this.prisma.episode.count({ where: { seasonId, status: 'COMPLETED' } })) > 0;
-      if (hasCompletedEpisode) {
+      if (hasCompletedEpisode || (await this.downloadsService.hasDeliveredSource({ seasonId }))) {
         throw i18nError.conflict(ERROR_KEYS.SEASON_ALREADY_COMPLETED);
       }
     }
@@ -159,7 +158,8 @@ export class SeasonsService {
         if (!finished) await this.qbittorrent.start(hash);
 
         if (activeSource && input.force) {
-          await this.demoteActiveSources(seasonId);
+          // Spec 087, REQ-3 REQ-4
+          await this.downloadsService.demoteDeliveredSources({ seasonId }, `season-${seasonId}-reactivate`);
         }
 
         await this.prisma.mediaSource.update({
@@ -184,8 +184,10 @@ export class SeasonsService {
     // Demote *before* creating the replacement, and only after qBittorrent
     // has accepted the new torrent — so a rejected add() leaves the
     // previously active source untouched.
+
+    // Spec 087, REQ-3 REQ-4
     if (activeSource && input.force) {
-      await this.demoteActiveSources(seasonId);
+      await this.downloadsService.demoteDeliveredSources({ seasonId }, `season-${seasonId}-attach`);
     }
 
     const mediaSource = existingSource
@@ -226,10 +228,11 @@ export class SeasonsService {
     const season = await this.findOneFromDb(seasonId, userId);
     if (!season) throw i18nError.notFound(ERROR_KEYS.SEASON_NOT_FOUND, { id: seasonId });
 
+    // Spec 087, REQ-2
     if (!force) {
       const hasCompletedEpisode =
         (await this.prisma.episode.count({ where: { seasonId, status: 'COMPLETED' } })) > 0;
-      if (hasCompletedEpisode) {
+      if (hasCompletedEpisode || (await this.downloadsService.hasDeliveredSource({ seasonId }))) {
         throw i18nError.conflict(ERROR_KEYS.SEASON_ALREADY_COMPLETED);
       }
     }
@@ -239,8 +242,9 @@ export class SeasonsService {
     const downloadPath = join(downloadsBase, 'imports', randomUUID());
     await mkdir(downloadPath, { recursive: true });
 
+    // Spec 087, REQ-3 REQ-4
     if (force) {
-      await this.demoteActiveSources(seasonId);
+      await this.downloadsService.demoteDeliveredSources({ seasonId }, `season-${seasonId}-upload`);
     }
 
     const mediaSource = await this.prisma.mediaSource.create({
@@ -267,8 +271,9 @@ export class SeasonsService {
 
     await this.uploads.demoteSupersededSources({ seasonId }, `session-${mediaSourceId}`);
 
+    // Spec 087, REQ-5
     const raceResult = await this.downloadsService.resolveRace(mediaSourceId);
-    if (!raceResult.startsWith('ganador')) {
+    if (raceResult.outcome !== 'WON') {
       throw i18nError.conflict(ERROR_KEYS.UPLOAD_SUPERSEDED);
     }
 
@@ -289,18 +294,6 @@ export class SeasonsService {
     return this.prisma.season.findUniqueOrThrow({
       where: { id: seasonId },
       include: { episodes: { orderBy: { episodeNumber: 'asc' } } },
-    });
-  }
-
-  private async demoteActiveSources(seasonId: number) {
-    await this.prisma.mediaSource.updateMany({
-      where: { seasonId, status: { not: 'ERROR' } },
-      data: {
-        status: 'ERROR',
-        errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
-        errorKey: ERROR_KEYS.SOURCE_REPLACED,
-        errorParams: null,
-      },
     });
   }
 

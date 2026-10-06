@@ -8,6 +8,7 @@ import { UploadTicketsService } from './upload-tickets.service';
 import { SessionService } from './session.service';
 import { MoviesService } from '@/movies/movies.service';
 import { EpisodesService } from '@/episodes/episodes.service';
+import { DownloadsService } from '@/downloads/downloads.service';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
@@ -17,6 +18,7 @@ export class UploadsResolver {
     private readonly uploadTickets: UploadTicketsService,
     private readonly movies: MoviesService,
     private readonly episodes: EpisodesService,
+    private readonly downloads: DownloadsService,
     private readonly sessions: SessionService,
   ) {}
 
@@ -46,8 +48,11 @@ export class UploadsResolver {
         throw new NotFoundException(`La película ${movieId} no existe`);
       }
 
-      // Spec 022, REQ-7 REQ-6 REQ-19
-      if (movie.status === 'COMPLETED' && !force) {
+      // Spec 022, REQ-7 REQ-6 REQ-19; Spec 087, REQ-2
+      if (
+        (movie.status === 'COMPLETED' || (await this.downloads.hasDeliveredSource({ movieId: movieId as number }))) &&
+        !force
+      ) {
         throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
       }
 
@@ -59,8 +64,11 @@ export class UploadsResolver {
       throw new NotFoundException(`El episodio ${episodeId} no existe`);
     }
 
-    // Spec 022, REQ-7
-    if (episode.status === 'COMPLETED' && !force) {
+    // Spec 022, REQ-7; Spec 087, REQ-2
+    if (
+      (episode.status === 'COMPLETED' || (await this.downloads.hasDeliveredSource({ episodeId: episodeId as number }))) &&
+      !force
+    ) {
       throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
     }
 

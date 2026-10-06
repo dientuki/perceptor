@@ -23,6 +23,41 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-06 — `087-force-replacement-arbitration`
+
+`api` and `web` touched; `worker` untouched (`git diff --stat -- services/worker` empty, and
+`git grep -n "superseded\|already_completed" services/worker/src` returns nothing — AC-11).
+No migration (`git status --short services/api/prisma` empty, NFR-1) and no SDL change
+(`git diff -- services/api/src/schema.gql` empty, NFR-2) — `error.source.superseded` is a backend
+constant reaching `web` only through `Download.lastError`, never new GraphQL surface.
+
+`api` 62/62 suites, 939/939 tests, measured against the real `bin/dev` stack (a real Redis, not a
+throwaway container) — up from the pre-feature baseline of 903 tests across the same 62 suites
+(+36 tests, 0 new suites: every new case lives inside an existing spec file next to the behaviour
+it covers). `bin/cli api npx tsc --noEmit` clean. `bin/comments api` PASS at 619 locators resolved
+(up from 586 before this feature), zero Spanish, zero malformed, zero dangling — every new comment
+carries `// Spec 087, REQ-n`. `bin/comments web` PASS at 76 locators resolved, unchanged count
+(this feature added no new comment to `web`, only two catalog strings).
+
+`bin/npm web run build` exits 0 (run once, before the dev stack's own `web` container was brought
+back up, per the standing rule against building while dev serves). `bin/npm web run lint`
+(`biome check`, whole repo) does **not** exit 0 — ~1548 pre-existing findings, documented in
+`services/web/CLAUDE.md`'s own "Current state" as not a usable gate (baseline ~1519 before this
+feature); scoped to the two files `087` actually touched (`messages/{en,es}.json`), lint is clean.
+
+**Live manual pass, against a real `bin/dev` stack with a real qBittorrent, using five synthetic
+movies and one synthetic episode (DB rows with no real downloaded files, created and removed
+through the app's own `addMedia`/`removeMovie`/`removeShow` mutations) plus direct `bin/mysql`
+writes to fast-forward pipeline state:** AC-1, AC-2, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9 all
+confirmed live, including the `resolveRace: … won`/`… superseded` log lines, the `error.source.
+superseded` row with `stage: SCAN`/`retryable: false`, the `es` catalog string, and a real
+`qbittorrent.add()` rejection (achieved by stopping the `torrent` container) leaving a delivered
+source untouched. **AC-3 not reached live** — it needs a real torrent download and a real FFmpeg
+encode of actual video content, which the synthetic DB-row fixtures used for speed and
+reversibility cannot exercise; the encode-completion code path itself is unchanged by this feature
+(confirmed by the empty `worker` diff), so the risk is judged low but is recorded, not silently
+closed. AC-10, AC-11, AC-12 confirmed by command output, detailed in `spec.md`'s own AC list.
+
 ## 2026-10-05 — `054-interrupted-encode-recovery` NFR-4 follow-up (worker singleton lease)
 
 Not an `/implement` run — a bug fix closing the one requirement `054` recorded and deliberately left

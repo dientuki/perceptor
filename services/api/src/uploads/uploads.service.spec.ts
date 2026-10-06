@@ -122,9 +122,11 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
             ['READY', 'SCANNED'].includes(row.status),
         );
         return alreadyWon
-          ? `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`
-          : `ganador: mediaSource ${mediaSourceId}, 0 pausado(s)`;
+          ? { outcome: 'SUPERSEDED' as const, message: `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target` }
+          : { outcome: 'WON' as const, message: `ganador: mediaSource ${mediaSourceId}, 0 pausado(s)` };
       }),
+      // Spec 087, REQ-2
+      hasDeliveredSource: jest.fn().mockResolvedValue(false),
     };
 
     const queue = { addSourceReady: jest.fn().mockResolvedValue(undefined) };
@@ -268,7 +270,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       );
 
       const results = await Promise.all(downloads.resolveRace.mock.results.map((r) => r.value));
-      expect(results.every((r: string) => r.startsWith('ganador'))).toBe(true);
+      expect(results.every((r: { outcome: string }) => r.outcome === 'WON')).toBe(true);
     });
   });
 
@@ -307,9 +309,10 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       });
       // Simulates the race: by the time this upload's own resolveRace runs,
       // a newer, concurrent upload has already taken the target.
-      downloads.resolveRace.mockResolvedValue(
-        `ignorado: mediaSource ${NEW_SOURCE_ID} superado por otro source de este target`,
-      );
+      downloads.resolveRace.mockResolvedValue({
+        outcome: 'SUPERSEDED',
+        message: `ignorado: mediaSource ${NEW_SOURCE_ID} superado por otro source de este target`,
+      });
 
       await expect(
         (service as any).handleUploadFinish(await stageUpload('upload-loses-own-race')),
@@ -317,6 +320,40 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
         status_code: 409,
         body: expect.stringContaining(ERROR_KEYS.UPLOAD_SUPERSEDED),
       });
+    });
+  });
+
+  // This test exists because otherwise a losing upload fails with no error
+  // anywhere that matters later: before Spec 087, REQ-5, handleUploadFinish
+  // threw its 409 after having already created a READY MediaSource, and
+  // resolveRace never touched that row on the SUPERSEDED branch — it just
+  // answered a string. That orphan stayed READY, which is itself a race
+  // winner by isRaceWinner, so it silently blocked every future source of
+  // the same target with no error anywhere. resolveRace now writes the
+  // superseded row to ERROR itself (asserted directly in
+  // downloads.service.spec.ts, Spec 087, NFR-5); this only defends that
+  // uploads.service.ts trusts that write on the throw path rather than
+  // leaving the row at its creation-time status.
+  describe('REQ-5: a losing upload leaves its own source ERROR, not READY', () => {
+    it('throws 409 and the just-created MediaSource reads ERROR afterward', async () => {
+      const { service, downloads, rows } = build({
+        replaceAuthorised: true,
+        existing: [],
+      });
+      downloads.resolveRace.mockImplementation(async (mediaSourceId: number) => {
+        const row = rows.find((candidate) => candidate.id === mediaSourceId)!;
+        row.status = 'ERROR';
+        return {
+          outcome: 'SUPERSEDED' as const,
+          message: `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`,
+        };
+      });
+
+      await expect(
+        (service as any).handleUploadFinish(await stageUpload('upload-orphan-must-error')),
+      ).rejects.toMatchObject({ status_code: 409 });
+
+      expect(rows.find((row) => row.id === NEW_SOURCE_ID)!.status).toBe('ERROR');
     });
   });
 });

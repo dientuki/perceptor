@@ -137,6 +137,7 @@
       "scan_no_downloaded_video": "Ningún video de esta descarga tiene contenido: revisá qué archivos están seleccionados en el cliente de torrents",
       "no_download_path": "Se completó sin ruta de descarga registrada: no se puede encolar",
       "replaced": "Reemplazado por una descarga nueva",
+      "superseded": "Otra fuente de este título ya se estaba procesando",
       "scan_failed": "No se pudo leer la descarga: {detail}"
     },
     "processJob": {

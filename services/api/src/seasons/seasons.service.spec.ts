@@ -61,7 +61,12 @@ describe('SeasonsService', () => {
     };
   };
   let qbittorrent: { add: jest.Mock; info: jest.Mock; start: jest.Mock };
-  let downloads: { handleTorrentCompleted: jest.Mock; resolveRace: jest.Mock };
+  let downloads: {
+    handleTorrentCompleted: jest.Mock;
+    resolveRace: jest.Mock;
+    hasDeliveredSource: jest.Mock;
+    demoteDeliveredSources: jest.Mock;
+  };
   let mediaRoots: { resolveFromRoot: jest.Mock };
   let queue: { addSourceReady: jest.Mock };
   let sessions: { findOpenSeasonSession: jest.Mock };
@@ -91,7 +96,12 @@ describe('SeasonsService', () => {
       },
     };
     qbittorrent = { add: jest.fn(), info: jest.fn(), start: jest.fn() };
-    downloads = { handleTorrentCompleted: jest.fn().mockResolvedValue('ok'), resolveRace: jest.fn() };
+    downloads = {
+      handleTorrentCompleted: jest.fn().mockResolvedValue('ok'),
+      resolveRace: jest.fn(),
+      hasDeliveredSource: jest.fn().mockResolvedValue(false),
+      demoteDeliveredSources: jest.fn().mockResolvedValue(0),
+    };
     mediaRoots = { resolveFromRoot: jest.fn().mockResolvedValue('/tmp') };
     queue = { addSourceReady: jest.fn() };
     sessions = { findOpenSeasonSession: jest.fn() };
@@ -256,6 +266,26 @@ describe('SeasonsService', () => {
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
     });
 
+    // A season demoted out of COMPLETED (069) while a delivered source
+    // survives must still require confirmation — the episode-COMPLETED
+    // count alone would miss it.
+
+    // Spec 087, REQ-2
+    it('rejects with error.season.already_completed when no episode is COMPLETED but a delivered source survives', async () => {
+      prisma.season.findFirst.mockResolvedValue(season);
+      prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, seasonId: 42, status: 'DOWNLOADING' });
+      prisma.episode.count.mockResolvedValue(0);
+      downloads.hasDeliveredSource.mockResolvedValue(true);
+
+      await expect(
+        service.addMagnetToSeason(42, { magnet, force: false }, 'user-1'),
+      ).rejects.toThrow('This season already has downloaded episodes. Confirm to replace the current files.');
+
+      expect(downloads.hasDeliveredSource).toHaveBeenCalledWith({ seasonId: 42 });
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+    });
+
     it('with force, accepts the torrent then demotes the previously active source before creating the replacement', async () => {
       prisma.season.findFirst.mockResolvedValue(season);
       prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, seasonId: 42, status: 'DOWNLOADING' });
@@ -272,20 +302,42 @@ describe('SeasonsService', () => {
       // rejected add() would leave the previously active source wrongly
       // demoted with no replacement.
       const addOrder = qbittorrent.add.mock.invocationCallOrder[0];
-      const updateManyOrder = prisma.mediaSource.updateMany.mock.invocationCallOrder[0];
+      const demoteOrder = downloads.demoteDeliveredSources.mock.invocationCallOrder[0];
       const createOrder = prisma.mediaSource.create.mock.invocationCallOrder[0];
-      expect(addOrder).toBeLessThan(updateManyOrder);
-      expect(updateManyOrder).toBeLessThan(createOrder);
+      expect(addOrder).toBeLessThan(demoteOrder);
+      expect(demoteOrder).toBeLessThan(createOrder);
 
-      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
-        where: { seasonId: 42, status: { not: 'ERROR' } },
-        data: {
-          status: 'ERROR',
-          errorMessage: expect.any(String),
-          errorKey: 'error.source.replaced',
-          errorParams: null,
-        },
-      });
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith(
+        { seasonId: 42 },
+        expect.any(String),
+      );
+    });
+
+    // A confirmed replacement must not demote a sibling that is still
+    // working — only the shared `demoteDeliveredSources` decides which rows
+    // are delivered, so this is the proof that this twin asks it the right
+    // target and nothing more.
+
+    // Spec 087, REQ-4
+    it('with force, demotes only the season-scoped delivered sources, leaving an in-flight sibling alone', async () => {
+      prisma.season.findFirst.mockResolvedValue(season);
+      prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, seasonId: 42, status: 'DOWNLOADING' });
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      qbittorrent.add.mockResolvedValue('/downloads/reacher-s02-v2');
+      prisma.mediaSource.create.mockResolvedValue({ id: 101, seasonId: 42 });
+      prisma.season.findUniqueOrThrow.mockResolvedValue({ ...season, episodes: [] });
+
+      await service.addMagnetToSeason(42, { magnet, force: true }, 'user-1');
+
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledTimes(1);
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith(
+        { seasonId: 42 },
+        expect.any(String),
+      );
+      // Everything that decides *which* rows are delivered lives in
+      // DownloadsService.demoteDeliveredSources — this service only calls it
+      // with the right, season-scoped target.
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
     });
 
     it('refuses an infoHash already owned by a movie', async () => {
@@ -476,9 +528,9 @@ describe('SeasonsService', () => {
       await service.addMagnetToSeason(42, { magnet, force: true }, 'user-1');
 
       expect(qbittorrent.start.mock.invocationCallOrder[0]).toBeLessThan(
-        prisma.mediaSource.updateMany.mock.invocationCallOrder[0],
+        downloads.demoteDeliveredSources.mock.invocationCallOrder[0],
       );
-      expect(prisma.mediaSource.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      expect(downloads.demoteDeliveredSources.mock.invocationCallOrder[0]).toBeLessThan(
         prisma.mediaSource.update.mock.invocationCallOrder[0],
       );
     });
@@ -570,18 +622,31 @@ describe('SeasonsService', () => {
         expect(await readdir(dir)).toEqual([]);
       });
 
-      it('with force demotes active sources before creating the session row', async () => {
+      // Spec 087, REQ-2
+      it('refuses a season with no COMPLETED episode but a delivered source, without force', async () => {
+        prisma.episode.count.mockResolvedValue(0);
+        downloads.hasDeliveredSource.mockResolvedValue(true);
+
+        await expect(service.startSeasonUpload(42, false, 'user-1')).rejects.toMatchObject({
+          response: { i18n: { key: 'error.season.already_completed' } },
+        });
+
+        expect(downloads.hasDeliveredSource).toHaveBeenCalledWith({ seasonId: 42 });
+        expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+      });
+
+      it('with force demotes delivered sources before creating the session row', async () => {
         prisma.episode.count.mockResolvedValue(1);
 
         const result = await service.startSeasonUpload(42, true, 'user-1');
 
         expect(result).toEqual({ mediaSourceId: 900, seasonId: 42 });
-        expect(prisma.mediaSource.updateMany).toHaveBeenCalledTimes(1);
-        expect(prisma.mediaSource.updateMany.mock.calls[0][0].where).toEqual({
-          seasonId: 42,
-          status: { not: 'ERROR' },
-        });
-        expect(prisma.mediaSource.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+        expect(downloads.demoteDeliveredSources).toHaveBeenCalledTimes(1);
+        expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith(
+          { seasonId: 42 },
+          expect.any(String),
+        );
+        expect(downloads.demoteDeliveredSources.mock.invocationCallOrder[0]).toBeLessThan(
           prisma.mediaSource.create.mock.invocationCallOrder[0],
         );
         expect(prisma.mediaSource.create.mock.calls[0][0].data).toMatchObject({
@@ -589,6 +654,24 @@ describe('SeasonsService', () => {
           status: 'PENDING',
           seasonId: 42,
         });
+      });
+
+      // Same proof as addMagnetToSeason's — the season-scoped target is all
+      // this service contributes; which rows are delivered is the shared
+      // predicate's job, not this guard's.
+
+      // Spec 087, REQ-4
+      it('with force calls demoteDeliveredSources season-scoped, never the raw status filter', async () => {
+        prisma.episode.count.mockResolvedValue(0);
+        downloads.hasDeliveredSource.mockResolvedValue(true);
+
+        await service.startSeasonUpload(42, true, 'user-1');
+
+        expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith(
+          { seasonId: 42 },
+          expect.any(String),
+        );
+        expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
       });
     });
 
@@ -602,7 +685,7 @@ describe('SeasonsService', () => {
       it('refuses a second close without enqueueing a second scan', async () => {
         await writeFile(join(dir, 'e01.mkv'), 'x');
         sessions.findOpenSeasonSession.mockResolvedValueOnce(open()).mockResolvedValueOnce(null);
-        downloads.resolveRace.mockResolvedValue('ganador: mediaSource 900, 0 pausado(s)');
+        downloads.resolveRace.mockResolvedValue({ outcome: 'WON', message: 'ganador: mediaSource 900, 0 pausado(s)' });
         prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
 
         await service.finishSeasonUpload(900, 'user-1');
@@ -616,7 +699,7 @@ describe('SeasonsService', () => {
       it('does not enqueue when a concurrent close already flipped the row', async () => {
         await writeFile(join(dir, 'e01.mkv'), 'x');
         sessions.findOpenSeasonSession.mockResolvedValue(open());
-        downloads.resolveRace.mockResolvedValue('ganador: mediaSource 900, 0 pausado(s)');
+        downloads.resolveRace.mockResolvedValue({ outcome: 'WON', message: 'ganador: mediaSource 900, 0 pausado(s)' });
         prisma.mediaSource.updateMany.mockResolvedValue({ count: 0 });
 
         await expect(service.finishSeasonUpload(900, 'user-1')).rejects.toMatchObject({
@@ -643,7 +726,10 @@ describe('SeasonsService', () => {
       it('answers superseded when the session loses the race, without READY or enqueue', async () => {
         await writeFile(join(dir, 'e01.mkv'), 'x');
         sessions.findOpenSeasonSession.mockResolvedValue(open());
-        downloads.resolveRace.mockResolvedValue('mediaSource 900 superado, el target ya tiene un ganador');
+        downloads.resolveRace.mockResolvedValue({
+          outcome: 'SUPERSEDED',
+          message: 'mediaSource 900 superado, el target ya tiene un ganador',
+        });
 
         await expect(service.finishSeasonUpload(900, 'user-1')).rejects.toMatchObject({
           response: { i18n: { key: 'error.upload.superseded' } },

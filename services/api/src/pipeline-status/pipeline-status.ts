@@ -281,6 +281,18 @@ export function isRaceWinner(status: SourceStatus, jobs: RaceJob[]): boolean {
   return !(failed && !active);
 }
 
+// Spec 087, REQ-2
+export function isDeliveredSource(status: SourceStatus, jobs: RaceJob[]): boolean {
+  if (status !== 'SCANNED') {
+    return false;
+  }
+  const active = jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status));
+  if (active) {
+    return false;
+  }
+  return jobs.some((job) => job.status === 'COMPLETED');
+}
+
 export type ResumeStage = 'DOWNLOAD' | 'SCAN' | 'ENCODE' | 'REPLACED';
 
 export type ResumeJob = {

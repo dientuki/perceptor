@@ -113,6 +113,7 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH]:
     'Completed with no download path recorded — cannot enqueue',
   [ERROR_KEYS.SOURCE_REPLACED]: 'Replaced by a new download',
+  [ERROR_KEYS.SOURCE_SUPERSEDED]: 'Another source of this title was already processing',
   [ERROR_KEYS.PROCESS_JOB_NOT_FOUND]: 'Process job {id} does not exist',
   [ERROR_KEYS.PROCESS_JOB_RECOVERY_EXHAUSTED]:
     'Automatic recovery for this encode has already been used once and failed again',

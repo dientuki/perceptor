@@ -137,6 +137,7 @@
       "scan_no_downloaded_video": "No video file in this download has any content — check which files are selected in the torrent client",
       "no_download_path": "Completed with no download path recorded — cannot enqueue",
       "replaced": "Replaced by a new download",
+      "superseded": "Another source of this title was already processing",
       "scan_failed": "The download could not be read: {detail}"
     },
     "processJob": {

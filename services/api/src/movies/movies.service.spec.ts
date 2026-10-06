@@ -90,6 +90,8 @@ describe('MoviesService', () => {
   let downloads: {
     handleTorrentCompleted: jest.Mock;
     unwindSourcesForTitle: jest.Mock;
+    hasDeliveredSource: jest.Mock;
+    demoteDeliveredSources: jest.Mock;
   };
   let mediaServerReconcile: {
     reconcileMovie: jest.Mock;
@@ -137,6 +139,8 @@ describe('MoviesService', () => {
     downloads = {
       handleTorrentCompleted: jest.fn().mockResolvedValue('ok'),
       unwindSourcesForTitle: jest.fn().mockResolvedValue(undefined),
+      hasDeliveredSource: jest.fn().mockResolvedValue(false),
+      demoteDeliveredSources: jest.fn().mockResolvedValue(0),
     };
     mediaServerReconcile = {
       reconcileMovie: jest.fn().mockResolvedValue(undefined),
@@ -965,6 +969,126 @@ describe('MoviesService', () => {
 
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expectNoWrites();
+    });
+  });
+
+  // Spec 087, REQ-2 REQ-3 REQ-9: before this feature a COMPLETED film never
+  // demoted its delivered source on replacement (only the episode/season
+  // twins did), so a replacement's torrent would complete and the arbiter
+  // would declare the new source superseded — the film stalled in
+  // DOWNLOADING forever with nothing failing anywhere. These cases assert
+  // the demotion now happens, in the right order relative to qBittorrent's
+  // add(), and that the confirmation guard also fires for a film whose
+  // *source* is delivered even when the stored status itself is not
+  // COMPLETED (069 can demote a title to MISSING while an old source
+  // survives).
+  describe('addMagnetToMovie (delivered source replacement, 087-force-replacement-arbitration)', () => {
+    function expectI18nKey(
+      promise: Promise<unknown>,
+      key: string,
+    ): Promise<void> {
+      return promise.then(
+        () => {
+          throw new Error('expected the call to reject');
+        },
+        (error) => {
+          expect(error).toBeInstanceOf(HttpException);
+          const response = (error as HttpException).getResponse() as {
+            i18n?: { key: string };
+          };
+          expect(response.i18n?.key).toBe(key);
+        },
+      );
+    }
+
+    const COMPLETED_FILM = {
+      id: 7,
+      title: 'Transformers',
+      status: 'COMPLETED',
+      filePath: '/media/movies/transformers.mkv',
+      isShort: false,
+      mediaSources: [{ id: 99 }],
+    };
+
+    it('demotes the delivered source and leaves Movie.filePath untouched when force:true', async () => {
+      prisma.movie.findFirst.mockResolvedValue(COMPLETED_FILM);
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      qbittorrent.add.mockResolvedValue('/media/downloads/new');
+      prisma.mediaSource.create.mockResolvedValue({ id: 101 });
+      prisma.movie.update.mockResolvedValue({
+        id: 7,
+        status: 'DOWNLOADING',
+        filePath: COMPLETED_FILM.filePath,
+      });
+
+      const result = await service.addMagnetToMovie(
+        7,
+        { magnet: MAGNET, force: true },
+        'user-1',
+      );
+
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith(
+        { movieId: 7 },
+        expect.any(String),
+      );
+      expect(qbittorrent.add.mock.invocationCallOrder[0]).toBeLessThan(
+        downloads.demoteDeliveredSources.mock.invocationCallOrder[0],
+      );
+      expect(
+        downloads.demoteDeliveredSources.mock.invocationCallOrder[0],
+      ).toBeLessThan(prisma.mediaSource.create.mock.invocationCallOrder[0]);
+      expect(prisma.movie.update).toHaveBeenCalledWith({
+        where: { id: 7 },
+        data: { status: 'DOWNLOADING' },
+      });
+      expect((result as { filePath: string }).filePath).toBe(
+        COMPLETED_FILM.filePath,
+      );
+    });
+
+    it('throws MOVIE_ALREADY_COMPLETED without force', async () => {
+      prisma.movie.findFirst.mockResolvedValue(COMPLETED_FILM);
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+
+      await expectI18nKey(
+        service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
+        ERROR_KEYS.MOVIE_ALREADY_COMPLETED,
+      );
+
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(downloads.demoteDeliveredSources).not.toHaveBeenCalled();
+    });
+
+    it('throws MOVIE_ALREADY_COMPLETED for a MISSING film whose delivered source survived (REQ-2)', async () => {
+      prisma.movie.findFirst.mockResolvedValue({
+        ...COMPLETED_FILM,
+        status: 'MISSING',
+      });
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      downloads.hasDeliveredSource.mockResolvedValue(true);
+
+      await expectI18nKey(
+        service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
+        ERROR_KEYS.MOVIE_ALREADY_COMPLETED,
+      );
+
+      expect(downloads.hasDeliveredSource).toHaveBeenCalledWith({ movieId: 7 });
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+    });
+
+    it('leaves the delivered source untouched when qBittorrent rejects the add (AC-9)', async () => {
+      prisma.movie.findFirst.mockResolvedValue(COMPLETED_FILM);
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      const failure = new TorrentClientError('down', 503);
+      qbittorrent.add.mockRejectedValue(failure);
+
+      await expect(
+        service.addMagnetToMovie(7, { magnet: MAGNET, force: true }, 'user-1'),
+      ).rejects.toBe(failure);
+
+      expect(downloads.demoteDeliveredSources).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.update).not.toHaveBeenCalled();
     });
   });
 

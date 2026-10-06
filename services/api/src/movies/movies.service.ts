@@ -698,8 +698,11 @@ export class MoviesService implements MediaTypeService {
       return this.prisma.movie.findUniqueOrThrow({ where: { id: movieId } });
     }
 
-    // Spec 022, REQ-7 REQ-6
-    if (movie.status === 'COMPLETED' && !input.force) {
+    // Spec 087, REQ-2
+    if (
+      (movie.status === 'COMPLETED' || (await this.downloadsService.hasDeliveredSource({ movieId }))) &&
+      !input.force
+    ) {
       throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
     }
 
@@ -713,6 +716,8 @@ export class MoviesService implements MediaTypeService {
         const finished = held.state === 'READY';
         if (!finished) await this.qbittorrent.start(hash);
 
+        // Spec 087, REQ-3 REQ-4
+        if (input.force) await this.downloadsService.demoteDeliveredSources({ movieId }, 'movie replacement');
         await this.prisma.mediaSource.update({
           where: { id: existingSource.id },
           data: {
@@ -737,6 +742,13 @@ export class MoviesService implements MediaTypeService {
       movieTags(movie),
       movie.isShort ? 'short' : 'movie',
     );
+
+    // Demote *before* creating the replacement, and only after qBittorrent
+    // has accepted the new torrent — so a rejected add() leaves the
+    // previously active source untouched.
+
+    // Spec 087, REQ-3 REQ-4
+    if (input.force) await this.downloadsService.demoteDeliveredSources({ movieId }, 'movie replacement');
 
     existingSource
       ? await this.prisma.mediaSource.update({

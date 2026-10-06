@@ -316,6 +316,12 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `status === 'ENCODING'`) and `null` from every other rule — so a completed, failed, cancelled or
   not-yet-started job's stored speed is never read, by construction, not by a consumer remembering
   to clear it (REQ-10).
+  Since `087-force-replacement-arbitration`, `isDeliveredSource(status, jobs)` sits beside
+  `isRaceWinner`, over the same `RaceJob[]` shape: true only for a `SCANNED` source with no job
+  still `WAITING`/`QUEUED`/`ENCODING` and at least one `COMPLETED` job — the one shared predicate for
+  "this target already holds a working, delivered copy," read by every acquisition guard
+  (`movies`/`episodes`/`seasons`/`uploads`) through `DownloadsService.hasDeliveredSource` instead of
+  each reimplementing its own notion of "already has something."
   Since `069-title-refresh` (REQ-17), `deriveTitleStatus` also ignores a `SCANNED` source and a
   `COMPLETED` job: only live work (a non-`ERROR`, non-`SCANNED` source; a `WAITING`/`QUEUED`/`ENCODING`
   job) lifts a title above its stored column, so a demotion by the media server sticks. `deriveSourceStatus`
@@ -377,9 +383,23 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   competes in the same race as any torrent of its target and never passes through this module any
   other way. Given a winner, every non-terminal sibling of the same target (`movieId`/`episodeId`/
   `seasonId`, **never** by tag) is stopped and moved to `PAUSED`, unless a sibling already reached
-  `READY`/`SCANNED`, in which case the call is a no-op. `process-jobs/`'s `downloadRemove` sweeps
+  `READY`/`SCANNED` first. Since `087-force-replacement-arbitration`, that case is no longer a silent
+  no-op: `resolveRace` returns `{ outcome: 'WON' | 'SUPERSEDED' | 'IGNORED', message }` (`message`
+  byte-identical to what each branch returned before `087` — it is still `torrentCompleted`'s
+  response body) and, on `SUPERSEDED`, writes the loser to `ERROR`/`error.source.superseded` and
+  stops its torrent (best-effort, logged on failure) before returning — closing the gap where a
+  source that lost the race to an already-finished sibling sat in `DOWNLOADING` forever with nothing
+  ever marking it failed. `resumeScanStage` reads this outcome too, rather than discarding it, so it
+  never re-enqueues a source the arbiter just demoted. `process-jobs/`'s `downloadRemove` sweeps
   the losing siblings when the winner's cleanup runs, regardless of whether the winner itself has an
   `infoHash`.
+  `DownloadsService` also exposes two helpers every acquisition entry point shares instead of
+  reimplementing its own demotion: `hasDeliveredSource(target)` and
+  `demoteDeliveredSources(target, reason)`, both over the `{ movieId } | { episodeId } | { seasonId }`
+  union, both driven by `isDeliveredSource` (`pipeline-status/`, below) — replacing three divergent,
+  independently-wrong demotions (`movies.service.ts` had none at all; `episodes.service.ts`'s old
+  `demoteActive` also caught a merely-downloading sibling; `seasons.service.ts`'s old
+  `demoteActiveSources` did the same, season-scoped).
   Since `043-pipeline-status-normalization`, `Download.status`/`downloadProgress`/`encodeProgress`/
   `compressionEnabled` are produced by `pipeline-status/`'s `deriveSourceStatus` rather than copying
   `source.status` — `toDownload` loads every listed source's `ProcessJob` rows in one query (grouped

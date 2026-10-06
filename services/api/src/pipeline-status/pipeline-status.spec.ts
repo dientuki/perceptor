@@ -1,6 +1,7 @@
 import {
   deriveEpisodeStatus,
   deriveResume,
+  isDeliveredSource,
   isRaceWinner,
   ResumeInput,
   deriveSourceStatus,
@@ -451,6 +452,41 @@ describe('isRaceWinner', () => {
       expect(isRaceWinner(status, [])).toBe(false);
     },
   );
+});
+
+// This test exists because otherwise a confirmed replacement cancels an encode in flight with
+// no error anywhere: treating a source as delivered while a sibling job is still WAITING,
+// QUEUED or ENCODING lets a replacement's demotion stop a download or kill an encode the user
+// never asked to interrupt (Spec 087, REQ-2 REQ-4).
+describe('isDeliveredSource', () => {
+  it('counts a SCANNED source whose every job completed as delivered', () => {
+    expect(isDeliveredSource('SCANNED', [{ status: 'COMPLETED' }, { status: 'COMPLETED' }])).toBe(
+      true,
+    );
+  });
+
+  it.each(['WAITING', 'QUEUED', 'ENCODING'] as const)(
+    'does not count a SCANNED source with a %s job as delivered',
+    (status) => {
+      expect(isDeliveredSource('SCANNED', [{ status: 'COMPLETED' }, { status }])).toBe(false);
+    },
+  );
+
+  it('does not count a SCANNED source with no jobs as delivered', () => {
+    expect(isDeliveredSource('SCANNED', [])).toBe(false);
+  });
+
+  it.each(['READY', 'DOWNLOADING', 'PAUSED', 'PENDING', 'QUEUED', 'ERROR'] as const)(
+    'does not count a %s source as delivered, with or without jobs',
+    (status) => {
+      expect(isDeliveredSource(status, [])).toBe(false);
+      expect(isDeliveredSource(status, [{ status: 'COMPLETED' }])).toBe(false);
+    },
+  );
+
+  it('does not count a SCANNED source whose every job failed as delivered', () => {
+    expect(isDeliveredSource('SCANNED', [{ status: 'ERROR' }, { status: 'ERROR' }])).toBe(false);
+  });
 });
 
 describe('deriveResume', () => {

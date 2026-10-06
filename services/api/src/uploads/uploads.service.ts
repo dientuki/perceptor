@@ -198,8 +198,10 @@ export class UploadsService implements OnModuleInit {
       const episode = await this.prisma.episode.findUnique({ where: { id: episodeId } });
       if (!episode) throw new UploadHttpError(404, ERROR_KEYS.EPISODE_NOT_FOUND, { id: episodeId });
 
-      // Spec 027, REQ-7; Spec 022, REQ-7; Spec 022, REQ-19
-      if (episode.status === 'COMPLETED' && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
+      // Spec 027, REQ-7; Spec 022, REQ-7; Spec 022, REQ-19; Spec 087, REQ-2
+      const episodeNeedsConfirmation =
+        episode.status === 'COMPLETED' || (await this.downloads.hasDeliveredSource({ episodeId }));
+      if (episodeNeedsConfirmation && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
         throw new UploadHttpError(409, ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
       }
 
@@ -218,12 +220,9 @@ export class UploadsService implements OnModuleInit {
         },
       });
 
-      // Spec 022, REQ-19; Spec 022, REQ-13
-      const raceResult = await this.downloads.resolveRace(mediaSource.id);
-      // resolveRace (read-only in this slice) answers with exactly one of two
-      // prefixes; "not a winner" is checked as the absence of "ganador"
-      // rather than by name-matching its other outcome.
-      if (!raceResult.startsWith('ganador')) {
+      // Spec 022, REQ-19; Spec 022, REQ-13; Spec 087, REQ-8
+      const { outcome } = await this.downloads.resolveRace(mediaSource.id);
+      if (outcome !== 'WON') {
         // Spec 022, REQ-7
         throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED);
       }
@@ -248,8 +247,9 @@ export class UploadsService implements OnModuleInit {
     const movie = await this.prisma.movie.findUnique({ where: { id: movieId } });
     if (!movie) throw new UploadHttpError(404, ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
-    // Spec 027, REQ-7; Spec 022, REQ-7; Spec 022, REQ-19
-    if (movie.status === 'COMPLETED' && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
+    // Spec 027, REQ-7; Spec 022, REQ-7; Spec 022, REQ-19; Spec 087, REQ-2
+    const movieNeedsConfirmation = movie.status === 'COMPLETED' || (await this.downloads.hasDeliveredSource({ movieId }));
+    if (movieNeedsConfirmation && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
       throw new UploadHttpError(409, ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
     }
 
@@ -268,9 +268,9 @@ export class UploadsService implements OnModuleInit {
       },
     });
 
-    // Spec 022, REQ-19 AC-22
-    const raceResult = await this.downloads.resolveRace(mediaSource.id);
-    if (!raceResult.startsWith('ganador')) {
+    // Spec 022, REQ-19 AC-22; Spec 087, REQ-8
+    const { outcome } = await this.downloads.resolveRace(mediaSource.id);
+    if (outcome !== 'WON') {
       // Spec 022, REQ-7
       throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED);
     }

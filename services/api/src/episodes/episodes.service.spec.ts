@@ -52,7 +52,11 @@ describe('EpisodesService', () => {
     };
   };
   let qbittorrent: { add: jest.Mock; info: jest.Mock; start: jest.Mock };
-  let downloads: { handleTorrentCompleted: jest.Mock };
+  let downloads: {
+    handleTorrentCompleted: jest.Mock;
+    hasDeliveredSource: jest.Mock;
+    demoteDeliveredSources: jest.Mock;
+  };
 
   const episode = {
     id: 42,
@@ -76,7 +80,11 @@ describe('EpisodesService', () => {
       },
     };
     qbittorrent = { add: jest.fn(), info: jest.fn(), start: jest.fn() };
-    downloads = { handleTorrentCompleted: jest.fn().mockResolvedValue('ok') };
+    downloads = {
+      handleTorrentCompleted: jest.fn().mockResolvedValue('ok'),
+      hasDeliveredSource: jest.fn().mockResolvedValue(false),
+      demoteDeliveredSources: jest.fn().mockResolvedValue(0),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -172,7 +180,7 @@ describe('EpisodesService', () => {
       expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
     });
 
-    it('with force, demotes the previously active source to ERROR before creating the replacement', async () => {
+    it('with force, demotes via the shared delivered-source predicate before creating the replacement', async () => {
       prisma.episode.findFirst.mockResolvedValue(episode);
       prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, episodeId: 42, status: 'DOWNLOADING' });
       prisma.mediaSource.findUnique.mockResolvedValue(null);
@@ -188,20 +196,60 @@ describe('EpisodesService', () => {
       // rejected add() would leave the previously active source wrongly
       // demoted with no replacement.
       const addOrder = qbittorrent.add.mock.invocationCallOrder[0];
-      const updateManyOrder = prisma.mediaSource.updateMany.mock.invocationCallOrder[0];
+      const demoteOrder = downloads.demoteDeliveredSources.mock.invocationCallOrder[0];
       const createOrder = prisma.mediaSource.create.mock.invocationCallOrder[0];
-      expect(addOrder).toBeLessThan(updateManyOrder);
-      expect(updateManyOrder).toBeLessThan(createOrder);
+      expect(addOrder).toBeLessThan(demoteOrder);
+      expect(demoteOrder).toBeLessThan(createOrder);
 
-      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
-        where: { episodeId: 42, status: { not: 'ERROR' } },
-        data: {
-          status: 'ERROR',
-          errorMessage: expect.any(String),
-          errorKey: 'error.source.replaced',
-          errorParams: null,
-        },
-      });
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith({ episodeId: 42 }, expect.any(String));
+    });
+
+    // This test exists because otherwise a replacement kills a download in
+    // flight with no error anywhere: a replacement must demote only a
+    // *delivered* sibling — a merely-DOWNLOADING one must survive. The old
+    // code demoted every non-ERROR sibling in one `updateMany({ where: {
+    // episodeId, status: { not: 'ERROR' } } })`, which would also catch a
+    // 50%-downloaded source with nothing to show for it. The
+    // delivered/not-delivered distinction itself is DownloadsService's
+    // (covered in downloads.service.spec.ts); what this service must get
+    // right is delegating to that shared predicate instead of writing its
+    // own `where` clause.
+
+    // Spec 087, REQ-4
+    it('with force, delegates the demotion to DownloadsService rather than demoting every non-ERROR sibling', async () => {
+      prisma.episode.findFirst.mockResolvedValue(episode);
+      prisma.mediaSource.findFirst.mockResolvedValue({ id: 5, episodeId: 42, status: 'DOWNLOADING' });
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      qbittorrent.add.mockResolvedValue('/downloads/reacher-s04e01-v2');
+      prisma.mediaSource.create.mockResolvedValue({ id: 101, episodeId: 42 });
+      prisma.episode.findUniqueOrThrow.mockResolvedValue({ ...episode, status: 'DOWNLOADING' });
+
+      await service.addTorrentToEpisode(42, { ...validInput, force: true }, 'user-1');
+
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledTimes(1);
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith({ episodeId: 42 }, expect.any(String));
+      // This is the assertion that fails against the pre-087 implementation:
+      // it demoted with a direct `prisma.mediaSource.updateMany` call that
+      // matched `status: { not: 'ERROR' }` — catching a DOWNLOADING sibling
+      // along with any genuinely delivered one.
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+    });
+
+    // A target that isn't stored COMPLETED (e.g. demoted to MISSING by 069
+    // while its delivered source survived) must still require confirmation.
+
+    // Spec 087, REQ-2
+    it('throws error.episode.already_completed for a non-COMPLETED episode holding a delivered source, without force', async () => {
+      prisma.episode.findFirst.mockResolvedValue({ ...episode, status: 'MISSING' });
+      prisma.mediaSource.findFirst.mockResolvedValue(null);
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      downloads.hasDeliveredSource.mockResolvedValue(true);
+
+      await expect(service.addTorrentToEpisode(42, validInput, 'user-1')).rejects.toThrow(
+        'This episode is already downloaded',
+      );
+      expect(downloads.hasDeliveredSource).toHaveBeenCalledWith({ episodeId: 42 });
+      expect(qbittorrent.add).not.toHaveBeenCalled();
     });
 
     it('refuses an infoHash already owned by a movie', async () => {

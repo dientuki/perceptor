@@ -825,7 +825,7 @@ The full vocabulary, by owner:
 | `api` — magnet parsing | `error.magnet.not_a_magnet`, `error.magnet.invalid_infohash`, `error.magnet.v2_unsupported` |
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
 | `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash` |
-| `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.processJob.not_found` |
+| `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.source.superseded` (`087-force-replacement-arbitration`), `error.processJob.not_found` |
 | `api` — ffprobe-logs | `error.ffprobeLog.not_found`, `error.ffprobeLog.empty_payload` |
 | `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
 | `api` — uploads (REST) | `error.upload.ticket_expired`, `error.upload.ticket_wrong_movie`, `error.upload.ticket_wrong_episode`, `error.upload.metadata_incomplete` |
@@ -1030,12 +1030,30 @@ touch. The `…_DOWNLOAD_IN_PROGRESS` keys themselves are deleted, not narrowed:
 `messages.en.ts` and both `services/web/messages/*.json` catalogs, plus the key arrays in
 `importMagnetModal.tsx`/`SearchTorrent.tsx`.
 
+**`087-force-replacement-arbitration` broadens the three `…_ALREADY_COMPLETED` conditions, not
+their names, status or copy.** Each of `attachTorrentSource` (movies/episodes/seasons),
+`startSeasonUpload` and `createUploadTicket`/`handleUploadFinish` (uploads) now refuses without
+`force` when the target's stored status is `COMPLETED` **or** the target holds a *delivered
+source* — a `MediaSource` in `SCANNED` with no `ProcessJob` in `WAITING`/`QUEUED`/`ENCODING` and at
+least one in `COMPLETED` (`isDeliveredSource`, `pipeline-status.ts`, beside `isRaceWinner`). This
+closes the gap where a film replaced through a torrent/magnet, not an upload, never demoted its old
+delivered source and stalled in `DOWNLOADING` forever with no error anywhere — `027`'s REQ-1 for
+films, which the torrent/magnet path never actually implemented. `force` itself still means nothing
+but "the user was shown the replacement warning and accepted it" (REQ-1); the demotion it now
+authorises everywhere runs through the shared `DownloadsService.demoteDeliveredSources`.
+
 **The race arbiter is one shared method on `DownloadsService`, entered from two places.** A torrent
 announces completion through the existing `torrentCompleted` webhook; a tus upload announces its own
 completion through `UploadsService.onUploadFinish`, which never passes through `DownloadsService`
-otherwise. Both call the same `resolveRace(mediaSourceId)`: if a sibling of the same target already
-reached `READY`/`SCANNED`, the call is a no-op; otherwise every other non-terminal sibling is stopped
-in qBittorrent and moved to `PAUSED`, and the winner is left running to keep seeding. Siblings are
+otherwise. Both call the same `resolveRace(mediaSourceId)`, which since `087` returns
+`{ outcome: 'WON' | 'SUPERSEDED' | 'IGNORED', message }` rather than a message string alone: if a
+sibling of the same target already reached `READY`/`SCANNED` first, the call no longer swallows the
+loser in silence — it writes the loser to `ERROR`/`error.source.superseded` and stops its torrent
+when it has one, then returns `SUPERSEDED` (`IGNORED` covers the other no-op branches, e.g. no
+winner found). Otherwise every other non-terminal sibling is stopped in qBittorrent and moved to
+`PAUSED`, and the winner is left running to keep seeding (`outcome: 'WON'`). `message` stays
+byte-identical to what each branch returned before `087` — it is still `torrentCompleted`'s response
+body. Siblings are
 always selected by `movieId`/`episodeId`/`seasonId`, never by tag — a tag is a title string two
 different shows can share. When the winner's post-encode cleanup runs, `downloadRemove` sweeps the
 losing siblings too: removed from the client with their files, rows deleted outright. This holds

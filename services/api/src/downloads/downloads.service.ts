@@ -18,6 +18,7 @@ import {
   toMediaStatus,
   deriveResume,
   isRaceWinner,
+  isDeliveredSource,
   SourceAltitudeJob,
   ResumeJob,
   ResumeSibling,
@@ -43,6 +44,12 @@ function seasonLabel(show: { title: string }, season: { seasonNumber: number }):
 type DownloadJob = SourceAltitudeJob & ResumeJob & { id: number };
 
 type JobsForSource = { jobs: DownloadJob[]; latestUpdatedAt: Date | null };
+
+// Spec 087, REQ-2
+type DeliveryTarget = { movieId: number } | { episodeId: number } | { seasonId: number };
+
+// Spec 087, REQ-5
+type RaceOutcome = { outcome: 'WON' | 'SUPERSEDED' | 'IGNORED'; message: string };
 
 type SiblingSource = {
   id: number;
@@ -230,6 +237,64 @@ export class DownloadsService {
     });
     const jobs = await this.jobsBySourceId(rows.map((row) => row.id));
     return siblingsIn(source, [source, ...rows], jobs);
+  }
+
+  // Spec 087, REQ-2
+  async hasDeliveredSource(target: DeliveryTarget): Promise<boolean> {
+    const sources = await this.prisma.mediaSource.findMany({
+      where: { ...target, status: 'SCANNED' },
+      select: { id: true },
+    });
+    if (sources.length === 0) return false;
+    const jobsBySourceId = await this.jobsBySourceId(sources.map((source) => source.id));
+    return sources.some((source) =>
+      isDeliveredSource('SCANNED', jobsBySourceId.get(source.id)?.jobs ?? []),
+    );
+  }
+
+  // Spec 087, REQ-3 REQ-9
+  async demoteDeliveredSources(target: DeliveryTarget, reason: string): Promise<number> {
+    const sources = await this.prisma.mediaSource.findMany({
+      where: { ...target, status: 'SCANNED' },
+      select: { id: true },
+    });
+    if (sources.length === 0) return 0;
+    const jobsBySourceId = await this.jobsBySourceId(sources.map((source) => source.id));
+    const deliveredIds = sources
+      .filter((source) => isDeliveredSource('SCANNED', jobsBySourceId.get(source.id)?.jobs ?? []))
+      .map((source) => source.id);
+    if (deliveredIds.length === 0) return 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.mediaSource.updateMany({
+        where: { id: { in: deliveredIds } },
+        data: {
+          status: 'ERROR',
+          errorKey: ERROR_KEYS.SOURCE_REPLACED,
+          errorParams: null,
+          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+        },
+      });
+
+      const { count: jobsClosed } = await tx.processJob.updateMany({
+        where: {
+          sourceFile: { mediaSourceId: { in: deliveredIds } },
+          status: { in: ['WAITING', 'QUEUED', 'ENCODING'] },
+        },
+        data: {
+          status: 'ERROR',
+          errorKey: ERROR_KEYS.SOURCE_REPLACED,
+          errorParams: null,
+          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+        },
+      });
+
+      console.log(
+        `[DownloadsService] ${reason}: ${deliveredIds.length} delivered source(s) replaced, ${jobsClosed} processJob(s) closed`,
+      );
+    });
+
+    return deliveredIds.length;
   }
 
   private async compressionEnabled(): Promise<boolean> {
@@ -589,8 +654,18 @@ export class DownloadsService {
     });
     if (result.count === 0) return;
 
+    // Spec 087, REQ-5 REQ-6
+
+    // A resumed scan still has to clear the arbiter — a sibling may have
+    // won since this source last errored. Anything but WON means
+    // resolveRace has already written this row back to ERROR (SUPERSEDED)
+    // or left it exactly as it found it (IGNORED); either way the enqueue
+    // below must not run, and the catch's own rollback to ERROR must not
+    // clobber what the arbiter just wrote.
+    let raceResult: RaceOutcome;
     try {
-      await this.resolveRace(mediaSourceId);
+      raceResult = await this.resolveRace(mediaSourceId);
+      if (raceResult.outcome !== 'WON') return;
       await this.queue.removeSourceReady(mediaSourceId);
       await this.queue.addSourceReady({ mediaSourceId });
     } catch (err) {
@@ -808,11 +883,19 @@ export class DownloadsService {
   }
 
   // Spec 022, REQ-12; Spec 022, REQ-13; Spec 022, REQ-14; Spec 022, REQ-19
-  async resolveRace(mediaSourceId: number): Promise<string> {
+
+  // Spec 087, REQ-5
+
+  // Outcome is typed so every call site can tell a superseded source from a
+  // nonexistent one instead of prefix-matching a Spanish sentence. The
+  // message strings themselves stay byte-identical to what this method
+  // returned before — they are torrentCompleted's response body (../plan.md
+  // § Contract Freeze).
+  async resolveRace(mediaSourceId: number): Promise<RaceOutcome> {
     const winner = await this.prisma.mediaSource.findUnique({ where: { id: mediaSourceId } });
     if (!winner) {
       console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} does not exist`);
-      return `ignorado: mediaSource ${mediaSourceId} no existe`;
+      return { outcome: 'IGNORED', message: `ignorado: mediaSource ${mediaSourceId} no existe` };
     }
 
     // A source already ERROR (027-replace-completed-media's force demotion)
@@ -821,7 +904,7 @@ export class DownloadsService {
     // this with an ERROR source, since its own ERROR rung runs first.
     if (winner.status === 'ERROR') {
       console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} is in ERROR, not a valid winner`);
-      return `ignorado: mediaSource ${mediaSourceId} está en ERROR`;
+      return { outcome: 'IGNORED', message: `ignorado: mediaSource ${mediaSourceId} está en ERROR` };
     }
 
     const targetWhere = winner.movieId
@@ -834,7 +917,7 @@ export class DownloadsService {
 
     if (!targetWhere) {
       console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} has no target`);
-      return `ignorado: mediaSource ${mediaSourceId} sin target`;
+      return { outcome: 'IGNORED', message: `ignorado: mediaSource ${mediaSourceId} sin target` };
     }
 
     const siblings = await this.prisma.mediaSource.findMany({
@@ -848,7 +931,35 @@ export class DownloadsService {
     );
     if (alreadyWon) {
       console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} superseded, the target already has a winner`);
-      return `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`;
+      // Spec 087, REQ-5
+
+      // A superseded source must not be left in its pre-arbitration status
+      // — stop its torrent (best-effort, same guard-and-catch as the loser
+      // loop below) and record the loss.
+      if (winner.infoHash) {
+        try {
+          await this.qbittorrent.stop(winner.infoHash);
+        } catch (err) {
+          // Spec 022, NFR-6
+          console.error(
+            `[torrentCompleted] resolveRace: could not stop superseded mediaSource ${mediaSourceId} in the torrent client:`,
+            err,
+          );
+        }
+      }
+      await this.prisma.mediaSource.update({
+        where: { id: mediaSourceId },
+        data: {
+          status: 'ERROR',
+          errorKey: ERROR_KEYS.SOURCE_SUPERSEDED,
+          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_SUPERSEDED],
+          errorParams: null,
+        },
+      });
+      return {
+        outcome: 'SUPERSEDED',
+        message: `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`,
+      };
     }
 
     const losers = siblings.filter(
@@ -871,7 +982,7 @@ export class DownloadsService {
     }
 
     console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} won, ${pausedCount} sibling(s) paused`);
-    return `ganador: mediaSource ${mediaSourceId}, ${pausedCount} pausado(s)`;
+    return { outcome: 'WON', message: `ganador: mediaSource ${mediaSourceId}, ${pausedCount} pausado(s)` };
   }
 
   async handleTorrentCompleted(infoHash: string): Promise<string> {
@@ -917,10 +1028,10 @@ export class DownloadsService {
       return `error: mediaSource ${mediaSource.id} sin downloadPath, marcado ERROR`;
     }
 
-    // Spec 022, REQ-12; Spec 022, REQ-13
+    // Spec 022, REQ-12; Spec 022, REQ-13; Spec 087, REQ-5
     const raceResult = await this.resolveRace(mediaSource.id);
-    if (raceResult.startsWith('ignorado')) {
-      return raceResult;
+    if (raceResult.outcome !== 'WON') {
+      return raceResult.message;
     }
 
     await this.prisma.$transaction(async (tx) => {
