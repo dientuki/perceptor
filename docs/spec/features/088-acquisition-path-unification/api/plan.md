@@ -2,7 +2,7 @@
 title: One acquisition path, one catalog search path — api slice
 service: api
 last_updated: 2026-10-06
-status: Approved
+status: Implemented
 ---
 
 # PLAN: One acquisition path, one catalog search path — `api` (`api/plan.md`)

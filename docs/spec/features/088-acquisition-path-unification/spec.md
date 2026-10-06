@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-06
 last_updated: 2026-10-06
-status: Approved
+status: Implemented
 services: [api]
 ---
 
@@ -276,7 +276,7 @@ AC-4 are unaffected — they describe the behaviour, not where it is guarded.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1 (failure path)**: Given a magnet attached to a season via `addMagnetToSeason`, when the
+- [x] **AC-1 (failure path)**: Given a magnet attached to a season via `addMagnetToSeason`, when the
       same magnet is submitted to a film from the film detail page, then the mutation is refused with
       `errorKey` `error.magnet.already_attached_season`, the rendered message names that show and
       season number, `web` offers no confirmation control, and
@@ -284,34 +284,34 @@ AC-4 are unaffected — they describe the behaviour, not where it is guarded.
       still shows **only** `seasonId` set. Before this feature the same steps succeed and that query
       returns both `movieId` and `seasonId`.
 
-- [ ] **AC-2 (failure path)**: The same against an episode, via the episode row's search modal:
+- [x] **AC-2 (failure path)**: The same against an episode, via the episode row's search modal:
       refused with `error.magnet.already_attached_season`, and the row keeps only its `seasonId`.
 
-- [ ] **AC-3 (failure path)**: Given a magnet attached to episode S02E05 of a series, when the same
+- [x] **AC-3 (failure path)**: Given a magnet attached to episode S02E05 of a series, when the same
       magnet is submitted to S03E01 of that same series, then the message names **S02E05**. Before
       this feature it names S03E01.
 
-- [ ] **AC-4**: `bin/mysql -e 'select count(*) from media_sources where (movieId is not null) + (seasonId is not null) + (episodeId is not null) <> 1'`
+- [x] **AC-4**: `bin/mysql -e 'select count(*) from media_sources where (movieId is not null) + (seasonId is not null) + (episodeId is not null) <> 1'`
       returns **0** after exercising AC-1, AC-2, AC-3 and AC-6.
 
-- [ ] **AC-5**: Given a film whose `MediaSource` is in `ERROR` with a non-null `errorKey`, when the
+- [x] **AC-5**: Given a film whose `MediaSource` is in `ERROR` with a non-null `errorKey`, when the
       same release is added again and qBittorrent no longer holds the hash, then
       `bin/mysql -e 'select status, errorMessage, errorKey, errorParams from media_sources where id = <id>'`
       returns `QUEUED` with all three error columns `NULL`.
 
-- [ ] **AC-6**: All six mutations still work end to end for a target with no collision: a film, an
+- [x] **AC-6**: All six mutations still work end to end for a target with no collision: a film, an
       episode and a season each accept a search result and a pasted magnet, the torrent appears in
       qBittorrent with the tags and category that target kind had before this feature (film:
       `<title>` + category `movie`/`short`; episode: `<show>`, `Season N`, `Episode M` + category
       `show`; season: `<show>`, `Season N` + category `show`), `downloadPath` is non-empty, and the
       target's status becomes `DOWNLOADING`.
 
-- [ ] **AC-7**: `087`'s guarantees still hold verbatim: a `COMPLETED` film refuses without `force`
+- [x] **AC-7**: `087`'s guarantees still hold verbatim: a `COMPLETED` film refuses without `force`
       and accepts with it, a confirmed replacement demotes the delivered sources and leaves a
       sibling that is still downloading untouched (`087` AC for REQ-3 and REQ-4 re-run), and
       replacing a film reaches `SCANNED` end to end.
 
-- [ ] **AC-8**: `searchMedia(query: "breaking bad", type: "show")` and
+- [x] **AC-8**: `searchMedia(query: "breaking bad", type: "show")` and
       `searchMedia(query: "dune", type: "movie")` return the same fields, in the same order, as
       before this feature; `bin/cli redis redis-cli get tmdb:show:<tmdbId>` and
       `... get tmdb:movie:<tmdbId>` both return a JSON object containing neither `inLibrary` nor
@@ -319,33 +319,33 @@ AC-4 are unaffected — they describe the behaviour, not where it is guarded.
       `inLibrary: true` while one only another user registered reports `false` with a non-null
       `mediaId`.
 
-- [ ] **AC-9**: Given `bin/cli redis redis-cli del tmdb:show:<tmdbId>` for a series not yet
+- [x] **AC-9**: Given `bin/cli redis redis-cli del tmdb:show:<tmdbId>` for a series not yet
       registered, when that series is registered, then `bin/cli redis redis-cli get tmdb:show:<tmdbId>`
       returns a populated entry afterwards (REQ-7). The same already holds for a film and must keep
       holding.
 
-- [ ] **AC-10**: `bin/npm api test` passes, `bin/cli api npx --no tsc --noEmit` exits 0 (there is
+- [x] **AC-10**: `bin/npm api test` passes, `bin/cli api npx --no tsc --noEmit` exits 0 (there is
       no `typecheck` script in `services/api/package.json`), and `bin/comments api` exits 0 (NFR-4).
 
-- [ ] **AC-11**: `git diff --stat` for this feature shows more lines removed than added across
+- [x] **AC-11**: `git diff --stat` for this feature shows more lines removed than added across
       `services/api/src`, and `wc -l` on `movies/movies.service.ts` and `shows/shows.service.ts`
       is lower than 812 and 641 respectively (NFR-7).
 
-- [ ] **AC-12**: `docs/constitution.md` Article X no longer names these two duplications as
+- [x] **AC-12**: `docs/constitution.md` Article X no longer names these two duplications as
       deliberate, and its version and Changelog record the amendment (NFR-1). Verified by reading
       the article, not by a command.
 
-- [ ] **AC-13**: Reading the unified attach path, the target kind is consulted in exactly the four
+- [x] **AC-13**: Reading the unified attach path, the target kind is consulted in exactly the four
       places REQ-10 lists and nowhere else: no per-target branch appears in the `infoHash`
       resolution, the already-attached-to-this-target no-op, the reactivation branch, the
       `add()`-before-write ordering, the `force` demotion, or the update-or-create. A reviewer who
       can point at a fifth has found a defect, and this criterion fails.
 
-- [ ] **AC-14**: `grep -rn "function sanitizeTag" services/api/src` returns **one** hit (it returns
+- [x] **AC-14**: `grep -rn "function sanitizeTag" services/api/src` returns **one** hit (it returns
       four today), and `grep -rn "episodeDisplayTitle" services/api/src --include=*.ts` shows one
       definition (three today). `grep -rn "findActiveSource" services/api/src` returns nothing.
 
-- [ ] **AC-15**: `docs/spec/graphql-contract.md` carries this feature's error-condition delta, the
+- [x] **AC-15**: `docs/spec/graphql-contract.md` carries this feature's error-condition delta, the
       root `CLAUDE.md` Download row no longer refers to a third twin, and `docs/spec/history.md` has
       a new newest-first entry for this feature. Verified by reading the three files.
 
