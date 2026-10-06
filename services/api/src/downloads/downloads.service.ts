@@ -6,6 +6,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
+import { sanitizeTag } from '@/clients/torrent/tags';
 import { TorrentClientInfo } from '@/clients/torrent/types';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
@@ -24,12 +25,6 @@ import {
   ResumeSibling,
 } from '@/pipeline-status/pipeline-status';
 import { Download } from './entities/download.entity';
-
-// Spec 022, REQ-5
-function sanitizeTag(title: string, fallbackId: number): string {
-  const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
-  return cleaned || `id-${fallbackId}`;
-}
 
 function episodeLabel(show: { title: string }, season: { seasonNumber: number }, episode: { episodeNumber: number }): string {
   const s = String(season.seasonNumber).padStart(2, '0');

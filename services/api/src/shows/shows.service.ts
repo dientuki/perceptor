@@ -17,6 +17,11 @@ import { CalendarEpisodeRow } from '@/calendar/group-episodes';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { classifyContentKind } from '@/media/content-kind';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { CatalogSearchService } from '@/media/catalog-search.service';
+import {
+  CatalogDescriptor,
+  RegisteredCatalogRow,
+} from '@/media/catalog-descriptor';
 import { RefreshCatalogOutcome, TitleRefresh } from '@/media/entities/title-refresh.entity';
 
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
@@ -47,6 +52,7 @@ export class ShowsService implements MediaTypeService {
     private readonly tmdb: TmdbClient,
     private readonly mediaServerReconcile: MediaServerReconcileService,
     private readonly downloadsService: DownloadsService,
+    private readonly catalogSearch: CatalogSearchService,
   ) {}
 
   // The library belongs to the user: only returns series this userId has
@@ -139,10 +145,6 @@ export class ShowsService implements MediaTypeService {
         status: deriveEpisodeStatus(season.mediaSources, episode, now),
       })),
     }));
-  }
-
-  private cacheKey(tmdbId: number): string {
-    return `tmdb:show:${tmdbId}`;
   }
 
   async register(tmdbId: number, userId: string): Promise<MediaRef> {
@@ -462,10 +464,13 @@ export class ShowsService implements MediaTypeService {
   }
 
   private async getCachedShow(tmdbId: number): Promise<MediaSearchResult> {
-    const raw = await this.redis.get(this.cacheKey(tmdbId));
+    const raw = await this.redis.get(this.catalogSearch.cacheKey('show', tmdbId));
     if (raw) return JSON.parse(raw) as MediaSearchResult;
 
-    return this.fetchShowFromTMDB(tmdbId);
+    const fetched = await this.fetchShowFromTMDB(tmdbId);
+    // Spec 088, REQ-7
+    void this.cacheShows([fetched]);
+    return fetched;
   }
 
   // Falls back to the catalog itself when the Redis cache has expired, been
@@ -509,11 +514,11 @@ export class ShowsService implements MediaTypeService {
           cached.id,
         )) as ShowDetail;
         genreIds = detail.genreIds ?? [];
-        // Best-effort, never awaited into the caller's path: getCachedShow(),
-        // unlike MoviesService's getCachedMovie(), does not write its own
-        // fallback fetch back to Redis, so without this the same cold title
-        // would re-ask TMDB for its genres on every registration inside the
-        // TTL. cacheShows() already logs and swallows its own failures.
+        // Best-effort, never awaited into the caller's path: a cache hit
+        // whose stored entry predates genre data still lacks it, so this
+        // tops the cached entry up rather than re-asking TMDB on every
+        // registration inside the TTL. cacheShows() already logs and
+        // swallows its own failures.
         void this.cacheShows([{ ...cached, genreIds }]);
       } catch {
         genreIds = undefined;
@@ -538,76 +543,67 @@ export class ShowsService implements MediaTypeService {
     return classifyContentKind({ genreIds, keywordIds });
   }
 
+  // Spec 088, REQ-6
+  private buildCatalogDescriptor(): CatalogDescriptor<TmdbShow> {
+    return {
+      mediaType: MEDIA_TYPE.SHOW,
+      tmdbSearchPath: 'tv',
+
+      toSearchResult: (item: TmdbShow): MediaSearchResult => ({
+        id: item.id,
+        title: item.name,
+        releaseDate: item.first_air_date || null,
+        posterUrl: posterUrl(item.poster_path),
+        originalLanguage: item.original_language,
+        overview: item.overview,
+        type: MEDIA_TYPE.SHOW,
+        genreIds: item.genre_ids,
+      }),
+
+      findRegistered: async (
+        prisma,
+        tmdbIds,
+        userId,
+      ): Promise<RegisteredCatalogRow[]> => {
+        const shows = await prisma.show.findMany({
+          where: { tmdbId: { in: tmdbIds } },
+          select: {
+            id: true,
+            tmdbId: true,
+            users: { where: { userId }, select: { userId: true } },
+          },
+        });
+
+        return shows.map((show) => ({
+          id: show.id,
+          tmdbId: show.tmdbId,
+          inLibrary: show.users.length > 0,
+          isShort: false,
+        }));
+      },
+    };
+  }
+
   async search(
     query: string,
     userId: string,
   ): Promise<MediaSearchResultEntity[]> {
-    if (!query.trim()) return [];
-
-    const items = await this.tmdb.search<TmdbShow>('tv', query);
-
-    const results: MediaSearchResult[] = items.map((item) => ({
-      id: item.id,
-      title: item.name,
-      releaseDate: item.first_air_date || null,
-      posterUrl: posterUrl(item.poster_path),
-      originalLanguage: item.original_language,
-      overview: item.overview,
-      type: MEDIA_TYPE.SHOW,
-      genreIds: item.genre_ids,
-    }));
-
-    return this.cacheAndEnrich(results, userId);
+    return this.catalogSearch.search(
+      this.buildCatalogDescriptor(),
+      query,
+      userId,
+    );
   }
 
-  // Steps 3-4 of the former search(): the cache write and the ownership
-  // enrichment, in this order and only this order — see 026-multi-search's
-  // MediaSearchService, the second caller of this method.
   async cacheAndEnrich(
     results: MediaSearchResult[],
     userId: string,
   ): Promise<MediaSearchResultEntity[]> {
-    // Spec 006, NFR-3
-    void this.cacheShows(results);
-
-    // Spec 006, NFR-3
-    const enriched = await this.enrichWithOwnership(results, userId);
-
-    return enriched;
-  }
-
-  // Attaches mediaId (registered by anyone, or null) and inLibrary (owned by
-  // this caller) to a page of catalog results, from a single query — not one
-  // per result. Deliberately not merged into the objects passed to
-  // cacheShows(): see the ordering note in search().
-  private async enrichWithOwnership(
-    results: MediaSearchResult[],
-    userId: string,
-  ): Promise<MediaSearchResultEntity[]> {
-    if (!results.length) return [];
-
-    const shows = await this.prisma.show.findMany({
-      where: { tmdbId: { in: results.map((r) => r.id) } },
-      select: {
-        id: true,
-        tmdbId: true,
-        users: { where: { userId }, select: { userId: true } },
-      },
-    });
-
-    const byTmdbId = new Map(shows.map((s) => [s.tmdbId, s]));
-
-    return results.map((result) => {
-      const registered = byTmdbId.get(result.id);
-      return {
-        ...result,
-        mediaId: registered?.id ?? null,
-        inLibrary: (registered?.users.length ?? 0) > 0,
-        // 048-shorts-category: a series is never a short (isShort exists
-        // on Movie only), and the field is non-null on every search result.
-        isShort: false,
-      };
-    });
+    return this.catalogSearch.cacheAndEnrich(
+      this.buildCatalogDescriptor(),
+      results,
+      userId,
+    );
   }
 
   private async cacheShows(results: MediaSearchResult[]): Promise<void> {
@@ -618,7 +614,7 @@ export class ShowsService implements MediaTypeService {
 
       for (const show of results) {
         pipeline.set(
-          this.cacheKey(show.id),
+          this.catalogSearch.cacheKey('show', show.id),
           JSON.stringify(show),
           'EX',
           TMDB_CACHE_TTL_SECONDS,
@@ -630,12 +626,12 @@ export class ShowsService implements MediaTypeService {
       const failed = (execResults ?? []).filter(([err]) => err);
       if (failed.length) {
         console.error(
-          `Error guardando ${failed.length} serie(s) de TMDB en Redis:`,
+          `Error caching ${failed.length} TMDB show(s) in Redis:`,
           failed.map(([err]) => err?.message),
         );
       }
     } catch (err) {
-      console.error('Error guardando resultados de TMDB en Redis:', err);
+      console.error('Error caching TMDB results in Redis:', err);
     }
   }
 }

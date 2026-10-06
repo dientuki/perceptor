@@ -6,6 +6,7 @@ import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { MEDIA_TYPE } from '@/types/media';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { CatalogSearchService } from '@/media/catalog-search.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // This suite exists because ShowsService's riskiest paths all fail with a
@@ -120,6 +121,19 @@ describe('ShowsService', () => {
           useValue: mediaServerReconcile,
         },
         { provide: DownloadsService, useValue: downloads },
+        {
+          // 088-acquisition-path-unification: the real CatalogSearchService,
+          // wired to this suite's own prisma/redis/tmdb mocks, so the cache
+          // ordering assertions below keep exercising the actual shared
+          // implementation rather than a stub that could drift from it.
+          provide: CatalogSearchService,
+          useFactory: () =>
+            new CatalogSearchService(
+              prisma as unknown as PrismaService,
+              redis as unknown as RedisService,
+              tmdb as unknown as TmdbClient,
+            ),
+        },
       ],
     }).compile();
 
@@ -696,6 +710,39 @@ describe('ShowsService', () => {
       expect(tmdb.details).toHaveBeenCalledTimes(1);
       const [{ data }] = prisma.show.create.mock.calls[0];
       expect(data.contentKind).toBe('LIVE_ACTION');
+    });
+
+    // Spec 088, REQ-7
+    it('writes a cold-cache TMDB fallback back to Redis, matching the film path, instead of leaving the series to re-ask TMDB on every registration inside the TTL', async () => {
+      redis.get.mockResolvedValue(null); // no Redis entry at all
+      tmdb.details.mockResolvedValue({
+        type: MEDIA_TYPE.SHOW,
+        id: 42,
+        title: 'Some Series',
+        originalTitle: 'Some Series',
+        overview: '...',
+        posterPath: null,
+        backdropPath: '',
+        originalLanguage: 'en',
+        voteAverage: 8,
+        status: 'Ended',
+        firstAirDate: '2020-01-01',
+        numberOfSeasons: 1,
+        numberOfEpisodes: 10,
+        seasons: [],
+        genreIds: [18], // Drama — not animated
+      });
+
+      await service.register(42, 'user-1');
+
+      expect(pipelineSet).toHaveBeenCalledTimes(1);
+      const [cacheKey, cachedJson] = pipelineSet.mock.calls[0];
+      expect(cacheKey).toBe('tmdb:show:42');
+      expect(JSON.parse(cachedJson)).toMatchObject({
+        id: 42,
+        title: 'Some Series',
+        type: MEDIA_TYPE.SHOW,
+      });
     });
 
     it('never writes the derived contentKind into the shared Redis cache entry (NFR-3)', async () => {

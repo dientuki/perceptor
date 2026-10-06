@@ -8,6 +8,7 @@ import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
 import { SessionService } from '@/uploads/session.service';
 import { UploadsService } from '@/uploads/uploads.service';
+import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { mkdtemp, mkdir, writeFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -110,6 +111,7 @@ describe('SeasonsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SeasonsService,
+        AttachSourceService,
         { provide: PrismaService, useValue: prisma },
         { provide: QbittorrentClient, useValue: qbittorrent },
         { provide: DownloadsService, useValue: downloads },
@@ -398,6 +400,7 @@ describe('SeasonsService', () => {
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 5,
         status: 'ERROR',
+        seasonId: 42,
         movie: null,
         episode: null,
         season: { id: 42, seasonNumber: 2, show: { title: 'Reacher' } },
@@ -444,6 +447,7 @@ describe('SeasonsService', () => {
     const own = (status: string) => ({
       id: 5,
       status,
+      seasonId: 42,
       movie: null,
       episode: null,
       season: { id: 42, seasonNumber: 2, show: { title: 'Reacher' } },

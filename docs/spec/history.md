@@ -23,6 +23,43 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-06 — `088-acquisition-path-unification`
+
+`api` only touched; `web` and `worker` untouched (`git diff --stat -- services/web` and
+`services/worker` both empty; `git grep -n "attachTorrentSource\|AttachSourceService"
+services/worker/src` returns nothing). No migration (`git status --short services/api/prisma`
+empty) and no SDL change (`git diff --stat services/api/src/schema.gql` empty) — every refusal this
+feature adds or corrects (a season-collision refusal on the movie/episode mutations; an
+episode-collision message now naming the holder) reaches `web` only through the existing error
+envelope and two error keys (`error.magnet.already_attached`,
+`error.magnet.already_attached_season`) that already existed in both `api` and both
+`services/web/messages/*.json` catalogs.
+
+`api` 65/65 suites, 954/954 tests — up from the pre-feature baseline of 939 tests across 62 suites
+(+15 tests, +3 suites: `src/acquisition/attach-source.service.spec.ts`,
+`src/episodes/episode-title.spec.ts`, `src/media/catalog-search.service.spec.ts`). `bin/cli api npx
+tsc --noEmit` clean. `bin/comments api` PASS at 649 locators resolved (up from 619 before this
+feature), zero Spanish, zero malformed, zero dangling.
+
+Three god-object duplications this feature closed, all verified by grep rather than asserted:
+`grep -rn "function sanitizeTag" services/api/src` → 1 hit (was 4); `grep -rn "findActiveSource"
+services/api/src` → 0 hits (was 1, dead); `grep -rn "episodeDisplayTitle" services/api/src
+--include=*.ts` → 1 definition (was 3); `movies.service.ts` 729 lines (was 812); `shows.service.ts`
+637 lines (was 641) — both shrank, per NFR-7. The two-target invariant query
+(`select count(*) from media_sources where (movieId is not null) + (seasonId is not null) +
+(episodeId is not null) <> 1`) read 0 both before (T001) and after (T021) this feature — the
+historical REQ-2 gap left no corrupted rows to find, so there was nothing to repair, only to stop
+recurring.
+
+Full repo `git diff --shortstat`: 17 files changed, 551 insertions(+), 621 deletions(-) — net
+removal (NFR-7/AC-11), plus five new files under `src/acquisition/` and `src/media/catalog-*`
+that a tracked-file diff doesn't count.
+
+**No live manual pass performed as part of this measurement** — `087`'s own live-stack
+regression coverage (REQ-3/REQ-4's replacement-arbitration guarantees, re-exercised end to end)
+was the only acceptance criterion this feature could not satisfy with a unit test; see `spec.md`'s
+AC-7 and `tasks.md`'s T026 for that pass.
+
 ## 2026-10-06 — `087-force-replacement-arbitration`
 
 `api` and `web` touched; `worker` untouched (`git diff --stat -- services/worker` empty, and

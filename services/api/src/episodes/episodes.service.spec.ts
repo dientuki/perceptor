@@ -3,6 +3,7 @@ import { EpisodesService } from './episodes.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { AttachSourceService } from '@/acquisition/attach-source.service';
 
 // This suite exists because Spec 010's central bug class is
 // silent by construction: an episode's acquisition landing on a film, or an
@@ -89,6 +90,7 @@ describe('EpisodesService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EpisodesService,
+        AttachSourceService,
         { provide: PrismaService, useValue: prisma },
         { provide: QbittorrentClient, useValue: qbittorrent },
         { provide: DownloadsService, useValue: downloads },
@@ -269,17 +271,59 @@ describe('EpisodesService', () => {
       expect(prisma.mediaSource.update).not.toHaveBeenCalled();
     });
 
-    it('refuses an infoHash already owned by a different episode', async () => {
+    it('refuses an infoHash already owned by a different episode, naming the holder', async () => {
+      // The message must name the episode that already holds the infoHash
+      // (S02E05), not the one being added to (S04E01) — the target's own
+      // identity must never leak in here.
+
+      // Spec 088, REQ-4 AC-3
       prisma.episode.findFirst.mockResolvedValue(episode);
       prisma.mediaSource.findFirst.mockResolvedValue(null);
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 8,
         movie: null,
+        season: null,
         episodeId: 999,
+        episode: {
+          episodeNumber: 5,
+          season: { seasonNumber: 2, show: { title: 'Reacher' } },
+        },
       });
 
       await expect(service.addTorrentToEpisode(42, validInput, 'user-1')).rejects.toThrow(
-        'That magnet is already attached to «Reacher S04E01»',
+        'That magnet is already attached to «Reacher S02E05»',
+      );
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses an infoHash already attached to a season, naming the holder, and writes nothing', async () => {
+      // Before this feature EpisodesService's collision lookup never
+      // inspected `season` on the colliding MediaSource, so a magnet
+      // already attached to a season pack passed this guard, failed the
+      // sameTarget check below, and reached the update that wrote
+      // `episodeId` onto a row whose `seasonId` was still set — a
+      // MediaSource pointing at two targets at once. Every downstream
+      // consumer that reads only one of those columns (worker's
+      // source-ready.job.ts, DownloadsService.resolveRace,
+      // MediaSourcesService.sourceScanned) silently mis-routes the file,
+      // and nothing in this path raised an error — the mutation returned
+      // 200.
+
+      // Spec 088, REQ-2 REQ-3 AC-2
+      prisma.episode.findFirst.mockResolvedValue(episode);
+      prisma.mediaSource.findFirst.mockResolvedValue(null);
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 51,
+        movie: null,
+        episode: null,
+        episodeId: null,
+        season: { seasonNumber: 3, show: { title: 'Reacher' } },
+      });
+
+      await expect(service.addTorrentToEpisode(42, validInput, 'user-1')).rejects.toThrow(
+        'That magnet is already attached to «Reacher Season 3»',
       );
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();

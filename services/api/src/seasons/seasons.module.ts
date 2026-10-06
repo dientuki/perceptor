@@ -6,9 +6,10 @@ import { DownloadsModule } from '@/downloads/downloads.module';
 import { MediaRootsModule } from '@/media-roots/media-roots.module';
 import { QueueModule } from '@/queue/queue.module';
 import { UploadsModule } from '@/uploads/uploads.module';
+import { AcquisitionModule } from '@/acquisition/acquisition.module';
 
 @Module({
-  imports: [SettingsModule, DownloadsModule, UploadsModule, MediaRootsModule, QueueModule],
+  imports: [SettingsModule, DownloadsModule, UploadsModule, MediaRootsModule, QueueModule, AcquisitionModule],
   providers: [SeasonsResolver, SeasonsService],
   exports: [SeasonsService],
 })

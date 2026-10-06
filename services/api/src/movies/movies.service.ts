@@ -13,8 +13,9 @@ import { MEDIA_TYPE } from '@/types/media';
 import { ContentKind as PrismaContentKind } from '@prisma/client';
 import { isReleaseWindowClosed } from './release-window';
 import { classifyContentKind } from '@/media/content-kind';
-import { QbittorrentClient } from '@/clients/torrent/client';
+import { QbittorrentClient, TorrentCategory } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
+import { sanitizeTag } from '@/clients/torrent/tags';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { SourceKind } from '@prisma/client';
 import { MediaTypeService } from '@/media/media-type.interface';
@@ -23,6 +24,13 @@ import { MediaServerReconcileService } from '@/media-server/media-server-reconci
 import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { AttachSourceService } from '@/acquisition/attach-source.service';
+import { AttachTarget } from '@/acquisition/attach-target';
+import { CatalogSearchService } from '@/media/catalog-search.service';
+import {
+  CatalogDescriptor,
+  RegisteredCatalogRow,
+} from '@/media/catalog-descriptor';
 import {
   RefreshCatalogOutcome,
   TitleRefresh,
@@ -34,30 +42,13 @@ const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
 // every exit path, this only bounds a process dying mid-refresh.
 const REFRESH_CLAIM_TTL_SECONDS = 60 * 2;
 
-// Zero-padded "<Show> S04E01" rendering for a MediaSource owned by an
-// episode, used only in the collision message below — matches the prefill
-// format `SearchTorrent.tsx` builds on the web side. Kept local rather than
-// shared with EpisodesService for the same reason attachTorrentSource itself
-// is not shared (see 010-episode-acquisition's api/plan.md § Approach).
-function episodeDisplayTitle(episode: {
-  episodeNumber: number;
-  season: { seasonNumber: number; show: { title: string } };
-}): string {
-  const season = String(episode.season.seasonNumber).padStart(2, '0');
-  const ep = String(episode.episodeNumber).padStart(2, '0');
-  return `${episode.season.show.title} S${season}E${ep}`;
-}
-
-// Spec 022, REQ-5
-function sanitizeTag(title: string, fallbackId: number): string {
-  const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
-  return cleaned || `id-${fallbackId}`;
-}
-
-// Spec 022, REQ-1
-function movieTags(movie: { id: number; title: string }): string[] {
-  return [sanitizeTag(movie.title, movie.id)];
-}
+// Spec 088, REQ-1 REQ-10
+type MovieAttachTarget = {
+  id: number;
+  title: string;
+  isShort: boolean;
+  status: string;
+};
 
 // Spec 056, NFR-3
 const SHORT_MAX_RUNTIME_MINUTES = 40;
@@ -84,6 +75,8 @@ export class MoviesService implements MediaTypeService {
     private readonly mediaServerReconcile: MediaServerReconcileService,
     private readonly mediaCapabilities: MediaCapabilitiesService,
     private readonly downloadsService: DownloadsService,
+    private readonly attachSource: AttachSourceService,
+    private readonly catalogSearch: CatalogSearchService,
   ) {}
 
   async create(createMovieDto: CreateMovieDto) {
@@ -166,10 +159,6 @@ export class MoviesService implements MediaTypeService {
       where: { id },
       data: updateMovieDto,
     });
-  }
-
-  private cacheKey(tmdbId: number): string {
-    return `tmdb:movie:${tmdbId}`;
   }
 
   // Spec 005, REQ-3
@@ -419,7 +408,7 @@ export class MoviesService implements MediaTypeService {
   }
 
   private async getCachedMovie(tmdbId: number): Promise<MediaSearchResult> {
-    const raw = await this.redis.get(this.cacheKey(tmdbId));
+    const raw = await this.redis.get(this.catalogSearch.cacheKey('movie', tmdbId));
     if (raw) return JSON.parse(raw) as MediaSearchResult;
 
     const fetched = await this.fetchMovieFromTMDB(tmdbId);
@@ -534,75 +523,68 @@ export class MoviesService implements MediaTypeService {
     }
   }
 
+  // Spec 088, REQ-6
+  private buildCatalogDescriptor(): CatalogDescriptor<TmdbMovie> {
+    return {
+      mediaType: MEDIA_TYPE.MOVIE,
+      tmdbSearchPath: 'movie',
+
+      toSearchResult: (item: TmdbMovie): MediaSearchResult => ({
+        id: item.id,
+        title: item.title,
+        releaseDate: item.release_date || null,
+        posterUrl: posterUrl(item.poster_path),
+        originalLanguage: item.original_language,
+        overview: item.overview,
+        type: MEDIA_TYPE.MOVIE,
+        genreIds: item.genre_ids,
+      }),
+
+      findRegistered: async (
+        prisma,
+        tmdbIds,
+        userId,
+      ): Promise<RegisteredCatalogRow[]> => {
+        const movies = await prisma.movie.findMany({
+          where: { tmdbId: { in: tmdbIds } },
+          select: {
+            id: true,
+            tmdbId: true,
+            isShort: true,
+            users: { where: { userId }, select: { userId: true } },
+          },
+        });
+
+        return movies.map((movie) => ({
+          id: movie.id,
+          tmdbId: movie.tmdbId,
+          inLibrary: movie.users.length > 0,
+          isShort: movie.isShort,
+        }));
+      },
+    };
+  }
+
   async search(
     query: string,
     userId: string,
   ): Promise<MediaSearchResultEntity[]> {
-    if (!query.trim()) return [];
-
-    const items = await this.tmdb.search<TmdbMovie>('movie', query);
-
-    const results: MediaSearchResult[] = items.map((item) => ({
-      id: item.id,
-      title: item.title,
-      releaseDate: item.release_date || null,
-      posterUrl: posterUrl(item.poster_path),
-      originalLanguage: item.original_language,
-      overview: item.overview,
-      type: MEDIA_TYPE.MOVIE,
-      genreIds: item.genre_ids,
-    }));
-
-    return this.cacheAndEnrich(results, userId);
+    return this.catalogSearch.search(
+      this.buildCatalogDescriptor(),
+      query,
+      userId,
+    );
   }
 
-  // Steps 3-4 of the former search(): the cache write and the ownership
-  // enrichment, in this order and only this order — see 026-multi-search's
-  // MediaSearchService, the second caller of this method.
   async cacheAndEnrich(
     results: MediaSearchResult[],
     userId: string,
   ): Promise<MediaSearchResultEntity[]> {
-    // Spec 005, NFR-5
-    void this.cacheMovies(results);
-
-    // Spec 005, NFR-5
-    const enriched = await this.enrichWithOwnership(results, userId);
-
-    return enriched;
-  }
-
-  // Attaches movieId (registered by anyone, or null) and inLibrary (owned by
-  // this caller) to a page of catalog results, from a single query — not one
-  // per result. Deliberately not merged into the objects passed to
-  // cacheMovies(): see the ordering note in searchMovies().
-  private async enrichWithOwnership(
-    results: MediaSearchResult[],
-    userId: string,
-  ): Promise<MediaSearchResultEntity[]> {
-    if (!results.length) return [];
-
-    const movies = await this.prisma.movie.findMany({
-      where: { tmdbId: { in: results.map((r) => r.id) } },
-      select: {
-        id: true,
-        tmdbId: true,
-        isShort: true,
-        users: { where: { userId }, select: { userId: true } },
-      },
-    });
-
-    const byTmdbId = new Map(movies.map((m) => [m.tmdbId, m]));
-
-    return results.map((result) => {
-      const registered = byTmdbId.get(result.id);
-      return {
-        ...result,
-        mediaId: registered?.id ?? null,
-        inLibrary: (registered?.users.length ?? 0) > 0,
-        isShort: registered?.isShort ?? false,
-      };
-    });
+    return this.catalogSearch.cacheAndEnrich(
+      this.buildCatalogDescriptor(),
+      results,
+      userId,
+    );
   }
 
   async addTorrentToMovie(
@@ -617,7 +599,7 @@ export class MoviesService implements MediaTypeService {
   ) {
     // The indexer no longer guarantees an infoHash at search time
     // (037-indexer-result-loss) — resolve it here, once, for the one
-    // release the user chose, before anything reaches attachTorrentSource.
+    // release the user chose, before anything reaches AttachSourceService.
     const infoHash = input.infoHash ?? (await resolveInfoHash(input.urls));
 
     return this.attachTorrentSource(
@@ -648,7 +630,47 @@ export class MoviesService implements MediaTypeService {
     );
   }
 
-  // Spec 005, REQ-6
+  // Spec 088, REQ-1 REQ-10; Spec 087, REQ-2
+  private buildAttachTarget(
+    movieId: number,
+  ): AttachTarget<MovieAttachTarget> {
+    return {
+      column: 'movieId',
+
+      resolve: async (userId: string): Promise<MovieAttachTarget> => {
+        const movie = await this.prisma.movie.findFirst({
+          where: { id: movieId, users: { some: { userId } } },
+        });
+        if (!movie)
+          throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
+        return movie;
+      },
+
+      refuse: async (
+        target: MovieAttachTarget,
+        force: boolean,
+      ): Promise<void> => {
+        if (
+          (target.status === 'COMPLETED' ||
+            (await this.downloadsService.hasDeliveredSource({
+              movieId: target.id,
+            }))) &&
+          !force
+        ) {
+          throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
+        }
+      },
+
+      labels: (
+        target: MovieAttachTarget,
+      ): { tags: string[]; category: TorrentCategory } => ({
+        tags: [sanitizeTag(target.title, target.id)],
+        category: target.isShort ? 'short' : 'movie',
+      }),
+    };
+  }
+
+  // Spec 005, REQ-6; Spec 088, REQ-1
   private async attachTorrentSource(
     movieId: number,
     input: {
@@ -660,125 +682,20 @@ export class MoviesService implements MediaTypeService {
     },
     userId: string,
   ) {
-    const movie = await this.prisma.movie.findFirst({
-      where: { id: movieId, users: { some: { userId } } },
-      include: { mediaSources: true, processJobs: true },
-    });
-    if (!movie)
-      throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
-
-    const existingSource = await this.prisma.mediaSource.findUnique({
-      where: { infoHash: input.infoHash },
-      include: {
-        movie: true,
-        episode: { include: { season: { include: { show: true } } } },
-      },
-    });
-
-    if (
-      existingSource &&
-      existingSource.movie &&
-      existingSource.movie.id !== movieId
-    ) {
-      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
-        title: existingSource.movie.title,
-      });
-    }
-
-    if (existingSource && existingSource.episode) {
-      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
-        title: episodeDisplayTitle(existingSource.episode),
-      });
-    }
-
- 
-    const sameTarget = existingSource?.movie?.id === movieId;
-
-    if (existingSource && sameTarget && existingSource.status !== 'ERROR') {
-      return this.prisma.movie.findUniqueOrThrow({ where: { id: movieId } });
-    }
-
-    // Spec 087, REQ-2
-    if (
-      (movie.status === 'COMPLETED' || (await this.downloadsService.hasDeliveredSource({ movieId }))) &&
-      !input.force
-    ) {
-      throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
-    }
-
-    if (existingSource && sameTarget) {
-      const hash = input.infoHash.toLowerCase();
-      const held = (await this.qbittorrent.info()).find(
-        (torrent) => torrent.hash.toLowerCase() === hash,
-      );
-
-      if (held) {
-        const finished = held.state === 'READY';
-        if (!finished) await this.qbittorrent.start(hash);
-
-        // Spec 087, REQ-3 REQ-4
-        if (input.force) await this.downloadsService.demoteDeliveredSources({ movieId }, 'movie replacement');
-        await this.prisma.mediaSource.update({
-          where: { id: existingSource.id },
-          data: {
-            status: 'QUEUED',
-            errorMessage: null,
-            errorKey: null,
-            errorParams: null,
-          },
-        });
-        await this.prisma.movie.update({
-          where: { id: movieId },
-          data: { status: 'DOWNLOADING' },
-        });
-        if (finished) await this.downloadsService.handleTorrentCompleted(hash);
-
-        return this.prisma.movie.findUniqueOrThrow({ where: { id: movieId } });
-      }
-    }
-
-    const downloadPath = await this.qbittorrent.add(
-      input.urls,
-      movieTags(movie),
-      movie.isShort ? 'short' : 'movie',
+    const outcome = await this.attachSource.attach(
+      this.buildAttachTarget(movieId),
+      input,
+      userId,
     );
 
-    // Demote *before* creating the replacement, and only after qBittorrent
-    // has accepted the new torrent — so a rejected add() leaves the
-    // previously active source untouched.
+    if (outcome === 'ATTACHED') {
+      await this.prisma.movie.update({
+        where: { id: movieId },
+        data: { status: 'DOWNLOADING' },
+      });
+    }
 
-    // Spec 087, REQ-3 REQ-4
-    if (input.force) await this.downloadsService.demoteDeliveredSources({ movieId }, 'movie replacement');
-
-    existingSource
-      ? await this.prisma.mediaSource.update({
-          where: { id: existingSource.id },
-          data: {
-            kind: input.kind,
-            status: 'QUEUED',
-            downloadUrl: input.urls[0] ?? null,
-            releaseTitle: input.releaseTitle,
-            downloadPath,
-            errorMessage: null,
-            movieId,
-          },
-        })
-      : await this.prisma.mediaSource.create({
-          data: {
-            kind: input.kind,
-            status: 'QUEUED',
-            infoHash: input.infoHash,
-            downloadUrl: input.urls[0] ?? null,
-            releaseTitle: input.releaseTitle,
-            downloadPath,
-            movieId,
-          },
-        });
-
-    return this.prisma.movie.update({
-      where: { id: movieId },
-      data: { status: 'DOWNLOADING' },
-    });
+    return this.prisma.movie.findUniqueOrThrow({ where: { id: movieId } });
   }
 
   private async cacheMovies(results: MediaSearchResult[]): Promise<void> {
@@ -789,7 +706,7 @@ export class MoviesService implements MediaTypeService {
 
       for (const movie of results) {
         pipeline.set(
-          this.cacheKey(movie.id),
+          this.catalogSearch.cacheKey('movie', movie.id),
           JSON.stringify(movie),
           'EX',
           TMDB_CACHE_TTL_SECONDS,
@@ -806,7 +723,7 @@ export class MoviesService implements MediaTypeService {
         );
       }
     } catch (err) {
-      console.error('Error guardando resultados de TMDB en Redis:', err);
+      console.error('Error caching TMDB results in Redis:', err);
     }
   }
 }

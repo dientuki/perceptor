@@ -6,6 +6,8 @@ import { RedisService } from '@/redis/redis.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { AttachSourceService } from '@/acquisition/attach-source.service';
+import { CatalogSearchService } from '@/media/catalog-search.service';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { MEDIA_TYPE } from '@/types/media';
@@ -162,6 +164,32 @@ describe('MoviesService', () => {
         },
         { provide: MediaCapabilitiesService, useValue: mediaCapabilities },
         { provide: DownloadsService, useValue: downloads },
+        {
+          // 088-acquisition-path-unification: the real AttachSourceService,
+          // wired to this suite's own mocks, so these cases keep exercising
+          // the actual attach body rather than a stub that could drift from
+          // it.
+          provide: AttachSourceService,
+          useFactory: () =>
+            new AttachSourceService(
+              prisma as unknown as PrismaService,
+              qbittorrent as unknown as QbittorrentClient,
+              downloads as unknown as DownloadsService,
+            ),
+        },
+        {
+          // 088-acquisition-path-unification: the real CatalogSearchService,
+          // wired to this suite's own prisma/redis/tmdb mocks, so the cache
+          // ordering assertions below keep exercising the actual shared
+          // implementation rather than a stub that could drift from it.
+          provide: CatalogSearchService,
+          useFactory: () =>
+            new CatalogSearchService(
+              prisma as unknown as PrismaService,
+              redis as unknown as RedisService,
+              tmdb as unknown as TmdbClient,
+            ),
+        },
       ],
     }).compile();
 
@@ -830,6 +858,12 @@ describe('MoviesService', () => {
       qbittorrent.add.mockResolvedValue('/media/downloads/abc123');
       prisma.mediaSource.create.mockResolvedValue({ id: 100 });
       prisma.movie.update.mockResolvedValue({ id: 7, status: 'DOWNLOADING' });
+      // 088-acquisition-path-unification: the service's own final read is
+      // now always findUniqueOrThrow, not the update()'s own return value.
+      prisma.movie.findUniqueOrThrow.mockResolvedValue({
+        id: 7,
+        status: 'DOWNLOADING',
+      });
 
       await expect(
         service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
@@ -837,6 +871,91 @@ describe('MoviesService', () => {
 
       expect(qbittorrent.add).toHaveBeenCalled();
       expect(prisma.mediaSource.create).toHaveBeenCalled();
+    });
+  });
+
+  // Spec 088, REQ-2 REQ-3: before this feature MoviesService's collision
+  // lookup never inspected `season` on the colliding MediaSource, so a
+  // magnet already attached to a season pack passed every guard here,
+  // failed the sameTarget check below, and reached the update that wrote
+  // `movieId` onto a row whose `seasonId` was still set — a MediaSource
+  // pointing at two targets at once. Every downstream consumer
+  // (worker's source-ready.job.ts reads movieId, DownloadsService
+  // .resolveRace picks the first non-null of the three, MediaSourcesService
+  // .sourceScanned resolves one) silently mis-routes a file that landed
+  // under the wrong target, and nothing in this path would have raised an
+  // error — the mutation returned 200.
+  describe('addMagnetToMovie (cross-target conflict scope, 088-acquisition-path-unification)', () => {
+    it('refuses a magnet already attached to a season, naming the holder, and writes nothing', async () => {
+      prisma.movie.findFirst.mockResolvedValue({
+        id: 7,
+        mediaSources: [],
+        status: 'MISSING',
+      });
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 50,
+        movie: null,
+        episode: null,
+        season: { seasonNumber: 2, show: { title: 'Reacher' } },
+      });
+
+      await expect(
+        service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
+      ).rejects.toThrow('That magnet is already attached to «Reacher Season 2»');
+
+      // The row the colliding source already belongs to (seasonId only)
+      // must never gain a second target — asserted here as "no write
+      // happened at all", since the only write path (update/create) is
+      // reached strictly after this refusal in the method body.
+      expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+    });
+  });
+
+  // Spec 088, REQ-5: before this feature, reusing an ERROR MediaSource
+  // through the main update-or-create branch (qBittorrent no longer holds
+  // the hash, so the reactivation branch above falls through to a genuine
+  // add()) cleared only `errorMessage`, leaving a stale `errorKey`/
+  // `errorParams` on a row that had just moved to QUEUED. `web`'s downloads
+  // list derives what it shows from those two fields, not `errorMessage`
+  // alone, so a film that just restarted downloading kept rendering its
+  // last failure underneath a QUEUED row, with nothing in any log to say
+  // the two had gone out of sync.
+  describe('addMagnetToMovie (error record fully cleared on reuse, 088-acquisition-path-unification)', () => {
+    it('clears errorMessage, errorKey and errorParams together when re-adding an ERROR source qBittorrent no longer holds', async () => {
+      prisma.movie.findFirst.mockResolvedValue({
+        id: 7,
+        title: 'Transformers',
+        status: 'DOWNLOADING',
+        mediaSources: [],
+      });
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 99,
+        status: 'ERROR',
+        movieId: 7,
+        movie: { id: 7, title: 'Transformers' },
+        episode: null,
+        season: null,
+        errorMessage: 'qBittorrent rechazó el torrent (500)',
+        errorKey: 'error.download.torrent_client_rejected',
+        errorParams: { code: 500 },
+      });
+      qbittorrent.info.mockResolvedValue([{ hash: 'f'.repeat(40), state: 'READY' }]);
+      qbittorrent.add.mockResolvedValue('/media/downloads/transformers-v2');
+      prisma.mediaSource.update.mockResolvedValue({ id: 99 });
+      prisma.movie.update.mockResolvedValue({ id: 7, status: 'DOWNLOADING' });
+
+      await service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1');
+
+      expect(prisma.mediaSource.update).toHaveBeenCalledTimes(1);
+      const data = prisma.mediaSource.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        status: 'QUEUED',
+        errorMessage: null,
+        errorKey: null,
+        errorParams: null,
+      });
     });
   });
 
@@ -852,6 +971,7 @@ describe('MoviesService', () => {
     const own = (status: string) => ({
       id: 99,
       status,
+      movieId: 7,
       movie: { id: 7, title: 'Transformers' },
       episode: null,
     });
@@ -1016,6 +1136,13 @@ describe('MoviesService', () => {
       qbittorrent.add.mockResolvedValue('/media/downloads/new');
       prisma.mediaSource.create.mockResolvedValue({ id: 101 });
       prisma.movie.update.mockResolvedValue({
+        id: 7,
+        status: 'DOWNLOADING',
+        filePath: COMPLETED_FILM.filePath,
+      });
+      // 088-acquisition-path-unification: the service's own final read is
+      // now always findUniqueOrThrow, not the update()'s own return value.
+      prisma.movie.findUniqueOrThrow.mockResolvedValue({
         id: 7,
         status: 'DOWNLOADING',
         filePath: COMPLETED_FILM.filePath,

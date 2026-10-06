@@ -85,7 +85,7 @@ export class PopularMediaService {
     try {
       await this.redis.set(cacheKey, JSON.stringify(rows), 'EX', POPULAR_LIST_TTL_SECONDS);
     } catch (err) {
-      console.error(`Error guardando cache de populares de TMDB (${cacheKey}):`, err);
+      console.error(`Error caching TMDB popular list (${cacheKey}):`, err);
     }
   }
 

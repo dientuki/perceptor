@@ -117,14 +117,20 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   lookup and throws for anything else; `026` added nothing to it. `media-type.interface.ts` is the
   whole contract: `search(query, userId)`, `register(tmdbId, userId)` and, since `026`,
   `cacheAndEnrich(results, userId)` — the best-effort cache write followed by caller-scoped
-  ownership enrichment, extracted out of each service's `search()` so both the per-type entry point
-  and the mixed one run the identical ordering-critical code. `media-search.service.ts` is the
+  ownership enrichment, originally extracted out of each service's `search()` so both the per-type
+  entry point and the mixed one ran the identical ordering-critical code. Since
+  `088-acquisition-path-unification`, `search`/`cacheAndEnrich` are no longer each service's own
+  copy of that code: both `MoviesService`/`ShowsService` delegate to `media/catalog-search.service.ts`'s
+  `CatalogSearchService`, parameterized by a `CatalogDescriptor` (TMDB search path, result mapping,
+  registered-row lookup) each builds for its own type — the cache-before-enrich ordering now lives
+  in one place rather than being a convention each service had to remember. `media-search.service.ts` is the
   fan-out for `searchAllMedia`: one `TmdbClient.searchMulti()` call, group rows by type, one
   `cacheAndEnrich` per type via the existing dispatch, then rebuild the response by walking the
   original ordered rows keyed by `${type}:${id}` — never the bare id, which collides across types.
-  Cache keys, endpoints, error strings and Prisma models stay private to each per-type
-  implementation by design. A third media type costs one new service plus one lookup entry, not an
-  edit to the dispatch. Since `033-billboard-and-navigation`, `popular-media.service.ts` is a third
+  Cache **keys** (the per-type Prisma model and the `isShort`/registration lookup inside each
+  `CatalogDescriptor`) stay private to each per-type implementation by design; the cache key
+  **shape** and the write/enrich ordering are now shared. A third media type costs one new service
+  plus one descriptor plus one lookup entry, not an edit to the dispatch. Since `033-billboard-and-navigation`, `popular-media.service.ts` is a third
   fan-out beside `media-search.service.ts`: `PopularMediaService.list(type, userId)` backs the
   `popularMedia` query behind the billboard's two carousels, resolving the caller's UI language
   first, then reading/writing a day-long `tmdb:popular:<type>:<lang>` list cache (via
@@ -190,9 +196,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   unreadable keywords) and never fails registration. `contentKind` never enters the cached object,
   same rule as `isShort`. `setContentKind(id, userId, kind)` follows `setShort`'s exact shape, exposed
   as `setMovieContentKind`.
-- **`shows/`** — `ShowsService`, `MoviesService`'s structural twin, **deliberately not factored into
-  a shared base class** (see `006-media-search/spec.md` § Out of Scope). Same cache-before-enrich
-  ordering, same upsert-based idempotent linking, scoped through `UserShow`. `shows` is a per-user
+- **`shows/`** — `ShowsService`, `MoviesService`'s structural twin for registration, hydration and
+  catalog refresh — **deliberately not factored into a shared base class** for those (see
+  `006-media-search/spec.md` § Out of Scope). Since `088-acquisition-path-unification`, the one
+  duplication `006` left on the table — `search`/`cacheAndEnrich`/`enrichWithOwnership` — is no
+  longer duplicated: both services delegate to `media/catalog-search.service.ts`'s
+  `CatalogSearchService` with their own `CatalogDescriptor`, which is what guarantees the
+  cache-before-enrich ordering below rather than each service having to remember it independently.
+  Same upsert-based idempotent linking, scoped through `UserShow`. `shows` is a per-user
   listing; `show(id)` is `findOneFromDb`'s twin one level deeper, with a nested `include` on
   `seasons`/`episodes` ordered server-side. `Show.status` is a `MediaStatus` in Prisma but crosses
   GraphQL as a plain `String!`, exactly as `Movie.status` does — **do not `registerEnumType` it for
@@ -268,32 +279,36 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `liveInfoForHash()`), otherwise the torrent's selected-and-complete files as paths relative to
   `downloadPath`. `api` never re-derives `isDownloaded` itself and never filters the `files` array it
   receives — the worker owns both the narrowing and the join.
-- **`episodes/`** — `MoviesService`'s structural twin one level deeper: `findOneFromDb` scoped through
-  `season.show.users`, plus `addTorrentToEpisode`/`addMagnetToEpisode` mirroring
-  `attachTorrentSource`'s ownership lookup, a `COMPLETED`-only conflict (`force`), demote-then-replace
-  and symmetric `infoHash` collision check — narrowed from "any active source conflicts" by
-  `022-download-status-tags`, which lets a target hold several concurrent sources (see `downloads/`
-  below). `MoviesService.attachTorrentSource`'s collision guard also
-  recognises an `infoHash` owned by an **episode**, not just another movie — without that, an
-  episode-owned hash falls through and gets silently re-pointed at a film. Reuses
-  `shows/entities/episode.entity.ts` rather than declaring a second `Episode`.
+- **`episodes/`** — `MoviesService`'s structural twin one level deeper for ownership: `findOneFromDb`
+  scoped through `season.show.users`, plus `addTorrentToEpisode`/`addMagnetToEpisode`. Since
+  `088-acquisition-path-unification`, the attach body itself is no longer a twin — it is not here
+  at all. Reuses `shows/entities/episode.entity.ts` rather than declaring a second `Episode`.
 
-  Since `060-duplicate-torrent-add`, all three `attachTorrentSource` twins (`movies/`, `episodes/`,
-  `seasons/`) treat an `infoHash` already attached to the **same** target as a no-op unless that
-  source is `ERROR` — no qBittorrent call, no write, not even under `force`. An `ERROR` duplicate is
-  reactivated in place: `info()` (errors propagate, never swallowed) decides whether qBittorrent
-  still holds it; if so the row keeps its `downloadPath`, `start()` runs unless it finished, and only
-  `status` plus the error fields change; a finished torrent is handed to
-  `DownloadsService.handleTorrentCompleted` after the row update. If qBittorrent no longer holds it,
-  the old `add()` path runs. The three modules import `DownloadsModule` for that (`067`: `movies/` and `shows/` also call `unwindSourcesForTitle` from `remove()`).
-- **`seasons/`** — the **third** structural twin of `attachTorrentSource`, same deliberate
-  non-abstraction. Two mutations as of `059-season-pack-acquisition-ui` —
-  `addMagnetToSeason(seasonId, magnet, force)` and `addTorrentToSeason(seasonId, infoHash, urls,
-  releaseTitle, force)` (twin of `EpisodesService.addTorrentToEpisode`: resolves a null `infoHash`
-  via `resolveInfoHash` before calling the same private `attachTorrentSource`) — both scoped through
-  `season.show.users`, with a season-scoped conflict on `MediaSource.seasonId` and the same
-  demote-on-`force` ordering (qBittorrent accepts the release first, *then* the previous source is
-  demoted, *then* the replacement is created). Since `068` it also owns `startSeasonUpload(seasonId, force)` and `finishSeasonUpload(mediaSourceId)`: an upload session is a season-scoped `MediaSource` (`LOCAL_FOLDER`, `PENDING`, `downloadPath` an empty per-session folder under the downloads root); closing it demotes superseded sources, runs `resolveRace`, flips `PENDING`→`READY` atomically (`updateMany`, so two closes enqueue one scan) and enqueues `addSourceReady` — it writes no episode status. `web` has a UI for both since `059` — see
+  **`088` collapsed all three per-target attach implementations (`movies/`, `episodes/`,
+  `seasons/`) onto one shared body**, `src/acquisition/attach-source.service.ts`'s
+  `AttachSourceService.attach()`: resolve the target and authorize the caller, the
+  `COMPLETED`/delivered-source refusal (`force`), the cross-target `infoHash` collision check
+  naming whichever target already holds it (a season, a film or a different episode — not just
+  "another movie", closing the gap `022-download-status-tags`-era code left), the
+  same-target-reuse no-op, the `ERROR`-duplicate reactivation (`060-duplicate-torrent-add`:
+  `info()` decides whether qBittorrent still holds it; if so the row keeps its `downloadPath`,
+  `start()` runs unless it finished, only `status` plus the error fields change, and a finished
+  torrent goes to `DownloadsService.handleTorrentCompleted`; otherwise the old `add()` path runs),
+  `add()` before any write, and demotion on `force` after `add()` succeeds. What still differs per
+  target is a four-member `AttachTarget` descriptor (`resolve`, `refuse`, `labels`, `column`) each
+  service builds for its own type — `MoviesService`/`EpisodesService` keep a thin private
+  `attachTorrentSource` wrapper that builds the descriptor and delegates; `SeasonsService` calls
+  `AttachSourceService.attach()` directly from each public method, with no wrapper of its own.
+  `AcquisitionModule` (imports `SettingsModule`, `DownloadsModule`) is what the three domain modules
+  import instead of each owning its own copy of this logic.
+- **`seasons/`** — same collapse as `episodes/` above: no private attach body of its own. Two
+  mutations as of `059-season-pack-acquisition-ui` — `addMagnetToSeason(seasonId, magnet, force)`
+  and `addTorrentToSeason(seasonId, infoHash, urls, releaseTitle, force)` (twin of
+  `EpisodesService.addTorrentToEpisode`: resolves a null `infoHash` via `resolveInfoHash` before
+  calling `AttachSourceService.attach()`) — both scoped through `season.show.users`, with a
+  season-scoped conflict on `MediaSource.seasonId` and the same demote-on-`force` ordering
+  (qBittorrent accepts the release first, *then* the previous source is demoted, *then* the
+  replacement is created). Since `068` it also owns `startSeasonUpload(seasonId, force)` and `finishSeasonUpload(mediaSourceId)`: an upload session is a season-scoped `MediaSource` (`LOCAL_FOLDER`, `PENDING`, `downloadPath` an empty per-session folder under the downloads root); closing it demotes superseded sources, runs `resolveRace`, flips `PENDING`→`READY` atomically (`updateMany`, so two closes enqueue one scan) and enqueues `addSourceReady` — it writes no episode status. `web` has a UI for both since `059` — see
   `services/web/CLAUDE.md`'s `AcquisitionTarget` section. Its final read is a
   `season.findUniqueOrThrow` that **must `include` the episodes** — `Season.episodes` is non-null, so
   a bare row fails the mutation *after* qBittorrent already accepted the torrent, orphaning the

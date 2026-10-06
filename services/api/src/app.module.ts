@@ -27,6 +27,7 @@ import { PreferencesModule } from './preferences/preferences.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { EnvironmentModule } from './environment/environment.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { AcquisitionModule } from './acquisition/acquisition.module';
 import { formatGraphQLError } from './i18n/graphql-error.formatter';
 
 @Module({
@@ -63,6 +64,7 @@ import { formatGraphQLError } from './i18n/graphql-error.formatter';
     SchedulerModule,
     EnvironmentModule,
     CalendarModule,
+    AcquisitionModule,
   ],
   providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })

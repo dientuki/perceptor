@@ -1042,6 +1042,22 @@ films, which the torrent/magnet path never actually implemented. `force` itself 
 but "the user was shown the replacement warning and accepted it" (REQ-1); the demotion it now
 authorises everywhere runs through the shared `DownloadsService.demoteDeliveredSources`.
 
+**Correction (`088-acquisition-path-unification`):** the paragraph above, and every other mention
+in this file of `attachTorrentSource` (movies/episodes/seasons) as three independent
+implementations, is no longer accurate about the body — only about the names and the error
+conditions, which are unchanged. `088` moved the one shared attach body (resolve `infoHash`, the
+no-op/reactivation branch, the `COMPLETED`/delivered refusal, `add()` before any write, demote on
+`force`, the update-or-create) onto `src/acquisition/attach-source.service.ts`'s
+`AttachSourceService.attach()`, parameterized by a four-member `AttachTarget` descriptor per
+target kind (`resolve`, `refuse`, `labels`, `column`). `MoviesService`/`EpisodesService` still
+expose a thin private `attachTorrentSource` wrapper that builds the descriptor and delegates;
+`SeasonsService` calls `AttachSourceService.attach()` directly from each public method with no
+wrapper at all. The three error conditions, their keys, and every mutation's signature are exactly
+as this file already describes — only "their own copy of the logic" is now false. `088` also added
+two refusals (an `infoHash` already attached to a season, refused on a film or episode target) and
+corrected one (an episode-to-episode collision now names the holder, not the target) — see
+`spec.md`'s § GraphQL Contract Delta for the exact table.
+
 **The race arbiter is one shared method on `DownloadsService`, entered from two places.** A torrent
 announces completion through the existing `torrentCompleted` webhook; a tus upload announces its own
 completion through `UploadsService.onUploadFinish`, which never passes through `DownloadsService`
@@ -1836,8 +1852,11 @@ type Mutation {
 `addTorrentToSeason` is the season twin of `addTorrentToEpisode`: the same lazy `infoHash`
 resolution (`resolveInfoHash` when the row supplied none), the same conflict/`force`/demotion rules
 and qBittorrent tagging that `addMagnetToSeason` already applies, via the existing private
-`SeasonsService.attachTorrentSource` — unchanged. `Season` gains no field; `web` selects only `id`
-and refreshes the page rather than patching state from the response.
+`SeasonsService.attachTorrentSource` — unchanged (as of `088-acquisition-path-unification`,
+`SeasonsService` calls the shared `AttachSourceService.attach()` directly from each public method,
+with no private `attachTorrentSource` wrapper of its own; `MoviesService`/`EpisodesService` still
+keep theirs). `Season` gains no field; `web` selects only `id` and refreshes the page rather than
+patching state from the response.
 
 `013-season-pack-processing`'s `addMagnetToSeason` gets its first consumer here — `web`'s season
 accordion header now has search, import-file (rendered disabled — a season file import is a
