@@ -7,6 +7,7 @@ import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
 jest.mock('node:fs/promises', () => ({
   rm: jest.fn().mockResolvedValue(undefined),
@@ -57,6 +58,12 @@ describe('DownloadsService', () => {
   let qbittorrent: { stop: jest.Mock; start: jest.Mock; info: jest.Mock; remove: jest.Mock };
   let settings: { getMap: jest.Mock };
   let mediaRoots: { resolveFromRoot: jest.Mock; isInsideRoot: jest.Mock };
+  let titleStatus: {
+    recomputeMovie: jest.Mock;
+    recomputeEpisode: jest.Mock;
+    recomputeSeason: jest.Mock;
+    recomputeShow: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -87,6 +94,12 @@ describe('DownloadsService', () => {
       resolveFromRoot: jest.fn().mockResolvedValue('/media/downloads'),
       isInsideRoot: jest.fn().mockResolvedValue(true),
     };
+    titleStatus = {
+      recomputeMovie: jest.fn().mockResolvedValue(undefined),
+      recomputeEpisode: jest.fn().mockResolvedValue(undefined),
+      recomputeSeason: jest.fn().mockResolvedValue(undefined),
+      recomputeShow: jest.fn().mockResolvedValue(undefined),
+    };
 
     (rm as jest.Mock).mockClear().mockResolvedValue(undefined);
     (rmdir as jest.Mock).mockClear().mockResolvedValue(undefined);
@@ -100,6 +113,7 @@ describe('DownloadsService', () => {
         { provide: QbittorrentClient, useValue: qbittorrent },
         { provide: SettingsService, useValue: settings },
         { provide: MediaRootsService, useValue: mediaRoots },
+        { provide: TitleStatusService, useValue: titleStatus },
       ],
     }).compile();
 
@@ -343,7 +357,7 @@ describe('DownloadsService', () => {
       expect(queue.addSourceReady).not.toHaveBeenCalled();
     });
 
-    it('marks READY, moves the target to ENCODING and enqueues once when there is no competing winner', async () => {
+    it('marks READY, recomputes the movie by identity and enqueues once when there is no competing winner', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 1,
         infoHash: 'winner-hash',
@@ -364,8 +378,32 @@ describe('DownloadsService', () => {
         where: { id: 1 },
         data: { status: 'READY' },
       });
-      expect(prisma.movie.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { status: 'ENCODING' } });
+      // Spec 089, REQ-1
+      expect(prisma.movie.update).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(7);
+      expect(titleStatus.recomputeEpisode).not.toHaveBeenCalled();
       expect(queue.addSourceReady).toHaveBeenCalledWith({ mediaSourceId: 1 });
+    });
+
+    it('recomputes the episode by identity instead of the movie when the source targets an episode', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 1,
+        infoHash: 'winner-hash',
+        status: 'DOWNLOADING',
+        downloadPath: '/media/downloads/abc123',
+        movieId: null,
+        episodeId: 42,
+        seasonId: null,
+        movie: null,
+        episode: { id: 42 },
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([]);
+
+      await service.handleTorrentCompleted('winner-hash');
+
+      expect(titleStatus.recomputeEpisode).toHaveBeenCalledWith(42);
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+      expect(prisma.episode.update).not.toHaveBeenCalled();
     });
   });
 
@@ -1413,6 +1451,111 @@ describe('DownloadsService', () => {
       expect(prisma.mediaSource.update).not.toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 1 } }),
       );
+    });
+  });
+
+  // Spec 089, REQ-7 REQ-8 NFR-1 NFR-4: this suite exists because a live
+  // read's write-back has two ways to fail with no error anywhere — writing
+  // only the row the caller happened to ask about (the plausible wrong
+  // implementation: fifty downloads, one stopped, one promoted from queued
+  // to downloading in the same info() call, and the promoted row's stored
+  // status silently stays stale), and writing over a terminal source whose
+  // torrent is still present in the client (a SCANNED source with its
+  // episodes encoding would be demoted to READY, corrupting isRaceWinner's
+  // "READY is an unconditional winner" rule). The third case pins the other
+  // failure mode: an unreachable torrent client must write nothing, not
+  // "every source is gone".
+  describe('live-read write-back', () => {
+    const liveRow = (hash: string, state: string, rawState: string) => ({
+      hash,
+      state,
+      rawState,
+      progress: 0.5,
+      dlspeed: 100,
+    });
+
+    beforeEach(() => {
+      prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Cincuenta Descargas' });
+    });
+
+    it('persists every row the live read returned, not only the one the caller asked about (AC-7)', async () => {
+      // Three sources share one title: one DOWNLOADING (about to be
+      // stopped by the caller elsewhere), and — in the very same info()
+      // call — a second one qBittorrent has just promoted out of its
+      // queue, plus a third still waiting. Only movieDownloads' tag-scoped
+      // read is exercised here; the point is that all three rows land in
+      // the DB from the one call, not just whichever the test's main
+      // assertion is about.
+      prisma.mediaSource.findMany
+        .mockResolvedValueOnce([
+          { id: 1, kind: 'TORRENT_SEARCH', status: 'DOWNLOADING', infoHash: 'hash-1', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+          { id: 2, kind: 'TORRENT_SEARCH', status: 'QUEUED', infoHash: 'hash-2', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+          { id: 3, kind: 'TORRENT_SEARCH', status: 'QUEUED', infoHash: 'hash-3', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+        ])
+        .mockResolvedValueOnce([
+          { id: 1, infoHash: 'hash-1', status: 'DOWNLOADING', movieId: 7, episodeId: null, seasonId: null },
+          { id: 2, infoHash: 'hash-2', status: 'QUEUED', movieId: 7, episodeId: null, seasonId: null },
+          { id: 3, infoHash: 'hash-3', status: 'QUEUED', movieId: 7, episodeId: null, seasonId: null },
+        ]);
+      qbittorrent.info.mockResolvedValue([
+        liveRow('hash-1', 'DOWNLOADING', 'downloading'),
+        liveRow('hash-2', 'DOWNLOADING', 'downloading'), // just promoted out of the queue
+        liveRow('hash-3', 'QUEUED', 'queuedDL'), // still waiting, unchanged
+      ]);
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.movieDownloads(7, 'user-1');
+
+      // The caller's own target (source 1) is untouched — already DOWNLOADING.
+      // Source 2, promoted QUEUED -> DOWNLOADING, must be written even though
+      // nobody asked about it directly.
+      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
+        where: { id: 2, status: { in: ['PENDING', 'QUEUED', 'DOWNLOADING', 'PAUSED'] } },
+        data: { status: 'DOWNLOADING' },
+      });
+      // Source 3's live state matches its stored status already — skipped,
+      // not re-written.
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ id: 3 }) }),
+      );
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(7);
+    });
+
+    it('never demotes a SCANNED source whose torrent is still seeding (AC-4)', async () => {
+      prisma.mediaSource.findMany
+        .mockResolvedValueOnce([
+          { id: 1, kind: 'TORRENT_SEARCH', status: 'SCANNED', infoHash: 'hash-1', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+        ])
+        .mockResolvedValueOnce([
+          { id: 1, infoHash: 'hash-1', status: 'SCANNED', movieId: 7, episodeId: null, seasonId: null },
+        ]);
+      // uploading -> READY per mapTorrentState's COMPLETED_STATES.
+      qbittorrent.info.mockResolvedValue([liveRow('hash-1', 'READY', 'uploading')]);
+
+      await service.movieDownloads(7, 'user-1');
+
+      // The attempted write is guarded to the non-terminal statuses, which
+      // excludes SCANNED by construction — matched here by the mock's
+      // default { count: 0 }, i.e. no row actually changed — so no
+      // recompute follows. If the guard were ever bypassed (a bare
+      // `update` instead of this guarded `updateMany`), this is the call
+      // that would demote the source straight to READY.
+      const call = prisma.mediaSource.updateMany.mock.calls.find((c) => c[0].where.id === 1);
+      expect(call?.[0].where.status.in).not.toContain('SCANNED');
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing when the torrent client is unreachable (AC-5)', async () => {
+      prisma.mediaSource.findMany.mockResolvedValueOnce([
+        { id: 1, kind: 'TORRENT_SEARCH', status: 'DOWNLOADING', infoHash: 'hash-1', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+      ]);
+      qbittorrent.info.mockRejectedValue(new Error('connection refused'));
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await service.movieDownloads(7, 'user-1');
+
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
     });
   });
 });

@@ -2,7 +2,7 @@
 title: Status materialization — api slice
 service: api
 last_updated: 2026-10-06
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Status materialization — `api` (`api/plan.md`)

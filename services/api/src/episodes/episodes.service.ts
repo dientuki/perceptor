@@ -8,6 +8,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { AttachTarget } from '@/acquisition/attach-target';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
 // Spec 022, REQ-2
 function episodeTags(episode: {
@@ -34,6 +35,7 @@ export class EpisodesService {
     private readonly prisma: PrismaService,
     private readonly downloadsService: DownloadsService,
     private readonly attachSourceService: AttachSourceService,
+    private readonly titleStatusService: TitleStatusService,
   ) {}
 
   async findOneFromDb(id: number, userId: string) {
@@ -108,10 +110,7 @@ export class EpisodesService {
     const outcome = await this.attachSourceService.attach(this.buildTarget(episodeId), input, userId);
 
     if (outcome === 'ATTACHED') {
-      await this.prisma.episode.update({
-        where: { id: episodeId },
-        data: { status: 'DOWNLOADING' },
-      });
+      await this.titleStatusService.recomputeEpisode(episodeId);
     }
 
     return this.prisma.episode.findUniqueOrThrow({ where: { id: episodeId } });

@@ -1,4 +1,4 @@
-import { EncodeStatus, MediaStatus, SourceStatus } from '@prisma/client';
+import { EncodeStatus, SourceStatus } from '@prisma/client';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 
@@ -53,15 +53,6 @@ export function translateSourceStatus(status: SourceStatus): PipelineStatus {
     case 'ERROR':
       return 'ERROR';
   }
-}
-
-/**
- * `MediaStatus` is already a subset of the eight values (spec.md's "MediaStatus is a subset of
- * the eight"). Identity in behaviour, kept as a named function so both translations are called
- * the same way at every call site and neither is a silent cast scattered around the codebase.
- */
-export function translateMediaStatus(status: MediaStatus): PipelineStatus {
-  return status;
 }
 
 export type SourceAltitudeJob = {
@@ -166,22 +157,6 @@ export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress 
   };
 }
 
-// Spec 047, REQ-12
-export function toMediaStatus(status: PipelineStatus): MediaStatus {
-  switch (status) {
-    case 'QUEUED':
-    case 'PAUSED':
-    case 'DOWNLOADING':
-    case 'DOWNLOADED':
-      return 'DOWNLOADING';
-    case 'MISSING':
-    case 'ENCODING':
-    case 'COMPLETED':
-    case 'ERROR':
-      return status;
-  }
-}
-
 /**
  * Season-pack lift (`059-season-pack-acquisition-ui`): whether an episode still stored as
  * `MISSING`/etc. should read at least `QUEUED` because an unscanned season-pack source is in
@@ -216,20 +191,21 @@ export type TitleAltitudeJob = {
 };
 
 export type TitleAltitudeInput = {
-  status: MediaStatus;
+  filePath: string | null;
+  mediaServerPresentAt: Date | null;
   sources: TitleAltitudeSource[];
   jobs: TitleAltitudeJob[];
 };
 
-// Spec 043, REQ-4; Spec 069, REQ-17; Spec 043, REQ-5; Spec 043, AC-8
+// Spec 089, REQ-2 REQ-3 REQ-4
 export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
-  const { status, sources, jobs } = input;
+  const { filePath, mediaServerPresentAt, sources, jobs } = input;
 
-  if (status === 'ERROR') {
-    return 'ERROR';
+  if (filePath != null || mediaServerPresentAt != null) {
+    return 'COMPLETED';
   }
 
-  let best = translateMediaStatus(status) as Exclude<PipelineStatus, 'ERROR'>;
+  let best: Exclude<PipelineStatus, 'ERROR'> = 'MISSING';
 
   for (const source of sources) {
     if (source.status === 'ERROR' || source.status === 'SCANNED') {
@@ -246,7 +222,8 @@ export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
 }
 
 export type EpisodeStatusInput = {
-  status: MediaStatus;
+  filePath: string | null;
+  mediaServerPresentAt: Date | null;
   releaseDate: Date | null;
   mediaSources: TitleAltitudeSource[];
   processJobs: TitleAltitudeJob[];
@@ -259,10 +236,41 @@ export function deriveEpisodeStatus(
 ): PipelineStatus {
   const lifted = isLiftedBySeasonPack(seasonSources, episode.releaseDate, now);
   return deriveTitleStatus({
-    status: episode.status,
+    filePath: episode.filePath,
+    mediaServerPresentAt: episode.mediaServerPresentAt,
     sources: lifted ? [...episode.mediaSources, { status: 'QUEUED' as const }] : episode.mediaSources,
     jobs: episode.processJobs,
   });
+}
+
+export type ShowEpisodeAltitude = {
+  status: PipelineStatus;
+  releaseDate: Date | null;
+};
+
+// Spec 089, REQ-11
+export function deriveShowStatus(episodes: ShowEpisodeAltitude[], now: Date): PipelineStatus {
+  const aired = episodes.filter((episode) => episode.releaseDate !== null && episode.releaseDate <= now);
+
+  if (aired.length === 0) {
+    return 'MISSING';
+  }
+
+  if (aired.every((episode) => episode.status === 'COMPLETED')) {
+    return 'COMPLETED';
+  }
+
+  // Spec 089, REQ-12
+  let best: Exclude<PipelineStatus, 'ERROR'> = 'MISSING';
+  for (const episode of aired) {
+    if (episode.status === 'ERROR') {
+      return 'ERROR';
+    }
+    const contribution = episode.status === 'COMPLETED' ? 'DOWNLOADED' : episode.status;
+    best = maxStatus(best, contribution);
+  }
+
+  return best;
 }
 
 export type RaceJob = {

@@ -41,7 +41,10 @@ enum EncodeStatus {
 // Estado simplificado / consolidado para la UI (Movie, Episode, Track)
 enum MediaStatus {
   MISSING // No solicitado o no existe archivo
+  QUEUED // Spec 089, REQ-5: waiting behind the torrent client's active-download limit
   DOWNLOADING // Está en cualquiera de los pasos de descarga (SEARCHING, ADDED, DOWNLOADING, etc.)
+  PAUSED // Spec 089, REQ-5: a download stopped or lost its race, not actively transferring
+  DOWNLOADED // Spec 089, REQ-5: downloaded and waiting to be scanned/encoded
   ENCODING // Está en la cola o siendo procesado por FFmpeg (QUEUED, ENCODING)
   COMPLETED // Todo el flujo finalizó (Descarga + Encode)
   ERROR // Falló la descarga o el encode
@@ -367,6 +370,11 @@ model Movie {
   status   MediaStatus @default(MISSING)
   filePath String?     @db.VarChar(500) // Ruta al archivo final procesado
 
+  // Spec 089, REQ-4: the configured media server was observed holding this title.
+  // A second possession input alongside filePath — set/cleared by the same reconciliation
+  // paths that promote/demote COMPLETED. Not exposed on any GraphQL type.
+  mediaServerPresentAt DateTime?
+
   // Orígenes de descarga vinculados (N:1 desde 022-download-status-tags, ver MediaSource.movieId)
   mediaSources MediaSource[]
 
@@ -429,6 +437,10 @@ model Episode {
 
   status   MediaStatus @default(MISSING)
   filePath String?     @db.VarChar(500)
+
+  // Spec 089, REQ-4: the configured media server was observed holding this episode.
+  // Same meaning as Movie.mediaServerPresentAt. Not exposed on any GraphQL type.
+  mediaServerPresentAt DateTime?
 
   sourceFiles  SourceFile[]
   mediaSources MediaSource[] // Pedidos de capítulo suelto (S1)

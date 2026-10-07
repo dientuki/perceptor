@@ -1,14 +1,13 @@
 import {
   deriveEpisodeStatus,
   deriveResume,
+  deriveShowStatus,
   isDeliveredSource,
   isRaceWinner,
   ResumeInput,
   deriveSourceStatus,
   deriveTitleStatus,
   isLiftedBySeasonPack,
-  toMediaStatus,
-  PIPELINE_STATUSES,
 } from './pipeline-status';
 import { SourceStatus } from '@prisma/client';
 
@@ -197,35 +196,91 @@ describe('deriveSourceStatus', () => {
   });
 });
 
-// Spec 069, REQ-17 bug class: a title demoted to MISSING (its file left the media
-// server) still reading COMPLETED/DOWNLOADED because a finished SCANNED source or COMPLETED job
-// lifted it back, so the refresh looks like a no-op; and the opposite, an active job/source no
-// longer lifting a title so a real download reads MISSING. Neither throws anywhere.
+// Spec 089, REQ-2 REQ-3 REQ-4 — the stored status column used to be an input to its own
+// derivation, which can only ratchet upward: a source moving QUEUED -> PAUSED never lowered the
+// answer, because the column itself (still DOWNLOADING from an earlier read) always won the
+// max. Removing the column as an input entirely is what proves the answer can now fall, and a
+// title demoted off COMPLETED must not be silently re-promoted by a leftover SCANNED source or
+// COMPLETED job either.
 describe('deriveTitleStatus', () => {
-  it('keeps a MISSING column MISSING beside a SCANNED source and a COMPLETED job (REQ-17)', () => {
-    expect(
-      deriveTitleStatus({
-        status: 'MISSING',
-        sources: [{ status: 'SCANNED' }],
-        jobs: [{ status: 'COMPLETED' }],
-      }),
-    ).toBe('MISSING');
+  const noPossession = { filePath: null, mediaServerPresentAt: null };
+
+  it('falls from DOWNLOADING to PAUSED when the only source pauses — the ratchet this feature removes (REQ-2)', () => {
+    // With the old signature this case was impossible to express: the caller had to pass the
+    // stale stored status as an input, which would always win the max against the honest PAUSED
+    // reading. Seeding at MISSING unconditionally and reading only the live rows is what lets
+    // this answer actually go down.
+    const downloading = deriveTitleStatus({ ...noPossession, sources: [{ status: 'DOWNLOADING' }], jobs: [] });
+    expect(downloading).toBe('DOWNLOADING');
+
+    const pausedAfter = deriveTitleStatus({ ...noPossession, sources: [{ status: 'PAUSED' }], jobs: [] });
+    expect(pausedAfter).toBe('PAUSED');
   });
 
-  it('keeps a COMPLETED column COMPLETED beside a SCANNED source and a COMPLETED job (REQ-17)', () => {
-    expect(
-      deriveTitleStatus({
-        status: 'COMPLETED',
-        sources: [{ status: 'SCANNED' }],
-        jobs: [{ status: 'COMPLETED' }],
-      }),
-    ).toBe('COMPLETED');
+  it('reads COMPLETED from filePath alone, before the ladder runs (REQ-3, REQ-4)', () => {
+    // Possession must win even against sources/jobs that would otherwise derive something lower
+    // — a demoted title's leftover MISSING rows must never fight a real filePath.
+    const result = deriveTitleStatus({
+      filePath: '/library/movie.mkv',
+      mediaServerPresentAt: null,
+      sources: [],
+      jobs: [],
+    });
+    expect(result).toBe('COMPLETED');
+  });
+
+  it('reads COMPLETED from mediaServerPresentAt alone, with no filePath, no sources and no jobs (REQ-4, AC-8/AC-9)', () => {
+    // The case the old `filePath != null` short-circuit could not express: a title the media
+    // server holds but Perceptor never downloaded. Without this second possession input the
+    // recompute would see identical inputs to a never-acquired title and demote it.
+    const result = deriveTitleStatus({
+      filePath: null,
+      mediaServerPresentAt: new Date('2026-01-01'),
+      sources: [],
+      jobs: [],
+    });
+    expect(result).toBe('COMPLETED');
+  });
+
+  it('never demotes on a null mediaServerPresentAt alone (NFR-5, AC-11)', () => {
+    // A null possession value must mean "this input says nothing" — it must not, by itself,
+    // pull a title down. A QUEUED source with no possession at all correctly reads QUEUED, not
+    // some demoted value the null supposedly caused.
+    const result = deriveTitleStatus({
+      filePath: null,
+      mediaServerPresentAt: null,
+      sources: [{ status: 'QUEUED' }],
+      jobs: [],
+    });
+    expect(result).toBe('QUEUED');
+  });
+
+  it('keeps possession from being undermined by a SCANNED source and a COMPLETED job (REQ-17)', () => {
+    const result = deriveTitleStatus({
+      filePath: '/library/movie.mkv',
+      mediaServerPresentAt: null,
+      sources: [{ status: 'SCANNED' }],
+      jobs: [{ status: 'COMPLETED' }],
+    });
+    expect(result).toBe('COMPLETED');
+  });
+
+  it('does not lift to DOWNLOADED/ENCODING from a SCANNED source or a COMPLETED job with no possession (REQ-17)', () => {
+    // These two are explicitly excluded from the ladder, not merely absent from it — this is
+    // what keeps a media-server demotion sticking: nothing left over from the pipeline's own
+    // finished work can re-promote a title the server no longer holds.
+    const result = deriveTitleStatus({
+      ...noPossession,
+      sources: [{ status: 'SCANNED' }],
+      jobs: [{ status: 'COMPLETED' }],
+    });
+    expect(result).toBe('MISSING');
   });
 
   it('lifts a SCANNED source with an ENCODING job to ENCODING (REQ-17)', () => {
     expect(
       deriveTitleStatus({
-        status: 'MISSING',
+        ...noPossession,
         sources: [{ status: 'SCANNED' }],
         jobs: [{ status: 'ENCODING' }],
       }),
@@ -233,60 +288,13 @@ describe('deriveTitleStatus', () => {
   });
 
   it.each(['WAITING', 'QUEUED'] as const)('lifts a %s job to ENCODING (REQ-17)', (status) => {
-    expect(deriveTitleStatus({ status: 'MISSING', sources: [], jobs: [{ status }] })).toBe('ENCODING');
+    expect(deriveTitleStatus({ ...noPossession, sources: [], jobs: [{ status }] })).toBe('ENCODING');
   });
 
   it('lifts a READY source with no jobs to DOWNLOADED (REQ-17)', () => {
-    expect(deriveTitleStatus({ status: 'MISSING', sources: [{ status: 'READY' }], jobs: [] })).toBe(
+    expect(deriveTitleStatus({ ...noPossession, sources: [{ status: 'READY' }], jobs: [] })).toBe(
       'DOWNLOADED',
     );
-  });
-
-  it('lets an ERROR column win over everything (REQ-17)', () => {
-    expect(
-      deriveTitleStatus({
-        status: 'ERROR',
-        sources: [{ status: 'READY' }],
-        jobs: [{ status: 'ENCODING' }],
-      }),
-    ).toBe('ERROR');
-  });
-
-  it('reads COMPLETED when the column is COMPLETED, one source is ERROR and one is SCANNED with a COMPLETED job (AC-8)', () => {
-    // Spec 038, REQ-9; Spec 043, REQ-4
-    const result = deriveTitleStatus({
-      status: 'COMPLETED',
-      sources: [{ status: 'ERROR' }, { status: 'SCANNED' }],
-      jobs: [{ status: 'ERROR' }, { status: 'COMPLETED' }],
-    });
-
-    expect(result).toBe('COMPLETED');
-  });
-
-  it('reads ERROR when the column is ERROR, even with a COMPLETED job present (AC-7)', () => {
-    // If ERROR were derived any other way than "column === ERROR", a title whose only job
-    // finished successfully but whose stored status lags behind could read something other than
-    // ERROR here, silently disagreeing with the row that failed.
-    const result = deriveTitleStatus({
-      status: 'ERROR',
-      sources: [],
-      jobs: [{ status: 'COMPLETED' }],
-    });
-
-    expect(result).toBe('ERROR');
-  });
-
-  it('returns the stored column verbatim with no sources and no jobs (AC-9)', () => {
-    // Preserves the COMPLETED that Jellyfin reconciliation writes with no filePath and no source
-    // at all. If the loop over an empty sources/jobs array somehow reset `best` to MISSING
-    // instead of seeding it from the column, this would fail.
-    const result = deriveTitleStatus({
-      status: 'COMPLETED',
-      sources: [],
-      jobs: [],
-    });
-
-    expect(result).toBe('COMPLETED');
   });
 
   it('resolves an episode with empty mediaSources and an ENCODING job to ENCODING, not MISSING', () => {
@@ -294,7 +302,7 @@ describe('deriveTitleStatus', () => {
     // the season), only its denormalized processJobs. If the title derivation only looked at
     // sources and ignored the job set, this would wrongly read MISSING.
     const result = deriveTitleStatus({
-      status: 'MISSING',
+      ...noPossession,
       sources: [],
       jobs: [{ status: 'ENCODING' }],
     });
@@ -302,16 +310,18 @@ describe('deriveTitleStatus', () => {
     expect(result).toBe('ENCODING');
   });
 
-  it('keeps a COMPLETED column COMPLETED beside a QUEUED source — the maximum never regresses (NFR-3)', () => {
-    // If the derivation took the *last* input's status rather than the maximum over the ranking,
-    // a stale QUEUED sibling row would drag a genuinely completed title backwards.
+  it('seeds at MISSING with no possession, no sources and no jobs', () => {
+    const result = deriveTitleStatus({ ...noPossession, sources: [], jobs: [] });
+    expect(result).toBe('MISSING');
+  });
+
+  it('takes the maximum over several live sources rather than the last one', () => {
     const result = deriveTitleStatus({
-      status: 'COMPLETED',
-      sources: [{ status: 'QUEUED' }],
+      ...noPossession,
+      sources: [{ status: 'QUEUED' }, { status: 'DOWNLOADING' }],
       jobs: [],
     });
-
-    expect(result).toBe('COMPLETED');
+    expect(result).toBe('DOWNLOADING');
   });
 });
 
@@ -367,54 +377,117 @@ describe('deriveEpisodeStatus', () => {
   const now = new Date('2026-09-16T00:00:00Z');
   const aired = new Date('2026-09-01T00:00:00Z');
   const future = new Date('2026-10-01T00:00:00Z');
-  const episode = (status: 'MISSING' | 'ERROR', releaseDate: Date | null) => ({
-    status,
-    releaseDate,
-    mediaSources: [],
-    processJobs: [],
+  const episode = (releaseDate: Date | null, over: Partial<ReturnType<typeof base>> = {}) => ({
+    ...base(releaseDate),
+    ...over,
   });
+  function base(releaseDate: Date | null) {
+    return {
+      filePath: null as string | null,
+      mediaServerPresentAt: null as Date | null,
+      releaseDate,
+      mediaSources: [] as { status: SourceStatus }[],
+      processJobs: [] as { status: 'WAITING' | 'QUEUED' | 'ENCODING' | 'COMPLETED' | 'ERROR' }[],
+    };
+  }
 
   it('lifts an aired episode to QUEUED while a season pack is in flight', () => {
-    expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode('MISSING', aired), now)).toBe('QUEUED');
+    expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode(aired), now)).toBe('QUEUED');
   });
 
   it('leaves an unaired episode MISSING despite an in-flight season pack', () => {
-    expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode('MISSING', future), now)).toBe('MISSING');
+    expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode(future), now)).toBe('MISSING');
   });
 
-  it('lets a stored ERROR win over a lift', () => {
-    expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode('ERROR', aired), now)).toBe('ERROR');
+  it('lets possession win over a lift', () => {
+    expect(
+      deriveEpisodeStatus(
+        [{ status: 'DOWNLOADING' }],
+        episode(aired, { filePath: '/library/ep.mkv' }),
+        now,
+      ),
+    ).toBe('COMPLETED');
   });
 
   it('lifts nothing when the season sources are SCANNED or ERROR', () => {
-    expect(deriveEpisodeStatus([{ status: 'SCANNED' }, { status: 'ERROR' }], episode('MISSING', aired), now)).toBe(
-      'MISSING',
-    );
+    expect(
+      deriveEpisodeStatus([{ status: 'SCANNED' }, { status: 'ERROR' }], episode(aired), now),
+    ).toBe('MISSING');
   });
 });
 
-// Spec 047, REQ-12: the eight-value vocabulary written back into the
-// five-value MediaStatus column after a delete recomputes a title's status. A
-// value this collapse gets wrong either rejects the Prisma write outright (a
-// PipelineStatus with no matching MediaStatus member) or writes a value no
-// consumer of the five-value column understands.
-describe('toMediaStatus', () => {
-  const expected: Record<(typeof PIPELINE_STATUSES)[number], string> = {
-    MISSING: 'MISSING',
-    QUEUED: 'DOWNLOADING',
-    PAUSED: 'DOWNLOADING',
-    DOWNLOADING: 'DOWNLOADING',
-    DOWNLOADED: 'DOWNLOADING',
-    ENCODING: 'ENCODING',
-    COMPLETED: 'COMPLETED',
-    ERROR: 'ERROR',
-  };
+// Spec 089, REQ-11 bug class: an unaired next episode silently holding a series back from
+// COMPLETED, or a series with no aired episode reading anything but MISSING. Neither throws.
+describe('deriveShowStatus', () => {
+  const now = new Date('2026-09-16T00:00:00Z');
+  const aired = new Date('2026-09-01T00:00:00Z');
+  const future = new Date('2026-10-01T00:00:00Z');
 
-  for (const status of PIPELINE_STATUSES) {
-    it(`collapses ${status} to ${expected[status]}`, () => {
-      expect(toMediaStatus(status)).toBe(expected[status]);
-    });
-  }
+  it('reads COMPLETED when every aired episode is COMPLETED and the next one has not aired (AC-12)', () => {
+    const result = deriveShowStatus(
+      [
+        { status: 'COMPLETED', releaseDate: aired },
+        { status: 'COMPLETED', releaseDate: aired },
+        { status: 'MISSING', releaseDate: future },
+      ],
+      now,
+    );
+    expect(result).toBe('COMPLETED');
+  });
+
+  it('reads MISSING when no episode has aired', () => {
+    const result = deriveShowStatus(
+      [
+        { status: 'MISSING', releaseDate: future },
+        { status: 'MISSING', releaseDate: null },
+      ],
+      now,
+    );
+    expect(result).toBe('MISSING');
+  });
+
+  it('reads MISSING when no episode exists at all', () => {
+    expect(deriveShowStatus([], now)).toBe('MISSING');
+  });
+
+  it('stops reading COMPLETED once an aired episode is not COMPLETED (REQ-12, AC-13)', () => {
+    // The transition with no event behind it: the next episode's air date passing with nothing
+    // acquired must pull a previously-COMPLETED series back down on the next recompute. The
+    // already-COMPLETED episode must not drag the series back up to COMPLETED by itself — it
+    // caps at DOWNLOADED, which is exactly what stops "no longer reads COMPLETED" from being
+    // trivially true only because of the one MISSING episode outranking nothing.
+    const result = deriveShowStatus(
+      [
+        { status: 'COMPLETED', releaseDate: aired },
+        { status: 'MISSING', releaseDate: aired },
+      ],
+      now,
+    );
+    expect(result).not.toBe('COMPLETED');
+    expect(result).toBe('DOWNLOADED');
+  });
+
+  it('takes the maximum over aired episodes when not every one is COMPLETED', () => {
+    const result = deriveShowStatus(
+      [
+        { status: 'DOWNLOADING', releaseDate: aired },
+        { status: 'QUEUED', releaseDate: aired },
+      ],
+      now,
+    );
+    expect(result).toBe('DOWNLOADING');
+  });
+
+  it('surfaces ERROR when an aired episode is ERROR', () => {
+    const result = deriveShowStatus(
+      [
+        { status: 'COMPLETED', releaseDate: aired },
+        { status: 'ERROR', releaseDate: aired },
+      ],
+      now,
+    );
+    expect(result).toBe('ERROR');
+  });
 });
 
 // The bug class this defends against: the race arbiter and the Play button disagreeing about who

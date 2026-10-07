@@ -6,6 +6,7 @@ import { RedisService } from '@/redis/redis.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { CatalogSearchService } from '@/media/catalog-search.service';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
@@ -101,6 +102,9 @@ describe('MoviesService', () => {
   let mediaCapabilities: {
     isShortsEnabled: jest.Mock;
   };
+  let titleStatus: {
+    recomputeMovie: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -150,6 +154,9 @@ describe('MoviesService', () => {
     mediaCapabilities = {
       isShortsEnabled: jest.fn().mockResolvedValue(true),
     };
+    titleStatus = {
+      recomputeMovie: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -164,6 +171,7 @@ describe('MoviesService', () => {
         },
         { provide: MediaCapabilitiesService, useValue: mediaCapabilities },
         { provide: DownloadsService, useValue: downloads },
+        { provide: TitleStatusService, useValue: titleStatus },
         {
           // 088-acquisition-path-unification: the real AttachSourceService,
           // wired to this suite's own mocks, so these cases keep exercising
@@ -1164,10 +1172,7 @@ describe('MoviesService', () => {
       expect(
         downloads.demoteDeliveredSources.mock.invocationCallOrder[0],
       ).toBeLessThan(prisma.mediaSource.create.mock.invocationCallOrder[0]);
-      expect(prisma.movie.update).toHaveBeenCalledWith({
-        where: { id: 7 },
-        data: { status: 'DOWNLOADING' },
-      });
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(7);
       expect((result as { filePath: string }).filePath).toBe(
         COMPLETED_FILM.filePath,
       );

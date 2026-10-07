@@ -14,6 +14,7 @@ import { EncodeJobDetails } from './entities/encode-job-details.entity';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { resolveAllowedSubtitleFormats } from '@/settings/subtitle-formats';
 import { COMPRESSION_RESOLUTIONS, DEFAULT_COMPRESSION_RESOLUTION } from '@/settings/settings.catalog';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
 // Spec 054, REQ-4
 const RECOVERY_ALLOWANCE = 1;
@@ -29,6 +30,8 @@ export class ProcessJobsService {
     private readonly mediaCapabilities: MediaCapabilitiesService,
     // Spec 054, T005
     private readonly encodeQueue: EncodeQueueService,
+    // Spec 089, REQ-1 REQ-2 REQ-3 REQ-4
+    private readonly titleStatus: TitleStatusService,
   ) {}
 
   async getEncodeJobDetails(id: number): Promise<EncodeJobDetails> {
@@ -304,13 +307,15 @@ export class ProcessJobsService {
       if (processJob.movieId) {
         await this.prisma.movie.update({
           where: { id: processJob.movieId },
-          data: { status: 'COMPLETED', filePath: outputFilePath },
+          data: { filePath: outputFilePath },
         });
+        await this.titleStatus.recomputeMovie(processJob.movieId);
       } else if (processJob.episodeId) {
         await this.prisma.episode.update({
           where: { id: processJob.episodeId },
-          data: { status: 'COMPLETED', filePath: outputFilePath },
+          data: { filePath: outputFilePath },
         });
+        await this.titleStatus.recomputeEpisode(processJob.episodeId);
       }
     }
 
@@ -390,9 +395,9 @@ export class ProcessJobsService {
   // actually means in code, not just in prose.
   private async propagateJobError(movieId: number | null, episodeId: number | null): Promise<void> {
     if (movieId) {
-      await this.prisma.movie.update({ where: { id: movieId }, data: { status: 'ERROR' } });
+      await this.titleStatus.recomputeMovie(movieId);
     } else if (episodeId) {
-      await this.prisma.episode.update({ where: { id: episodeId }, data: { status: 'ERROR' } });
+      await this.titleStatus.recomputeEpisode(episodeId);
     }
   }
 

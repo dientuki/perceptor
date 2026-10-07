@@ -12,6 +12,7 @@ import { MESSAGES_EN } from '@/i18n/messages.en';
 import { UploadTicketExpiredError, UploadTicketMismatchError, UploadTicketsService } from './upload-tickets.service';
 import type { UploadTicketTarget } from './upload-tickets.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 import { SessionService } from './session.service';
 
 const ILLEGAL_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
@@ -64,6 +65,7 @@ export class UploadsService implements OnModuleInit {
     private readonly queue: ProcessQueueService,
     private readonly uploadTickets: UploadTicketsService,
     private readonly downloads: DownloadsService,
+    private readonly titleStatus: TitleStatusService,
     private readonly sessions: SessionService,
   ) {}
 
@@ -227,10 +229,8 @@ export class UploadsService implements OnModuleInit {
         throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED);
       }
 
-      await this.prisma.episode.update({
-        where: { id: episodeId },
-        data: { status: 'ENCODING' },
-      });
+      // Spec 089, REQ-13
+      await this.titleStatus.recomputeEpisode(episodeId);
 
       await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
 
@@ -275,10 +275,8 @@ export class UploadsService implements OnModuleInit {
       throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED);
     }
 
-    await this.prisma.movie.update({
-      where: { id: movieId },
-      data: { status: 'ENCODING' },
-    });
+    // Spec 089, REQ-13
+    await this.titleStatus.recomputeMovie(movieId);
 
     await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
 

@@ -13,11 +13,15 @@ const DOWNLOADING_STATES = new Set([
   "metaDL",             // Torrent has just started downloading and is fetching metadata
   "forcedDL",           // Torrent is forced to downloading to ignore queue limit
   "forcedMetaDL",       // Torrent is forced to fetch metadata, ignoring queue limit
-  "queuedDL",           // Queuing is enabled and torrent is queued for download
   "stalledDL",          // Torrent is being downloaded, but no connection were made
   "checkingDL",         // Same as checkingUP, but torrent has NOT finished downloading
   "allocating",         // Torrent is allocating disk space for download
   "checkingResumeData", // Checking resume data on qBt startup
+]);
+
+// Spec 089, REQ-9
+const QUEUED_STATES = new Set([
+  "queuedDL", // Queuing is enabled and torrent is queued for download
 ]);
 
 const COMPLETED_STATES = new Set([
@@ -40,13 +44,15 @@ const PAUSED_STATES = new Set([
   "unknown",      // Unknown status
 ]);
 
-function mapTorrentState(state: string, completion: number): SourceStatus {
+// Spec 089, REQ-9
+export function mapTorrentState(state: string, completion: number): SourceStatus {
   if (completion !== -1) return SourceStatus.READY;
   if (!state) return SourceStatus.ERROR;
 
   if (state.includes("error")) return SourceStatus.ERROR;
   if (PAUSED_STATES.has(state)) return SourceStatus.PAUSED;
   if (COMPLETED_STATES.has(state)) return SourceStatus.READY;
+  if (QUEUED_STATES.has(state)) return SourceStatus.QUEUED;
   if (DOWNLOADING_STATES.has(state)) return SourceStatus.DOWNLOADING;
 
   // An unrecognised state used to be laundered into ERROR, which is exactly

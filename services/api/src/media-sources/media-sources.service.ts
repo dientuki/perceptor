@@ -8,6 +8,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { QbittorrentClient } from '@/clients/torrent/client';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
 @Injectable()
 export class MediaSourcesService {
@@ -15,6 +16,7 @@ export class MediaSourcesService {
     private readonly prisma: PrismaService,
     private readonly encodeQueue: EncodeQueueService,
     private readonly torrentClient: QbittorrentClient,
+    private readonly titleStatus: TitleStatusService,
   ) {}
 
   // Spec 052, NFR-1; Spec 052, REQ-2; Spec 052, REQ-4; Spec 052, REQ-8; Spec 052, REQ-7
@@ -46,9 +48,10 @@ export class MediaSourcesService {
     return this.findOneFlat(id);
   }
 
+  // Spec 089, REQ-1 REQ-5
   private async markScanFailed(
     tx: Prisma.TransactionClient,
-    mediaSource: { id: number; episodeId: number | null; movie?: { id: number } | null },
+    mediaSource: { id: number },
     errorKey: string,
     errorParams: string | null,
     errorMessage: string,
@@ -58,14 +61,6 @@ export class MediaSourcesService {
       where: { id: mediaSource.id },
       data: { status: 'ERROR', errorMessage, errorKey, errorParams, hasUnmatchedFiles },
     });
-
-    if (mediaSource.movie) {
-      await tx.movie.update({ where: { id: mediaSource.movie.id }, data: { status: 'ERROR' } });
-    }
-
-    if (mediaSource.episodeId) {
-      await tx.episode.update({ where: { id: mediaSource.episodeId }, data: { status: 'ERROR' } });
-    }
   }
 
   async sourceScanFailed(
@@ -74,6 +69,8 @@ export class MediaSourcesService {
     errorParams: string | null,
     errorMessage: string,
   ): Promise<boolean> {
+    let recomputeTarget: { movieId: number | null; episodeId: number | null } | null = null;
+
     await this.prisma.$transaction(async (tx) => {
       const mediaSource = await tx.mediaSource.findUnique({
         where: { id: mediaSourceId },
@@ -84,12 +81,23 @@ export class MediaSourcesService {
         return;
       }
       await this.markScanFailed(tx, mediaSource, errorKey, errorParams, errorMessage);
+      recomputeTarget = { movieId: mediaSource.movie?.id ?? null, episodeId: mediaSource.episodeId };
     });
+
+    // Spec 089, REQ-1 REQ-2
+    if (recomputeTarget) {
+      const target: { movieId: number | null; episodeId: number | null } = recomputeTarget;
+      if (target.movieId) await this.titleStatus.recomputeMovie(target.movieId);
+      if (target.episodeId) await this.titleStatus.recomputeEpisode(target.episodeId);
+    }
+
     return true;
   }
 
   async sourceScanned(mediaSourceId: number, files: SourceFileInput[], matches: ScannedMatchInput[]) {
     const processJobIdsToQueue: number[] = [];
+    let scanFailedTarget: { movieId: number | null; episodeId: number | null } | null = null;
+    const episodeIdsToRecompute = new Set<number>();
 
     await this.prisma.$transaction(async (tx) => {
       const mediaSource = await tx.mediaSource.findUnique({
@@ -178,6 +186,7 @@ export class MediaSourcesService {
         const errorMessage = MESSAGES_EN[errorKey];
 
         await this.markScanFailed(tx, mediaSource, errorKey, null, errorMessage, hasUnmatchedFiles);
+        scanFailedTarget = { movieId, episodeId: mediaSource.episodeId };
 
         return;
       }
@@ -226,12 +235,9 @@ export class MediaSourcesService {
           jobCreatedOrRequeued = true;
         }
 
-        // Spec 013, REQ-6
+        // Spec 013, REQ-6; Spec 089, REQ-2
         if (jobCreatedOrRequeued && resolved.episodeId) {
-          await tx.episode.update({
-            where: { id: resolved.episodeId },
-            data: { status: 'ENCODING' },
-          });
+          episodeIdsToRecompute.add(resolved.episodeId);
         }
       }
 
@@ -247,6 +253,16 @@ export class MediaSourcesService {
         },
       });
     });
+
+    // Spec 089, REQ-1 REQ-2
+    if (scanFailedTarget) {
+      const target: { movieId: number | null; episodeId: number | null } = scanFailedTarget;
+      if (target.movieId) await this.titleStatus.recomputeMovie(target.movieId);
+      if (target.episodeId) await this.titleStatus.recomputeEpisode(target.episodeId);
+    }
+    for (const episodeId of episodeIdsToRecompute) {
+      await this.titleStatus.recomputeEpisode(episodeId);
+    }
 
     for (const processJobId of processJobIdsToQueue) {
       await this.encodeQueue.addEncode({ processJobId });

@@ -2,7 +2,7 @@
 title: Status materialization — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-10-06
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Status materialization (`plan.md`)

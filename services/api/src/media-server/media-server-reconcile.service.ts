@@ -55,10 +55,10 @@ export class MediaServerReconcileService {
       const externalId = await client.findByTmdbId(MEDIA_TYPE.MOVIE, tmdbId);
       if (!externalId) return;
 
-      // Spec 034, REQ-15
+      // Spec 034, REQ-15; Spec 089, REQ-4
       await this.prisma.movie.updateMany({
         where: { id: movieId, status: 'MISSING' },
-        data: { status: 'COMPLETED' },
+        data: { status: 'COMPLETED', mediaServerPresentAt: new Date() },
       });
     } catch (err) {
       console.error(
@@ -97,9 +97,10 @@ export class MediaServerReconcileService {
         );
         if (!episode) continue; // same, at episode granularity
 
+        // Spec 089, REQ-4
         await this.prisma.episode.updateMany({
           where: { id: episode.id, status: 'MISSING' },
-          data: { status: 'COMPLETED' },
+          data: { status: 'COMPLETED', mediaServerPresentAt: new Date() },
         });
       }
     } catch (err) {
@@ -123,14 +124,15 @@ export class MediaServerReconcileService {
         tmdbId,
       );
       const present = !!externalId;
+      // Spec 089, REQ-4 AC-10
       const { count } = present
         ? await this.prisma.movie.updateMany({
             where: { id: movieId, status: 'MISSING', ...IN_FLIGHT_GUARD },
-            data: { status: 'COMPLETED' },
+            data: { status: 'COMPLETED', mediaServerPresentAt: new Date() },
           })
         : await this.prisma.movie.updateMany({
             where: { id: movieId, status: 'COMPLETED', ...IN_FLIGHT_GUARD },
-            data: { status: 'MISSING', filePath: null },
+            data: { status: 'MISSING', filePath: null, mediaServerPresentAt: null },
           });
       return {
         outcome: RefreshMediaServerOutcome.DONE,
@@ -202,10 +204,11 @@ export class MediaServerReconcileService {
             // has a live pack.
             ...(aired ? seasonGuard : {}),
           },
+          // Spec 089, REQ-4 AC-10
           data:
             from === 'MISSING'
-              ? { status: 'COMPLETED' }
-              : { status: 'MISSING', filePath: null },
+              ? { status: 'COMPLETED', mediaServerPresentAt: new Date() }
+              : { status: 'MISSING', filePath: null, mediaServerPresentAt: null },
         });
         return count;
       };

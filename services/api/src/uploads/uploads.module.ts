@@ -11,6 +11,7 @@ import { RedisModule } from '../redis/redis.module';
 import { MoviesModule } from '@/movies/movies.module';
 import { EpisodesModule } from '@/episodes/episodes.module';
 import { DownloadsModule } from '@/downloads/downloads.module';
+import { TitleStatusModule } from '@/title-status/title-status.module';
 import { SessionService } from './session.service';
 
 @Module({
@@ -24,6 +25,8 @@ import { SessionService } from './session.service';
     EpisodesModule,
     // Spec 022, REQ-19
     DownloadsModule,
+    // Spec 089, REQ-13
+    TitleStatusModule,
   ],
   controllers: [UploadsController],
   providers: [UploadsService, UploadsResolver, UploadTicketsService, SessionService],

@@ -5,6 +5,7 @@ import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { SourceFileInput } from './dto/source-file.input';
 import { ScannedMatchInput } from './dto/scanned-match.input';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
 // This suite exists because sourceScanned's per-match episode resolution is
 // the only place a season pack's files get filed under a row in the
@@ -43,6 +44,7 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
   };
   let encodeQueue: { addEncode: jest.Mock };
   let torrentClient: { files: jest.Mock };
+  let titleStatus: { recomputeMovie: jest.Mock; recomputeEpisode: jest.Mock };
 
   // Spec 052, REQ-6 REQ-7 REQ-4
   const videoFile = (filePath: string, isDownloaded = true): SourceFileInput =>
@@ -72,6 +74,7 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
 
     encodeQueue = { addEncode: jest.fn() };
     torrentClient = { files: jest.fn() };
+    titleStatus = { recomputeMovie: jest.fn(), recomputeEpisode: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -79,6 +82,7 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: EncodeQueueService, useValue: encodeQueue },
         { provide: QbittorrentClient, useValue: torrentClient },
+        { provide: TitleStatusService, useValue: titleStatus },
       ],
     }).compile();
 
@@ -122,7 +126,8 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
     expect(tx.processJob.create).toHaveBeenCalledWith({
       data: { sourceFileId: 900, movieId: null, episodeId: 555, status: 'WAITING' },
     });
-    expect(tx.episode.update).toHaveBeenCalledWith({ where: { id: 555 }, data: { status: 'ENCODING' } });
+    expect(tx.episode.update).not.toHaveBeenCalled();
+    expect(titleStatus.recomputeEpisode).toHaveBeenCalledWith(555);
     expect(tx.mediaSource.update).toHaveBeenCalledWith({
       where: { id: 10 },
       data: { status: 'SCANNED', errorMessage: null, errorKey: null, errorParams: null, hasUnmatchedFiles: false },
@@ -176,9 +181,10 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
       3,
       expect.objectContaining({ create: expect.objectContaining({ filePath: 'Show.S02E03.mkv', episodeId: 303 }) }),
     );
-    expect(tx.episode.update).toHaveBeenCalledWith({ where: { id: 301 }, data: { status: 'ENCODING' } });
-    expect(tx.episode.update).toHaveBeenCalledWith({ where: { id: 302 }, data: { status: 'ENCODING' } });
-    expect(tx.episode.update).toHaveBeenCalledWith({ where: { id: 303 }, data: { status: 'ENCODING' } });
+    expect(tx.episode.update).not.toHaveBeenCalled();
+    expect(titleStatus.recomputeEpisode).toHaveBeenCalledWith(301);
+    expect(titleStatus.recomputeEpisode).toHaveBeenCalledWith(302);
+    expect(titleStatus.recomputeEpisode).toHaveBeenCalledWith(303);
     expect(tx.mediaSource.update).toHaveBeenCalledWith({
       where: { id: 20 },
       data: { status: 'SCANNED', errorMessage: null, errorKey: null, errorParams: null, hasUnmatchedFiles: false },
@@ -310,7 +316,8 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
         hasUnmatchedFiles: false,
       },
     });
-    expect(tx.movie.update).toHaveBeenCalledWith({ where: { id: 900 }, data: { status: 'ERROR' } });
+    expect(tx.movie.update).not.toHaveBeenCalled();
+    expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(900);
     expect(encodeQueue.addEncode).not.toHaveBeenCalled();
   });
 
@@ -365,6 +372,7 @@ describe('MediaSourcesService — downloadedFiles', () => {
         { provide: PrismaService, useValue: {} },
         { provide: EncodeQueueService, useValue: {} },
         { provide: QbittorrentClient, useValue: torrentClient },
+        { provide: TitleStatusService, useValue: { recomputeMovie: jest.fn(), recomputeEpisode: jest.fn() } },
       ],
     }).compile();
 
@@ -443,6 +451,7 @@ describe('MediaSourcesService — sourceScanned narrowing by isDownloaded', () =
         { provide: PrismaService, useValue: prisma },
         { provide: EncodeQueueService, useValue: encodeQueue },
         { provide: QbittorrentClient, useValue: { files: jest.fn() } },
+        { provide: TitleStatusService, useValue: { recomputeMovie: jest.fn(), recomputeEpisode: jest.fn() } },
       ],
     }).compile();
 
@@ -537,6 +546,7 @@ describe('MediaSourcesService — sourceScanFailed', () => {
     movie: { update: jest.Mock };
     episode: { update: jest.Mock };
   };
+  let titleStatus: { recomputeMovie: jest.Mock; recomputeEpisode: jest.Mock };
 
   beforeEach(async () => {
     tx = {
@@ -547,18 +557,20 @@ describe('MediaSourcesService — sourceScanFailed', () => {
     const prisma = {
       $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) => callback(tx)),
     };
+    titleStatus = { recomputeMovie: jest.fn(), recomputeEpisode: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MediaSourcesService,
         { provide: PrismaService, useValue: prisma },
         { provide: EncodeQueueService, useValue: {} },
         { provide: QbittorrentClient, useValue: {} },
+        { provide: TitleStatusService, useValue: titleStatus },
       ],
     }).compile();
     service = module.get<MediaSourcesService>(MediaSourcesService);
   });
 
-  it('a READY source becomes ERROR with the given key and its movie becomes ERROR', async () => {
+  it('a READY source becomes ERROR with the given key and its movie is recomputed through TitleStatusService', async () => {
     tx.mediaSource.findUnique.mockResolvedValue({ id: 5, status: 'READY', episodeId: null, movie: { id: 40 } });
 
     await expect(
@@ -574,17 +586,19 @@ describe('MediaSourcesService — sourceScanFailed', () => {
         errorParams: '{"detail":"boom"}',
       },
     });
-    expect(tx.movie.update).toHaveBeenCalledWith({ where: { id: 40 }, data: { status: 'ERROR' } });
-    expect(tx.episode.update).not.toHaveBeenCalled();
+    expect(tx.movie.update).not.toHaveBeenCalled();
+    expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(40);
+    expect(titleStatus.recomputeEpisode).not.toHaveBeenCalled();
   });
 
-  it('a READY episode source marks its episode ERROR', async () => {
+  it('a READY episode source recomputes its episode through TitleStatusService', async () => {
     tx.mediaSource.findUnique.mockResolvedValue({ id: 6, status: 'READY', episodeId: 77, movie: null });
 
     await service.sourceScanFailed(6, 'error.source.scan_failed', null, 'x');
 
-    expect(tx.episode.update).toHaveBeenCalledWith({ where: { id: 77 }, data: { status: 'ERROR' } });
-    expect(tx.movie.update).not.toHaveBeenCalled();
+    expect(tx.episode.update).not.toHaveBeenCalled();
+    expect(titleStatus.recomputeEpisode).toHaveBeenCalledWith(77);
+    expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
   });
 
   it('a SCANNED source is left unchanged and true is returned', async () => {
@@ -594,6 +608,7 @@ describe('MediaSourcesService — sourceScanFailed', () => {
 
     expect(tx.mediaSource.update).not.toHaveBeenCalled();
     expect(tx.movie.update).not.toHaveBeenCalled();
+    expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
   });
 
   it('a missing source returns true and writes nothing', async () => {

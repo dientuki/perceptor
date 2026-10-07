@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-06
 last_updated: 2026-10-06
-status: Approved
+status: Implemented
 services: [api]
 ---
 
@@ -297,76 +297,76 @@ No model, relation or index is added or dropped. `Show` gains no possession colu
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a film with one attached torrent source, when the source is paused (either by
+- [x] **AC-1**: Given a film with one attached torrent source, when the source is paused (either by
       `downloadStop` or by losing `resolveRace`), then the film's `status` reads `PAUSED` on the next
       read — not `DOWNLOADING`. This is the defect in § Context; it fails today.
 
-- [ ] **AC-2**: Given a film whose torrent has just been attached and is sitting in qBittorrent's
+- [x] **AC-2**: Given a film whose torrent has just been attached and is sitting in qBittorrent's
       queue having transferred nothing, then the film's `status` reads `QUEUED`, and
       `select status from media_sources where id = <id>` returns `QUEUED` — not `DOWNLOADING`.
 
-- [ ] **AC-3**: `bin/mysql -e "select status, count(*) from media_sources group by status"` returns a
+- [x] **AC-3**: `bin/mysql -e "select status, count(*) from media_sources group by status"` returns a
       non-zero count for `DOWNLOADING` while a torrent is transferring. It returns zero today for any
       state of the system.
 
-- [ ] **AC-4 (failure path)**: Given a source already at `SCANNED` whose episodes are encoding, and a
+- [x] **AC-4 (failure path)**: Given a source already at `SCANNED` whose episodes are encoding, and a
       torrent still present in the client reporting `uploading`, when a live reading is taken and
       written back, then the source is still `SCANNED` — the write-back did not demote it to `READY`
       (REQ-8). Without the guard this corrupts the race arbiter: `isRaceWinner` treats `READY` as an
       unconditional winner.
 
-- [ ] **AC-5 (failure path)**: Given qBittorrent stopped, when `/downloads` is loaded and a control
+- [x] **AC-5 (failure path)**: Given qBittorrent stopped, when `/downloads` is loaded and a control
       mutation is attempted, then no `MediaSource.status` row changes value, nothing is demoted, and
       the mutation's own refusal is the existing `error.download.torrent_client_rejected` (NFR-4).
 
-- [ ] **AC-6 (failure path)**: Given a title whose only `ProcessJob` fails, when the failure is
+- [x] **AC-6 (failure path)**: Given a title whose only `ProcessJob` fails, when the failure is
       reported, then the title reads `ERROR`; and when that errored source is deleted (`047`'s
       unwind), the title no longer reads `ERROR` — the recompute lowered it rather than leaving a dead
       value behind.
 
-- [ ] **AC-7**: Given fifty torrents with three active slots, when one active torrent is stopped and
+- [x] **AC-7**: Given fifty torrents with three active slots, when one active torrent is stopped and
       qBittorrent promotes a queued one, then after the next live reading the promoted row's stored
       status is `DOWNLOADING` and the stopped row's is `PAUSED` — both written from the one `info()`
       call the stop already made (REQ-7). The other forty-seven still read `QUEUED`.
 
-- [ ] **AC-8 (failure path)**: Given a **film** the configured media server holds — promoted to
+- [x] **AC-8 (failure path)**: Given a **film** the configured media server holds — promoted to
       `COMPLETED` by reconciliation, with `filePath` null, no `MediaSource` and no `ProcessJob` — when
       any recompute of that film runs, then it still reads `COMPLETED` (REQ-4). Without the second
       possession input this demotes to `MISSING` and breaks `069`.
 
-- [ ] **AC-9 (failure path)**: Given an **episode** the configured media server holds — promoted the
+- [x] **AC-9 (failure path)**: Given an **episode** the configured media server holds — promoted the
       same way, by `reconcileShow`'s per-episode write (`media-server-reconcile.service.ts:101`) —
       when any recompute of that episode runs, then it still reads `COMPLETED`, and its series still
       reads `COMPLETED` (REQ-4, REQ-11). This is the case `media_server_items` could never express,
       since `Episode` has no `tmdbId`.
 
-- [ ] **AC-10 (failure path)**: Given a demotion — the media server no longer holds a title that was
+- [x] **AC-10 (failure path)**: Given a demotion — the media server no longer holds a title that was
       `COMPLETED` — when `069`'s sync runs, then the row's `filePath` **and**
       `mediaServerPresentAt` are both null afterwards, and a recompute immediately after does **not**
       promote it back to `COMPLETED` (REQ-4). Clearing only one of the two makes the demotion silently
       undo itself.
 
-- [ ] **AC-11 (failure path)**: Given `media_server` set to `none` — so every `mediaServerPresentAt`
+- [x] **AC-11 (failure path)**: Given `media_server` set to `none` — so every `mediaServerPresentAt`
       is null — when a film with one `COMPLETED` encode is recomputed, then it reads `COMPLETED` from
       its `filePath`, and no title anywhere was demoted by the null (NFR-5).
 
-- [ ] **AC-12**: Given a series whose every aired episode is `COMPLETED` and whose next episode has
+- [x] **AC-12**: Given a series whose every aired episode is `COMPLETED` and whose next episode has
       not aired, then `Show.status` reads `COMPLETED` while `Show.tmdbStatus` still reads
       `"Returning Series"` (REQ-11).
 
-- [ ] **AC-13**: Given that series, when the next episode's air date passes with no file acquired,
+- [x] **AC-13**: Given that series, when the next episode's air date passes with no file acquired,
       then within 24 hours `Show.status` no longer reads `COMPLETED` (REQ-12), on an installation that
       has opted into no scheduled task.
 
-- [ ] **AC-14**: Given a season with an in-flight, unscanned pack, then its aired episodes read at
+- [x] **AC-14**: Given a season with an in-flight, unscanned pack, then its aired episodes read at
       least `QUEUED`; and when the pack is deleted, they read `MISSING` again (REQ-13). The second half
       is the un-write that did not have to exist before this feature.
 
-- [ ] **AC-15**: `grep -rn "status: *'\(DOWNLOADING\|ENCODING\)'" services/api/src --include=*.ts |
+- [x] **AC-15**: `grep -rn "status: *'\(DOWNLOADING\|ENCODING\)'" services/api/src --include=*.ts |
       grep -v spec.ts` returns nothing for `movie.update`/`episode.update`/`show.update` call sites
       (REQ-1).
 
-- [ ] **AC-16**: `bin/npm api run test` and `bin/cli api npx tsc --noEmit` both pass, and the
+- [x] **AC-16**: `bin/npm api run test` and `bin/cli api npx tsc --noEmit` both pass, and the
       migration plus backfill applied to a database holding a title stuck at `DOWNLOADING` leaves that
       title reading its true status (NFR-3).
 

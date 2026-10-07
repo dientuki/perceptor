@@ -6,9 +6,17 @@ import { MediaRootsModule } from '@/media-roots/media-roots.module';
 import { MediaServerModule } from '@/media-server/media-server.module';
 import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
 import { QueueModule } from '@/queue/queue.module';
+import { TitleStatusModule } from '@/title-status/title-status.module';
 
 @Module({
-  imports: [SettingsModule, MediaRootsModule, MediaServerModule, MediaCapabilitiesModule, QueueModule],
+  imports: [
+    SettingsModule,
+    MediaRootsModule,
+    MediaServerModule,
+    MediaCapabilitiesModule,
+    QueueModule,
+    TitleStatusModule,
+  ],
   providers: [ProcessJobsResolver, ProcessJobsService],
 })
 export class ProcessJobsModule {}

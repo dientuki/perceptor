@@ -10,13 +10,12 @@ import { sanitizeTag } from '@/clients/torrent/tags';
 import { TorrentClientInfo } from '@/clients/torrent/types';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { i18nError } from '@/i18n/i18n-error';
 import {
   deriveSourceStatus,
-  deriveTitleStatus,
-  toMediaStatus,
   deriveResume,
   isRaceWinner,
   isDeliveredSource,
@@ -159,16 +158,40 @@ export class DownloadsService {
     private readonly qbittorrent: QbittorrentClient,
     private readonly settings: SettingsService,
     private readonly mediaRoots: MediaRootsService,
+    private readonly titleStatus: TitleStatusService,
   ) {}
 
-  // Spec 022, REQ-9 REQ-10
+  // Spec 022, REQ-9 REQ-10; Spec 089, REQ-7
   private async liveInfoByHash(tag?: string): Promise<Map<string, TorrentClientInfo>> {
     try {
       const rows = await this.qbittorrent.info(tag);
+      await this.writeBackLiveStates(rows);
       return new Map(rows.map((row) => [row.hash.toLowerCase(), row]));
     } catch (err) {
       console.error(`[DownloadsService] could not read torrent client state (tag "${tag ?? ''}"):`, err);
       return new Map();
+    }
+  }
+
+  // Spec 089, REQ-7 REQ-8 REQ-10 NFR-1 NFR-4
+  private async writeBackLiveStates(rows: TorrentClientInfo[]): Promise<void> {
+    if (rows.length === 0) return;
+
+    const liveByHash = new Map(rows.map((row) => [row.hash.toLowerCase(), row]));
+    const sources = await this.prisma.mediaSource.findMany({
+      where: { infoHash: { in: [...liveByHash.keys()] } },
+      select: { id: true, infoHash: true, status: true, movieId: true, episodeId: true, seasonId: true },
+    });
+
+    for (const source of sources) {
+      if (!source.infoHash) continue;
+      const live = liveByHash.get(source.infoHash.toLowerCase());
+      if (!live || live.state === source.status) continue;
+
+      const changed = await this.writeStatusIfNonTerminal(source.id, live.state);
+      if (changed) {
+        await this.recomputeStatus(source);
+      }
     }
   }
 
@@ -809,58 +832,21 @@ export class DownloadsService {
     }
   }
 
-  // Spec 047, T007; Spec 047, REQ-12
-  private async recomputeStatus(source: MediaSourceRow): Promise<void> {
+  // Spec 047, T007; Spec 047, REQ-12; Spec 089, REQ-13
+  private async recomputeStatus(
+    source: Pick<MediaSourceRow, 'movieId' | 'episodeId' | 'seasonId'>,
+  ): Promise<void> {
     if (source.movieId) {
-      await this.recomputeMovieStatus(source.movieId);
+      await this.titleStatus.recomputeMovie(source.movieId);
       return;
     }
     if (source.episodeId) {
-      await this.recomputeEpisodeStatus(source.episodeId);
+      await this.titleStatus.recomputeEpisode(source.episodeId);
       return;
     }
     if (source.seasonId) {
-      const episodes = await this.prisma.episode.findMany({
-        where: { seasonId: source.seasonId },
-        select: { id: true },
-      });
-      for (const episode of episodes) {
-        await this.recomputeEpisodeStatus(episode.id);
-      }
+      await this.titleStatus.recomputeSeason(source.seasonId);
     }
-  }
-
-  private async recomputeMovieStatus(movieId: number): Promise<void> {
-    const movie = await this.prisma.movie.findUnique({
-      where: { id: movieId },
-      include: { mediaSources: true, processJobs: true },
-    });
-    if (!movie) return;
-
-    // Spec 047, REQ-13; Spec 047, AC-12
-    if (movie.filePath != null) {
-      await this.prisma.movie.update({ where: { id: movieId }, data: { status: 'COMPLETED' } });
-      return;
-    }
-
-    const derived = deriveTitleStatus({ status: 'MISSING', sources: movie.mediaSources, jobs: movie.processJobs });
-    await this.prisma.movie.update({ where: { id: movieId }, data: { status: toMediaStatus(derived) } });
-  }
-
-  private async recomputeEpisodeStatus(episodeId: number): Promise<void> {
-    const episode = await this.prisma.episode.findUnique({
-      where: { id: episodeId },
-      include: { mediaSources: true, processJobs: true },
-    });
-    if (!episode) return;
-
-    if (episode.filePath != null) {
-      await this.prisma.episode.update({ where: { id: episodeId }, data: { status: 'COMPLETED' } });
-      return;
-    }
-
-    const derived = deriveTitleStatus({ status: 'MISSING', sources: episode.mediaSources, jobs: episode.processJobs });
-    await this.prisma.episode.update({ where: { id: episodeId }, data: { status: toMediaStatus(derived) } });
   }
 
   // Single-torrent lookup for the three control mutations above — cheaper
@@ -869,6 +855,7 @@ export class DownloadsService {
   private async liveInfoForHash(infoHash: string): Promise<TorrentClientInfo | undefined> {
     try {
       const rows = await this.qbittorrent.info();
+      await this.writeBackLiveStates(rows);
       const wanted = infoHash.toLowerCase();
       return rows.find((row) => row.hash.toLowerCase() === wanted);
     } catch (err) {
@@ -1029,26 +1016,18 @@ export class DownloadsService {
       return raceResult.message;
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.mediaSource.update({
-        where: { id: mediaSource.id },
-        data: { status: 'READY' }, // READY = "Archivos disponibles en disco"
-      });
-
-      if (mediaSource.movie) {
-        await tx.movie.update({
-          where: { id: mediaSource.movie.id },
-          data: { status: 'ENCODING' },
-        });
-      }
-
-      if (mediaSource.episode) {
-        await tx.episode.update({
-          where: { id: mediaSource.episode.id },
-          data: { status: 'ENCODING' },
-        });
-      }
+    await this.prisma.mediaSource.update({
+      where: { id: mediaSource.id },
+      data: { status: 'READY' }, // READY = "Archivos disponibles en disco"
     });
+
+    // Spec 089, REQ-1 REQ-8
+    if (mediaSource.movie) {
+      await this.titleStatus.recomputeMovie(mediaSource.movie.id);
+    }
+    if (mediaSource.episode) {
+      await this.titleStatus.recomputeEpisode(mediaSource.episode.id);
+    }
 
     await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
 

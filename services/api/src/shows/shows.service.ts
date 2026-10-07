@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { EncodeStatus, MediaStatus, SourceStatus } from '@prisma/client';
+import { MediaStatus } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -12,7 +12,6 @@ import { MEDIA_TYPE } from '@/types/media';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
-import { deriveEpisodeStatus } from '@/pipeline-status/pipeline-status';
 import { CalendarEpisodeRow } from '@/calendar/group-episodes';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { classifyContentKind } from '@/media/content-kind';
@@ -103,17 +102,14 @@ export class ShowsService implements MediaTypeService {
         season: { show: { users: { some: { userId } } } },
       },
       include: {
-        mediaSources: true,
-        processJobs: true,
         season: {
           include: {
             show: { select: { id: true, title: true } },
-            mediaSources: { where: { status: { not: 'ERROR' } } },
           },
         },
       },
     });
-    const now = new Date();
+    // Spec 089, REQ-6
     return episodes.map((episode) => ({
       showId: episode.season.show.id,
       showTitle: episode.season.show.title,
@@ -121,28 +117,23 @@ export class ShowsService implements MediaTypeService {
       episodeNumber: episode.episodeNumber,
       episodeTitle: episode.title,
       releaseDate: episode.releaseDate as Date,
-      status: deriveEpisodeStatus(episode.season.mediaSources, episode, now),
+      status: episode.status,
     }));
   }
 
-  // Spec 059, T003
+  // Spec 059, T003; Spec 089, REQ-6
   private deriveSeasonEpisodeStatuses<
     TSeason extends {
-      mediaSources: { status: SourceStatus }[];
       episodes: {
         status: MediaStatus;
-        releaseDate: Date | null;
-        mediaSources: { status: SourceStatus }[];
-        processJobs: { status: EncodeStatus }[];
       }[];
     },
   >(seasons: TSeason[]) {
-    const now = new Date();
     return seasons.map((season) => ({
       ...season,
       episodes: season.episodes.map((episode) => ({
         ...episode,
-        status: deriveEpisodeStatus(season.mediaSources, episode, now),
+        status: episode.status,
       })),
     }));
   }

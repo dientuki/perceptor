@@ -2133,6 +2133,32 @@ Things the schema cannot express, all load-bearing:
   work lifts it. `Download.status` per source row is unchanged.
 - **`isShort` and `contentKind` are never re-derived by a refresh.**
 
+### `Show.status` moves off `MISSING`, and a column replaces a projection (`089-status-materialization`)
+
+No schema change — `Show.status` was already `String!` since `007-library-listing`; this feature
+only changes where its value comes from and, for the first time, moves it off `MISSING` in
+practice. Beside the `Episode.status` note from `059` above: a series now reads `COMPLETED` once
+every **aired** episode is `COMPLETED` (an unaired next episode never holds it back), and drops to a
+ladder maximum — never back to `COMPLETED` by an older episode's own completion — the moment a new
+episode airs with nothing acquired for it yet. This is visible on any screen rendering a series'
+`StatusBadge`, with no consumer change owed: the field is still `String!`, still the same
+eight-value vocabulary (`MISSING`/`QUEUED`/`PAUSED`/`DOWNLOADING`/`DOWNLOADED`/`ENCODING`/
+`COMPLETED`/`ERROR`) `Movie`/`Episode` already use.
+
+`Movie.status`/`Episode.status`/`Show.status` are now written once, by `api`'s internal
+`TitleStatusService`, instead of being re-derived from sources/jobs on every read (`043`'s REQ-17
+posture — a finished pipeline run doesn't lift the stored value — is superseded: the column is no
+longer fed a finished-run signal at read time at all, because nothing derives at read time for
+these three fields any more). The two acquisition sweeps (`acquire_movies`/`acquire_episodes`) are
+the one deliberate exception: they still call the pure derivation fresh from live rows rather than
+trust the column, since a momentarily stale `MISSING` would make a sweep double-acquire with no
+error anywhere.
+
+**`mediaServerPresentAt` (new `Movie`/`Episode` column) never crosses the boundary.** It exists
+only so a demotion (`069`'s media-server reconciliation) and the derivation agree on possession
+without reading the status column back into its own derivation — not exposed on any GraphQL type,
+not read by `web` or `worker`.
+
 ### What never crosses the boundary
 
 - **Absolute container paths.** Constitution, Article V — `web` sees host paths, `worker` receives

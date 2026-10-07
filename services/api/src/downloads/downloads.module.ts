@@ -4,10 +4,11 @@ import { DownloadsService } from './downloads.service';
 import { QueueModule } from '@/queue/queue.module';
 import { SettingsModule } from '@/settings/settings.module';
 import { MediaRootsModule } from '@/media-roots/media-roots.module';
+import { TitleStatusModule } from '@/title-status/title-status.module';
 
 // Spec 022, REQ-19
 @Module({
-  imports: [QueueModule, SettingsModule, MediaRootsModule],
+  imports: [QueueModule, SettingsModule, MediaRootsModule, TitleStatusModule],
   providers: [DownloadsResolver, DownloadsService],
   exports: [DownloadsService],
 })

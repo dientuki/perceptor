@@ -9,6 +9,7 @@ import { ProcessQueueService } from '@/queue/process-queue.service';
 import { SessionService } from '@/uploads/session.service';
 import { UploadsService } from '@/uploads/uploads.service';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { mkdtemp, mkdir, writeFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -72,6 +73,7 @@ describe('SeasonsService', () => {
   let queue: { addSourceReady: jest.Mock };
   let sessions: { findOpenSeasonSession: jest.Mock };
   let uploads: { demoteSupersededSources: jest.Mock };
+  let titleStatus: { recomputeSeason: jest.Mock };
 
   const season = {
     id: 42,
@@ -107,6 +109,7 @@ describe('SeasonsService', () => {
     queue = { addSourceReady: jest.fn() };
     sessions = { findOpenSeasonSession: jest.fn() };
     uploads = { demoteSupersededSources: jest.fn() };
+    titleStatus = { recomputeSeason: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -120,6 +123,7 @@ describe('SeasonsService', () => {
         { provide: ProcessQueueService, useValue: queue },
         { provide: SessionService, useValue: sessions },
         { provide: UploadsService, useValue: uploads },
+        { provide: TitleStatusService, useValue: titleStatus },
       ],
     }).compile();
 
@@ -742,6 +746,102 @@ describe('SeasonsService', () => {
         expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
         expect(queue.addSourceReady).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  // Spec 089, REQ-13; Spec 089, AC-14 — 059 recorded the season-pack lift as a read-time projection with "no
+  // un-write anywhere" — status materialization turns the read-time max into
+  // a stored column, so that claim has to be re-proven: if attaching a pack
+  // does not trigger a season recompute, the aired episode never lifts off
+  // MISSING in the first place; if deleting it does not trigger one, the
+  // episode is stuck reading QUEUED forever with a torrent that no longer
+  // exists and nothing in any log to explain why. This runs the real
+  // TitleStatusService (not a mock) so the write TitleStatusService actually
+  // issues is what's asserted, not a stand-in for it.
+  describe('status materialization (089, REQ-13)', () => {
+    const validSeasonTorrentInput = {
+      infoHash: 'abc123def456abc123def456abc123def456abc',
+      urls: ['https://indexer.example/download/123'],
+      releaseTitle: 'Reacher S02 1080p',
+      force: false,
+    };
+
+    it('lifts an aired episode to QUEUED on attach, and drops it back to MISSING once the pack is gone', async () => {
+      const episodeRow = {
+        id: 7,
+        status: 'MISSING',
+        filePath: null,
+        mediaServerPresentAt: null,
+        releaseDate: new Date('2020-01-01'),
+        mediaSources: [],
+        processJobs: [],
+        season: { showId: 1, mediaSources: [] as { status: string }[] },
+      };
+      const showRow = { status: 'MISSING', seasons: [{ episodes: [episodeRow] }] };
+
+      const realPrisma: any = {
+        season: {
+          findUnique: jest.fn(async () => ({ showId: 1, episodes: [{ id: episodeRow.id }] })),
+        },
+        episode: {
+          findUnique: jest.fn(async () => episodeRow),
+          updateMany: jest.fn(async ({ data }: any) => {
+            episodeRow.status = data.status;
+            return { count: 1 };
+          }),
+        },
+        show: {
+          findUnique: jest.fn(async () => ({ ...showRow, seasons: [{ episodes: [episodeRow] }] })),
+          updateMany: jest.fn(async () => ({ count: 1 })),
+        },
+      };
+      const realTitleStatus = new TitleStatusService(realPrisma);
+
+      prisma.season.findFirst.mockResolvedValue(season);
+      prisma.mediaSource.findFirst.mockResolvedValue(null);
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      qbittorrent.add.mockResolvedValue('/downloads/reacher-s02');
+      // The attach's own write lands on the outer, mocked `prisma` — this
+      // mirrors that into the fixture realTitleStatus reads from, the same
+      // way a real database would make one write visible to the other query.
+      prisma.mediaSource.create.mockImplementation(async () => {
+        episodeRow.season.mediaSources.push({ status: 'QUEUED' });
+        return { id: 100, seasonId: 42 };
+      });
+      prisma.season.findUniqueOrThrow.mockResolvedValue({ ...season, episodes: [] });
+
+      const moduleWithRealTitleStatus: TestingModule = await Test.createTestingModule({
+        providers: [
+          SeasonsService,
+          AttachSourceService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: QbittorrentClient, useValue: qbittorrent },
+          { provide: DownloadsService, useValue: downloads },
+          { provide: SettingsService, useValue: { getMap: jest.fn().mockResolvedValue({}) } },
+          { provide: MediaRootsService, useValue: mediaRoots },
+          { provide: ProcessQueueService, useValue: queue },
+          { provide: SessionService, useValue: sessions },
+          { provide: UploadsService, useValue: uploads },
+          { provide: TitleStatusService, useValue: realTitleStatus },
+        ],
+      }).compile();
+      const serviceWithRealTitleStatus = moduleWithRealTitleStatus.get<SeasonsService>(SeasonsService);
+
+      expect(episodeRow.status).toBe('MISSING');
+
+      // The pack attaches: the aired episode, with nothing else backing it,
+      // lifts off MISSING because a non-ERROR, non-SCANNED season source now
+      // exists (isLiftedBySeasonPack).
+      await serviceWithRealTitleStatus.addTorrentToSeason(42, validSeasonTorrentInput, 'user-1');
+      expect(episodeRow.status).toBe('QUEUED');
+
+      // The pack is gone (deleted, scanned or errored) — the season has no
+      // live source left. Nothing but a fresh recompute un-does the lift;
+      // this is the call downloadDelete's unwind already makes through the
+      // very same TitleStatusService instance.
+      episodeRow.season.mediaSources = [];
+      await realTitleStatus.recomputeSeason(42);
+      expect(episodeRow.status).toBe('MISSING');
     });
   });
 });

@@ -130,6 +130,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
     };
 
     const queue = { addSourceReady: jest.fn().mockResolvedValue(undefined) };
+    const titleStatus = { recomputeMovie: jest.fn().mockResolvedValue(undefined), recomputeEpisode: jest.fn().mockResolvedValue(undefined) };
 
     const service = new UploadsService(
       prisma as any,
@@ -138,10 +139,11 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       queue as any,
       uploadTickets as any,
       downloads as any,
+      titleStatus as any,
       {} as any,
     );
 
-    return { service, prisma, queue, downloads, rows, jobRows };
+    return { service, prisma, queue, downloads, rows, jobRows, titleStatus };
   }
 
   let downloadsRoot: string;
@@ -162,7 +164,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
   }
 
   it('adopts an authorised replacement of a film whose previous source already finished', async () => {
-    const { service, queue, prisma, rows } = build({
+    const { service, queue, prisma, rows, titleStatus } = build({
       replaceAuthorised: true,
       existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
     });
@@ -176,10 +178,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
         data: expect.objectContaining({ errorKey: ERROR_KEYS.SOURCE_REPLACED }),
       }),
     );
-    expect(prisma.movie.update).toHaveBeenCalledWith({
-      where: { id: MOVIE_ID },
-      data: { status: 'ENCODING' },
-    });
+    expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(MOVIE_ID);
     expect(queue.addSourceReady).toHaveBeenCalledWith({
       mediaSourceId: NEW_SOURCE_ID,
     });
@@ -238,7 +237,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
   // never COMPLETED has no replace ticket to authorise.
   describe('REQ-6/REQ-7: an upload always wins its target\'s race, authorised or not', () => {
     it('demotes a SCANNED sibling and moves the title to ENCODING even with no replace authorisation', async () => {
-      const { service, prisma, queue, rows } = build({
+      const { service, prisma, queue, rows, titleStatus } = build({
         replaceAuthorised: false,
         movieStatus: 'DOWNLOADING',
         existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
@@ -248,10 +247,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       await (service as any).handleUploadFinish(upload);
 
       expect(rows.find((row) => row.id === 2)!.status).toBe('ERROR');
-      expect(prisma.movie.update).toHaveBeenCalledWith({
-        where: { id: MOVIE_ID },
-        data: { status: 'ENCODING' },
-      });
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(MOVIE_ID);
       expect(queue.addSourceReady).toHaveBeenCalledWith({
         mediaSourceId: NEW_SOURCE_ID,
       });
@@ -405,6 +401,7 @@ describe('UploadsService session branch (season multi-file upload)', () => {
     const downloads = { resolveRace: jest.fn() };
     const queue = { addSourceReady: jest.fn() };
     const sessions = { findOpenSeasonSession: jest.fn().mockResolvedValue(options.session) };
+    const titleStatus = { recomputeMovie: jest.fn(), recomputeEpisode: jest.fn() };
     // Real containment semantics over the temp root, not a constant answer.
     const mediaRoots = {
       resolveFromRoot: jest.fn(async () => downloadsRoot),
@@ -418,9 +415,10 @@ describe('UploadsService session branch (season multi-file upload)', () => {
       queue as any,
       uploadTickets as any,
       downloads as any,
+      titleStatus as any,
       sessions as any,
     );
-    return { service, prisma, queue, downloads, sessions, uploadTickets };
+    return { service, prisma, queue, downloads, sessions, uploadTickets, titleStatus };
   }
 
   async function stage(uploadId: string, filename: string, extra: Record<string, string> = {}) {

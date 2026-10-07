@@ -337,30 +337,63 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   "this target already holds a working, delivered copy," read by every acquisition guard
   (`movies`/`episodes`/`seasons`/`uploads`) through `DownloadsService.hasDeliveredSource` instead of
   each reimplementing its own notion of "already has something."
-  Since `069-title-refresh` (REQ-17), `deriveTitleStatus` also ignores a `SCANNED` source and a
-  `COMPLETED` job: only live work (a non-`ERROR`, non-`SCANNED` source; a `WAITING`/`QUEUED`/`ENCODING`
-  job) lifts a title above its stored column, so a demotion by the media server sticks. `deriveSourceStatus`
-  (the per-row `/downloads` altitude) is unchanged.
-  `deriveTitleStatus` decides one `Movie`/`Episode`'s status as the maximum, over an eight-value
-  rank ladder, of its own stored `MediaStatus` and each non-`ERROR` source's derived status — `ERROR`
-  surfaces **only** from the stored column, never from a raw job/source read, so a demoted
-  (`SOURCE_REPLACED`) sibling can never poison a completed title. Takes no live reading and does not
-  group jobs by source (title-level `processJobs` are already denormalized to the film/episode).
-  Both read `services/api/prisma/schema.prisma`'s existing enums only — no migration, no new column;
-  the eight-value vocabulary (`MISSING`/`QUEUED`/`DOWNLOADING`/`PAUSED`/`DOWNLOADED`/`ENCODING`/
-  `COMPLETED`/`ERROR`) is a read-time projection over `SourceStatus`/`EncodeStatus`/`MediaStatus`,
-  which stay exactly as they were. `MediaSource.status` itself is **not** routed through this
-  module — it stays the raw `SourceStatus` column, since the worker reads it.
+  `deriveSourceStatus` (the per-row `/downloads` altitude) is unchanged by any of the title-level
+  changes below. `deriveTitleStatus`/`deriveEpisodeStatus` decide one `Movie`/`Episode`'s status as
+  the maximum, over an eight-value rank ladder, of each non-`ERROR` source's derived status —
+  `ERROR` surfaces **only** from a source/job actually in that state, so a demoted
+  (`SOURCE_REPLACED`) sibling can never poison a completed title. Neither groups jobs by source
+  (title-level `processJobs` are already denormalized to the film/episode). `MediaSource.status`
+  itself is **not** routed through this module — it stays the raw `SourceStatus` column, since the
+  worker reads it.
   Since `059-season-pack-acquisition-ui`, it also exports `isLiftedBySeasonPack(sources,
   releaseDate, now)`: true iff some season source is neither `ERROR` nor `SCANNED` and the episode's
-  `releaseDate` is non-null and not after `now`. `ShowsService` (below) is the only caller, feeding
-  `deriveTitleStatus` one extra synthetic `{ status: 'QUEUED' }` source when it holds — never a
-  stored write, so a scanned or deleted pack stops lifting with no un-write anywhere. `now` is a
-  parameter rather than read internally, keeping the function pure and testable without fake timers.
-  `ShowsService.findOneFromDb` and `setContentKind` both build the `show → seasons → episodes`
-  include (the season level now also selects `mediaSources: { where: { status: { not: 'ERROR' } } }`)
-  and share one private method for the lift, so the two readers cannot drift — `setContentKind`
-  reclassifying a title never returns episodes without the projection the detail page just showed.
+  `releaseDate` is non-null and not after `now`. `now` is a parameter rather than read internally,
+  keeping the function pure and testable without fake timers. Since `089-status-materialization`,
+  `deriveEpisodeStatus` is the only caller (feeding itself the synthetic `{ status: 'QUEUED' }`
+  source internally) — `ShowsService`'s detail-page/calendar reads no longer call either function
+  at all (REQ-6, below), and the lift's un-write is `title-status/`'s `TitleStatusService.recomputeSeason`
+  recomputing every episode of the season fresh, never a value `ShowsService` itself projects.
+  Since `089-status-materialization`, `deriveTitleStatus` no longer takes a stored status as
+  input — `069`'s REQ-17 posture (ignore a `SCANNED` source and a `COMPLETED` job) is superseded by
+  an explicit possession check (`filePath`/`mediaServerPresentAt`, either non-null means
+  `COMPLETED`) ahead of the ladder, which is what lets the answer fall as well as rise; a
+  projection fed back into its own derivation could previously only ratchet upward, which is how a
+  title got stuck reading `DOWNLOADING` forever. `toMediaStatus` is deleted — the ladder's
+  eight-value vocabulary is now the stored column's own vocabulary (REQ-5), no translation needed.
+  `deriveShowStatus(episodes, now)` joins the module: `COMPLETED` only when every **aired** episode
+  (the same aired test `isLiftedBySeasonPack` already uses) is `COMPLETED`; otherwise the ladder
+  maximum over the aired episodes, with an individually-`COMPLETED` episode's own contribution
+  capped at `DOWNLOADED` in that branch — the cap is what stops an already-finished series from
+  reading `COMPLETED` by an older episode's completion alone the moment a new one airs with
+  nothing acquired yet (REQ-11/REQ-12). `deriveTitleStatus`/`deriveEpisodeStatus` are still pure and
+  still take no live reading; what changed is only what they're fed, never how the ladder itself
+  ranks.
+- **`title-status/`** — since `089-status-materialization`, the single writer of `Movie.status`,
+  `Episode.status` and `Show.status` (REQ-1): `TitleStatusService` exposes
+  `recomputeMovie(id)`/`recomputeEpisode(id)`/`recomputeSeason(id)`/`recomputeShow(id)`, each
+  notified by **identity only** — no caller passes a status, the service re-reads the target's own
+  rows and derives the answer itself through `pipeline-status/`, which is what makes the answer able
+  to fall as well as rise. `recomputeEpisode` cascades to its series; `recomputeSeason` recomputes
+  every episode of the season first, then the show once, not per episode. Every write is a guarded
+  `updateMany` naming the status it expects to replace (NFR-2, following
+  `media-server-reconcile.service.ts`'s existing convention); a missing target is a silent no-op.
+  `TitleStatusModule` imports only `PrismaModule` — nothing injects into it, so the Nest graph stays
+  a tree with this module as a leaf every domain service can safely depend on. Every former literal
+  status write across `movies/`, `episodes/`, `media-sources/`, `uploads/`, `downloads/`,
+  `process-jobs/` and `seasons/` now calls one of these four methods instead — `grep -rn "status:
+  *'DOWNLOADING'\|status: *'ENCODING'" services/api/src --include=*.ts | grep -v spec.ts` finds none
+  left outside this module and `pipeline-status/`'s own pure return values. `ShowStatusSweepService`
+  lives in this module too: an `@Cron(EVERY_HOUR)` provider, armed unconditionally at boot (NestJS's
+  `ScheduleModule.forRoot()` is registered `global: true` in `scheduler.module.ts`, so this has
+  nothing to do with the opt-in `schedule_<id>_enabled` Settings rows the scheduler's own
+  `SCHEDULED_TASKS` gate on) that recomputes the series of any episode whose `releaseDate` fell in
+  the last two hours — the mechanism that makes a series stop reading `COMPLETED` within a day of
+  its next episode airing (REQ-12) independent of whether the user ever enabled a scheduled task.
+  `scripts/recompute-statuses.ts` is the backfill/un-stick path: it walks every `Movie`, `Episode`
+  and `Show` through this service, idempotent by construction since it derives only from rows never
+  from a previous run's output — wired into `src/main.ts`'s existing `PERCEPTOR_AUTO_MIGRATE` boot
+  block, right after the production seed, so it runs unconditionally on every boot rather than
+  needing a human to run it by hand (NFR-3).
 - **`calendar/`** — since `062-release-calendar`, the read-only `calendar(from, to)` query behind
   `web`'s `/calendar`. `CalendarService` composes `MoviesService.findReleasedBetween` and
   `ShowsService.findEpisodesReleasedBetween` (no Prisma of its own), filters by `MediaCapabilitiesService`
@@ -422,10 +455,17 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   existing `torrents/info?tag=` call. `downloadStart`/`downloadStop` also write `QUEUED`/`PAUSED` to
   the `MediaSource` row (REQ-7), guarded via `updateMany`'s `where` to the non-terminal statuses only
   — so a manual pause is visible to a reader with no live torrent data, and resuming an
-  already-finished download can never regress it. `Movie.status`/`Episode.status` are mapped through
-  `deriveTitleStatus` in `movies.service.ts`/`shows.service.ts`, with no extra query — both queries
-  already include the `mediaSources`/`processJobs` the derivation needs. `Show.status` and
-  `MediaSource.status` are unchanged (see `pipeline-status/` above). Since
+  already-finished download can never regress it. Since `089-status-materialization`,
+  `Movie.status`/`Episode.status` are read straight off the column on the wire (REQ-6) — the write
+  side is `title-status/`'s job, not this resolver's. `MediaSource.status` is unchanged (see
+  `pipeline-status/` above). That same feature also closed the gap where a live torrent read only
+  ever persisted the one row a caller explicitly asked about: `liveInfoByHash`
+  (`movieDownloads`/`showDownloads`/`downloads`) and `liveInfoForHash`
+  (`downloadStart`/`downloadStop`/`downloadDelete`) both call `writeBackLiveStates` on **every**
+  row their one existing `torrents/info` read already returned (REQ-7 — no new torrent-client call,
+  NFR-1), through the same `writeStatusIfNonTerminal` guard, and only recompute the title of a row
+  whose write actually changed something — so fifty unchanged rows on a `/downloads` load trigger
+  zero recomputes, not fifty. Since
   `053-downloads-panel-repair`, `liveFor`/`liveInfoForHash` lowercase both sides of every join
   against the torrent client's reported hash — `MediaSource.infoHash` can be stored either case
   (an indexer-sourced row used to be written uppercase; a legacy row may still be), qBittorrent
@@ -606,11 +646,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   Since `069-title-refresh`, the same service also has `syncMovie`/`syncShow`: bidirectional and
   counted, never throwing (`SKIPPED` with no client, `FAILED` with zero writes when the index or a
   listing fails). Every write is one `updateMany` whose `where` carries the in-flight relation filter
-  (no live source or job; for an aired episode, no live season pack — `059`'s lift as a filter), and a
-  demotion sets `filePath: null` so `recompute*Status` cannot re-promote it. `MoviesService.refresh`/
-  `ShowsService.refresh` call them; a series refresh takes the same `show:hydrate:<tmdbId>` claim as
-  `hydrate()`, a film the twin `movie:refresh:<tmdbId>`, and a lost claim is
-  `error.media.refresh_in_progress`.
+  (no live source or job; for an aired episode, no live season pack — `059`'s lift as a filter).
+  Since `089-status-materialization`, both this service's promotions and demotions (and the
+  per-episode promotion in `reconcileShow`) also stamp/clear `mediaServerPresentAt` in the same
+  `updateMany` as `filePath` — a demotion that cleared only `filePath` would leave `title-status/`'s
+  possession check still seeing `mediaServerPresentAt` non-null and promote the title straight back
+  with no error anywhere (REQ-4, AC-10). `MoviesService.refresh`/`ShowsService.refresh` call them; a
+  series refresh takes the same `show:hydrate:<tmdbId>` claim as `hydrate()`, a film the twin
+  `movie:refresh:<tmdbId>`, and a lost claim is `error.media.refresh_in_progress`.
 - **`media-server-index/`** — a leaf module (imports only `RedisModule`; `PrismaService` comes from
   the global `PrismaModule`) holding the local index a client with no native provider-id filter
   (Jellyfin) needs: a `MediaServerItem` row per `(mediaType, tmdbId)` mapping to that server's own

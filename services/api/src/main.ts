@@ -12,6 +12,7 @@ import type { ErrorKey } from '@/i18n/error-keys';
 import { runMigrations } from './bootstrap/run-migrations';
 import { seedProduction } from './database/seed/production-seed';
 import { PrismaService } from './prisma/prisma.service';
+import { recomputeAllStatuses } from '../scripts/recompute-statuses';
 
 function skipUploads(middleware: RequestHandler): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -31,6 +32,8 @@ async function bootstrap() {
       await prisma.$connect();
       try {
         await seedProduction(prisma);
+        // Spec 089, NFR-3
+        await recomputeAllStatuses(prisma);
       } finally {
         await prisma.$disconnect();
       }

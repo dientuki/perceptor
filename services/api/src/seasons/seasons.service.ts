@@ -19,6 +19,7 @@ import { SessionService } from '@/uploads/session.service';
 import { UploadsService } from '@/uploads/uploads.service';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { AttachTarget } from '@/acquisition/attach-target';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
 // Spec 022, REQ-3; Spec 022, REQ-2
 function seasonTags(season: { seasonNumber: number; show: { id: number; title: string } }): string[] {
@@ -39,6 +40,7 @@ export class SeasonsService {
     private readonly sessions: SessionService,
     private readonly uploads: UploadsService,
     private readonly attachSource: AttachSourceService,
+    private readonly titleStatus: TitleStatusService,
   ) {}
 
   async findOneFromDb(id: number, userId: string) {
@@ -86,6 +88,9 @@ export class SeasonsService {
       userId,
     );
 
+    // Spec 089, REQ-13
+    await this.titleStatus.recomputeSeason(seasonId);
+
     return this.findSeasonWithEpisodes(seasonId);
   }
 
@@ -104,6 +109,9 @@ export class SeasonsService {
       },
       userId,
     );
+
+    // Spec 089, REQ-13
+    await this.titleStatus.recomputeSeason(seasonId);
 
     return this.findSeasonWithEpisodes(seasonId);
   }
@@ -135,12 +143,16 @@ export class SeasonsService {
       data: { kind: 'LOCAL_FOLDER', status: 'PENDING', seasonId, downloadPath },
     });
 
+    // Spec 089, REQ-13
+    await this.titleStatus.recomputeSeason(seasonId);
+
     return { mediaSourceId: mediaSource.id, seasonId };
   }
 
   // Closes an upload session: the one place a season upload is handed to the
   // scan. Mirrors handleTorrentCompleted's season tail — race, READY, enqueue —
-  // and writes no episode status (a season source has no episode of its own).
+  // and writes no episode status literal (a season source has no episode of
+  // its own); the season recompute below is a notification, not a write.
   async finishSeasonUpload(mediaSourceId: number, userId: string) {
     const session = await this.sessions.findOpenSeasonSession(mediaSourceId, userId);
     if (!session || !session.seasonId || !session.downloadPath) {
@@ -170,6 +182,9 @@ export class SeasonsService {
     if (count === 0) throw i18nError.conflict(ERROR_KEYS.UPLOAD_SESSION_NOT_OPEN);
 
     await this.queue.addSourceReady({ mediaSourceId });
+
+    // Spec 089, REQ-13
+    await this.titleStatus.recomputeSeason(seasonId);
 
     return this.findSeasonWithEpisodes(seasonId);
   }

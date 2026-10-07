@@ -7,6 +7,7 @@ import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 
@@ -34,6 +35,7 @@ describe('ProcessJobsService', () => {
   let torrentClient: { remove: jest.Mock };
   let mediaCapabilities: { isShortsEnabled: jest.Mock };
   let encodeQueue: { addEncode: jest.Mock; removeEncode: jest.Mock };
+  let titleStatus: { recomputeMovie: jest.Mock; recomputeEpisode: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -61,6 +63,7 @@ describe('ProcessJobsService', () => {
     torrentClient = { remove: jest.fn().mockResolvedValue(undefined) };
     mediaCapabilities = { isShortsEnabled: jest.fn().mockResolvedValue(false) };
     encodeQueue = { addEncode: jest.fn().mockResolvedValue(undefined), removeEncode: jest.fn().mockResolvedValue(undefined) };
+    titleStatus = { recomputeMovie: jest.fn().mockResolvedValue(undefined), recomputeEpisode: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -72,6 +75,7 @@ describe('ProcessJobsService', () => {
         { provide: MediaServerService, useValue: mediaServer },
         { provide: MediaCapabilitiesService, useValue: mediaCapabilities },
         { provide: EncodeQueueService, useValue: encodeQueue },
+        { provide: TitleStatusService, useValue: titleStatus },
       ],
     }).compile();
 
@@ -1234,7 +1238,7 @@ describe('ProcessJobsService', () => {
       });
       // Same propagation encodeFailed performs — the title must not sit at
       // "encoding" once its ProcessJob is a permanent ERROR.
-      expect(prisma.movie.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { status: 'ERROR' } });
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(3);
       // No call anywhere touches recoveryCount for this job.
       for (const call of prisma.processJob.updateMany.mock.calls) {
         if (call[0].where.id.in.includes(9)) {

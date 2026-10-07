@@ -4,6 +4,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
 // This suite exists because Spec 010's central bug class is
 // silent by construction: an episode's acquisition landing on a film, or an
@@ -58,6 +59,7 @@ describe('EpisodesService', () => {
     hasDeliveredSource: jest.Mock;
     demoteDeliveredSources: jest.Mock;
   };
+  let titleStatus: { recomputeEpisode: jest.Mock };
 
   const episode = {
     id: 42,
@@ -86,6 +88,9 @@ describe('EpisodesService', () => {
       hasDeliveredSource: jest.fn().mockResolvedValue(false),
       demoteDeliveredSources: jest.fn().mockResolvedValue(0),
     };
+    titleStatus = {
+      recomputeEpisode: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -94,6 +99,7 @@ describe('EpisodesService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: QbittorrentClient, useValue: qbittorrent },
         { provide: DownloadsService, useValue: downloads },
+        { provide: TitleStatusService, useValue: titleStatus },
       ],
     }).compile();
 
@@ -158,10 +164,7 @@ describe('EpisodesService', () => {
       expect(createData).toMatchObject({ episodeId: 42 });
       expect(createData).not.toHaveProperty('movieId');
 
-      expect(prisma.episode.update).toHaveBeenCalledWith({
-        where: { id: 42 },
-        data: { status: 'DOWNLOADING' },
-      });
+      expect(titleStatus.recomputeEpisode).toHaveBeenCalledWith(42);
     });
 
     // Spec 022, REQ-7 REQ-6

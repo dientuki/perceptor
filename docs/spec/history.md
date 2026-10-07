@@ -23,6 +23,46 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-06 — `089-status-materialization`
+
+`api` only touched; `web` and `worker` untouched (`git diff --stat -- services/web services/worker`
+empty) and no SDL change (`git diff --stat services/api/src/schema.gql` empty) — the GraphQL
+Contract Delta is "None" as frozen in `spec.md`: `Movie.status`/`Episode.status`/`Show.status` keep
+their exact `String!` shape and eight-value vocabulary, only where the value comes from changed.
+
+Two new migrations: `20261006223933_widen_media_status` (additive — `QUEUED`/`PAUSED`/`DOWNLOADED`
+join the `MediaStatus` enum) and `20261006223959_add_media_server_presence` (`Movie`/`Episode` gain
+a nullable `mediaServerPresentAt DateTime?`, backfilled from existing `COMPLETED`+no-`filePath` rows
+in the same migration — not exposed on any GraphQL type).
+
+`api` 68/68 suites, 980/980 tests — up from the pre-feature baseline of 65 suites / 954 tests
+(+3 suites, +26 tests: `src/title-status/title-status.service.spec.ts`,
+`src/title-status/show-status-sweep.service.spec.ts`, `src/clients/torrent/client.spec.ts`).
+`bin/cli api npx tsc --noEmit` clean. `bin/comments api`: `comments gate: PASS (716 locators
+resolved)`.
+
+A new `src/title-status/` module is the single writer of `Movie.status`/`Episode.status`/
+`Show.status` (`TitleStatusService.recomputeMovie/recomputeEpisode/recomputeSeason/recomputeShow`,
+each notified by id only); `src/pipeline-status/pipeline-status.ts` dropped the stored-status input
+it used to take (the ratchet bug — a title could only rise, never fall, because it fed its own
+column back into its derivation) in favour of an explicit possession check (`filePath`/
+`mediaServerPresentAt`) ahead of the ladder, and gained `deriveShowStatus`; `toMediaStatus` is
+deleted. Every former literal status write across `movies/`, `episodes/`, `media-sources/`,
+`uploads/`, `downloads/`, `process-jobs/` and `seasons/` now notifies `TitleStatusService` instead.
+`clients/torrent/client.ts`'s `queuedDL` now maps to `QUEUED` rather than the coarse `DOWNLOADING`
+bucket, and `downloads.service.ts`'s live-read helpers write back every row a torrent-client call
+already returned, not only the row a caller explicitly asked about — no new torrent-client call.
+`ShowStatusSweepService` (an always-on `@Cron(EVERY_HOUR)` provider, independent of the opt-in
+`schedule_<id>_enabled` Settings rows) and `src/scripts/recompute-statuses.ts` (wired into the
+existing `PERCEPTOR_AUTO_MIGRATE` boot seam, so it runs unconditionally on every boot) are what
+un-stick a title an existing install left stuck at `DOWNLOADING` or `Show.status` left at `MISSING`
+forever. The two daily acquisition sweeps (`acquire_movies`/`acquire_episodes`) are a deliberate,
+documented exception: they still derive fresh from live rows rather than trust the column.
+
+Verified live on the dev DB during the implementation's final pass: `select status, count(*) from
+media_sources group by status` showed a non-zero `DOWNLOADING` count (AC-3, impossible before this
+feature in any state of the system) while a torrent was transferring.
+
 ## 2026-10-06 — `088-acquisition-path-unification`
 
 `api` only touched; `web` and `worker` untouched (`git diff --stat -- services/web` and

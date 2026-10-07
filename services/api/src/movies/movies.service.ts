@@ -21,9 +21,9 @@ import { SourceKind } from '@prisma/client';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
-import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { AttachTarget } from '@/acquisition/attach-target';
 import { CatalogSearchService } from '@/media/catalog-search.service';
@@ -75,6 +75,7 @@ export class MoviesService implements MediaTypeService {
     private readonly mediaServerReconcile: MediaServerReconcileService,
     private readonly mediaCapabilities: MediaCapabilitiesService,
     private readonly downloadsService: DownloadsService,
+    private readonly titleStatus: TitleStatusService,
     private readonly attachSource: AttachSourceService,
     private readonly catalogSearch: CatalogSearchService,
   ) {}
@@ -133,21 +134,13 @@ export class MoviesService implements MediaTypeService {
     return movie ? this.withDerivedStatus(movie) : null;
   }
 
-  // Spec 043, REQ-4
-  private withDerivedStatus<
-    T extends {
-      status: import('@prisma/client').MediaStatus;
-      mediaSources: { status: import('@prisma/client').SourceStatus }[];
-      processJobs: { status: import('@prisma/client').EncodeStatus }[];
-    },
-  >(movie: T): Omit<T, 'status'> & { status: string } {
+  // Spec 089, REQ-6
+  private withDerivedStatus<T extends { status: import('@prisma/client').MediaStatus }>(
+    movie: T,
+  ): Omit<T, 'status'> & { status: string } {
     return {
       ...movie,
-      status: deriveTitleStatus({
-        status: movie.status,
-        sources: movie.mediaSources,
-        jobs: movie.processJobs,
-      }),
+      status: movie.status,
     };
   }
 
@@ -689,10 +682,7 @@ export class MoviesService implements MediaTypeService {
     );
 
     if (outcome === 'ATTACHED') {
-      await this.prisma.movie.update({
-        where: { id: movieId },
-        data: { status: 'DOWNLOADING' },
-      });
+      await this.titleStatus.recomputeMovie(movieId);
     }
 
     return this.prisma.movie.findUniqueOrThrow({ where: { id: movieId } });
