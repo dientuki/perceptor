@@ -22,6 +22,14 @@
 // There is deliberately no allowlist file anywhere in this script (NFR-4) — an exemption list is
 // exactly the "leave it for later" clause this feature retires.
 //
+// A sixth, narrower check rides alongside the five above: a comment that is itself nothing but a
+// well-formed locator, immediately followed (a blank line is fine, a line of code is not) by a
+// prose comment carrying no spec reference token at all, is also FAIL ([orphan-prose-after-locator]).
+// This is the specific abuse the REQ-7 leniency above invites — stamping a bare locator on top of
+// an explanatory paragraph instead of letting the locator *be* the whole comment, which is what the
+// root CLAUDE.md's "never prose on its own" line actually requires. It is a local tightening, not
+// one of 086's own numbered requirements, so it carries no REQ/AC id of its own.
+//
 // Run through bin/comments (Article I) — never directly on the host.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -521,6 +529,41 @@ function isException2(fileRel, sourceLines, unit) {
   return /^describe\s*\(/.test(nextCode);
 }
 
+/** Local tightening, no spec id of its own (see the file header): a unit that is nothing but a
+ * well-formed locator, immediately followed — a blank line is fine, a line of code is not — by a
+ * prose unit carrying no spec reference token at all, is the abuse the REQ-7 leniency invites: a
+ * locator stamped beside its own justification instead of being the whole comment. */
+function checkOrphanProseAfterLocator(units, sourceLines, fileRel, hadFailureRef, stats) {
+  for (let i = 0; i < units.length - 1; i++) {
+    const locatorUnit = units[i];
+    const proseUnit = units[i + 1];
+
+    const locatorText = locatorUnit.text.trim();
+    if (locatorText.length === 0 || !FULL_LOCATOR_LINE.test(locatorText)) continue;
+
+    const proseText = proseUnit.text.trim();
+    if (proseText.length === 0) continue;
+    if ([...proseText.matchAll(DETECTION_TOKEN)].length > 0) continue;
+
+    let hasCodeBetween = false;
+    for (let ln = locatorUnit.endLine + 1; ln < proseUnit.startLine; ln++) {
+      if (sourceLines[ln - 1].trim().length > 0) {
+        hasCodeBetween = true;
+        break;
+      }
+    }
+    if (hasCodeBetween) continue;
+
+    console.error(
+      `${fileRel}:${proseUnit.startLine}: FAIL [orphan-prose-after-locator] a prose comment with no ` +
+        `spec reference sits right after the pure locator at line ${locatorUnit.startLine} ("${locatorText}") ` +
+        `— the locator must be the whole comment; fold the prose into it or delete it`,
+    );
+    hadFailureRef.value = true;
+    stats.orphanProse++;
+  }
+}
+
 function checkFile(absPath, specDirIndex, hadFailureRef, stats) {
   const fileRel = toRepoRelative(absPath);
   const source = readFileSync(absPath, "utf8");
@@ -528,6 +571,8 @@ function checkFile(absPath, specDirIndex, hadFailureRef, stats) {
 
   const rawComments = extractRawComments(source);
   const units = mergeComments(rawComments, sourceLines);
+
+  checkOrphanProseAfterLocator(units, sourceLines, fileRel, hadFailureRef, stats);
 
   for (const unit of units) {
     const text = unit.text;
@@ -640,6 +685,7 @@ function main() {
     danglingSpec: 0,
     danglingId: 0,
     spanishTestDescription: 0,
+    orphanProse: 0,
   };
 
   for (const service of servicesToRun) {
@@ -654,7 +700,7 @@ function main() {
   console.log(
     `\ncomments gate: resolved=${stats.resolved} spanish=${stats.spanish} malformed=${stats.malformed} ` +
       `dangling-spec=${stats.danglingSpec} dangling-id=${stats.danglingId} ` +
-      `spanish-test-description=${stats.spanishTestDescription}`,
+      `spanish-test-description=${stats.spanishTestDescription} orphan-prose=${stats.orphanProse}`,
   );
 
   if (hadFailureRef.value) {

@@ -673,13 +673,6 @@ export class DownloadsService {
     if (result.count === 0) return;
 
     // Spec 087, REQ-5 REQ-6
-
-    // A resumed scan still has to clear the arbiter — a sibling may have
-    // won since this source last errored. Anything but WON means
-    // resolveRace has already written this row back to ERROR (SUPERSEDED)
-    // or left it exactly as it found it (IGNORED); either way the enqueue
-    // below must not run, and the catch's own rollback to ERROR must not
-    // clobber what the arbiter just wrote.
     let raceResult: RaceOutcome;
     try {
       raceResult = await this.resolveRace(mediaSourceId);
@@ -864,15 +857,7 @@ export class DownloadsService {
     }
   }
 
-  // Spec 022, REQ-12; Spec 022, REQ-13; Spec 022, REQ-14; Spec 022, REQ-19
-
-  // Spec 087, REQ-5
-
-  // Outcome is typed so every call site can tell a superseded source from a
-  // nonexistent one instead of prefix-matching a Spanish sentence. The
-  // message strings themselves stay byte-identical to what this method
-  // returned before — they are torrentCompleted's response body (../plan.md
-  // § Contract Freeze).
+  // Spec 022, REQ-12; Spec 022, REQ-13; Spec 022, REQ-14; Spec 022, REQ-19; Spec 087, REQ-5
   async resolveRace(mediaSourceId: number): Promise<RaceOutcome> {
     const winner = await this.prisma.mediaSource.findUnique({ where: { id: mediaSourceId } });
     if (!winner) {
@@ -914,10 +899,6 @@ export class DownloadsService {
     if (alreadyWon) {
       console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} superseded, the target already has a winner`);
       // Spec 087, REQ-5
-
-      // A superseded source must not be left in its pre-arbitration status
-      // — stop its torrent (best-effort, same guard-and-catch as the loser
-      // loop below) and record the loss.
       if (winner.infoHash) {
         try {
           await this.qbittorrent.stop(winner.infoHash);
