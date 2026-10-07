@@ -17,11 +17,6 @@ export type AttachInput = {
   force: boolean;
 };
 
-// Whether the caller must still write its own target's status to
-// DOWNLOADING afterward. UNCHANGED means the no-op branch ran (an infoHash
-// already on this same target, not in ERROR) and nothing was written, so
-// the owning title's status is left exactly as it was.
-
 // Spec 088, REQ-1
 export type AttachOutcome = 'UNCHANGED' | 'ATTACHED';
 
@@ -40,15 +35,6 @@ function columnDataFor<T extends { id: number }>(
 ): { movieId?: number; episodeId?: number; seasonId?: number } {
   return { [targetDef.column]: target.id };
 }
-
-// The one attach body shared by movies, episodes and seasons. Everything
-// that is not one of AttachTarget's four members — resolving infoHash, the
-// no-op for a hash already on this same target, the symmetric conflict
-// scope, the reactivation branch for a hash the torrent client still holds,
-// add() before any write, the force demotion and the update-or-create
-// itself — has exactly one implementation here, with no per-target branch.
-// Reuses DownloadsService.demoteDeliveredSources/hasDeliveredSource and
-// resolveInfoHash rather than reimplementing either.
 
 // Spec 037, REQ-4; Spec 087, REQ-3 REQ-4; Spec 088, REQ-1 REQ-2 REQ-8 REQ-9 REQ-10
 @Injectable()
@@ -81,10 +67,6 @@ export class AttachSourceService {
     const sameTarget = existingSource
       ? existingSource[targetDef.column] === target.id
       : false;
-
-    // A colliding infoHash is refused against every target kind other than
-    // this one, naming the holder, regardless of the holder's own status
-    // (including a holder in ERROR).
 
     // Spec 088, REQ-2 REQ-3 REQ-4 REQ-9
     if (existingSource && !sameTarget) {
@@ -149,9 +131,6 @@ export class AttachSourceService {
 
     const { tags, category } = targetDef.labels(target);
     const downloadPath = await this.qbittorrent.add(input.urls, tags, category);
-
-    // Demote only after qBittorrent has accepted the new torrent, so a
-    // rejected add() leaves the previously active source untouched.
 
     // Spec 087, REQ-3 REQ-4
     if (input.force) {

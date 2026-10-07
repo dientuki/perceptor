@@ -1,6 +1,3 @@
-// One definition of the zero-padded "<Show> SxxEyy" rendering, shared by
-// every acquisition path instead of three copies.
-
 // Spec 088, REQ-11
 export function episodeDisplayTitle(episode: {
   episodeNumber: number;

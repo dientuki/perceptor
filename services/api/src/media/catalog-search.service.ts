@@ -8,13 +8,6 @@ import { CatalogDescriptor } from './catalog-descriptor';
 
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
 
-// The single implementation of the catalog search, its Redis caching and
-// its ownership enrichment, parameterised by a CatalogDescriptor instead of
-// existing once per media type. MoviesService and ShowsService keep
-// implementing MediaTypeService by delegating search()/cacheAndEnrich() to
-// this collaborator with their own descriptor — this service never
-// implements MediaTypeService itself.
-
 // Spec 088, REQ-6
 @Injectable()
 export class CatalogSearchService {
@@ -39,15 +32,6 @@ export class CatalogSearchService {
 
     return this.cacheAndEnrich(descriptor, results, userId);
   }
-
-  // Steps 3-4 of the former per-type search(): the cache write and the
-  // ownership enrichment, in this order and only this order — 026-multi-search
-  // extracted this ordering out of each service's search() so a fan-out
-  // search never becomes a third copy of the cache-before-enrich rule; this
-  // finishes that job one level down into a single shared implementation.
-  // The cache write MUST stay before enrichment: computing ownership first
-  // would leak one caller's inLibrary/mediaId into the shared Redis entry
-  // every other caller reads for the next 24h.
 
   // Spec 006, AC-3; Spec 088, REQ-6
   async cacheAndEnrich<TItem>(

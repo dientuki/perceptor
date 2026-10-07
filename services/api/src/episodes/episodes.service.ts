@@ -73,12 +73,6 @@ export class EpisodesService {
   }
 
   // Spec 088, REQ-1 REQ-8 REQ-10
-
-  // Builds this target's AttachTarget descriptor — ownership lookup, the
-  // COMPLETED/delivered refusal, the tag list and the `episodeId` column —
-  // and hands it to the one shared attach body. Everything else (infoHash
-  // resolution, the conflict scope, the no-op/reactivation branches,
-  // add-before-write, demote-on-force) lives in AttachSourceService now.
   private buildTarget(episodeId: number): AttachTarget<EpisodeTarget> {
     return {
       resolve: async (userId: string) => {
