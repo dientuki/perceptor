@@ -38,7 +38,10 @@ set -a; . ./.env; set +a
 project="$(compose_project_name)"
 
 echo "Stopping the stack in this directory (project '${project}')..."
-docker compose -f docker-compose.yaml stop
+# --profile traefik/https always, regardless of COMPOSE_PROFILES: a container started earlier with
+# a profile active (eg. bin/dev after opting into Traefik) stays invisible to `compose stop` once
+# COMPOSE_PROFILES no longer lists it, so the container survives this command instead of stopping.
+docker compose -f docker-compose.yaml --profile traefik --profile https stop
 
 # Every service of every Perceptor stack joins the perceptor-net bridge, which Compose names
 # <project>_perceptor-net. That is a far better marker than the container name — it catches the
