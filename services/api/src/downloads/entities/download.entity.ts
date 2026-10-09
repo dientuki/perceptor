@@ -68,6 +68,9 @@ export class Download {
   retryable: boolean;
 
   @Field()
+  lostRace: boolean;
+
+  @Field()
   readAt: Date;
 
   @Field(() => Date, { nullable: true })

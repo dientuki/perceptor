@@ -503,6 +503,7 @@
       "actionsHeader": "Actions",
       "unknown": "—",
       "replaced": "Replaced",
+      "discarded": "Discarded",
       "startTitle": "Resume",
       "stopTitle": "Stop",
       "deleteTitle": "Delete",

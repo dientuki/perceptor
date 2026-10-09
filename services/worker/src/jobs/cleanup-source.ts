@@ -29,8 +29,8 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
     deleteDownloadPath,
   } = input;
 
-  // Spec 013, REQ-8
-  if (removeTorrent && infoHash) {
+  // Spec 013, REQ-8; Spec 091, REQ-1
+  if (removeTorrent) {
     try {
       await fetchGraphQL(
         `mutation ($id: Int!) { downloadRemove(mediaSourceId: $id, deleteFiles: false) }`,

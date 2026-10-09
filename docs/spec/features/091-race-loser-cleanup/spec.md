@@ -196,7 +196,7 @@ is the only column this feature reads that does not exist today, and it is `090`
 - [ ] **AC-8**: Given three season packs attached to one season, when the first pack's *first*
       episode encode completes, then both other packs are still present; when its *last* episode
       encode completes, then both are gone.
-- [ ] **AC-9**: `bin/npm api run test`, `bin/npm web run test` and `bin/npm worker run test` pass;
+- [x] **AC-9**: `bin/npm api run test`, `bin/npm web run test` and `bin/npm worker run test` pass;
       `bin/comments api`, `bin/comments web` and `bin/comments worker` pass.
 
 ## Out of Scope

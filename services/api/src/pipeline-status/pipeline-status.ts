@@ -343,6 +343,11 @@ export type ResumeSibling = {
   retiredAt?: Date | null;
 };
 
+// Spec 091, REQ-6
+export function hasRaceWinner(siblings: ResumeSibling[]): boolean {
+  return siblings.some((sibling) => isRaceWinner(sibling.status, sibling.jobs, sibling.retiredAt ?? null));
+}
+
 export type ResumeInput = {
   status: PipelineStatus;
   source: ResumeSource;
@@ -442,9 +447,7 @@ export function deriveResume(input: ResumeInput): ResumeVerdict {
   let refusalKey: string | null = null;
   if (stage === 'REPLACED') {
     refusalKey = ERROR_KEYS.DOWNLOAD_RETRY_REPLACED;
-  } else if (
-    siblings.some((sibling) => isRaceWinner(sibling.status, sibling.jobs, sibling.retiredAt ?? null))
-  ) {
+  } else if (hasRaceWinner(siblings)) {
     refusalKey = ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED;
   } else if (
     lastError.key === ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH ||

@@ -8,6 +8,7 @@ import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { TitleStatusService } from '@/title-status/title-status.service';
+import { DownloadsService } from '@/downloads/downloads.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 
@@ -36,6 +37,7 @@ describe('ProcessJobsService', () => {
   let mediaCapabilities: { isShortsEnabled: jest.Mock };
   let encodeQueue: { addEncode: jest.Mock; removeEncode: jest.Mock };
   let titleStatus: { recomputeMovie: jest.Mock; recomputeEpisode: jest.Mock };
+  let downloads: { unwindLosingSiblings: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -64,6 +66,7 @@ describe('ProcessJobsService', () => {
     mediaCapabilities = { isShortsEnabled: jest.fn().mockResolvedValue(false) };
     encodeQueue = { addEncode: jest.fn().mockResolvedValue(undefined), removeEncode: jest.fn().mockResolvedValue(undefined) };
     titleStatus = { recomputeMovie: jest.fn().mockResolvedValue(undefined), recomputeEpisode: jest.fn().mockResolvedValue(undefined) };
+    downloads = { unwindLosingSiblings: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -76,6 +79,7 @@ describe('ProcessJobsService', () => {
         { provide: MediaCapabilitiesService, useValue: mediaCapabilities },
         { provide: EncodeQueueService, useValue: encodeQueue },
         { provide: TitleStatusService, useValue: titleStatus },
+        { provide: DownloadsService, useValue: downloads },
       ],
     }).compile();
 
@@ -1066,73 +1070,30 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // This suite exists because Spec 022, REQ-15's sweep has two failure classes that
-  // both produce no error anywhere (Spec 022, NFR-5):
-  //
-  //  - selecting siblings by tag instead of by target id: a second title
-  //    that happens to share a tag string loses downloads the user never
-  //    touched, and the deletion *succeeds*, so there is nothing to catch it;
-  //  - an upload winning a race and sweeping nothing, because the
-  //    `!infoHash` early return fired in front of the sweep instead of only
-  //    guarding the winner's own `remove` call — the upload files
-  //    correctly, the encode succeeds, and two losing torrents keep
-  //    downloading and seeding forever with no row and no log pointing at
-  //    them.
-  describe('downloadRemove — REQ-15 loser sweep', () => {
-    it('removes every other sibling of the same movie, with files, and deletes their rows', async () => {
-      prisma.mediaSource.findUnique.mockResolvedValue({ id: 10, infoHash: 'winner-hash', movieId: 7 });
-      prisma.mediaSource.findMany.mockResolvedValue([
-        { id: 11, infoHash: 'loser-hash-1' },
-        { id: 12, infoHash: 'loser-hash-2' },
-      ]);
-
-      await service.downloadRemove(10, false);
-
-      // Spec 022, REQ-14
-      expect(prisma.mediaSource.findMany).toHaveBeenCalledWith({
-        where: { movieId: 7, id: { not: 10 } },
-      });
-
-      // The winner's own removal keeps whatever deleteFiles the caller
-      // passed (the worker always passes false); the losers are always
-      // removed WITH their files — the two must never be swapped.
-      expect(torrentClient.remove).toHaveBeenCalledWith('winner-hash', false);
-      expect(torrentClient.remove).toHaveBeenCalledWith('loser-hash-1', true);
-      expect(torrentClient.remove).toHaveBeenCalledWith('loser-hash-2', true);
-
-      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 11 } });
-      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 12 } });
-      // The winner's own row is never deleted here — only its torrent is
-      // removed; the caller (cleanup-source.ts) owns the winner's row.
-      expect(prisma.mediaSource.delete).not.toHaveBeenCalledWith({ where: { id: 10 } });
-    });
-
-    // Spec 022, NFR-5
-    it('still sweeps losing torrent siblings when the winner itself is a LOCAL_FILE upload with no infoHash', async () => {
+  // The loser sweep itself moved to DownloadsService.unwindLosingSiblings
+  // (Spec 091, REQ-1 REQ-2 REQ-3; see downloads.service.spec.ts for its own
+  // suite). What is owed here is that downloadRemove still delegates to it
+  // — including for a winner with no infoHash, which is the exact hole
+  // Spec 091 closes: an upload winner used to never reach the sweep at all.
+  describe('downloadRemove — delegates the loser sweep to DownloadsService', () => {
+    it('calls unwindLosingSiblings and still answers the not-a-torrent string for a LOCAL_FILE winner', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({ id: 20, infoHash: null, movieId: 8 });
-      prisma.mediaSource.findMany.mockResolvedValue([{ id: 21, infoHash: 'loser-hash' }]);
 
       const result = await service.downloadRemove(20, false);
 
       expect(result).toBe('omitido: mediaSource 20 no es un torrent');
-      // The winner has no infoHash, so torrentClient.remove must be called
-      // exactly once — for the losing torrent, never for the winner itself.
-      expect(torrentClient.remove).toHaveBeenCalledTimes(1);
-      expect(torrentClient.remove).toHaveBeenCalledWith('loser-hash', true);
-      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 21 } });
+      expect(torrentClient.remove).not.toHaveBeenCalled();
+      expect(downloads.unwindLosingSiblings).toHaveBeenCalledWith({ id: 20, infoHash: null, movieId: 8 });
     });
 
-    it('does not delete a loser whose torrent removal the client rejected, and leaves its row intact', async () => {
+    it('calls unwindLosingSiblings for a torrent winner too, after its own remove', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({ id: 10, infoHash: 'winner-hash', movieId: 7 });
-      prisma.mediaSource.findMany.mockResolvedValue([{ id: 11, infoHash: 'unreachable-hash' }]);
-      torrentClient.remove.mockImplementation(async (hash: string) => {
-        if (hash === 'unreachable-hash') throw new Error('qBittorrent unreachable');
-      });
 
-      await service.downloadRemove(10, false);
+      const result = await service.downloadRemove(10, false);
 
-      // Spec 022, NFR-6
-      expect(prisma.mediaSource.delete).not.toHaveBeenCalledWith({ where: { id: 11 } });
+      expect(result).toBe('removido: mediaSource 10');
+      expect(torrentClient.remove).toHaveBeenCalledWith('winner-hash', false);
+      expect(downloads.unwindLosingSiblings).toHaveBeenCalledWith({ id: 10, infoHash: 'winner-hash', movieId: 7 });
     });
   });
 

@@ -36,6 +36,7 @@ const DOWNLOAD_FIELDS = `
     message
   }
   retryable
+  lostRace
   readAt
   retiredAt
 `;

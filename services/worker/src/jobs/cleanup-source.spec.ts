@@ -130,7 +130,8 @@ describe('cleanupSource — LOCAL_FILE', () => {
     expect(await readdir(stagingDir)).toEqual(['sample.mkv']);
   });
 
-  it('never calls downloadRemove for a LOCAL_FILE source', async () => {
+  // Spec 091, REQ-1
+  it('calls downloadRemove for a LOCAL_FILE source too', async () => {
     const stagingDir = join(root, 'imports', 'upload-4');
     const filePath = join(stagingDir, 'movie.mkv');
     await mkdir(stagingDir, { recursive: true });
@@ -148,12 +149,16 @@ describe('cleanupSource — LOCAL_FILE', () => {
       deleteDownloadPath: true,
     });
 
-    expect(fetchGraphQLMock).not.toHaveBeenCalled();
+    expect(fetchGraphQLMock).toHaveBeenCalledWith(
+      expect.stringContaining('downloadRemove'),
+      { id: 4 },
+    );
   });
 });
 
 describe('cleanupSource — LOCAL_FOLDER', () => {
-  it('never calls downloadRemove and deletes the folder recursively', async () => {
+  // Spec 091, REQ-1
+  it('calls downloadRemove and deletes the folder recursively', async () => {
     const folderPath = join(root, 'imports', 'upload-folder');
     await mkdir(folderPath, { recursive: true });
     await writeFile(join(folderPath, 'movie.mkv'), 'x');
@@ -171,7 +176,10 @@ describe('cleanupSource — LOCAL_FOLDER', () => {
       deleteDownloadPath: true,
     });
 
-    expect(fetchGraphQLMock).not.toHaveBeenCalled();
+    expect(fetchGraphQLMock).toHaveBeenCalledWith(
+      expect.stringContaining('downloadRemove'),
+      { id: 5 },
+    );
     await expect(readdir(folderPath)).rejects.toThrow();
   });
 });

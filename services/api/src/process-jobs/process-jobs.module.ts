@@ -7,6 +7,7 @@ import { MediaServerModule } from '@/media-server/media-server.module';
 import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
 import { QueueModule } from '@/queue/queue.module';
 import { TitleStatusModule } from '@/title-status/title-status.module';
+import { DownloadsModule } from '@/downloads/downloads.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TitleStatusModule } from '@/title-status/title-status.module';
     MediaCapabilitiesModule,
     QueueModule,
     TitleStatusModule,
+    DownloadsModule,
   ],
   providers: [ProcessJobsResolver, ProcessJobsService],
 })

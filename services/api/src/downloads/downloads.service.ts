@@ -19,6 +19,7 @@ import {
   deriveResume,
   isRaceWinner,
   isDeliveredSource,
+  hasRaceWinner,
   SourceAltitudeJob,
   ResumeJob,
   ResumeSibling,
@@ -51,6 +52,7 @@ type SiblingSource = {
   movieId: number | null;
   seasonId: number | null;
   episodeId: number | null;
+  retiredAt?: Date | null;
 };
 
 function targetKey(source: SiblingSource): string {
@@ -68,7 +70,11 @@ function siblingsIn(
   const key = targetKey(source);
   return all
     .filter((other) => other.id !== source.id && targetKey(other) === key)
-    .map((other) => ({ status: other.status, jobs: jobsBySourceId.get(other.id)?.jobs ?? [] }));
+    .map((other) => ({
+      status: other.status,
+      jobs: jobsBySourceId.get(other.id)?.jobs ?? [],
+      retiredAt: other.retiredAt ?? null,
+    }));
 }
 
 function byLastActivity<T extends { id: number; updatedAt: Date }>(
@@ -252,7 +258,7 @@ export class DownloadsService {
     if (!targetWhere) return [];
     const rows = await this.prisma.mediaSource.findMany({
       where: { ...targetWhere, id: { not: source.id } },
-      select: { id: true, status: true, movieId: true, seasonId: true, episodeId: true },
+      select: { id: true, status: true, movieId: true, seasonId: true, episodeId: true, retiredAt: true },
     });
     const jobs = await this.jobsBySourceId(rows.map((row) => row.id));
     return siblingsIn(source, [source, ...rows], jobs);
@@ -362,6 +368,7 @@ export class DownloadsService {
       encodeSpeed: derived.encodeSpeed ?? undefined,
       lastError: resume.lastError ?? undefined,
       retryable: resume.retryable,
+      lostRace: hasRaceWinner(siblings),
       readAt: new Date(),
       retiredAt: source.retiredAt,
     };
@@ -543,6 +550,14 @@ export class DownloadsService {
 
     if (derived.status === 'ERROR') {
       return this.resumeErroredSource(source, userId, jobs, live, siblings);
+    }
+
+    // After the ERROR branch above, which answers the more specific
+    // error.download.retry_replaced through deriveResume for a source
+    // replaced on purpose, and before any write or torrent-client call — a
+    // loser cannot be resumed into a race its target already decided.
+    if (hasRaceWinner(siblings)) {
+      throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED);
     }
 
     const infoHash = this.requireTorrent(source);
@@ -780,6 +795,66 @@ export class DownloadsService {
     for (const source of sources) {
       await this.unwindSource(source, { removeTorrent: false });
     }
+  }
+
+  // The post-delivery sweep, moved here from process-jobs/ so it reuses the
+  // same per-source unwind (unwindSource) and recompute every other
+  // deletion path already uses, rather than a second deletion sequence that
+  // removes the torrent and the row alone and never touches queued work,
+  // disk residue or the target's status.
+  async unwindLosingSiblings(winner: {
+    id: number;
+    movieId: number | null;
+    episodeId: number | null;
+    seasonId: number | null;
+  }): Promise<void> {
+    const targetWhere = winner.movieId
+      ? { movieId: winner.movieId }
+      : winner.episodeId
+        ? { episodeId: winner.episodeId }
+        : winner.seasonId
+          ? { seasonId: winner.seasonId }
+          : null;
+
+    if (!targetWhere) return;
+
+    const siblings = await this.prisma.mediaSource.findMany({
+      where: { ...targetWhere, id: { not: winner.id } },
+    });
+    if (siblings.length === 0) return;
+
+    const jobsBySourceId = await this.jobsBySourceId(siblings.map((sibling) => sibling.id));
+    // Both terms are required: isDeliveredSource already answers false for a
+    // retired source, but the explicit retiredAt check is kept so a future
+    // change to that predicate cannot silently start sweeping a retired row.
+    const losers = siblings.filter(
+      (sibling) =>
+        !isDeliveredSource(sibling.status, jobsBySourceId.get(sibling.id)?.jobs ?? [], sibling.retiredAt) &&
+        sibling.retiredAt === null,
+    );
+
+    // Unlike unwindSourcesForTitle's batched remove, which intentionally
+    // aborts the whole unwind on failure since a user-visible delete must
+    // not half-apply, this sweep runs off the pipeline with no caller to
+    // retry it — a torrent-client outage must log and let every loser row
+    // and its residue still be purged, not orphan them.
+    const hashes = losers.map((loser) => loser.infoHash).filter((h): h is string => !!h);
+    if (hashes.length > 0) {
+      try {
+        await this.callTorrentClient(() => this.qbittorrent.remove(hashes, true));
+      } catch (err) {
+        console.error(
+          `[DownloadsService] unwindLosingSiblings: could not remove ${hashes.length} losing sibling(s) from the torrent client:`,
+          err,
+        );
+      }
+    }
+
+    for (const loser of losers) {
+      await this.unwindSource(loser, { removeTorrent: false });
+    }
+
+    await this.recomputeStatus(winner);
   }
 
   // Spec 047, T006; Spec 047, REQ-8; Spec 047, REQ-9; Spec 047, REQ-10

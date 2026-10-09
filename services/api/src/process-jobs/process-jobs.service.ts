@@ -15,6 +15,7 @@ import { ContentKind } from '@/media/entities/content-kind.enum';
 import { resolveAllowedSubtitleFormats } from '@/settings/subtitle-formats';
 import { COMPRESSION_RESOLUTIONS, DEFAULT_COMPRESSION_RESOLUTION } from '@/settings/settings.catalog';
 import { TitleStatusService } from '@/title-status/title-status.service';
+import { DownloadsService } from '@/downloads/downloads.service';
 
 // Spec 054, REQ-4
 const RECOVERY_ALLOWANCE = 1;
@@ -32,6 +33,8 @@ export class ProcessJobsService {
     private readonly encodeQueue: EncodeQueueService,
     // Spec 089, REQ-1 REQ-2 REQ-3 REQ-4
     private readonly titleStatus: TitleStatusService,
+    // Spec 091, REQ-3 NFR-4
+    private readonly downloads: DownloadsService,
   ) {}
 
   async getEncodeJobDetails(id: number): Promise<EncodeJobDetails> {
@@ -512,47 +515,13 @@ export class ProcessJobsService {
       await this.torrentClient.remove(mediaSource.infoHash, deleteFiles);
     }
 
-    await this.sweepLosingSiblings(mediaSource);
+    // Spec 091, REQ-1 REQ-2 REQ-3
+    await this.downloads.unwindLosingSiblings(mediaSource);
 
     if (!mediaSource.infoHash) {
       return `omitido: mediaSource ${mediaSourceId} no es un torrent`;
     }
 
     return `removido: mediaSource ${mediaSourceId}`;
-  }
-
-  // Spec 022, REQ-15; Spec 022, REQ-14
-  private async sweepLosingSiblings(winner: {
-    id: number;
-    movieId: number | null;
-    episodeId: number | null;
-    seasonId: number | null;
-  }): Promise<void> {
-    const targetWhere = winner.movieId
-      ? { movieId: winner.movieId }
-      : winner.episodeId
-        ? { episodeId: winner.episodeId }
-        : winner.seasonId
-          ? { seasonId: winner.seasonId }
-          : null;
-
-    if (!targetWhere) return;
-
-    const losers = await this.prisma.mediaSource.findMany({
-      where: { ...targetWhere, id: { not: winner.id } },
-    });
-
-    for (const loser of losers) {
-      if (loser.infoHash) {
-        try {
-          await this.torrentClient.remove(loser.infoHash, true);
-        } catch (err) {
-          // Spec 022, NFR-6
-          console.error(`[downloadRemove] could not remove mediaSource ${loser.id} from the torrent client:`, err);
-          continue;
-        }
-      }
-      await this.prisma.mediaSource.delete({ where: { id: loser.id } });
-    }
   }
 }

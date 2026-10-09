@@ -321,6 +321,11 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   bare `add*` is a silent no-op) and guards each status write on the state it expects. `resolveRace`
   asks `isRaceWinner`, so a `SCANNED` source whose encode failed no longer blocks a new torrent for
   its title.
+  Since `091-race-loser-cleanup`, `Download.lostRace` is `toDownload`'s `hasRaceWinner(siblings)` —
+  non-null, true exactly when another source of the same target has already won — and
+  `downloadStart` throws `error.download.retry_superseded` (409) for such a source, placed after
+  `090`'s `retiredAt` guard and after `deriveResume`'s `ERROR`-branch verdict so it never pre-empts
+  the more specific `error.download.retry_replaced`.
 - **`pipeline-status/`** — since `043-pipeline-status-normalization`, the single derivation behind
   every status a user reads: a plain exported function, no Nest module, no injection.
   `deriveSourceStatus` decides one `MediaSource`'s status from its column, its `ProcessJob` rows
@@ -345,6 +350,11 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   same optional `retiredAt`, so `deriveResume` stops refusing `error.download.retry_superseded`
   against a sibling that only looks like a live winner because it has not been taught about
   retirement.
+  Since `091-race-loser-cleanup`, `hasRaceWinner(siblings: ResumeSibling[])` is the one exported
+  reader of "someone already won" — `siblings.some((s) => isRaceWinner(s.status, s.jobs, s.retiredAt
+  ?? null))`, the exact expression `deriveResume` used to inline. `downloads/`'s `toDownload` calls
+  it for `Download.lostRace`, and `downloadStart` calls it for the REQ-6 refusal; neither
+  reimplements the check.
   `deriveSourceStatus` (the per-row `/downloads` altitude) is unchanged by any of the title-level
   changes below. `deriveTitleStatus`/`deriveEpisodeStatus` decide one `Movie`/`Episode`'s status as
   the maximum, over an eight-value rank ladder, of each non-`ERROR` source's derived status —
@@ -446,9 +456,15 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   stops its torrent (best-effort, logged on failure) before returning — closing the gap where a
   source that lost the race to an already-finished sibling sat in `DOWNLOADING` forever with nothing
   ever marking it failed. `resumeScanStage` reads this outcome too, rather than discarding it, so it
-  never re-enqueues a source the arbiter just demoted. `process-jobs/`'s `downloadRemove` sweeps
-  the losing siblings when the winner's cleanup runs, regardless of whether the winner itself has an
-  `infoHash`.
+  never re-enqueues a source the arbiter just demoted.
+  Since `091-race-loser-cleanup`, the loser sweep itself lives here, not in `process-jobs/`:
+  `unwindLosingSiblings(winner)` loads the winner's siblings, keeps only the ones that are neither
+  delivered (`isDeliveredSource`) nor retired (`retiredAt` non-null), removes their torrents in one
+  batched call (a torrent-client failure is logged and swallowed, never aborting the rest — the
+  failure must not orphan a row), unwinds each through the existing per-source `unwindSource`, and
+  recomputes the target once. `process-jobs/`'s `downloadRemove` calls it in the winner's own
+  cleanup, regardless of whether the winner itself has an `infoHash` — the old `&& infoHash` gate on
+  the worker's call into `downloadRemove` was the bug this closed (see `services/worker/CLAUDE.md`).
   `DownloadsService` also exposes two helpers every acquisition entry point shares instead of
   reimplementing its own demotion: `hasDeliveredSource(target)` and
   `demoteDeliveredSources(target, reason)`, both over the `{ movieId } | { episodeId } | { seasonId }`

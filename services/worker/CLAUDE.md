@@ -313,7 +313,14 @@ deletion itself; qBittorrent is only asked to forget the torrent, never to touch
 **own** `isInsideRoot(downloadsRoot, inputFilePath)` check — deliberately separate from the
 `downloadPath` guard above it, since an input file's path is not the same string and must not be
 assumed contained just because the download folder is. `deleteDownloadPath` gates today's
-`LOCAL_FILE`/recursive branch, unchanged. `encode.job.ts` reads `EncodeCompletedResult`'s three
+`LOCAL_FILE`/recursive branch, unchanged.
+Until `091-race-loser-cleanup`, the `removeTorrent` branch's own `downloadRemove` call was the one
+place this "branches on `sourceKind`, not `infoHash`" claim did not hold: it was gated
+`if (removeTorrent && infoHash)`, so a race won by an uploaded file (`infoHash` null) never called
+`downloadRemove` and `api`'s loser sweep (`DownloadsService.unwindLosingSiblings`, see
+`services/api/CLAUDE.md`'s `downloads/` section) never ran for it — two still-downloading torrents
+with no error anywhere. The condition is now just `if (removeTorrent)`; `infoHash` stays destructured
+for the filesystem branches above, which never depended on it. `encode.job.ts` reads `EncodeCompletedResult`'s three
 booleans from the mutation response and, if any single one arrives `undefined` (a hand-typed
 GraphQL selection missing a field — nothing catches this at compile time, see
 `docs/spec/graphql-contract.md`'s "no codegen" section), skips `cleanupSource` entirely and

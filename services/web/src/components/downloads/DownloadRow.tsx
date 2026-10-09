@@ -41,6 +41,7 @@ export default function DownloadRow({
 
   const canStart =
     !isRetired &&
+    !download.lostRace &&
     (download.status === "ERROR"
       ? download.owned && download.retryable
       : isControllable);
@@ -85,6 +86,11 @@ export default function DownloadRow({
           {isRetired && (
             <Badge variant="light" color="light" size="sm">
               {t("replaced")}
+            </Badge>
+          )}
+          {download.lostRace && (
+            <Badge variant="light" color="light" size="sm">
+              {t("discarded")}
             </Badge>
           )}
         </div>
