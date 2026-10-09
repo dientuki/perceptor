@@ -329,6 +329,18 @@ This asymmetry is the design, not an omission: step 1 is where `jellyfin` → `p
 
 ## Acceptance Criteria
 
+**None of the 17 boxes below is a verification gap.** This spec is `status: Draft` and has never been
+planned or implemented: the directory holds `spec.md` alone — no `plan.md`, no `tasks.md`, no
+`<svc>/plan.md` — and `grep -rn "migrateLibraryLayout\|pendingTitles\|libraryMigration" services/`
+returns nothing, as does the same grep against `docs/spec/graphql-contract.md`. The gate is NFR-1:
+Article XII's prohibition on removing anything under the destinations root is absolute as written, so
+the constitution must be amended to 1.3.0 *before* `/plan-feature` may run. That amendment is a human
+decision that has not been taken. Re-checked 2026-10-09.
+
+An agent counting unticked acceptance criteria across the repository should exclude this spec, or it
+will read a deliberate "not built" as "built but unverified" — the two need opposite responses.
+
+
 - [ ] **AC-1**: Given a library filed under `jellyfin` and `media_server_client` set to `plex`, when an
       administrator opens Settings → media server, then the migration block shows a non-zero
       `pendingTitles` and an enabled action; with the layouts already consistent the block is absent.

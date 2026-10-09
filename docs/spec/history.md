@@ -23,6 +23,201 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-09 — verification pass over `002`–`071` (no code change)
+
+Third and widest pass of the same exercise, working downwards from `071`. `git diff --stat --
+services/` is empty; only `docs/spec/features/*/spec.md` and this file changed. 193 criteria were
+unticked across 28 specs in this range; eight are now ticked and the other 185 carry a written
+blocker in place of a bare `[ ]`.
+
+**Measured this pass** (branch `fix/tech-debt`, commit `b65ef65`, dev stack up):
+
+```
+bin/npm api run test            68 suites, 1000 tests, 0 failures, exit 0
+bin/npm worker test             28 files,   323 tests, 0 failures, exit 0
+bin/npm web test                MISSING SCRIPT — web has no test runner at all
+bin/cli api    npx tsc --noEmit 0 errors
+bin/cli web    npx tsc --noEmit 0 errors
+bin/cli worker npx tsc --noEmit 0 errors
+check-messages.mjs              en/es match exactly, 602 keys
+git status --short services/api/prisma   empty
+```
+
+The pre-existing `src/ffmpeg/` failures that several specs' criteria explicitly allow for **no longer
+exist**, so those bars are cleared outright rather than by exemption.
+
+Ticked: **`038` AC-11**, **`039` AC-10**, **`070` AC-11** (each the suites + typechecks + `web`
+build above — `038` goes from 0/11 verified to 1/11, its first). **`064` AC-13** (all four clauses:
+suites including NFR-6's four counting cases, clean `prisma`, and the `schema.gql` delta confirmed
+to be exactly `showId`/`showTitle`/`owned` on `Download` plus `downloads`/`activeDownloadCount` on
+`Query`, neither carrying `@AllowService()`). **`039` AC-7** (both preference mutations called with
+the installation's `SERVICE_TOKEN` answer `error.auth.unauthenticated`, refused in
+`JwtAuthGuard.canActivate`; preference tables unchanged after). **`071` AC-7** (`mediaCapabilities`
+takes no principal, so there is no non-admin variant to run; `catalogKeyConfigured` is a pure
+emptiness test on the key). **`066` AC-3** and **`066` AC-5** — see below.
+
+**`066` turned out to be the most verifiable spec in the band, and its boxes badly understated it.**
+This checkout *is* an HTTPS installation, and TLS claims need `openssl`, not a browser. The CA
+carries `X509v3 Name Constraints: critical, Permitted: DNS:perceptor.local`; the leaf carries
+`SAN: perceptor.local, *.perceptor.local` — that is AC-5, ticked. `curl -sI -H 'Host:
+perceptor.local' http://localhost/` returns `307` to `/login?redirect=%2F`, a relative path with no
+`3xx` to `https://`, and `/login` answers `200` over plain HTTP — AC-3, ticked. Beyond the ticks:
+`openssl s_client -servername perceptor.local -CAfile certs/ca.crt` returns **`Verify return code: 0
+(ok)`**, as do `api.`, `torrent.` and `indexer.perceptor.local` off the wildcard SAN (AC-2's
+cryptographic content), and the same handshake against the host's default trust store returns
+`verify error:num=20` / code 21 while HTTP keeps answering `200` (AC-8's). `GET /ca.crt` with no
+cookie returns `200`, `application/x-x509-ca-cert`, byte-identical to `certs/ca.crt`, and `web`'s
+only certificate mount is `ca_public` read-only with no key file anywhere in the container (three of
+AC-11's four clauses). What is left in each case is the browser's own chrome.
+
+**The traefik `unhealthy` flagged in the previous pass is not a routing fault.** Routing works over
+both schemes, as the measurements above show. The healthcheck is what fails — `Head
+"http://:8080/ping": dial tcp :8080: connect: connection refused`, i.e. it probes a ping entrypoint
+that is not enabled. Worth fixing, but it is not evidence against any criterion.
+
+**The structural finding of this pass: the whole range reduces to four unlocks, not 185.** Measured
+on this installation — 1 user, 3 films, 2 series, 64 episodes, **1** `media_sources` row (a pre-`053`
+orphan), **0** `process_jobs`, **0** `ffprobe_logs`. No pipeline run has ever completed on this
+branch, and there is exactly one account.
+
+| Unlock | Criteria it opens |
+| :-- | :-- |
+| **an admin session in a browser** | `007` AC-11/12 · `036` AC-4e/6/18 · `039` AC-2/3/4/11/12/13 · `062` all 14 · `063` all 9 · `064` AC-1–6/9–12 · `068` all 7 · `070` AC-3/4/5 · `071` AC-2/6 — plus it is a precondition for nearly everything below |
+| **a second user** | `023` AC-7 · `042` AC-7 · `062` AC-6 · `064` AC-7/8 · `067` AC-2/7/12/17 · `069` AC-11 — no public registration, so this is itself a session task |
+| **one completed pipeline run** | `002` AC-9 · `012` AC-1/2/8/9/10/11/12 · `013` all 6 · `023` AC-1/4/5 · `032` AC-6/8 · `052` all 6 · `054` AC-4/5 · `058` AC-2–10/12/13 · `060` all 7 · `065` all 13 · `067` AC-9/10/11 — the single highest-leverage item in the backlog |
+| **a fresh `install.sh` / `bin/prod` run** | `015` AC-7/8 · `049` AC-5/9/12 · `061` AC-1–4/8 · `066` AC-1/10 |
+
+A fifth group is small and genuinely cheap: **one signed-in user's bearer token**, no UI and no
+pipeline, closes `037` AC-3, `039` AC-5/6, `062` AC-9 and `065` AC-11 — five criteria, five curls.
+Each was attempted this pass with the `SERVICE_TOKEN` and refused at the guard, which is itself the
+correct behaviour and is recorded as such in each spec.
+
+Corrections made to stale notes, since a wrong recorded reason is worse than none:
+
+- **`012` AC-11** said it was not re-verified because the stack had `media_server_client = jellyfin`.
+  It reads **`none`** today, so the precondition is already met; the real blocker is the absent
+  encode. The `none` branch itself is structurally sound — `createMediaServerClient` yields nothing
+  and `notifyCreated` returns before any request.
+- **`061`** — this checkout still carries `ADMIN_PASSWORD`, `QBITTORRENT_PASSWORD` and
+  `INDEXER_PASSWORD` in `.env`, so it is a **pre-`061` installation**: AC-8's subject, not AC-1's.
+  Nine of its ten criteria need either a fresh installer run or writing a real credential across
+  three services, which no verification pass should do unasked.
+- **`065` AC-11** — the refusal is not the `@AllowService()` decorator (which *permits* a service
+  principal rather than excluding a user) but an explicit `principal.type !== 'service'` throw in the
+  resolver body, before the service is reached, so "leaves the source untouched" cannot fail
+  independently of the error key.
+- **`036` AC-4e/AC-6** — their "`web` has no test runner" reasoning is now measured rather than
+  assumed: `npm test` in `web` exits with `Missing script: "test"`.
+- **`052`** ships but still reads `status: Approved` — the third instance this week of the
+  status-setting `[docs]` task never having run (`077` and `080` were the first two).
+
+Also recorded: Prowlarr holds two enabled indexers (Knaben, The Pirate Bay) and **neither carries a
+tag**, so no indexer sits behind FlareSolverr — which is `014`'s deliberate manual step and the
+standing blocker on `078` AC-9.
+
+## 2026-10-09 — verification pass over `072`–`081` (no code change)
+
+Second pass of the same exercise, working downwards from `081`. `git diff --stat services/` is empty;
+only `docs/spec/features/*/spec.md` changed. 102 criteria were unticked across the ten specs; four are
+now ticked and the rest are written up with the specific thing each one is waiting on.
+
+Ticked: **`073` AC-10** (`rankTorrentResults` grep empty, `src/lib/torrent-ranking.ts` absent),
+**`077` AC-11** (commit `c219812` touches no file under `services/api/` or `services/worker/`),
+**`077` AC-12** (the production build exits 0 — run in a throwaway `perceptor-web:local-dev`
+container as uid 1000 with the dev `.next` parked and restored, since `bin/npm` shells into the
+running container and a build against a live dev stack is forbidden), **`080` AC-10** (commit
+`ae6c23b` is five files, none of them `api`/`worker`).
+
+Partial records, box left unticked: `073` AC-9's grep half (`resolutionTier` appears only as a type
+field and a selection-set line — no comparator in `web`), `077` AC-10's parity half (602 keys, no
+drift).
+
+Three findings worth carrying forward:
+
+1. **`081` is not verification debt at all.** It is `status: Draft`, holds `spec.md` alone with no
+   `plan.md`/`tasks.md`, and `migrateLibraryLayout` exists in no service. Its gate is NFR-1: Article
+   XII must be amended to 1.3.0 before `/plan-feature` may run, which is a human decision not yet
+   taken. Its 17 boxes should be excluded from any repository-wide count of unverified criteria, or a
+   deliberate "not built" reads as "built but unverified" — the two need opposite responses.
+2. **`080`'s criteria are much cheaper than they read.** The service worker registers behind
+   `window.isSecureContext`, not `USE_HTTPS`, and `ServiceWorkerRegistration` sits in the root
+   `layout.tsx`, so AC-1/AC-2/AC-4/AC-5/AC-6 need neither HTTPS, nor a trusted `certs/ca.crt`, nor a
+   session — `http://localhost:3000` on the login page suffices. They were still not run: registration
+   failed in the available browser, and a control origin (a one-line static worker served by
+   `python -m http.server`) failed identically, so the browser blocks service workers outright. Not a
+   Perceptor fault, and AC-3 is *unrunnable* there rather than merely unrun, since a missing worker at
+   a non-secure origin cannot be told apart from the gate working.
+3. **`080`'s implementation largely landed inside `079`'s commit.** `sw.js`, `offline/page.tsx` and
+   `ServiceWorkerRegistration.tsx` were added by `94aee98` ("implement 079 spec, mobile") and
+   `manifest.json` by `689c65e` ("favicon"); `080`'s own commit only adjusted `sw.js` and
+   `globals.css`. That is why `spec.md` still reads `status: Approved` — the `/implement` run was
+   folded into its predecessor's, so the status-setting `[docs]` task never ran.
+
+What the remainder is waiting on, grouped by the actual blocker rather than by spec:
+
+| Blocker | Specs and criteria |
+| :-- | :-- |
+| **an authenticated admin session** — `runScheduledTask` carries `AdminGuard` and **no** `@AllowService()`, so the service credential cannot trigger a sweep, and every UI criterion needs a login | `073` AC-2–AC-9, `074` AC-1–AC-11, `075` AC-1–AC-10, `076` AC-1–AC-17, `077` AC-1–AC-10, `078` AC-1–AC-8 |
+| a browser that permits service workers | `080` AC-1–AC-7, AC-9 |
+| a physical iOS device | `079` AC-6, `080` AC-8 |
+| a reachable Plex server (none exists here: `media_server_client` is `none`, `media_server_host` empty; the owner asked that nothing be exercised against Plex) | `072` AC-1–AC-13 |
+| a Cloudflare-fronted indexer tagged `flaresolverr` | `078` AC-9 |
+| real torrents and real encode time — folded into `091`'s pending live pass | `073` AC-4, `076` AC-4/AC-5b/AC-6/AC-8/AC-12 |
+| an Article XII amendment, then `/plan-feature` | `081`, all 17 |
+
+The encouraging half: the TMDB key is configured (`movie_db_api_key` is set), so **`074` and `075`
+are reachable in full with nothing but a session** — every one of their criteria is a hand-set
+database column, an "Ejecutar ahora", and a read back. No downloads, no encodes, no external service.
+That is twenty criteria of desk work and it is the next thing to do.
+
+## 2026-10-09 — verification pass over `082`–`087` (no code change)
+
+Not an `/implement` run: a pass over the ACs left unticked by `082`, `083`, `084`, `085` and `087`,
+working downwards from `087` as the backlog order calls for. `git diff --stat services/` is empty and
+no migration, contract or catalog was touched — only `docs/spec/features/*/spec.md`. `086` needed
+nothing, all 17 of its ACs were already ticked.
+
+Four criteria closed, each against the live host rather than by inference:
+
+- **`082` AC-9** — `bin/stop -y` then `bin/dev -d`, with the user's consent, since the note that had
+  kept it unrun was that it would stop the tester's live install. State captured before and diffed
+  after is identical on all three axes: the same ten containers, the same seven volumes (with
+  `perceptor_mariadb_data` keeping its original 2026-09-10 `CreatedAt`, so it was never recreated),
+  the same single `perceptor_perceptor-net`. `movies`/`media_sources`/`users`/`settings` row counts
+  unchanged at 3/1/1/50, `.env` md5 unchanged, and `bin/stop` reported no Perceptor container left
+  running outside the project.
+- **`083` AC-1** — `docker manifest inspect` on the published `:latest` for all five images: each is
+  an OCI image index carrying `linux/amd64` and `linux/arm64`, plus two `unknown/unknown`
+  attestation manifests that are not platforms.
+- **`083` AC-4** — the development host's own end-user install (project `ptor`, `PERCEPTOR_TAG=v0.4.0-rc4`,
+  published images, no `build:` section, no `--platform` anywhere) came up with `api` healthy,
+  `uname -m` reading `x86_64` in `api`/`worker`/`web`, and `.env` unchanged by md5. Its `api` digest
+  (`sha256:ea808ad5…`) is the one `:latest` resolves to here, so NFR-2's "the same tag" is the same
+  image.
+- **`084` AC-12** — the published pages serve Spanish `og:title`/`og:description` with `og:locale`
+  `es_AR` at `/es/` and the English pair with `en_US` at the root. This one had already been verified
+  and recorded on `dev` (`082d516`, 2026-10-03); `fix/tech-debt` forked before it, so the gap was
+  branch divergence, not an unrun check.
+
+Eight remain open, and the reason is hardware or an unmerged default branch, not diligence —
+recorded in each `spec.md` so an agent reading one does not mistake an unrunnable box for an
+unexamined one. `083` AC-2/AC-3/AC-3b need an Apple Silicon Mac and say *native, not emulated*, so
+registering QEMU here would not satisfy them (this host has no arm64 handler under
+`/proc/sys/fs/binfmt_misc/` either); `083` AC-5 needs a deliberately red release run; `083` AC-6c
+needs the directory of a failed pre-083 arm64 install, which cannot be faithfully fabricated on x86.
+**`083` REQ-6 carries the only real residual risk in this set**: nothing verified so far
+distinguishes an arm64 image that starts from one that encodes. `085` AC-1/AC-2/AC-3 are
+*unobservable*, not unverified — `.github/dependabot.yml` lives on `fix/tech-debt` alone (`master`,
+`stage` and `dev` all lack it) and Dependabot reads only the default branch. `087` AC-3 was folded
+into `091`'s pending live pass, whose § Verification step 7 is the same force-replacement with the
+same download and the same encode.
+
+`091` itself: its automated half was re-run from scratch rather than trusted — `api` 1000/1000,
+`worker` 323/323, `tsc --noEmit` clean on all three, `bin/comments` clean on all three,
+`check-messages.mjs` at 602 keys with no drift, empty Prisma diff, `sweepLosingSiblings` gone
+tree-wide, `lostRace: Boolean!` present in `schema.gql`. T010's eight live-race criteria are still
+open and still correctly in **Blocked**.
+
 ## 2026-10-09 — `090-replaced-source-not-an-error`
 
 `api` and `web` touched; `worker` untouched. GraphQL Contract Delta matches `spec.md` exactly: one

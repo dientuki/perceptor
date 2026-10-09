@@ -169,6 +169,13 @@ audience is a maintainer reading a workflow log, not a user reading a translated
   close. Recorded in `tasks.md` T016 as deferred past this feature's merge; tick them there once the
   config has actually reached `master` and the first Dependabot PRs have opened.
 
+  **Deferral re-checked 2026-10-09 and it still holds.** `.github/dependabot.yml` exists on
+  `fix/tech-debt` only (commit `9c56d79`): `git show master:.github/dependabot.yml`,
+  `git show stage:…` and `git show dev:…` all fail, and `gh repo view` confirms `master` is still
+  the default branch. So Dependabot has never read this config and these three criteria are not
+  merely unverified, they are **unobservable** until the merge chain completes. Nothing to do here
+  until then.
+
 - [x] **AC-4**: A production audit of `services/api` reports exactly 6 vulnerabilities, and every
       one of them appears in the allowlist: `deepmerge-ts` (`GHSA-ggr8-5vv4-36mx`), `mariadb`
       (`GHSA-cqhc-2h57-wpxf`, `GHSA-42r5-vhpq-m858`, `GHSA-g5xc-5w98-jfvm`), `mysql2`

@@ -742,6 +742,22 @@ document or anything under `services/api/`, they have left scope and must stop a
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Three of thirty-nine open — the best-verified spec in this band — and all three are already honest
+about why. Re-checked this pass, with nothing to add to AC-4e or AC-6 beyond confirming their
+reading: each has a proven ranking half (`api/src/indexer/ranking.spec.ts`, green in the 1000 api
+tests measured this pass, including `'returns no candidates and throws nothing when every row is
+vetoed'`) and an unrun `web` half — that the table shows REQ-17's empty-candidate message rather than
+the "no results" copy. `web` has no test runner at all (`npm test` in that service exits with
+`Missing script: "test"`, confirmed this pass), so there is no path to that half except a browser
+with a session.
+
+**AC-18** (the episode path, with *Audio mandatory* on and a Spanish preference) additionally needs a
+real indexer search against a series. That is reachable on this installation — Prowlarr holds two
+enabled indexers, checked 2026-10-09 — but still needs a signed-in user's token, since
+`searchTorrents` carries no `@AllowService()` and the machine credential is refused at the guard.
+
 - [x] **AC-1**: Given a search for a film that returns a mixed list, when "Buscar" completes, the
       table is in the API's original size-descending order, no parsed-attribute labels are shown,
       and the button is enabled.

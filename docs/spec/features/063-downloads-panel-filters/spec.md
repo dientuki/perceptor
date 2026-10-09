@@ -146,6 +146,30 @@ None.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Nine of ten open, and every one of them is an **admin session in a browser plus sources in flight**.
+The panel this feature filters lives on `/movies/<id>` and `/shows/<id>`; the filter chips, the
+badge counts and the ordering it asserts have no non-browser equivalent to read them from.
+
+What this installation can offer towards the setup: 3 films, 2 series, 64 episodes — and
+`media_sources` holds **one** row, a pre-`053` orphan. AC-1 needs a film with four sources in four
+distinct states (`COMPLETED`, two in progress, one `ERROR`), AC-5 two idle sources with different
+ages, AC-6 and AC-7 a season-3 pack. Those are live acquisitions; the rows carry live qBittorrent
+state, so writing them by hand would produce rows that read as errors rather than as the scenario.
+
+Two boxes are cheaper than the rest and worth doing first once a session exists:
+
+- **AC-4** (a title whose sources are all `COMPLETED`, **error** clicked → the empty-state copy, not
+  an error) needs one completed title and no in-flight anything.
+- **AC-7** is not a page assertion at all — `showDownloads(showId)` returning `seasonNumber: 3` and a
+  season label, read through GraphiQL. It needs a signed-in user's token and a season-scoped source,
+  nothing more. Its data half is unit-covered: `downloads.service.spec.ts` asserts
+  `'showDownloads orders the same way and labels a season row with its number'`.
+
+AC-8's refusal copy (a magnet whose hash is already attached elsewhere) is `060`'s territory and
+blocked the same way — see that spec's own note.
+
 - [ ] **AC-1**: Given a film with one `COMPLETED`, two in-progress (e.g. `DOWNLOADING`, `ENCODING`)
       and one `ERROR` source, when `/movies/<id>` loads, then the panel header shows, left of
       Refresh, `completed 1`, `working 2`, `error 1`, no toggle active, and all four rows listed.

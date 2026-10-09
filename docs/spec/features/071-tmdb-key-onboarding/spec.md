@@ -102,6 +102,25 @@ None.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+AC-7 is closed above. The two still open are blocked twice over, and the second reason is the
+harder one: this installation **has a TMDB key configured** (`movie_db_api_key`, non-empty), so the
+onboarding panel does not render here at all. Verifying AC-2 or AC-6's rendered output means first
+clearing that key — an admin Settings write that would break catalog search for the installation
+until restored — and then signing in, as a **non-admin** for AC-2, where the user table holds
+exactly one row (the seeded admin). So: a second user, a session, and a deliberately broken key.
+
+- **AC-6** — the link *targets* are verified, only the render is not. The panel hard-codes four
+  URLs (`web/src/components/onboarding/TmdbKeyOnboarding.tsx:4-7`); fetched 2026-10-09,
+  `https://www.themoviedb.org/signup`, `/login` and `/api-terms-of-use` each answer `200` with no
+  redirect, and `/settings/api` answers `401` — which is the expected page, reachable only after the
+  TMDB login the panel's own steps tell the user to do first.
+- **AC-2** — needs the non-admin session described above. Note that the *data* half cannot differ:
+  `mediaCapabilities` takes no principal (see AC-7), so an admin and a non-admin are served the
+  identical capability object; what AC-2 actually tests is `web`'s rendering of it minus the
+  admin-only Settings shortcut.
+
 - [x] **AC-1**: Given `movie_db_api_key` empty, an admin opening `/` sees the privacy reason first,
       then the five steps with working links, step 5 linking to Settings; no catalog error text
       appears, and the api logs show no TMDB request for that page load.
@@ -115,9 +134,19 @@ None.
       carousels.
 - [ ] **AC-6**: Every link in the panel opens the expected TMDB page (signup, login, API settings,
       API terms) — checked by hand on the day the spec is approved.
-- [ ] **AC-7**: A non-admin's `mediaCapabilities` response contains `catalogKeyConfigured` and
+- [x] **AC-7**: A non-admin's `mediaCapabilities` response contains `catalogKeyConfigured` and
       nothing derived from the key's value; `bin/cli web node scripts/check-messages.mjs` reports no
       `en`/`es` drift.
+      **Verified 2026-10-09** (branch `fix/tech-debt`, commit `b65ef65`). The criterion is a property
+      of the response shape, and the resolver has no non-admin variant to run: `mediaCapabilities`
+      (`media/media.resolver.ts:22`) takes no principal at all — no `@CurrentUser`, no role guard
+      beyond the global auth, no branch — so every authenticated caller receives the identical
+      object. That object is four booleans (`media-capabilities.entity.ts`, `schema.gql:431`), and
+      `catalogKeyConfigured` is computed as `(map['movie_db_api_key'] ?? '').trim() !== ''`
+      (`media-capabilities.service.ts:21`) — a pure emptiness test, so nothing derived from the key's
+      value can reach the response. `media-capabilities.service.spec.ts` § `catalogKeyConfigured`
+      parametrises it. `bin/cli web node scripts/check-messages.mjs` reports `en.json` and `es.json`
+      matching exactly (602 keys).
 
 ## Out of Scope
 

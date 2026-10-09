@@ -218,6 +218,10 @@ None.
       encode-completion handlers changed (AC-11 confirms the worker diff is empty). Low risk, but
       genuinely unverified live; recommend a real end-to-end pass with an actual small torrent before
       the next release if this is a concern.
+      **Re-checked 2026-10-09:** still unrun, and now folded into `091`'s pending live pass rather
+      than tracked separately — `091` § Verification step 7 force-replaces a delivered film and lets
+      the replacement deliver, which is exactly this criterion's setup. Verify it there and tick it
+      back here; running it on its own would be the same download and the same encode twice.
 - [x] **AC-4 (failure path)**: Given a film with one source downloading at ~50% and a second, newly
       added source that reaches 100% first, when the arbiter runs, then the 50% source is **not**
       `ERROR` — it is `PAUSED`, as `022` already specifies — and no confirmed replacement anywhere in

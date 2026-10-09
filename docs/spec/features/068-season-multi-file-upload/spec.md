@@ -212,6 +212,27 @@ the page; the season now belongs to another source.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+All seven open criteria are one blocker: an **admin session in a browser, plus local video files to
+upload**. Every one of them starts at the season header's import button on `/shows/<id>` (AC-1–AC-5,
+AC-8) or at a row on `/downloads` (AC-6), and the tus upload path is the project's only REST route —
+there is no CLI or GraphQL equivalent to drive it with, so no part of this feature is reachable
+without a browser. Chrome is not connected to this session and the admin password is not known here,
+so none of it was run.
+
+What is established without a session: `api/src/uploads/uploads.service.ts` and
+`api/src/seasons/seasons.service.ts` are unit-covered (`uploads.service.spec.ts`,
+`upload-tickets.service.spec.ts`, `seasons.service.spec.ts`), all green in the 1000 api tests this
+pass measured, and the shared attach body AC-8's `COMPLETED`-episode refusal goes through is
+`acquisition/attach-source.service.spec.ts` (`088`'s consolidation). The season-scoped
+`MediaSource` of kind `LOCAL_FOLDER` that AC-3 reads back is schema-present.
+
+Also relevant to anyone picking this up: `media_sources` holds **one** row on this installation and
+`process_jobs` is **empty**, so AC-3's "the source reads `SCANNED`, three episodes…" starts from a
+clean slate — and AC-8 needs a `COMPLETED` episode to exist first, which on this data means running a
+full pipeline pass before the criterion can even be set up.
+
 - [ ] **AC-1**: On `/shows/<id>`, the import-file button on a season header is enabled, and clicking
       it opens the season import modal titled with `<Show> Temporada N` without expanding or
       collapsing the accordion.

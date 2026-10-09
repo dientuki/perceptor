@@ -170,6 +170,34 @@ None. `Movie.releaseDate`, `Episode.releaseDate`, `Movie.isShort` and the owners
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+All fourteen boxes open on a spec marked `Implemented`, and the cause is singular: `/calendar` is a
+page, and this session has no browser session to open it with (Chrome is not connected; the admin
+password is not known here). There is no CLI or GraphQL path to the grid, the month navigation, the
+colours or the legend.
+
+**AC-9 is the one criterion that is pure GraphQL, and it was attempted this pass and refused for a
+different reason than expected**: `calendar` does not carry `@AllowService()`, so the installation's
+`SERVICE_TOKEN` cannot drive it — `JwtAuthGuard.canActivate` answers
+`extensions.i18n.key = "error.auth.unauthenticated"` before either argument is validated (measured
+2026-10-09 against `http://localhost:4000/graphql`). The two keys AC-9 asserts,
+`error.calendar.invalid_range` and `error.calendar.invalid_date`, are therefore reachable **only with
+a signed-in user's bearer token**, not with the machine credential. Their logic is unit-covered —
+`api/src/calendar/calendar-range.spec.ts` is exactly the range/date validation suite, green in the
+1000 api tests measured this pass.
+
+**AC-6 additionally needs a second user** (a film registered by A must not appear on B's calendar);
+the `users` table holds exactly one row, the seeded admin.
+
+Everything else — AC-1 to AC-5b, AC-7, AC-8, AC-10 to AC-13 — is a session away and needs no
+pipeline run, which makes this one of the cheapest specs in the 060–071 band to close once a browser
+is available. The library already holds data to render: 3 films, 2 series, 64 episodes. AC-10 wants
+`api` stopped, AC-11 a browser timezone of `America/Argentina/Buenos_Aires`, AC-7 `shows_enabled`
+turned off and restored — all three are configuration, not acquisition. The grouping and
+status-rollup rules behind AC-3, AC-5 and AC-5b are covered by `calendar/group-episodes.spec.ts` and
+`calendar/calendar.service.spec.ts`.
+
 - [ ] **AC-1**: Signed in as a user with a film released this month, when opening `/calendar`, the
       grid shows the current month and the film on its release day, linked to `/movies/<id>`.
 - [ ] **AC-2**: Given a series in the library with episodes airing next month, when clicking "next",

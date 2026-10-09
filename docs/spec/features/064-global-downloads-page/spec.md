@@ -214,6 +214,31 @@ None.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+AC-13 is closed above, off the test suites and the schema. The other twelve need, between them, only
+three things this installation lacks:
+
+- **An admin session in a browser** — `/downloads` is a page; there is no other way to read it.
+  AC-1–AC-6, AC-9, AC-10, AC-11 and AC-12 are all page-level assertions (the sidebar badge, the group
+  headers, the pagination line, the filter chips, the per-title grouping on a detail page).
+- **A second user** — AC-7 and AC-8 are the visibility exception this feature exists for: user B
+  seeing A's rows read-only, and `downloadDelete` refusing on a row B does not own. The `users` table
+  holds **exactly one row** (the seeded admin), so there is no B. The refusal itself is unit-covered
+  in `downloads.service.spec.ts`, and `owned` is asserted per caller for the same source.
+- **Sources actually in flight** — `media_sources` holds **one** row on this installation, a pre-`053`
+  orphan reading `DOWNLOADING` with no torrent in qBittorrent and no folder on disk. AC-1 wants three
+  films with two active sources each, AC-5 wants 23 titles, AC-3 wants a season pack plus single
+  episodes. Every one of those is a live acquisition, not a fixture: the rows carry live qBittorrent
+  state, so hand-writing them in SQL would produce rows that read as errors rather than as the
+  scenario. AC-9's own setup (the `torrent` container stopped) is the exception — cheap, and the only
+  one of this group that needs no new data.
+
+AC-10 deserves a note: "with nothing in flight, the sidebar badge disappears" is the *current* state
+of this installation — the single orphan row's derived status is what decides it, and nothing is
+genuinely active. That makes AC-10 the cheapest box here, reachable with a session and no setup at
+all.
+
 - [ ] **AC-1**: Given user A owns films F1, F2, F3, each with two sources currently `DOWNLOADING` or
       `ENCODING`, when A opens `/downloads`, then three groups are listed, each with a header naming
       the film and `2`, and its two rows beneath; the most recently active film's group is first; the
@@ -252,9 +277,21 @@ None.
       `/downloads` still lists that row and the badge still counts its show.
 - [ ] **AC-12**: `/movies/<id>` and `/shows/<id>` render their panel with no group header and no
       pagination controls, whatever the number of rows.
-- [ ] **AC-13**: `bin/npm api run test` passes, including NFR-6's tests; `git status --short
+- [x] **AC-13**: `bin/npm api run test` passes, including NFR-6's tests; `git status --short
       services/api/prisma` is empty; the `schema.gql` diff is exactly this delta;
       `bin/cli web node scripts/check-messages.mjs` reports no drift; `bin/npm web run build` exits 0.
+      **Verified 2026-10-09** (branch `fix/tech-debt`, commit `b65ef65`), all four clauses:
+      `bin/npm api run test` → 68 suites, 1000 tests, 0 failures, NFR-6's cases among them
+      (`downloads.service.spec.ts` § `downloads / activeDownloadCount — installation-wide` asserts
+      `3` for three films with two active sources each, `1` for one show with an active pack plus two
+      active episodes, `0` for a film whose only source is paused, and reads `owned` per caller for
+      the same source). `git status --short services/api/prisma` is empty. The `schema.gql` delta is
+      exactly this one: `type Download` carries `showId: Int`, `showTitle: String` and
+      `owned: Boolean!` and nothing else new, `type Query` carries `downloads: [Download!]!` and
+      `activeDownloadCount: Int!`, and neither resolver carries `@AllowService()`
+      (`downloads.resolver.ts:42,48`). `bin/cli web node scripts/check-messages.mjs` reports
+      `en.json` and `es.json` matching exactly (602 keys). `npm run build` in `web` exits 0, run in a
+      throwaway container as uid 1000 with the dev `.next` parked.
 
 ## Out of Scope
 

@@ -243,6 +243,27 @@ Per Article III the migration is generated through `bin/npm api run prisma:migra
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Two boxes open, both needing **a live encode to interrupt**, which this installation cannot supply:
+`process_jobs` holds **0** rows and no encode has ever run on this branch.
+
+- **AC-4** (deleting a source mid-encode) is `047`'s guarantee seen from this feature's side: the
+  cancellation must win over the recovery. Covered at unit level by
+  `worker/src/encode/cancellation.spec.ts` (including the registry keeping the first controller when
+  an id is registered twice) and by the two rethrow-as-non-retryable paths that keep BullMQ from
+  retrying a cancellation. Unrun live.
+- **AC-5** (an orphaned `<input>.working.mkv` and `<final>.part.mkv` left from a crash) needs those
+  files to exist on disk from a killed FFmpeg. The clearing itself is unconditional before every
+  encode, not only a recovered one, so the criterion is really "a crash leaves nothing that poisons
+  the next run" — and that is the kind of claim only a real crash establishes.
+
+The rest of the feature's machinery is covered and green in this pass's suites:
+`worker/src/lease/worker-lease.spec.ts` (the NFR-4 Redis lease — a second instance exits 1 rather
+than resetting the first one's live encode) and `api/src/process-jobs/process-jobs.service.spec.ts`
+(the boot-time reconciliation of every job still reading `ENCODING`, requeued once and failed outright
+on a second orphaning).
+
 - [x] **AC-1**: Given a movie whose encode is in progress, when the stack is killed outright
       (`docker compose kill worker api`, simulating a host reset) and brought back with `bin/dev`,
       then within that boot the job's row reads a queued/encoding status with its recovery counter

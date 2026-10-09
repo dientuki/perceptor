@@ -259,6 +259,42 @@ None. Every column read or cleared already exists (NFR-6).
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Twelve of thirteen boxes open, and the reason is uniform: **every criterion here starts from a
+failure that has to be manufactured on a live pipeline.** On this installation `process_jobs` holds
+**0** rows and `media_sources` **1** (a pre-`053` orphan with no torrent and no folder), so there is
+no failed encode to press Play on, no stopped torrent, no partially-encoded season pack. The feature
+is resume-from-the-stage-that-failed; with nothing ever having run, there is nothing to resume.
+
+Grouped by what each needs beyond an admin session:
+
+| Criteria | Needs |
+| :-- | :-- |
+| AC-1, AC-6, AC-10 | a **failed encode** (AC-6 over an uploaded file, AC-10 pressed twice quickly) |
+| AC-2, AC-4 | **qBittorrent manipulation** — a torrent stopped in state `error`, and files deselected then re-selected (`error.source.scan_no_downloaded_video`) |
+| AC-3 | a completed torrent whose **download folder is made unreadable** on disk |
+| AC-5, AC-8b | a **season pack** where some episodes encoded and others failed |
+| AC-7 | a source **demoted by a forced replace** — the same setup `087` AC-3 needs, and folded into `091`'s live pass step 7 |
+| AC-8 | a film whose only source failed to encode, then a sibling added — the race-unwedging case |
+| AC-9 | the **`redis` container stopped** while pressing Play |
+| AC-11 | a **user JWT** calling `sourceScanFailed` — the one criterion here that needs no pipeline state at all, only a signed-in user's bearer token |
+| AC-12 | the `es` render of every error above; its catalog half is re-confirmed below |
+
+**AC-12's catalog half, re-measured 2026-10-09**: `bin/cli web node scripts/check-messages.mjs`
+reports `en.json` and `es.json` matching exactly at **602 keys** (the note in the box records 484 —
+that was true when written and the catalogs have grown since; parity still holds). The `es` rendering
+of each error is the half that stays unrun.
+
+**AC-11 is the cheapest box here** — one GraphQL call with a signed-in user's token, no pipeline
+state — and its second clause is already structurally guaranteed. The refusal is not the guard
+decorator (`@AllowService()` *permits* a service principal, it does not exclude a user) but an
+explicit check in the resolver body: `media-sources.resolver.ts:52-54` throws
+`i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED)` when `principal.type !== 'service'`,
+**before** `MediaSourcesService.sourceScanFailed` is reached, so no write can occur on that path and
+"leaves the source untouched" cannot fail independently of the error key. What is unrun is only that
+a real user JWT produces that key over the wire.
+
 - [ ] **AC-1 (Encode resumes, failure path)**: Given a film whose torrent completed and whose encode
       failed (e.g. the destinations volume was full), the row in `/movies/<id>` reads `ERROR` with
       stage "encode" and the FFmpeg failure message, and Play is shown. After freeing space and

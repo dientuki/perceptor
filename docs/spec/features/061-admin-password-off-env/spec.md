@@ -111,6 +111,43 @@ column, not a schema change.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Ten of ten open, and the blocker is not a session: **nine of these ten criteria are about the
+installer and the password-reset command, and running them means setting a real credential.**
+
+- **AC-1, AC-2, AC-3, AC-4, AC-8** need a **fresh `curl … | bash` install into an empty directory**
+  (AC-8 an upgrade of a pre-`061` install whose `.env` still carries the three removed variables).
+  This checkout cannot stand in for either: its `.env` was answered long ago and `bin/install`, not
+  `install.sh`, generated it.
+- **AC-5, AC-6, AC-7, AC-9, AC-10** drive `scripts/reset-password.ts` — `bin/reset-password` on a dev
+  stack for AC-9 and AC-10. That command writes the app, qBittorrent and Prowlarr logins together,
+  which is the whole point of the feature and also why it was not run here: it would change the
+  admin credential of the user's own working installation, across three services, and nothing in
+  this verification pass authorises that. AC-7 (a non-admin username touching only the app login)
+  additionally needs a second user, and the `users` table holds exactly one row.
+
+What is established without running any of it: `api/src/shared-login/shared-login.spec.ts` covers the
+three-way write, and `api/src/database/seed/production-seed.spec.ts` covers the seed storing an
+unusable hash when no `ADMIN_PASSWORD` is present — both green in the 1000 api tests measured this
+pass.
+
+**One measured fact that bears directly on AC-8, and the opposite of what AC-1 describes:** this
+checkout's `.env` still carries all three removed variables — `ADMIN_PASSWORD`,
+`QBITTORRENT_PASSWORD` and `INDEXER_PASSWORD` are each present (checked 2026-10-09; values not
+recorded here, and never to be). This is therefore itself a **pre-`061` installation**, i.e. exactly
+AC-8's subject rather than AC-1's. What AC-8 asks — that such an installation keeps working with the
+variables honoured if present — is weakly in evidence every day this stack runs: `api`, `torrent`
+and `indexer` are all healthy with those variables in place. What is *not* in evidence is the
+deliberate part of AC-8: that the login still works and that the reset command then takes over
+cleanly. Closing AC-8 properly means a login, which means a session; closing AC-1 means a fresh
+install directory, which this is not and cannot be made into.
+
+**AC-10 is the one box here that could be closed without touching a credential**: that `ps aux`
+inside `api` never shows the password while the reset runs is a property of how the script reads
+stdin, and could be established by inspection plus a run against a throwaway username. It is
+recorded here as the cheapest path, not as verified.
+
 - [ ] **AC-1**: A fresh `curl … | bash` install finishes, and `grep -E
       'ADMIN_PASSWORD|QBITTORRENT_PASSWORD|INDEXER_PASSWORD' .env` prints nothing.
 - [ ] **AC-2**: Right after AC-1, the password typed into the installer logs into the web app, the

@@ -249,8 +249,13 @@ must refuse it like any other unknown key.
       the per-row ranking chips render exactly as they did before this feature, and
       `grep -rn "resolutionTier" services/web/src` shows only reads of the server's field — no
       comparator.
-- [ ] **AC-10**: `grep -rn "rankTorrentResults" services/web/src` returns nothing and
-      `services/web/src/lib/torrent-ranking.ts` no longer exists.
+      **Second half confirmed 2026-10-09**: `resolutionTier` appears in exactly two places,
+      `src/types/indexer.ts:6` (a field on the type) and `src/actions/indexer.ts:48` (a line in the
+      selection set) — no comparison, sort or threshold anywhere in `web`. The first half, that the
+      modal renders as it did before, still needs the browser.
+- [x] **AC-10**: `grep -rn "rankTorrentResults" services/web/src` returns nothing and
+      `services/web/src/lib/torrent-ranking.ts` no longer exists. Both confirmed 2026-10-09: the
+      grep is empty and the file is absent.
 - [ ] **AC-11**: With 30 eligible episodes, a single run attaches at most 20 and the next run picks
       up the rest (NFR-1).
 

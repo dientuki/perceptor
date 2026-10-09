@@ -169,6 +169,24 @@ what this column becomes.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Two boxes open, both **browser-only and both cheap** — they are among the least expensive unticked
+criteria anywhere in 002–091, needing no pipeline run, no external service and no second user.
+
+- **AC-11** (`/shows` with three series renders three cards with poster, title and episode count) —
+  needs a session, and the library currently holds **2** series, not three. Registering a third is a
+  search-and-add from the UI, cheap, and the TMDB key is configured (`movie_db_api_key` non-empty),
+  so the catalog path works.
+- **AC-12** (`/shows` with an empty library renders "No hay series registradas") — needs a session
+  and an empty library, i.e. it should be run **before** anything is registered, or against a fresh
+  install. On this installation it would mean removing both series first, which `067`'s Remove button
+  does; worth sequencing rather than treating as a separate setup.
+
+The listing query behind both is unit-covered (`api/src/shows/shows.resolver.spec.ts`,
+`shows/shows.service.spec.ts`), green in the 1000 api tests measured this pass, and the per-user
+scoping it enforces is `064`'s documented exception set. What is unverified is only the rendering.
+
 - [x] **AC-1**: Given user A has registered two series and user B one different series, when A
       queries `shows`, then exactly A's two series are returned and B's is absent.
 - [x] **AC-2**: Given a series already registered by user B, when user A registers the same series

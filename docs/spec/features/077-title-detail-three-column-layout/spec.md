@@ -144,9 +144,23 @@ None.
       page scroll.
 - [ ] **AC-10**: `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift, and
       switching the UI locale to `es` shows every new label translated.
-- [ ] **AC-11**: `git diff --stat services/api services/worker` is empty and `services/api/src/schema.gql`
-      does not appear in the diff.
-- [ ] **AC-12**: `bin/npm web run build` exits 0 and `bin/cli web npx --no tsc --noEmit` reports 0 errors.
+      **First half confirmed 2026-10-09**: the parity check reports `OK: en.json and es.json match
+      exactly (602 keys)`. The second half — that each new label actually reads as Spanish rather
+      than as a present-but-untranslated key — needs the browser and an admin session, so the box
+      stays unticked.
+- [x] **AC-11**: `git diff --stat services/api services/worker` is empty and `services/api/src/schema.gql`
+      does not appear in the diff. Confirmed 2026-10-09 against the feature's commit (`c219812`,
+      "add & implement 077 spec, movie/short/serie detail"): its 23 files are this spec's own
+      documents, `CLAUDE.md`, `README.md`, `site/index.html`, `services/web/CLAUDE.md`, the two
+      message catalogs and fifteen files under `services/web/src/` — nothing under
+      `services/api/` or `services/worker/`, so `schema.gql` never appears.
+- [x] **AC-12**: `bin/npm web run build` exits 0 and `bin/cli web npx --no tsc --noEmit` reports 0 errors.
+      Both run 2026-10-09. The build was run in a throwaway container from the `perceptor-web:local-dev`
+      image (node 24.18.0) with `services/web` bind-mounted as uid 1000, because `bin/npm` shells into
+      the running container and the root `CLAUDE.md` forbids a build against a live dev stack — the dev
+      `.next` was parked before the run and restored after, so the stack was never un-hydrated. It
+      exited 0 and emitted the full route table, including `/movies/[id]` and `/shows/[id]`, the two
+      routes this feature rewrote. `tsc --noEmit` is clean.
 
 ## Out of Scope
 

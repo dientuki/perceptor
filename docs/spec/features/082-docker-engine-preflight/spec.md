@@ -143,8 +143,14 @@ stopped serving.
 - [x] **AC-8** (regression): `. bin/_docker.sh && compose_project_name` prints `perceptor`, not
       `perceptor-`, in a directory named `perceptor`. The real volume on the host is
       `perceptor_mariadb_data`, which is why the old value could never match.
-- [ ] **AC-9**: `bin/stop` followed by `bin/dev` brings the stack back with every container, volume
-      and network intact. **Not run** — it would have stopped the tester's live install.
+- [x] **AC-9**: `bin/stop` followed by `bin/dev` brings the stack back with every container, volume
+      and network intact. Run live 2026-10-09 with the tester's consent: state captured before
+      `bin/stop -y` and diffed after `bin/dev -d` is identical on all three axes — the same ten
+      containers under the same names, the same seven volumes
+      (`perceptor_mariadb_data` still carrying its original `CreatedAt` of 2026-09-10, so it was
+      never recreated), the same single network `perceptor_perceptor-net`. Row counts across
+      `movies`/`media_sources`/`users`/`settings` are unchanged (3/1/1/50) and `.env` has the same
+      md5. `bin/stop` also reported `No Perceptor containers left running outside this project.`
 - [x] **AC-10**: The `bin/` table in both `README.md` and the root `CLAUDE.md` lists `bin/stop`, and
       each file states that the wrappers check for a reachable engine first.
 

@@ -152,6 +152,20 @@ not a column. No migration, no backfill.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+One box open, and it needs two things this installation lacks. **AC-7** reads `movie(id:)` **as user
+A** and expects the per-user resolution of the installation-wide defaults; the `users` table holds
+**exactly one row** (the seeded admin), and `movie(id:)` carries no `@AllowService()`, so the
+machine credential cannot stand in — attempted on a sibling query this pass, `JwtAuthGuard` answers
+`error.auth.unauthenticated` before the resolver is reached. So: a second user, and a signed-in
+session to read as them.
+
+The resolution logic itself is covered by `api/src/preferences/preferences.service.spec.ts` and by
+`039` AC-8, which is ticked: a film with no per-title preference of either kind, encoded with
+`default_languages` set to `es`, produces the expected `allowedAudioLanguagesIso3`. AC-7 is the same
+claim read through the GraphQL surface rather than through the encode payload.
+
 - [x] **AC-1** *(unit-verified; end-to-end half pending the user's manual pass)*: Given a user who
       owns an English-original film, whose `/preferences` audio list is `en, es-419` and whose
       subtitle list is `en, es-419`, and who has set **no** per-title preference on that film, and

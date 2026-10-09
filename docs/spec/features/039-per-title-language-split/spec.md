@@ -272,6 +272,30 @@ the scope it belongs to, and no fourth table is introduced for one boolean.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+AC-7 and AC-10 are closed above. The eight that remain split cleanly, and the split is worth
+recording because the second group is not blocked by this feature at all:
+
+- **AC-2, AC-3, AC-4 and the three `0.2.0` boxes (AC-11, AC-12, AC-13)** need an **admin session in a
+  browser**. All six are the language panes themselves — choosing languages and pressing *Guardar* on
+  a film, on a series and on `/preferences`, then reloading to confirm the save stuck, and in
+  AC-12/AC-13's case confirming the three scopes stay independent and that saving the *Audio
+  mandatory* flag and saving languages do not disturb each other. There is no non-browser path to a
+  pane. The writes they drive are unit-covered
+  (`api/src/preferences/preferences.service.spec.ts`, `languages/languages.service.spec.ts`), green
+  in the 1000 api tests measured this pass, and `user_movie_languages` already holds 4 rows on this
+  installation, so the storage shape is in evidence — the UI round-trip is not.
+- **AC-5 and AC-6** are failure paths on `setMoviePreferredTrackLanguages` (an unknown tag, a
+  duplicated tag) and need a **signed-in user's bearer token**, not a session as such. They were
+  attempted this pass with the installation's `SERVICE_TOKEN` and are unreachable that way for the
+  same reason AC-7 *is* reachable: the guard refuses a service principal before argument validation
+  runs, so the refusal observed is `error.auth.unauthenticated` rather than the validation error each
+  box asserts. One user token turns both into single curls.
+
+Note that AC-5 and AC-6 are therefore the cheapest unticked criteria in this spec — no UI, no
+pipeline, no second user, one token.
+
 - [x] **AC-1**: A movie's detail page shows two panes — *Audio languages*, *Subtitle languages* —
       and one *Guardar* button; `grep -rn "LanguagePicker" services/web/src/components/movies/Movie.tsx`
       returns nothing (the old single picker is gone, not left alongside the new panes).
@@ -295,8 +319,18 @@ the scope it belongs to, and no fourth table is introduced for one boolean.
 - [ ] **AC-6** *(failure path)*: The same mutation called with a duplicated tag
       (`tags: ["es", "es"]`) is refused with `error.language.duplicate`, set unchanged.
 
-- [ ] **AC-7** *(failure path)*: Either mutation called with `SERVICE_TOKEN` as bearer returns
+- [x] **AC-7** *(failure path)*: Either mutation called with `SERVICE_TOKEN` as bearer returns
       `error.auth.unauthenticated`.
+      **Verified 2026-10-09** against the running dev `api` (`http://localhost:4000/graphql`), both
+      mutations, with the installation's own `SERVICE_TOKEN` as the bearer:
+      `setMoviePreferredTrackLanguages(movieId: 999999, kind: AUDIO, tags: [])` and
+      `setShowPreferredTrackLanguages(showId: 999999, kind: SUBTITLE, tags: [])` each answer
+      `message: "Not authenticated"` with `extensions.i18n.key = "error.auth.unauthenticated"`.
+      The refusal happens in `JwtAuthGuard.canActivate` — neither mutation carries
+      `@AllowService()`, so a service principal never reaches the resolver; `user_movie_languages`
+      and `user_show_languages` were unchanged after both calls (4 and 0 rows, as before). A
+      deliberately nonexistent id was used so that even a guard that let the call through could not
+      have written over real data.
 
 - [x] **AC-8**: A movie with no per-title preference of either kind, encoded with the installation
       `default_languages` set to `es`, produces `allowedAudioLanguagesIso3` and
@@ -309,8 +343,14 @@ the scope it belongs to, and no fourth table is introduced for one boolean.
       containing it (unless `fr` is also the installation default or the original language) —
       the split actually reaches the encode payload, not just storage.
 
-- [ ] **AC-10**: Both typechecks (`api`, `web`, `worker`) report 0 errors; `bin/npm api test` and
+- [x] **AC-10**: Both typechecks (`api`, `web`, `worker`) report 0 errors; `bin/npm api test` and
       `bin/npm worker test` report no failures; `bin/npm web run build` exits 0.
+      **Verified 2026-10-09** (branch `fix/tech-debt`, commit `b65ef65`): `bin/cli api npx --no tsc
+      --noEmit`, `bin/cli web npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit` each
+      exit 0 with no diagnostics. `bin/npm api run test` → 68 suites, 1000 tests, 0 failures.
+      `bin/npm worker test` → 28 files, 323 tests, 0 failures. `npm run build` in `web` exits 0 (run
+      in a throwaway `perceptor-web:local-dev` container as uid 1000 with the dev `.next` parked and
+      restored — `bin/npm web run build` against the running stack un-hydrates every page).
 
 - [ ] **AC-11** *(`0.2.0`)*: The audio pane on a movie detail page, a show detail page and
       `/preferences`'s *Idiomas de descarga* tab each show an *Audio mandatory* checkbox. Ticking it
