@@ -147,6 +147,7 @@ type MediaSourceRow = {
   movieId: number | null;
   seasonId: number | null;
   episodeId: number | null;
+  retiredAt: Date | null;
 };
 
 @Injectable()
@@ -260,7 +261,7 @@ export class DownloadsService {
   // Spec 087, REQ-2
   async hasDeliveredSource(target: DeliveryTarget): Promise<boolean> {
     const sources = await this.prisma.mediaSource.findMany({
-      where: { ...target, status: 'SCANNED' },
+      where: { ...target, status: 'SCANNED', retiredAt: null },
       select: { id: true },
     });
     if (sources.length === 0) return false;
@@ -270,10 +271,10 @@ export class DownloadsService {
     );
   }
 
-  // Spec 087, REQ-3 REQ-9
+  // Spec 087, REQ-3 REQ-9; Spec 090, REQ-1
   async demoteDeliveredSources(target: DeliveryTarget, reason: string): Promise<number> {
     const sources = await this.prisma.mediaSource.findMany({
-      where: { ...target, status: 'SCANNED' },
+      where: { ...target, status: 'SCANNED', retiredAt: null },
       select: { id: true },
     });
     if (sources.length === 0) return 0;
@@ -287,10 +288,7 @@ export class DownloadsService {
       await tx.mediaSource.updateMany({
         where: { id: { in: deliveredIds } },
         data: {
-          status: 'ERROR',
-          errorKey: ERROR_KEYS.SOURCE_REPLACED,
-          errorParams: null,
-          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+          retiredAt: new Date(),
         },
       });
 
@@ -365,6 +363,7 @@ export class DownloadsService {
       lastError: resume.lastError ?? undefined,
       retryable: resume.retryable,
       readAt: new Date(),
+      retiredAt: source.retiredAt,
     };
   }
 
@@ -524,6 +523,11 @@ export class DownloadsService {
 
   async downloadStart(mediaSourceId: number, userId: string): Promise<Download> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
+
+    // Spec 090, REQ-5
+    if (source.retiredAt) {
+      throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_REPLACED);
+    }
 
     const [live, jobsBySourceId, siblings] = await Promise.all([
       source.infoHash ? this.liveInfoForHash(source.infoHash) : Promise.resolve(undefined),
@@ -894,7 +898,7 @@ export class DownloadsService {
     // Spec 022, REQ-13; Spec 022, REQ-15
     const siblingJobs = await this.jobsBySourceId(siblings.map((sibling) => sibling.id));
     const alreadyWon = siblings.some((sibling) =>
-      isRaceWinner(sibling.status, siblingJobs.get(sibling.id)?.jobs ?? []),
+      isRaceWinner(sibling.status, siblingJobs.get(sibling.id)?.jobs ?? [], sibling.retiredAt ?? null),
     );
     if (alreadyWon) {
       console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} superseded, the target already has a winner`);

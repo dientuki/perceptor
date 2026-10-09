@@ -283,14 +283,21 @@ export class UploadsService implements OnModuleInit {
     console.log(`[uploads] ${upload.id}: completed -> mediaSource ${mediaSource.id}, queued`);
   }
 
-  // Spec 038, REQ-6
+  // Spec 038, REQ-6; Spec 090, REQ-4
   async demoteSupersededSources(
     target: { movieId: number } | { episodeId: number } | { seasonId: number },
     uploadId: string,
   ): Promise<void> {
+    // A source that already delivered its file is retired, not errored —
+    // DownloadsService.demoteDeliveredSources is the one writer of
+    // retiredAt. Everything else this method would otherwise catch (still
+    // READY, or SCANNED with an encode still running) never delivered
+    // anything, and keeps the ERROR treatment below.
+    await this.downloads.demoteDeliveredSources(target, `upload ${uploadId}`);
+
     await this.prisma.$transaction(async (tx) => {
       const demoted = await tx.mediaSource.findMany({
-        where: { ...target, status: { in: ['READY', 'SCANNED'] } },
+        where: { ...target, status: { in: ['READY', 'SCANNED'] }, retiredAt: null },
         select: { id: true },
       });
 

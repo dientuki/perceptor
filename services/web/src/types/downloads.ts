@@ -43,4 +43,7 @@ export interface Download {
   lastError: DownloadError | null;
   retryable: boolean;
   readAt: string;
+  // Spec 090: non-null when the source delivered a file and was later
+  // retired in favour of a replacement; an ISO string, never the Date itself.
+  retiredAt: string | null;
 }

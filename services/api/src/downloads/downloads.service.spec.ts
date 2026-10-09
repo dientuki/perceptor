@@ -1234,6 +1234,23 @@ describe('DownloadsService', () => {
       });
       expect(qbittorrent.start).not.toHaveBeenCalled();
     });
+
+    // Spec 090, REQ-5
+    it('refuses a retired source with retry_replaced, before touching the torrent client', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(
+        sourceRow({ status: 'SCANNED', retiredAt: new Date('2026-10-09T00:00:00Z') }),
+      );
+
+      await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+        response: { i18n: { key: 'error.download.retry_replaced' } },
+        status: 409,
+      });
+
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+      expect(qbittorrent.info).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+    });
   });
 
   // Spec 087, REQ-2 REQ-3 REQ-9: this suite exists because a force-replacement that fails to tell
@@ -1269,7 +1286,7 @@ describe('DownloadsService', () => {
 
         await expect(service.hasDeliveredSource({ episodeId: 5 })).resolves.toBe(true);
         expect(prisma.mediaSource.findMany).toHaveBeenCalledWith({
-          where: { episodeId: 5, status: 'SCANNED' },
+          where: { episodeId: 5, status: 'SCANNED', retiredAt: null },
           select: { id: true },
         });
       });
@@ -1292,12 +1309,31 @@ describe('DownloadsService', () => {
 
         expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
           where: { id: { in: [1] } },
-          data: expect.objectContaining({ status: 'ERROR', errorKey: 'error.source.replaced' }),
+          data: { retiredAt: expect.any(Date) },
         });
         expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
           where: { sourceFile: { mediaSourceId: { in: [1] } }, status: { in: ['WAITING', 'QUEUED', 'ENCODING'] } },
           data: expect.objectContaining({ status: 'ERROR', errorKey: 'error.source.replaced' }),
         });
+      });
+
+      // Spec 090, REQ-1
+      it('retires the delivered source (retiredAt set) and writes no status or error field', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([{ id: 1 }]);
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 1, 'COMPLETED')]);
+        prisma.processJob.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(service.demoteDeliveredSources({ movieId: 7 }, 'force-replace')).resolves.toBe(1);
+
+        expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
+          where: { id: { in: [1] } },
+          data: { retiredAt: expect.any(Date) },
+        });
+        const writtenData = prisma.mediaSource.updateMany.mock.calls[0][0].data;
+        expect(writtenData.status).toBeUndefined();
+        expect(writtenData.errorKey).toBeUndefined();
+        expect(writtenData.errorMessage).toBeUndefined();
+        expect(writtenData.errorParams).toBeUndefined();
       });
 
       it('does not demote a SCANNED sibling whose encode is still active, and writes nothing', async () => {
@@ -1316,7 +1352,7 @@ describe('DownloadsService', () => {
         await expect(service.demoteDeliveredSources({ episodeId: 5 }, 'force-replace')).resolves.toBe(0);
 
         expect(prisma.mediaSource.findMany).toHaveBeenCalledWith({
-          where: { episodeId: 5, status: 'SCANNED' },
+          where: { episodeId: 5, status: 'SCANNED', retiredAt: null },
           select: { id: true },
         });
         expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
@@ -1450,6 +1486,45 @@ describe('DownloadsService', () => {
       // The winner itself is never written by resolveRace.
       expect(prisma.mediaSource.update).not.toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 1 } }),
+      );
+    });
+
+    // Spec 090, REQ-3
+    it('a retired delivered sibling never blocks the new source from winning its race', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'DOWNLOADING',
+        infoHash: 'winner-hash',
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 2, status: 'SCANNED', infoHash: 'retired-hash', retiredAt: new Date() },
+      ]);
+      prisma.processJob.findMany.mockResolvedValue([
+        {
+          id: 21,
+          status: 'COMPLETED',
+          progress: 100,
+          encodeSpeed: null,
+          errorKey: null,
+          errorParams: null,
+          errorMessage: null,
+          updatedAt: new Date(),
+          sourceFile: { mediaSourceId: 2 },
+        },
+      ]);
+
+      const result = await service.resolveRace(1);
+
+      expect(result.outcome).toBe('WON');
+      expect(qbittorrent.stop).not.toHaveBeenCalledWith('winner-hash');
+      expect(prisma.mediaSource.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({ status: 'ERROR', errorKey: 'error.source.superseded' }),
+        }),
       );
     });
   });

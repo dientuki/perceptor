@@ -2,7 +2,7 @@
 title: A Replaced Source Is Not An Error — web slice
 service: web
 last_updated: 2026-10-08
-status: Approved
+status: Implemented
 ---
 
 # PLAN: A Replaced Source Is Not An Error — `web` (`web/plan.md`)

@@ -2,7 +2,7 @@
 title: A Replaced Source Is Not An Error — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-10-08
-status: Approved
+status: Implemented
 ---
 
 # PLAN: A Replaced Source Is Not An Error (`plan.md`)

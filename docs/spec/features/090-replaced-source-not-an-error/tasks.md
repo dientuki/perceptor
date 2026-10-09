@@ -1,7 +1,7 @@
 ---
 title: A Replaced Source Is Not An Error — Tasks
 last_updated: 2026-10-08
-status: Draft
+status: Done
 ---
 
 # TASKS: A Replaced Source Is Not An Error (`tasks.md`)
@@ -23,7 +23,7 @@ parallel only when they touch **different files**. T003, T004, T005 and T008 all
 
 ### Group 1 — schema and the two guards
 
-- [ ] **T001** `[api] [P]` Add `MediaSource.retiredAt DateTime?` to `prisma/schema.prisma`,
+- [x] **T001** `[api] [P]` Add `MediaSource.retiredAt DateTime?` to `prisma/schema.prisma`,
       generate the migration with `bin/npm api run prisma:migrate`, and write the NFR-1 backfill
       into that same generated `migration.sql` **before applying it** — a migration already applied
       cannot be edited, so the column and its backfill are one task, not two. The backfill rule and
@@ -35,7 +35,7 @@ parallel only when they touch **different files**. T003, T004, T005 and T008 all
       `bin/mysql -e "SELECT status, errorKey, retiredAt FROM media_sources WHERE errorKey = 'error.source.replaced' OR retiredAt IS NOT NULL"`
       shows delivered rows as `SCANNED` / null `errorKey` / non-null `retiredAt`, and every other
       candidate unchanged (AC-6).
-- [ ] **T002** `[api] [P]` Teach `isRaceWinner` and `isDeliveredSource` in
+- [x] **T002** `[api] [P]` Teach `isRaceWinner` and `isDeliveredSource` in
       `src/pipeline-status/pipeline-status.ts` to answer `false` for a retired source, widen
       `ResumeSibling` to carry retirement so `deriveResume` stops refusing `retry_superseded`
       against a retired winner, and extend `pipeline-status.spec.ts` with all three cases.
@@ -48,7 +48,7 @@ parallel only when they touch **different files**. T003, T004, T005 and T008 all
 Everything here depends on Group 1: the column must exist and the guards must already know the
 question before any caller is rewired.
 
-- [ ] **T003** `[api]` In `src/downloads/downloads.service.ts`, add `retiredAt: null` to the
+- [x] **T003** `[api]` In `src/downloads/downloads.service.ts`, add `retiredAt: null` to the
       `where` of `hasDeliveredSource` and `demoteDeliveredSources`, and change
       `demoteDeliveredSources` to write `retiredAt` instead of
       `status`/`errorKey`/`errorMessage`/`errorParams` (REQ-1). Leave its unreachable job-closing
@@ -57,21 +57,21 @@ question before any caller is rewired.
       methods are the single read and the single write. → T001 T002
       *Done when:* `bin/npm api run test` passes with a case asserting the demotion writes
       `retiredAt` and writes **no** error field and no `ERROR` status.
-- [ ] **T004** `[api]` Pass retirement through `resolveRace`'s `alreadyWon` read into
+- [x] **T004** `[api]` Pass retirement through `resolveRace`'s `alreadyWon` read into
       `isRaceWinner`, in the same file. This is the feature's highest-risk line (`plan.md` §
       Risks, first row): get it wrong and the replacement is written
       `error.source.superseded` with no log anywhere saying why. → T003
       *Done when:* `bin/npm api run test` passes with a case where `resolveRace` returns `WON`
       because the only delivered sibling is retired, and the new source is neither stopped in the
       torrent client nor written an error key (AC-3's unit half).
-- [ ] **T005** `[api]` Make `downloadStart` throw
+- [x] **T005** `[api]` Make `downloadStart` throw
       `i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_REPLACED)` for a retired source, before
       `requireTorrent`, before the torrent client, and before the `derived.status === 'ERROR'`
       branch — a retired row is not `ERROR`, so `resumeErroredSource` would never catch it. No new
       error key, and `409`, matching the key's only other producer. → T003
       *Done when:* `bin/npm api run test` passes with a case asserting the conflict is thrown and
       the qBittorrent client is never called (AC-4's server half).
-- [ ] **T006** `[api] [P]` In `src/acquisition/attach-source.service.ts`, treat a retired row as
+- [x] **T006** `[api] [P]` In `src/acquisition/attach-source.service.ts`, treat a retired row as
       reactivatable in the `060` no-op test (REQ-6) and clear `retiredAt` in the same write that
       sets `status: 'QUEUED'` and clears the error fields (NFR-3). Leaving it set is the second
       silent stall in `plan.md` § Risks: the row goes live but is excluded from its own race
@@ -79,7 +79,7 @@ question before any caller is rewired.
       *Done when:* `bin/npm api run test` passes with a case proving re-adding a retired source's
       `infoHash` to the same target reactivates it and leaves `retiredAt` null, rather than
       answering `UNCHANGED` (AC-7's unit half).
-- [ ] **T007** `[api] [P]` Split `UploadsService.demoteSupersededSources` in
+- [x] **T007** `[api] [P]` Split `UploadsService.demoteSupersededSources` in
       `src/uploads/uploads.service.ts`: delegate its **delivered** sources to
       `DownloadsService.demoteDeliveredSources`, and keep today's `ERROR` /
       `error.source.replaced` write and job cancellation for every source it demotes that never
@@ -88,7 +88,7 @@ question before any caller is rewired.
       *Done when:* `bin/npm api run test` passes with a case proving a source still `ENCODING`
       when an upload replaces it is written `ERROR` with its job cancelled and `retiredAt` left
       null (AC-5).
-- [ ] **T008** `[api]` Put `retiredAt` on the wire: a nullable `Date` field on
+- [x] **T008** `[api]` Put `retiredAt` on the wire: a nullable `Date` field on
       `src/downloads/entities/download.entity.ts`, the field on `MediaSourceRow` and every `select`
       that feeds it, and the mapping in `toDownload` — the single projection behind `downloads`,
       `movieDownloads`, `showDownloads`, `downloadStart` and `downloadStop`. Never hand-edit
@@ -101,14 +101,14 @@ question before any caller is rewired.
 
 Blocked on T008: `web` cannot select a field the schema does not answer.
 
-- [ ] **T009** `[web]` Add `retiredAt: string | null` to the `Download` interface in
+- [x] **T009** `[web]` Add `retiredAt: string | null` to the `Download` interface in
       `src/types/downloads.ts` keeping the file's existing comment convention, add `retiredAt` to
       the single `DOWNLOAD_FIELDS` fragment in `src/actions/downloads.ts`, and add one key under
       `downloads.panel` in both `messages/en.json` (`Replaced`) and `messages/es.json`
       (`Reemplazada`). → T008
       *Done when:* `bin/cli web npx --no tsc --noEmit` passes and `/downloads` still renders with
       no GraphQL error in the server log — proof the field exists on the other side.
-- [ ] **T010** `[web]` In `src/components/downloads/DownloadRow.tsx`, render the neutral mark via
+- [x] **T010** `[web]` In `src/components/downloads/DownloadRow.tsx`, render the neutral mark via
       the existing `components/ui/badge/Badge.tsx` when `retiredAt != null` (never `color="error"`
       or `"warning"`), and make both `canStart` and `isControllable` false for that row, leaving
       the delete button gated on `owned` alone (REQ-5). Do **not** touch `DownloadErrorLine.tsx`,
@@ -120,7 +120,7 @@ Blocked on T008: `web` cannot select a field the schema does not answer.
 
 ### Group 4 — verification and docs
 
-- [ ] **T011** `[docs]` Record the contract and the behaviour change in prose: `Download.retiredAt`
+- [x] **T011** `[docs]` Record the contract and the behaviour change in prose: `Download.retiredAt`
       in `docs/spec/graphql-contract.md` (the boundary doc future features read, not optional); the
       Download row of the root `CLAUDE.md` pipeline table — a replaced delivered source is retired,
       not errored, and `force`'s demotion no longer writes `ERROR`; the `downloads/`,
@@ -129,7 +129,7 @@ Blocked on T008: `web` cannot select a field the schema does not answer.
       *Done when:* `grep -rn "retiredAt" docs/spec/graphql-contract.md CLAUDE.md services/api/CLAUDE.md services/web/CLAUDE.md`
       returns a hit in each of the four, and no surviving sentence in them says a replaced source
       is written `ERROR`.
-- [ ] **T012** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack —
+- [x] **T012** `[docs]` Walk every acceptance criterion in `spec.md` against the running stack —
       including the manual pass in `plan.md` § Verification, whose step 5 (the replacement actually
       reaching the library) is the one that cannot be skipped — tick each box, append the
       measurement entry to `docs/spec/history.md` (newest first; never to the root `CLAUDE.md`,

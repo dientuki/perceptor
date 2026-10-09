@@ -502,6 +502,7 @@
       "speedHeader": "Speed",
       "actionsHeader": "Actions",
       "unknown": "—",
+      "replaced": "Replaced",
       "startTitle": "Resume",
       "stopTitle": "Stop",
       "deleteTitle": "Delete",

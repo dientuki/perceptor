@@ -524,6 +524,7 @@ describe('SeasonsService', () => {
         errorMessage: null,
         errorKey: null,
         errorParams: null,
+        retiredAt: null,
       });
       expect(downloads.handleTorrentCompleted).not.toHaveBeenCalled();
     });

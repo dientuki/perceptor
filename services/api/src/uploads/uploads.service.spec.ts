@@ -34,7 +34,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
   const MOVIE_ID = 2;
   const NEW_SOURCE_ID = 99;
 
-  type Row = { id: number; status: string; movieId: number | null };
+  type Row = { id: number; status: string; movieId: number | null; retiredAt?: Date | null };
   type JobRow = { id: number; mediaSourceId: number; status: string };
 
   function build(options: {
@@ -59,7 +59,12 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
         // status-blind scan of the whole table.
         findMany: jest.fn(async ({ where }: any) => {
           return rows
-            .filter((row) => row.movieId === where.movieId && where.status.in.includes(row.status))
+            .filter(
+              (row) =>
+                row.movieId === where.movieId &&
+                where.status.in.includes(row.status) &&
+                (where.retiredAt === undefined || row.retiredAt == null),
+            )
             .map((row) => ({ id: row.id }));
         }),
         updateMany: jest.fn(async ({ where, data }: any) => {
@@ -119,7 +124,8 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
           (row) =>
             row.id !== mediaSourceId &&
             row.movieId === winner.movieId &&
-            ['READY', 'SCANNED'].includes(row.status),
+            ['READY', 'SCANNED'].includes(row.status) &&
+            row.retiredAt == null,
         );
         return alreadyWon
           ? { outcome: 'SUPERSEDED' as const, message: `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target` }
@@ -127,6 +133,24 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       }),
       // Spec 087, REQ-2
       hasDeliveredSource: jest.fn().mockResolvedValue(false),
+      // Spec 090, REQ-4
+      demoteDeliveredSources: jest.fn(async (target: Record<string, number>, _reason: string) => {
+        const key = Object.keys(target)[0] as keyof Row;
+        const candidates = rows.filter(
+          (row) => row[key] === target[key as string] && row.status === 'SCANNED' && row.retiredAt == null,
+        );
+        let count = 0;
+        for (const row of candidates) {
+          const jobs = jobRows.filter((job) => job.mediaSourceId === row.id);
+          const active = jobs.some((job) => ['WAITING', 'QUEUED', 'ENCODING'].includes(job.status));
+          const completed = jobs.some((job) => job.status === 'COMPLETED');
+          if (!active && completed) {
+            row.retiredAt = new Date();
+            count++;
+          }
+        }
+        return count;
+      }),
     };
 
     const queue = { addSourceReady: jest.fn().mockResolvedValue(undefined) };
@@ -292,6 +316,62 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       expect(byId(2).status).toBe('ERROR');
       // Spec 038, REQ-9
       expect(byId(3).status).toBe('COMPLETED');
+    });
+  });
+
+  // Spec 090, REQ-4 AC-5: the boundary between retiring a replaced source
+  // and erroring it is "did it ever deliver a file", not "was it demoted by
+  // an upload". Getting this backwards in either direction is silent: a
+  // still-encoding source marked retired would read COMPLETED with its job
+  // still running, and a delivered source marked ERROR would turn a watched,
+  // working film into a red error line for no reason (the bug this whole
+  // feature exists to fix).
+  describe('REQ-4: only a delivered source is retired, not errored', () => {
+    it('writes ERROR and cancels the running job for a source still ENCODING, leaving retiredAt null', async () => {
+      const { service, rows, jobRows, downloads } = build({
+        replaceAuthorised: true,
+        existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
+        jobs: [{ id: 1, mediaSourceId: 2, status: 'ENCODING' }],
+      });
+
+      await (service as any).handleUploadFinish(
+        await stageUpload('upload-still-encoding'),
+      );
+
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith(
+        { movieId: MOVIE_ID },
+        expect.any(String),
+      );
+      const demoted = rows.find((row) => row.id === 2)!;
+      expect(demoted.status).toBe('ERROR');
+      expect(demoted.retiredAt ?? null).toBeNull();
+      expect(jobRows.find((job) => job.id === 1)!.status).toBe('ERROR');
+    });
+
+    it('retires a delivered source instead of erroring it', async () => {
+      const { service, rows, downloads, prisma } = build({
+        replaceAuthorised: true,
+        existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
+        jobs: [{ id: 1, mediaSourceId: 2, status: 'COMPLETED' }],
+      });
+
+      await (service as any).handleUploadFinish(
+        await stageUpload('upload-delivered-replace'),
+      );
+
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith(
+        { movieId: MOVIE_ID },
+        expect.any(String),
+      );
+      const retired = rows.find((row) => row.id === 2)!;
+      expect(retired.status).toBe('SCANNED');
+      expect(retired.retiredAt).not.toBeNull();
+      // The ERROR path never ran against this row: no error fields written.
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: { in: [2] } }),
+        }),
+      );
     });
   });
 

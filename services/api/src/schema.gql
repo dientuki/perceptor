@@ -198,6 +198,7 @@ type Download {
   lastError: DownloadError
   retryable: Boolean!
   readAt: DateTime!
+  retiredAt: DateTime
 }
 
 type TorrentLink {

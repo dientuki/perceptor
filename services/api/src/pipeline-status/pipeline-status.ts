@@ -277,7 +277,15 @@ export type RaceJob = {
   status: EncodeStatus;
 };
 
-export function isRaceWinner(status: SourceStatus, jobs: RaceJob[]): boolean {
+// Spec 090, REQ-3
+export function isRaceWinner(
+  status: SourceStatus,
+  jobs: RaceJob[],
+  retiredAt: Date | null = null,
+): boolean {
+  if (retiredAt !== null) {
+    return false;
+  }
   if (status === 'READY') {
     return true;
   }
@@ -289,8 +297,15 @@ export function isRaceWinner(status: SourceStatus, jobs: RaceJob[]): boolean {
   return !(failed && !active);
 }
 
-// Spec 087, REQ-2
-export function isDeliveredSource(status: SourceStatus, jobs: RaceJob[]): boolean {
+// Spec 087, REQ-2; Spec 090, REQ-3
+export function isDeliveredSource(
+  status: SourceStatus,
+  jobs: RaceJob[],
+  retiredAt: Date | null = null,
+): boolean {
+  if (retiredAt !== null) {
+    return false;
+  }
   if (status !== 'SCANNED') {
     return false;
   }
@@ -321,9 +336,11 @@ export type ResumeSource = {
   updatedAt: Date;
 };
 
+// Spec 090, REQ-3
 export type ResumeSibling = {
   status: SourceStatus;
   jobs: RaceJob[];
+  retiredAt?: Date | null;
 };
 
 export type ResumeInput = {
@@ -425,7 +442,9 @@ export function deriveResume(input: ResumeInput): ResumeVerdict {
   let refusalKey: string | null = null;
   if (stage === 'REPLACED') {
     refusalKey = ERROR_KEYS.DOWNLOAD_RETRY_REPLACED;
-  } else if (siblings.some((sibling) => isRaceWinner(sibling.status, sibling.jobs))) {
+  } else if (
+    siblings.some((sibling) => isRaceWinner(sibling.status, sibling.jobs, sibling.retiredAt ?? null))
+  ) {
     refusalKey = ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED;
   } else if (
     lastError.key === ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH ||

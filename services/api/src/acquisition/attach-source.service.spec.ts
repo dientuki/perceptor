@@ -254,3 +254,146 @@ describe('AttachSourceService — cross-target collisions (Spec 088, REQ-2 REQ-3
     assertNothingWritten();
   });
 });
+
+// This suite exists because treating a retired row like any other healthy
+// row would make re-adding its own infoHash answer UNCHANGED (Spec 090,
+// REQ-6) — a silent no-op that leaves the title permanently stuck on the
+// bad, replaced source with no path back to re-acquiring it. And if the
+// reactivation write sets status QUEUED without also clearing retiredAt in
+// the same write (Spec 090, NFR-3), the row goes live again while still
+// being excluded from its own race by isRaceWinner/isDeliveredSource — the
+// same "no error anywhere" stall, from the other direction.
+describe('AttachSourceService — reactivating a retired source (Spec 090, REQ-6 NFR-3)', () => {
+  let prisma: {
+    mediaSource: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
+  };
+  let qbittorrent: {
+    add: jest.Mock;
+    info: jest.Mock;
+    start: jest.Mock;
+  };
+  let downloads: {
+    demoteDeliveredSources: jest.Mock;
+    handleTorrentCompleted: jest.Mock;
+  };
+  let service: AttachSourceService;
+
+  beforeEach(() => {
+    prisma = {
+      mediaSource: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+    qbittorrent = {
+      add: jest.fn(),
+      info: jest.fn(),
+      start: jest.fn(),
+    };
+    downloads = {
+      demoteDeliveredSources: jest.fn(),
+      handleTorrentCompleted: jest.fn(),
+    };
+
+    service = new AttachSourceService(
+      prisma as never,
+      qbittorrent as never,
+      downloads as never,
+    );
+  });
+
+  function buildTarget(
+    column: 'movieId' | 'episodeId' | 'seasonId',
+    id = 42,
+  ): AttachTarget<{ id: number }> & { refuse: jest.Mock } {
+    return {
+      resolve: jest.fn().mockResolvedValue({ id }),
+      refuse: jest.fn().mockResolvedValue(undefined),
+      labels: jest.fn().mockReturnValue({ tags: [], category: 'movie' }),
+      column,
+    };
+  }
+
+  function buildInput(overrides: Partial<AttachInput> = {}): AttachInput {
+    return {
+      kind: SourceKind.TORRENT_SEARCH,
+      infoHash: '5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c',
+      urls: [],
+      releaseTitle: null,
+      force: false,
+      ...overrides,
+    };
+  }
+
+  const retiredSource = {
+    id: 7,
+    movieId: 42,
+    episodeId: null,
+    seasonId: null,
+    status: SourceStatus.SCANNED,
+    retiredAt: new Date('2026-10-01T00:00:00Z'),
+    movie: { title: 'Dune' },
+    episode: null,
+    season: null,
+  };
+
+  it('reactivates a retired source still held by qBittorrent, rather than answering UNCHANGED', async () => {
+    prisma.mediaSource.findUnique.mockResolvedValue(retiredSource);
+    qbittorrent.info.mockResolvedValue([
+      { hash: '5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c', state: 'downloading' },
+    ]);
+    const target = buildTarget('movieId');
+
+    const outcome = await service.attach(target, buildInput(), 'user-1');
+
+    expect(outcome).toBe('ATTACHED');
+    expect(qbittorrent.start).toHaveBeenCalled();
+    expect(prisma.mediaSource.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: {
+        status: 'QUEUED',
+        errorMessage: null,
+        errorKey: null,
+        errorParams: null,
+        retiredAt: null,
+      },
+    });
+  });
+
+  it('clears retiredAt on the fallback add() path too, when qBittorrent no longer holds the torrent', async () => {
+    prisma.mediaSource.findUnique.mockResolvedValue(retiredSource);
+    qbittorrent.info.mockResolvedValue([]);
+    qbittorrent.add.mockResolvedValue('/downloads/dune');
+    const target = buildTarget('movieId');
+
+    const outcome = await service.attach(target, buildInput(), 'user-1');
+
+    expect(outcome).toBe('ATTACHED');
+    expect(prisma.mediaSource.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: expect.objectContaining({
+        status: 'QUEUED',
+        retiredAt: null,
+        movieId: 42,
+      }),
+    });
+  });
+
+  it('does not return UNCHANGED for a retired source with the same infoHash and target', async () => {
+    prisma.mediaSource.findUnique.mockResolvedValue(retiredSource);
+    qbittorrent.info.mockResolvedValue([
+      { hash: '5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c', state: 'downloading' },
+    ]);
+    const target = buildTarget('movieId');
+
+    const outcome = await service.attach(target, buildInput(), 'user-1');
+
+    expect(outcome).not.toBe('UNCHANGED');
+    expect(prisma.mediaSource.update).toHaveBeenCalled();
+  });
+});

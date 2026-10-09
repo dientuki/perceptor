@@ -2159,6 +2159,41 @@ only so a demotion (`069`'s media-server reconciliation) and the derivation agre
 without reading the status column back into its own derivation — not exposed on any GraphQL type,
 not read by `web` or `worker`.
 
+### A replaced delivered source is retired, not errored (`090-replaced-source-not-an-error`)
+
+```graphql
+type Download {
+  # ...unchanged fields...
+  retiredAt: DateTime   # non-null once this source delivered a file and was then replaced
+}
+```
+
+Things the schema cannot express, all load-bearing:
+
+- **`status`/`lastError`/`retryable` are unaffected.** A retired source keeps reading whatever its
+  status already derives to (`COMPLETED` via the title's possession, `SCANNED` via `pipeline-
+  status/`'s Rule 2) — `retiredAt` is the only new signal, answered alongside the existing fields,
+  never folded into them. There is no ninth `SourceStatus`/`MediaStatus` value.
+  `MediaSource.status` itself never becomes `ERROR` for this case; `demoteDeliveredSources` writes
+  `retiredAt` instead of the `error.source.replaced` key it used to write.
+- **Only a *delivered* source is retired.** A source still mid-encode or never-delivered when it
+  loses a race or is replaced still goes to `ERROR`/`error.source.replaced` exactly as before —
+  `uploads/`'s `demoteSupersededSources` splits its candidates by `isDeliveredSource` and routes
+  only the delivered ones through the shared retirement write.
+- **A retired source is never a race winner and never counts as delivered again.**
+  `isRaceWinner`/`isDeliveredSource` (`pipeline-status/`) both read `retiredAt` and answer `false`
+  for a retired row — closing the case where a retired sibling looked like a live blocking winner
+  to a brand-new replacement's own race resolution.
+- **No live controls.** `downloadStart` on a retired source throws `error.download.retry_replaced`
+  (`409`, reusing the existing key rather than inventing one) before any torrent-client call; `web`
+  withholds both Play and Stop for a retired row (`DownloadRow.tsx`'s `canStart`/`isControllable`).
+  Delete is unaffected — it is still the way to remove what the torrent client holds for a retired
+  row.
+- **Re-adding the same release reactivates it.** Attaching the same `infoHash` to a retired row's
+  target (`060`'s reactivation path) clears `retiredAt` in the same write that flips `status` back
+  to `QUEUED` — the one way back from retirement, and it is atomic with the status flip so the row
+  is never live while still excluded from its own race.
+
 ### What never crosses the boundary
 
 - **Absolute container paths.** Constitution, Article V — `web` sees host paths, `worker` receives

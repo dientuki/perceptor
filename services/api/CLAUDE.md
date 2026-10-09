@@ -337,6 +337,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   "this target already holds a working, delivered copy," read by every acquisition guard
   (`movies`/`episodes`/`seasons`/`uploads`) through `DownloadsService.hasDeliveredSource` instead of
   each reimplementing its own notion of "already has something."
+  Since `090-replaced-source-not-an-error`, both `isRaceWinner(status, jobs, retiredAt)` and
+  `isDeliveredSource(status, jobs, retiredAt)` take a third, optional `retiredAt: Date | null`
+  argument (defaulting `null` for the handful of callers not yet wired to pass it) and answer
+  `false` unconditionally whenever it is non-null — a retired source is out of play for both
+  predicates regardless of what its status/jobs would otherwise say. `ResumeSibling` carries the
+  same optional `retiredAt`, so `deriveResume` stops refusing `error.download.retry_superseded`
+  against a sibling that only looks like a live winner because it has not been taught about
+  retirement.
   `deriveSourceStatus` (the per-row `/downloads` altitude) is unchanged by any of the title-level
   changes below. `deriveTitleStatus`/`deriveEpisodeStatus` decide one `Movie`/`Episode`'s status as
   the maximum, over an eight-value rank ladder, of each non-`ERROR` source's derived status —
@@ -448,6 +456,23 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   independently-wrong demotions (`movies.service.ts` had none at all; `episodes.service.ts`'s old
   `demoteActive` also caught a merely-downloading sibling; `seasons.service.ts`'s old
   `demoteActiveSources` did the same, season-scoped).
+  Since `090-replaced-source-not-an-error`, `demoteDeliveredSources` no longer writes
+  `ERROR`/`error.source.replaced` at all — it stamps `MediaSource.retiredAt` instead, leaving
+  `status` untouched (a retired source typically still reads `COMPLETED`/`SCANNED` via the title's
+  own possession or `pipeline-status/`'s Rule 2). Both it and `hasDeliveredSource` filter their
+  candidate `where` to `retiredAt: null`, so an already-retired row is never retired twice.
+  `resolveRace`'s `alreadyWon` check now passes each sibling's `retiredAt` into `isRaceWinner`
+  (the feature's highest-risk line — a retired sibling must never again read as a live race
+  winner, or the real replacement gets wrongly written `SUPERSEDED`), and `downloadStart` refuses
+  a retired source outright with `error.download.retry_replaced` (`409`, the same key
+  `resumeErroredSource` already used for a different case) before any torrent-client call — a
+  retired row is `SCANNED`, not `ERROR`, so that resume branch would never have caught it.
+  `attach-source.service.ts`'s `060` reactivation path now also treats a retired row as
+  reactivatable (never `UNCHANGED`) and clears `retiredAt` in the same write that returns the row
+  to `QUEUED` — the single way back from retirement, atomic with the status flip (NFR-3). Only a
+  source that **never delivered** — still mid-encode, or `SCANNED` with no `COMPLETED` job — keeps
+  the old `ERROR`/`error.source.replaced` write; `uploads/`'s `demoteSupersededSources` splits its
+  candidates between the two paths rather than treating every superseded source alike.
   Since `043-pipeline-status-normalization`, `Download.status`/`downloadProgress`/`encodeProgress`/
   `compressionEnabled` are produced by `pipeline-status/`'s `deriveSourceStatus` rather than copying
   `source.status` — `toDownload` loads every listed source's `ProcessJob` rows in one query (grouped
@@ -726,6 +751,12 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   losing side of an upload-versus-upload race: what used to be a `console.log` and a silent early
   return is now `throw new UploadHttpError(409, ERROR_KEYS.UPLOAD_SUPERSEDED)` — the browser sees a
   real error instead of a completed-looking upload that never starts encoding.
+  Since `090-replaced-source-not-an-error`, `demoteSupersededSources` no longer treats every
+  superseded candidate alike: it first delegates to `DownloadsService.demoteDeliveredSources`,
+  which retires (`retiredAt`, no error) whichever candidates already delivered a file; only the
+  leftovers — still mid-encode or never delivered — keep this method's own `ERROR`/
+  `error.source.replaced` write and job cancellation (REQ-4). `DownloadsService.demoteDeliveredSources`
+  is the only function in the codebase that writes `retiredAt`.
 - **`scheduler/`** (`035-scheduled-tasks`) — a cron-driven registry of five tasks (`refresh_movies`,
   `refresh_shows`, `refresh_episodes`, `acquire_episodes`, `acquire_movies`). `acquire_episodes` is real since `073-automatic-episode-acquisition` (`mediaType: 'show'`, disabled by default): it walks episodes aired at least one full UTC day ago, on or after the calendar day of the `auto_acquire_episodes_since` Setting (stamped by `SettingsResolver.updateSettings` on the switch's off→on transition, not editable through `updateSettings`), whose derived status is `MISSING`, at most 20 per run, sequentially; it searches `<Series> SxxEyy`, attaches the `candidateRank === 1` release through `EpisodesService.addTorrentToEpisode` as the series' oldest owner, and throws only when every attempt failed. `refresh_shows` is real since `074-show-refresh-sweep` (`mediaType: 'show'`, disabled by default): one `findMany` of series whose `seasonsSyncedAt` is `NULL`, older than 180 days with `Show.tmdbStatus` `Ended`/`Canceled`, or older than 30 days for any other status including `NULL` (the explicit `{ tmdbStatus: null }` arm is load-bearing — `notIn` alone drops `NULL` rows, and every pre-`074` series is `NULL`); the two windows are module constants, not Settings. It calls `ShowsService.syncCatalogClaimed()` sequentially — the same private catalog step `hydrate()` and `refresh()` use, under the same `show:hydrate:<tmdbId>` claim (a held claim is skipped, not counted) — writes catalog rows only (never media-server reconciliation, status, sources or jobs), and throws with counts if any series failed. `Show.tmdbStatus` is TMDB's raw series status string, distinct from `Show.status` (`MediaStatus`), written by `hydrate()`, `refresh()` and the sweep. `refresh_movies` is real since `075-movie-refresh-sweep` (`mediaType: 'movie'`, disabled by default): it calls `MoviesService.refreshCatalog` — the same write path as the `069` Refresh button — for every film whose stored `status` is not `COMPLETED` and whose `catalogClosedAt` is `NULL`, sequentially, and throws with failed/total/succeeded counts when any refresh returns `FAILED` (that method reports failure by return value, so the sweep counts a `FAILED` return like a throw). A film carries `theatricalReleaseDate`/`digitalReleaseDate`/`physicalReleaseDate` (earliest worldwide per TMDB release type; `releaseDate` keeps meaning earliest of any type, which `062`'s calendar reads), `tmdbStatus` (TMDB's raw production status — never the cached `MediaSearchResult.status`, which is the pipeline status on the wire) and `catalogClosedAt`, set by `movies/release-window.ts` only inside a successful refresh: `Canceled`, or no future date and the newest date over 365 days old. A manual Refresh re-evaluates it in both directions; a failed refresh never touches it. None of the five columns is a GraphQL field, and that sweep never acquires anything. `acquire_movies` is real since `076-automatic-movie-acquisition` and replaces the `acquire_pending` stub — that id no longer exists, so `runScheduledTask('acquire_pending')` answers `error.schedule.task_unknown`, and the two seeded `schedule_acquire_pending_*` Settings rows are left inert on existing installs (`mediaType: 'movie'`, disabled by default, daily `0 2 * * *`). Each user marks any of three windows on `User` (`acquireTheatrical`/`acquireDigital`/`acquirePhysical`, all off by default; the theatrical one is inert while that user's `allowCinemaReleases` is off). `scheduler/tasks/acquisition-window.ts` is the pure rule: theatrical opens `theatricalReleaseDate` + 2 days with no quality floor, digital + 1 day with `sourceRank >= 4`, physical + 5 days with `sourceRank >= 6`; a film missing the marked window's date falls back through theatrical → digital → physical, digital → physical, physical → digital (theatrical is in no chain but its own); with several windows open the earliest opens the film and the lowest floor applies, and a window with no floor is `null`, never `0`. `AcquireMoviesTask` selects films with an owner and any of the three dates whose derived status is `MISSING`, unions the owners' marks through `RankingContextService.forMovieOwners` (languages/groups union; `allowCinemaReleases` is the AND over owners, the one deliberate exception), orders by window-open time and takes at most 20 per run. It searches `<Title> <YYYY>` through `IndexerService.searchRanked` with `RankingContext.minSourceRank` armed — the floor is a veto inside `rankTorrentResults`'s survivor filter, before the best resolution tier is chosen, never a post-filter (a post-filter would let a 2160p WEB-DL shadow a 1080p remux and stall the film forever with a green `SUCCESS`); it is absent for every other caller — attaches `candidateRank === 1` through `MoviesService.addTorrentToMovie(..., force: false)` as the oldest owner, treats a floor that empties the candidate set as a retry (no row, no suppression), and throws only when every attempt failed. `Movie.catalogClosedAt` is not a filter here. `startOfUtcDay` now lives in `acquisition-window.ts`. `refresh_episodes` is real since `041-episode-info-refresh`:
   `RefreshEpisodesTask.run()` selects every `Episode` whose `releaseDate` is `NULL` or on/after a

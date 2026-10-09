@@ -37,6 +37,7 @@ const DOWNLOAD_FIELDS = `
   }
   retryable
   readAt
+  retiredAt
 `;
 
 const MOVIE_DOWNLOADS_QUERY = `

@@ -23,6 +23,43 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-09 — `090-replaced-source-not-an-error`
+
+`api` and `web` touched; `worker` untouched. GraphQL Contract Delta matches `spec.md` exactly: one
+hunk on `services/api/src/schema.gql`, `Download` gains `retiredAt: DateTime` (nullable), nothing
+else. One migration, `20261009061717_add_media_source_retired_at` — additive (`MediaSource.retiredAt
+DateTime?`, no default) plus the NFR-1 backfill UPDATE for pre-existing `error.source.replaced` rows
+that pass the delivered test; `prisma migrate status` reports up to date. `git status --short
+services/api/prisma` shows the modified `schema.prisma` and the new migration directory.
+
+`api` 68/68 suites, 993/993 tests — up from the pre-feature baseline of 68 suites / 985 tests
+(+8 tests across `pipeline-status.spec.ts`, `downloads.service.spec.ts`,
+`attach-source.service.spec.ts`, `uploads.service.spec.ts`). `bin/cli api npx tsc --noEmit`: 0
+errors. `bin/comments api`: PASS, 735 locators resolved, 0 malformed.
+
+`web`: `bin/cli web npx tsc --noEmit` 0 errors; `bin/comments web`: PASS, 76 locators resolved, 0
+malformed; `bin/cli web node scripts/check-messages.mjs`: en/es catalogs match exactly (601 keys,
++1 each for `downloads.panel.replaced`). `web` has no `test` script in this repo (pre-existing,
+not a gap introduced by this feature) — `web/plan.md` recorded no tests owed here since every
+failure mode (a withheld control, a stray error-colored badge) is loud or visible, not silent.
+
+Live manual pass: the five backend predicates (`isRaceWinner`/`isDeliveredSource` retirement
+awareness, `resolveRace`'s `alreadyWon` threading, `downloadStart`'s 409 refusal, the reactivation
+clear) were each verified with a fault-injection case — reverting the fix and watching the specific
+test fail — rather than mock-only coverage. The `retiredAt` field was confirmed live against the
+running dev stack's GraphQL endpoint (`{ downloads { retiredAt } }` resolves `null` cleanly with
+no server error) and `/downloads` renders with no GraphQL error in the server log. The
+`DownloadRow.tsx` badge/control logic (neutral `Badge variant="light" color="light"`, never
+`"error"`/`"warning"`; `canStart`/`isControllable` both forced `false` when `retiredAt != null`;
+delete gated on `owned` alone) was verified by direct code reading against the exact AC-1/AC-2/AC-4
+wording, not by exercising a live retired row end-to-end through a real torrent — the dev database
+held no row that had actually been through the replace flow, and fabricating one by hand in the
+shared dev stack's database was avoided as a risk to the running install rather than attempted.
+
+One spec defect caught and fixed during closeout, not during `/plan-feature`: `spec.md`'s AC-4 still
+named `BadRequestException` after the earlier defect-fix pass had corrected the contract's error
+table to `ConflictException` (409) — the two had drifted. Fixed in `spec.md` before closing.
+
 ## 2026-10-06 — `089-status-materialization`
 
 `api` only touched; `web` and `worker` untouched (`git diff --stat -- services/web services/worker`

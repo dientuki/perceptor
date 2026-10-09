@@ -280,6 +280,10 @@ model MediaSource {
   // suppress the per-episode input deletions for files that did resolve and encode.
   hasUnmatchedFiles Boolean @default(false)
 
+  // Spec 090: set when a delivered source is replaced by a newer one. Null for every
+  // live or failed source; `status` is left unchanged so a retired row still derives COMPLETED.
+  retiredAt DateTime?
+
   @@index([status])
   @@index([movieId])
   @@map("media_sources")

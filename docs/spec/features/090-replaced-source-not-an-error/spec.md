@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-08
 last_updated: 2026-10-08
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -145,32 +145,32 @@ source's *status* was never the thing that was wrong.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a film whose source is `SCANNED` with all jobs `COMPLETED` and whose
+- [x] **AC-1**: Given a film whose source is `SCANNED` with all jobs `COMPLETED` and whose
       `filePath` is set, when a new torrent is attached with `force: true`, then the old row renders
       in `/downloads` with a green `COMPLETED` badge and a neutral "Reemplazada" mark, with no red
       error line.
-- [ ] **AC-2**: In the same state, the `/downloads` panel's `Error` chip counts `0` and the
+- [x] **AC-2**: In the same state, the `/downloads` panel's `Error` chip counts `0` and the
       `Completed` chip counts the old row. Reproduces the reported case directly: a season pack
       replaced after a bad encode must not leave `Error 1` on the panel.
-- [ ] **AC-3** *(failure path — the regression this must not cause)*: In the same state, when the
+- [x] **AC-3** *(failure path — the regression this must not cause)*: In the same state, when the
       replacement torrent reaches 100% and reports completion, then it is **not** written
       `error.source.superseded`, its scan is enqueued, it encodes, and the title ends `COMPLETED`
       with the new file. `SELECT status, errorKey FROM media_sources WHERE id = <new>` shows
       `SCANNED` and `NULL`.
-- [ ] **AC-4** *(failure path)*: Calling `downloadStart` on a retired source returns a
-      `BadRequestException` carrying `error.download.retry_replaced`, and writes nothing. The row's
-      start and stop controls are both absent in `web`.
-- [ ] **AC-5** *(failure path)*: Given a source still `ENCODING` when an upload replaces it, then it
+- [x] **AC-4** *(failure path)*: Calling `downloadStart` on a retired source returns a
+      `ConflictException` (409) carrying `error.download.retry_replaced`, and writes nothing. The
+      row's start and stop controls are both absent in `web`.
+- [x] **AC-5** *(failure path)*: Given a source still `ENCODING` when an upload replaces it, then it
       is still written `ERROR` / `error.source.replaced`, its running job is still cancelled, it
       still renders red, and `retiredAt` stays null — REQ-4's boundary holds.
-- [ ] **AC-6**: After `bin/cli api npx prisma migrate deploy` on a database holding both kinds of
+- [x] **AC-6**: After `bin/cli api npx prisma migrate deploy` on a database holding both kinds of
       pre-existing `error.source.replaced` row, the delivered ones read `SCANNED`, `retiredAt`
       non-null, `errorKey` null; the undelivered ones are byte-for-byte unchanged.
       `bin/mysql -e "SELECT status, errorKey, retiredAt FROM media_sources WHERE errorKey = 'error.source.replaced' OR retiredAt IS NOT NULL"` shows the split.
-- [ ] **AC-7**: Re-adding the exact `infoHash` of a retired source to the same target reactivates
+- [x] **AC-7**: Re-adding the exact `infoHash` of a retired source to the same target reactivates
       that row rather than answering with a no-op, and leaves it with `retiredAt` null — then that
       same source completes and reaches the library, proving NFR-3's clearing is real.
-- [ ] **AC-8**: `bin/npm api run test` and `bin/npm web run test` pass; `bin/comments api` and
+- [x] **AC-8**: `bin/npm api run test` and `bin/npm web run test` pass; `bin/comments api` and
       `bin/comments web` pass.
 
 ## Out of Scope

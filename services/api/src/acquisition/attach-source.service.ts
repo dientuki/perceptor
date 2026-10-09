@@ -88,7 +88,13 @@ export class AttachSourceService {
       }
     }
 
-    if (existingSource && sameTarget && existingSource.status !== 'ERROR') {
+    // Spec 090, REQ-6
+    if (
+      existingSource &&
+      sameTarget &&
+      existingSource.status !== 'ERROR' &&
+      !existingSource.retiredAt
+    ) {
       return 'UNCHANGED';
     }
 
@@ -113,6 +119,7 @@ export class AttachSourceService {
           );
         }
 
+        // Spec 090, NFR-3
         await this.prisma.mediaSource.update({
           where: { id: existingSource.id },
           data: {
@@ -120,6 +127,7 @@ export class AttachSourceService {
             errorMessage: null,
             errorKey: null,
             errorParams: null,
+            retiredAt: null,
           },
         });
 
@@ -154,6 +162,7 @@ export class AttachSourceService {
             errorMessage: null,
             errorKey: null,
             errorParams: null,
+            retiredAt: null,
             ...columnData,
           },
         })

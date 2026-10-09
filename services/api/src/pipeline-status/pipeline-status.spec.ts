@@ -525,6 +525,17 @@ describe('isRaceWinner', () => {
       expect(isRaceWinner(status, [])).toBe(false);
     },
   );
+
+  // Spec 090, REQ-3
+  it('does not count a retired SCANNED source with completed jobs as the winner', () => {
+    expect(
+      isRaceWinner('SCANNED', [{ status: 'COMPLETED' }], new Date(2026, 0, 1)),
+    ).toBe(false);
+  });
+
+  it('still counts a non-retired SCANNED source with completed jobs as the winner', () => {
+    expect(isRaceWinner('SCANNED', [{ status: 'COMPLETED' }], null)).toBe(true);
+  });
 });
 
 // This test exists because otherwise a confirmed replacement cancels an encode in flight with
@@ -559,6 +570,17 @@ describe('isDeliveredSource', () => {
 
   it('does not count a SCANNED source whose every job failed as delivered', () => {
     expect(isDeliveredSource('SCANNED', [{ status: 'ERROR' }, { status: 'ERROR' }])).toBe(false);
+  });
+
+  // Spec 090, REQ-3
+  it('does not count a retired SCANNED source with completed jobs as delivered', () => {
+    expect(
+      isDeliveredSource('SCANNED', [{ status: 'COMPLETED' }], new Date(2026, 0, 1)),
+    ).toBe(false);
+  });
+
+  it('still counts a non-retired SCANNED source with completed jobs as delivered', () => {
+    expect(isDeliveredSource('SCANNED', [{ status: 'COMPLETED' }], null)).toBe(true);
   });
 });
 
@@ -753,6 +775,18 @@ describe('deriveResume', () => {
       }),
     );
     expect(result.refusalKey).toBe('error.download.retry_replaced');
+  });
+
+  // Spec 090, REQ-3
+  it('does not refuse as superseded when the only qualifying sibling is retired', () => {
+    const result = deriveResume(
+      input({
+        siblings: [
+          { status: 'SCANNED', jobs: [{ status: 'COMPLETED' }], retiredAt: new Date(2026, 0, 1) },
+        ],
+      }),
+    );
+    expect(result.refusalKey).not.toBe('error.download.retry_superseded');
   });
 
   it('does not treat a sibling whose encodes all failed as a winner', () => {

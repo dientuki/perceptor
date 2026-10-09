@@ -69,4 +69,7 @@ export class Download {
 
   @Field()
   readAt: Date;
+
+  @Field(() => Date, { nullable: true })
+  retiredAt: Date | null;
 }
