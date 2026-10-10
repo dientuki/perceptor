@@ -3,7 +3,7 @@ import { seedProduction } from './production-seed';
 
 // This suite exists because otherwise a regression from the create-only
 // settings loop to a bare `upsert` fails with no error anywhere: the
-// production seed now runs on *every* boot (REQ-10/REQ-11), so an `upsert`
+// production seed now runs on *every* boot (Spec 049, REQ-10 REQ-11), so an `upsert`
 // would silently wipe a user's `movie_db_api_key` (or any other configured
 // setting) back to its seed default on the next update, and the app would
 // start failing TMDB calls with 401 with nothing in any log pointing at the

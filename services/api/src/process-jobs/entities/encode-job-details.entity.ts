@@ -1,11 +1,6 @@
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 
-// Todo lo que el worker necesita para encodear un ProcessJob en un solo round
-// trip: input físico + los datos de la media (película o episodio, aplanados
-// en vez de exponer el grafo entero) + lo necesario para limpiar el torrent al
-// terminar. "kind" reemplaza al enum MediaType del repo viejo (no existe acá):
-// alcanza con mirar cuál de movieId/episodeId no es null.
 @ObjectType()
 export class EncodeJobDetails {
   @Field(() => ID)
@@ -20,8 +15,6 @@ export class EncodeJobDetails {
   @Field()
   kind: string; // 'MOVIE' | 'EPISODE'
 
-  // De la Movie o del Show (según kind) — lo necesita el cliente de Jellyfin
-  // para el matching por [tmdbid=...] en vez de confiar en el nombre.
   @Field(() => Int)
   tmdbId: number;
 
@@ -32,38 +25,20 @@ export class EncodeJobDetails {
   year: number | null;
 
   @Field()
-  originalLanguage: string; // iso2, tal cual lo guarda Movie/Show (ej. 'en', 'ja')
+  originalLanguage: string;
 
-  // iso3 del mismo idioma (ej. 'eng', 'jpn') — lo necesita el driver de ffmpeg para
-  // elegir la pista de audio/subtítulo original (ver src/ffmpeg/params.ts en el worker,
-  // que compara contra tags.language, que ffprobe reporta en iso3).
   @Field()
   originalLanguageIso3: string;
 
-  // Every ISO-639-2/B code the encode is allowed to keep for audio tracks —
-  // the original language plus the union of the installation's
-  // `default_languages` setting and every owner's per-title AUDIO preference
-  // (039-per-title-language-split, REQ-5/REQ-6), deduplicated, original
-  // first. Never empty. originalLanguageIso3 stays a separate field even
-  // though it duplicates the first element here: the worker needs to know
-  // *which* of these is mandatory (REQ-6/REQ-7), and inferring that from list
-  // position is a rule that breaks the first time someone reorders the list.
+  // Spec 039, REQ-5 REQ-6 REQ-7
   @Field(() => [String])
   allowedAudioLanguagesIso3: string[];
 
-  // The same merge as `allowedAudioLanguagesIso3`, expressed in BCP-47 tags
-  // instead of resolved ISO-639-2/B codes (030-language-regional-variants,
-  // REQ-8) — preserves which regional variant was actually asked for
-  // (`es-419`/`es-ES` both collapse to `spa` in the iso3 list above).
+  // Spec 030, REQ-8
   @Field(() => [String])
   allowedAudioLanguageTags: string[];
 
-  // Same shape as the audio pair above, but for subtitle tracks: the
-  // original language plus `default_languages` (unsplit — it still feeds
-  // both pairs, NFR-4) plus every owner's per-title SUBTITLE preference only
-  // (039-per-title-language-split, REQ-5/REQ-6). A title with no per-title
-  // preference of either kind produces a pair identical to the audio one —
-  // no regression for the common case.
+  // Spec 039, NFR-4; Spec 039, REQ-5 REQ-6
   @Field(() => [String])
   allowedSubtitleLanguagesIso3: string[];
 
@@ -94,26 +69,14 @@ export class EncodeJobDetails {
   @Field(() => String, { nullable: true })
   downloadPath: string | null;
 
-  // Ruta absoluta de container donde el worker tiene que armar la carpeta de
-  // salida — resuelta server-side desde path_movies/path_shows (ver
-  // ProcessJobsService, media-roots/). El worker sólo hace join()/mkdir()
-  // sobre esto, nunca lee env para el destino.
   @Field()
   outputRoot: string;
 
-  // The downloads ROOT itself, resolved with resolveFromRoot('downloads', '.') —
-  // not the path_downloads setting. Torrents save under
-  // <downloadsRoot>/<path_downloads>/<hash>, while tus uploads stage under
-  // <downloadsRoot>/imports/<uploadId>; the worker's REQ-12 containment check
-  // has to cover both, so it needs the root, not the narrower path_downloads
-  // segment.
+  // Spec 012, REQ-12
   @Field()
   downloadsRoot: string;
 
-  // Resolved from `compression_enabled` at query time, not frozen onto the
-  // ProcessJob row when it was enqueued (032-optional-compression, REQ-6).
-  // False means: skip ffprobe/ffmpeg/mkvmerge and move the input file into
-  // place instead.
+  // Spec 032, REQ-6
   @Field()
   compressionEnabled: boolean;
 

@@ -1,14 +1,3 @@
-// Defends REQ-9/AC-5 of 051-language-track-titles: fetchTrackTitles must
-// never let a transport failure escape and fail an otherwise-successful
-// encode job over a cosmetic track title. Two classes of bug this guards
-// against:
-//   1. The fold mis-keys or drops an entry, so a track title silently
-//      resolves to the wrong string or falls back to the ISO code even
-//      though api answered fine.
-//   2. A thrown error from fetchGraphQL (ApiUnreachableError, a non-2xx, a
-//      GraphQL error) propagates out of fetchTrackTitles instead of
-//      degrading to an empty map, which would fail a multi-hour encode.
-
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./graphql-client', () => ({
@@ -18,6 +7,15 @@ vi.mock('./graphql-client', () => ({
 import { fetchGraphQL } from './graphql-client';
 import { fetchTrackTitles } from './track-titles';
 
+// Defends Spec 051, REQ-9 AC-5: fetchTrackTitles must never let a transport
+// failure escape and fail an otherwise-successful encode job over a
+// cosmetic track title. Two classes of bug this guards against:
+//   1. The fold mis-keys or drops an entry, so a track title silently
+//      resolves to the wrong string or falls back to the ISO code even
+//      though api answered fine.
+//   2. A thrown error from fetchGraphQL (ApiUnreachableError, a non-2xx, a
+//      GraphQL error) propagates out of fetchTrackTitles instead of
+//      degrading to an empty map, which would fail a multi-hour encode.
 describe('fetchTrackTitles', () => {
   it('folds the list into a Record keyed by iso3', async () => {
     (fetchGraphQL as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({

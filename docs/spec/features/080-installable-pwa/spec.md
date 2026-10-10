@@ -149,11 +149,73 @@ None.
       with no `(ServiceWorker)` in their size column.
 - [ ] **AC-8**: On iOS Safari, *Add to Home Screen* produces a Perceptor icon that launches without
       Safari's chrome.
+**Verification status as of 2026-10-09 (second pass).** An admin session in a browser now exists,
+and it changes AC-9 but not AC-1 to AC-8:
+
+- **AC-9, available half: confirmed.** With `USE_TRAEFIK=true` and `USE_HTTPS=true`, Settings ->
+  Environment renders an "Installable as an app" row reading **Available**, immediately below the
+  existing HTTPS badge ("Enabled (local certificate authority)") and its CA download link.
+  `bin/cli web node scripts/check-messages.mjs` reports `OK: en.json and es.json match exactly
+  (602 keys)`, and the unavailable string does name the reason in both locales
+  (`Unavailable - requires HTTPS` / `No disponible - requiere HTTPS`).
+- **AC-9, unavailable half: still open, and the criterion as written cannot hold.** The row is
+  driven by `window.isSecureContext && "serviceWorker" in navigator`
+  (`components/settings/EnvironmentPanel.tsx`), not by the `useHttps` the panel already receives from
+  `api`. On a `localhost` install with `USE_HTTPS=false` the row would therefore still read
+  **Available**, and the string "requires HTTPS" would be wrong twice over - the requirement is a
+  secure context, which `http://localhost` satisfies without any TLS. Rendering the unavailable
+  branch needs a non-secure origin (`http://<lan-ip>:3000`), and the panel is behind the session,
+  whose cookie is host-scoped - so that origin needs its own login. Left unticked deliberately: this
+  is an implementation/criterion divergence to resolve, not a measurement still to take.
+
+**AC-1 to AC-8 remain blocked on the browser, re-confirmed.** The session's browser reaches
+`http://localhost:3000` with `isSecureContext` true and `"serviceWorker" in navigator` true, yet
+`navigator.serviceWorker.getRegistrations()` answers `[]` and an explicit
+`register("/sw.js", { scope: "/", updateViaCache: "none" })` - the component's exact call - fails
+with the identical `TypeError: ... An unknown error occurred when fetching the script`, while
+`GET /sw.js` answers `200 application/javascript`. The first pass already ruled this out as a
+Perceptor fault against a control origin; the finding below stands unchanged.
+The attempt and what it established, so the next pass does not repeat it:
+
+- The registration gate is `window.isSecureContext` (`components/pwa/ServiceWorkerRegistration.tsx`),
+  **not** `USE_HTTPS`. Since `http://localhost` is a secure context in Chromium, these criteria do
+  not actually require HTTPS or a trusted `certs/ca.crt` — `http://localhost:3000` is enough — and
+  `ServiceWorkerRegistration` is mounted in the root `src/app/layout.tsx`, so it runs on the login
+  page too and no session is needed either. That makes AC-1, AC-2, AC-4, AC-5 and AC-6 cheaper than
+  the criteria imply.
+- Registration nonetheless failed in the available browser with
+  `TypeError: Failed to register a ServiceWorker … An unknown error occurred when fetching the
+  script`, while `GET /sw.js` itself answered `200` with `application/javascript; charset=UTF-8` and
+  the correct body. **This is the environment, not Perceptor**: a control origin — a one-line
+  `self.addEventListener("install", …)` served by `python -m http.server` on `127.0.0.1:8099`, with
+  `isSecureContext` true and `'serviceWorker' in navigator` true — failed with the identical error.
+  The browser in use does not permit service worker registration at all.
+- AC-3 is therefore not merely unrun but **unrunnable** in that browser: with registration blocked
+  everywhere, an absent worker at a non-secure origin cannot be distinguished from the gate working.
+  It needs a browser where the localhost case registers, so that the LAN-IP case failing to register
+  means something.
+- **AC-8 needs a physical iOS device**, following the `079` AC-6 precedent — no structural substitute.
+
+What this leaves: run AC-1 through AC-7 and AC-9 in a real browser against `http://localhost:3000`
+(or the HTTPS domain if the installability prompt itself is in question, which only AC-1 needs), and
+AC-8 on an iPhone. AC-6's rebuild step is the one to adapt: the root `CLAUDE.md` forbids
+`bin/npm web run build` against a live dev stack, and in dev mode a changed catalog string hot-reloads
+anyway, so verify the staleness guarantee by the Cache Storage contents (at most the offline document,
+no build asset) rather than by a production rebuild.
+
 - [ ] **AC-9**: Settings → Environment shows an installability row: with `USE_HTTPS=true` it reads as
       available; with HTTPS off it reads as unavailable and names HTTPS as the reason, beside the
       existing badge. `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift.
-- [ ] **AC-10**: `git diff --stat services/api services/worker` is empty and `services/api/src/schema.gql`
-      is unchanged.
+- [x] **AC-10**: `git diff --stat services/api services/worker` is empty and `services/api/src/schema.gql`
+      is unchanged. Confirmed 2026-10-09 against the feature's own commit (`ae6c23b`, "add &
+      implement 080 spec, pwa"), whose entire diff is `CLAUDE.md`, this feature's `tasks.md`,
+      `services/web/CLAUDE.md`, `services/web/public/sw.js` and `services/web/src/app/globals.css`
+      — no file under `services/api/` or `services/worker/`, so no `schema.gql` delta either.
+      Worth recording while reading that commit: `manifest.json` was added earlier by `689c65e`
+      ("favicon") and `sw.js`, `offline/page.tsx` and `ServiceWorkerRegistration.tsx` by `94aee98`
+      ("implement 079 spec, mobile"), so most of this feature's code landed inside `079`'s commit
+      and `080`'s own commit only adjusted `sw.js`. That is why `spec.md` still reads
+      `status: Approved` — the `/implement` run was folded into its predecessor's.
 
 ## Out of Scope
 

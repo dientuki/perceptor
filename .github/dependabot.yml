@@ -1,0 +1,87 @@
+# Dependency update cadence (085-dependency-update-cadence).
+#
+# Five configurations, every one opening pull requests against `dev` — never the repository's
+# default branch, since `master` and `stage` are protected and take changes only through the
+# feature -> dev -> stage -> master flow (REQ-2). This file is read from the default branch only,
+# which is a GitHub constraint, not a choice made here.
+#
+# `target-branch` also disables Dependabot's own security-update path for every ecosystem below;
+# the CI `audit` job (`tools/audit/`, wired into `.github/workflows/ci.yml`) is the enforcement
+# mechanism instead, so that trade is accepted rather than worked around.
+version: 2
+updates:
+  # npm — services/api
+  - package-ecosystem: "npm"
+    directory: "/services/api"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+      major:
+        update-types: ["major"]
+
+  # npm — services/web
+  - package-ecosystem: "npm"
+    directory: "/services/web"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+      major:
+        update-types: ["major"]
+
+  # npm — services/worker
+  - package-ecosystem: "npm"
+    directory: "/services/worker"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+      major:
+        update-types: ["major"]
+
+  # GitHub Actions — every workflow under .github/workflows/
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+      major:
+        update-types: ["major"]
+
+  # Docker base images — the five service Dockerfiles plus docker-compose.yaml.
+  # The project's own published images (ghcr.io/dientuki/perceptor-*) are excluded: their version
+  # is PERCEPTOR_TAG, set per installation, and pinning one to a concrete tag would break the
+  # published-images install path (REQ-3).
+  - package-ecosystem: "docker"
+    directories:
+      - "/services/api"
+      - "/services/web"
+      - "/services/worker"
+      - "/services/torrent"
+      - "/services/indexer"
+      - "/"
+    target-branch: "dev"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "ghcr.io/dientuki/perceptor-*"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+      major:
+        update-types: ["major"]

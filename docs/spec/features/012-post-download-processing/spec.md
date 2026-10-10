@@ -223,6 +223,32 @@ documenting a policy the code does not follow.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Seven of fifteen open on the spec that defines the pipeline's post-download half, and the blocker is
+the same one that dominates this whole band: **no pipeline run has ever completed on this
+installation.** `process_jobs` holds **0** rows, `ffprobe_logs` **0**, `media_sources` **1** (a
+pre-`053` orphan with no torrent and no folder). AC-1 and AC-2 — a torrent finishing, a job being
+created, the encode completing, the file existing at its destination — are the two criteria every
+other open box in 002–071 that needs "a completed encode" ultimately waits on.
+
+- **AC-1, AC-2** — one real acquisition end to end. Closing these two would also close or unblock
+  `002` AC-9, `023` AC-1/AC-4, `032` AC-8, and the `058` resolution criteria.
+- **AC-8, AC-9, AC-10, AC-12** — failure paths off that same run: a folder with no video file, a
+  source with no audio track in the film's original language, a folder holding two video files, and
+  `torrentCompleted` firing twice for a source already `SCANNED`. AC-12's idempotency is unit-covered
+  (`api/src/downloads/downloads.service.spec.ts`), and AC-10's two-video-file selection is
+  `worker/src/scan/select-matches.spec.ts`; the rest need the live run.
+- **AC-11** — **its recorded reason is now stale and worth correcting.** The box says it was not
+  re-verified because "the running stack has `media_server_client = jellyfin` configured". It no
+  longer does: `media_server_client` reads **`none`** on this installation as of 2026-10-09, so
+  AC-11's precondition is already satisfied and no settings change is needed. The second half is also
+  structurally sound — `MediaServerService.notifyCreated` builds its client through
+  `createMediaServerClient(clientId, …)`, which yields nothing for `none`, and the method returns
+  before any request is attempted. What remains is the first half: a job reaching `COMPLETED`, so
+  there is an `api` log to read and find no media-server request in. The blocker is the absent
+  encode, not the setting.
+
 - [ ] **AC-1**: Given a torrent added from the indexer, when it finishes downloading, then
       `bin/mysql -e 'select id, status from media_sources order by id desc limit 1'` reports
       `SCANNED`, `source_files` holds exactly one row for that source pointing at the largest video

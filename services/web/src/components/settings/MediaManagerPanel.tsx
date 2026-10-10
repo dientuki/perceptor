@@ -19,16 +19,7 @@ interface MediaManagerPanelProps {
   movieDbApiKey: string;
 }
 
-// Media Manager tab (REQ-2): movies/series folders and the two
-// enable/disable toggles — moved verbatim out of the old single-column form,
-// with the hand-rolled <input type="checkbox"> replaced by the same
-// Switch + hidden-input pairing CompressionPanel uses (REQ-3). Each switch
-// also gates its matching PathPicker: while a switch is off, that folder
-// input becomes non-editable (REQ-4), but the folder's stored value keeps
-// travelling to the server unchanged — PathPicker owns that guarantee, not
-// this component. The TMDB API key isn't named by REQ-2's per-tab list
-// (spec.md), but it was part of the old "movies and series" section this
-// tab replaces and has nowhere else to go — kept here rather than dropped.
+// Spec 029, REQ-2; Spec 044, REQ-3 REQ-4
 export default function MediaManagerPanel({
   moviesFolder,
   showsFolder,

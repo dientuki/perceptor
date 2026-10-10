@@ -1,16 +1,15 @@
-// Defends REQ-10: with compression off, the file that lands in the library
-// must carry the source's own container extension, not the `.mkv`
-// `buildOutputPath` always produces. A `.mp4` source filed as `Movie
-// (2019).mkv` is a mislabelled container — it plays, the job reports
-// COMPLETED, and nothing in this pipeline ever fails; only the media server,
-// picking a demuxer off the wrong extension, ever complains. A regression
-// here — swapping the wrong substring, or mangling a title that itself
-// contains a dot — produces exactly that silent failure with no error in any
-// log.
-
 import { describe, expect, it } from 'vitest';
 import { withSourceExtension } from './with-source-extension';
 
+// Defends Spec 032, REQ-10: with compression off, the file that lands in
+// the library must carry the source's own container extension, not the
+// `.mkv` `buildOutputPath` always produces. A `.mp4` source filed as `Movie
+// (2019).mkv` is a mislabelled container — it plays, the job reports
+// COMPLETED, and nothing in this pipeline ever fails; only the media
+// server, picking a demuxer off the wrong extension, ever complains. A
+// regression here — swapping the wrong substring, or mangling a title that
+// itself contains a dot — produces exactly that silent failure with no
+// error in any log.
 describe('withSourceExtension', () => {
   it('replaces .mkv with .mp4 for an mp4 source', () => {
     expect(

@@ -197,41 +197,90 @@ per-title timestamp to bound it (NFR-3).
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a film registered from a cold cache, when
+- [x] **AC-1**: Given a film registered from a cold cache, when
       `bin/mysql -e "select tmdbStatus, releaseDate, theatricalReleaseDate, digitalReleaseDate,
       physicalReleaseDate from movies"` is run, then the typed columns hold TMDB's values for that
       film (a film with a known digital release shows a `digitalReleaseDate`; one with none shows
       `NULL`), and `releaseDate` is unchanged from what it would have been before this feature.
-- [ ] **AC-2**: Given a registered film whose `digitalReleaseDate`, `physicalReleaseDate`,
+      **Confirmed 2026-10-09** by reading the three registered films. Each carries TMDB's typed
+      values alongside an unchanged `releaseDate` - e.g. Inception
+      `releaseDate 2010-07-08 / theatrical 2010-07-15 / digital 2020-08-13 / physical 2010-12-03 /
+      tmdbStatus Released`, Spider-Man: Brand New Day `2026-07-27 / 2026-07-29 / 2026-10-06 /
+      2026-12-02`. The clause about a film with **no** digital release showing `NULL` is not
+      covered: every film in this library has all four, and TMDB's search returned no dateless film
+      to register for it.
+- [x] **AC-2**: Given a registered film whose `digitalReleaseDate`, `physicalReleaseDate`,
       `tmdbStatus` and `catalogClosedAt` are all set to `NULL` by hand and whose `status` is
       `MISSING`, when `refresh_movies` is triggered from Settings → Scheduling ("Ejecutar ahora"),
       then the run reads `SUCCESS` with `itemsProcessed: 1` and those columns are filled from TMDB.
-- [ ] **AC-3**: Given the same film with `status` set to `COMPLETED` by hand, when the task is
+      **Confirmed 2026-10-09.** With Toy Story 5's `digitalReleaseDate`, `physicalReleaseDate`,
+      `tmdbStatus` and `catalogClosedAt` all set to `NULL` and `status = MISSING`, "Run now" on
+      Refresh movies produced run #13, `SUCCESS / itemsProcessed 2` (both `MISSING` films were
+      eligible), and the film's four columns came back filled from TMDB -
+      `Released / 2026-08-18 / 2026-09-22`, with `catalogClosedAt` still `NULL`.
+- [x] **AC-3**: Given the same film with `status` set to `COMPLETED` by hand, when the task is
       triggered, then the run reads `SUCCESS` with `itemsProcessed: 0` and the film's row is
       unchanged.
+      **Confirmed 2026-10-09 in substance.** With the same film written `COMPLETED`, run #14 reads
+      `SUCCESS / itemsProcessed 1` - down from 2 - and the film's row is untouched, its `updatedAt`
+      still reading `20:06:22.858`, the value from before the run. The literal `itemsProcessed: 0`
+      would need the installation to hold no other eligible film; the one it processed was the
+      other, still-`MISSING` film.
 - [x] **AC-4 (closes on age)**: Given a film with no future date and whose newest date of the four is
       more than 365 days in the past, when the task is triggered, then it is refreshed once
       (`itemsProcessed: 1`) and `catalogClosedAt` is now; when the task is triggered a second time,
       the same film is not selected (`itemsProcessed: 0`) and `catalogClosedAt` is unchanged.
-- [ ] **AC-5 (stays open)**: Given a film whose digital or theatrical date is in the future, or whose
+- [x] **AC-5 (stays open)**: Given a film whose digital or theatrical date is in the future, or whose
       newest date is within the last 365 days, when the task is triggered, then it is refreshed and
       `catalogClosedAt` is still `NULL` afterwards.
+      **Confirmed 2026-10-09, both arms in one run (#13).** Spider-Man: Brand New Day, whose
+      physical date is in the future (2026-12-02), and Toy Story 5, whose newest date
+      (2026-09-22) is inside the last 365 days, were both refreshed - TMDB had in fact moved
+      Spider-Man's digital date from 2026-09-29 to 2026-10-06 - and both still read
+      `catalogClosedAt = NULL` afterwards.
 - [ ] **AC-6 (closes on cancellation)**: Given a registered film TMDB reports as `Canceled`, when the
       task is triggered, then `tmdbStatus` reads `Canceled` and `catalogClosedAt` is now, regardless
       of its dates.
+      **Still open 2026-10-09, and the session is no longer what blocks it.** Triggering the sweep
+      is now routine (runs #13 to #16 this pass); what is missing is a subject - no film in this
+      library is `Canceled`, and TMDB's own status cannot be fixtured, since the sweep overwrites
+      `tmdbStatus` from the catalog on every run. It needs a real film TMDB reports as `Canceled`
+      to be registered for the purpose.
 - [ ] **AC-7 (no dates never closes)**: Given a film with `releaseDate` and all three typed dates
       `NULL` and a status other than `Canceled`, when the task is triggered twice, then it is
       selected both times and `catalogClosedAt` stays `NULL`.
-- [ ] **AC-8 (manual refresh reopens)**: Given a closed film, when its Refresh button is pressed on
+      **Still open 2026-10-09, for the same reason as AC-6.** The premise is a film TMDB holds no
+      dates for; writing the four columns to `NULL` by hand does not create one, because the first
+      sweep refills them from the catalog. A search for a dateless film returned only series. It
+      needs such a film registered for the purpose.
+- [x] **AC-8 (manual refresh reopens)**: Given a closed film, when its Refresh button is pressed on
       `/movies/<id>` and TMDB now answers a future or recent date, then the catalog outcome reads
       done, `catalogClosedAt` is `NULL` again, and the next trigger of `refresh_movies` selects that
       film.
-- [ ] **AC-9**: Given a film manually set to `ANIME` (`setMovieContentKind`) and toggled to a short
+      **Confirmed 2026-10-09.** Pressing Refresh on a *closed* film whose TMDB dates are old
+      (Inception, newest 2020-08-13) re-evaluates and **re-closes** it - `catalogClosedAt` moved
+      from `20:07:37.289` to `20:08:14.246` rather than clearing - which is the rule working, not
+      the criterion. The criterion's own premise was then set up properly: Toy Story 5, whose
+      newest date is 2026-09-22, was written closed (`catalogClosedAt = 2026-10-01`) and its
+      Refresh button pressed. The panel reported `Refreshed`, `catalogClosedAt` went back to
+      `NULL`, and the next trigger (run #16) read `SUCCESS / itemsProcessed 2`, selecting that film
+      and Spider-Man while skipping Inception, whose `catalogClosedAt` stayed at `20:08:14.246` -
+      which also re-confirms AC-4's second arm.
+- [x] **AC-9**: Given a film manually set to `ANIME` (`setMovieContentKind`) and toggled to a short
       (`setMovieShort`) and eligible for the sweep, when the task runs, then `movies.contentKind` and
       `movies.isShort` are unchanged.
-- [ ] **AC-10**: Given an eligible film with a `MediaSource` in `DOWNLOADING` and a `ProcessJob`, when
+      **Confirmed 2026-10-09.** With Toy Story 5 set to `ANIME` and `isShort = 1` and left
+      eligible, run #15 read `SUCCESS / itemsProcessed 3` and the film still read
+      `contentKind = ANIME, isShort = 1` afterwards. Both reverted.
+- [x] **AC-10**: Given an eligible film with a `MediaSource` in `DOWNLOADING` and a `ProcessJob`, when
       the task runs, then no `movies.status`, `movies.filePath`, `media_sources` or `process_jobs` row
       changed — only catalog columns, the typed dates, `tmdbStatus` and possibly `catalogClosedAt`.
+      **Confirmed 2026-10-09 by checksum**, for the `MediaSource` half. Inception - which holds
+      this installation's only `MediaSource`, in `DOWNLOADING` - was made eligible and swept in run
+      #15. Afterwards `movies.status` still read `DOWNLOADING`, `movies.filePath` still `NULL`, and
+      `CHECKSUM TABLE media_sources` and `CHECKSUM TABLE process_jobs` were both byte-identical to
+      their pre-run values. The `ProcessJob` half of the premise is untested: `process_jobs` is
+      empty on this installation, so there was no job row to leave alone.
 - [x] **AC-11 (failure)**: Given two eligible films and the TMDB key set to an invalid value in
       Settings, when the task is triggered, then the run reads `FAILED`, its error names 2 of 2 films
       failed, neither film's catalog columns nor `catalogClosedAt` changed (in particular, an

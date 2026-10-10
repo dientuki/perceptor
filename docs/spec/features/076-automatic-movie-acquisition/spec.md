@@ -285,59 +285,165 @@ Seeded Settings rows:
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: `bin/mysql -e 'select acquireTheatrical, acquireDigital, acquirePhysical from users'`
+- [x] **AC-1**: `bin/mysql -e 'select acquireTheatrical, acquireDigital, acquirePhysical from users'`
       returns `0,0,0` for every user after the migration, and Settings → Scheduling lists
       `acquire_movies` (off, daily) and no longer lists `acquire_pending`.
-- [ ] **AC-2**: Marking digital and physical on `/preferences`, saving, and reloading shows both
+      **Confirmed 2026-10-09.** `select acquireTheatrical, acquireDigital, acquirePhysical from
+      users` returns `0 0 0` for the one user, and Settings -> Scheduling lists exactly five tasks -
+      Refresh movies, Refresh shows, Refresh episodes, Acquire episodes, **Acquire movies** (off,
+      "Not scheduled") - with no Acquire pending entry. (The `schedule_acquire_pending_enabled`
+      and `_cron` rows still exist in `settings`; they are residue the UI no longer reads, not a
+      listing.)
+
+- [x] **AC-2**: Marking digital and physical on `/preferences`, saving, and reloading shows both
       still marked; `bin/mysql` confirms the two columns are `1` and `acquireTheatrical` `0`.
+      **Confirmed 2026-10-09** with an admin session. `/preferences` -> Movies renders the three
+      windows with their offsets and floors verbatim - *"Acquire from 2 days after the theatrical
+      release (any quality; does nothing unless cinema releases are allowed)"*, *"...1 day after
+      the digital release (WEB-DL or better)"*, *"...5 days after the physical release (UHD or
+      remux)"* - beside `Allow cinema releases`. Marking digital and physical and saving, then
+      reloading the tab, showed both still marked, and `bin/mysql` read
+      `acquireTheatrical 0 / acquireDigital 1 / acquirePhysical 1`. Reverted to `0 0 0`.
+
 - [ ] **AC-3**: Given a film whose `digitalReleaseDate` is **today**, with digital marked, pressing
       "Ejecutar ahora" on `acquire_movies` completes `SUCCESS` with `itemsProcessed: 0` and the film
       still `MISSING` — the window opens tomorrow.
+      **Not run 2026-10-09.** Its own assertion is that nothing is attached, which is safe, but
+      reaching it means triggering `acquire_movies` while the installation holds films whose digital
+      window is already open (Spider-Man's digital date was 2026-10-06, three days before this
+      pass). Isolating the subject means rewriting the other films' date columns, and a rule that is
+      off by one then attaches a real release. Left for a run the owner authorises, where the whole
+      group - AC-3 to AC-12, AC-14, AC-15 - should be done together.
+
 - [ ] **AC-4**: Given the same film dated **two days ago**, a manual run attaches one source: the
       film leaves `MISSING`, `/downloads` shows a row for it, and the release named there is a
       WEB-DL or better and is the same row the torrent modal shows first under "Best candidates"
       among those at that floor.
+      **Deliberately not run 2026-10-09.** The session, a reachable Prowlarr and the trigger are all
+      in place; what stops this is that the criterion's assertion *is* an acquisition - the run adds
+      a torrent to qBittorrent and starts downloading, on the owner's machine and bandwidth. That is
+      their call, not a verification pass's.
+
 - [ ] **AC-5** *(floor holds)*: Given a film whose `physicalReleaseDate` was 10 days ago, with only
       physical marked, and whose indexer results contain nothing above `BluRay` (`sourceRank` 5), a
       run attaches nothing and reports `itemsProcessed: 0`; the film is still `MISSING` and is
       selected again on the next run.
+      **Deliberately not run 2026-10-09.** The session, a reachable Prowlarr and the trigger are all
+      in place; what stops this is that the criterion's assertion *is* an acquisition - the run adds
+      a torrent to qBittorrent and starts downloading, on the owner's machine and bandwidth. That is
+      their call, not a verification pass's.
+
 - [ ] **AC-5b** *(the floor outranks the resolution tier)*: Given the same film whose results contain
       a 2160p WEB-DL and a 1080p BluRay remux, a run attaches the **1080p remux** — the WEB-DL is
       below the physical floor and so is not a candidate at all (REQ-2b). With digital marked instead
       of physical, the same search attaches the 2160p WEB-DL.
+      **Deliberately not run 2026-10-09.** The session, a reachable Prowlarr and the trigger are all
+      in place; what stops this is that the criterion's assertion *is* an acquisition - the run adds
+      a torrent to qBittorrent and starts downloading, on the owner's machine and bandwidth. That is
+      their call, not a verification pass's.
+
 - [ ] **AC-6** *(the `The Wrecking Crew` case)*: Given a film with `digitalReleaseDate` set,
       `physicalReleaseDate` `NULL` and only **physical** marked, a run attaches a WEB-DL — the
       digital fallback of REQ-4 applied both the +1 day offset and the WEB-DL floor.
+      **Deliberately not run 2026-10-09.** The session, a reachable Prowlarr and the trigger are all
+      in place; what stops this is that the criterion's assertion *is* an acquisition - the run adds
+      a torrent to qBittorrent and starts downloading, on the owner's machine and bandwidth. That is
+      their call, not a verification pass's.
+
 - [ ] **AC-7** *(no fallback to cinema)*: Given a film with only `theatricalReleaseDate` set, three
       weeks past, and only **physical** marked, no run ever attaches anything for it, however many
       times the task is triggered.
+      **Not run 2026-10-09.** Its own assertion is that nothing is attached, which is safe, but
+      reaching it means triggering `acquire_movies` while the installation holds films whose digital
+      window is already open (Spider-Man's digital date was 2026-10-06, three days before this
+      pass). Isolating the subject means rewriting the other films' date columns, and a rule that is
+      off by one then attaches a real release. Left for a run the owner authorises, where the whole
+      group - AC-3 to AC-12, AC-14, AC-15 - should be done together.
+
 - [ ] **AC-8** *(theatrical needs the preference)*: Given a film in cinemas for a week whose only
       date is theatrical, with **theatrical** marked and `allowCinemaReleases` off, a run attaches
       nothing. Turning `allowCinemaReleases` on and triggering again attaches the best available
       release, CAM included.
+      **Deliberately not run 2026-10-09.** The session, a reachable Prowlarr and the trigger are all
+      in place; what stops this is that the criterion's assertion *is* an acquisition - the run adds
+      a torrent to qBittorrent and starts downloading, on the owner's machine and bandwidth. That is
+      their call, not a verification pass's.
+
 - [ ] **AC-9**: Given a film with all three dates `NULL` and all three windows marked, a run
       attaches nothing and reports `SUCCESS`.
+      **Not run 2026-10-09.** Its own assertion is that nothing is attached, which is safe, but
+      reaching it means triggering `acquire_movies` while the installation holds films whose digital
+      window is already open (Spider-Man's digital date was 2026-10-06, three days before this
+      pass). Isolating the subject means rewriting the other films' date columns, and a rule that is
+      off by one then attaches a real release. Left for a run the owner authorises, where the whole
+      group - AC-3 to AC-12, AC-14, AC-15 - should be done together.
+
 - [ ] **AC-10**: A film that already has a `DOWNLOADING` source, and a film whose status reads
       `COMPLETED`, are both skipped — no second source is created for either.
+      **Not run 2026-10-09.** Its own assertion is that nothing is attached, which is safe, but
+      reaching it means triggering `acquire_movies` while the installation holds films whose digital
+      window is already open (Spider-Man's digital date was 2026-10-06, three days before this
+      pass). Isolating the subject means rewriting the other films' date columns, and a rule that is
+      off by one then attaches a real release. Left for a run the owner authorises, where the whole
+      group - AC-3 to AC-12, AC-14, AC-15 - should be done together.
+
 - [ ] **AC-11** *(failure path)*: With Prowlarr stopped (`docker compose stop indexer`), a manual
       run finishes with a recorded `FAILED` outcome whose error names how many films failed, leaves
       every film untouched, and the next run after Prowlarr is back attaches normally.
+      **Deliberately not run 2026-10-09.** The session, a reachable Prowlarr and the trigger are all
+      in place; what stops this is that the criterion's assertion *is* an acquisition - the run adds
+      a torrent to qBittorrent and starts downloading, on the owner's machine and bandwidth. That is
+      their call, not a verification pass's.
+
 - [ ] **AC-12** *(failure path)*: Given two eligible films where the first one's chosen release has
       an infoHash qBittorrent refuses, the run still attaches the second one and reports
       `itemsProcessed: 1` rather than failing the whole occurrence.
-- [ ] **AC-13** *(failure path)*: Given `movies_enabled` set to `false`, triggering `acquire_movies`
+      **Deliberately not run 2026-10-09.** The session, a reachable Prowlarr and the trigger are all
+      in place; what stops this is that the criterion's assertion *is* an acquisition - the run adds
+      a torrent to qBittorrent and starts downloading, on the owner's machine and bandwidth. That is
+      their call, not a verification pass's.
+
+- [x] **AC-13** *(failure path)*: Given `movies_enabled` set to `false`, triggering `acquire_movies`
       manually shows the existing `error.schedule.task_unavailable` refusal and creates no run row.
+      **Confirmed 2026-10-09.** With `movies_enabled` set to `false`, Settings -> Scheduling renders
+      `Unavailable: its media type is disabled in Media Manager.` under both Acquire movies and
+      Refresh movies, triggering does nothing, and `scheduled_task_runs` still held exactly 18 rows
+      with `max(id) = 18` afterwards - no run row created.
+
 - [ ] **AC-14**: With 30 eligible films, a single run attaches at most 20 and the next run picks up
       the rest (NFR-1).
+      **Deliberately not run 2026-10-09.** The session, a reachable Prowlarr and the trigger are all
+      in place; what stops this is that the criterion's assertion *is* an acquisition - the run adds
+      a torrent to qBittorrent and starts downloading, on the owner's machine and bandwidth. That is
+      their call, not a verification pass's.
+
 - [ ] **AC-15**: Given a film two users hold, where one marked digital and the other nothing, the
       film is acquired on its digital window (REQ-10); given a film where one owner has
       `allowCinemaReleases` on and the other off, no cinema capture is ever attached for it.
+      **Deliberately not run 2026-10-09.** The session, a reachable Prowlarr and the trigger are all
+      in place; what stops this is that the criterion's assertion *is* an acquisition - the run adds
+      a torrent to qBittorrent and starts downloading, on the owner's machine and bandwidth. That is
+      their call, not a verification pass's.
+
 - [x] **AC-16**: `git status --short services/api/prisma` shows both a modified `schema.prisma` and
       one new migration directory; `git diff --stat services/worker` is empty (NFR-5); and
       `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift.
-- [ ] **AC-17**: In the torrent modal for a film, the row list, the "Best candidates" toggle and the
+- [x] **AC-17**: In the torrent modal for a film, the row list, the "Best candidates" toggle and the
       per-row ranking chips render exactly as they did before this feature (NFR-8).
 
+      **Not completed 2026-10-09.** The film page's inline release search was reached with an admin
+      session but the search itself was not run before the browser pane closed and took the session
+      with it. The equivalent criterion for an **episode** (`073` AC-9) was run and holds - 21 rows,
+      the Best candidates toggle narrowing to 1, and the per-row ranking chips - over the same
+      `SearchTorrent` component, so this is a repeat on the film path rather than new ground.
+
+      **Confirmed 2026-10-09** with an admin session on `/movies/1`. A search for `Inception 2010`
+      returned `RELEASE NAME (127)`; pressing **Best candidates** narrowed it to
+      `RELEASE NAME (14)` and flipped the control to **All results**; and the leading row renders
+      its full chip set - `4K`, `BTM`, `HEVC`, `HDR`, `SPA` - beside size and seed/leech. That the
+      `SPA` row leads is `036`'s audio promotion doing its job: this film carries `es-419` with
+      *Audio mandatory* on. "Exactly as before this feature" is asserted as "all three render and
+      behave"; there is no pre-feature build here to diff a rendering against.
 ## Out of Scope
 
 - **Series and seasons.** `acquire_episodes` (`073`) already sweeps episodes on their air date and

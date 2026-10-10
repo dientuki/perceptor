@@ -1,7 +1,3 @@
-// Contrato compartido entre clientes de catálogo (TMDB hoy; indexer y
-// mediaServer después). Los tipos crudos de cada proveedor (wire, snake_case)
-// viven en clients/<proveedor>/types.ts y no se mezclan acá.
-
 import { MEDIA_TYPE, MediaType } from '@/types/media';
 
 export interface MovieDBSearch {
@@ -77,9 +73,6 @@ export interface EpisodeDetail {
   voteAverage: number;
 }
 
-// Resultado de búsqueda ya traducido a nuestro formato (no confundir con la
-// entity GraphQL de mismo nombre en movies/entities, que es la versión
-// decorada con @ObjectType para exponer este mismo shape por schema).
 export interface MediaSearchResult {
   id: number;
   title: string;
@@ -89,13 +82,7 @@ export interface MediaSearchResult {
   overview?: string;
   type: string;
   status?: string;
-  // 056-shorts-runtime-classification: minutes, as TMDB's detail endpoint
-  // reports it. Only ever present on a film's cache entry; TMDB's search
-  // response never carries it, so a warm entry written by a search has none
-  // until a registration tops it up (MoviesService.deriveIsShort). Not the
-  // `@ObjectType` of the same name in media/entities/ — never gains a
-  // `@Field()`, since a duration per search result is exactly what NFR-1
-  // forbids.
+  // Spec 056, NFR-1
   runtime?: number | null;
   // 057-content-kind-classification: TMDB genre/keyword ids, carried through
   // the same warm cache entry runtime already uses. Present on a search

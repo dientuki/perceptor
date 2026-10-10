@@ -13,7 +13,6 @@ import Movie from "@/components/movies/Movie";
 import SearchTorrent from "@/components/search/SearchTorrent";
 import type { AcquisitionTarget } from "@/types/media";
 
-// generateMetadata y la página corren por separado; cache() colapsa los dos fetch en uno solo
 const getMovie = cache(getMovieById);
 
 interface PageProps {

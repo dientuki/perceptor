@@ -16,11 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-// No isAdmin check and no notFound() — every signed-in user, administrator
-// or not, must land here in full (REQ-2, AC-2b). All four reads are
-// independent of one another, so they run in a single Promise.all rather
-// than the sequential pattern users/page.tsx and settings/page.tsx use to
-// guard an admin-only read.
+// Spec 021, REQ-2 AC-2b
 export default async function PreferencesPage() {
   const t = await getTranslations("pages.preferences");
 

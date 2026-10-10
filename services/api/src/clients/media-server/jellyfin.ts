@@ -11,9 +11,7 @@ import { HTTP_METHOD } from '@/types/http';
 // Reads other than listLibrary: short timeout, this is a request/response
 // call inline in a user-facing flow (register/reconcile).
 const READ_TIMEOUT_MS = 5_000;
-// listLibrary enumerates the whole library in a background rebuild — NFR-2
-// gives it room for a large one rather than racing an arbitrary library size
-// against a short timeout.
+// Spec 034, NFR-2
 const LIST_LIBRARY_TIMEOUT_MS = 5 * 60 * 1000;
 
 const LIBRARY_PAGE_SIZE = 500;
@@ -93,11 +91,6 @@ export const createJellyfinClient = (
   config: MediaServerConfig,
   index: MediaServerIndexPort,
 ): MediaServerClient => {
-  // Sin fallback a 'localhost': acá adentro "localhost" sería el container
-  // api, casi nunca donde corre Jellyfin de verdad — un default silencioso
-  // ahí sólo cambia un error visible (host vacío) por uno confuso
-  // (ECONNREFUSED contra el propio api). MediaServerService ya garantiza que
-  // no llega acá con el host vacío (ver notifyCreated).
   const { host, port, apiKey } = config;
 
   const baseUrl = `http://${host}:${port}/`;
@@ -129,7 +122,7 @@ export const createJellyfinClient = (
 
     if (!response.ok) {
       throw new Error(
-        `Jellyfin respondió ${response.status} al listar ${includeItemTypes}: ${await response.text()}`,
+        `Jellyfin responded ${response.status} while listing ${includeItemTypes}: ${await response.text()}`,
       );
     }
 
@@ -177,7 +170,7 @@ export const createJellyfinClient = (
 
       if (!response.ok) {
         throw new Error(
-          `Jellyfin respondió ${response.status} al refrescar la biblioteca: ${await response.text()}`,
+          `Jellyfin responded ${response.status} while refreshing the library: ${await response.text()}`,
         );
       }
     },
@@ -201,7 +194,7 @@ export const createJellyfinClient = (
           Updates: [
             {
               Path: media,
-              UpdateType: 'created', // lo abstractamos aquí
+              UpdateType: 'created',
             },
           ],
         }),
@@ -209,7 +202,7 @@ export const createJellyfinClient = (
 
       if (!response.ok) {
         throw new Error(
-          `Jellyfin respondió ${response.status} al avisar de ${media}: ${await response.text()}`,
+          `Jellyfin responded ${response.status} while notifying about ${media}: ${await response.text()}`,
         );
       }
     },
@@ -237,7 +230,7 @@ export const createJellyfinClient = (
 
       if (!response.ok) {
         throw new Error(
-          `Jellyfin respondió ${response.status} al listar episodios de ${externalSeriesId}: ${await response.text()}`,
+          `Jellyfin responded ${response.status} while listing episodes of ${externalSeriesId}: ${await response.text()}`,
         );
       }
 

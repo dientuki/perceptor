@@ -4,9 +4,7 @@ import { ScheduledTaskHandler } from '../scheduler.registry';
 import { PrismaService } from '@/prisma/prisma.service';
 import { TmdbClient } from '@/clients/tmdb/client';
 
-// Two days of grace after air date, per spec.md REQ-2/REQ-3: TMDB routinely
-// fills a title in at or just after air time, so an episode that aired
-// yesterday is still worth re-fetching. A constant, not a Setting — REQ-3.
+// Spec 041, REQ-2 REQ-3
 const GRACE_PERIOD_DAYS = 2;
 
 interface SelectedEpisode {
@@ -58,13 +56,12 @@ export class RefreshEpisodesTask implements ScheduledTaskHandler {
       },
     });
 
-    // Idle installation: zero TMDB calls (NFR-2, AC-4).
+    // Spec 041, NFR-2 AC-4
     if (pending.length === 0) {
       return { itemsProcessed: 0 };
     }
 
-    // Group by (show.tmdbId, season.seasonNumber) so a season with several
-    // selected episodes costs exactly one TMDB request (REQ-4).
+    // Spec 041, REQ-4
     const groups = new Map<string, SeasonGroup>();
     for (const episode of pending) {
       const tmdbId = episode.season.show.tmdbId;
@@ -82,8 +79,7 @@ export class RefreshEpisodesTask implements ScheduledTaskHandler {
     let written = 0;
     let failedGroups = 0;
 
-    // Sequential, never Promise.all (NFR-1) — a burst against a shared TMDB
-    // key rate-limits and leaves the sweep half-done with no error anywhere.
+    // Spec 041, NFR-1
     for (const group of groups.values()) {
       try {
         const episodes = await this.tmdb.seasonDetails(
@@ -96,8 +92,7 @@ export class RefreshEpisodesTask implements ScheduledTaskHandler {
 
         for (const selected of group.episodes) {
           const found = byNumber.get(selected.episodeNumber);
-          // Missing from TMDB's response: leave the row untouched and
-          // uncounted (REQ-7) — never blank, never delete.
+          // Spec 041, REQ-7
           if (!found) continue;
 
           await this.prisma.episode.update({

@@ -1,7 +1,7 @@
 ---
 description: Execute a feature's tasks by dispatching each to its service subagent
 argument-hint: [NNN or slug — defaults to the most recent feature]
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent, TaskCreate, TaskUpdate, AskUserQuestion
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent, Skill, TaskCreate, TaskUpdate, AskUserQuestion
 ---
 
 Implement feature **$ARGUMENTS** (if empty, the highest-numbered directory in
@@ -83,7 +83,25 @@ When every task is ticked:
 - Do the `[docs]` tasks: the root `CLAUDE.md` pipeline table if a stage changed status, the
   service's own `CLAUDE.md` if a convention changed.
 
-## 5. Report
+Walking the criteria is where this command earns its keep: a criterion you cannot observe holding
+stays unticked, and step 5 is where you write down what it is waiting on. Never tick one because
+its task is done — that is exactly the drift `docs/spec/pending-acs.md` exists to measure.
+
+## 5. Record what was measured, and what still is not
+
+Two documents close a feature, and neither one is optional:
+
+- **`docs/spec/history.md`** — append a new entry **at the top**, never edit the root `CLAUDE.md`
+  for this (REQ-11 of `086-comment-locator-convention`). Re-measure with the commands at the top of
+  that file: the test counts per service, the typechecks, the migrations applied, the GraphQL
+  contract diff. Record the real numbers, including a failure.
+- **`docs/spec/pending-acs.md`** — run `/pending-acs <NNN>`. Step 4 above ticked every criterion you
+  saw hold; this records what is still unticked and **why**, which is the part a bare `[ ]` cannot
+  say. If the feature closed every box, its row disappears from that document and you say so.
+
+Run them in that order — `/pending-acs` reads the ticks step 4 just wrote.
+
+## 6. Report
 
 What shipped, per service. Every command actually run and its real output — a failing test is
 reported as failing, with the output. What is still blocked and why. What you noticed along the

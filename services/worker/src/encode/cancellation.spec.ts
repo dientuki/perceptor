@@ -1,14 +1,14 @@
-// Defends the registry a cancelled encode depends on end to end (NFR-1):
-// a message for a job not running here must be a silent no-op, never a
-// thrown error that could kill the Redis subscriber (src/index.ts); a
-// registered job must actually have its signal aborted, exactly once, even
-// if the cancel message somehow arrives twice; and releaseEncode must really
-// forget the id, so a later message that reuses a processJobId (BullMQ ids
-// are not unique forever) can never abort a different job's signal.
-
 import { describe, expect, it } from 'vitest';
 import { cancelEncode, registerEncode, releaseEncode } from './cancellation';
 
+// Defends the registry a cancelled encode depends on end to end (Spec 047,
+// NFR-1): a message for a job not running here must be a silent no-op,
+// never a thrown error that could kill the Redis subscriber (src/index.ts);
+// a registered job must actually have its signal aborted, exactly once,
+// even if the cancel message somehow arrives twice; and releaseEncode must
+// really forget the id, so a later message that reuses a processJobId
+// (BullMQ ids are not unique forever) can never abort a different job's
+// signal.
 describe('cancellation registry', () => {
   it('cancelling an id nobody registered returns false and throws nothing', () => {
     expect(() => {

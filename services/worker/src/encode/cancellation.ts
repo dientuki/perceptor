@@ -20,7 +20,7 @@ export function registerEncode(processJobId: number): AbortSignal {
   const existing = registry.get(processJobId);
   if (existing) {
     console.log(
-      `[cancellation] ${processJobId} ya estaba registrado, se mantiene el controller existente`,
+      `[cancellation] ${processJobId} was already registered, keeping the existing controller`,
     );
     return existing.signal;
   }
@@ -30,8 +30,7 @@ export function registerEncode(processJobId: number): AbortSignal {
   return controller.signal;
 }
 
-// No-op returning false for an id nobody registered — a message for a job
-// not running on this worker is expected and correct, not an error (NFR-1).
+// Spec 047, NFR-1
 export function cancelEncode(processJobId: number): boolean {
   const controller = registry.get(processJobId);
   if (!controller) {

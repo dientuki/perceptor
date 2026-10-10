@@ -28,17 +28,9 @@ export function buildFfmpegCommand(
   const aStreams = metadata.streams.filter((s) => s.codec_type === "audio");
   const sStreams = metadata.streams.filter((s) => s.codec_type === "subtitle");
 
-  // REQ-10: remux detection reads the ffprobe metadata, not the filename.
-  // The filename is only consulted inside isRemux itself, as the last resort
-  // when no bitrate at all can be computed (src/ffmpeg/remux-detection.ts).
+  // Spec 011, REQ-10
   const quality = isRemux(metadata, input) ? "remux" : "web";
 
-  // -progress pipe:1: emite out_time_us=/progress= por stdout en formato
-  // key=value, que runner.ts parsea para reportar progreso real (antes no
-  // existía ningún parseo, sólo se imprimía la línea cruda de stderr).
-  // -nostats -loglevel error: sin esto ffmpeg también manda su resumen de
-  // progreso normal a stderr, duplicando y ensuciando lo que runner.ts lee ahí
-  // para el mensaje de error.
   const args = [
     "-i",
     input,
@@ -72,8 +64,6 @@ export function buildFfmpegCommand(
     `PERCEPTOR_SOURCE=${details.sourceTag}`,
   ];
 
-  // Sólo mientras se prueba el workflow: encodear unos pocos segundos en vez
-  // del archivo completo. Ver ENCODE_SAMPLE_SECONDS en .env.example.
   const sampleSeconds = process.env.ENCODE_SAMPLE_SECONDS;
   if (sampleSeconds) {
     args.push("-t", sampleSeconds);

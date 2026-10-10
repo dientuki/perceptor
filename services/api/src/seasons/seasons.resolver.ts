@@ -5,10 +5,7 @@ import { SeasonUploadSession } from './entities/season-upload-session.entity';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
 
-// Structural twin of EpisodesResolver — see 013-season-pack-processing's
-// api/plan.md § Approach for why this is not shared. No @AllowService()
-// here either: this mutation exists so the season-pack pipeline is
-// reachable and testable at all (013's own REQ-14), not for the worker.
+// Spec 013, REQ-14
 @Resolver(() => Season)
 export class SeasonsResolver {
   constructor(private readonly seasonsService: SeasonsService) {}

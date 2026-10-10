@@ -151,6 +151,34 @@ schema.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Six of eight open on a spec still marked `Approved`. All six need **a real torrent in qBittorrent
+with files deliberately deselected** — the bug this feature fixed depends on a file keeping its full
+announced size on disk with none of its bytes, which only the torrent client produces. On this
+installation `media_sources` holds one stale row and `process_jobs` **0**, so there is nothing to
+scan.
+
+Grouped by what each needs beyond an admin session:
+
+| Criteria | Needs |
+| :-- | :-- |
+| AC-1, AC-2, AC-3 | a two-file torrent of equal announced size with one file deselected, downloaded, scanned, encoded and cleaned up |
+| AC-4 | the same with **every** video file deselected — the `error.source.scan_no_downloaded_video` key that distinguishes this from `error.source.scan_no_video` |
+| AC-5 | the same two-file torrent with the **`torrent` container stopped**, so `downloadedFiles` cannot be fetched |
+| AC-6 | a film acquired through the **tus upload** path, where `downloadedFiles` is `null` and neither selection rule may narrow anything |
+
+The narrowing rule itself is unit-covered three ways, all green in the 323 worker tests measured this
+pass: `worker/src/scan/mark-downloaded.spec.ts`, `scan/select-matches.spec.ts` and
+`scan/scan-folder.spec.ts`. AC-6's "uploads unchanged" is the `null` branch of that same rule, so its
+logic is asserted even though the live path is not.
+
+Two notes for whoever runs these. First, AC-5's degradation (client unreachable → scan proceeds on
+the unnarrowed set rather than failing) is the one criterion whose *failure* would be silent, which
+is why it is worth running before the happy paths. Second, this spec's `status` is `Approved` while
+the code shipped — the same stale-status pattern found on `077` and `080` this week, where the
+`[docs]` task that sets it never ran.
+
 - [ ] **AC-1 (the reported bug)**: Given a torrent holding `A.mkv` and `B.mkv` of the same announced size,
       with `B.mkv` set to *Do not download* in qBittorrent, when the download completes, then the encode
       that gets enqueued has `A.mkv` as its input — verifiable in the worker log's

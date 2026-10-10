@@ -65,11 +65,7 @@ interface CompressionPanelProps {
   subtitlesImageFormats: string;
 }
 
-// Compresión tab: the switch persists `compression_enabled` through the main
-// Settings form's Save button, via the hidden input below. The resolution
-// radios persist `compression_resolution` the same way — no `name` on the
-// radios themselves (see the comment below), a hidden input carries the
-// selected value instead. They are disabled whenever the switch is off.
+// Spec 032, REQ-2; Spec 044, REQ-6; Spec 058, REQ-5
 export default function CompressionPanel({
   compressionEnabled,
   compressionResolution,
@@ -131,12 +127,7 @@ export default function CompressionPanel({
             <Radio
               key={value}
               id={`compression-resolution-${value}`}
-              // Empty name, deliberately: a non-empty `name` on a form
-              // control makes it a "successful control" the browser
-              // includes in FormData on submit (WHATWG "constructing the
-              // form data set"), which REQ-4 forbids. Exclusivity across
-              // the group is enforced by the shared `resolution` state and
-              // `checked`/`onChange` below, not by native radio grouping.
+              // Spec 044, REQ-6
               name=""
               value={value}
               checked={resolution === value}

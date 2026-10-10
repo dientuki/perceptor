@@ -38,10 +38,7 @@ const failed = (): SyncResult => ({
   demoted: 0,
 });
 
-// Reflects what a configured media server already holds onto a newly
-// registered (or re-registered) title. NFR-1: neither method ever throws —
-// a failure here must never turn a title that registered fine into a
-// GraphQL error, so the whole body of both public methods is try/catch.
+// Spec 034, NFR-1
 @Injectable()
 export class MediaServerReconcileService {
   constructor(
@@ -58,18 +55,14 @@ export class MediaServerReconcileService {
       const externalId = await client.findByTmdbId(MEDIA_TYPE.MOVIE, tmdbId);
       if (!externalId) return;
 
-      // The `status: 'MISSING'` clause in `where` IS the never-downgrade
-      // guard (REQ-15): it makes the promotion atomic against a concurrent
-      // torrentCompleted, and it is why this is an updateMany rather than a
-      // findUnique-then-update, which would read one status and write over
-      // whatever it became a moment later. filePath is never written here.
+      // Spec 034, REQ-15; Spec 089, REQ-4
       await this.prisma.movie.updateMany({
         where: { id: movieId, status: 'MISSING' },
-        data: { status: 'COMPLETED' },
+        data: { status: 'COMPLETED', mediaServerPresentAt: new Date() },
       });
     } catch (err) {
       console.error(
-        `[media-server-reconcile] falló reconciliando la película ${movieId}:`,
+        `[media-server-reconcile] failed reconciling movie ${movieId}:`,
         err,
       );
     }
@@ -90,9 +83,7 @@ export class MediaServerReconcileService {
         where: { showId },
         include: { episodes: true },
       });
-      // Season 0 (specials) is not filtered out here (REQ-13) — it
-      // reconciles like any other season, the same way hydrate() does not
-      // filter it when fetching from TMDB.
+      // Spec 034, REQ-13
       const bySeasonNumber = new Map(
         seasons.map((season) => [season.seasonNumber, season]),
       );
@@ -106,14 +97,15 @@ export class MediaServerReconcileService {
         );
         if (!episode) continue; // same, at episode granularity
 
+        // Spec 089, REQ-4
         await this.prisma.episode.updateMany({
           where: { id: episode.id, status: 'MISSING' },
-          data: { status: 'COMPLETED' },
+          data: { status: 'COMPLETED', mediaServerPresentAt: new Date() },
         });
       }
     } catch (err) {
       console.error(
-        `[media-server-reconcile] falló reconciliando la serie ${showId}:`,
+        `[media-server-reconcile] failed reconciling show ${showId}:`,
         err,
       );
     }
@@ -132,14 +124,15 @@ export class MediaServerReconcileService {
         tmdbId,
       );
       const present = !!externalId;
+      // Spec 089, REQ-4 AC-10
       const { count } = present
         ? await this.prisma.movie.updateMany({
             where: { id: movieId, status: 'MISSING', ...IN_FLIGHT_GUARD },
-            data: { status: 'COMPLETED' },
+            data: { status: 'COMPLETED', mediaServerPresentAt: new Date() },
           })
         : await this.prisma.movie.updateMany({
             where: { id: movieId, status: 'COMPLETED', ...IN_FLIGHT_GUARD },
-            data: { status: 'MISSING', filePath: null },
+            data: { status: 'MISSING', filePath: null, mediaServerPresentAt: null },
           });
       return {
         outcome: RefreshMediaServerOutcome.DONE,
@@ -211,10 +204,11 @@ export class MediaServerReconcileService {
             // has a live pack.
             ...(aired ? seasonGuard : {}),
           },
+          // Spec 089, REQ-4 AC-10
           data:
             from === 'MISSING'
-              ? { status: 'COMPLETED' }
-              : { status: 'MISSING', filePath: null },
+              ? { status: 'COMPLETED', mediaServerPresentAt: new Date() }
+              : { status: 'MISSING', filePath: null, mediaServerPresentAt: null },
         });
         return count;
       };
@@ -267,9 +261,7 @@ export class MediaServerReconcileService {
     };
   }
 
-  // Mirrors MediaServerService.notifyCreated's early returns: no client
-  // configured, or a client chosen but with no host filled in, both mean
-  // "there is nothing to reconcile against" rather than an error (REQ-20).
+  // Spec 034, REQ-20
   private async client(): Promise<MediaServerClient | null> {
     const config = await this.settings.getMap();
     const clientId = config.media_server_client;

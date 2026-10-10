@@ -6,6 +6,7 @@ import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { MEDIA_TYPE } from '@/types/media';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { CatalogSearchService } from '@/media/catalog-search.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // This suite exists because ShowsService's riskiest paths all fail with a
@@ -18,7 +19,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 //    either way, so only asserting on what is actually handed to the Redis
 //    pipeline can catch it. `005-movie-search` already has this case for
 //    films, but the ordering is implemented separately in ShowsService, so
-//    it can be broken separately with nothing failing (NFR-3) — that is why
+//    it can be broken separately with nothing failing (Spec 006, NFR-3) — that is why
 //    this feature demands the case here too, not just once in the film
 //    suite;
 //  - `enrichWithOwnership` dropping (or never applying) its per-caller
@@ -31,10 +32,10 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 //    or throws a raw Prisma P2002 the second time the same user clicks it;
 //  - a hydration that marks `seasonsSyncedAt` before every season and
 //    episode has actually been written makes a half-populated series
-//    permanently indistinguishable from a complete one — REQ-14's retry
+//    permanently indistinguishable from a complete one — Spec 006, REQ-14's retry
 //    path never fires again for it — and a claim key left behind after a
 //    failed hydration silently disables every future retry until the TTL
-//    expires (NFR-4 / NFR-5);
+//    expires (Spec 006, NFR-4 NFR-5);
 //  - `findOneFromDb` dropping (or never applying) its `user_shows` scope
 //    would resolve a series (and its seasons/episodes) for any authenticated
 //    caller, not just the one linked to it — the query still succeeds,
@@ -120,6 +121,19 @@ describe('ShowsService', () => {
           useValue: mediaServerReconcile,
         },
         { provide: DownloadsService, useValue: downloads },
+        {
+          // 088-acquisition-path-unification: the real CatalogSearchService,
+          // wired to this suite's own prisma/redis/tmdb mocks, so the cache
+          // ordering assertions below keep exercising the actual shared
+          // implementation rather than a stub that could drift from it.
+          provide: CatalogSearchService,
+          useFactory: () =>
+            new CatalogSearchService(
+              prisma as unknown as PrismaService,
+              redis as unknown as RedisService,
+              tmdb as unknown as TmdbClient,
+            ),
+        },
       ],
     }).compile();
 
@@ -150,9 +164,32 @@ describe('ShowsService', () => {
         releaseDate: { gte: from, lt: toExclusive },
         season: { show: { users: { some: { userId: 'user-1' } } } },
       });
-      expect(args.include.season.include.mediaSources).toEqual({
-        where: { status: { not: 'ERROR' } },
-      });
+    });
+
+    // Spec 089, REQ-6
+    it("returns the episode's stored status column directly, with no derivation", async () => {
+      const findMany = jest.fn().mockResolvedValue([
+        {
+          id: 101,
+          episodeNumber: 1,
+          title: 'Pilot',
+          status: 'DOWNLOADING',
+          releaseDate: new Date('2026-09-15'),
+          season: {
+            seasonNumber: 1,
+            show: { id: 7, title: 'Mine' },
+          },
+        },
+      ]);
+      (prisma.episode as unknown as { findMany: jest.Mock }).findMany = findMany;
+
+      const result = await service.findEpisodesReleasedBetween(
+        'user-1',
+        new Date('2026-09-01T00:00:00Z'),
+        new Date('2026-10-01T00:00:00Z'),
+      );
+
+      expect(result[0].status).toBe('DOWNLOADING');
     });
   });
 
@@ -177,9 +214,7 @@ describe('ShowsService', () => {
     });
 
     it('returns an empty list for a user with no series', async () => {
-      // REQ-4: an empty library is not an error and not null — `shows` is
-      // `[Show!]!`, so a null here would surface in web as a GraphQL
-      // non-null violation instead of an empty grid.
+      // Spec 007, REQ-4
       prisma.show.findMany.mockResolvedValue([]);
 
       await expect(service.findAll('user-without-series')).resolves.toEqual([]);
@@ -214,9 +249,7 @@ describe('ShowsService', () => {
     });
 
     it('returns the same null for an id that does not exist', async () => {
-      // NFR-1: an unowned series and a missing one must be indistinguishable
-      // from the caller's side — both resolve through the identical query
-      // shape above and both come back null.
+      // Spec 009, NFR-1
       prisma.show.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -233,10 +266,7 @@ describe('ShowsService', () => {
 
       await service.findOneFromDb(7, 'user-1');
 
-      // NFR-2: episodes rendering in the wrong order is a silent failure —
-      // nothing throws, the page just looks wrong. Asserting the shape of
-      // the `include` passed to Prisma is the only way a mocked client can
-      // catch a dropped or misplaced `orderBy`.
+      // Spec 009, NFR-2
       const [args] = prisma.show.findFirst.mock.calls[0];
       expect(args.include.seasons.orderBy).toEqual({ seasonNumber: 'asc' });
       expect(args.include.seasons.include.episodes.orderBy).toEqual({
@@ -244,10 +274,7 @@ describe('ShowsService', () => {
       });
     });
 
-    // 059-season-pack-acquisition-ui T003: dropping this filter would let a
-    // demoted (ERROR) season-pack source keep counting toward the lift
-    // forever — deriveSeasonEpisodeStatuses would have no way to tell a
-    // superseded pack from a live one, since it never sees the raw column.
+    // Spec 059, T003
     it("filters the season's mediaSources include to non-ERROR", async () => {
       prisma.show.findFirst.mockResolvedValue({ id: 7, title: 'Mine', seasons: [] });
 
@@ -259,13 +286,8 @@ describe('ShowsService', () => {
       });
     });
 
-    // AC-1 / 043-pipeline-status-normalization: this is the reported
-    // Daredevil bug — an episode whose stored MediaStatus is still
-    // DOWNLOADING (nothing writes it back to COMPLETED) but whose
-    // MediaSource is SCANNED and whose ProcessJob is COMPLETED must read
-    // COMPLETED once it crosses GraphQL. Failing to route through the
-    // include and the derivation would silently keep reporting DOWNLOADING.
-    it('reads the stored column, not the finished SCANNED source or COMPLETED job, for an episode (REQ-17)', async () => {
+    // Spec 089, REQ-6
+    it("returns each episode's stored status column directly, with no derivation", async () => {
       prisma.show.findFirst.mockResolvedValue({
         id: 7,
         title: 'Mine',
@@ -273,15 +295,11 @@ describe('ShowsService', () => {
           {
             id: 1,
             seasonNumber: 1,
-            mediaSources: [],
             episodes: [
               {
                 id: 101,
                 episodeNumber: 1,
-                status: 'DOWNLOADING',
-                releaseDate: null,
-                mediaSources: [{ status: 'SCANNED' }],
-                processJobs: [{ status: 'COMPLETED' }],
+                status: 'QUEUED',
               },
             ],
           },
@@ -290,121 +308,7 @@ describe('ShowsService', () => {
 
       const result = await service.findOneFromDb(7, 'user-1');
 
-      // 069 REQ-17: finished history no longer lifts the column; it is the column that decides.
-      expect(result?.seasons[0].episodes[0].status).toBe('DOWNLOADING');
-    });
-
-    // 059-season-pack-acquisition-ui T003 / AC-7-AC-8: the season-pack lift.
-    // These defend against the silent failure the plan calls out — an
-    // unscanned pack that stops lifting mid-flight regresses an aired
-    // episode to MISSING with nothing wrong reported anywhere, and a
-    // SCANNED/ERROR pack that keeps lifting forever hides an unmatched
-    // episode as permanently "queued".
-    describe('season-pack lift', () => {
-      const baseEpisode: {
-        id: number;
-        episodeNumber: number;
-        status: 'MISSING' | 'COMPLETED' | 'ERROR';
-        releaseDate: Date | null;
-        mediaSources: { status: string }[];
-        processJobs: { status: string }[];
-      } = {
-        id: 101,
-        episodeNumber: 1,
-        status: 'MISSING',
-        releaseDate: null,
-        mediaSources: [],
-        processJobs: [],
-      };
-
-      function showWith(season: {
-        mediaSources: { status: string }[];
-        episodes: typeof baseEpisode[];
-      }) {
-        return {
-          id: 7,
-          title: 'Mine',
-          seasons: [{ id: 1, seasonNumber: 1, ...season }],
-        };
-      }
-
-      it('lifts an aired MISSING episode to QUEUED under a DOWNLOADING season source', async () => {
-        prisma.show.findFirst.mockResolvedValue(
-          showWith({
-            mediaSources: [{ status: 'DOWNLOADING' }],
-            episodes: [{ ...baseEpisode, releaseDate: new Date('2020-01-01') }],
-          }),
-        );
-
-        const result = await service.findOneFromDb(7, 'user-1');
-
-        expect(result?.seasons[0].episodes[0].status).toBe('QUEUED');
-      });
-
-      it('does not lift a future-dated episode', async () => {
-        const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        prisma.show.findFirst.mockResolvedValue(
-          showWith({
-            mediaSources: [{ status: 'DOWNLOADING' }],
-            episodes: [{ ...baseEpisode, releaseDate: future }],
-          }),
-        );
-
-        const result = await service.findOneFromDb(7, 'user-1');
-
-        expect(result?.seasons[0].episodes[0].status).toBe('MISSING');
-      });
-
-      it('leaves an already-COMPLETED episode COMPLETED under a lifting season source', async () => {
-        prisma.show.findFirst.mockResolvedValue(
-          showWith({
-            mediaSources: [{ status: 'DOWNLOADING' }],
-            episodes: [
-              {
-                ...baseEpisode,
-                status: 'COMPLETED' as const,
-                releaseDate: new Date('2020-01-01'),
-              },
-            ],
-          }),
-        );
-
-        const result = await service.findOneFromDb(7, 'user-1');
-
-        expect(result?.seasons[0].episodes[0].status).toBe('COMPLETED');
-      });
-
-      it('leaves a stored ERROR episode ERROR under a lifting season source', async () => {
-        prisma.show.findFirst.mockResolvedValue(
-          showWith({
-            mediaSources: [{ status: 'DOWNLOADING' }],
-            episodes: [
-              {
-                ...baseEpisode,
-                status: 'ERROR' as const,
-                releaseDate: new Date('2020-01-01'),
-              },
-            ],
-          }),
-        );
-
-        const result = await service.findOneFromDb(7, 'user-1');
-
-        expect(result?.seasons[0].episodes[0].status).toBe('ERROR');
-      });
-
-      it('does not lift from a SCANNED season source', async () => {
-        prisma.show.findFirst.mockResolvedValue(
-          showWith({
-            mediaSources: [{ status: 'SCANNED' }],
-            episodes: [{ ...baseEpisode, releaseDate: new Date('2020-01-01') }],
-          }),
-        );
-
-        const result = await service.findOneFromDb(7, 'user-1');
-
-        expect(result?.seasons[0].episodes[0].status).toBe('MISSING');
-      });
+      expect(result?.seasons[0].episodes[0].status).toBe('QUEUED');
     });
   });
 
@@ -588,7 +492,7 @@ describe('ShowsService', () => {
     });
   });
 
-  // 057-content-kind-classification REQ-6: ShowsService.register() derives a
+  // Spec 057, REQ-6: ShowsService.register() derives a
   // fresh series' contentKind by the same genre-then-keywords rule as
   // MoviesService. Every case here defends against a class of bug that
   // produces a perfectly valid ContentKind and a wrongly-tuned encode nobody
@@ -674,12 +578,7 @@ describe('ShowsService', () => {
       expect(tmdb.keywords).not.toHaveBeenCalled();
     });
 
-    // NFR-2 + REQ-5: the genre already established the series as animated —
-    // only the style lookup failed. Landing on LIVE_ACTION here (the
-    // generic degrade-to-default) would be wrong: only a title whose
-    // *genre* could not be read falls back that far. This is the one case
-    // that is easy to get backwards, since both outcomes look like a
-    // perfectly ordinary, successful registration.
+    // Spec 057, NFR-2 REQ-5
     it('still registers when the keywords request fails, deriving CGI rather than LIVE_ACTION (NFR-2)', async () => {
       redis.get.mockResolvedValue(cachedEntry({ genreIds: [16] }));
       tmdb.keywords.mockRejectedValue(new Error('TMDB unreachable'));
@@ -718,6 +617,39 @@ describe('ShowsService', () => {
       expect(data.contentKind).toBe('LIVE_ACTION');
     });
 
+    // Spec 088, REQ-7
+    it('writes a cold-cache TMDB fallback back to Redis, matching the film path, instead of leaving the series to re-ask TMDB on every registration inside the TTL', async () => {
+      redis.get.mockResolvedValue(null); // no Redis entry at all
+      tmdb.details.mockResolvedValue({
+        type: MEDIA_TYPE.SHOW,
+        id: 42,
+        title: 'Some Series',
+        originalTitle: 'Some Series',
+        overview: '...',
+        posterPath: null,
+        backdropPath: '',
+        originalLanguage: 'en',
+        voteAverage: 8,
+        status: 'Ended',
+        firstAirDate: '2020-01-01',
+        numberOfSeasons: 1,
+        numberOfEpisodes: 10,
+        seasons: [],
+        genreIds: [18], // Drama — not animated
+      });
+
+      await service.register(42, 'user-1');
+
+      expect(pipelineSet).toHaveBeenCalledTimes(1);
+      const [cacheKey, cachedJson] = pipelineSet.mock.calls[0];
+      expect(cacheKey).toBe('tmdb:show:42');
+      expect(JSON.parse(cachedJson)).toMatchObject({
+        id: 42,
+        title: 'Some Series',
+        type: MEDIA_TYPE.SHOW,
+      });
+    });
+
     it('never writes the derived contentKind into the shared Redis cache entry (NFR-3)', async () => {
       redis.get.mockResolvedValue(cachedEntry({ genreIds: [16] }));
       tmdb.keywords.mockResolvedValue([210024]);
@@ -733,13 +665,7 @@ describe('ShowsService', () => {
   });
 
   describe('hydrate (detached from register)', () => {
-    // register() fires `void this.hydrate(...)` without awaiting it
-    // (REQ-13) — flushing the microtask queue is the only way to observe
-    // hydrate's own outcome from a test without changing that fire-and-
-    // forget shape in production code. All the mocks below resolve/reject
-    // through native promises with no real I/O, so a `setImmediate` flush
-    // (which only runs once the microtask queue is fully drained) is enough
-    // to let the whole chained try/catch/finally settle.
+    // Spec 006, REQ-13
     const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
     it('never marks seasonsSyncedAt when a season fetch fails partway through, and always releases the claim', async () => {
@@ -800,8 +726,7 @@ describe('ShowsService', () => {
       );
       prisma.episode.upsert.mockResolvedValue({});
 
-      // Season 1 hydrates cleanly; season 2's episode fetch fails — the
-      // exact partial-fetch shape REQ-14 exists for.
+      // Spec 006, REQ-14
       tmdb.seasonDetails.mockImplementation(
         (_tmdbId: number, seasonNumber: number) => {
           if (seasonNumber === 2)
@@ -834,14 +759,10 @@ describe('ShowsService', () => {
       expect(prisma.season.upsert).toHaveBeenCalledTimes(2); // both seasons' rows were attempted
       expect(prisma.episode.upsert).toHaveBeenCalledTimes(1); // only season 1's single episode was written
 
-      // The bug this case defends against: a partial fetch that marks
-      // itself complete is permanently invisible — REQ-14's retry would
-      // never fire again for this series.
+      // Spec 006, REQ-14
       expect(prisma.show.update).not.toHaveBeenCalled();
 
-      // The bug NFR-5 warns about: a claim left behind after a failed
-      // hydration silently disables every future retry until the TTL
-      // expires.
+      // Spec 006, NFR-5
       expect(redis.del).toHaveBeenCalledWith('show:hydrate:42');
 
       expect(consoleErrorSpy).toHaveBeenCalled();

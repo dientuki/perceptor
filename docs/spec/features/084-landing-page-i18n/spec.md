@@ -178,7 +178,8 @@ a literal `<a href="es/?lang=es">`/`<a href="../?lang=en">` — content and navi
 on script execution. **AC-12 confirmed 2026-10-03** after merge to `master` (PR #12) and the
 `pages.yml` redeploy: `curl -s https://dientuki.github.io/perceptor/es/ | grep 'og:'` shows
 `og:locale` `es_AR` and the Spanish title/description; the same command against the root shows
-`en_US` and the English ones.
+`en_US` and the English ones. Re-confirmed 2026-10-09 from this branch, which had forked before
+that record and still showed the box unticked.
 
 ## Out of Scope
 

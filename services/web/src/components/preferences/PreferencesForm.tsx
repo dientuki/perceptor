@@ -44,13 +44,7 @@ function idsFrom(groups: TorrentGroup[]) {
   return groups.map((g) => g.id);
 }
 
-// One <form>, four panels, all mounted at once and switched with `hidden`
-// like SettingsForm.tsx — and, per this feature's own visual-parity request,
-// one Guardar button that fires all six mutations together instead of the
-// six independent saves REQ-8 originally specified. A partial failure
-// reverts only the fields whose mutation failed, leaving the ones that
-// succeeded as saved (the transaction boundary is still per-mutation on
-// api — this form does not pretend otherwise).
+// Spec 021, REQ-8
 export default function PreferencesForm({
   currentLocale,
   preferences,

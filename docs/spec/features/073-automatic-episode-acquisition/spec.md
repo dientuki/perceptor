@@ -226,34 +226,77 @@ must refuse it like any other unknown key.
 
 - [x] **AC-1**: With the task off, a `bin/mysql` select of the `auto_acquire_episodes_since` row
       returns no value, and no `MediaSource` is ever created by the scheduler.
-- [ ] **AC-2**: Turning `schedule_acquire_episodes_enabled` on in Settings → Scheduling writes
+- [x] **AC-2**: Turning `schedule_acquire_episodes_enabled` on in Settings → Scheduling writes
       today's timestamp into `auto_acquire_episodes_since`; saving the Scheduling tab again without
       changing the toggle leaves that value untouched.
-- [ ] **AC-3**: Given a registered series with an episode dated **today** and no source, pressing
+      **Confirmed 2026-10-09.** Turning `schedule_acquire_episodes_enabled` on in Settings ->
+      Scheduling and saving wrote `auto_acquire_episodes_since = 2026-10-09T20:11:19.319Z`;
+      pressing Save again with no toggle changed left that value byte-identical.
+- [x] **AC-3**: Given a registered series with an episode dated **today** and no source, pressing
       "Ejecutar ahora" on `acquire_episodes` completes with outcome `SUCCESS`, `itemsProcessed` 0,
       and the episode still `MISSING` — the grace of REQ-6 has not elapsed.
+      **Confirmed 2026-10-09.** With Reacher S04E08 re-dated to today and holding no source, and
+      the cutoff above in place, "Run now" on Acquire episodes produced run #17:
+      `SUCCESS / itemsProcessed 0`, `media_sources` still held its single pre-existing row, and the
+      episode still read `MISSING`. Fixture reverted to 2026-09-16.
 - [ ] **AC-4**: Given the same episode dated **yesterday**, a manual run attaches one source: the
       episode's card moves out of `MISSING`, `/downloads` shows a row for it, and the release
       titled in that row is the same one the torrent modal shows first under "Best candidates".
-- [ ] **AC-5**: Given an episode dated **before** the cutoff of AC-2, no run ever attaches anything
+      **Deliberately not run 2026-10-09.** Everything it needs is now in place - an admin session,
+      a working Prowlarr (the modal returned 21 rows for this very episode) and the trigger - but
+      the criterion's assertion *is* a real acquisition: the run would add a torrent to qBittorrent
+      and start downloading. That is the owner's call, not a verification pass's. For whoever runs
+      it: the release to expect in the `/downloads` row is
+      `Reacher S04E08 Cut 2160P AMZN WEB-DL DD+ 5.1 Atmos DV HDR10+. H.265`, measured as the single
+      **Best candidates** row for that episode on 2026-10-09.
+- [x] **AC-5**: Given an episode dated **before** the cutoff of AC-2, no run ever attaches anything
       for it, however many times the task is triggered.
+      **Confirmed 2026-10-09.** Runs #17 and #18 both read `SUCCESS / itemsProcessed 0`, created no
+      `MediaSource` and left every one of the 84 episodes at `MISSING`. The discriminating subject
+      is Reacher S04E07, dated 2026-09-09 - thirty days old, so far past REQ-6's grace that the
+      grace cannot explain its being skipped, and before the AC-2 cutoff, which can.
 - [ ] **AC-6** *(failure path)*: With Prowlarr stopped (`docker compose stop indexer`), a manual run
       finishes with a recorded outcome and leaves every episode untouched; the run's error is
       visible in Settings → Scheduling and the next run after Prowlarr is back attaches normally.
+      **Not run 2026-10-09**, for the same reason as AC-4: its second half ("the next run after
+      Prowlarr is back attaches normally") is a real acquisition. Its first half - a run with
+      `indexer` stopped finishing with a recorded outcome and touching nothing - is safe and could
+      be split off.
 - [ ] **AC-7** *(failure path)*: Given two eligible episodes where the first one's chosen release
       has an infoHash qBittorrent refuses, the run still attaches the second one and reports
       `itemsProcessed` 1 rather than failing the whole occurrence.
+      **Not run 2026-10-09**: a real acquisition, and it additionally needs a release qBittorrent
+      refuses, which cannot be arranged without attaching one.
 - [ ] **AC-8**: An episode that already has a `DOWNLOADING` source, and an episode whose season has
       a pack in flight, are both skipped — no second source is created for either.
-- [ ] **AC-9**: In the torrent modal for an episode, the row list, the "Best candidates" toggle and
+      **Not run 2026-10-09.** Safe in itself - its assertion is that nothing is created - but the
+      premise is missing: this installation has no episode with a `DOWNLOADING` source and no
+      season with a pack in flight. Its only `MediaSource` is on a film. Setting one up is an
+      acquisition.
+- [x] **AC-9**: In the torrent modal for an episode, the row list, the "Best candidates" toggle and
       the per-row ranking chips render exactly as they did before this feature, and
       `grep -rn "resolutionTier" services/web/src` shows only reads of the server's field — no
       comparator.
-- [ ] **AC-10**: `grep -rn "rankTorrentResults" services/web/src` returns nothing and
-      `services/web/src/lib/torrent-ranking.ts` no longer exists.
+      **Second half confirmed 2026-10-09**: `resolutionTier` appears in exactly two places,
+      `src/types/indexer.ts:6` (a field on the type) and `src/actions/indexer.ts:48` (a line in the
+      selection set) — no comparison, sort or threshold anywhere in `web`. The first half, that the
+      modal renders as it did before, still needs the browser.
+      **First half confirmed 2026-10-09** in the episode's torrent modal (Reacher S04E08). The
+      modal opens prefilled with `Reacher S04E08`, searches Prowlarr and renders
+      `RELEASE NAME (21) / SIZE / S/L / ACTION` with 21 rows. Pressing **Best candidates** narrows
+      it to `RELEASE NAME (1)` - `Reacher S04E08 Cut 2160P AMZN WEB-DL DD+ 5.1 Atmos DV HDR10+.
+      H.265`, 7.74 GB, 267/34 - flips the control to **All results**, and that row carries its
+      ranking chips: `4K`, `WEB-DL AMZN`, `HEVC`, `HDR10`, `Atmos`. "Exactly as they did before
+      this feature" is asserted as "all three render and behave"; there is no pre-feature build
+      here to diff a rendering against.
+- [x] **AC-10**: `grep -rn "rankTorrentResults" services/web/src` returns nothing and
+      `services/web/src/lib/torrent-ranking.ts` no longer exists. Both confirmed 2026-10-09: the
+      grep is empty and the file is absent.
 - [ ] **AC-11**: With 30 eligible episodes, a single run attaches at most 20 and the next run picks
       up the rest (NFR-1).
 
+      **Not run 2026-10-09**: thirty eligible episodes attaching twenty releases is the largest
+      acquisition of this group.
 ## Out of Scope
 
 - **Films.** A film's acquisition window is not its theatrical date — it is the digital/physical

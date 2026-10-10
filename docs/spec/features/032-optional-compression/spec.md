@@ -179,6 +179,25 @@ column: REQ-6 resolves the flag at query time, not at enqueue time.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Two boxes open, both needing **a completed job**, which this installation cannot supply:
+`process_jobs` holds **0** rows and no encode has ever run on this branch.
+
+- **AC-6** (compression off, a series source, the file lands at the layout-correct destination and is
+  renamed and moved without FFmpeg touching it) has its path-building half proven exhaustively:
+  `worker/src/paths/build-output-path.spec.ts` covers 18 cases across both library layouts and
+  `paths/library-layout.spec.ts` 6 more, all green in the 323 worker tests measured this pass. The
+  skip-FFmpeg branch itself is `worker/src/encode/passthrough.spec.ts`. What is unproven is that a
+  real file arrives there.
+- **AC-8** (compression back on, the same job again, an ffmpeg command recorded on the row) is a
+  single column read — `process_jobs.ffmpegCommand`, which exists and is `text`-typed — after one
+  real encode. It is the cheapest of the two and would also close part of `058` and `023` in the same
+  run.
+
+Current settings on this installation: `compression_enabled = true`, `compression_resolution =
+1080p`. AC-6 needs the first flipped off and restored, which is an admin Settings write.
+
 - [x] **AC-1**: On Settings → Compression, the enable control renders as a sliding switch, not a
       checkbox. With it off, clicking any of the three preset radios changes nothing and they render
       as disabled; turning the switch on makes them clickable again without saving or reloading.

@@ -1,0 +1,69 @@
+{
+  "description": "Production npm advisories accepted for this installation. Each entry carries the package, the advisory identifiers it covers (empty when the package carries no advisory of its own and is listed only because it pulls in an entry that does), the version range, severity, the date it was accepted, a non-empty reachability argument and the condition that reopens it. tools/audit/check.mjs reads this file; an entry with no reachability argument is rejected by the gate rather than honoured (REQ-6).",
+  "entries": [
+    {
+      "service": "api",
+      "package": "deepmerge-ts",
+      "versionRange": "7.1.5",
+      "advisories": ["GHSA-ggr8-5vv4-36mx"],
+      "severity": "high",
+      "dateAccepted": "2026-10-03",
+      "reachability": "deepmerge-ts enters the api tree only through @prisma/config, which the prisma CLI uses; the CLI is invoked only at container boot by src/bootstrap/run-migrations.ts, against the project's own committed prisma.config.ts and the same local database api already talks to over the perceptor-net Docker bridge inside a single host with no TLS configured. There is no network input that reaches deepmerge-ts's merge call.",
+      "reopenCondition": "Either of the two topology facts this allowlist rests on ceasing to hold: real TLS being configured between api and db, or the database becoming reachable from outside the host."
+    },
+    {
+      "service": "api",
+      "package": "mariadb",
+      "versionRange": "3.4.5",
+      "advisories": [
+        "GHSA-cqhc-2h57-wpxf",
+        "GHSA-42r5-vhpq-m858",
+        "GHSA-g5xc-5w98-jfvm"
+      ],
+      "severity": "high",
+      "dateAccepted": "2026-10-03",
+      "reachability": "api reaches db over the perceptor-net Docker bridge inside a single host with no TLS configured; PrismaMariaDb receives DATABASE_URL unmodified, with no charset override, so GHSA-g5xc-5w98-jfvm's big5/gbk/sjis/cp932/gb18030 range does not apply either. A MitM on that link is equivalent to already holding the host, which is outside this advisory's threat model.",
+      "reopenCondition": "Either of the two topology facts this allowlist rests on ceasing to hold: real TLS being configured between api and db, or the database becoming reachable from outside the host."
+    },
+    {
+      "service": "api",
+      "package": "mysql2",
+      "versionRange": "3.15.3",
+      "advisories": ["GHSA-3f6p-5ww8-9rcr", "GHSA-rgwj-5xj2-c3m3"],
+      "severity": "high",
+      "dateAccepted": "2026-10-03",
+      "reachability": "mysql2 enters the api tree only through the prisma CLI, which src/bootstrap/run-migrations.ts invokes at boot against the project's own local database over the perceptor-net Docker bridge inside a single host with no TLS configured, reading the project's own committed prisma.config.ts. No externally supplied input reaches mysql2's parsing path.",
+      "reopenCondition": "Either of the two topology facts this allowlist rests on ceasing to hold: real TLS being configured between api and db, or the database becoming reachable from outside the host."
+    },
+    {
+      "service": "api",
+      "package": "@prisma/config",
+      "versionRange": "via deepmerge-ts",
+      "advisories": [],
+      "severity": "high",
+      "dateAccepted": "2026-10-03",
+      "reachability": "@prisma/config carries no advisory of its own; it is listed because it pulls in deepmerge-ts 7.1.5 (GHSA-ggr8-5vv4-36mx). It is read only by the prisma CLI at container boot (src/bootstrap/run-migrations.ts), against the project's own committed prisma.config.ts and the same local database api reaches over the perceptor-net Docker bridge inside a single host with no TLS configured.",
+      "reopenCondition": "Either of the two topology facts this allowlist rests on ceasing to hold: real TLS being configured between api and db, or the database becoming reachable from outside the host."
+    },
+    {
+      "service": "api",
+      "package": "prisma",
+      "versionRange": "via @prisma/config and mysql2",
+      "advisories": [],
+      "severity": "high",
+      "dateAccepted": "2026-10-03",
+      "reachability": "prisma carries no advisory of its own; it is listed because it pulls in @prisma/config (deepmerge-ts, GHSA-ggr8-5vv4-36mx) and mysql2 3.15.3 (GHSA-3f6p-5ww8-9rcr, GHSA-rgwj-5xj2-c3m3). The prisma CLI runs only at container boot, invoked by src/bootstrap/run-migrations.ts against the same local database api reaches over the perceptor-net Docker bridge inside a single host with no TLS configured.",
+      "reopenCondition": "Either of the two topology facts this allowlist rests on ceasing to hold: real TLS being configured between api and db, or the database becoming reachable from outside the host."
+    },
+    {
+      "service": "api",
+      "package": "@prisma/adapter-mariadb",
+      "versionRange": "via mariadb",
+      "advisories": [],
+      "severity": "moderate",
+      "dateAccepted": "2026-10-03",
+      "reachability": "@prisma/adapter-mariadb carries no advisory of its own; it is listed because it pins mariadb 3.4.5 (GHSA-cqhc-2h57-wpxf, GHSA-42r5-vhpq-m858, GHSA-g5xc-5w98-jfvm) at every version it has ever shipped. api reaches db over the perceptor-net Docker bridge inside a single host with no TLS configured, and PrismaMariaDb receives DATABASE_URL unmodified with no charset override, so a MitM on that link is equivalent to already holding the host.",
+      "reopenCondition": "Either of the two topology facts this allowlist rests on ceasing to hold: real TLS being configured between api and db, or the database becoming reachable from outside the host."
+    }
+  ]
+}

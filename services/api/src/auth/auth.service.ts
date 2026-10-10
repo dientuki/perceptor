@@ -16,9 +16,7 @@ export class AuthService {
     private readonly sessionService: SessionService,
   ) {}
 
-  // 1. Validar username y password contra MariaDB
   async validateUser(username: string, pass: string) {
-    // Buscar usuario en la base de datos
     const user = await this.prisma.user.findUnique({
       where: { username },
     });
@@ -27,11 +25,9 @@ export class AuthService {
       return null;
     }
 
-    // Comparar la contraseña ingresada con el hash guardado
     const isPasswordValid = await bcrypt.compare(pass, user.password);
 
     if (isPasswordValid) {
-      // Excluimos el password antes de retornar el usuario
       const { password, ...result } = user;
       return result;
     }
@@ -39,9 +35,6 @@ export class AuthService {
     return null;
   }
 
-  // 2. Generar el JWT. La sesión (jti) se registra en Redis antes de firmar
-  // el token para que TTL de la cookie, TTL del JWT y TTL del registro de
-  // sesión sean siempre el mismo número (REQ-8).
   async login(username: string, pass: string, rememberMe: boolean) {
     const user = await this.validateUser(username, pass);
 
@@ -49,9 +42,7 @@ export class AuthService {
       throw i18nError.unauthorized(ERROR_KEYS.AUTH_INVALID_CREDENTIALS);
     }
 
-    // A disabled user must not get a session, even with the correct password
-    // (004-user-disable REQ-2) — this has to run before sessionService.create()
-    // so a refused login never leaves a session record behind.
+    // Spec 004, REQ-2
     if (!user.isEnabled) {
       throw i18nError.unauthorized(ERROR_KEYS.AUTH_ACCOUNT_DISABLED);
     }
@@ -71,19 +62,12 @@ export class AuthService {
     };
   }
 
-  // Revoca el registro de sesión del caller — sin esto, un JWT firmado
-  // correctamente seguiría autenticando hasta su expiración natural pese al
-  // logout (AC-5).
+  // Spec 002, AC-5
   async logout(jti: string): Promise<void> {
     await this.sessionService.revoke(jti);
   }
 
-  // `me` necesita una lectura a la DB (no alcanza con lo que ya trae el
-  // payload del JWT): es la única forma de detectar un usuario borrado
-  // después de que el token fue emitido. A valid JWT with a live session
-  // that no longer resolves to a user row is functionally a revoked
-  // session, not "no credential at all" — hence session_expired, not
-  // unauthenticated.
+  // Spec 018, REQ-14
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {

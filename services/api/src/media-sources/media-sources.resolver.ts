@@ -19,11 +19,7 @@ export class MediaSourcesResolver {
     return this.mediaSourcesService.findOne(id);
   }
 
-  // Resolved on demand (NFR-1): one torrent-client call per caller that asks
-  // for this field, never eagerly inside findOne/sourceScanned. The parent is
-  // the Prisma row findOneFlat returns, so infoHash is already in hand — no
-  // second query. Typed locally against what the service actually needs, not
-  // against the MediaSource @ObjectType, which does not expose infoHash.
+  // Spec 052, NFR-1
   @ResolveField(() => [String], { nullable: true })
   async downloadedFiles(@Parent() source: { infoHash: string | null }) {
     return this.mediaSourcesService.downloadedFiles(source);

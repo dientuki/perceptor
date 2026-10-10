@@ -197,7 +197,9 @@ type Download {
   encodeSpeed: Float
   lastError: DownloadError
   retryable: Boolean!
+  lostRace: Boolean!
   readAt: DateTime!
+  retiredAt: DateTime
 }
 
 type TorrentLink {

@@ -6,11 +6,7 @@ import {
   type SupportedLocale,
 } from "@/i18n/locales";
 
-/**
- * Resolves an `Accept-Language` header against `SUPPORTED_LOCALES` by language range, so
- * `es-AR`, `es-419` and `es` all resolve to `es`, and a header with no supported range falls back
- * to `DEFAULT_LOCALE` (REQ-2).
- */
+// Spec 018, REQ-2
 export function negotiateLocale(
   acceptLanguageHeader: string | null,
 ): SupportedLocale {

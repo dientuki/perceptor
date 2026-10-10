@@ -8,9 +8,7 @@ import { FfprobeLog } from './entities/ffprobe-log.entity';
 export class FfprobeLogsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // The row must exist before the encode starts (REQ-1), so this rejects an
-  // empty payload before ever touching Prisma — validation still runs before
-  // any side effect, even though the only side effect here is a write.
+  // Spec 023, REQ-1
   async record(file: string, ffprobe: string): Promise<FfprobeLog> {
     if (!file.trim() || !ffprobe.trim()) {
       throw i18nError.badRequest(ERROR_KEYS.FFPROBE_LOG_EMPTY_PAYLOAD);
@@ -19,8 +17,7 @@ export class FfprobeLogsService {
     return this.prisma.ffprobeLog.create({ data: { file, ffprobe } });
   }
 
-  // Newest first, then id descending, so paging stays stable when several
-  // probes land in the same second (REQ-3).
+  // Spec 023, REQ-3
   async findAll(file: string | undefined, take: number, skip: number): Promise<FfprobeLog[]> {
     return this.prisma.ffprobeLog.findMany({
       where: file ? { file } : undefined,

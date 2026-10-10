@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { startDownloadAction, stopDownloadAction } from "@/actions/downloads";
 import StatusBadge from "@/components/status/StatusBadge";
+import Badge from "@/components/ui/badge/Badge";
 import Button from "@/components/ui/button/Button";
 import { formatEncodeSpeed, formatSpeed } from "@/lib/format";
 import type { Download } from "@/types/downloads";
@@ -33,12 +34,17 @@ export default function DownloadRow({
   const [isPending, startTransition] = useTransition();
   const [rowError, setRowError] = useState<string | null>(null);
 
-  const isControllable = download.owned && download.infoHash != null;
+  const isRetired = download.retiredAt != null;
+
+  const isControllable =
+    download.owned && download.infoHash != null && !isRetired;
 
   const canStart =
-    download.status === "ERROR"
+    !isRetired &&
+    !download.lostRace &&
+    (download.status === "ERROR"
       ? download.owned && download.retryable
-      : isControllable;
+      : isControllable);
 
   const handleStart = () => {
     setRowError(null);
@@ -75,7 +81,19 @@ export default function DownloadRow({
   return (
     <tr>
       <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-        <div className="font-medium">{displayName}</div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{displayName}</span>
+          {isRetired && (
+            <Badge variant="light" color="light" size="sm">
+              {t("replaced")}
+            </Badge>
+          )}
+          {download.lostRace && (
+            <Badge variant="light" color="light" size="sm">
+              {t("discarded")}
+            </Badge>
+          )}
+        </div>
         {download.releaseTitle && (
           <div className="mt-1 break-words text-base text-gray-500 dark:text-gray-400">
             {download.releaseTitle}

@@ -5,9 +5,7 @@ import { ProfileResolver } from './profile.resolver';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  // AuthModule exports SessionService, which UsersService needs to revoke a
-  // disabled user's live sessions (004-user-disable REQ-3). AuthModule does
-  // not import UsersModule, so this stays acyclic.
+  // Spec 004, REQ-3
   imports: [AuthModule],
   providers: [UsersResolver, ProfileResolver, UsersService],
   exports: [UsersService],

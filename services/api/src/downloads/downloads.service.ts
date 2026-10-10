@@ -6,34 +6,25 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
+import { sanitizeTag } from '@/clients/torrent/tags';
 import { TorrentClientInfo } from '@/clients/torrent/types';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { i18nError } from '@/i18n/i18n-error';
 import {
   deriveSourceStatus,
-  deriveTitleStatus,
-  toMediaStatus,
   deriveResume,
   isRaceWinner,
+  isDeliveredSource,
+  hasRaceWinner,
   SourceAltitudeJob,
   ResumeJob,
   ResumeSibling,
 } from '@/pipeline-status/pipeline-status';
 import { Download } from './entities/download.entity';
-
-// REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw.
-// Fallback derived from the target row's id, not the MediaSource's — this
-// is the exact same algorithm movies/episodes/seasons each keep their own
-// copy of when tagging on `add()`; a title's tag has to be reproducible
-// here, at read time, or the `info(tag)` narrowing below would silently
-// stop matching what was actually sent to qBittorrent.
-function sanitizeTag(title: string, fallbackId: number): string {
-  const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
-  return cleaned || `id-${fallbackId}`;
-}
 
 function episodeLabel(show: { title: string }, season: { seasonNumber: number }, episode: { episodeNumber: number }): string {
   const s = String(season.seasonNumber).padStart(2, '0');
@@ -49,12 +40,19 @@ type DownloadJob = SourceAltitudeJob & ResumeJob & { id: number };
 
 type JobsForSource = { jobs: DownloadJob[]; latestUpdatedAt: Date | null };
 
+// Spec 087, REQ-2
+type DeliveryTarget = { movieId: number } | { episodeId: number } | { seasonId: number };
+
+// Spec 087, REQ-5
+type RaceOutcome = { outcome: 'WON' | 'SUPERSEDED' | 'IGNORED'; message: string };
+
 type SiblingSource = {
   id: number;
   status: SourceStatus;
   movieId: number | null;
   seasonId: number | null;
   episodeId: number | null;
+  retiredAt?: Date | null;
 };
 
 function targetKey(source: SiblingSource): string {
@@ -72,7 +70,11 @@ function siblingsIn(
   const key = targetKey(source);
   return all
     .filter((other) => other.id !== source.id && targetKey(other) === key)
-    .map((other) => ({ status: other.status, jobs: jobsBySourceId.get(other.id)?.jobs ?? [] }));
+    .map((other) => ({
+      status: other.status,
+      jobs: jobsBySourceId.get(other.id)?.jobs ?? [],
+      retiredAt: other.retiredAt ?? null,
+    }));
 }
 
 function byLastActivity<T extends { id: number; updatedAt: Date }>(
@@ -151,6 +153,7 @@ type MediaSourceRow = {
   movieId: number | null;
   seasonId: number | null;
   episodeId: number | null;
+  retiredAt: Date | null;
 };
 
 @Injectable()
@@ -162,27 +165,44 @@ export class DownloadsService {
     private readonly qbittorrent: QbittorrentClient,
     private readonly settings: SettingsService,
     private readonly mediaRoots: MediaRootsService,
+    private readonly titleStatus: TitleStatusService,
   ) {}
 
-  // REQ-9/REQ-10: DB-first, joined to qBittorrent on infoHash. A torrent
-  // client that is unreachable on a *query* is not an error (unlike on a
-  // mutation) — the row still renders, with the three live fields null.
+  // Spec 022, REQ-9 REQ-10; Spec 089, REQ-7
   private async liveInfoByHash(tag?: string): Promise<Map<string, TorrentClientInfo>> {
     try {
       const rows = await this.qbittorrent.info(tag);
+      await this.writeBackLiveStates(rows);
       return new Map(rows.map((row) => [row.hash.toLowerCase(), row]));
     } catch (err) {
-      console.error(`[DownloadsService] no se pudo leer el estado del cliente de torrents (tag "${tag ?? ''}"):`, err);
+      console.error(`[DownloadsService] could not read torrent client state (tag "${tag ?? ''}"):`, err);
       return new Map();
     }
   }
 
-  // REQ-2/../plan.md § Approach: the single join point every reader of the
-  // live map must go through — an indexer-sourced row's infoHash is stored
-  // uppercase (until the migration and the write-path fix land), while
-  // qBittorrent reports and is keyed here lowercase. A raw `live.get(source
-  // .infoHash)` at a call site is exactly the bug this feature exists to
-  // fix (../plan.md § Risks: "one call site keeps its raw live.get(...)").
+  // Spec 089, REQ-7 REQ-8 REQ-10 NFR-1 NFR-4
+  private async writeBackLiveStates(rows: TorrentClientInfo[]): Promise<void> {
+    if (rows.length === 0) return;
+
+    const liveByHash = new Map(rows.map((row) => [row.hash.toLowerCase(), row]));
+    const sources = await this.prisma.mediaSource.findMany({
+      where: { infoHash: { in: [...liveByHash.keys()] } },
+      select: { id: true, infoHash: true, status: true, movieId: true, episodeId: true, seasonId: true },
+    });
+
+    for (const source of sources) {
+      if (!source.infoHash) continue;
+      const live = liveByHash.get(source.infoHash.toLowerCase());
+      if (!live || live.state === source.status) continue;
+
+      const changed = await this.writeStatusIfNonTerminal(source.id, live.state);
+      if (changed) {
+        await this.recomputeStatus(source);
+      }
+    }
+  }
+
+  // Spec 053, REQ-2
   private liveFor(
     source: { infoHash: string | null },
     live: Map<string, TorrentClientInfo>,
@@ -190,10 +210,7 @@ export class DownloadsService {
     return source.infoHash ? live.get(source.infoHash.toLowerCase()) : undefined;
   }
 
-  // REQ-3: one query per page/mutation, never one per row — see
-  // movieDownloads/showDownloads/downloadStart/downloadStop/downloadStart
-  // for the callers, each of which loads the jobs for its own set of
-  // mediaSourceIds and passes the matching group in here.
+  // Spec 043, REQ-3
   private async jobsBySourceId(mediaSourceIds: number[]): Promise<Map<number, JobsForSource>> {
     const rows = await this.prisma.processJob.findMany({
       where: { sourceFile: { mediaSourceId: { in: mediaSourceIds } } },
@@ -241,10 +258,65 @@ export class DownloadsService {
     if (!targetWhere) return [];
     const rows = await this.prisma.mediaSource.findMany({
       where: { ...targetWhere, id: { not: source.id } },
-      select: { id: true, status: true, movieId: true, seasonId: true, episodeId: true },
+      select: { id: true, status: true, movieId: true, seasonId: true, episodeId: true, retiredAt: true },
     });
     const jobs = await this.jobsBySourceId(rows.map((row) => row.id));
     return siblingsIn(source, [source, ...rows], jobs);
+  }
+
+  // Spec 087, REQ-2
+  async hasDeliveredSource(target: DeliveryTarget): Promise<boolean> {
+    const sources = await this.prisma.mediaSource.findMany({
+      where: { ...target, status: 'SCANNED', retiredAt: null },
+      select: { id: true },
+    });
+    if (sources.length === 0) return false;
+    const jobsBySourceId = await this.jobsBySourceId(sources.map((source) => source.id));
+    return sources.some((source) =>
+      isDeliveredSource('SCANNED', jobsBySourceId.get(source.id)?.jobs ?? []),
+    );
+  }
+
+  // Spec 087, REQ-3 REQ-9; Spec 090, REQ-1
+  async demoteDeliveredSources(target: DeliveryTarget, reason: string): Promise<number> {
+    const sources = await this.prisma.mediaSource.findMany({
+      where: { ...target, status: 'SCANNED', retiredAt: null },
+      select: { id: true },
+    });
+    if (sources.length === 0) return 0;
+    const jobsBySourceId = await this.jobsBySourceId(sources.map((source) => source.id));
+    const deliveredIds = sources
+      .filter((source) => isDeliveredSource('SCANNED', jobsBySourceId.get(source.id)?.jobs ?? []))
+      .map((source) => source.id);
+    if (deliveredIds.length === 0) return 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.mediaSource.updateMany({
+        where: { id: { in: deliveredIds } },
+        data: {
+          retiredAt: new Date(),
+        },
+      });
+
+      const { count: jobsClosed } = await tx.processJob.updateMany({
+        where: {
+          sourceFile: { mediaSourceId: { in: deliveredIds } },
+          status: { in: ['WAITING', 'QUEUED', 'ENCODING'] },
+        },
+        data: {
+          status: 'ERROR',
+          errorKey: ERROR_KEYS.SOURCE_REPLACED,
+          errorParams: null,
+          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
+        },
+      });
+
+      console.log(
+        `[DownloadsService] ${reason}: ${deliveredIds.length} delivered source(s) replaced, ${jobsClosed} processJob(s) closed`,
+      );
+    });
+
+    return deliveredIds.length;
   }
 
   private async compressionEnabled(): Promise<boolean> {
@@ -296,14 +368,13 @@ export class DownloadsService {
       encodeSpeed: derived.encodeSpeed ?? undefined,
       lastError: resume.lastError ?? undefined,
       retryable: resume.retryable,
+      lostRace: hasRaceWinner(siblings),
       readAt: new Date(),
+      retiredAt: source.retiredAt,
     };
   }
 
-  // REQ-17: same ownership clause MoviesService.findOneFromDb uses, written
-  // locally rather than imported — see api/plan.md § Existing code to reuse
-  // for why (the triplication this codebase already accepted three times
-  // over for attachTorrentSource).
+  // Spec 022, REQ-17
   async movieDownloads(movieId: number, userId: string): Promise<Download[]> {
     const movie = await this.prisma.movie.findFirst({
       where: { id: movieId, users: { some: { userId } } },
@@ -316,9 +387,7 @@ export class DownloadsService {
       include: targetInclude(userId),
     });
 
-    // REQ-4: every server-side lookup of a title's torrents uses the title
-    // tag only — never the season/episode tags, which are flat and shared
-    // across shows on purpose.
+    // Spec 022, REQ-4
     const [live, jobsBySourceId, compressionEnabled] = await Promise.all([
       this.liveInfoByHash(sanitizeTag(movie.title, movie.id)),
       this.jobsBySourceId(sources.map((source) => source.id)),
@@ -379,8 +448,7 @@ export class DownloadsService {
     });
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
 
-    // The whole show, not one season: every season-pack and every
-    // single-episode download (REQ-8).
+    // Spec 022, REQ-8
     const sources = await this.prisma.mediaSource.findMany({
       where: {
         OR: [{ season: { showId } }, { episode: { season: { showId } } }],
@@ -406,9 +474,7 @@ export class DownloadsService {
     );
   }
 
-  // REQ-17: the source exists but belongs to a title the caller does not
-  // own answers identically to a missing id — same SOURCE_NOT_FOUND, same
-  // message, indistinguishable, per 008-movie-detail's rule extended here.
+  // Spec 022, REQ-17
   private async findOwnedSource(mediaSourceId: number, userId: string): Promise<MediaSourceRow & TargetSource> {
     const source = await this.prisma.mediaSource.findUnique({
       where: { id: mediaSourceId },
@@ -428,9 +494,7 @@ export class DownloadsService {
     return source;
   }
 
-  // REQ-18: the interface not offering start/stop/delete on an upload is
-  // not a guarantee — every control mutation refuses a non-torrent source
-  // server-side, before any call reaches the torrent client.
+  // Spec 022, REQ-18
   private requireTorrent(source: MediaSourceRow): string {
     if (!source.infoHash) {
       throw i18nError.badRequest(ERROR_KEYS.DOWNLOAD_NOT_A_TORRENT);
@@ -438,9 +502,7 @@ export class DownloadsService {
     return source.infoHash;
   }
 
-  // NFR-6: every torrent-client call a mutation makes is wrapped so a
-  // rejection or an unreachable client surfaces as TORRENT_CLIENT_REJECTED
-  // — thrown before any DB write, never silently swallowed (AC-17).
+  // Spec 022, NFR-6
   private async callTorrentClient<T>(action: () => Promise<T>): Promise<T> {
     try {
       return await action();
@@ -450,13 +512,7 @@ export class DownloadsService {
     }
   }
 
-  // REQ-7/../plan.md § Approach decision 2: the write is a guarded
-  // `updateMany`, never a read-then-write, so a concurrent transition (the
-  // race arbiter, a completion notice) can't be clobbered by a stale read.
-  // The `where` only matches the non-terminal statuses — a source already
-  // at READY/SCANNED/ERROR is left untouched, so a `downloadStart` on a
-  // finished-but-still-seeding torrent cannot walk the title's derived
-  // status backwards (NFR-3).
+  // Spec 043, REQ-7; Spec 043, NFR-3
   private static readonly NON_TERMINAL_STATUSES: SourceStatus[] = ['PENDING', 'QUEUED', 'DOWNLOADING', 'PAUSED'];
 
   // Returns whether the guard matched, so the caller can keep the in-memory
@@ -475,6 +531,11 @@ export class DownloadsService {
   async downloadStart(mediaSourceId: number, userId: string): Promise<Download> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
 
+    // Spec 090, REQ-5
+    if (source.retiredAt) {
+      throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_REPLACED);
+    }
+
     const [live, jobsBySourceId, siblings] = await Promise.all([
       source.infoHash ? this.liveInfoForHash(source.infoHash) : Promise.resolve(undefined),
       this.jobsBySourceId([source.id]),
@@ -489,6 +550,14 @@ export class DownloadsService {
 
     if (derived.status === 'ERROR') {
       return this.resumeErroredSource(source, userId, jobs, live, siblings);
+    }
+
+    // After the ERROR branch above, which answers the more specific
+    // error.download.retry_replaced through deriveResume for a source
+    // replaced on purpose, and before any write or torrent-client call — a
+    // loser cannot be resumed into a race its target already decided.
+    if (hasRaceWinner(siblings)) {
+      throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED);
     }
 
     const infoHash = this.requireTorrent(source);
@@ -622,8 +691,11 @@ export class DownloadsService {
     });
     if (result.count === 0) return;
 
+    // Spec 087, REQ-5 REQ-6
+    let raceResult: RaceOutcome;
     try {
-      await this.resolveRace(mediaSourceId);
+      raceResult = await this.resolveRace(mediaSourceId);
+      if (raceResult.outcome !== 'WON') return;
       await this.queue.removeSourceReady(mediaSourceId);
       await this.queue.addSourceReady({ mediaSourceId });
     } catch (err) {
@@ -661,11 +733,7 @@ export class DownloadsService {
     );
   }
 
-  // 047-source-deletion: the orchestrator for the whole unwind. Order is the
-  // contract (api/plan.md § Steps 6) — torrent client first (the only step
-  // that can fail the mutation, NFR-2), then queued/running work withdrawn,
-  // then disk, then the row, then the target's status. REQ-1: no
-  // requireTorrent here — an upload is accepted the same as a torrent.
+  // Spec 047, NFR-2; Spec 047, REQ-1
   async downloadDelete(mediaSourceId: number, userId: string): Promise<boolean> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
 
@@ -689,15 +757,11 @@ export class DownloadsService {
 
     if (opts.removeTorrent && source.infoHash) {
       const infoHash = source.infoHash;
-      // REQ-2/REQ-11: always with its files — this is the user-facing
-      // sibling of downloadRemove, which is @AllowService()-only and always
-      // deletes with deleteFiles:false. Different defaults, deliberately
-      // never shared.
+      // Spec 047, REQ-2; Spec 047, REQ-11
       await this.callTorrentClient(() => this.qbittorrent.remove(infoHash, true));
     }
 
-    // REQ-3/REQ-4: cancel before withdraw so a job mid-transition is caught
-    // by one or the other; withdrawal alone can't stop one already active.
+    // Spec 047, REQ-3; Spec 047, REQ-4
     for (const job of jobs) {
       await this.encodeQueue.publishCancel(job.id);
       await this.encodeQueue.removeEncode(job.id);
@@ -710,11 +774,7 @@ export class DownloadsService {
     await this.prisma.mediaSource.delete({ where: { id: mediaSourceId } });
   }
 
-  // 067-title-removal: unwinds every source of a title. ALL torrents leave
-  // the client in ONE call before anything else moves, so a rejection
-  // aborts with nothing removed (NFR-2). No recomputeStatus: the target is
-  // about to be deleted. deleteResidue never throws, so one bad path does
-  // not stop the remaining sources (NFR-3).
+  // Spec 067, NFR-2; Spec 067, NFR-3
   async unwindSourcesForTitle(scope: { movieId: number } | { showId: number }): Promise<void> {
     const where =
       'movieId' in scope
@@ -737,14 +797,71 @@ export class DownloadsService {
     }
   }
 
-  // T006/REQ-8/REQ-9/REQ-10: deletes whatever the source left on disk under
-  // the downloads root. Never throws — the torrent is already gone from the
-  // client by the time this runs, so a failure here must not leave the user
-  // unable to retry the delete.
+  // The post-delivery sweep, moved here from process-jobs/ so it reuses the
+  // same per-source unwind (unwindSource) and recompute every other
+  // deletion path already uses, rather than a second deletion sequence that
+  // removes the torrent and the row alone and never touches queued work,
+  // disk residue or the target's status.
+  async unwindLosingSiblings(winner: {
+    id: number;
+    movieId: number | null;
+    episodeId: number | null;
+    seasonId: number | null;
+  }): Promise<void> {
+    const targetWhere = winner.movieId
+      ? { movieId: winner.movieId }
+      : winner.episodeId
+        ? { episodeId: winner.episodeId }
+        : winner.seasonId
+          ? { seasonId: winner.seasonId }
+          : null;
+
+    if (!targetWhere) return;
+
+    const siblings = await this.prisma.mediaSource.findMany({
+      where: { ...targetWhere, id: { not: winner.id } },
+    });
+    if (siblings.length === 0) return;
+
+    const jobsBySourceId = await this.jobsBySourceId(siblings.map((sibling) => sibling.id));
+    // Both terms are required: isDeliveredSource already answers false for a
+    // retired source, but the explicit retiredAt check is kept so a future
+    // change to that predicate cannot silently start sweeping a retired row.
+    const losers = siblings.filter(
+      (sibling) =>
+        !isDeliveredSource(sibling.status, jobsBySourceId.get(sibling.id)?.jobs ?? [], sibling.retiredAt) &&
+        sibling.retiredAt === null,
+    );
+
+    // Unlike unwindSourcesForTitle's batched remove, which intentionally
+    // aborts the whole unwind on failure since a user-visible delete must
+    // not half-apply, this sweep runs off the pipeline with no caller to
+    // retry it — a torrent-client outage must log and let every loser row
+    // and its residue still be purged, not orphan them.
+    const hashes = losers.map((loser) => loser.infoHash).filter((h): h is string => !!h);
+    if (hashes.length > 0) {
+      try {
+        await this.callTorrentClient(() => this.qbittorrent.remove(hashes, true));
+      } catch (err) {
+        console.error(
+          `[DownloadsService] unwindLosingSiblings: could not remove ${hashes.length} losing sibling(s) from the torrent client:`,
+          err,
+        );
+      }
+    }
+
+    for (const loser of losers) {
+      await this.unwindSource(loser, { removeTorrent: false });
+    }
+
+    await this.recomputeStatus(winner);
+  }
+
+  // Spec 047, T006; Spec 047, REQ-8; Spec 047, REQ-9; Spec 047, REQ-10
   private async deleteResidue(source: MediaSourceRow): Promise<void> {
     const downloadPath = source.downloadPath;
     if (!downloadPath) {
-      console.log(`[DownloadsService] mediaSource ${source.id}: sin downloadPath, nada que borrar`);
+      console.log(`[DownloadsService] mediaSource ${source.id}: no downloadPath, nothing to delete`);
       return;
     }
 
@@ -753,13 +870,13 @@ export class DownloadsService {
       const config = await this.settings.getMap();
       downloadsRoot = await this.mediaRoots.resolveFromRoot('downloads', config.path_downloads ?? '.');
     } catch (err) {
-      console.error(`[DownloadsService] mediaSource ${source.id}: no se pudo resolver la raíz de downloads:`, err);
+      console.error(`[DownloadsService] mediaSource ${source.id}: could not resolve the downloads root:`, err);
       return;
     }
 
     if (!(await this.mediaRoots.isInsideRoot('downloads', downloadPath))) {
       console.error(
-        `[DownloadsService] mediaSource ${source.id}: downloadPath ${downloadPath} está fuera de la raíz de downloads (${downloadsRoot}) — no se borra nada`,
+        `[DownloadsService] mediaSource ${source.id}: downloadPath ${downloadPath} is outside the downloads root (${downloadsRoot}) — deleting nothing`,
       );
       return;
     }
@@ -772,7 +889,7 @@ export class DownloadsService {
         await rm(downloadPath, { force: true });
         await rmdir(dirname(downloadPath)).catch((err) => {
           console.log(
-            `[DownloadsService] mediaSource ${source.id}: no se pudo rmdir ${dirname(downloadPath)} (probablemente no está vacío):`,
+            `[DownloadsService] mediaSource ${source.id}: could not rmdir ${dirname(downloadPath)} (probably not empty):`,
             err instanceof Error ? err.message : err,
           );
         });
@@ -783,66 +900,25 @@ export class DownloadsService {
         await rm(downloadPath, { recursive: true, force: true });
       }
     } catch (err) {
-      console.error(`[DownloadsService] mediaSource ${source.id}: no se pudo borrar ${downloadPath}:`, err);
+      console.error(`[DownloadsService] mediaSource ${source.id}: could not delete ${downloadPath}:`, err);
     }
   }
 
-  // T007/REQ-12: recomputes the target's status from the rows that remain
-  // after the delete. A season has no status column — it recomputes every
-  // episode of it instead (see the comment above ShowsService.findOneFromDb
-  // for why a season-pack episode carries its own processJobs).
-  private async recomputeStatus(source: MediaSourceRow): Promise<void> {
+  // Spec 047, T007; Spec 047, REQ-12; Spec 089, REQ-13
+  private async recomputeStatus(
+    source: Pick<MediaSourceRow, 'movieId' | 'episodeId' | 'seasonId'>,
+  ): Promise<void> {
     if (source.movieId) {
-      await this.recomputeMovieStatus(source.movieId);
+      await this.titleStatus.recomputeMovie(source.movieId);
       return;
     }
     if (source.episodeId) {
-      await this.recomputeEpisodeStatus(source.episodeId);
+      await this.titleStatus.recomputeEpisode(source.episodeId);
       return;
     }
     if (source.seasonId) {
-      const episodes = await this.prisma.episode.findMany({
-        where: { seasonId: source.seasonId },
-        select: { id: true },
-      });
-      for (const episode of episodes) {
-        await this.recomputeEpisodeStatus(episode.id);
-      }
+      await this.titleStatus.recomputeSeason(source.seasonId);
     }
-  }
-
-  private async recomputeMovieStatus(movieId: number): Promise<void> {
-    const movie = await this.prisma.movie.findUnique({
-      where: { id: movieId },
-      include: { mediaSources: true, processJobs: true },
-    });
-    if (!movie) return;
-
-    // REQ-13/AC-12: a title already delivered to the library never walks
-    // backwards — checked before deriveTitleStatus is even called.
-    if (movie.filePath != null) {
-      await this.prisma.movie.update({ where: { id: movieId }, data: { status: 'COMPLETED' } });
-      return;
-    }
-
-    const derived = deriveTitleStatus({ status: 'MISSING', sources: movie.mediaSources, jobs: movie.processJobs });
-    await this.prisma.movie.update({ where: { id: movieId }, data: { status: toMediaStatus(derived) } });
-  }
-
-  private async recomputeEpisodeStatus(episodeId: number): Promise<void> {
-    const episode = await this.prisma.episode.findUnique({
-      where: { id: episodeId },
-      include: { mediaSources: true, processJobs: true },
-    });
-    if (!episode) return;
-
-    if (episode.filePath != null) {
-      await this.prisma.episode.update({ where: { id: episodeId }, data: { status: 'COMPLETED' } });
-      return;
-    }
-
-    const derived = deriveTitleStatus({ status: 'MISSING', sources: episode.mediaSources, jobs: episode.processJobs });
-    await this.prisma.episode.update({ where: { id: episodeId }, data: { status: toMediaStatus(derived) } });
   }
 
   // Single-torrent lookup for the three control mutations above — cheaper
@@ -851,30 +927,21 @@ export class DownloadsService {
   private async liveInfoForHash(infoHash: string): Promise<TorrentClientInfo | undefined> {
     try {
       const rows = await this.qbittorrent.info();
+      await this.writeBackLiveStates(rows);
       const wanted = infoHash.toLowerCase();
       return rows.find((row) => row.hash.toLowerCase() === wanted);
     } catch (err) {
-      console.error(`[DownloadsService] no se pudo releer el estado de mediaSource tras la mutación:`, err);
+      console.error(`[DownloadsService] could not reread mediaSource state after the mutation:`, err);
       return undefined;
     }
   }
 
-  // REQ-12/13/14: given a winning mediaSourceId, decide whether it is
-  // actually the winner (REQ-13's one-winner guard) and, if so, stop and
-  // pause every other non-terminal sibling of the same target (REQ-12),
-  // selected by movieId/episodeId/seasonId — never by tag (REQ-14): a tag
-  // is a title string shared across users and titles, carrying no
-  // ownership and no identity.
-  //
-  // ONE shared method: both handleTorrentCompleted (torrents) below and
-  // UploadsService.onUploadFinish (uploads, REQ-19) call this exact same
-  // logic, so the guard and the pause can never drift into two copies that
-  // disagree on the first change to either (../plan.md § Approach).
-  async resolveRace(mediaSourceId: number): Promise<string> {
+  // Spec 022, REQ-12; Spec 022, REQ-13; Spec 022, REQ-14; Spec 022, REQ-19; Spec 087, REQ-5
+  async resolveRace(mediaSourceId: number): Promise<RaceOutcome> {
     const winner = await this.prisma.mediaSource.findUnique({ where: { id: mediaSourceId } });
     if (!winner) {
-      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} no existe`);
-      return `ignorado: mediaSource ${mediaSourceId} no existe`;
+      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} does not exist`);
+      return { outcome: 'IGNORED', message: `ignorado: mediaSource ${mediaSourceId} no existe` };
     }
 
     // A source already ERROR (027-replace-completed-media's force demotion)
@@ -882,8 +949,8 @@ export class DownloadsService {
     // caller of this method; handleTorrentCompleted below never reaches
     // this with an ERROR source, since its own ERROR rung runs first.
     if (winner.status === 'ERROR') {
-      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} está en ERROR, no es un ganador válido`);
-      return `ignorado: mediaSource ${mediaSourceId} está en ERROR`;
+      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} is in ERROR, not a valid winner`);
+      return { outcome: 'IGNORED', message: `ignorado: mediaSource ${mediaSourceId} está en ERROR` };
     }
 
     const targetWhere = winner.movieId
@@ -895,25 +962,46 @@ export class DownloadsService {
           : null;
 
     if (!targetWhere) {
-      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} no tiene target`);
-      return `ignorado: mediaSource ${mediaSourceId} sin target`;
+      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} has no target`);
+      return { outcome: 'IGNORED', message: `ignorado: mediaSource ${mediaSourceId} sin target` };
     }
 
     const siblings = await this.prisma.mediaSource.findMany({
       where: { ...targetWhere, id: { not: mediaSourceId } },
     });
 
-    // REQ-13: a completion notice for a target that already has a source in
-    // READY or SCANNED is ignored — this is what protects a loser that
-    // finishes inside the window between the winner completing and the
-    // pause taking effect, and what makes REQ-15's row deletion safe.
+    // Spec 022, REQ-13; Spec 022, REQ-15
     const siblingJobs = await this.jobsBySourceId(siblings.map((sibling) => sibling.id));
     const alreadyWon = siblings.some((sibling) =>
-      isRaceWinner(sibling.status, siblingJobs.get(sibling.id)?.jobs ?? []),
+      isRaceWinner(sibling.status, siblingJobs.get(sibling.id)?.jobs ?? [], sibling.retiredAt ?? null),
     );
     if (alreadyWon) {
-      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} superado, el target ya tiene un ganador`);
-      return `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`;
+      console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} superseded, the target already has a winner`);
+      // Spec 087, REQ-5
+      if (winner.infoHash) {
+        try {
+          await this.qbittorrent.stop(winner.infoHash);
+        } catch (err) {
+          // Spec 022, NFR-6
+          console.error(
+            `[torrentCompleted] resolveRace: could not stop superseded mediaSource ${mediaSourceId} in the torrent client:`,
+            err,
+          );
+        }
+      }
+      await this.prisma.mediaSource.update({
+        where: { id: mediaSourceId },
+        data: {
+          status: 'ERROR',
+          errorKey: ERROR_KEYS.SOURCE_SUPERSEDED,
+          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_SUPERSEDED],
+          errorParams: null,
+        },
+      });
+      return {
+        outcome: 'SUPERSEDED',
+        message: `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`,
+      };
     }
 
     const losers = siblings.filter(
@@ -926,10 +1014,8 @@ export class DownloadsService {
         try {
           await this.qbittorrent.stop(loser.infoHash);
         } catch (err) {
-          // NFR-6: an unacknowledged stop must not be written to the DB as
-          // PAUSED — that would leave the loser downloading while the row
-          // lies about it.
-          console.error(`[torrentCompleted] resolveRace: no se pudo pausar mediaSource ${loser.id} en el cliente de torrents:`, err);
+          // Spec 022, NFR-6
+          console.error(`[torrentCompleted] resolveRace: could not pause mediaSource ${loser.id} in the torrent client:`, err);
           continue;
         }
       }
@@ -937,8 +1023,8 @@ export class DownloadsService {
       pausedCount++;
     }
 
-    console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} ganó, ${pausedCount} sibling(s) pausado(s)`);
-    return `ganador: mediaSource ${mediaSourceId}, ${pausedCount} pausado(s)`;
+    console.log(`[torrentCompleted] resolveRace: mediaSource ${mediaSourceId} won, ${pausedCount} sibling(s) paused`);
+    return { outcome: 'WON', message: `ganador: mediaSource ${mediaSourceId}, ${pausedCount} pausado(s)` };
   }
 
   async handleTorrentCompleted(infoHash: string): Promise<string> {
@@ -947,38 +1033,28 @@ export class DownloadsService {
       include: { movie: true, episode: true },
     });
 
-    // El AutoRun dispara para TODOS los torrents del cliente, incluso los que no
-    // agregó Perceptor (hay varios previos en este qBittorrent). Un hash
-    // desconocido no es un error: se ignora y se avisa.
     if (!mediaSource) {
-      console.log(`[torrentCompleted] ignorado: ${infoHash} no corresponde a ningún MediaSource`);
+      console.log(`[torrentCompleted] ignored: ${infoHash} does not match any MediaSource`);
       return `ignorado: ${infoHash} no corresponde a ningún MediaSource`;
     }
 
-    // Idempotencia: el AutoRun puede volver a disparar, por ejemplo si se fuerza
-    // un re-check del torrent.
     if (mediaSource.status === 'READY' || mediaSource.status === 'SCANNED') {
       console.log(
-        `[torrentCompleted] ya procesado: mediaSource ${mediaSource.id} en estado ${mediaSource.status}`,
+        `[torrentCompleted] already processed: mediaSource ${mediaSource.id} in state ${mediaSource.status}`,
       );
       return `ya procesado: mediaSource ${mediaSource.id} en estado ${mediaSource.status}`;
     }
 
-    // Una fila ya degradada a ERROR (por ejemplo, reemplazada con force) fue
-    // superada por un pedido más nuevo. Un torrentCompleted tardío para ese hash
-    // no debe mover nada. Deliberately still runs before resolveRace below:
-    // resolveRace pauses this source's *siblings*, and an ERROR source's late
-    // completion must never pause whatever superseded it.
+    // Deliberately still runs before resolveRace below: resolveRace pauses
+    // this source's *siblings*, and an ERROR source's late completion must
+    // never pause whatever superseded it.
     if (mediaSource.status === 'ERROR') {
       console.log(
-        `[torrentCompleted] ignorado: mediaSource ${mediaSource.id} está en ERROR (reemplazado)`,
+        `[torrentCompleted] ignored: mediaSource ${mediaSource.id} is in ERROR (replaced)`,
       );
       return `ignorado: mediaSource ${mediaSource.id} está en ERROR (reemplazado)`;
     }
 
-    // Las filas viejas (previas al savepath por torrent) no tienen path, así que
-    // no hay nada que decirle al worker. Se marca ERROR para que no quede colgada
-    // en DOWNLOADING para siempre.
     if (!mediaSource.downloadPath) {
       const errorMessage = MESSAGES_EN[ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH];
       await this.prisma.mediaSource.update({
@@ -994,36 +1070,24 @@ export class DownloadsService {
       return `error: mediaSource ${mediaSource.id} sin downloadPath, marcado ERROR`;
     }
 
-    // REQ-12/13: resolve the race before touching this source's own status.
-    // If another sibling already won, this is a late-arriving loser — REQ-13
-    // says no status change and no second bull:process job, so it is
-    // reported and returned immediately, exactly like every other ignored
-    // branch above.
+    // Spec 022, REQ-12; Spec 022, REQ-13; Spec 087, REQ-5
     const raceResult = await this.resolveRace(mediaSource.id);
-    if (raceResult.startsWith('ignorado')) {
-      return raceResult;
+    if (raceResult.outcome !== 'WON') {
+      return raceResult.message;
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.mediaSource.update({
-        where: { id: mediaSource.id },
-        data: { status: 'READY' }, // READY = "Archivos disponibles en disco"
-      });
-
-      if (mediaSource.movie) {
-        await tx.movie.update({
-          where: { id: mediaSource.movie.id },
-          data: { status: 'ENCODING' },
-        });
-      }
-
-      if (mediaSource.episode) {
-        await tx.episode.update({
-          where: { id: mediaSource.episode.id },
-          data: { status: 'ENCODING' },
-        });
-      }
+    await this.prisma.mediaSource.update({
+      where: { id: mediaSource.id },
+      data: { status: 'READY' }, // READY = "Archivos disponibles en disco"
     });
+
+    // Spec 089, REQ-1 REQ-8
+    if (mediaSource.movie) {
+      await this.titleStatus.recomputeMovie(mediaSource.movie.id);
+    }
+    if (mediaSource.episode) {
+      await this.titleStatus.recomputeEpisode(mediaSource.episode.id);
+    }
 
     await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
 

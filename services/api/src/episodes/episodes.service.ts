@@ -1,28 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { QbittorrentClient } from '@/clients/torrent/client';
 import { parseMagnet } from '@/clients/torrent/magnet';
+import { sanitizeTag } from '@/clients/torrent/tags';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
-import { SourceKind } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
-import { MESSAGES_EN } from '@/i18n/messages.en';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { AttachSourceService } from '@/acquisition/attach-source.service';
+import { AttachTarget } from '@/acquisition/attach-target';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
-// REQ-5: comma -> space, whitespace collapsed, trimmed; never sent raw
-// since a comma is qBittorrent's tag separator. A title that sanitises to
-// nothing falls back to a stable tag derived from the target row's id, not
-// the MediaSource's, so it is reproducible later from the target alone and
-// shared by every source of it (REQ-4). Kept local rather than shared with
-// MoviesService's copy — see attachTorrentSource's own comment for why.
-function sanitizeTag(title: string, fallbackId: number): string {
-  const cleaned = title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
-  return cleaned || `id-${fallbackId}`;
-}
-
-// REQ-2: an episode's torrent carries three tags — the show's title,
-// `Season <n>` and `Episode <n>`, English keywords, unpadded numbers,
-// deliberately different from the zero-padded S03E08 form used elsewhere.
+// Spec 022, REQ-2
 function episodeTags(episode: {
   episodeNumber: number;
   season: { seasonNumber: number; show: { id: number; title: string } };
@@ -34,17 +22,20 @@ function episodeTags(episode: {
   ];
 }
 
-// Structural twin of MoviesService.findOneFromDb, one relation deeper:
-// ownership runs through episode -> season -> show -> UserShow rather than
-// a direct join, but the rule is identical — null covers both "does not
-// exist" and "exists but belongs to someone else's show", indistinguishably
-// (see spec.md's 010-episode-acquisition § Errors).
+interface EpisodeTarget {
+  id: number;
+  status: string;
+  episodeNumber: number;
+  season: { seasonNumber: number; show: { id: number; title: string } };
+}
+
 @Injectable()
 export class EpisodesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly qbittorrent: QbittorrentClient,
     private readonly downloadsService: DownloadsService,
+    private readonly attachSourceService: AttachSourceService,
+    private readonly titleStatusService: TitleStatusService,
   ) {}
 
   async findOneFromDb(id: number, userId: string) {
@@ -54,36 +45,18 @@ export class EpisodesService {
     });
   }
 
-  // Every owner relation is symmetric since 022-download-status-tags
-  // (MediaSource.movieId is now a real column too), so "has an active
-  // source" is the same query shape for a film, an episode or a season.
-  // Reused by `attachTorrentSource` below and by
-  // `UploadsResolver.createUploadTicket`'s pre-flight conflict check
-  // (027-replace-completed-media REQ-6), so both entry points agree on the
-  // same definition of "busy".
-  async findActiveSource(episodeId: number) {
-    return this.prisma.mediaSource.findFirst({
-      where: { episodeId, status: { not: 'ERROR' } },
-    });
-  }
-
   async addTorrentToEpisode(
     episodeId: number,
     input: { infoHash: string | null; urls: string[]; releaseTitle: string | null; force: boolean },
     userId: string,
   ) {
-    // REQ-4: the search response may not carry an infoHash — resolve it here, once, before
-    // anything reaches qBittorrent, so a failure never leaves a half-applied download behind.
+    // Spec 037, REQ-4
     const infoHash = input.infoHash ?? (await resolveInfoHash(input.urls));
     return this.attachTorrentSource(episodeId, { kind: 'TORRENT_SEARCH', ...input, infoHash }, userId);
   }
 
-  // Magnet pegado a mano por el usuario — mismo flujo que
-  // MoviesService.addMagnetToMovie de acá en más, una vez parseado el
-  // infoHash del propio magnet.
   async addMagnetToEpisode(episodeId: number, input: { magnet: string; force: boolean }, userId: string) {
-    // parseMagnet already throws a keyed BadRequestException (018 T010) — no
-    // re-wrap needed, just let it propagate so `extensions.i18n` survives.
+    // Spec 018, T010
     const parsed = parseMagnet(input.magnet);
 
     return this.attachTorrentSource(
@@ -99,149 +72,41 @@ export class EpisodesService {
     );
   }
 
-  // Structural twin of MoviesService.attachTorrentSource
-  // (src/movies/movies.service.ts), deliberately not extracted into a shared
-  // helper — see 010-episode-acquisition's api/plan.md § Approach for why.
-  // Since 022-download-status-tags REQ-7, "already downloading" no longer
-  // conflicts at all here (or for a film) — only a COMPLETED target does;
-  // `force` going through still means demoting every active row to
-  // ERROR *before* creating the replacement — that demotion is what makes a
-  // late torrentCompleted for the superseded infoHash harmless.
-  private async attachTorrentSource(
-    episodeId: number,
-    input: { kind: SourceKind; infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
-    userId: string,
-  ) {
-    const episode = await this.findOneFromDb(episodeId, userId);
-    if (!episode) throw i18nError.notFound(ERROR_KEYS.EPISODE_NOT_FOUND, { id: episodeId });
+  // Spec 088, REQ-1 REQ-8 REQ-10
+  private buildTarget(episodeId: number): AttachTarget<EpisodeTarget> {
+    return {
+      resolve: async (userId: string) => {
+        const episode = await this.findOneFromDb(episodeId, userId);
+        if (!episode) throw i18nError.notFound(ERROR_KEYS.EPISODE_NOT_FOUND, { id: episodeId });
+        return episode;
+      },
 
-    const activeSource = await this.findActiveSource(episodeId);
+      // Spec 087, REQ-2
+      refuse: async (episode, force) => {
+        const alreadyComplete =
+          episode.status === 'COMPLETED' ||
+          (await this.downloadsService.hasDeliveredSource({ episodeId: episode.id }));
+        if (alreadyComplete && !force) {
+          throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
+        }
+      },
 
-    // Symmetric with the check MoviesService.attachTorrentSource now does:
-    // an infoHash already owned by a movie, or by a *different* episode,
-    // must not be silently re-pointed at this one.
-    const existingSource = await this.prisma.mediaSource.findUnique({
-      where: { infoHash: input.infoHash },
-      include: { movie: true },
-    });
-
-    if (existingSource && existingSource.movie) {
-      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
-        title: existingSource.movie.title,
-      });
-    }
-
-    if (existingSource && existingSource.episodeId && existingSource.episodeId !== episodeId) {
-      throw i18nError.conflict(ERROR_KEYS.MAGNET_ALREADY_ATTACHED, {
-        title: this.episodeDisplayTitle(episode),
-      });
-    }
-
-    const sameTarget = existingSource?.episodeId === episodeId;
-
-    if (existingSource && sameTarget && existingSource.status !== 'ERROR') {
-      return this.prisma.episode.findUniqueOrThrow({ where: { id: episodeId } });
-    }
-
-    // REQ-7: only a COMPLETED target refuses. A merely-downloading episode
-    // no longer conflicts — REQ-6 makes a second acquisition normal. The
-    // `activeSource` query stays: it still drives the demote-on-force block
-    // below regardless of the episode's status.
-    if (episode.status === 'COMPLETED' && !input.force) {
-      throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
-    }
-
-    const demoteActive = async () => {
-      if (!activeSource || !input.force) return;
-      await this.prisma.mediaSource.updateMany({
-        where: { episodeId, status: { not: 'ERROR' } },
-        data: {
-          status: 'ERROR',
-          errorMessage: MESSAGES_EN[ERROR_KEYS.SOURCE_REPLACED],
-          errorKey: ERROR_KEYS.SOURCE_REPLACED,
-          errorParams: null,
-        },
-      });
+      labels: (episode) => ({ tags: episodeTags(episode), category: 'show' }),
+      column: 'episodeId',
     };
-
-    if (existingSource && sameTarget) {
-      const hash = input.infoHash.toLowerCase();
-      const held = (await this.qbittorrent.info()).find((torrent) => torrent.hash.toLowerCase() === hash);
-
-      if (held) {
-        const finished = held.state === 'READY';
-        if (!finished) await this.qbittorrent.start(hash);
-
-        await demoteActive();
-        await this.prisma.mediaSource.update({
-          where: { id: existingSource.id },
-          data: { status: 'QUEUED', errorMessage: null, errorKey: null, errorParams: null },
-        });
-        await this.prisma.episode.update({
-          where: { id: episodeId },
-          data: { status: 'DOWNLOADING' },
-        });
-        if (finished) await this.downloadsService.handleTorrentCompleted(hash);
-
-        return this.prisma.episode.findUniqueOrThrow({ where: { id: episodeId } });
-      }
-    }
-
-    // El savepath lo decide el client al agregar el torrent, así cada
-    // descarga cae en su propia carpeta. Corre antes de cualquier escritura
-    // en la DB: si qBittorrent rechaza el torrent no debe quedar ninguna
-    // fila QUEUED colgada, ni la fila activa demovida sin reemplazo.
-    const downloadPath = await this.qbittorrent.add(input.urls, episodeTags(episode), 'show');
-
-    // Demote *before* creating the replacement, and only after qBittorrent
-    // has accepted the new torrent — so a rejected add() leaves the
-    // previously active source untouched.
-    await demoteActive();
-
-    const mediaSource = existingSource
-      ? await this.prisma.mediaSource.update({
-          where: { id: existingSource.id },
-          data: {
-            kind: input.kind,
-            status: 'QUEUED',
-            downloadUrl: input.urls[0] ?? null,
-            releaseTitle: input.releaseTitle,
-            downloadPath,
-            errorMessage: null,
-            errorKey: null,
-            errorParams: null,
-            episodeId,
-          },
-        })
-      : await this.prisma.mediaSource.create({
-          data: {
-            kind: input.kind,
-            status: 'QUEUED',
-            infoHash: input.infoHash,
-            downloadUrl: input.urls[0] ?? null,
-            releaseTitle: input.releaseTitle,
-            downloadPath,
-            episodeId,
-          },
-        });
-
-    await this.prisma.episode.update({
-      where: { id: episodeId },
-      data: { status: 'DOWNLOADING' },
-    });
-
-    return this.prisma.episode.findUniqueOrThrow({ where: { id: episodeId } });
   }
 
-  // Zero-padded "<Show> S04E01" rendering, matching the prefill format
-  // SearchTorrent.tsx builds on the web side. Kept local rather than shared
-  // with MoviesService's own copy — see that file's comment.
-  private episodeDisplayTitle(episode: {
-    episodeNumber: number;
-    season: { seasonNumber: number; show: { title: string } };
-  }): string {
-    const season = String(episode.season.seasonNumber).padStart(2, '0');
-    const ep = String(episode.episodeNumber).padStart(2, '0');
-    return `${episode.season.show.title} S${season}E${ep}`;
+  private async attachTorrentSource(
+    episodeId: number,
+    input: { kind: 'TORRENT_SEARCH' | 'TORRENT_FILE'; infoHash: string; urls: string[]; releaseTitle: string | null; force: boolean },
+    userId: string,
+  ) {
+    const outcome = await this.attachSourceService.attach(this.buildTarget(episodeId), input, userId);
+
+    if (outcome === 'ATTACHED') {
+      await this.titleStatusService.recomputeEpisode(episodeId);
+    }
+
+    return this.prisma.episode.findUniqueOrThrow({ where: { id: episodeId } });
   }
 }

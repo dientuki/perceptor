@@ -1,10 +1,3 @@
-// Defends REQ-9: the CRF must land on the right value, evaluated in this
-// order — non-live-action first (even on a remux), then remux, then
-// everything else. Before this fix `buildFfmpegCommand` guessed "remux" from
-// the filename substring, so a correctly named release that omitted the word
-// silently got the web-grade CRF, and the job still completed with no error
-// in any log (Constitution, Article IX).
-
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildFfmpegCommand } from './buildCommand';
 import type { EncodeInput } from '../encode/types';
@@ -54,7 +47,13 @@ function crfOf(args: string[]): string | undefined {
   return i === -1 ? undefined : args[i + 1];
 }
 
-describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
+// Defends Spec 011, REQ-9: the CRF must land on the right value, evaluated
+// in this order — non-live-action first (even on a remux), then remux, then
+// everything else. Before this fix `buildFfmpegCommand` guessed "remux" from
+// the filename substring, so a correctly named release that omitted the
+// word silently got the web-grade CRF, and the job still completed with no
+// error in any log (Constitution, Article IX).
+describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
   afterEach(() => {
     delete process.env.ENCODE_SAMPLE_SECONDS;
   });
@@ -103,7 +102,7 @@ describe('buildFfmpegCommand — CRF selection (REQ-9)', () => {
       ],
     };
 
-    // Filename deliberately omits "remux" — REQ-10 forbids relying on it here.
+    // Spec 011, REQ-10
     const args = buildFfmpegCommand(
       'Some.Movie.Blu-ray.mkv',
       '/out/Some.Movie.Blu-ray.mkv',

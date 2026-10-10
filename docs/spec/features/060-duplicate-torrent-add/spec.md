@@ -125,6 +125,31 @@ None.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Seven of nine open. Every one of them needs **a live torrent in qBittorrent** plus an admin session,
+and most need a specific pre-state that only a real acquisition produces: a source `DOWNLOADING` at
+a known `downloadPath` (AC-1, AC-2), one `READY`/`SCANNED` (AC-3), one written to `ERROR` by the race
+arbiter (AC-4, AC-5), the same hash attached to a second title (AC-6), and all of it repeated through
+`addTorrentToSeason`/`addMagnetToSeason` (AC-7).
+
+On this installation `media_sources` holds **one** row — a pre-`053` orphan (Inception, uppercase
+`infoHash`, created 2026-09-25) with no torrent in qBittorrent and no folder on disk — and
+`process_jobs` is **empty**. So the no-op-on-re-add behaviour this feature exists for has nothing to
+be re-added against. AC-5 additionally wants the `torrent` container stopped, which is the cheap half
+of its setup; the expensive half is still having an `ERROR` source for hash `H` first.
+
+The rule itself is unit-covered and that coverage is where the `060` regression actually lives:
+`api/src/acquisition/attach-source.service.spec.ts` (the shared attach body `088` consolidated the
+three call sites into) and `api/src/movies/movies.service.spec.ts` assert the re-add no-op and the
+in-place reactivation that keeps `downloadPath` — the bug being that the old code re-called `add()`
+and overwrote the path with an empty folder. All green in the 1000 api tests measured this pass. What
+no unit test can show is that qBittorrent itself behaves as assumed on a second `add()` of a hash it
+already holds, which is the half these seven criteria exist for.
+
+Note for whoever runs them: the orphan row above will contaminate sibling reads. Per `091`'s Out of
+Scope it clears through the per-row Delete button in the UI — the full `047` unwind — never by SQL.
+
 - [ ] **AC-1**: Given a film with a `DOWNLOADING` source for hash `H` at `downloadPath` `P`, when the
       user adds a second search row that resolves to `H` but has a different download URL, then the
       mutation succeeds, `bin/mysql -e 'select status, downloadPath from media_sources where

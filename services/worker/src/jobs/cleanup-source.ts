@@ -3,9 +3,6 @@ import { rm, rmdir } from 'node:fs/promises';
 import { fetchGraphQL } from '../api/graphql-client';
 import { isInsideRoot } from '../paths/is-inside-root';
 
-// Subconjunto de EncodeJobDetails (services/worker/src/jobs/encode.job.ts) —
-// mismo patrón que paths/build-output-path.ts's OutputPathInput: un tipo
-// local, angosto, en vez de importar la forma completa de la query.
 export type CleanupInput = {
   mediaSourceId: number;
   sourceKind: string; // 'TORRENT_SEARCH' | 'TORRENT_FILE' | 'LOCAL_FILE' | 'LOCAL_FOLDER'
@@ -18,20 +15,7 @@ export type CleanupInput = {
   deleteDownloadPath: boolean;
 };
 
-// Post-encode cleanup for the source that produced a completed file (REQ-10).
-// Called from encode.job.ts AFTER its try/catch has already reported
-// encodeCompleted, wrapped in its own try there too — this function itself
-// must never throw, no matter what fails inside it.
-//
-// Why swallowing here is correct (REQ-11), against the rule in
-// services/worker/CLAUDE.md § Errors must not be swallowed: that rule exists
-// because a swallowed error must never let a job report success it didn't
-// earn. Here it's the inverse danger — the encode already succeeded and
-// encodeCompleted has already been reported; a cleanup failure (the torrent
-// client unreachable, a permission error, a busy file) must not be allowed to
-// travel back up and flip a finished job to ERROR. So every failure in this
-// function is caught and logged with the `[cleanup]` prefix and the
-// mediaSource id, never rethrown.
+// Spec 012, REQ-10 REQ-11
 export async function cleanupSource(input: CleanupInput): Promise<void> {
   const {
     mediaSourceId,
@@ -45,44 +29,29 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
     deleteDownloadPath,
   } = input;
 
-  // A torrent must be removed from the client whatever else happens, and
-  // before anything on disk moves so the client releases its file handles
-  // first. Guarded on infoHash (not sourceKind): downloadRemove itself
-  // already answers "omitido: ... no es un torrent" for a source with none,
-  // but calling it unconditionally would be a wasted round-trip for every
-  // local file — the mutation call and the filesystem branch below are
-  // deliberately guarded on two different things (see worker/plan.md).
-  // `removeTorrent` (013-season-pack-processing) gates whether this is even
-  // the right job to do it: for a season pack it is only `true` on the last
-  // ProcessJob to finish, whatever the others ended as.
-  if (removeTorrent && infoHash) {
+  // Spec 013, REQ-8; Spec 091, REQ-1
+  if (removeTorrent) {
     try {
       await fetchGraphQL(
         `mutation ($id: Int!) { downloadRemove(mediaSourceId: $id, deleteFiles: false) }`,
         { id: mediaSourceId },
       );
     } catch (err) {
-      console.error(`[cleanup] mediaSource ${mediaSourceId}: downloadRemove falló:`, err);
+      console.error(`[cleanup] mediaSource ${mediaSourceId}: downloadRemove failed:`, err);
     }
   }
 
-  // Per-episode input deletion (REQ-8/REQ-9, 013-season-pack-processing): a
-  // season pack releases each episode's own file as soon as that episode's
-  // encode succeeds, well before the whole download path is ever touched.
-  // `inputFilePath` is worker-reported data that made a round trip through
-  // the database (SourceFile.filePath), so it gets its own containment
-  // check — the one on downloadPath below does not cover it, the two paths
-  // differ for a pack.
+  // Spec 013, REQ-8 REQ-9
   if (deleteInputFile) {
     if (!isInsideRoot(downloadsRoot, inputFilePath)) {
       console.error(
-        `[cleanup] mediaSource ${mediaSourceId}: inputFilePath ${inputFilePath} no está dentro de downloadsRoot ${downloadsRoot} — no se borra`,
+        `[cleanup] mediaSource ${mediaSourceId}: inputFilePath ${inputFilePath} is not inside downloadsRoot ${downloadsRoot} — not deleting`,
       );
     } else {
       try {
         await rm(inputFilePath, { force: true });
       } catch (err) {
-        console.error(`[cleanup] mediaSource ${mediaSourceId}: no se pudo borrar ${inputFilePath}:`, err);
+        console.error(`[cleanup] mediaSource ${mediaSourceId}: could not delete ${inputFilePath}:`, err);
       }
     }
   }
@@ -92,16 +61,14 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
   }
 
   if (!downloadPath) {
-    console.log(`[cleanup] mediaSource ${mediaSourceId}: sin downloadPath, nada que borrar`);
+    console.log(`[cleanup] mediaSource ${mediaSourceId}: no downloadPath, nothing to delete`);
     return;
   }
 
-  // REQ-12: never delete anything outside the downloads root. downloadsRoot
-  // arriving empty/undefined (the NFR-3 drift) must refuse, never pass —
-  // isInsideRoot already returns false for that case.
+  // Spec 012, REQ-12
   if (!isInsideRoot(downloadsRoot, downloadPath)) {
     console.error(
-      `[cleanup] mediaSource ${mediaSourceId}: downloadPath ${downloadPath} no está dentro de downloadsRoot ${downloadsRoot} — no se borra nada`,
+      `[cleanup] mediaSource ${mediaSourceId}: downloadPath ${downloadPath} is not inside downloadsRoot ${downloadsRoot} — deleting nothing`,
     );
     return;
   }
@@ -117,7 +84,7 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
       await rm(downloadPath, { force: true });
       await rmdir(dirname(downloadPath)).catch((err) => {
         console.log(
-          `[cleanup] mediaSource ${mediaSourceId}: no se pudo rmdir ${dirname(downloadPath)} (probablemente no está vacío):`,
+          `[cleanup] mediaSource ${mediaSourceId}: could not rmdir ${dirname(downloadPath)} (probably not empty):`,
           err instanceof Error ? err.message : err,
         );
       });
@@ -128,6 +95,6 @@ export async function cleanupSource(input: CleanupInput): Promise<void> {
       await rm(downloadPath, { recursive: true, force: true });
     }
   } catch (err) {
-    console.error(`[cleanup] mediaSource ${mediaSourceId}: no se pudo borrar ${downloadPath}:`, err);
+    console.error(`[cleanup] mediaSource ${mediaSourceId}: could not delete ${downloadPath}:`, err);
   }
 }

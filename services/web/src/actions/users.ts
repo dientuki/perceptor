@@ -74,10 +74,7 @@ export async function createUserAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    // Translated via the API's `extensions.i18n.key` — this is what surfaces
-    // REQ-6's duplicate-username message and the CreateUserInput validation
-    // messages in the active locale, falling back to the English message if
-    // the catalog hasn't caught up with the key yet.
+    // Spec 003, REQ-6; Spec 018, REQ-7 REQ-9
     return { error: await translateGraphQLError(errors[0]) };
   }
 
@@ -125,10 +122,7 @@ export async function updateUserAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    // Translated via the API's `extensions.i18n.key` — this is what surfaces
-    // REQ-9's username-taken message and the UpdateUserInput validation
-    // messages in the active locale, falling back to the English message if
-    // the catalog hasn't caught up with the key yet.
+    // Spec 028, REQ-9; Spec 018, REQ-7 REQ-9
     return { error: await translateGraphQLError(errors[0]) };
   }
 
@@ -157,10 +151,7 @@ export async function setUserEnabledAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    // Translated via the API's `extensions.i18n.key` — this is what surfaces
-    // REQ-5's self-disable and last-admin messages in the active locale,
-    // falling back to the English message if the catalog hasn't caught up
-    // with the key yet.
+    // Spec 003, REQ-5; Spec 018, REQ-7
     return { error: await translateGraphQLError(errors[0]) };
   }
 
@@ -191,10 +182,7 @@ export async function deleteUserAction(
 
   if (errors && errors.length > 0) {
     await redirectIfUnauthenticated(errors);
-    // Translated via the API's `extensions.i18n.key` — this is what surfaces
-    // REQ-5's self-delete and last-admin messages (AC-7, AC-8) in the active
-    // locale, falling back to the English message if the catalog hasn't
-    // caught up with the key yet.
+    // Spec 003, REQ-5 AC-7 AC-8; Spec 018, REQ-7
     return { error: await translateGraphQLError(errors[0]) };
   }
 

@@ -10,7 +10,7 @@ import { ENVIRONMENT_CONFIG, EnvironmentConfig } from './environment.types';
 //    for `endpoints[].url`/`expectedUploadEndpoint` — a stray `?? 'localhost'`
 //    or `?? domain` would make the panel confidently recommend
 //    `http://api.null/uploads` or a `localhost` URL that only works for the
-//    admin's own browser (../plan.md § Risks, row 1 / NFR-1).
+//    admin's own browser (Spec 055, NFR-1).
 // 2. A leaked secret. `environmentInfo` is an admin-only read over process
 //    env; the only thing standing between it and a wholesale `process.env`
 //    dump is this service returning exactly the allowlisted keys. A

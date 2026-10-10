@@ -12,17 +12,7 @@ export class EncodeQueueService implements OnModuleDestroy {
 
   constructor(private readonly redis: RedisService) {}
 
-  // jobId derivado del ProcessJob: un re-scan que vuelva a pasar por acá no
-  // encola el mismo encode dos veces. Prefijado porque BullMQ rechaza jobIds
-  // puramente numéricos ("1"), reservados para su contador interno
-  // autogenerado (ver `Job.validateOptions`).
-  //
-  // attempts/backoff (REQ-7, NFR-8): a small retry budget for the narrow case
-  // of "the worker process died but Redis survived" (a stall BullMQ detects
-  // on its own), not a general-purpose retry policy — one retry here is
-  // potentially hours of re-encoded CPU time. `UnrecoverableError` (thrown by
-  // the worker for a cancelled or deterministically-failed encode, REQ-8/
-  // REQ-9) bypasses this budget entirely regardless of the count set here.
+  // Spec 054, REQ-7; Spec 054, NFR-8; Spec 054, REQ-8; Spec 054, REQ-9
   async addEncode(payload: EncodeJob) {
     return this.queue.add(ENCODE_JOB, payload, {
       jobId: `job-${payload.processJobId}`,
@@ -41,8 +31,7 @@ export class EncodeQueueService implements OnModuleDestroy {
     }
   }
 
-  // One-way, no ack expected and none read (NFR-1). A worker not currently
-  // encoding this job ignores the message; there is nothing to wait for here.
+  // Spec 047, NFR-1
   async publishCancel(processJobId: number): Promise<void> {
     const message: EncodeCancelMessage = { processJobId };
     await this.redis.publish(ENCODE_CANCEL_CHANNEL, JSON.stringify(message));

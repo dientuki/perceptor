@@ -59,7 +59,7 @@ describe('IndexerService.status', () => {
   });
 });
 
-// This suite exists because 040-indexer-search-cache's read-through sits on
+// This suite exists because Spec 040's read-through sits on
 // top of four invariants that a perfectly successful response cannot reveal
 // on its own — every failure mode below leaves the caller's list looking
 // correct while breaking something no one is watching:
@@ -68,7 +68,7 @@ describe('IndexerService.status', () => {
 //    substituting an empty list for it) makes a title look like it has zero
 //    releases for ten minutes, with no error anywhere. Only asserting
 //    `redis.set` was never called after a rejection can catch it.
-//  - the write is dispatched, not awaited (REQ-2b), so it lands one
+//  - the write is dispatched, not awaited (Spec 040, REQ-2b), so it lands one
 //    microtask after `search()` resolves. A naive assertion right after
 //    `await search()` sees nothing and "fixing" it by deleting the
 //    assertion is exactly how the cache silently stops populating while
@@ -78,9 +78,9 @@ describe('IndexerService.status', () => {
 //    the test reads as redundant without it.
 //  - treating an empty cached array as falsy (instead of checking
 //    `raw === null`) would re-hit Prowlarr on every search for a title with
-//    no seeded release, defeating REQ-6 with no visible symptom.
+//    no seeded release, defeating Spec 040, REQ-6 with no visible symptom.
 //  - a rejected `redis.get`/`redis.set` must never surface as an error to
-//    the caller (NFR-1) and must never crash the process via an unobserved
+//    the caller (Spec 040, NFR-1) and must never crash the process via an unobserved
 //    rejected promise (the deferred write risk in `../plan.md` § Risks).
 describe('IndexerService', () => {
   let service: IndexerService;
