@@ -1,7 +1,7 @@
 # ==========================================
 # 1. BASE: Entorno común (Alpine + libc6)
 # ==========================================
-FROM node:24.18.0-alpine AS base
+FROM node:26.10.0-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
