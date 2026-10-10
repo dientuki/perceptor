@@ -3,9 +3,7 @@
 import { useTranslations } from "next-intl";
 import { statusTone } from "@/lib/status-tone";
 
-// The one status pill (REQ-10). Replaces the byte-identical
-// `statusBadgeClass` duplicates that used to live in
-// `downloads/DownloadsPanel.tsx` and `shows/SeasonAccordion.tsx`.
+// Spec 043, REQ-10
 function statusBadgeClass(status: string): string {
   switch (statusTone(status)) {
     case "completed":

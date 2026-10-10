@@ -476,6 +476,17 @@ worker exports plus the `source.*` and `processJob.*` keys.
 
 `DownloadsPanel.tsx` carries three single-select toggles (completed, working, error) left of Refresh, bucketed by `statusTone()` (`progress` is working; `missing` has no bucket). Badge counts come from the full `downloads` prop; a toggle only filters, never sorts, since `api` already orders by last activity. Clicking the active toggle clears it, and the panel is not keyed on its data so the choice survives `router.refresh()`. A season-pack row renders `download.showTitle` (since `064`, off the row itself) plus `seasonAccordion.seasonLabel` from `seasonNumber`, never `download.label`. Both detail pages render the panel inside the card's `space-y-6`, before search (films) and before the seasons (series). `Button` takes an optional `ariaPressed`.
 
+## A replaced source reads as retired, not errored (`090-replaced-source-not-an-error`)
+
+`Download.retiredAt` (non-null once a delivered source was replaced) is read only by `DownloadRow.tsx`
+— `lib/status-tone.ts`, `StatusBadge.tsx` and `DownloadsPanel.tsx`'s filter bucketing are untouched by
+this feature on purpose: a retired row arrives with whatever `status` it already derives to
+(typically still `COMPLETED`/`SCANNED`), so those three already place and paint it correctly with no
+new branch. `DownloadRow` adds a neutral `Badge` (`variant="light" color="light"`, never `"error"` or
+`"warning"`) reading the new `downloads.panel.replaced` key (`Replaced`/`Reemplazada`) next to the
+title when `retiredAt != null`, and both `canStart` and `isControllable` are forced `false` for that
+row — no Play, no Stop, Delete still gated on `owned` alone.
+
 ## The calendar (`/calendar`, `062-release-calendar`)
 
 `components/calendar/Calendar.tsx` is a read-only FullCalendar `dayGridMonth` (`@fullcalendar/core`,

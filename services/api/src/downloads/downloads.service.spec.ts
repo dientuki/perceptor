@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { rm, rmdir } from 'node:fs/promises';
+import { SourceStatus } from '@prisma/client';
 import { DownloadsService } from './downloads.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
@@ -7,6 +8,7 @@ import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
 jest.mock('node:fs/promises', () => ({
   rm: jest.fn().mockResolvedValue(undefined),
@@ -14,12 +16,12 @@ jest.mock('node:fs/promises', () => ({
 }));
 
 // This suite exists because two failure classes here produce no error
-// anywhere (spec.md NFR-5 (a)/(b)):
+// anywhere (Spec 022, NFR-5):
 //
 //  - a loser's torrentCompleted arriving after the winner already reached
 //    READY still marking that loser READY and enqueuing a second
 //    bull:process — the target ends up with two ProcessJobs writing the
-//    same output path, and nothing logs a problem (REQ-13);
+//    same output path, and nothing logs a problem (Spec 022, REQ-13);
 //  - the global downloads list reading `owned: true` for a title the caller
 //    never added, which makes the page offer controls the mutations then
 //    refuse, and the sidebar badge counting sources or paused work instead
@@ -28,7 +30,7 @@ jest.mock('node:fs/promises', () => ({
 //    writing a paused loser's status as ERROR instead of PAUSED — either
 //    would be silently read by this very function as "superseded, ignore"
 //    on the next completion notice, indistinguishable from a legitimately
-//    discarded source (REQ-12, NFR-7's whole reason for existing).
+//    discarded source (Spec 022, REQ-12 NFR-7).
 //
 // The arbiter (resolveRace) is covered once here, directly, rather than a
 // second near-identical suite driving it through UploadsService — both
@@ -57,6 +59,12 @@ describe('DownloadsService', () => {
   let qbittorrent: { stop: jest.Mock; start: jest.Mock; info: jest.Mock; remove: jest.Mock };
   let settings: { getMap: jest.Mock };
   let mediaRoots: { resolveFromRoot: jest.Mock; isInsideRoot: jest.Mock };
+  let titleStatus: {
+    recomputeMovie: jest.Mock;
+    recomputeEpisode: jest.Mock;
+    recomputeSeason: jest.Mock;
+    recomputeShow: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -87,6 +95,12 @@ describe('DownloadsService', () => {
       resolveFromRoot: jest.fn().mockResolvedValue('/media/downloads'),
       isInsideRoot: jest.fn().mockResolvedValue(true),
     };
+    titleStatus = {
+      recomputeMovie: jest.fn().mockResolvedValue(undefined),
+      recomputeEpisode: jest.fn().mockResolvedValue(undefined),
+      recomputeSeason: jest.fn().mockResolvedValue(undefined),
+      recomputeShow: jest.fn().mockResolvedValue(undefined),
+    };
 
     (rm as jest.Mock).mockClear().mockResolvedValue(undefined);
     (rmdir as jest.Mock).mockClear().mockResolvedValue(undefined);
@@ -100,6 +114,7 @@ describe('DownloadsService', () => {
         { provide: QbittorrentClient, useValue: qbittorrent },
         { provide: SettingsService, useValue: settings },
         { provide: MediaRootsService, useValue: mediaRoots },
+        { provide: TitleStatusService, useValue: titleStatus },
       ],
     }).compile();
 
@@ -122,7 +137,8 @@ describe('DownloadsService', () => {
 
       const result = await service.resolveRace(1);
 
-      expect(result).toMatch(/^ganador/);
+      expect(result.outcome).toBe('WON');
+      expect(result.message).toMatch(/^ganador/);
       // The winner (mediaSource 1) must never be touched here — its own
       // status transition belongs to the caller (handleTorrentCompleted /
       // UploadsService.onUploadFinish), not to the arbiter.
@@ -138,13 +154,14 @@ describe('DownloadsService', () => {
       expect(prisma.mediaSource.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { status: 'PAUSED' } });
     });
 
-    // REQ-13: this is the exact case a loser's late completion must be
-    // ignored — if this guard were removed, a second source of the same
-    // target would sail through to READY/ENCODING with nothing to catch it.
-    it('reports "ignorado" and pauses nothing when a sibling already won', async () => {
+    // Spec 022, REQ-13
+
+    // Spec 087, REQ-5
+    it('reports SUPERSEDED, stops its own torrent (when it has one) and records the loss, pausing no sibling', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 2,
         status: 'DOWNLOADING',
+        infoHash: 'loser-own-hash',
         movieId: 7,
         episodeId: null,
         seasonId: null,
@@ -155,14 +172,82 @@ describe('DownloadsService', () => {
 
       const result = await service.resolveRace(2);
 
-      expect(result).toMatch(/^ignorado/);
-      expect(qbittorrent.stop).not.toHaveBeenCalled();
-      expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('SUPERSEDED');
+      expect(result.message).toMatch(/^ignorado/);
+      expect(qbittorrent.stop).toHaveBeenCalledWith('loser-own-hash');
+      // The winner (mediaSource 1) must never be touched by this branch.
+      expect(prisma.mediaSource.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 1 } }),
+      );
+      expect(prisma.mediaSource.update).toHaveBeenCalledWith({
+        where: { id: 2 },
+        data: {
+          status: 'ERROR',
+          errorKey: 'error.source.superseded',
+          errorMessage: expect.any(String),
+          errorParams: null,
+        },
+      });
     });
 
-    // 065 REQ-13: a SCANNED sibling whose only job failed must not count as
-    // the target's winner; otherwise a second source is ignored with no error
-    // anywhere and the title is wedged.
+    it('records a superseded source with no infoHash without calling stop', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 2,
+        status: 'DOWNLOADING',
+        infoHash: null,
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 1, status: 'READY', infoHash: 'winner-hash' },
+      ]);
+
+      const result = await service.resolveRace(2);
+
+      expect(result.outcome).toBe('SUPERSEDED');
+      expect(qbittorrent.stop).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.update).toHaveBeenCalledWith({
+        where: { id: 2 },
+        data: {
+          status: 'ERROR',
+          errorKey: 'error.source.superseded',
+          errorMessage: expect.any(String),
+          errorParams: null,
+        },
+      });
+    });
+
+    it('still reports SUPERSEDED and records the loss when stopping the torrent throws', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 2,
+        status: 'DOWNLOADING',
+        infoHash: 'loser-own-hash',
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 1, status: 'READY', infoHash: 'winner-hash' },
+      ]);
+      qbittorrent.stop.mockRejectedValueOnce(new Error('qBittorrent unreachable'));
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      const result = await service.resolveRace(2);
+
+      expect(result.outcome).toBe('SUPERSEDED');
+      expect(prisma.mediaSource.update).toHaveBeenCalledWith({
+        where: { id: 2 },
+        data: {
+          status: 'ERROR',
+          errorKey: 'error.source.superseded',
+          errorMessage: expect.any(String),
+          errorParams: null,
+        },
+      });
+    });
+
+    // Spec 065, REQ-13
     it('does not let a SCANNED sibling whose only job is ERROR block the race', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 2,
@@ -188,7 +273,8 @@ describe('DownloadsService', () => {
 
       const result = await service.resolveRace(2);
 
-      expect(result).toMatch(/^ganador/);
+      expect(result.outcome).toBe('WON');
+      expect(result.message).toMatch(/^ganador/);
     });
 
     it('does not treat an already-ERROR source as a valid winner', async () => {
@@ -202,7 +288,8 @@ describe('DownloadsService', () => {
 
       const result = await service.resolveRace(5);
 
-      expect(result).toMatch(/^ignorado/);
+      expect(result.outcome).toBe('IGNORED');
+      expect(result.message).toMatch(/^ignorado/);
       expect(prisma.mediaSource.findMany).not.toHaveBeenCalled();
       expect(qbittorrent.stop).not.toHaveBeenCalled();
     });
@@ -222,11 +309,10 @@ describe('DownloadsService', () => {
 
       const result = await service.resolveRace(1);
 
-      // NFR-6: an unacknowledged stop must not be written to the DB as
-      // PAUSED — that would leave the sibling downloading while the row
-      // lies about it.
+      // Spec 022, NFR-6
       expect(prisma.mediaSource.update).not.toHaveBeenCalled();
-      expect(result).toMatch(/^ganador.*0 pausado/);
+      expect(result.outcome).toBe('WON');
+      expect(result.message).toMatch(/^ganador.*0 pausado/);
     });
   });
 
@@ -234,8 +320,13 @@ describe('DownloadsService', () => {
     // Fault injection: comment out the resolveRace call in
     // handleTorrentCompleted (or move it after the READY-marking
     // transaction) and this case starts asserting a second
-    // bull:process job and a status change that must never happen.
-    it('leaves a late-arriving loser untouched and enqueues nothing when a sibling already reached READY', async () => {
+    // bull:process job and a status change that must never happen. A
+    // late-arriving loser is no longer left untouched — it is written to
+    // ERROR/error.source.superseded, but the movie must still never be
+    // touched and nothing is enqueued for it.
+
+    // Spec 087, REQ-5 AC-6
+    it('records a late-arriving loser as superseded and enqueues nothing when a sibling already reached READY', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 2,
         infoHash: 'loser-hash',
@@ -254,12 +345,20 @@ describe('DownloadsService', () => {
       const result = await service.handleTorrentCompleted('loser-hash');
 
       expect(result).toMatch(/^ignorado/);
-      expect(prisma.mediaSource.update).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.update).toHaveBeenCalledWith({
+        where: { id: 2 },
+        data: {
+          status: 'ERROR',
+          errorKey: 'error.source.superseded',
+          errorMessage: expect.any(String),
+          errorParams: null,
+        },
+      });
       expect(prisma.movie.update).not.toHaveBeenCalled();
       expect(queue.addSourceReady).not.toHaveBeenCalled();
     });
 
-    it('marks READY, moves the target to ENCODING and enqueues once when there is no competing winner', async () => {
+    it('marks READY, recomputes the movie by identity and enqueues once when there is no competing winner', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({
         id: 1,
         infoHash: 'winner-hash',
@@ -280,8 +379,32 @@ describe('DownloadsService', () => {
         where: { id: 1 },
         data: { status: 'READY' },
       });
-      expect(prisma.movie.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { status: 'ENCODING' } });
+      // Spec 089, REQ-1
+      expect(prisma.movie.update).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(7);
+      expect(titleStatus.recomputeEpisode).not.toHaveBeenCalled();
       expect(queue.addSourceReady).toHaveBeenCalledWith({ mediaSourceId: 1 });
+    });
+
+    it('recomputes the episode by identity instead of the movie when the source targets an episode', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 1,
+        infoHash: 'winner-hash',
+        status: 'DOWNLOADING',
+        downloadPath: '/media/downloads/abc123',
+        movieId: null,
+        episodeId: 42,
+        seasonId: null,
+        movie: null,
+        episode: { id: 42 },
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([]);
+
+      await service.handleTorrentCompleted('winner-hash');
+
+      expect(titleStatus.recomputeEpisode).toHaveBeenCalledWith(42);
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+      expect(prisma.episode.update).not.toHaveBeenCalled();
     });
   });
 
@@ -401,6 +524,100 @@ describe('DownloadsService', () => {
       await service.downloadStart(4, 'user-1');
 
       expect(order).toEqual(['client', 'db']);
+    });
+  });
+
+  // Spec 091, REQ-6: placement is load-bearing — this guard sits after the
+  // ERROR branch's own refusal (deriveResume's more specific
+  // error.download.retry_replaced for a 090 replaced source), never ahead
+  // of it, or both 409s would collapse onto the wrong message with no
+  // other symptom.
+  describe('downloadStart — REQ-6 refuses a loser once its target has a winner', () => {
+    it('refuses a PAUSED source whose sibling is READY, writing nothing and calling nothing', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 5,
+        kind: 'TORRENT_SEARCH',
+        status: 'PAUSED',
+        infoHash: 'loser-hash',
+        releaseTitle: null,
+        movieId: 11,
+        seasonId: null,
+        episodeId: null,
+        movie: { id: 11, title: 'Perdedora', users: [{ userId: 'user-1' }] },
+        episode: null,
+        season: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 6, status: 'READY', movieId: 11, seasonId: null, episodeId: null },
+      ]);
+
+      await expect(service.downloadStart(5, 'user-1')).rejects.toMatchObject({
+        response: { i18n: { key: 'error.download.retry_superseded' } },
+        status: 409,
+      });
+
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('still answers retry_replaced for an ERROR source demoted by 090, even with a winning sibling', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 1,
+        kind: 'TORRENT_SEARCH',
+        status: 'ERROR',
+        infoHash: 'hash-1',
+        releaseTitle: null,
+        downloadPath: '/downloads/x',
+        errorKey: 'error.source.replaced',
+        errorParams: null,
+        errorMessage: 'reemplazada',
+        updatedAt: new Date('2026-10-01T00:00:00Z'),
+        movieId: 7,
+        seasonId: null,
+        episodeId: null,
+        movie: { id: 7, title: 'Film', users: [{ userId: 'user-1' }] },
+        episode: null,
+        season: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 2, status: 'READY', movieId: 7, seasonId: null, episodeId: null },
+      ]);
+
+      await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+        response: { i18n: { key: 'error.download.retry_replaced' } },
+        status: 409,
+      });
+
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+    });
+
+    it('starts a PAUSED source normally, lostRace false, when its only sibling is a SCANNED source whose encode failed', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 5,
+        kind: 'TORRENT_SEARCH',
+        status: 'PAUSED',
+        infoHash: 'loser-hash',
+        releaseTitle: null,
+        movieId: 11,
+        seasonId: null,
+        episodeId: null,
+        movie: { id: 11, title: 'Perdedora', users: [{ userId: 'user-1' }] },
+        episode: null,
+        season: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 6, status: 'SCANNED', movieId: 11, seasonId: null, episodeId: null },
+      ]);
+      prisma.processJob.findMany.mockResolvedValue([
+        { id: 60, status: 'ERROR', sourceFile: { mediaSourceId: 6 } },
+      ]);
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+      prisma.movie.findUnique.mockResolvedValue({ title: 'Perdedora' });
+
+      const download = await service.downloadStart(5, 'user-1');
+
+      expect(qbittorrent.start).toHaveBeenCalledWith('loser-hash');
+      expect(download.lostRace).toBe(false);
     });
   });
 
@@ -622,11 +839,7 @@ describe('DownloadsService', () => {
   });
 
   describe('movieDownloads — job grouping', () => {
-    // T003: two MediaSource rows on the same title must not pool each
-    // other's ProcessJob rows into one derivation. Fault injection: group
-    // the jobs query result by index/order instead of by
-    // `sourceFile.mediaSourceId` and this case starts asserting the wrong
-    // status/encodeProgress for source 2.
+    // Spec 043, T003
     it('derives each source from only its own jobs, never a sibling source on the same title', async () => {
       prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Dos Fuentes' });
       prisma.mediaSource.findMany.mockResolvedValue([
@@ -950,6 +1163,90 @@ describe('DownloadsService', () => {
     });
   });
 
+  // This suite exists because the loser sweep this feature moves (Spec 091,
+  // REQ-2) used to delete every sibling of the winner with no test of what
+  // that sibling was — defensible before Spec 090, wrong once a replaced
+  // source can be retired on purpose. A status-shaped filter
+  // (`status !== 'SCANNED'`) would pass a one-loser case and still delete a
+  // retired row or keep a SCANNED-but-failed sibling forever, both silent.
+  describe('unwindLosingSiblings — REQ-2/REQ-3/REQ-4/REQ-5 loser sweep', () => {
+    const sibling = (id: number, status: SourceStatus, infoHash: string | null, over: Record<string, unknown> = {}) => ({
+      id,
+      status,
+      infoHash,
+      downloadPath: `/media/downloads/s${id}`,
+      kind: 'TORRENT_SEARCH',
+      movieId: 9,
+      seasonId: null,
+      episodeId: null,
+      retiredAt: null,
+      ...over,
+    });
+    const job = (id: number, mediaSourceId: number, status: string) => ({
+      id,
+      status,
+      sourceFile: { mediaSourceId },
+    });
+
+    it('purges only the siblings that actually lost, recomputing the target once', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([
+        sibling(11, 'PAUSED', 'paused-hash'),
+        sibling(12, 'SCANNED', 'scan-error-hash'),
+        sibling(13, 'SCANNED', 'delivered-hash'),
+        sibling(14, 'SCANNED', 'retired-hash', { retiredAt: new Date('2026-10-01T00:00:00Z') }),
+      ]);
+      prisma.processJob.findMany.mockResolvedValue([
+        job(120, 12, 'ERROR'),
+        job(130, 13, 'COMPLETED'),
+        job(140, 14, 'COMPLETED'),
+      ]);
+
+      await service.unwindLosingSiblings({ id: 10, movieId: 9, episodeId: null, seasonId: null });
+
+      expect(prisma.mediaSource.findMany).toHaveBeenCalledWith({
+        where: { movieId: 9, id: { not: 10 } },
+      });
+      expect(qbittorrent.remove).toHaveBeenCalledTimes(1);
+      expect(qbittorrent.remove).toHaveBeenCalledWith(['paused-hash', 'scan-error-hash'], true);
+      expect(prisma.mediaSource.delete.mock.calls.map((c) => c[0].where.id).sort()).toEqual([11, 12]);
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledTimes(1);
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(9);
+    });
+
+    it('still deletes every loser row and its residue when the torrent client rejects', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([
+        sibling(11, 'PAUSED', 'paused-hash'),
+        sibling(12, 'PAUSED', 'paused-hash-2'),
+      ]);
+      qbittorrent.remove.mockRejectedValue(new Error('torrent container is down'));
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await service.unwindLosingSiblings({ id: 10, movieId: 9, episodeId: null, seasonId: null });
+
+      spy.mockRestore();
+      expect(prisma.mediaSource.delete.mock.calls.map((c) => c[0].where.id).sort()).toEqual([11, 12]);
+      expect(rm).toHaveBeenCalledTimes(2);
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledTimes(1);
+    });
+
+    it('is a no-op when the winner has no target', async () => {
+      await service.unwindLosingSiblings({ id: 10, movieId: null, episodeId: null, seasonId: null });
+
+      expect(prisma.mediaSource.findMany).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op (NFR-3) when no sibling remains', async () => {
+      prisma.mediaSource.findMany.mockResolvedValue([]);
+
+      await service.unwindLosingSiblings({ id: 10, movieId: 9, episodeId: null, seasonId: null });
+
+      expect(qbittorrent.remove).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.delete).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+    });
+  });
+
   describe('downloadStart on an ERROR source — resume', () => {
     const at = new Date('2026-09-19T10:00:00Z');
     const sourceRow = (over: Record<string, unknown> = {}) => ({
@@ -1011,9 +1308,18 @@ describe('DownloadsService', () => {
       const order: string[] = [];
       queue.removeSourceReady.mockImplementation(async () => void order.push('remove'));
       queue.addSourceReady.mockImplementation(async () => void order.push('add'));
-      prisma.mediaSource.findUnique.mockResolvedValue(
-        sourceRow({ status: 'ERROR', errorKey: 'error.source.scan_no_video', errorMessage: 'none' }),
-      );
+      // The first findUnique is the ERROR lookup downloadStart/resumeErroredSource
+      // reads; resolveRace re-reads the row afterward, by which point the
+      // guarded updateMany below has already flipped it to READY in the real
+      // DB — a static mock would otherwise make resolveRace see a source
+      // still ERROR and (correctly, per this feature's fix) refuse to treat it
+      // as a winner, which is a mocking gap, not a behaviour this test means
+      // to cover.
+      prisma.mediaSource.findUnique
+        .mockResolvedValueOnce(
+          sourceRow({ status: 'ERROR', errorKey: 'error.source.scan_no_video', errorMessage: 'none' }),
+        )
+        .mockResolvedValue(sourceRow({ status: 'READY', errorKey: null, errorMessage: null }));
       prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
 
       await service.downloadStart(1, 'user-1');
@@ -1040,9 +1346,13 @@ describe('DownloadsService', () => {
 
     it('restores the source to ERROR when the scan enqueue fails', async () => {
       queue.addSourceReady.mockRejectedValue(new Error('redis down'));
-      prisma.mediaSource.findUnique.mockResolvedValue(
-        sourceRow({ status: 'ERROR', errorKey: 'error.source.scan_no_video', errorMessage: 'none' }),
-      );
+      // Same mocking gap as the previous case: resolveRace's own re-read must
+      // see the row the guarded updateMany below already flipped to READY.
+      prisma.mediaSource.findUnique
+        .mockResolvedValueOnce(
+          sourceRow({ status: 'ERROR', errorKey: 'error.source.scan_no_video', errorMessage: 'none' }),
+        )
+        .mockResolvedValue(sourceRow({ status: 'READY', errorKey: null, errorMessage: null }));
       prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
 
       await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
@@ -1095,6 +1405,45 @@ describe('DownloadsService', () => {
       expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
     });
 
+    // siblingsOf's select used to omit retiredAt and siblingsIn never mapped
+    // it, so every ResumeSibling built here carried retiredAt: undefined —
+    // deriveResume's `?? null` then made a retired sibling read as a live
+    // race winner and wrongly refused the retry.
+    it('does not refuse retry_superseded against a sibling that is merely retired', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(
+        sourceRow({ status: 'SCANNED', errorKey: null, errorMessage: null }),
+      );
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 2, status: 'SCANNED', movieId: 7, seasonId: null, episodeId: null, retiredAt: at },
+      ]);
+      prisma.processJob.findMany.mockImplementation(
+        async ({ where }: { where: { sourceFile: { mediaSourceId: { in: number[] } } } }) => {
+          const ids = where.sourceFile.mediaSourceId.in;
+          if (ids.includes(1)) return [jobRow(11)];
+          if (ids.includes(2)) {
+            return [
+              {
+                id: 21,
+                status: 'COMPLETED',
+                progress: 100,
+                encodeSpeed: null,
+                errorKey: null,
+                errorParams: null,
+                errorMessage: null,
+                updatedAt: at,
+                sourceFile: { mediaSourceId: 2 },
+              },
+            ];
+          }
+          return [];
+        },
+      );
+
+      await service.downloadStart(1, 'user-1');
+
+      expect(encodeQueue.addEncode).toHaveBeenCalled();
+    });
+
     it('still refuses a non-ERROR upload with not_a_torrent', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue(sourceRow({ kind: 'LOCAL_FILE', infoHash: null, status: 'READY' }));
 
@@ -1102,6 +1451,404 @@ describe('DownloadsService', () => {
         response: { i18n: { key: 'error.download.not_a_torrent' } },
       });
       expect(qbittorrent.start).not.toHaveBeenCalled();
+    });
+
+    // Spec 090, REQ-5
+    it('refuses a retired source with retry_replaced, before touching the torrent client', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(
+        sourceRow({ status: 'SCANNED', retiredAt: new Date('2026-10-09T00:00:00Z') }),
+      );
+
+      await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+        response: { i18n: { key: 'error.download.retry_replaced' } },
+        status: 409,
+      });
+
+      expect(qbittorrent.start).not.toHaveBeenCalled();
+      expect(qbittorrent.info).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // Spec 087, REQ-2 REQ-3 REQ-9: this suite exists because a force-replacement that fails to tell
+  // a delivered sibling from one still working either reintroduces the stall described in
+  // spec.md's § Context & Goal (a target never offered the warning, so the pipeline never
+  // demotes the stale source and the replacement sits DOWNLOADING forever) or kills a sibling
+  // download in flight with no error anywhere, the collateral-damage regression this feature forbids.
+  describe('hasDeliveredSource / demoteDeliveredSources', () => {
+    const jobRow = (id: number, mediaSourceId: number, status: string, over: Record<string, unknown> = {}) => ({
+      id,
+      status,
+      progress: 100,
+      encodeSpeed: null,
+      errorKey: null,
+      errorParams: null,
+      errorMessage: null,
+      updatedAt: new Date('2026-10-01T00:00:00Z'),
+      sourceFile: { mediaSourceId },
+      ...over,
+    });
+
+    describe('hasDeliveredSource', () => {
+      it('is false when the target holds no SCANNED source', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([]);
+
+        await expect(service.hasDeliveredSource({ movieId: 7 })).resolves.toBe(false);
+        expect(prisma.processJob.findMany).not.toHaveBeenCalled();
+      });
+
+      it('is true when a SCANNED source has a COMPLETED job and none active', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([{ id: 1 }]);
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 1, 'COMPLETED')]);
+
+        await expect(service.hasDeliveredSource({ episodeId: 5 })).resolves.toBe(true);
+        expect(prisma.mediaSource.findMany).toHaveBeenCalledWith({
+          where: { episodeId: 5, status: 'SCANNED', retiredAt: null },
+          select: { id: true },
+        });
+      });
+
+      it('is false when the SCANNED source still has an ENCODING job — a download in flight is not a delivery', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([{ id: 1 }]);
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 1, 'ENCODING')]);
+
+        await expect(service.hasDeliveredSource({ seasonId: 3 })).resolves.toBe(false);
+      });
+    });
+
+    describe('demoteDeliveredSources', () => {
+      it('demotes only the delivered source, closing none of its jobs since none are active', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([{ id: 1 }]);
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 1, 'COMPLETED')]);
+        prisma.processJob.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(service.demoteDeliveredSources({ movieId: 7 }, 'force-replace')).resolves.toBe(1);
+
+        expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
+          where: { id: { in: [1] } },
+          data: { retiredAt: expect.any(Date) },
+        });
+        expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
+          where: { sourceFile: { mediaSourceId: { in: [1] } }, status: { in: ['WAITING', 'QUEUED', 'ENCODING'] } },
+          data: expect.objectContaining({ status: 'ERROR', errorKey: 'error.source.replaced' }),
+        });
+      });
+
+      // Spec 090, REQ-1
+      it('retires the delivered source (retiredAt set) and writes no status or error field', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([{ id: 1 }]);
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 1, 'COMPLETED')]);
+        prisma.processJob.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(service.demoteDeliveredSources({ movieId: 7 }, 'force-replace')).resolves.toBe(1);
+
+        expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
+          where: { id: { in: [1] } },
+          data: { retiredAt: expect.any(Date) },
+        });
+        const writtenData = prisma.mediaSource.updateMany.mock.calls[0][0].data;
+        expect(writtenData.status).toBeUndefined();
+        expect(writtenData.errorKey).toBeUndefined();
+        expect(writtenData.errorMessage).toBeUndefined();
+        expect(writtenData.errorParams).toBeUndefined();
+      });
+
+      it('does not demote a SCANNED sibling whose encode is still active, and writes nothing', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([{ id: 1 }]);
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 1, 'ENCODING')]);
+
+        await expect(service.demoteDeliveredSources({ movieId: 7 }, 'force-replace')).resolves.toBe(0);
+
+        expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+        expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('leaves a non-SCANNED sibling (e.g. DOWNLOADING at 50%) untouched — it is never selected at all', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([]);
+
+        await expect(service.demoteDeliveredSources({ episodeId: 5 }, 'force-replace')).resolves.toBe(0);
+
+        expect(prisma.mediaSource.findMany).toHaveBeenCalledWith({
+          where: { episodeId: 5, status: 'SCANNED', retiredAt: null },
+          select: { id: true },
+        });
+        expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('writes no Movie/Episode/Season column — only MediaSource and ProcessJob', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([{ id: 1 }]);
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 1, 'COMPLETED')]);
+
+        await service.demoteDeliveredSources({ movieId: 7 }, 'force-replace');
+
+        expect(prisma.movie.update).not.toHaveBeenCalled();
+        expect(prisma.episode.update).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  // Spec 087, REQ-5 REQ-6: this suite exists because the arbiter used to
+  // answer a superseded source with a log line and nothing else — the
+  // source never left its pre-arbitration status, so a film whose
+  // replacement reached 100% while a sibling had already won sat frozen in
+  // DOWNLOADING with no error anywhere (spec.md § Context & Goal). It also
+  // guards the one regression this feature must not introduce: a WON
+  // outcome must still pause its in-flight losers exactly as 022 specifies.
+  describe('resolveRace — outcome typing and the superseded write (REQ-5/REQ-6)', () => {
+    it('comes back SUPERSEDED, writes ERROR/error.source.superseded and stops the torrent for its own hash', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 9,
+        status: 'DOWNLOADING',
+        infoHash: 'superseded-hash',
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 1, status: 'SCANNED', infoHash: 'winner-hash' },
+      ]);
+      prisma.processJob.findMany.mockResolvedValue([
+        {
+          id: 20,
+          status: 'COMPLETED',
+          progress: 100,
+          encodeSpeed: null,
+          errorKey: null,
+          errorParams: null,
+          errorMessage: null,
+          updatedAt: new Date(),
+          sourceFile: { mediaSourceId: 1 },
+        },
+      ]);
+
+      const result = await service.resolveRace(9);
+
+      expect(result).toEqual({ outcome: 'SUPERSEDED', message: expect.stringContaining('ignorado') });
+      expect(qbittorrent.stop).toHaveBeenCalledWith('superseded-hash');
+      expect(prisma.mediaSource.update).toHaveBeenCalledWith({
+        where: { id: 9 },
+        data: {
+          status: 'ERROR',
+          errorKey: 'error.source.superseded',
+          errorMessage: expect.any(String),
+          errorParams: null,
+        },
+      });
+    });
+
+    it('still comes back SUPERSEDED and records the loss when qbittorrent.stop throws', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 9,
+        status: 'DOWNLOADING',
+        infoHash: 'superseded-hash',
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 1, status: 'READY', infoHash: 'winner-hash' },
+      ]);
+      qbittorrent.stop.mockRejectedValueOnce(new Error('qBittorrent unreachable'));
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await expect(service.resolveRace(9)).resolves.toEqual({
+        outcome: 'SUPERSEDED',
+        message: expect.any(String),
+      });
+      expect(prisma.mediaSource.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 9 }, data: expect.objectContaining({ status: 'ERROR' }) }),
+      );
+    });
+
+    it('records a superseded source with no infoHash as a loss without calling stop', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 9,
+        status: 'DOWNLOADING',
+        infoHash: null,
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 1, status: 'READY', infoHash: 'winner-hash' },
+      ]);
+
+      const result = await service.resolveRace(9);
+
+      expect(result.outcome).toBe('SUPERSEDED');
+      expect(qbittorrent.stop).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 9 }, data: expect.objectContaining({ status: 'ERROR' }) }),
+      );
+    });
+
+    it('a WON outcome still pauses every in-flight loser, unaffected by the SUPERSEDED branch', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'DOWNLOADING',
+        infoHash: 'winner-hash',
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 2, status: 'DOWNLOADING', infoHash: 'loser-hash' },
+      ]);
+
+      const result = await service.resolveRace(1);
+
+      expect(result.outcome).toBe('WON');
+      expect(qbittorrent.stop).toHaveBeenCalledWith('loser-hash');
+      expect(prisma.mediaSource.update).toHaveBeenCalledWith({ where: { id: 2 }, data: { status: 'PAUSED' } });
+      // The winner itself is never written by resolveRace.
+      expect(prisma.mediaSource.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 1 } }),
+      );
+    });
+
+    // Spec 090, REQ-3
+    it('a retired delivered sibling never blocks the new source from winning its race', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'DOWNLOADING',
+        infoHash: 'winner-hash',
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+      });
+      prisma.mediaSource.findMany.mockResolvedValue([
+        { id: 2, status: 'SCANNED', infoHash: 'retired-hash', retiredAt: new Date() },
+      ]);
+      prisma.processJob.findMany.mockResolvedValue([
+        {
+          id: 21,
+          status: 'COMPLETED',
+          progress: 100,
+          encodeSpeed: null,
+          errorKey: null,
+          errorParams: null,
+          errorMessage: null,
+          updatedAt: new Date(),
+          sourceFile: { mediaSourceId: 2 },
+        },
+      ]);
+
+      const result = await service.resolveRace(1);
+
+      expect(result.outcome).toBe('WON');
+      expect(qbittorrent.stop).not.toHaveBeenCalledWith('winner-hash');
+      expect(prisma.mediaSource.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({ status: 'ERROR', errorKey: 'error.source.superseded' }),
+        }),
+      );
+    });
+  });
+
+  // Spec 089, REQ-7 REQ-8 NFR-1 NFR-4: this suite exists because a live
+  // read's write-back has two ways to fail with no error anywhere — writing
+  // only the row the caller happened to ask about (the plausible wrong
+  // implementation: fifty downloads, one stopped, one promoted from queued
+  // to downloading in the same info() call, and the promoted row's stored
+  // status silently stays stale), and writing over a terminal source whose
+  // torrent is still present in the client (a SCANNED source with its
+  // episodes encoding would be demoted to READY, corrupting isRaceWinner's
+  // "READY is an unconditional winner" rule). The third case pins the other
+  // failure mode: an unreachable torrent client must write nothing, not
+  // "every source is gone".
+  describe('live-read write-back', () => {
+    const liveRow = (hash: string, state: string, rawState: string) => ({
+      hash,
+      state,
+      rawState,
+      progress: 0.5,
+      dlspeed: 100,
+    });
+
+    beforeEach(() => {
+      prisma.movie.findFirst.mockResolvedValue({ id: 7, title: 'Cincuenta Descargas' });
+    });
+
+    it('persists every row the live read returned, not only the one the caller asked about (AC-7)', async () => {
+      // Three sources share one title: one DOWNLOADING (about to be
+      // stopped by the caller elsewhere), and — in the very same info()
+      // call — a second one qBittorrent has just promoted out of its
+      // queue, plus a third still waiting. Only movieDownloads' tag-scoped
+      // read is exercised here; the point is that all three rows land in
+      // the DB from the one call, not just whichever the test's main
+      // assertion is about.
+      prisma.mediaSource.findMany
+        .mockResolvedValueOnce([
+          { id: 1, kind: 'TORRENT_SEARCH', status: 'DOWNLOADING', infoHash: 'hash-1', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+          { id: 2, kind: 'TORRENT_SEARCH', status: 'QUEUED', infoHash: 'hash-2', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+          { id: 3, kind: 'TORRENT_SEARCH', status: 'QUEUED', infoHash: 'hash-3', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+        ])
+        .mockResolvedValueOnce([
+          { id: 1, infoHash: 'hash-1', status: 'DOWNLOADING', movieId: 7, episodeId: null, seasonId: null },
+          { id: 2, infoHash: 'hash-2', status: 'QUEUED', movieId: 7, episodeId: null, seasonId: null },
+          { id: 3, infoHash: 'hash-3', status: 'QUEUED', movieId: 7, episodeId: null, seasonId: null },
+        ]);
+      qbittorrent.info.mockResolvedValue([
+        liveRow('hash-1', 'DOWNLOADING', 'downloading'),
+        liveRow('hash-2', 'DOWNLOADING', 'downloading'), // just promoted out of the queue
+        liveRow('hash-3', 'QUEUED', 'queuedDL'), // still waiting, unchanged
+      ]);
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.movieDownloads(7, 'user-1');
+
+      // The caller's own target (source 1) is untouched — already DOWNLOADING.
+      // Source 2, promoted QUEUED -> DOWNLOADING, must be written even though
+      // nobody asked about it directly.
+      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
+        where: { id: 2, status: { in: ['PENDING', 'QUEUED', 'DOWNLOADING', 'PAUSED'] } },
+        data: { status: 'DOWNLOADING' },
+      });
+      // Source 3's live state matches its stored status already — skipped,
+      // not re-written.
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ id: 3 }) }),
+      );
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(7);
+    });
+
+    it('never demotes a SCANNED source whose torrent is still seeding (AC-4)', async () => {
+      prisma.mediaSource.findMany
+        .mockResolvedValueOnce([
+          { id: 1, kind: 'TORRENT_SEARCH', status: 'SCANNED', infoHash: 'hash-1', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+        ])
+        .mockResolvedValueOnce([
+          { id: 1, infoHash: 'hash-1', status: 'SCANNED', movieId: 7, episodeId: null, seasonId: null },
+        ]);
+      // uploading -> READY per mapTorrentState's COMPLETED_STATES.
+      qbittorrent.info.mockResolvedValue([liveRow('hash-1', 'READY', 'uploading')]);
+
+      await service.movieDownloads(7, 'user-1');
+
+      // The attempted write is guarded to the non-terminal statuses, which
+      // excludes SCANNED by construction — matched here by the mock's
+      // default { count: 0 }, i.e. no row actually changed — so no
+      // recompute follows. If the guard were ever bypassed (a bare
+      // `update` instead of this guarded `updateMany`), this is the call
+      // that would demote the source straight to READY.
+      const call = prisma.mediaSource.updateMany.mock.calls.find((c) => c[0].where.id === 1);
+      expect(call?.[0].where.status.in).not.toContain('SCANNED');
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing when the torrent client is unreachable (AC-5)', async () => {
+      prisma.mediaSource.findMany.mockResolvedValueOnce([
+        { id: 1, kind: 'TORRENT_SEARCH', status: 'DOWNLOADING', infoHash: 'hash-1', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+      ]);
+      qbittorrent.info.mockRejectedValue(new Error('connection refused'));
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await service.movieDownloads(7, 'user-1');
+
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
     });
   });
 });

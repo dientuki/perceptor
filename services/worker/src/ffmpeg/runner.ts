@@ -19,8 +19,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Cuántas líneas de stderr de ffmpeg se guardan para el errorMessage que
-// termina en encodeFailed — sin esto un fallo de encode no dice nada útil.
 const STDERR_TAIL_LINES = 40;
 
 async function exists(path: string): Promise<boolean> {
@@ -32,26 +30,6 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-// Corre ffmpeg y, si termina bien, remuxea con mkvmerge para corregir
-// metadatos del contenedor — mkvmerge escribe DIRECTO al destino final.
-//
-// Secuencia de archivos:
-//   ffmpeg   -> workingPath (junto al ORIGEN: <input>.working.mkv, ver
-//               encode.ffmpeg.ts) — el encode dura horas, no tiene sentido
-//               pagar la latencia de un disco de biblioteca lento durante
-//               todo ese tiempo.
-//   mkvmerge -> partPath    (<final>.part.mkv, en el DESTINO) — igual lee el
-//               archivo entero y lo vuelve a escribir, así que hace de remux
-//               y de "copiar al destino" en una sola pasada.
-//   rename   -> output      (atómico: partPath y output son hermanos en el
-//               mismo filesystem de destino, así que nunca cruza dispositivos)
-// Ninguno de los dos pasos escribe nunca directo sobre `output`: si se corta
-// a mitad de camino (SIGKILL, disco lleno, corte de luz), Jellyfin no puede
-// encontrar un archivo con nombre definitivo pero contenido truncado.
-//
-// `durationSeconds` es el denominador para calcular el progreso a partir de
-// out_time_us (ver -progress pipe:1 en buildCommand.ts) — con
-// ENCODE_SAMPLE_SECONDS seteado es ese valor, no la duración real del archivo.
 export function runFfmpeg(
   args: string[],
   workingPath: string,
@@ -67,12 +45,7 @@ export function runFfmpeg(
 
     const stderrTail: string[] = [];
     let progressInFlight = false;
-    // Last speed= FFmpeg reported, read at report time rather than required
-    // in the same stdout chunk as out_time_us= — a -progress block can split
-    // across chunk boundaries, and requiring both in one chunk would drop
-    // most reports (053-downloads-panel-repair). null until a value has
-    // actually been parsed, and again whenever a chunk carries speed=N/A or
-    // something unparseable.
+    // Spec 053, AC-8
     let lastSpeed: number | null = null;
     let settled = false;
     // Set the moment the abort listener below fires, so the close handlers
@@ -82,43 +55,26 @@ export function runFfmpeg(
     let cancelled = false;
     let killTimer: NodeJS.Timeout | null = null;
 
-    // Apunta al proceso que esté corriendo en cada momento (primero ffmpeg,
-    // después mkvmerge): así una señal de cierre llega al que corresponda sin
-    // importar en qué paso esté el job. El bug viejo sólo mataba a ffmpeg —
-    // durante todo el remux (ahora potencialmente varios minutos, escribiendo
-    // a un disco lento) no había ningún proceso registrado para matar.
     let activeChild: ChildProcess | null = null;
 
     const cleanupTemps = async () => {
-      // Los dos temporales viven en discos distintos (origen y destino): un
-      // .part.mkv huérfano en la biblioteca puede pesar varios GB, así que
-      // limpiarlo acá importa tanto como limpiar el .working.mkv del origen.
       await rm(workingPath, { force: true }).catch(() => {});
       await rm(partPath, { force: true }).catch(() => {});
     };
 
-    // Docker manda SIGTERM en `docker compose stop`/restart, no SIGINT — el
-    // runner viejo sólo escuchaba SIGINT, así que un stop dejaba el proceso
-    // huérfano. ffmpeg y mkvmerge manejan SIGTERM igual que SIGINT.
     const killHandler = () => {
       if (activeChild && !activeChild.killed) {
-        console.log('[ffmpeg] señal de cierre recibida, matando el proceso activo...');
+        console.log('[ffmpeg] shutdown signal received, killing the active process...');
         activeChild.kill('SIGTERM');
       }
     };
 
     process.once('SIGINT', killHandler);
     process.once('SIGTERM', killHandler);
-    // Último recurso si el proceso se cae sin pasar por SIGINT/SIGTERM (p. ej.
-    // una excepción no capturada en otro punto del worker): sólo mata al hijo
-    // activo, sin tocar el filesystem — 'exit' no puede esperar operaciones async.
     process.once('exit', () => {
       if (activeChild && !activeChild.killed) activeChild.kill('SIGKILL');
     });
 
-    // Se llama recién al final real del trabajo (éxito o fallo, tras ffmpeg
-    // Y tras mkvmerge) — no en el close de ffmpeg, que es lo que dejaba el
-    // remux sin ningún handler de señales registrado.
     function cleanupListeners() {
       process.removeListener('SIGINT', killHandler);
       process.removeListener('SIGTERM', killHandler);
@@ -143,14 +99,11 @@ export function runFfmpeg(
       resolve(finalCmd);
     }
 
-    // A deletion cancellation (encode:cancel, 047-source-deletion), not a
-    // container shutdown — that's killHandler/SIGINT/SIGTERM above, a
-    // separate concern left untouched. SIGTERM first, SIGKILL only if the
-    // child is still alive after the grace period.
+    // Spec 047, REQ-4
     function abortHandler() {
       cancelled = true;
       if (activeChild && !activeChild.killed) {
-        console.log('[ffmpeg] cancelación recibida, matando el proceso activo...');
+        console.log('[ffmpeg] cancellation received, killing the active process...');
         activeChild.kill('SIGTERM');
         killTimer = setTimeout(() => {
           if (activeChild && !activeChild.killed) {
@@ -167,12 +120,7 @@ export function runFfmpeg(
 
     signal.addEventListener('abort', abortHandler);
 
-    // Clear any scratch file a crashed previous run left behind, before
-    // spawning ffmpeg — unconditional for every encode, not only a recovered
-    // one (054-interrupted-encode-recovery, REQ-6). `cleanupTemps` is async,
-    // so it is chained rather than awaited: this executor must stay
-    // synchronous, since a rejection thrown from an async Promise executor
-    // is swallowed instead of rejecting the promise.
+    // Spec 054, REQ-6
     cleanupTemps().then(startFfmpeg);
 
     function startFfmpeg() {
@@ -189,24 +137,10 @@ export function runFfmpeg(
 
       child.on('error', (err) => settleReject(err));
 
-      // out_time_us= llega en microsegundos y viene en 'N/A' durante el
-      // buffering inicial de encoders como SVT-AV1 — hay que saltearlo, no
-      // tratarlo como progreso 0. onProgress es async pero el stream 'data' no
-      // tiene backpressure para esperarlo ahí mismo: se serializa con
-      // progressInFlight ("hay uno en vuelo, descarto este") en vez de await,
-      // así nunca hay dos mutations de progreso concurrentes sobre el mismo
-      // ProcessJob — es la misma condición que ya rompió con error 1020 de
-      // MariaDB en encode.mock.ts/encode.job.ts.
       child.stdout.on('data', (data: Buffer) => {
         const chunk = data.toString();
 
-        // speed= can land in a different chunk than out_time_us= (the
-        // -progress block splits across chunk boundaries), so it is parsed
-        // independently and remembered in `lastSpeed` rather than required
-        // alongside out_time_us= in the same match (053-downloads-panel-repair).
-        // FFmpeg emits `speed=N/A` during startup buffering, and possibly a
-        // leading space (`speed= 1.02x`) — both fall through to null, never
-        // throwing (NFR-3).
+        // Spec 053, AC-8
         const speedMatch = chunk.match(/speed=\s*([\d.]+)x/);
         if (speedMatch) {
           const parsedSpeed = Number(speedMatch[1]);
@@ -221,12 +155,10 @@ export function runFfmpeg(
         const outTimeSeconds = Number(match[1]) / 1_000_000;
         if (!Number.isFinite(outTimeSeconds)) return;
 
-        // Tope en 99: el 100 lo pone encodeCompleted recién después del rename
-        // final, cuando el archivo ya está de verdad en su ruta definitiva.
         const progress = Math.min(99, Math.max(0, Math.round((outTimeSeconds / durationSeconds) * 100)));
         progressInFlight = true;
         onProgress(progress, lastSpeed)
-          .catch((err) => console.error('[ffmpeg] no se pudo reportar progreso:', err))
+          .catch((err) => console.error('[ffmpeg] could not report progress:', err))
           .finally(() => {
             progressInFlight = false;
           });
@@ -265,10 +197,6 @@ export function runFfmpeg(
         return;
       }
 
-      // El bug que colgaba el worker para siempre estaba acá: si code===0 pero
-      // el temporal no existe, el código viejo no llamaba ni resolve() ni
-      // reject() — con concurrency 1 eso ocupaba el worker de encode
-      // indefinidamente. Ahora siempre se resuelve uno de los dos caminos.
       if (!(await exists(workingPath))) {
         const params = { path: workingPath };
         settleReject(
@@ -281,22 +209,10 @@ export function runFfmpeg(
         return;
       }
 
-      // De acá en más el trabajo pesado ya no es CPU, es I/O contra el disco
-      // de destino: si es el disco lento de la biblioteca, este paso puede
-      // tardar varios minutos por sí solo (progreso clavado en 99% mientras
-      // tanto) — por eso importa que activeChild siga apuntando a algo vivo.
-      console.log(`[ffmpeg] muxing con mkvmerge hacia el destino (${partPath})...`);
+      console.log(`[ffmpeg] muxing with mkvmerge to the destination (${partPath})...`);
 
       try {
-        // La carpeta de destino se crea recién acá, justo antes del primer
-        // byte que se escribe ahí — no al arrancar el encode (que puede durar
-        // horas). Así nadie mirando la biblioteca ve una carpeta vacía
-        // fingiendo contenido que todavía no existe.
         await mkdir(dirname(partPath), { recursive: true });
-        // Margen defensivo para destinos de red (NFS/SMB): un mkdir que ya
-        // resolvió puede tardar un instante en propagarse antes de que otro
-        // proceso (mkvmerge) la vea — barato comparado con las horas que ya
-        // llevó el encode.
         await sleep(1000);
       } catch (err) {
         settleReject(err instanceof Error ? err : new Error(String(err)));
@@ -345,7 +261,7 @@ export function runFfmpeg(
       try {
         await rm(workingPath, { force: true });
         await rename(partPath, output);
-        console.log(`[ffmpeg] completado -> ${output}`);
+        console.log(`[ffmpeg] completed -> ${output}`);
         settleResolve();
       } catch (err) {
         settleReject(err instanceof Error ? err : new Error(String(err)));

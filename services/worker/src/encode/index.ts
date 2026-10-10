@@ -5,9 +5,6 @@ import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import { ERROR_ENCODE_UNKNOWN_DRIVER } from '../i18n/error-keys';
 
-// Punto de sutura entre el workflow (probado con el mock) y FFmpeg real: el
-// día que se porte services/worker/src/ffmpeg/, cambia ENCODE_DRIVER, no el
-// resto del pipeline.
 const DRIVERS: Record<string, EncodeFn> = {
   mock: encodeMock,
   ffmpeg: encodeFfmpeg,

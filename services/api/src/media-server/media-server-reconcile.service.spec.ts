@@ -12,6 +12,15 @@
 // flip every COMPLETED title to MISSING with no error anywhere. So a failed
 // read must produce FAILED with zero writes, and every write must carry the
 // in-flight relation filter in its own `where`.
+//
+// Since deriveTitleStatus now treats mediaServerPresentAt as possession,
+// every promotion here must set it and every demotion must clear it in the
+// same updateMany that clears filePath — a demotion that cleared filePath
+// alone would leave mediaServerPresentAt set, and the very next recompute
+// would read that as possession and promote the title right back with no
+// error anywhere.
+
+// Spec 089, REQ-4 AC-10
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { MediaServerReconcileService } from './media-server-reconcile.service';
@@ -19,6 +28,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaServerIndexService } from '@/media-server-index/media-server-index.service';
 import * as registry from '@/clients/media-server/registry';
+import { deriveTitleStatus } from '@/pipeline-status/pipeline-status';
 
 describe('MediaServerReconcileService', () => {
   let service: MediaServerReconcileService;
@@ -83,18 +93,16 @@ describe('MediaServerReconcileService', () => {
   }
 
   describe('reconcileMovie', () => {
-    it('promotes a MISSING film to COMPLETED without writing filePath', async () => {
+    it('promotes a MISSING film to COMPLETED, setting mediaServerPresentAt, without writing filePath', async () => {
       mockClient({ findByTmdbId: jest.fn().mockResolvedValue('ext-1') });
 
       await service.reconcileMovie(42, 539);
 
-      expect(movieUpdateMany).toHaveBeenCalledWith({
-        where: { id: 42, status: 'MISSING' },
-        data: { status: 'COMPLETED' },
-      });
-      expect(movieUpdateMany.mock.calls[0][0].data).not.toHaveProperty(
-        'filePath',
-      );
+      const arg = movieUpdateMany.mock.calls[0][0];
+      expect(arg.where).toEqual({ id: 42, status: 'MISSING' });
+      expect(arg.data.status).toBe('COMPLETED');
+      expect(arg.data.mediaServerPresentAt).toBeInstanceOf(Date);
+      expect(arg.data).not.toHaveProperty('filePath');
     });
 
     it('relies on the where-clause guard rather than a read-then-write for a DOWNLOADING film', async () => {
@@ -174,10 +182,10 @@ describe('MediaServerReconcileService', () => {
       await service.reconcileShow(7, 1405);
 
       expect(episodeUpdateMany).toHaveBeenCalledTimes(1);
-      expect(episodeUpdateMany).toHaveBeenCalledWith({
-        where: { id: 100, status: 'MISSING' },
-        data: { status: 'COMPLETED' },
-      });
+      const arg = episodeUpdateMany.mock.calls[0][0];
+      expect(arg.where).toEqual({ id: 100, status: 'MISSING' });
+      expect(arg.data.status).toBe('COMPLETED');
+      expect(arg.data.mediaServerPresentAt).toBeInstanceOf(Date);
     });
 
     it('reconciles season 0 like any other season', async () => {
@@ -191,10 +199,10 @@ describe('MediaServerReconcileService', () => {
 
       await service.reconcileShow(7, 1405);
 
-      expect(episodeUpdateMany).toHaveBeenCalledWith({
-        where: { id: 200, status: 'MISSING' },
-        data: { status: 'COMPLETED' },
-      });
+      const arg = episodeUpdateMany.mock.calls[0][0];
+      expect(arg.where).toEqual({ id: 200, status: 'MISSING' });
+      expect(arg.data.status).toBe('COMPLETED');
+      expect(arg.data.mediaServerPresentAt).toBeInstanceOf(Date);
     });
 
     it('skips an episode the server reports but the show does not have, without throwing', async () => {
@@ -259,23 +267,45 @@ describe('MediaServerReconcileService', () => {
       expect(where.processJobs).toEqual(jobGuard);
     }
 
-    it('promotes a present film with the in-flight guard inside the where', async () => {
+    it('promotes a present film with the in-flight guard inside the where, setting mediaServerPresentAt', async () => {
       mockClient({ findByTmdbId: jest.fn().mockResolvedValue('ext') });
       const r = await service.syncMovie(1, 5);
       expect(r).toEqual({ outcome: 'DONE', promoted: 1, demoted: 0 });
       const arg = movieUpdateMany.mock.calls[0][0];
       expect(arg.where.status).toBe('MISSING');
+      expect(arg.data.status).toBe('COMPLETED');
+      expect(arg.data.mediaServerPresentAt).toBeInstanceOf(Date);
       expectGuarded(arg.where);
     });
 
-    it('demotes an absent film, clearing filePath, with the guard inside the where', async () => {
+    it('demotes an absent film, clearing both filePath and mediaServerPresentAt, with the guard inside the where', async () => {
       mockClient({ findByTmdbId: jest.fn().mockResolvedValue(null) });
       const r = await service.syncMovie(1, 5);
       expect(r).toEqual({ outcome: 'DONE', promoted: 0, demoted: 1 });
       const arg = movieUpdateMany.mock.calls[0][0];
       expect(arg.where.status).toBe('COMPLETED');
-      expect(arg.data).toEqual({ status: 'MISSING', filePath: null });
+      expect(arg.data).toEqual({
+        status: 'MISSING',
+        filePath: null,
+        mediaServerPresentAt: null,
+      });
       expectGuarded(arg.where);
+    });
+
+    // Spec 089, AC-10
+    it('a demoted film does not get promoted back by an immediate recompute', async () => {
+      mockClient({ findByTmdbId: jest.fn().mockResolvedValue(null) });
+      await service.syncMovie(1, 5);
+      const written = movieUpdateMany.mock.calls[0][0].data;
+
+      const status = deriveTitleStatus({
+        filePath: written.filePath,
+        mediaServerPresentAt: written.mediaServerPresentAt,
+        sources: [],
+        jobs: [],
+      });
+
+      expect(status).toBe('MISSING');
     });
 
     it('is SKIPPED with no writes when no client is configured', async () => {
@@ -333,7 +363,11 @@ describe('MediaServerReconcileService', () => {
       expect(episodeUpdateMany).toHaveBeenCalledTimes(2); // aired + unaired
       for (const [arg] of episodeUpdateMany.mock.calls) {
         expect(arg.where.status).toBe('COMPLETED');
-        expect(arg.data).toEqual({ status: 'MISSING', filePath: null });
+        expect(arg.data).toEqual({
+          status: 'MISSING',
+          filePath: null,
+          mediaServerPresentAt: null,
+        });
         expectGuarded(arg.where);
       }
       const aired = episodeUpdateMany.mock.calls.find(
@@ -344,6 +378,28 @@ describe('MediaServerReconcileService', () => {
         ([a]) => a.where.id.in.length === 1,
       )![0];
       expect(unaired.where).not.toHaveProperty('season');
+    });
+
+    // Spec 089, AC-10
+    it('a demoted episode does not get promoted back by an immediate recompute, episode side', async () => {
+      mockClient({
+        findByTmdbId: jest.fn().mockResolvedValue('ext'),
+        listPresentEpisodes: jest.fn().mockResolvedValue([]),
+      });
+      seasonFindMany.mockResolvedValue(seasons);
+      episodeUpdateMany.mockResolvedValue({ count: 2 });
+
+      await service.syncShow(7, 9);
+      const written = episodeUpdateMany.mock.calls[0][0].data;
+
+      const status = deriveTitleStatus({
+        filePath: written.filePath,
+        mediaServerPresentAt: written.mediaServerPresentAt,
+        sources: [],
+        jobs: [],
+      });
+
+      expect(status).toBe('MISSING');
     });
 
     it('promotes present episodes only from MISSING, matched by season and episode number', async () => {
@@ -360,7 +416,8 @@ describe('MediaServerReconcileService', () => {
         ([a]) => a.where.status === 'MISSING',
       )![0];
       expect(promote.where.id).toEqual({ in: [1] });
-      expect(promote.data).toEqual({ status: 'COMPLETED' });
+      expect(promote.data.status).toBe('COMPLETED');
+      expect(promote.data.mediaServerPresentAt).toBeInstanceOf(Date);
       expectGuarded(promote.where);
     });
   });

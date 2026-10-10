@@ -16,8 +16,7 @@ export class EnvironmentEndpoint {
   @Field(() => Int, { nullable: true })
   port: number | null;
 
-  // null when useTraefik is false, or domain is null — never a fabricated
-  // host (NFR-1). See environment.service.ts.
+  // Spec 055, NFR-1
   @Field(() => String, { nullable: true })
   url: string | null;
 }
@@ -31,8 +30,7 @@ export class EnvironmentInfo {
   @Field()
   useHttps: boolean;
 
-  // Reported in both modes (REQ-3) — null only when the variable is unset
-  // or empty, never filtered by useTraefik.
+  // Spec 055, REQ-3
   @Field(() => String, { nullable: true })
   domain: string | null;
 

@@ -14,11 +14,10 @@ import { EncodeJobDetails } from './entities/encode-job-details.entity';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { resolveAllowedSubtitleFormats } from '@/settings/subtitle-formats';
 import { COMPRESSION_RESOLUTIONS, DEFAULT_COMPRESSION_RESOLUTION } from '@/settings/settings.catalog';
+import { TitleStatusService } from '@/title-status/title-status.service';
+import { DownloadsService } from '@/downloads/downloads.service';
 
-// REQ-4: one automatic recovery per ProcessJob, ever — a constant, not a
-// Setting (Article X). A job found orphaned in ENCODING a second time is
-// failed outright rather than re-armed, since an encode that is itself what
-// kills the host must not re-arm itself on every reboot.
+// Spec 054, REQ-4
 const RECOVERY_ALLOWANCE = 1;
 
 @Injectable()
@@ -30,10 +29,12 @@ export class ProcessJobsService {
     private readonly mediaRoots: MediaRootsService,
     private readonly mediaServer: MediaServerService,
     private readonly mediaCapabilities: MediaCapabilitiesService,
-    // 054-interrupted-encode-recovery: needed by the (not yet added, T005)
-    // boot reconciliation method to withdraw and re-add an orphaned job's
-    // queue entry.
+    // Spec 054, T005
     private readonly encodeQueue: EncodeQueueService,
+    // Spec 089, REQ-1 REQ-2 REQ-3 REQ-4
+    private readonly titleStatus: TitleStatusService,
+    // Spec 091, REQ-3 NFR-4
+    private readonly downloads: DownloadsService,
   ) {}
 
   async getEncodeJobDetails(id: number): Promise<EncodeJobDetails> {
@@ -52,14 +53,9 @@ export class ProcessJobsService {
 
     const mediaSource = processJob.sourceFile.mediaSource;
     const settingsMap = await this.settings.getMap();
-    // REQ-7: anything other than the exact string "false" means compress, so
-    // a missing row (an install that predates the seed) resolves to true.
-    // Never write this as `=== 'true'` — that reads absence as "off", which
-    // is the silent-library-left-uncompressed failure REQ-7 exists to forbid.
+    // Spec 032, REQ-7
     const compressionEnabled = settingsMap['compression_enabled'] !== 'false';
-    // REQ-4: a missing row or a value outside the catalog (only reachable by
-    // hand-editing the database) resolves to the safe default rather than
-    // failing the query or handing the worker a raw, unrecognised string.
+    // Spec 058, REQ-4
     const storedResolution = settingsMap['compression_resolution'];
     const compressionResolution = (COMPRESSION_RESOLUTIONS as readonly string[]).includes(storedResolution)
       ? storedResolution
@@ -88,10 +84,7 @@ export class ProcessJobsService {
         subtitleIso3Codes: allowedSubtitleLanguagesIso3,
         subtitleTags: allowedSubtitleLanguageTags,
       } = await this.mergeMovieAllowedLanguages(movie.id, original);
-      // REQ-12: a short is filed under path_shorts only while the category is
-      // effectively enabled (movies_enabled && shorts_enabled) — resolved
-      // fresh on every call, with no lock and no snapshot (REQ-13): a job
-      // whose details were already handed out keeps whatever root it got.
+      // Spec 048, REQ-12; Spec 048, REQ-13
       const outputSettingKey =
         movie.isShort && (await this.mediaCapabilities.isShortsEnabled()) ? 'path_shorts' : 'path_movies';
       return {
@@ -148,17 +141,9 @@ export class ProcessJobsService {
       };
     }
 
-    // No debería pasar: sourceScanned siempre setea uno de los dos al crear el
-    // ProcessJob. Si pasa, es un dato corrupto — mejor que el worker falle acá
-    // con un mensaje claro a que arme una ruta de salida sin media asociada.
     throw new Error(`El processJob ${id} no tiene movie ni episode asociado`);
   }
 
-  // Resuelve path_movies/path_shows (relativos a la raíz "library", ver
-  // media-roots/) a la ruta absoluta de container que el worker va a usar
-  // para armar la carpeta de salida. Si la setting falta o se escapa de la
-  // raíz, el job falla acá con un mensaje claro — mejor que el worker
-  // reciba una ruta ambigua o escriba fuera de la biblioteca.
   private async resolveOutputRoot(settingKey: 'path_movies' | 'path_shows' | 'path_shorts'): Promise<string> {
     const config = await this.settings.getMap();
     const relPath = config[settingKey];
@@ -168,20 +153,6 @@ export class ProcessJobsService {
     return this.mediaRoots.resolveFromRoot('library', relPath);
   }
 
-  // Movie/Show guardan el idioma como iso2 (TMDB). El driver de ffmpeg necesita
-  // iso3 para comparar contra tags.language de ffprobe. Si el idioma no está
-  // sembrado en la tabla languages, cae a { tag: 'en', iso3: 'eng' } en vez de
-  // romper el job — un idioma sin traducir es mejor que un encode que nunca
-  // arranca.
-  //
-  // 030-language-regional-variants: `iso2` is no longer unique (three rows
-  // now share `es`), so this looks up by `tag` instead of `iso2` — a base
-  // row's tag IS its ISO-639-1 code by construction, and TMDB's
-  // `originalLanguage` is exactly an ISO-639-1 code. This is exact, not
-  // approximate: `findFirst` on `iso2` would compile just as well but could
-  // nondeterministically return a variant row (e.g. `es-419`) for a plain
-  // Spanish title, silently attributing a regional preference the user never
-  // expressed. See ../plan.md § Risks.
   private async resolveOriginalLanguage(originalLanguageIso2: string): Promise<{ tag: string; iso3: string }> {
     const language = await this.prisma.language.findUnique({ where: { tag: originalLanguageIso2 } });
     if (!language) {
@@ -190,20 +161,7 @@ export class ProcessJobsService {
     return { tag: language.tag, iso3: language.iso3 };
   }
 
-  // REQ-3/REQ-8 (029), extended by REQ-8/AC-9 (030), REQ-5 (039) and REQ-1/
-  // REQ-2 (042): the set of languages an encode may keep, split by track
-  // kind. Each pair is {original} ∪ the installation's `default_languages`
-  // setting (unsplit, contributes to both pairs) ∪ every owner's global
-  // `UserLanguagePreference` **of that kind** ∪ every owner's per-title
-  // preference **of that kind**, deduplicated, original first — expressed as
-  // BOTH the ISO-639-2/B list the worker matches against and the BCP-47 tag
-  // list that survives the collapse to iso3. All four lists come out of the
-  // SAME walk in `collectAllowedLanguages` on purpose: separate merges could
-  // drift (e.g. a tag added to one Set but not another), which would
-  // silently mismatch the fields on the wire with no error anywhere. A `Set`
-  // per list gives us dedup and insertion order for free. A title with no
-  // owners and no default falls through to just the original for both pairs
-  // — no special case needed (see plan.md's risk list).
+  // Spec 029, REQ-3 REQ-8; Spec 030, REQ-8; Spec 030, AC-9; Spec 039, REQ-5; Spec 042, REQ-1 REQ-2
   private async mergeMovieAllowedLanguages(
     movieId: number,
     original: { tag: string; iso3: string },
@@ -242,19 +200,7 @@ export class ProcessJobsService {
     return this.collectAllowedLanguages(original, owners);
   }
 
-  // Reads the installation-wide `default_languages` setting (BCP-47 tags,
-  // comma separated since 030-language-regional-variants) and resolves each
-  // tag to its { tag, iso3 } pair, mirroring `resolveOriginalLanguage`. An
-  // unknown tag is dropped rather than thrown here — `SettingsService.updateMany`
-  // is the only place that rejects an unknown tag; by the time this runs the
-  // setting was already validated at write time, and a stale/renamed row must
-  // not break every encode that follows.
-  //
-  // 030-language-regional-variants: looks up by `tag`, not `iso2` — `iso2`
-  // stopped being unique the moment `es-419`/`es-ES` were seeded, and
-  // `default_languages` itself now stores tags (REQ-2), so a lookup left on
-  // `iso2` would match nothing and the installation default would silently
-  // contribute no languages to any encode.
+  // Spec 030, REQ-2
   private async resolveDefaultLanguages(): Promise<Array<{ tag: string; iso3: string }>> {
     const config = await this.settings.getMap();
     const rawValue = config['default_languages'];
@@ -277,13 +223,7 @@ export class ProcessJobsService {
       .filter((entry): entry is { tag: string; iso3: string } => entry !== null);
   }
 
-  // 039-per-title-language-split, REQ-5, extended by 042's REQ-1/REQ-2: one
-  // walk building four Sets, never two separate merges — see the comment on
-  // the two callers above for why. The original language and every
-  // `default_languages` entry seed both pairs unconditionally; each owner's
-  // global preference and per-title preference each seed only the pair
-  // matching their own `kind`, through the same branch, since both arrive
-  // shaped identically off the owner row.
+  // Spec 039, REQ-5; Spec 042, REQ-1 REQ-2
   private async collectAllowedLanguages(
     original: { tag: string; iso3: string },
     owners: Array<{
@@ -331,9 +271,7 @@ export class ProcessJobsService {
   }
 
   async encodeProgress(processJobId: number, progress: number, speed?: number | null) {
-    // NFR-3: a bad speed reading must never fail or slow a report — coerce
-    // anything unusable (missing, non-finite, negative) to null rather than
-    // rejecting it. The contract's error table says so explicitly.
+    // Spec 053, NFR-3
     const encodeSpeed = speed === null || speed === undefined || !Number.isFinite(speed) || speed < 0 ? null : speed;
 
     await this.prisma.processJob.update({
@@ -345,10 +283,7 @@ export class ProcessJobsService {
   }
 
   async encodeCompleted(processJobId: number, outputFilePath: string, ffmpegCommand: string) {
-    // REQ-5/REQ-8: read the job's current state (and its source's status)
-    // before writing anything, so a repeat delivery and a delivery for a
-    // demoted source can both be recognised before they mutate the movie/
-    // episode a second time or notify the media server twice.
+    // Spec 038, REQ-5; Spec 038, REQ-8
     const existing = await this.prisma.processJob.findUnique({
       where: { id: processJobId },
       include: { sourceFile: { select: { mediaSourceId: true, mediaSource: { select: { status: true } } } } },
@@ -362,9 +297,7 @@ export class ProcessJobsService {
     // Nothing left to propagate or to notify a second time.
     const alreadyDeliveredSame =
       existing.status === 'COMPLETED' && existing.outputFilePath === outputFilePath;
-    // REQ-8: this source lost its race to a newer upload after this job was
-    // enqueued — the title now belongs to the winner and must not be moved
-    // by a late report from the loser.
+    // Spec 038, REQ-8
     const sourceDemoted = existing.sourceFile.mediaSource.status === 'ERROR';
 
     const processJob = await this.prisma.processJob.update({
@@ -373,25 +306,23 @@ export class ProcessJobsService {
       include: { sourceFile: { select: { mediaSourceId: true } } },
     });
 
-    // Propaga a la media consolidada, igual que downloads.service hace con
-    // ENCODING al arrancar: la UI mira Movie/Episode.status, no ProcessJob.
     if (!alreadyDeliveredSame && !sourceDemoted) {
       if (processJob.movieId) {
         await this.prisma.movie.update({
           where: { id: processJob.movieId },
-          data: { status: 'COMPLETED', filePath: outputFilePath },
+          data: { filePath: outputFilePath },
         });
+        await this.titleStatus.recomputeMovie(processJob.movieId);
       } else if (processJob.episodeId) {
         await this.prisma.episode.update({
           where: { id: processJob.episodeId },
-          data: { status: 'COMPLETED', filePath: outputFilePath },
+          data: { filePath: outputFilePath },
         });
+        await this.titleStatus.recomputeEpisode(processJob.episodeId);
       }
     }
 
-    // El archivo ya está en la biblioteca y la DB ya lo refleja: recién ahora se
-    // avisa. notifyCreated se traga sus propios errores a propósito (ver ahí).
-    // REQ-5: only the first delivery notifies the media server.
+    // Spec 038, REQ-5
     if (!alreadyDeliveredSame) {
       await this.mediaServer.notifyCreated(outputFilePath);
     }
@@ -436,9 +367,7 @@ export class ProcessJobsService {
     errorParams: string | undefined,
     errorMessage: string,
   ) {
-    // REQ-8: same demoted-source guard as encodeCompleted — a failure
-    // reported for a source the user's newer upload already replaced must
-    // not fail the title the winner is still encoding.
+    // Spec 038, REQ-8
     const existing = await this.prisma.processJob.findUnique({
       where: { id: processJobId },
       include: { sourceFile: { select: { mediaSource: { select: { status: true } } } } },
@@ -469,21 +398,13 @@ export class ProcessJobsService {
   // actually means in code, not just in prose.
   private async propagateJobError(movieId: number | null, episodeId: number | null): Promise<void> {
     if (movieId) {
-      await this.prisma.movie.update({ where: { id: movieId }, data: { status: 'ERROR' } });
+      await this.titleStatus.recomputeMovie(movieId);
     } else if (episodeId) {
-      await this.prisma.episode.update({ where: { id: episodeId }, data: { status: 'ERROR' } });
+      await this.titleStatus.recomputeEpisode(episodeId);
     }
   }
 
-  // REQ-1/NFR-2: called from encodeWorkerStarted (T006, not yet added) when
-  // the worker announces its own boot — never from api's onModuleInit, which
-  // would reset a live encode (NFR-2's whole argument). A ProcessJob still
-  // reading ENCODING at that moment can only be the residue of a run that
-  // died, because a worker that has just started is encoding nothing.
-  //
-  // Shape copied from SchedulerService.reconcileOrphanedRuns (035-scheduled-
-  // tasks): select the orphans, return early on an empty set (NFR-6), write
-  // in one pass rather than per-row round trips.
+  // Spec 054, REQ-1; Spec 054, NFR-2; Spec 054, T006; Spec 054, NFR-6
   async reconcileOrphanedEncodes(): Promise<number> {
     const orphaned = await this.prisma.processJob.findMany({
       where: { status: 'ENCODING' },
@@ -505,18 +426,7 @@ export class ProcessJobsService {
     let skipped = 0;
 
     for (const job of orphaned) {
-      // REQ-5: never resurrect a dead target. Three independent reasons a
-      // resurrection would overwrite a good file with a stale one or crash
-      // against nothing:
-      //   - the source row is gone (defensive: a SourceFile's mediaSource
-      //     relation is required, so this should be unreachable via a real
-      //     cascade delete, but a job whose include failed to resolve one
-      //     must not be treated as recoverable);
-      //   - the source lost a race and was demoted to ERROR
-      //     (038-encode-report-durability REQ-8);
-      //   - the target already holds a COMPLETED file — which, since this
-      //     job is itself still ENCODING, can only have come from a
-      //     different, winning source.
+      // Spec 054, REQ-5; Spec 038, REQ-8
       const mediaSource = job.sourceFile?.mediaSource;
       const targetStatus = job.movie?.status ?? job.episode?.status;
       if (!mediaSource || mediaSource.status === 'ERROR' || targetStatus === 'COMPLETED') {
@@ -543,9 +453,7 @@ export class ProcessJobsService {
     return skipped + failed.length + requeued.length;
   }
 
-  // REQ-4: the allowance is spent. Same end state encodeFailed reaches
-  // (status/errorKey/errorMessage plus the Movie/Episode propagation), never
-  // a second write path to that state.
+  // Spec 054, REQ-4
   private async failExhaustedEncodes(
     jobs: Array<{ id: number; movieId: number | null; episodeId: number | null }>,
   ): Promise<void> {
@@ -564,19 +472,7 @@ export class ProcessJobsService {
     }
   }
 
-  // REQ-3: reproduces sourceScanned's exact enqueue ordering (media-sources.
-  // service.ts, the tail after its transaction) — commit the row write
-  // first, then removeEncode/addEncode per job, then flip only the
-  // successfully-enqueued set to QUEUED in one updateMany. A job whose
-  // addEncode throws stays WAITING, which is the truth and which the next
-  // worker boot recovers — never flip to QUEUED ahead of a confirmed add.
-  //
-  // removeEncode is called before addEncode for every job: both derive the
-  // same `job-<processJobId>` jobId, and BullMQ silently refuses to create a
-  // second entry under an id that still exists, so calling addEncode alone
-  // here would be a no-op that leaves the row reading QUEUED against a queue
-  // that never received it (../plan.md § Risks — the most likely bug in
-  // this feature).
+  // Spec 054, REQ-3
   private async requeueOrphanedEncodes(processJobIds: number[]): Promise<void> {
     await this.prisma.processJob.updateMany({
       where: { id: { in: processJobIds } },
@@ -607,77 +503,25 @@ export class ProcessJobsService {
     }
   }
 
-  // `deleteFiles` defaults to `true` for backward compatibility with any
-  // caller that predates this argument. This pipeline (encodeCompleted's
-  // removeTorrent instruction) always passes `false`: the worker owns every
-  // deletion, behind isInsideRoot, so the client is never asked to delete
-  // anything itself. Signature, `omitido:` string and return type are all
-  // unchanged (the worker calls this and is not in `services:`) — but
-  // 022-download-status-tags REQ-15 grew its behaviour: it now also sweeps
-  // every losing sibling of the same target.
+  // Spec 022, REQ-15
   async downloadRemove(mediaSourceId: number, deleteFiles: boolean = true) {
     const mediaSource = await this.prisma.mediaSource.findUnique({ where: { id: mediaSourceId } });
     if (!mediaSource) {
       throw i18nError.notFound(ERROR_KEYS.SOURCE_NOT_FOUND, { id: mediaSourceId });
     }
 
-    // LOCAL_FILE/LOCAL_FOLDER no tienen infoHash: no hay nada que sacarle al
-    // cliente de torrents para ESTA fila. The sweep below must still run:
-    // under REQ-19 the winner can be an upload, and if the sweep only ran
-    // after torrentClient.remove, an upload winner would leave every
-    // losing torrent downloading and seeding forever with nothing pointing
-    // at them (spec.md NFR-5 (c)). Only the winner's own remove is skipped.
+    // Spec 022, REQ-19; Spec 022, NFR-5
     if (mediaSource.infoHash) {
       await this.torrentClient.remove(mediaSource.infoHash, deleteFiles);
     }
 
-    await this.sweepLosingSiblings(mediaSource);
+    // Spec 091, REQ-1 REQ-2 REQ-3
+    await this.downloads.unwindLosingSiblings(mediaSource);
 
     if (!mediaSource.infoHash) {
       return `omitido: mediaSource ${mediaSourceId} no es un torrent`;
     }
 
     return `removido: mediaSource ${mediaSourceId}`;
-  }
-
-  // REQ-15: once the winner's own torrent (or upload) is cleaned up, every
-  // losing sibling of the same target — selected by movieId/episodeId/
-  // seasonId, never by tag (REQ-14: a tag is a title string, shared across
-  // users and titles, with no ownership and no identity) — has its torrent
-  // removed **with** files and its row deleted outright. No history kept.
-  private async sweepLosingSiblings(winner: {
-    id: number;
-    movieId: number | null;
-    episodeId: number | null;
-    seasonId: number | null;
-  }): Promise<void> {
-    const targetWhere = winner.movieId
-      ? { movieId: winner.movieId }
-      : winner.episodeId
-        ? { episodeId: winner.episodeId }
-        : winner.seasonId
-          ? { seasonId: winner.seasonId }
-          : null;
-
-    if (!targetWhere) return;
-
-    const losers = await this.prisma.mediaSource.findMany({
-      where: { ...targetWhere, id: { not: winner.id } },
-    });
-
-    for (const loser of losers) {
-      if (loser.infoHash) {
-        try {
-          await this.torrentClient.remove(loser.infoHash, true);
-        } catch (err) {
-          // NFR-6: an unacknowledged delete must not delete the row either —
-          // that would leave the loser's torrent and files on disk with
-          // nothing left tracking them.
-          console.error(`[downloadRemove] no se pudo borrar mediaSource ${loser.id} en el cliente de torrents:`, err);
-          continue;
-        }
-      }
-      await this.prisma.mediaSource.delete({ where: { id: loser.id } });
-    }
   }
 }

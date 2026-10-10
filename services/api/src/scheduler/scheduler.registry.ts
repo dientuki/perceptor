@@ -7,15 +7,7 @@ import { RefreshEpisodesTask } from './tasks/refresh-episodes.task';
 import { RefreshMoviesTask } from './tasks/refresh-movies.task';
 import { RefreshShowsTask } from './tasks/refresh-shows.task';
 
-/**
- * Every scheduled task's shape: a stable id, the cron cadence it ships with
- * before an administrator ever touches Settings, and the injectable that
- * runs when the task fires. A row configured for an id outside this array
- * cannot be queried, triggered or run (REQ-1). `mediaType`, when present,
- * ties the task to the `movies_enabled`/`shows_enabled` switch that gates it
- * (045-media-type-availability) — omitted for a task that belongs to no
- * type, which stays unconditionally available.
- */
+// Spec 035, REQ-1; Spec 045, REQ-9
 export interface ScheduledTaskDefinition {
   id: string;
   defaultCron: string;

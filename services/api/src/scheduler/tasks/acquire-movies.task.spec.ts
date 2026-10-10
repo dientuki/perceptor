@@ -33,11 +33,17 @@ describe('AcquireMoviesTask', () => {
     title: 'Film: The Sequel!',
     releaseDate: new Date('2026-08-01T00:00:00.000Z'),
     status: 'MISSING',
+    filePath: null,
+    mediaServerPresentAt: null,
     mediaSources: [],
     processJobs: [],
     theatricalReleaseDate: null,
     digitalReleaseDate: new Date('2026-09-01T00:00:00.000Z'),
     physicalReleaseDate: null,
+    // Spec 089, REQ-4
+    ...(overrides.status === 'COMPLETED' && overrides.filePath === undefined
+      ? { filePath: '/library/film.mkv' }
+      : {}),
     ...overrides,
   });
 

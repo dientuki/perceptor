@@ -206,6 +206,25 @@ consumer.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Two boxes open, both needing **the stack brought up from `bin/prod`** and then a signed-in session.
+
+- **AC-7** (`bin/prod` brings up the nine services, all reach `healthy`, login plus TMDB search work)
+  and **AC-8** (with that stack up, the file-upload modal resolves its endpoint correctly) cannot be
+  run from the dev stack that is currently up: `bin/prod` rebuilds the `prod` image stage and runs it
+  with no dev overlay and no bind mount, so it replaces the running installation rather than sitting
+  beside it. Doing that is cheap and reversible, but closing either box still needs a login
+  afterwards, and this session has no credential to log in with.
+
+Partial evidence from the dev stack, offered as context rather than as verification: all nine
+services are present and eight report `healthy` right now — `api`, `db`, `redis`, `web`, `torrent`,
+`indexer`, `flaresolverr` healthy, `worker` running with no healthcheck declared, and `traefik`
+reporting `unhealthy` for a reason unrelated to routing (its healthcheck probes
+`http://:8080/ping`, an entrypoint that is not enabled; routing itself was verified working this pass
+over both HTTP and HTTPS). That is the `dev` stage, not the `prod` one AC-7 names, and the two differ
+in exactly the way this spec exists to pin down.
+
 - [x] **AC-1**: On a clean clone (`git clone` + `bin/install`), with no `node_modules`, `dist` or
       `.next` in any service, `bin/build` exits 0 and `docker images` lists the five own images.
 - [x] **AC-2**: `bin/build web` exits 0 (fails today: TypeScript errors, spec 016).

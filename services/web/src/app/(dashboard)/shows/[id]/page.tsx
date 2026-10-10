@@ -11,7 +11,6 @@ import DownloadsPanel from "@/components/downloads/DownloadsPanel";
 import SeasonAccordion from "@/components/shows/SeasonAccordion";
 import Show from "@/components/shows/Show";
 
-// generateMetadata y la página corren por separado; cache() colapsa los dos fetch en uno solo
 const getShow = cache(getShowById);
 
 interface PageProps {

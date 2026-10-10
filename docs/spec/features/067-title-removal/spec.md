@@ -194,6 +194,30 @@ any media row and are untouched by the delete.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+This spec is already the honest kind: sixteen of seventeen boxes carry their own reason inline, and
+those reasons are accurate as written. Re-checked this pass, with the blockers named by cause rather
+than per box:
+
+- **AC-1–AC-8 and AC-13** are marked *not run live; covered by unit tests only* — confirmed. The
+  covering suites are `api/src/movies/movies.service.spec.ts`, `shows/shows.service.spec.ts` and
+  `downloads/downloads.service.spec.ts` (the `047` unwind, including the case that aborts with
+  nothing removed when the torrent client call fails — AC-6's path), all green in the 1000 api tests
+  measured this pass. Promoting any of them needs a browser session for the confirm dialog.
+- **AC-2, AC-7, AC-12 and AC-17 need a second user**, not just a session: the `users` table holds
+  **exactly one row** (the seeded admin), and there is no public registration, so a second account is
+  an admin creating one from `/users`. Until then "a film users A and B both own" cannot be set up at
+  all, and `Movie.otherOwners` has nothing to report.
+- **AC-9, AC-10, AC-11** need a **completed pipeline run**: a `COMPLETED` film with a real file under
+  the destinations root (AC-9), its re-registration afterwards (AC-10), and ffprobed files whose
+  `FfprobeLog` rows must survive the delete (AC-11). On this installation `process_jobs` holds **0**
+  rows and `ffprobe_logs` **0** — nothing has ever been encoded or probed here, so AC-11 has no data
+  to preserve and AC-9 no file to leave untouched. Note that AC-9's assertion is Article XII's: the
+  library file must survive. Setting it up means first producing one.
+- **AC-15, AC-16** are dialog copy (AC-16 in `es`) — session only, no pipeline needed. These are the
+  two cheapest boxes here once a session exists.
+
 - [ ] **AC-1**: _[not run live; covered by unit tests only]_ Given a film only user A owns, when A confirms removal on `/movies/<id>`, then A lands
       on `/movies`, the film is gone from the listing, and `bin/mysql -e 'select count(*) from movies
       where id = <id>'` returns 0.

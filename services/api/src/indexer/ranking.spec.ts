@@ -407,9 +407,7 @@ describe('rankTorrentResults', () => {
   });
 
   it('reads a BDRemux as a remux and DS4K as 1080p — not UHD, since the tier is 4 (REQ-7b)', () => {
-    // Rewritten for REQ-7b: this release names `UHD` but its resolution tier is 4
-    // (`DS4K` does not parse as 4K, `1080p` does), so it is no longer a UHD disc —
-    // it used to report sourceRank 8 by trusting the token; it must now report 7.
+    // Spec 036, REQ-7b
     const out = rankTorrentResults(
       [release('Movie.2026.DS4K.1080p.UHD.BDRemux-GRP')],
       UNARMED,

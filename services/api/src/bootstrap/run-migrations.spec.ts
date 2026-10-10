@@ -3,7 +3,7 @@ import type { ChildProcess } from 'node:child_process';
 import { runMigrations, OPERATOR_MIGRATION_COMMAND } from './run-migrations';
 
 // This suite exists because otherwise a resolve-on-any-exit bug in the
-// boot-time migration step produces no error anywhere (NFR-2): the health
+// boot-time migration step produces no error anywhere (Spec 049, NFR-2): the health
 // check goes green, web and worker start on the strength of it, and the
 // failure only surfaces later as an unrelated query error against a
 // half-migrated schema. Driven through the injected spawn seam with a fake

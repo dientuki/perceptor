@@ -1,0 +1,29 @@
+#!/bin/bash
+# Regenerates the mechanical half of docs/spec/pending-acs.md — the counts, the per-spec table and
+# the per-blocker rollup — from the specs themselves, by running tools/pending-acs/build.mjs inside
+# the web image (Article I: nothing runs on the host). Like bin/comments, it bind-mounts the whole
+# repo root, since the script reads every docs/spec/features/*/spec.md and writes back into
+# docs/spec/. The hand-written `obs` column is carried over verbatim and never invented.
+# Arguments are forwarded as-is — `bin/pending-acs --check` reports staleness and exits non-zero
+# instead of writing.
+set -e
+cd "$(dirname "$0")/.."
+
+. "$(dirname "$0")/_docker.sh"
+require_docker
+
+if [ ! -f .env ]; then
+  echo ".env no existe. Corré bin/install primero."
+  exit 1
+fi
+
+set -a; . ./.env; set +a
+
+COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml -f docker-compose.dev.yaml"
+
+BUILD_TARGET=dev docker compose $COMPOSE_FILES run --rm --no-deps \
+  --user "$(id -u):$(id -g)" \
+  -v "$(pwd):/repo" \
+  --workdir /repo \
+  --entrypoint node \
+  web tools/pending-acs/build.mjs "$@"

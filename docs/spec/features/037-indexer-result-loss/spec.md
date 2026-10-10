@@ -177,6 +177,24 @@ hash exists.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+One box open. **AC-3** is a latency measurement — `searchTorrents` for the reported query returning
+in under 2 s end to end — and it needs **a signed-in user's bearer token**: the query carries no
+`@AllowService()`, so the installation's `SERVICE_TOKEN` is refused at `JwtAuthGuard` with
+`error.auth.unauthenticated` (measured on a sibling query this pass). The indexer side is **not** a
+blocker: Prowlarr on this installation holds two enabled indexers (Knaben and The Pirate Bay,
+checked 2026-10-09 through its own API), so a real search would return real rows. The token is the
+only thing missing.
+
+What the measurement would actually be testing is the lazy `infoHash` resolution this feature
+introduced — resolving a hash only for the release the user adds, rather than for every row — plus
+`040`'s 10-minute Redis read-through on a repeat query, which would make a second run of the same
+search answer from cache and so is not the number AC-3 wants. Both are unit-covered
+(`api/src/clients/indexer/resolve-info-hash.spec.ts`, `indexer/indexer.service.spec.ts`), green in
+the 1000 api tests this pass measured. Neither substitutes for a wall-clock reading against a real
+Prowlarr.
+
 - [x] **AC-1**: Given the live stack and the query `The Matrix`, when `searchTorrents` is called,
       then the response contains rows sourced from 1337x, LimeTorrents, BigFANGroup, Torrent9,
       Torrent Downloads and NoNaMe Club — the six indexers absent today.

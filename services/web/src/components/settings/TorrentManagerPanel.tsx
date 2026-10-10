@@ -21,14 +21,7 @@ interface TorrentManagerPanelProps {
   torrentGroups: TorrentGroup[];
 }
 
-// Torrent Manager tab (REQ-2, REQ-8): downloads folder + indexer API key,
-// plus the administrator's torrent-group catalog ABM. The group input and
-// its badge list are NOT a nested <form> — this panel lives inside the main
-// Settings <form> (SettingsForm.tsx), so both the add button's click
-// handler and Enter on the input must call preventDefault(), or they submit
-// the whole settings screen instead of only adding a group. Local state
-// changes only after the server action reports success — never
-// optimistically (spec.md § GraphQL Contract Delta).
+// Spec 029, REQ-2; Spec 044, REQ-8
 export default function TorrentManagerPanel({
   downloadsFolder,
   trackerApiKey,

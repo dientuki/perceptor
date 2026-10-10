@@ -197,6 +197,39 @@ new accepted value, not a new row.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Eleven of fifteen open, and ten of those eleven ask for **`ffprobe` on a real encoded output**.
+That is unreachable here for a reason stronger than a missing session: `process_jobs` holds **0**
+rows and `ffprobe_logs` **0** on this installation — no encode has ever run on this branch — and
+`media_sources` holds one stale row. There is no output file to probe, and producing one per
+criterion means a real download and a real transcode at each of five resolution ceilings, over
+sources in H264, HEVC, AV1, Dolby Vision and MPEG-2.
+
+Both halves of the mechanism are nonetheless already proven, which is worth separating from the
+criteria themselves:
+
+- **The worker's rule** — `worker/src/encode/compression-resolution.spec.ts` (11 cases, green)
+  covers the ceiling semantics this feature introduced: downscale to fit, never upscale, HEVC below
+  4K re-encoded, H264/VC-1 above the ceiling downscaled, AV1 above the ceiling re-encoded, AV1 at or
+  below it copied, an absent or unrecognised value defaulted to `1080p` with a log. That is AC-3 to
+  AC-9's decision table, minus the `ffprobe`.
+- **The api's resolution** — `compressionResolution` is resolved at query time onto
+  `EncodeJobDetails`, never snapshotted onto the `ProcessJob` row (no such column exists in
+  `process_jobs`, checked 2026-10-09). That is **AC-13's whole content** — a setting changed between
+  enqueue and pickup takes effect — established structurally rather than by observation.
+
+**AC-2 was attempted this pass and is blocked by the absence of jobs, not by the guard**: `processJob`
+*does* carry `@AllowService()`, so the installation's `SERVICE_TOKEN` can read
+`EncodeJobDetails` directly — but there is no job id to read. With a single `ProcessJob` in any state,
+AC-2 becomes a one-line curl. The current setting is `compression_resolution = 1080p` (AC-2 is
+written against `720p`, so it needs a settings change too, which needs an admin session).
+
+AC-10's failure path (the row hand-edited to an unrecognised value) and AC-12 (`compression_enabled`
+false with a `360p` ceiling, FFmpeg skipped entirely) are the two cheapest once one job exists: both
+are a single enqueue plus a log read, and AC-12's skip path is `032`'s, independently covered by
+`worker/src/encode/passthrough.spec.ts`.
+
 - [x] **AC-1**: Given an administrator selects `480p` in Settings → Compression and saves, then
       `bin/mysql -e "select value from settings where \`key\`='compression_resolution'"` prints `480p`,
       and reloading the Settings screen (in `en` and in `es`) shows `480p` selected. Observed live in

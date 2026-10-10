@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { RedisService } from '../redis/redis.service';
 import { SessionService } from './session.service';
 
-// SessionService is the entire mechanism behind AC-5: a logout (or a session
+// SessionService is the entire mechanism behind Spec 002, AC-5: a logout (or a session
 // that outlives its intended lifetime) has to make a still-correctly-signed
 // JWT stop authenticating. If `revoke` didn't actually delete the key, or
 // `create` never attached a TTL, the UI would show "logged out" while a
@@ -51,7 +51,7 @@ describe('SessionService', () => {
     expect(ttl).toBeLessThanOrEqual(60);
   });
 
-  // 004-user-disable REQ-3: disabling a user must kill every session they
+  // Spec 004, REQ-3: disabling a user must kill every session they
   // currently hold, not just the next login. `revokeAllForUser` is the whole
   // mechanism — if it revoked only some of a user's sessions (or none), a
   // disabled user would keep browsing in whichever browser wasn't caught,

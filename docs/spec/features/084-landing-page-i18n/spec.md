@@ -153,7 +153,7 @@ without storage, and both are specified as degradations in NFR-1 and NFR-9 rathe
       seven screenshots and `og.jpg` all resolve from one directory deeper.
 - [x] **AC-11** *(failure)*: Deleting one key from the Spanish catalog and re-running the parity
       check prints that key and exits non-zero; restoring it makes the check pass.
-- [ ] **AC-12**: `curl -s https://dientuki.github.io/perceptor/es/ | grep 'og:'` shows a Spanish
+- [x] **AC-12**: `curl -s https://dientuki.github.io/perceptor/es/ | grep 'og:'` shows a Spanish
       `og:title` and `og:description` and `og:locale` of `es_AR`, and the same command against the
       root shows the English ones — confirming a shared `/es/` link previews in Spanish.
 - [x] **AC-13**: Changing one Spanish sentence in the catalog, regenerating and inspecting the diff
@@ -175,8 +175,11 @@ the deliberately literal set (the install command, brand name, and screenshot-ma
 confirmed structurally rather than by toggling a real no-JS browser flag: `curl`'d HTML for both
 locales carries the full document (same section count as the JS-rendered page) and the switcher is
 a literal `<a href="es/?lang=es">`/`<a href="../?lang=en">` — content and navigation do not depend
-on script execution. **AC-12 is not run** — it curls the pages this feature's own
-`pages.yml` only publishes from `master`, so it can only be checked after this branch merges.
+on script execution. **AC-12 confirmed 2026-10-03** after merge to `master` (PR #12) and the
+`pages.yml` redeploy: `curl -s https://dientuki.github.io/perceptor/es/ | grep 'og:'` shows
+`og:locale` `es_AR` and the Spanish title/description; the same command against the root shows
+`en_US` and the English ones. Re-confirmed 2026-10-09 from this branch, which had forked before
+that record and still showed the box unticked.
 
 ## Out of Scope
 

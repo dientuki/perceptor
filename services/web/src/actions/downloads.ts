@@ -36,7 +36,9 @@ const DOWNLOAD_FIELDS = `
     message
   }
   retryable
+  lostRace
   readAt
+  retiredAt
 `;
 
 const MOVIE_DOWNLOADS_QUERY = `

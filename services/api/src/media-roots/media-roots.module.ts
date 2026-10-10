@@ -3,9 +3,6 @@ import { MediaRootsService } from './media-roots.service';
 import { MediaRootsResolver } from './media-roots.resolver';
 import { MEDIA_ROOTS, MediaRootConfig } from './media-roots.types';
 
-// Arma MEDIA_ROOTS leyendo env acá, no adentro del servicio, para que
-// media-roots.service.spec.ts pueda inyectar raíces apuntando a un mkdtemp
-// (con symlinks reales) sin tocar process.env ni el filesystem del container.
 function buildMediaRoots(): MediaRootConfig[] {
   return [
     {

@@ -31,11 +31,6 @@ export class MediaServerService {
     return entry.layout;
   }
 
-  // Aviso de "hay un archivo nuevo" al media server configurado. NUNCA tira:
-  // lo llama encodeCompleted, y una excepción acá haría que el worker reciba
-  // un error de GraphQL y llame a encodeFailed — marcando como ERROR un encode
-  // que salió bien y cuyo archivo ya está en la biblioteca. Un aviso perdido se
-  // arregla con un scan manual desde Jellyfin; un job en ERROR, no.
   async notifyCreated(containerFilePath: string): Promise<void> {
     try {
       const config = await this.settings.getMap();
@@ -46,11 +41,8 @@ export class MediaServerService {
         clientId !== MEDIA_SERVER_NONE &&
         !config.media_server_host
       ) {
-        // Cliente elegido pero sin host: 'localhost' sería el propio api, no
-        // la PC del usuario — mejor avisar claro acá que dejar que el fetch
-        // falle contra un host implícito y equivocado (ver jellyfin.ts).
         console.warn(
-          `[media-server] "${clientId}" configurado sin host — completá media_server_host en Settings`,
+          `[media-server] "${clientId}" configured with no host — set media_server_host in Settings`,
         );
         return;
       }
@@ -69,7 +61,6 @@ export class MediaServerService {
       );
 
       if (!client) {
-        // 'none' (o setting faltante): configuración válida, no hay nada que avisar.
         return;
       }
 
@@ -85,10 +76,10 @@ export class MediaServerService {
       }
 
       await client.createdMedia(hostFilePath);
-      console.log(`[media-server] avisado: ${hostFilePath}`);
+      console.log(`[media-server] notified: ${hostFilePath}`);
     } catch (err) {
       console.error(
-        `[media-server] falló el aviso de ${containerFilePath}:`,
+        `[media-server] notify failed for ${containerFilePath}:`,
         err,
       );
     }

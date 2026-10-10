@@ -3,11 +3,7 @@ import { EnvironmentService } from './environment.service';
 import { EnvironmentResolver } from './environment.resolver';
 import { ENVIRONMENT_CONFIG, EnvironmentConfig } from './environment.types';
 
-// Reads process.env exactly here, never inside the service — same reason as
-// media-roots.module.ts's buildMediaRoots: so a spec can inject a fixture
-// config instead of mutating process.env. This function's env var list is
-// the allowlist NFR-2 requires (055-environment-panel) — it must never grow
-// beyond these seven names.
+// Spec 055, NFR-2
 function buildEnvironmentConfig(): EnvironmentConfig {
   return {
     useTraefik: process.env.USE_TRAEFIK === 'true',

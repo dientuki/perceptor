@@ -11,8 +11,7 @@ export default async function Shorts() {
     <div>
       <MediaList
         items={dbMovies}
-        // Cards keep MEDIA_TYPE.MOVIE so they link to /movies/[id] — there is
-        // no /shorts/[id] (spec REQ-9).
+        // Spec 048, REQ-9
         mediaType={MEDIA_TYPE.MOVIE}
         showLink={true}
         emptyMessage={t("emptyShorts")}

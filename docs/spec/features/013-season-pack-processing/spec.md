@@ -288,6 +288,29 @@ index.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Six of eleven open. Every one needs **a real season pack downloaded and encoded**, which this
+installation cannot supply: `process_jobs` holds **0** rows, `media_sources` **1** (a stale film
+row), and no encode has ever run on this branch. A pack also has to be a genuine multi-episode
+torrent — the fan-out into one `ProcessJob` per episode, the per-episode then whole-folder cleanup
+gate, and the partial-failure behaviour are all properties of that fan-out, not of a fixture.
+
+| Criteria | Needs beyond a session |
+| :-- | :-- |
+| AC-3 | a pack added through `addMagnetToEpisode` rather than the season path — the regression this box exists for |
+| AC-4 | the AC-1 pack **plus a fourth video file that resolves to no episode** |
+| AC-5 | a season source whose download holds **no video file at all** |
+| AC-6, AC-6b | a completed pack (per-episode cleanup, then the folder) and a completed **film** for contrast — nothing left behind |
+| AC-7 | a pack where the **second episode's encode fails** and the others still land |
+
+The resolution and selection rules underneath are covered and green in the 323 worker tests this
+pass measured: `worker/src/scan/parse-episode.spec.ts` (the `SxxEyy` parsing AC-4's unresolved file
+tests the edge of), `scan/select-matches.spec.ts`, `scan/scan-folder.spec.ts` and
+`jobs/cleanup-source.spec.ts` (AC-6's gate). `api/src/seasons/seasons.service.spec.ts` covers the
+season-scoped attach. What none of them establish is that a real pack's files are enumerated,
+matched and cleaned up in that order on disk.
+
 - [x] **AC-1**: Given a registered show whose season 2 has episodes 1–3, when `addMagnetToSeason` is
       called with a magnet for a pack containing `Show.S02E01.mkv`, `Show.S02E02.mkv` and
       `Show.S02E03.mkv` and the download completes, then `bin/mysql -e 'select id, episode_id, status

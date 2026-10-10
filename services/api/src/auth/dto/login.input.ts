@@ -5,8 +5,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 
 @InputType()
 export class LoginInput {
-  // The `message` option's value is the i18n key itself — see
-  // `settings/dto/setting.input.ts` for why (018 REQ-9).
+  // Spec 018, REQ-9
   @Field()
   @IsNotEmpty({ message: ERROR_KEYS.VALIDATION_LOGIN_USERNAME_REQUIRED })
   username: string;

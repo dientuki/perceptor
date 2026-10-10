@@ -18,18 +18,13 @@ export class MediaResolver {
     private readonly mediaCapabilitiesService: MediaCapabilitiesService,
   ) {}
 
-  // No @Public(), no @AllowService(), no AdminGuard: every authenticated
-  // user reads the same system-wide pair (045-media-type-availability
-  // spec.md § REQ-1, REQ-12, NFR-2).
+  // Spec 045, REQ-1 REQ-12 NFR-2
   @Query(() => MediaCapabilities, { name: 'mediaCapabilities' })
   async mediaCapabilities(): Promise<MediaCapabilities> {
     return this.mediaCapabilitiesService.read();
   }
 
-  // The global JwtAuthGuard already requires a credential; neither operation
-  // here carries @AllowService(), so principal should always be 'user' —
-  // narrowed anyway, for structural safety (see auth.types.ts). Deliberately
-  // not exempted for the worker/qBittorrent credential (NFR-7).
+  // Spec 006, NFR-7
   @Query(() => [MediaSearchResult], { name: 'searchMedia' })
   async searchMedia(
     @Args('query') query: string,
@@ -41,7 +36,7 @@ export class MediaResolver {
     return this.mediaDispatch.resolve(type).search(query, userId);
   }
 
-  // Same auth shape as searchMedia above — no @AllowService() (NFR-5).
+  // Spec 026, NFR-5
   @Query(() => [MediaSearchResult], { name: 'searchAllMedia' })
   async searchAllMedia(
     @Args('query') query: string,
@@ -51,8 +46,7 @@ export class MediaResolver {
     return this.mediaSearch.searchAll(query, userId);
   }
 
-  // Deliberately no @AllowService() and no @Public(): this query requires a
-  // real user session, never the worker/qBittorrent service token (NFR-2).
+  // Spec 033, NFR-2
   @Query(() => [MediaSearchResult], { name: 'popularMedia' })
   async popularMedia(
     @Args('type') type: string,

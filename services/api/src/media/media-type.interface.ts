@@ -4,9 +4,12 @@ import { MediaSearchResult } from '@/clients/types';
 
 // The contract every per-type service (movies, shows, ...) implements. This
 // is deliberately the entire boundary between the dispatch and a per-type
-// service — no cache key, no catalog endpoint, no `type` getter. Every other
-// detail stays private to the implementation (see spec.md § Decided During
-// Specification and § Context & Goal).
+// service — no cache key, no catalog endpoint, no `type` getter crosses it.
+// Since 088-acquisition-path-unification, the one search + cache +
+// ownership implementation lives in CatalogSearchService, reached through
+// each service's own descriptor: the cache key *shape* is shared, the keys
+// themselves stay per-type, and neither the descriptor nor the collaborator
+// crosses this interface.
 export interface MediaTypeService {
   search(query: string, userId: string): Promise<MediaSearchResultEntity[]>;
   register(tmdbId: number, userId: string): Promise<MediaRef>;

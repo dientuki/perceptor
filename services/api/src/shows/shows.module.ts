@@ -7,6 +7,7 @@ import { LanguagesModule } from '@/languages/languages.module';
 import { MediaServerModule } from '@/media-server/media-server.module';
 import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
 import { DownloadsModule } from '@/downloads/downloads.module';
+import { CatalogSearchModule } from '@/media/catalog-search.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { DownloadsModule } from '@/downloads/downloads.module';
     MediaServerModule,
     MediaCapabilitiesModule,
     DownloadsModule,
+    CatalogSearchModule,
   ],
   providers: [ShowsResolver, ShowsService],
   exports: [ShowsService],

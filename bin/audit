@@ -1,0 +1,26 @@
+#!/bin/bash
+# Runs the production npm advisory gate (tools/audit/check.mjs) against api/web/worker — or just
+# the one service passed as an argument — inside the web image (Article I: nothing runs on the
+# host). Like bin/site, it bind-mounts the whole repo root rather than one service, since the
+# script reads all three package.json/package-lock.json pairs. Arguments are forwarded as-is.
+set -e
+cd "$(dirname "$0")/.."
+
+. "$(dirname "$0")/_docker.sh"
+require_docker
+
+if [ ! -f .env ]; then
+  echo ".env no existe. Corré bin/install primero."
+  exit 1
+fi
+
+set -a; . ./.env; set +a
+
+COMPOSE_FILES="-f docker-compose.yaml -f docker-compose.build.yaml -f docker-compose.dev.yaml"
+
+BUILD_TARGET=dev docker compose $COMPOSE_FILES run --rm --no-deps \
+  --user "$(id -u):$(id -g)" \
+  -v "$(pwd):/repo" \
+  --workdir /repo \
+  --entrypoint node \
+  web tools/audit/check.mjs "$@"

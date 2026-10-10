@@ -5,9 +5,9 @@ import { AUTH_COOKIE_NAME } from '../auth.constants';
 
 // This strategy carries two guarantees that are each invisible until they
 // are wrong in production: which carrier wins when a request somehow
-// presents both a bearer header and a cookie (REQ-3), and that a revoked
+// presents both a bearer header and a cookie (Spec 002, REQ-3), and that a revoked
 // user session is rejected even though the JWT signature and expiry are
-// both still valid (AC-5). A service principal skipping the session check
+// both still valid (Spec 002, AC-5). A service principal skipping the session check
 // is equally load-bearing the other way — service credentials never expire
 // and never get a `jti`, so subjecting them to the same lookup would make
 // every worker/qBittorrent call fail with no session ever created for it.

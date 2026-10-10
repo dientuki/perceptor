@@ -21,7 +21,6 @@ export class UsersService {
   async create(createUserInput: CreateUserInput): Promise<User> {
     const { username, password, name } = createUserInput;
 
-    // 1. Verificar si el username ya existe
     const existingUser = await this.prisma.user.findUnique({
       where: { username },
     });
@@ -30,10 +29,8 @@ export class UsersService {
       throw i18nError.conflict(ERROR_KEYS.USER_USERNAME_TAKEN);
     }
 
-    // 2. Hash de la contraseña (10 salt rounds)
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 3. Crear el usuario en MariaDB
     return await this.prisma.user.create({
       data: {
         username,
@@ -60,8 +57,6 @@ export class UsersService {
   }
 
   async update(id: string, updateUserInput: UpdateUserInput, requesterId: string): Promise<User> {
-    // Si tu UpdateUserInput trae el 'id' adentro, lo separamos
-    // para no intentarlo actualizar en la BD.
     const { id: _, ...dataToUpdate } = updateUserInput;
 
     // Same duplicate-username guard as updateProfile(): a row with the
@@ -79,11 +74,7 @@ export class UsersService {
       }
     }
 
-    // Only an actual disable (isEnabled === false, not undefined/true) runs
-    // the REQ-5 safeguards — same ordering remove() uses: self-check first,
-    // then the last-*enabled*-admin check, so a lone admin disabling
-    // themself sees the "your own account" message, not the "last admin"
-    // one.
+    // Spec 004, REQ-5
     const isDisabling = dataToUpdate.isEnabled === false;
     if (isDisabling) {
       if (id === requesterId) {
@@ -92,9 +83,7 @@ export class UsersService {
 
       const target = await this.findOne(id);
       if (target.isAdmin) {
-        // Counting only *enabled* admins is the requirement, not an
-        // optimisation (REQ-5): counting disabled admins would let someone
-        // disable every admin but themselves one at a time and lock the app.
+        // Spec 004, REQ-5
         const enabledAdminCount = await this.prisma.user.count({
           where: { isAdmin: true, isEnabled: true },
         });
@@ -120,9 +109,7 @@ export class UsersService {
       throw i18nError.notFound(ERROR_KEYS.USER_NOT_FOUND, { id });
     }
 
-    // NFR-3: a disable that doesn't also revoke the live session is a silent
-    // failure — do it here, inside the same method, rather than leaving it
-    // to a caller who could forget.
+    // Spec 004, NFR-3
     if (isDisabling) {
       await this.sessionService.revokeAllForUser(id);
     }
@@ -131,8 +118,7 @@ export class UsersService {
   }
 
   async remove(id: string, requesterId: string): Promise<User> {
-    // Order matters (AC-7): a lone admin deleting themself must see the
-    // "your own account" message, not the "last admin" one.
+    // Spec 003, AC-7
     if (id === requesterId) {
       throw i18nError.badRequest(ERROR_KEYS.USER_CANNOT_DELETE_SELF);
     }
@@ -199,11 +185,7 @@ export class UsersService {
     }
   }
 
-  // Validate-then-write, same shape as `LanguagesService`'s preference
-  // writes: nothing is persisted until the locale is confirmed to be one
-  // `web` actually ships a catalog for (REQ-19). An unsupported locale must
-  // leave the previous value untouched — AC-6 checks that explicitly, so the
-  // rejection has to happen before any `prisma.user.update` call, not after.
+  // Spec 018, REQ-19
   async setUiLocale(userId: string, locale: string): Promise<User> {
     if (!isSupportedLocale(locale)) {
       throw i18nError.badRequest(ERROR_KEYS.USER_UNSUPPORTED_LOCALE, { locale });
@@ -225,9 +207,7 @@ export class UsersService {
     });
   }
 
-  // Twin of setAllowCinemaReleases — the general per-user *Audio mandatory*
-  // flag (039-per-title-language-split REQ-9). Inert this cycle: nothing
-  // reads it yet (REQ-11).
+  // Spec 039, REQ-9; Spec 039, REQ-11
   async setAudioMandatory(userId: string, mandatory: boolean): Promise<User> {
     return await this.prisma.user.update({
       where: { id: userId },

@@ -31,8 +31,7 @@ export async function updateProfileAction(
   const hasPassword = Boolean(password);
   const hasConfirmation = Boolean(passwordConfirmation);
 
-  // REQ-4: exactly one of the two filled is refused before any network call —
-  // these two strings are web-local and never come from `api`.
+  // Spec 020, REQ-4
   if (hasPassword !== hasConfirmation) {
     return { error: t("validation.passwordPairIncomplete") };
   }

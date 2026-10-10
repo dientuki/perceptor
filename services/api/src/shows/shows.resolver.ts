@@ -77,9 +77,7 @@ export class ShowsResolver {
     );
   }
 
-  // The caller's own audio-mandatory flag for this series (039-per-title-
-  // language-split REQ-9). Only runs when the client selects it, same
-  // N+1-avoidance reasoning as audioLanguages/subtitleLanguages above.
+  // Spec 039, REQ-9
   @ResolveField(() => Boolean)
   async audioMandatory(@Parent() show: Show, @CurrentUser() principal: AuthPrincipal) {
     const userId = principal.type === 'user' ? principal.id : '';
@@ -124,8 +122,7 @@ export class ShowsResolver {
     @CurrentUser() principal: AuthPrincipal,
   ) {
     const userId = principal.type === 'user' ? principal.id : '';
-    // Same ownership refusal as setShowPreferredTrackLanguages, reused
-    // verbatim (039-per-title-language-split REQ-10).
+    // Spec 039, REQ-10
     const show = await this.showsService.findOneFromDb(showId, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
     return this.showsService.setAudioMandatoryFor(userId, showId, mandatory);

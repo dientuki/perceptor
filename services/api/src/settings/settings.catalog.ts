@@ -1,10 +1,6 @@
 import { MEDIA_SERVER_IDS } from '@/clients/media-server/registry';
 import { SUPPORTED_LOCALES } from '@/i18n/locales';
 
-// Gemelo server-side de EDITABLE_KEYS en services/web/src/actions/settings.ts
-// (client-only hasta ahora). `updateSettings` aceptaba cualquier key/value —
-// esto es lo que lo cierra: toda key que llega tiene que estar acá, y las de
-// tipo 'path' se validan contra media-roots antes de guardarse.
 export type SettingKind =
   | 'path'
   | 'string'
@@ -18,10 +14,7 @@ export type SettingKind =
 
 export type SettingCatalogEntry = {
   kind: SettingKind;
-  // Sólo presente cuando kind === 'path': contra qué raíz de media-roots se
-  // valida este valor.
   rootId?: string;
-  // Sólo presente cuando kind === 'enum' o 'enum_list': los valores permitidos.
   options?: string[];
 };
 
@@ -32,18 +25,12 @@ export type SettingCatalogEntry = {
 // see prisma/seeds/index.ts) but must stay one of these five values.
 export const COMPRESSION_RESOLUTIONS = ['4k', '1080p', '720p', '480p', '360p'] as const;
 
-// The safe fallback ProcessJobsService.getEncodeJobDetails resolves to when
-// the stored `compression_resolution` row is missing or outside the catalog
-// (058-compression-resolution, REQ-4) — never a raw invalid value on the wire.
+// Spec 058, REQ-4
 export const DEFAULT_COMPRESSION_RESOLUTION: (typeof COMPRESSION_RESOLUTIONS)[number] = '1080p';
 
 export const SUBTITLE_TEXT_FORMATS = ['srt', 'ass', 'webvtt', 'mov_text'] as const;
 export const SUBTITLE_IMAGE_FORMATS = ['pgs', 'vobsub', 'dvb'] as const;
 
-// torrent_port no es editable: es el puerto interno de qBittorrent dentro de
-// la red de Docker (QBITTORRENT_WEBUI_PORT en .env), no algo que el usuario
-// final deba tocar desde Settings. Sigue existiendo como fila en la DB
-// (sembrada, leída por QbittorrentClient.baseUrl()) — sólo se sacó de acá.
 export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   path_downloads: { kind: 'path', rootId: 'downloads' },
   path_movies: { kind: 'path', rootId: 'library' },
@@ -56,9 +43,6 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   shorts_enabled: { kind: 'boolean' },
   compression_enabled: { kind: 'boolean' },
   compression_resolution: { kind: 'enum', options: [...COMPRESSION_RESOLUTIONS] },
-  // options sale del registro de clientes (clients/media-server/registry.ts),
-  // no de una lista a mano: sumar un media server ahí lo vuelve válido acá
-  // automáticamente.
   subtitles_enabled: { kind: 'boolean' },
   subtitles_text_enabled: { kind: 'boolean' },
   subtitles_text_formats: { kind: 'enum_list', options: [...SUBTITLE_TEXT_FORMATS] },
@@ -68,8 +52,6 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   media_server_host: { kind: 'string' },
   media_server_port: { kind: 'int' },
   media_server_api_key: { kind: 'secret' },
-  // options viene de la lista soportada de locales (i18n/locales.ts), no de
-  // un literal acá — sumar un locale ahí lo vuelve válido acá automáticamente.
   ui_locale: { kind: 'enum', options: [...SUPPORTED_LOCALES] },
   default_languages: { kind: 'languages' },
   // Cadence and enablement for the scheduler (src/scheduler/) — keys are

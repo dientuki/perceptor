@@ -158,11 +158,7 @@ describe('LanguagesService — preference writes', () => {
   }
 
   it('setPreferredTrackLanguagesFor: writing AUDIO deletes only AUDIO rows, leaving SUBTITLE untouched, and the reverse', async () => {
-    // Both kinds live in the same `userLanguagePreference` table, keyed apart
-    // only by `kind` — the fault this guards against is `deleteMany`'s `where`
-    // narrowed to `{ userId }`, which would silently wipe the caller's other
-    // kind on every write. Verified to fail with `kind` dropped from the
-    // `where` (T009).
+    // Spec 021, T009
     languageFindMany.mockResolvedValue([spanish, english]);
 
     await service.setPreferredTrackLanguagesFor('user-1', LanguageTrackKind.AUDIO, ['es']);
@@ -188,16 +184,7 @@ describe('LanguagesService — preference writes', () => {
   });
 
   it('setMoviePreferredTrackLanguagesFor: writing AUDIO deletes only AUDIO rows for that movie, leaving SUBTITLE untouched, and the reverse', async () => {
-    // Same fault as the per-user case above, but for the per-title table:
-    // both kinds live in `userMovieLanguage`, keyed apart only by `kind` on
-    // top of `userId`/`movieId`. The fault this guards against is
-    // `deleteMany`'s `where` narrowed back to `{ userId, movieId }`, which
-    // would silently wipe the caller's other kind for the same movie on
-    // every save. Verified to fail by temporarily dropping `kind` from
-    // `setMoviePreferredTrackLanguagesFor`'s `deleteMany` where and watching
-    // this assertion fail (`{ userId: 'user-1', movieId: 42 }` instead of the
-    // kind-narrowed where), then restoring it (039-per-title-language-split,
-    // T002/NFR-3).
+    // Spec 039, T002 NFR-3
     languageFindMany.mockResolvedValue([spanish, english]);
 
     await service.setMoviePreferredTrackLanguagesFor('user-1', 42, LanguageTrackKind.AUDIO, ['es']);
@@ -228,10 +215,7 @@ describe('LanguagesService — preference writes', () => {
   });
 
   it('setShowPreferredTrackLanguagesFor: writing AUDIO deletes only AUDIO rows for that show, leaving SUBTITLE untouched, and the reverse', async () => {
-    // Same fault, for `userShowLanguage`. Verified to fail by temporarily
-    // dropping `kind` from `setShowPreferredTrackLanguagesFor`'s `deleteMany`
-    // where and watching this assertion fail, then restoring it
-    // (039-per-title-language-split, T002/NFR-3).
+    // Spec 039, T002 NFR-3
     languageFindMany.mockResolvedValue([spanish, english]);
 
     await service.setShowPreferredTrackLanguagesFor('user-1', 7, LanguageTrackKind.AUDIO, ['es']);
@@ -278,12 +262,7 @@ describe('LanguagesService — preference writes', () => {
   });
 
   it('resolves es-419 and es-ES to two different ids despite sharing iso2', async () => {
-    // A lookup left on `iso2` (e.g. a Map keyed by row.iso2) would collapse
-    // both rows under the key 'es' and silently return the same id twice —
-    // a user's two-variant choice would lose one variant with no error
-    // anywhere. This is the fault-injection target for T005: temporarily
-    // keying the validator's Map by `row.iso2` instead of `row.tag` makes
-    // this assertion fail (both resolved ids become the same one).
+    // Spec 030, T005
     languageFindMany.mockResolvedValue([spanishLatam, spanishSpain]);
 
     const ids = await service.validateAndResolveLanguageIds(['es-419', 'es-ES']);

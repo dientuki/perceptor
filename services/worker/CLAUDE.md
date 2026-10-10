@@ -18,7 +18,7 @@ per the root Docker-first workflow.
 They are not two job names on one queue. An encode can run for hours; sharing a queue at
 `concurrency: 1` would either block every scan behind FFmpeg or risk N simultaneous FFmpegs. Each
 `Worker` opens its own blocking connection, so the encode side can be busy for hours without
-stalling the scan side. The reasoning is in the comments in `index.ts` — don't collapse them.
+stalling the scan side.
 
 `process.umask(0o002)` at the top of `index.ts` is load-bearing: the container runs as `PUID:PGID`,
 and over the setgid library directories this yields `2775`/`664`, which is what lets a media server
@@ -313,7 +313,14 @@ deletion itself; qBittorrent is only asked to forget the torrent, never to touch
 **own** `isInsideRoot(downloadsRoot, inputFilePath)` check — deliberately separate from the
 `downloadPath` guard above it, since an input file's path is not the same string and must not be
 assumed contained just because the download folder is. `deleteDownloadPath` gates today's
-`LOCAL_FILE`/recursive branch, unchanged. `encode.job.ts` reads `EncodeCompletedResult`'s three
+`LOCAL_FILE`/recursive branch, unchanged.
+Until `091-race-loser-cleanup`, the `removeTorrent` branch's own `downloadRemove` call was the one
+place this "branches on `sourceKind`, not `infoHash`" claim did not hold: it was gated
+`if (removeTorrent && infoHash)`, so a race won by an uploaded file (`infoHash` null) never called
+`downloadRemove` and `api`'s loser sweep (`DownloadsService.unwindLosingSiblings`, see
+`services/api/CLAUDE.md`'s `downloads/` section) never ran for it — two still-downloading torrents
+with no error anywhere. The condition is now just `if (removeTorrent)`; `infoHash` stays destructured
+for the filesystem branches above, which never depended on it. `encode.job.ts` reads `EncodeCompletedResult`'s three
 booleans from the mutation response and, if any single one arrives `undefined` (a hand-typed
 GraphQL selection missing a field — nothing catches this at compile time, see
 `docs/spec/graphql-contract.md`'s "no codegen" section), skips `cleanupSource` entirely and
@@ -329,7 +336,19 @@ feature: a `ProcessJob` a dead run left reading `ENCODING` has no other signal t
 is safe to touch, since neither an `api` restart nor a stale `updatedAt` can distinguish "dead" from
 "a six-hour encode mid-`mkvmerge`, still alive." The call is sound only because exactly one `worker`
 container ever runs — "I just booted" and "nothing is encoding" coincide under that assumption
-alone, and a second replica would reconcile the first one's live encodes out from under it. The
+alone, and a second replica would reconcile the first one's live encodes out from under it. That
+assumption is no longer taken on faith: `src/lease/worker-lease.ts` takes a Redis lease
+(`perceptor:worker:lease`, `SET NX PX` 30s, renewed every 10s, released on `SIGTERM`) **before** the
+announcement, since announcing is the destructive act — a second instance never gets that far, logs
+why and exits 1, which `restart: unless-stopped` turns into a visible crash loop rather than a
+silent reset of someone else's encode. The arbiter is Redis rather than Docker because the invariant
+is "one consumer of this queue", not "one container": `deploy: replicas: 1` in
+`docker-compose.yaml` declares the default but `--scale worker=2` overrides it, and nothing in
+Docker sees a one-off `docker compose run worker` or a second stack pointed at the same
+`REDIS_HOST`. The acquisition window (60s) deliberately outlasts the TTL (30s) so a worker killed
+hard can retake its own unexpired lease when Docker restarts it seconds later; a renewal that fails
+mid-encode is logged and never fatal, since a Redis blip is not worth abandoning a multi-hour encode
+and an `api` unreachable through the same outage would not be reconciling anything either. The
 returned count is logged, never branched on — which jobs get skipped, failed or requeued is
 entirely `api`'s decision, made against rows this service cannot see (no Prisma, no database).
 
@@ -372,7 +391,7 @@ internationalization" for the full envelope and vocabulary.
 
 ## Errors must not be swallowed
 
-`src/api/graphql-client.ts` throws on `json.errors`, and the comment at the top says why: `web`
+`src/api/graphql-client.ts` throws on `json.errors`: `web`
 renders errors to a user, but a worker that swallowed one would mark the job completed without
 having written anything. Preserve that. A caught-and-logged error that lets a job report success is
 this service's central failure mode. Since `018-ui-i18n`, if the incoming error carries
@@ -406,8 +425,7 @@ job, never anyone else's.
 a throwing `fetchGraphQL` (torrent client unreachable) or a throwing `rm`/`rmdir` — instead of
 letting it propagate. This is deliberate, not an oversight: cleanup runs after the encode has
 already succeeded and the `ProcessJob` already reports `COMPLETED`; letting a cleanup failure
-propagate would demote a job that produced a perfectly good file. The reasoning is written as a
-comment at the top of the file itself.
+propagate would demote a job that produced a perfectly good file.
 
 Second, `jobs/encode.job.ts`'s `onProbe` catches every error `recordFfprobe` can produce — `api`
 unreachable, a stale `SERVICE_TOKEN`, the mutation rejecting the payload — logs one line and

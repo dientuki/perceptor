@@ -47,9 +47,7 @@ export class MoviesResolver {
     );
   }
 
-  // The caller's own audio-mandatory flag for this film (039-per-title-
-  // language-split REQ-9). Only runs when the client selects it, same
-  // N+1-avoidance reasoning as audioLanguages/subtitleLanguages above.
+  // Spec 039, REQ-9
   @ResolveField(() => Boolean)
   async audioMandatory(@Parent() movie: Movie, @CurrentUser() principal: AuthPrincipal) {
     const userId = principal.type === 'user' ? principal.id : '';
@@ -70,9 +68,7 @@ export class MoviesResolver {
   // 'user' — narrowed anyway, for structural safety (see auth.types.ts).
   @Query(() => [Movie], { name: 'movies' })
   async getMovies(
-    // 048-shorts-category REQ-8: omitted or null both mean "every film the
-    // caller owns" — MoviesService.findAll only adds the where clause when
-    // the argument is actually given (api/plan.md step 9).
+    // Spec 048, REQ-8
     @Args('isShort', { type: () => Boolean, nullable: true }) isShort: boolean | null,
     @CurrentUser() principal: AuthPrincipal,
   ) {
@@ -162,8 +158,7 @@ export class MoviesResolver {
     @CurrentUser() principal: AuthPrincipal,
   ) {
     const userId = principal.type === 'user' ? principal.id : '';
-    // Same ownership refusal as setMoviePreferredTrackLanguages, reused
-    // verbatim (039-per-title-language-split REQ-10).
+    // Spec 039, REQ-10
     const movie = await this.moviesService.findOneFromDb(movieId, userId);
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
     return this.moviesService.setAudioMandatoryFor(userId, movieId, mandatory);
@@ -178,9 +173,7 @@ export class MoviesResolver {
     @Args('isShort', { type: () => Boolean }) isShort: boolean,
     @CurrentUser() principal: AuthPrincipal,
   ) {
-    // 048-shorts-category REQ-14: guard order matters — movies-disabled is
-    // checked first so a caller with movies off gets error.media.type_disabled
-    // rather than the shorts-specific refusal (see spec.md's error table).
+    // Spec 048, REQ-14
     await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.MOVIE);
     await this.mediaCapabilitiesService.assertShortsEnabled();
     const userId = principal.type === 'user' ? principal.id : '';

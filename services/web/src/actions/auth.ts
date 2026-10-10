@@ -48,7 +48,6 @@ export async function loginAction(
       loginInput: { username, password, rememberMe },
     });
 
-    // Manejo de errores específicos de GraphQL
     if (errors && errors.length > 0) {
       return { error: await translateGraphQLError(errors[0]) };
     }
@@ -59,9 +58,7 @@ export async function loginAction(
       return { error: t("auth.invalidToken") };
     }
 
-    // Guardar el token retornado en una cookie HttpOnly.
-    // rememberMe: cookie persistente de 30 días. Sin tildar: cookie de sesión
-    // (ni maxAge ni expires), el navegador la descarta al cerrarse.
+    // Spec 002, REQ-8
     const cookieStore = await cookies();
     cookieStore.set(CONFIG.authCookie, token, {
       httpOnly: true,

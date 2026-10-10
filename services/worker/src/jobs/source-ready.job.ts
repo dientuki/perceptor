@@ -34,10 +34,7 @@ type SourceScannedMutationResult = {
   };
 };
 
-// Picks the scan mode from data the API returns, never from the shape of the
-// download directory (REQ-1). A source targeting neither a film, an episode
-// nor a season is an error — the job fails loudly rather than silently
-// scanning nothing.
+// Spec 013, REQ-1
 function selectMode(mediaSource: NonNullable<MediaSourceQueryResult['mediaSource']>): SelectMatchesMode {
   if (mediaSource.movieId !== null || mediaSource.episodeId !== null) {
     return { kind: 'single' };
@@ -120,11 +117,11 @@ async function scanSource(mediaSourceId: number): Promise<void> {
 
   if (mediaSource.downloadedFiles === null) {
     console.log(
-      `[source-ready] ${mediaSourceId}: sin información de archivos bajados — se consideran todos`,
+      `[source-ready] ${mediaSourceId}: no downloaded-files info — considering all of them`,
     );
   } else {
     console.log(
-      `[source-ready] ${mediaSourceId}: el cliente de torrents reportó ${mediaSource.downloadedFiles.length} archivo(s) bajado(s)`,
+      `[source-ready] ${mediaSourceId}: torrent client reported ${mediaSource.downloadedFiles.length} downloaded file(s)`,
     );
   }
 
@@ -132,13 +129,13 @@ async function scanSource(mediaSourceId: number): Promise<void> {
   const skipped = files.filter((file) => file.isVideo && !matchedPaths.has(file.filePath));
 
   console.log(
-    `[source-ready] ${mediaSourceId}: ${files.length} archivo(s), ${matches.length} match(es)`,
+    `[source-ready] ${mediaSourceId}: ${files.length} file(s), ${matches.length} match(es)`,
   );
   for (const file of skipped) {
     if (!file.isDownloaded) {
-      console.log(`[source-ready] ${mediaSourceId}: archivo de video no bajado — ${file.fileName}`);
+      console.log(`[source-ready] ${mediaSourceId}: video file not downloaded — ${file.fileName}`);
     } else {
-      console.log(`[source-ready] ${mediaSourceId}: archivo de video no resuelto — ${file.fileName}`);
+      console.log(`[source-ready] ${mediaSourceId}: video file not resolved — ${file.fileName}`);
     }
   }
 

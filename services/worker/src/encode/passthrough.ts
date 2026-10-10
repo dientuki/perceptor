@@ -72,11 +72,7 @@ export const passthrough: EncodeFn = async (input, output, _details, onProgress,
       await removeIfExists(input);
     }
 
-    // 100 only once the file is at its final name, exactly like
-    // ffmpeg/runner.ts caps progress at 99 until its own final rename. null
-    // speed: with compression off there is no FFmpeg and there is no speed
-    // (REQ-11, 053-downloads-panel-repair) — the panel's Speed column must
-    // stay empty rather than show a fabricated value.
+    // Spec 053, REQ-11
     await onProgress(100, null);
 
     return { ffmpegCommand: '' };

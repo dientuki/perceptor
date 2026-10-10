@@ -168,6 +168,29 @@ installation is seeded with, not what can be stored. A database created by a pre
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Three boxes open, each needing a different thing this checkout is not:
+
+- **AC-5** (registering a title and taking a torrent through to `COMPLETED` on a published-image
+  install) needs a **full pipeline run** plus a session. On the dev installation `process_jobs` holds
+  **0** rows — nothing has been encoded here at all — so the end-to-end proof this criterion asks for
+  does not exist on either install.
+- **AC-9** (upgrading from the previous published version with `docker compose pull && up -d`, with
+  `api` applying its own pending migrations and the production seed before it listens) needs **an
+  installation sitting on an older `PERCEPTOR_TAG`**. The migration-and-seed gate is unit-covered by
+  `api/src/bootstrap/run-migrations.spec.ts` and `database/seed/production-seed.spec.ts`, both green
+  in the 1000 api tests measured this pass; the upgrade itself is not.
+- **AC-12**'s second half (opting into Traefik with the file already on disk and nothing else
+  downloaded, routing the app by domain) needs a **fresh `install.sh` directory**. Its first half is
+  already recorded as verified in the box.
+
+Worth adding for AC-12, since this checkout *is* an opted-in Traefik installation and the routing was
+measured this pass: Traefik routes `Host(perceptor.local)` to `web` correctly over both schemes
+(`http://perceptor.local/login` → `200`; `https://perceptor.local` presents the local CA's leaf and
+verifies clean). That is evidence the label contract works, not evidence for AC-12, which is
+specifically about an `install.sh` directory holding only `docker-compose.yaml` and `.env`.
+
 - [x] **AC-1**: On a machine with Docker and no checkout of this repository, in an empty directory,
       `curl -fsSL <install url> | bash` followed by the five answers ends with the stack running and
       prints the URL and the administrator username. Opening that URL shows the login screen and

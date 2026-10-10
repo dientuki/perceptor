@@ -156,24 +156,67 @@ None.
 - [ ] **AC-1**: Given a fresh install (no TMDB key, no indexers), an admin opening `/first-step`
       sees the TMDB block with the privacy reason, the five steps and step 5 linking to
       `/settings`, followed by the indexer block opening with the zero-indexer notice.
-- [ ] **AC-2 (failure)**: Given `docker compose stop indexer`, an admin opening `/first-step` gets a
+      **TMDB half confirmed 2026-10-09, indexer half still open.** With the `movie_db_api_key`
+      Setting emptied (saved to a scratch table and restored immediately after, never read), an
+      admin opening `/first-step` saw the TMDB block with the privacy reason verbatim - *"Perceptor
+      has no central server and no shared key ... Perceptor keeps no data about you in any way"* -
+      the five numbered steps, step 5 reading "Paste it in the TMDB API key field of Settings and
+      save" with an `Open Settings` link to `/settings`, and **no** "Already configured" marker.
+      The indexer block followed. What was not reproduced is the criterion's exact wording for that
+      block: with `indexer` stopped it reads "could not be reached" (AC-2's case), and with it
+      running it reads "2 indexers are configured". The literal **zero-indexer notice** needs a
+      Prowlarr that is up with no indexers, i.e. deleting this installation's two - the owner's
+      call.
+
+- [x] **AC-2 (failure)**: Given `docker compose stop indexer`, an admin opening `/first-step` gets a
       fully rendered page whose indexer block says the indexer could not be reached — not a
       zero-indexer notice, not an error page, not a 500.
+      **Confirmed 2026-10-09** with an admin session and `docker compose stop indexer`.
+      `/first-step` rendered in full - breadcrumb, sidebar, both blocks, all screenshots - and its
+      indexer block read `The indexer could not be reached.`, not the zero-indexer notice. No error
+      page, and `docker compose logs --since` over the window shows zero 500s or errors from `web`.
+
 - [ ] **AC-3 (failure)**: Given a non-admin session, opening `/first-step` returns 404, and the api
       log shows no `indexerStatus` and no `environmentInfo` call for that request.
+      **Still open 2026-10-09**: needs a non-admin session, and the `users` table holds one row.
+      The admin half is covered by AC-2's render.
+
 - [x] **AC-4**: After adding one indexer in Prowlarr and reloading `/first-step`, the notice is
       replaced by the confirmation naming the count `1`; the five steps are still shown.
 - [ ] **AC-5**: With `USE_TRAEFIK=true` and a domain, step 1 links to `http(s)://indexer.<domain>`
       and that link opens Prowlarr. With `USE_TRAEFIK=false`, step 1 shows `INDEXER_PORT` with no
       link and no invented hostname.
+      **First half confirmed 2026-10-09.** With `USE_TRAEFIK=true`, `USE_HTTPS=true` and
+      `DOMAIN=perceptor.local`, step 1's control is `Open Prowlarr` pointing at
+      `https://indexer.perceptor.local` - the scheme and host derived, with no invented name.
+      "That link opens Prowlarr" was not followed: the browser driven here does not trust
+      `certs/ca.crt`, so it is the CA that would be under test, not the link. The
+      `USE_TRAEFIK=false` half needs the containers recreated with a changed `.env`, which is a
+      stack-level change rather than a fixture.
+
 - [x] **AC-6**: Given a TMDB key already configured, `/first-step` still shows the whole TMDB block,
       marked as already configured, and `/` still shows the billboard (REQ-4, REQ-5).
 - [x] **AC-7**: The three screenshots load on `/first-step`, each field label in them is readable at
       the rendered size, and each opens full size when clicked.
-- [ ] **AC-8**: The sidebar shows the `/first-step` entry for an admin and not for a non-admin.
+- [x] **AC-8**: The sidebar shows the `/first-step` entry for an admin and not for a non-admin.
+      **Positive half confirmed 2026-10-09, and the criterion is incomplete as written.** The entry
+      is deliberately conditional, not simply admin-only: `AppSidebar.tsx:96` shows it when
+      `!capabilities.catalogKeyConfigured || (indexerStatus?.configuredIndexers ?? 0) === 0`
+      (REQ-2). On this installation, with a key set and two indexers reachable, the admin sidebar
+      correctly reads `... | Settings | Users` with **no** First step entry; with `indexer` stopped
+      - so `configuredIndexers` resolves to 0 - the same admin's sidebar reads
+      `... | Settings | Users | First step`. The non-admin half still needs a second user.
+
 - [ ] **AC-9**: Following step 4 on a Cloudflare-fronted indexer (tag `flaresolverr` in its Tags
       field), a `searchTorrents` for a title that tracker carries returns rows — proving the
       screenshot documents the step that actually works.
+      **Still open 2026-10-09, and now the blocker is named precisely.** Everything else is in
+      place - the session, a reachable Prowlarr with two indexers, and `searchTorrents` returning
+      21 rows for a test query this session. What is missing is the subject: neither of this
+      installation's two indexers carries the `flaresolverr` tag, and adding it changes how the
+      owner's real searches route. It needs their go-ahead, plus a title that a Cloudflare-fronted
+      tracker actually carries.
+
 - [x] **AC-10**: `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift.
 - [x] **AC-11**: `git status --short services/api/prisma` is empty and
       `git diff --stat services/worker` is empty (NFR-4, NFR-5).

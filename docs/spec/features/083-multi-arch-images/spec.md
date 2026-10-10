@@ -158,9 +158,14 @@ None.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: After a release run, for each of `web`, `api`, `worker`, `torrent`, `indexer`,
+- [x] **AC-1**: After a release run, for each of `web`, `api`, `worker`, `torrent`, `indexer`,
       `docker manifest inspect ghcr.io/dientuki/perceptor-<svc>:<tag>` lists two entries whose
-      `platform` fields are `linux/amd64` and `linux/arm64`.
+      `platform` fields are `linux/amd64` and `linux/arm64`. Confirmed 2026-10-09 against the
+      published `:latest` (an OCI image index, `mediaType`
+      `application/vnd.oci.image.index.v1+json`): all five images carry both `linux/amd64` and
+      `linux/arm64`. Each also carries two `unknown/unknown` entries, which are buildkit's
+      attestation manifests (provenance/SBOM) and not platforms — the criterion's "two entries
+      whose `platform` fields are" is what holds.
 - [ ] **AC-2**: On an Apple Silicon Mac with Docker Desktop and no `--platform` flag anywhere,
       `curl -fsSL <install url> | bash` in an empty directory completes, and
       `docker compose ps` afterwards shows every service running.
@@ -172,9 +177,15 @@ None.
       scanned, encoded and filed — and the resulting file's video stream reads AV1 under
       `ffprobe`. This is the only criterion that proves the arm64 image works rather than merely
       starts (REQ-6).
-- [ ] **AC-4**: On an x86 host, pulling the same tag still yields an amd64 image:
+- [x] **AC-4**: On an x86 host, pulling the same tag still yields an amd64 image:
       `docker compose exec api uname -m` prints `x86_64`, and the stack reaches a healthy `api`
-      with no change to `.env` (NFR-2).
+      with no change to `.env` (NFR-2). Run live 2026-10-09 against the development host's own
+      end-user install (project `ptor`, `PERCEPTOR_TAG=v0.4.0-rc4`, published images only, no
+      `build:` section and no `--platform` flag anywhere): `docker compose up -d` brought every
+      service up, `api` reported `healthy`, `uname -m` printed `x86_64` in `api`, `worker` and
+      `web` alike, and `.env` had the same md5 before and after. The `api` image digest resolved
+      there (`sha256:ea808ad5…`) is the same one `docker run ghcr.io/dientuki/perceptor-api:latest
+      uname -m` resolved to on this host, so "the same tag" is literally the same image.
 - [ ] **AC-5 (failure path)**: With the arm64 build of one image forced to fail (for example by
       pushing a tag from a branch with a deliberate compile error in that service), the release run
       finishes red and `docker manifest inspect ghcr.io/dientuki/perceptor-<svc>:<that tag>` fails
@@ -206,11 +217,25 @@ printed the detected value and the supported list, exited `1`, left the director
 `grep -n 'Architecture\|uname' bin/_docker.sh` returned nothing; `README.md` and `release.yml`'s
 header were confirmed by reading them back. AC-6b's clause about `bin/dev` on an arm64 *development*
 host was **not** exercised — this host is `x86_64` — and rests on NFR-7 holding by construction
-(`bin/_docker.sh` untouched) rather than on a live arm64 dev run. **AC-1 through AC-5, AC-2/AC-3/
-AC-3b and AC-6c have not been run at all**: they need a real release-candidate tag pushed to
-GitHub and, for AC-2/AC-3/AC-3b/AC-6c, an Apple Silicon machine — this development host has no
-`binfmt`/QEMU registered and cannot emulate arm64 even for a smoke test. Push a release tag and
-walk `plan.md` § Verification before telling anyone the Mac install works.
+(`bin/_docker.sh` untouched) rather than on a live arm64 dev run.
+
+**AC-1 and AC-4 were run on 2026-10-09**, against the already-published `:latest`/`v0.4.0-rc4`
+rather than a fresh release run — the manifests prove the `build`/`merge` split produced two
+platforms per image, and the x86 install proves NFR-2 held. Their evidence is inline above.
+
+**AC-2, AC-3, AC-3b, AC-5 and AC-6c remain unrun, each for a reason no amount of care on this host
+removes** — the gate is hardware or a deliberate red release, not diligence:
+
+| AC | What it needs that this host cannot supply |
+| :-- | :-- |
+| AC-2, AC-3, AC-3b | an Apple Silicon Mac. The criteria say *native, not emulated*, so registering `binfmt`/QEMU here would not satisfy them even as a smoke test; this host has no arm64 handler registered under `/proc/sys/fs/binfmt_misc/` at all |
+| AC-5 | a release run deliberately pushed red — a tag from a branch with a compile error in one service, to prove the manifest is never assembled from one platform |
+| AC-6c | a directory holding the `.env` and `docker-compose.yaml` of a *failed pre-083 arm64 install*. No such directory exists here, and it cannot be fabricated faithfully on x86 |
+
+Push a release tag and walk `plan.md` § Verification on ARM hardware before telling anyone the Mac
+install works. REQ-6 — that the arm64 image carries `libsvtav1` and actually encodes — is the one
+with real residual risk, since nothing verified so far distinguishes an arm64 image that starts
+from one that works.
 
 ## Out of Scope
 

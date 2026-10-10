@@ -742,6 +742,22 @@ document or anything under `services/api/`, they have left scope and must stop a
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Three of thirty-nine open — the best-verified spec in this band — and all three are already honest
+about why. Re-checked this pass, with nothing to add to AC-4e or AC-6 beyond confirming their
+reading: each has a proven ranking half (`api/src/indexer/ranking.spec.ts`, green in the 1000 api
+tests measured this pass, including `'returns no candidates and throws nothing when every row is
+vetoed'`) and an unrun `web` half — that the table shows REQ-17's empty-candidate message rather than
+the "no results" copy. `web` has no test runner at all (`npm test` in that service exits with
+`Missing script: "test"`, confirmed this pass), so there is no path to that half except a browser
+with a session.
+
+**AC-18** (the episode path, with *Audio mandatory* on and a Spanish preference) additionally needs a
+real indexer search against a series. That is reachable on this installation — Prowlarr holds two
+enabled indexers, checked 2026-10-09 — but still needs a signed-in user's token, since
+`searchTorrents` carries no `@AllowService()` and the machine credential is refused at the guard.
+
 - [x] **AC-1**: Given a search for a film that returns a mixed list, when "Buscar" completes, the
       table is in the API's original size-descending order, no parsed-attribute labels are shown,
       and the button is enabled.
@@ -799,6 +815,14 @@ document or anything under `services/api/`, they have left scope and must stop a
       every row is vetoed'`), the `web` half — REQ-17's message rather than the "no results" copy —
       has never been run live. Same standing as AC-6, and for the same reason.*
 
+      **Attempted 2026-10-09 with an admin session; still open for want of a subject.** The modal
+      itself now runs end to end - a search for `Reacher S04E08` returned 21 rows and
+      **Best candidates** narrowed them to 1 with its ranking chips - but this criterion needs a
+      result list holding *only* cinema captures, and nothing in the live indexer produces one on
+      demand. The modal's title filter cannot stand in: it filters the rendered rows client-side,
+      while `candidate` is decided server-side over the whole set, so filtering would not exercise
+      REQ-17's empty-candidate branch.
+
 - [x] **AC-4f** (failure path — no false positives): Given a result list containing
       `… 1080p BluRay DTS-HD MA 5.1 …`, `Ghosts.of.Mars.1080p.BluRay`, `Catch.Me.If.You.Can.1080p`
       and `Camelot.1080p.WEB-DL`, and the switch is **off**, when the button is pressed **all four**
@@ -823,6 +847,10 @@ document or anything under `services/api/`, they have left scope and must stop a
 - [ ] **AC-6** (failure path): Given a result list in which **every** release is AV1 or VP9, when
       the button is pressed, the table shows the empty-candidate message from REQ-17 — not the
       "no results" copy — no error reaches the console, and pressing again restores all of them.
+
+      **Attempted 2026-10-09; still open for want of a subject**, exactly as AC-4e. It needs a
+      result list in which every release is AV1 or VP9, which the live indexer does not produce for
+      any title tried.
 
 - [x] **AC-7** (failure path): Given a result list in which every `title` is null and every `size`
       is null, when the button is pressed, the table renders with no console error, every release
@@ -874,6 +902,20 @@ document or anything under `services/api/`, they have left scope and must stop a
       in its audio languages, when the torrent modal is opened for one of its episodes and the
       button is pressed, an episode release naming `SPA` is promoted the same way a film's is — the
       series' preference reaches the modal (REQ-25).
+
+      **Attempted 2026-10-09 with an admin session; the premise has no subject in the live index.**
+      The series' preference does reach the modal (REQ-25): with Reacher set to *Audio mandatory*
+      and `es-419` in its audio languages, the title's panel reads
+      `Audio | Latin American Spanish ... Audio is mandatory`, and `RankingContextService` reads
+      both into the episode ranking. But of the 21 rows the indexer returned for Reacher S04E08,
+      **none names SPA, Spanish, Castellano or Latino**, so there is no release for the rule to
+      promote, and **Best candidates** returned the same single 2160p row it returns with no
+      preference set.
+
+      That sameness is not a defect: `isArmed`/`adjustSourceRank` (`src/indexer/ranking.ts:88,105`)
+      make a mandatory audio language a **promotion**, never a veto, so with no matching release the
+      ordering is expected to be unchanged. Closing this needs a series whose episodes the indexer
+      actually carries a Spanish-named release for. Fixture reverted.
 
 - [x] **AC-19** *(`0.8.0`, below 4K AVC leads)*: Given a candidate set whose best tier is 1080p and
       two `WEB-DL` releases identical except for their codec, where the `x265` one is **larger**,

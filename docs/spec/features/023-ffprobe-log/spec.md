@@ -139,6 +139,29 @@ and it is a weak one on purpose.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Four boxes open, and this spec was already the honest kind — AC-2, AC-6 and AC-7's `SERVICE_TOKEN`
+half each carry their own measured evidence. Re-checked, with the blockers named:
+
+- **AC-1, AC-4, AC-5 need an encode.** This is absolute rather than inconvenient on this
+  installation: `ffprobe_logs` holds **0** rows and `process_jobs` **0** — the table this feature
+  exists to fill has never had a row written to it here. AC-1 wants the row present *while* the job
+  is still `ENCODING` and before any output exists (the REQ-1 timing claim); AC-4 wants it complete
+  after an encode that failed *after* the probe; AC-5 wants it surviving `api` being stopped, with
+  the encode still reaching `COMPLETED` and nothing moving to `ERROR` because of the log. All three
+  are properties of a live run, and all three would be observable in a single pipeline pass if that
+  pass were made to fail on purpose partway.
+- **AC-7's remaining half needs a second user.** The `users` table holds **exactly one row**, the
+  seeded admin; `ffprobeLogs` refusing a non-admin session with `error.auth.admin_required` cannot be
+  observed until a non-admin exists. The note in the box is right that creating one was out of scope
+  for the implementation run — it is still out of scope for a verification pass that has no session
+  to create it from.
+
+The recording path's own durability (NFR-1: a failed `recordFfprobe` never fails the encode) is
+covered by `worker/src/api/deliver-report.spec.ts` and `api/src/ffprobe-logs/*.spec.ts`, green in
+this pass's suites.
+
 Verified 2026-08-20 against the running dev stack. Six hold and are ticked with what was observed.
 **Four are not ticked**: AC-1, AC-4 and AC-5 need a real FFmpeg encode of a real multi-track file,
 and AC-7's non-admin half needs a second, non-admin user account — neither of which the

@@ -95,16 +95,8 @@ export class SettingsResolver {
     // actually stored, not against this submission's own values.
     const before = await this.settingsService.getMap();
 
-    // updateMany valida entries ANTES de escribir nada (rechaza rutas que se
-    // escapan de la raíz) — recién acá, con la escritura ya confirmada, se
-    // avisa a qBittorrent.
     const result = await this.settingsService.updateMany(entries);
 
-    // El save path lo decide la UI, pero el dueño del path es qBittorrent:
-    // el api transporta el valor, no lo calcula. Se dispara acá (y no en
-    // SettingsService) para no crear un ciclo SettingsService <-> QbittorrentClient.
-    // path_downloads se guarda relativo (ver media-roots/): qBittorrent no
-    // sabe nada de raíces, así que acá se resuelve a absoluto antes de avisarle.
     const changedDownloadsPath = entries.find(
       (entry) => entry.key === 'path_downloads',
     );
@@ -154,11 +146,7 @@ export class SettingsResolver {
       await this.schedulerService.stampAcquireEpisodesCutoff();
     }
 
-    // REQ-3: a cadence or enable/disable flip must take effect on the next
-    // tick, not only after a restart. Re-arm only when a `schedule_*` key
-    // genuinely changed — same before/after guard as the two blocks above,
-    // so a submission that never touched scheduling does not needlessly
-    // replace every armed cron job.
+    // Spec 035, REQ-3
     const scheduleChanged = entries.some(
       (entry) =>
         SCHEDULE_SETTING_KEYS.includes(entry.key) &&

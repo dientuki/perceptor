@@ -163,6 +163,21 @@ expressible in the current schema and is left alone by design (see Out of Scope)
 - [ ] **AC-4** *(failure path)*: Given a `ProcessJob` id that does not exist, when the worker reports
       an outcome for it, then the worker stops after the `api` rejection rather than retrying, and
       the rejection is logged once.
+      **Two of three clauses verified 2026-10-09; left unticked for the third.**
+      *The `api` rejection* — measured live against the running dev `api` with the installation's
+      `SERVICE_TOKEN`: `encodeCompleted(processJobId: 999999, …)` and
+      `encodeFailed(processJobId: 999999, …)` each answer `message: "Process job 999999 does not
+      exist"` with `extensions.i18n = { key: "error.processJob.not_found", params: { id: 999999 } }`,
+      and `process_jobs` still held 0 rows afterwards — the rejection creates nothing.
+      *The worker stopping rather than retrying* — `worker/src/api/deliver-report.spec.ts` asserts
+      exactly this case, and with this scenario's own wording: `'rethrows any other error on the
+      first attempt without retrying'` rejects with an `Error('processJob 999 does not exist')` and
+      expects `send` to have been called **once**. A not-found is not `ApiUnreachableError`, so it
+      never enters the retry loop.
+      *Unverified* — that the rejection is logged exactly once in `docker compose logs worker`.
+      The log statements exist (`worker/src/jobs/encode.job.ts`), but counting them needs a real
+      encode reporting against a real missing id, and `process_jobs` has never held a row on this
+      installation.
 - [ ] **AC-5**: Given a target whose `MediaSource` sits in `SCANNED` or `READY`, when a user uploads
       a file for that target, then the upload's row becomes the winner, the previous source is
       demoted, the episode or film moves to `ENCODING`, and a `bull:process` job is enqueued.
@@ -182,9 +197,17 @@ expressible in the current schema and is left alone by design (see Out of Scope)
 - [ ] **AC-10** *(failure path)*: Given two uploads for the same target completing at the same
       moment, the loser's upload request answers `409` with `i18n.key = "error.upload.superseded"`
       and the browser renders the Spanish copy — never a success followed by nothing.
-- [ ] **AC-11**: `bin/npm worker test` and `bin/npm api test` are green,
+- [x] **AC-11**: `bin/npm worker test` and `bin/npm api test` are green,
       `bin/cli worker npx --no tsc --noEmit` / `bin/cli api npx --no tsc --noEmit` report 0 errors,
       and `bin/npm web run build` exits 0.
+      **Verified 2026-10-09** (branch `fix/tech-debt`, commit `b65ef65`): `bin/npm api run test` →
+      68 suites, 1000 tests, 0 failures, exit 0. `bin/npm worker test` → 28 files, 323 tests, 0
+      failures, exit 0; the `src/ffmpeg/` failures this criterion allows for no longer exist, so the
+      bar is cleared outright rather than by exemption. `bin/cli api npx --no tsc --noEmit`,
+      `bin/cli worker npx --no tsc --noEmit` and `bin/cli web npx --no tsc --noEmit` each exit 0 with
+      no diagnostics. `npm run build` in `web` exits 0 — run in a throwaway `perceptor-web:local-dev`
+      container as uid 1000 with the dev `.next` parked and restored, since `bin/npm web run build`
+      against the running stack un-hydrates every page.
 
 ## Out of Scope
 

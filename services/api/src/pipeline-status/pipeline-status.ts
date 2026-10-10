@@ -1,12 +1,8 @@
-import { EncodeStatus, MediaStatus, SourceStatus } from '@prisma/client';
+import { EncodeStatus, SourceStatus } from '@prisma/client';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 
-/**
- * The one normalized vocabulary every status a consumer reads must reduce to (REQ-1/REQ-2).
- * A plain, dependency-free module by design: no Nest, no Prisma client, no injection — every
- * input here is a plain row, so this is testable without a database.
- */
+// Spec 043, REQ-1 REQ-2
 export const PIPELINE_STATUSES = [
   'MISSING',
   'QUEUED',
@@ -20,10 +16,7 @@ export const PIPELINE_STATUSES = [
 
 export type PipelineStatus = (typeof PIPELINE_STATUSES)[number];
 
-/**
- * REQ-4's rank ladder. `ERROR` is deliberately absent — it never participates in a "most
- * advanced of" comparison, it always wins outright wherever it is checked.
- */
+// Spec 043, REQ-4
 const RANK: Record<Exclude<PipelineStatus, 'ERROR'>, number> = {
   MISSING: 0,
   QUEUED: 1,
@@ -62,15 +55,6 @@ export function translateSourceStatus(status: SourceStatus): PipelineStatus {
   }
 }
 
-/**
- * `MediaStatus` is already a subset of the eight values (spec.md's "MediaStatus is a subset of
- * the eight"). Identity in behaviour, kept as a named function so both translations are called
- * the same way at every call site and neither is a silent cast scattered around the codebase.
- */
-export function translateMediaStatus(status: MediaStatus): PipelineStatus {
-  return status;
-}
-
 export type SourceAltitudeJob = {
   status: EncodeStatus;
   progress: number; // 0..100, as stored on ProcessJob
@@ -92,7 +76,7 @@ export type DerivedProgress = {
   status: PipelineStatus;
   downloadProgress: number | null; // 0..100 or null
   encodeProgress: number | null; // 0..100 or null
-  encodeSpeed: number | null; // FFmpeg's realtime multiplier, non-null only from Rule 3 (REQ-10)
+  encodeSpeed: number | null; // Spec 053, REQ-10
 };
 
 const ACTIVE_ENCODE_STATUSES: EncodeStatus[] = ['WAITING', 'QUEUED', 'ENCODING'];
@@ -102,9 +86,7 @@ function meanProgress(jobs: SourceAltitudeJob[]): number {
   return Math.floor(sum / jobs.length);
 }
 
-// Rule 3 only (REQ-10): the mean of the non-null speeds of jobs *currently* ENCODING — a
-// WAITING/QUEUED job is not running and has nothing to report, and a COMPLETED/ERROR job's
-// stored value is stale by construction. Null when no job is actively encoding.
+// Spec 053, REQ-10
 function meanEncodeSpeed(jobs: SourceAltitudeJob[]): number | null {
   const running = jobs.filter(
     (job): job is SourceAltitudeJob & { encodeSpeed: number } =>
@@ -117,20 +99,12 @@ function meanEncodeSpeed(jobs: SourceAltitudeJob[]): number | null {
   return sum / running.length;
 }
 
-// The only place the 0..1 -> 0..100 conversion happens (REQ-3). The adapter boundary
-// (clients/torrent) keeps 0..1; nothing downstream of this function should multiply again.
-// Floored, never rounded: 99.9% must not read as 100% while bytes are still missing. The
-// epsilon absorbs float error (0.29 * 100 === 28.999999999999996) so floor does not lose 1%.
+// Spec 043, REQ-3
 function liveProgressToPercent(live: LiveTorrentReading): number {
   return Math.floor(live.progress * 100 + 1e-9);
 }
 
-/**
- * Source-altitude derivation (REQ-3): given one `MediaSource`, its `ProcessJob` rows and
- * optionally a live torrent reading for its `infoHash`, decide the normalized status and the
- * two progress numbers. The six rules run as **ordered early returns** — the order is the
- * specification, not an implementation detail. Do not reorder or collapse them into a switch.
- */
+// Spec 043, REQ-3
 export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress {
   const { sourceStatus, jobs, live } = input;
 
@@ -184,29 +158,6 @@ export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress 
 }
 
 /**
- * Collapse of the eight-value vocabulary back to the five-value `MediaStatus` column
- * (`047-source-deletion` REQ-12). `QUEUED`/`PAUSED`/`DOWNLOADING`/`DOWNLOADED` all mean "some
- * source is still being acquired" from the title's perspective, so they collapse to
- * `DOWNLOADING`; the rest already spell the same word. Exhaustive `switch`, no `default` — a
- * future `PipelineStatus` member must fail to compile here, not silently fall through into a
- * column value nothing understands.
- */
-export function toMediaStatus(status: PipelineStatus): MediaStatus {
-  switch (status) {
-    case 'QUEUED':
-    case 'PAUSED':
-    case 'DOWNLOADING':
-    case 'DOWNLOADED':
-      return 'DOWNLOADING';
-    case 'MISSING':
-    case 'ENCODING':
-    case 'COMPLETED':
-    case 'ERROR':
-      return status;
-  }
-}
-
-/**
  * Season-pack lift (`059-season-pack-acquisition-ui`): whether an episode still stored as
  * `MISSING`/etc. should read at least `QUEUED` because an unscanned season-pack source is in
  * flight for its season and the episode has already aired. A pack source is deliberately kept
@@ -240,31 +191,21 @@ export type TitleAltitudeJob = {
 };
 
 export type TitleAltitudeInput = {
-  status: MediaStatus;
+  filePath: string | null;
+  mediaServerPresentAt: Date | null;
   sources: TitleAltitudeSource[];
   jobs: TitleAltitudeJob[];
 };
 
-/**
- * Title-altitude derivation (REQ-4): `ERROR` if and only if the stored column is `ERROR`;
- * otherwise the maximum over the ladder of (a) the column, (b) each source's translated status
- * except `ERROR` and `SCANNED` ones, and (c) `ENCODING` when any job is WAITING/QUEUED/ENCODING.
- * A `SCANNED` source and a `COMPLETED` job are finished history, not live work (REQ-17,
- * `069-title-refresh`): they contribute nothing, so the stored column alone says whether a
- * finished run still counts (a refresh that demotes the column to `MISSING` must stick). Reads only the database
- * (REQ-5, no live reading) and does not group jobs by source — `plan.md` § Approach decision 1
- * is explicit that `Movie.processJobs`/`Episode.processJobs` are denormalized precisely so this
- * join is unnecessary. Taking `ERROR` from the raw job set instead of the column would let a
- * superseded (demoted) source's failed job poison an otherwise-completed title — the AC-8 case.
- */
+// Spec 089, REQ-2 REQ-3 REQ-4
 export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
-  const { status, sources, jobs } = input;
+  const { filePath, mediaServerPresentAt, sources, jobs } = input;
 
-  if (status === 'ERROR') {
-    return 'ERROR';
+  if (filePath != null || mediaServerPresentAt != null) {
+    return 'COMPLETED';
   }
 
-  let best = translateMediaStatus(status) as Exclude<PipelineStatus, 'ERROR'>;
+  let best: Exclude<PipelineStatus, 'ERROR'> = 'MISSING';
 
   for (const source of sources) {
     if (source.status === 'ERROR' || source.status === 'SCANNED') {
@@ -281,7 +222,8 @@ export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
 }
 
 export type EpisodeStatusInput = {
-  status: MediaStatus;
+  filePath: string | null;
+  mediaServerPresentAt: Date | null;
   releaseDate: Date | null;
   mediaSources: TitleAltitudeSource[];
   processJobs: TitleAltitudeJob[];
@@ -294,17 +236,56 @@ export function deriveEpisodeStatus(
 ): PipelineStatus {
   const lifted = isLiftedBySeasonPack(seasonSources, episode.releaseDate, now);
   return deriveTitleStatus({
-    status: episode.status,
+    filePath: episode.filePath,
+    mediaServerPresentAt: episode.mediaServerPresentAt,
     sources: lifted ? [...episode.mediaSources, { status: 'QUEUED' as const }] : episode.mediaSources,
     jobs: episode.processJobs,
   });
+}
+
+export type ShowEpisodeAltitude = {
+  status: PipelineStatus;
+  releaseDate: Date | null;
+};
+
+// Spec 089, REQ-11
+export function deriveShowStatus(episodes: ShowEpisodeAltitude[], now: Date): PipelineStatus {
+  const aired = episodes.filter((episode) => episode.releaseDate !== null && episode.releaseDate <= now);
+
+  if (aired.length === 0) {
+    return 'MISSING';
+  }
+
+  if (aired.every((episode) => episode.status === 'COMPLETED')) {
+    return 'COMPLETED';
+  }
+
+  // Spec 089, REQ-12
+  let best: Exclude<PipelineStatus, 'ERROR'> = 'MISSING';
+  for (const episode of aired) {
+    if (episode.status === 'ERROR') {
+      return 'ERROR';
+    }
+    const contribution = episode.status === 'COMPLETED' ? 'DOWNLOADED' : episode.status;
+    best = maxStatus(best, contribution);
+  }
+
+  return best;
 }
 
 export type RaceJob = {
   status: EncodeStatus;
 };
 
-export function isRaceWinner(status: SourceStatus, jobs: RaceJob[]): boolean {
+// Spec 090, REQ-3
+export function isRaceWinner(
+  status: SourceStatus,
+  jobs: RaceJob[],
+  retiredAt: Date | null = null,
+): boolean {
+  if (retiredAt !== null) {
+    return false;
+  }
   if (status === 'READY') {
     return true;
   }
@@ -314,6 +295,25 @@ export function isRaceWinner(status: SourceStatus, jobs: RaceJob[]): boolean {
   const failed = jobs.some((job) => job.status === 'ERROR');
   const active = jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status));
   return !(failed && !active);
+}
+
+// Spec 087, REQ-2; Spec 090, REQ-3
+export function isDeliveredSource(
+  status: SourceStatus,
+  jobs: RaceJob[],
+  retiredAt: Date | null = null,
+): boolean {
+  if (retiredAt !== null) {
+    return false;
+  }
+  if (status !== 'SCANNED') {
+    return false;
+  }
+  const active = jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status));
+  if (active) {
+    return false;
+  }
+  return jobs.some((job) => job.status === 'COMPLETED');
 }
 
 export type ResumeStage = 'DOWNLOAD' | 'SCAN' | 'ENCODE' | 'REPLACED';
@@ -336,10 +336,17 @@ export type ResumeSource = {
   updatedAt: Date;
 };
 
+// Spec 090, REQ-3
 export type ResumeSibling = {
   status: SourceStatus;
   jobs: RaceJob[];
+  retiredAt?: Date | null;
 };
+
+// Spec 091, REQ-6
+export function hasRaceWinner(siblings: ResumeSibling[]): boolean {
+  return siblings.some((sibling) => isRaceWinner(sibling.status, sibling.jobs, sibling.retiredAt ?? null));
+}
 
 export type ResumeInput = {
   status: PipelineStatus;
@@ -440,7 +447,7 @@ export function deriveResume(input: ResumeInput): ResumeVerdict {
   let refusalKey: string | null = null;
   if (stage === 'REPLACED') {
     refusalKey = ERROR_KEYS.DOWNLOAD_RETRY_REPLACED;
-  } else if (siblings.some((sibling) => isRaceWinner(sibling.status, sibling.jobs))) {
+  } else if (hasRaceWinner(siblings)) {
     refusalKey = ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED;
   } else if (
     lastError.key === ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH ||

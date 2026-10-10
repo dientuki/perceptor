@@ -13,12 +13,11 @@ jest.mock('@tus/file-store', () => ({ FileStore: class {} }));
 import { UploadsService } from './uploads.service';
 
 // Defends the confirmed replacement of an already-downloaded title through
-// the file entry point (027-replace-completed-media AC-7), against the race
-// arbiter added later by 022-download-status-tags, and — since
-// 038-encode-report-durability — that an upload always wins its target's
-// race whether or not a replace ticket authorised it (REQ-6), that a
-// demotion closes every ProcessJob it orphans (REQ-9), and that a loser of
-// an upload-versus-upload race gets a 409 instead of a silent no-op (REQ-7).
+// the file entry point (Spec 027, AC-7), against the race
+// arbiter added later, and that an upload always wins its target's
+// race whether or not a replace ticket authorised it (Spec 038, REQ-6), that a
+// demotion closes every ProcessJob it orphans (Spec 038, REQ-9), and that a loser of
+// an upload-versus-upload race gets a 409 instead of a silent no-op (Spec 038, REQ-7).
 //
 // The bug this covers is silent and total: the upload finishes, the file is
 // staged, the MediaSource row is created — and then resolveRace sees the
@@ -35,7 +34,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
   const MOVIE_ID = 2;
   const NEW_SOURCE_ID = 99;
 
-  type Row = { id: number; status: string; movieId: number | null };
+  type Row = { id: number; status: string; movieId: number | null; retiredAt?: Date | null };
   type JobRow = { id: number; mediaSourceId: number; status: string };
 
   function build(options: {
@@ -60,7 +59,12 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
         // status-blind scan of the whole table.
         findMany: jest.fn(async ({ where }: any) => {
           return rows
-            .filter((row) => row.movieId === where.movieId && where.status.in.includes(row.status))
+            .filter(
+              (row) =>
+                row.movieId === where.movieId &&
+                where.status.in.includes(row.status) &&
+                (where.retiredAt === undefined || row.retiredAt == null),
+            )
             .map((row) => ({ id: row.id }));
         }),
         updateMany: jest.fn(async ({ where, data }: any) => {
@@ -83,9 +87,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
           return row;
         }),
       },
-      // REQ-9: the demotion must close every non-terminal ProcessJob of the
-      // sources it demotes — reached through sourceFile.mediaSourceId, never
-      // a status-blind updateMany over the whole table.
+      // Spec 038, REQ-9
       processJob: {
         updateMany: jest.fn(async ({ where, data }: any) => {
           const mediaSourceIds: number[] = where.sourceFile.mediaSourceId.in;
@@ -122,15 +124,37 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
           (row) =>
             row.id !== mediaSourceId &&
             row.movieId === winner.movieId &&
-            ['READY', 'SCANNED'].includes(row.status),
+            ['READY', 'SCANNED'].includes(row.status) &&
+            row.retiredAt == null,
         );
         return alreadyWon
-          ? `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`
-          : `ganador: mediaSource ${mediaSourceId}, 0 pausado(s)`;
+          ? { outcome: 'SUPERSEDED' as const, message: `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target` }
+          : { outcome: 'WON' as const, message: `ganador: mediaSource ${mediaSourceId}, 0 pausado(s)` };
+      }),
+      // Spec 087, REQ-2
+      hasDeliveredSource: jest.fn().mockResolvedValue(false),
+      // Spec 090, REQ-4
+      demoteDeliveredSources: jest.fn(async (target: Record<string, number>, _reason: string) => {
+        const key = Object.keys(target)[0] as keyof Row;
+        const candidates = rows.filter(
+          (row) => row[key] === target[key as string] && row.status === 'SCANNED' && row.retiredAt == null,
+        );
+        let count = 0;
+        for (const row of candidates) {
+          const jobs = jobRows.filter((job) => job.mediaSourceId === row.id);
+          const active = jobs.some((job) => ['WAITING', 'QUEUED', 'ENCODING'].includes(job.status));
+          const completed = jobs.some((job) => job.status === 'COMPLETED');
+          if (!active && completed) {
+            row.retiredAt = new Date();
+            count++;
+          }
+        }
+        return count;
       }),
     };
 
     const queue = { addSourceReady: jest.fn().mockResolvedValue(undefined) };
+    const titleStatus = { recomputeMovie: jest.fn().mockResolvedValue(undefined), recomputeEpisode: jest.fn().mockResolvedValue(undefined) };
 
     const service = new UploadsService(
       prisma as any,
@@ -139,10 +163,11 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       queue as any,
       uploadTickets as any,
       downloads as any,
+      titleStatus as any,
       {} as any,
     );
 
-    return { service, prisma, queue, downloads, rows, jobRows };
+    return { service, prisma, queue, downloads, rows, jobRows, titleStatus };
   }
 
   let downloadsRoot: string;
@@ -163,7 +188,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
   }
 
   it('adopts an authorised replacement of a film whose previous source already finished', async () => {
-    const { service, queue, prisma, rows } = build({
+    const { service, queue, prisma, rows, titleStatus } = build({
       replaceAuthorised: true,
       existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
     });
@@ -177,10 +202,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
         data: expect.objectContaining({ errorKey: ERROR_KEYS.SOURCE_REPLACED }),
       }),
     );
-    expect(prisma.movie.update).toHaveBeenCalledWith({
-      where: { id: MOVIE_ID },
-      data: { status: 'ENCODING' },
-    });
+    expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(MOVIE_ID);
     expect(queue.addSourceReady).toHaveBeenCalledWith({
       mediaSourceId: NEW_SOURCE_ID,
     });
@@ -227,7 +249,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
     expect(queue.addSourceReady).not.toHaveBeenCalled();
   });
 
-  // 038-encode-report-durability, T007: this is the incident REQ-6 exists to
+  // Spec 038, T007: this is the incident Spec 038, REQ-6 exists to
   // close. The pre-fix code opened demoteSupersededSources with
   // `if (!(await this.uploadTickets.isReplaceAuthorised(uploadId))) return;`
   // — an upload against a target whose status never reached COMPLETED (so no
@@ -239,7 +261,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
   // never COMPLETED has no replace ticket to authorise.
   describe('REQ-6/REQ-7: an upload always wins its target\'s race, authorised or not', () => {
     it('demotes a SCANNED sibling and moves the title to ENCODING even with no replace authorisation', async () => {
-      const { service, prisma, queue, rows } = build({
+      const { service, prisma, queue, rows, titleStatus } = build({
         replaceAuthorised: false,
         movieStatus: 'DOWNLOADING',
         existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
@@ -249,17 +271,13 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       await (service as any).handleUploadFinish(upload);
 
       expect(rows.find((row) => row.id === 2)!.status).toBe('ERROR');
-      expect(prisma.movie.update).toHaveBeenCalledWith({
-        where: { id: MOVIE_ID },
-        data: { status: 'ENCODING' },
-      });
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(MOVIE_ID);
       expect(queue.addSourceReady).toHaveBeenCalledWith({
         mediaSourceId: NEW_SOURCE_ID,
       });
     });
 
-    // AC-6: no `ignorado` outcome reaches the caller silently — REQ-7's two
-    // permitted outcomes (queued job, or an error) are the only ones left.
+    // Spec 038, AC-6; Spec 038, REQ-7
     it('never resolves to the losing race outcome for the target’s own new upload', async () => {
       const { service, downloads } = build({
         replaceAuthorised: false,
@@ -272,15 +290,11 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       );
 
       const results = await Promise.all(downloads.resolveRace.mock.results.map((r) => r.value));
-      expect(results.every((r: string) => r.startsWith('ganador'))).toBe(true);
+      expect(results.every((r: { outcome: string }) => r.outcome === 'WON')).toBe(true);
     });
   });
 
-  // AC-9: a demotion must leave no ProcessJob of the demoted source in a
-  // non-terminal state — a row left WAITING/QUEUED/ENCODING is exactly the
-  // wedged state this feature exists to prevent, just re-created by its own
-  // fix. Delete the processJob.updateMany call inside demoteSupersededSources
-  // and this case goes red: `WAITING`/`ENCODING` never flip to `ERROR`.
+  // Spec 038, AC-9
   describe('REQ-9: demotion closes the ProcessJob rows it orphans', () => {
     it('moves every non-terminal ProcessJob of the demoted source to ERROR, leaving a terminal one alone', async () => {
       const { service, jobRows } = build({
@@ -300,18 +314,68 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       const byId = (id: number) => jobRows.find((job) => job.id === id)!;
       expect(byId(1).status).toBe('ERROR');
       expect(byId(2).status).toBe('ERROR');
-      // A job that had already reported is left exactly as it was — REQ-9
-      // closes non-terminal jobs, it does not rewrite history.
+      // Spec 038, REQ-9
       expect(byId(3).status).toBe('COMPLETED');
     });
   });
 
-  // AC-10: reachable only when a *concurrent* upload demotes this row
-  // between its own `create` and its own `resolveRace` call — the loser of
-  // an upload-versus-upload race. The pre-fix code returned silently here
-  // (`if (raceResult.startsWith('ignorado')) { console.log(...); return; }`),
-  // leaving the caller's request looking like a success with nothing behind
-  // it. Restore that silent return and this case goes red: the promise
+  // Spec 090, REQ-4 AC-5: the boundary between retiring a replaced source
+  // and erroring it is "did it ever deliver a file", not "was it demoted by
+  // an upload". Getting this backwards in either direction is silent: a
+  // still-encoding source marked retired would read COMPLETED with its job
+  // still running, and a delivered source marked ERROR would turn a watched,
+  // working film into a red error line for no reason (the bug this whole
+  // feature exists to fix).
+  describe('REQ-4: only a delivered source is retired, not errored', () => {
+    it('writes ERROR and cancels the running job for a source still ENCODING, leaving retiredAt null', async () => {
+      const { service, rows, jobRows, downloads } = build({
+        replaceAuthorised: true,
+        existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
+        jobs: [{ id: 1, mediaSourceId: 2, status: 'ENCODING' }],
+      });
+
+      await (service as any).handleUploadFinish(
+        await stageUpload('upload-still-encoding'),
+      );
+
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith(
+        { movieId: MOVIE_ID },
+        expect.any(String),
+      );
+      const demoted = rows.find((row) => row.id === 2)!;
+      expect(demoted.status).toBe('ERROR');
+      expect(demoted.retiredAt ?? null).toBeNull();
+      expect(jobRows.find((job) => job.id === 1)!.status).toBe('ERROR');
+    });
+
+    it('retires a delivered source instead of erroring it', async () => {
+      const { service, rows, downloads, prisma } = build({
+        replaceAuthorised: true,
+        existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
+        jobs: [{ id: 1, mediaSourceId: 2, status: 'COMPLETED' }],
+      });
+
+      await (service as any).handleUploadFinish(
+        await stageUpload('upload-delivered-replace'),
+      );
+
+      expect(downloads.demoteDeliveredSources).toHaveBeenCalledWith(
+        { movieId: MOVIE_ID },
+        expect.any(String),
+      );
+      const retired = rows.find((row) => row.id === 2)!;
+      expect(retired.status).toBe('SCANNED');
+      expect(retired.retiredAt).not.toBeNull();
+      // The ERROR path never ran against this row: no error fields written.
+      expect(prisma.mediaSource.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: { in: [2] } }),
+        }),
+      );
+    });
+  });
+
+  // Spec 038, AC-10
   // resolves instead of rejecting with a 409.
   describe('REQ-7/AC-10: a row demoted out from under its own resolveRace', () => {
     it('throws 409 with error.upload.superseded rather than returning silently', async () => {
@@ -321,9 +385,10 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       });
       // Simulates the race: by the time this upload's own resolveRace runs,
       // a newer, concurrent upload has already taken the target.
-      downloads.resolveRace.mockResolvedValue(
-        `ignorado: mediaSource ${NEW_SOURCE_ID} superado por otro source de este target`,
-      );
+      downloads.resolveRace.mockResolvedValue({
+        outcome: 'SUPERSEDED',
+        message: `ignorado: mediaSource ${NEW_SOURCE_ID} superado por otro source de este target`,
+      });
 
       await expect(
         (service as any).handleUploadFinish(await stageUpload('upload-loses-own-race')),
@@ -331,6 +396,40 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
         status_code: 409,
         body: expect.stringContaining(ERROR_KEYS.UPLOAD_SUPERSEDED),
       });
+    });
+  });
+
+  // This test exists because otherwise a losing upload fails with no error
+  // anywhere that matters later: before Spec 087, REQ-5, handleUploadFinish
+  // threw its 409 after having already created a READY MediaSource, and
+  // resolveRace never touched that row on the SUPERSEDED branch — it just
+  // answered a string. That orphan stayed READY, which is itself a race
+  // winner by isRaceWinner, so it silently blocked every future source of
+  // the same target with no error anywhere. resolveRace now writes the
+  // superseded row to ERROR itself (asserted directly in
+  // downloads.service.spec.ts, Spec 087, NFR-5); this only defends that
+  // uploads.service.ts trusts that write on the throw path rather than
+  // leaving the row at its creation-time status.
+  describe('REQ-5: a losing upload leaves its own source ERROR, not READY', () => {
+    it('throws 409 and the just-created MediaSource reads ERROR afterward', async () => {
+      const { service, downloads, rows } = build({
+        replaceAuthorised: true,
+        existing: [],
+      });
+      downloads.resolveRace.mockImplementation(async (mediaSourceId: number) => {
+        const row = rows.find((candidate) => candidate.id === mediaSourceId)!;
+        row.status = 'ERROR';
+        return {
+          outcome: 'SUPERSEDED' as const,
+          message: `ignorado: mediaSource ${mediaSourceId} superado por otro source de este target`,
+        };
+      });
+
+      await expect(
+        (service as any).handleUploadFinish(await stageUpload('upload-orphan-must-error')),
+      ).rejects.toMatchObject({ status_code: 409 });
+
+      expect(rows.find((row) => row.id === NEW_SOURCE_ID)!.status).toBe('ERROR');
     });
   });
 });
@@ -382,6 +481,7 @@ describe('UploadsService session branch (season multi-file upload)', () => {
     const downloads = { resolveRace: jest.fn() };
     const queue = { addSourceReady: jest.fn() };
     const sessions = { findOpenSeasonSession: jest.fn().mockResolvedValue(options.session) };
+    const titleStatus = { recomputeMovie: jest.fn(), recomputeEpisode: jest.fn() };
     // Real containment semantics over the temp root, not a constant answer.
     const mediaRoots = {
       resolveFromRoot: jest.fn(async () => downloadsRoot),
@@ -395,9 +495,10 @@ describe('UploadsService session branch (season multi-file upload)', () => {
       queue as any,
       uploadTickets as any,
       downloads as any,
+      titleStatus as any,
       sessions as any,
     );
-    return { service, prisma, queue, downloads, sessions, uploadTickets };
+    return { service, prisma, queue, downloads, sessions, uploadTickets, titleStatus };
   }
 
   async function stage(uploadId: string, filename: string, extra: Record<string, string> = {}) {

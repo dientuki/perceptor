@@ -5,10 +5,7 @@ import { AdminGuard } from '@/auth/guards/admin.guard';
 import { SchedulerService } from './scheduler.service';
 import { ScheduledTask } from './entities/scheduled-task.entity';
 
-// Both operations are admin-only (NFR-1). Guards are applied per method,
-// following ffprobe-logs.resolver.ts, not a class-level guard — there is no
-// other principal calling into this resolver today, but the per-method form
-// keeps that decision local to each operation rather than implicit.
+// Spec 035, NFR-1
 @Resolver()
 export class SchedulerResolver {
   constructor(private readonly schedulerService: SchedulerService) {}

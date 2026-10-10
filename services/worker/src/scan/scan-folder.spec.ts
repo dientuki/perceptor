@@ -1,16 +1,16 @@
-// Defends REQ-2/AC-10: scanFolder must enumerate every file in the download
-// with its size and isVideo flag, and must never itself pick a "main" file —
-// that selection now lives in select-matches.ts. A wrong isVideo flag here is
-// silent: it either drops a real episode from the season pipeline's candidate
-// list or lets a sidecar (.nfo/.srt) get treated as a video downstream. Also
-// covers the single-file downloadPath case (LOCAL_FILE sources).
-
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { scanFolder } from './scan-folder';
 
+// Defends Spec 013, REQ-2: scanFolder must enumerate every file in the
+// download with its size and isVideo flag, and must never itself pick a
+// "main" file — that selection now lives in select-matches.ts. A wrong
+// isVideo flag here is silent: it either drops a real episode from the
+// season pipeline's candidate list or lets a sidecar (.nfo/.srt) get
+// treated as a video downstream. Also covers the single-file downloadPath
+// case (LOCAL_FILE sources).
 describe('scanFolder', () => {
   let root: string;
 

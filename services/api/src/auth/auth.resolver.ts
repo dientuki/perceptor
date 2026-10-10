@@ -26,9 +26,7 @@ export class AuthResolver {
     private usersService: UsersService,
   ) {}
 
-  // REQ-18: the picker this feature does not build reads this rather than
-  // hardcoding a list. Derived from SUPPORTED_LOCALES, never a literal array
-  // here — that's the whole point of REQ-17.
+  // Spec 018, REQ-18; Spec 018, REQ-17
   @Query(() => [String])
   supportedLocales(): readonly string[] {
     return SUPPORTED_LOCALES;
@@ -46,8 +44,7 @@ export class AuthResolver {
     return await this.usersService.setUiLocale(principal.id, locale);
   }
 
-  // The only public operation in the schema (REQ-4) — every other resolver
-  // requires a credential once JwtAuthGuard is registered as APP_GUARD.
+  // Spec 002, REQ-4
   @Public()
   @Mutation(() => LoginResponse, { description: 'Inicia sesión y retorna un JWT' })
   async login(
@@ -60,9 +57,7 @@ export class AuthResolver {
     );
   }
 
-  // The API can never reach a cookie scoped to a different origin — `web`
-  // owns clearing it. Logout here only ever needs to revoke the caller's own
-  // Redis session record (REQ-10, AC-5).
+  // Spec 002, REQ-10 AC-5
   @UseGuards(JwtAuthGuard)
   @Mutation(() => Boolean)
   async logout(@CurrentUser() principal: AuthPrincipal): Promise<boolean> {

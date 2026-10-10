@@ -197,6 +197,33 @@ None — no Prisma model or enum changes (NFR-4). Five new `Setting` rows, seede
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+AC-11 is closed above, off the test suites. The remaining nine split into two blockers, and the
+second is absolute on this installation: `process_jobs` holds **0 rows** and `ffprobe_logs` **0** —
+no encode has ever run here, so no MKV exists to inspect.
+
+- **AC-3, AC-4, AC-5** — need an **admin session**: all three drive `updateSettings`, which is
+  admin-guarded, and AC-5 additionally wants the row hand-edited and then read back through the UI.
+  Their *resolution* half is already proven at unit level and the tests name the exact cases:
+  `api/src/settings/subtitle-formats.spec.ts` asserts `'is empty when the text group is allowed with
+  no formats checked'` (AC-3) and `'drops corrupt ids and ids from the other group'` (AC-4's
+  `srt,pgs` and AC-5's `pgs,garbage` both), plus `'returns ids in catalog order regardless of stored
+  order'`. What is unproven is the Settings screen's own write and read-back, not the rule.
+- **AC-6, AC-7, AC-8, AC-9, AC-10** — need a **completed encode** over a source carrying the right
+  track mix (ASS + SRT, Spanish SRT + PGS + an unallowed-language track, PGS-only, and a job
+  enqueued before a settings change and picked up after). The worker's half of the contract is
+  covered by `worker/src/encode/subtitle-formats.spec.ts` (unknown ids dropped with one warning,
+  duplicates collapsed, `[]` kept empty rather than defaulted), and AC-10's "resolved at pickup, not
+  at enqueue" is structural — `allowedSubtitleFormats` is resolved when the worker queries
+  `processJob`, never snapshotted onto the row. None of that substitutes for an `ffprobe` of a real
+  output, which is what these five ask for.
+
+Current setting rows, for whoever runs this: `subtitles_enabled=true`,
+`subtitles_text_enabled=true`, `subtitles_text_formats=srt,ass,webvtt,mov_text`,
+`subtitles_image_enabled=false`, `subtitles_image_formats=pgs,vobsub,dvb` — i.e. the defaults AC-6
+and AC-7 assume, so neither needs a settings change first.
+
 - [x] **AC-1**: On a fresh `bin/dbreset`, `bin/mysql -e "select \`key\`, value from Setting where \`key\` like 'subtitles_%'"`
       returns exactly the five NFR-1 rows and values.
 - [x] **AC-2**: In Settings → Compression, turning "no subtitles" on disables both groups and all
@@ -227,9 +254,16 @@ None — no Prisma model or enum changes (NFR-4). Five new `Setting` rows, seede
       reaches `COMPLETED`, and the worker log contains the "disabled by settings" line.
 - [ ] **AC-10**: A job enqueued with defaults, then picked up after an administrator switched to
       "no subtitles", comes out with no subtitle stream (REQ-7 query-time resolution).
-- [ ] **AC-11**: `bin/npm api run test` and `bin/npm worker test` pass apart from the pre-existing
+- [x] **AC-11**: `bin/npm api run test` and `bin/npm worker test` pass apart from the pre-existing
       `src/ffmpeg/` failures recorded in the root `CLAUDE.md`; `bin/cli web node scripts/check-messages.mjs`
       reports no `en`/`es` drift.
+      **Verified 2026-10-09** (branch `fix/tech-debt`, commit `b65ef65`): `bin/npm api run test` →
+      68 suites, 1000 tests, 0 failures, exit 0 (`settings/subtitle-formats.spec.ts` among them);
+      `bin/npm worker test` → 28 files, 323 tests, 0 failures, exit 0
+      (`encode/subtitle-formats.spec.ts` among them) — the pre-existing `src/ffmpeg/` failures this
+      criterion allows for no longer exist, so the bar is cleared outright rather than by exemption.
+      `bin/cli web node scripts/check-messages.mjs` reports `en.json` and `es.json` matching exactly
+      (602 keys).
 
 ## Out of Scope
 

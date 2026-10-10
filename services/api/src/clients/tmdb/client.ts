@@ -18,8 +18,6 @@ import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { HTTP_METHOD } from '@/types/http';
 import { SettingsService } from '@/settings/settings.service';
 
-// Mapea nuestro MediaType interno al segmento de ruta que usa TMDB: el "show"
-// interno corresponde a "tv" en la API de TMDB, no a "show" (eso daría 404).
 const TMDB_ENDPOINT: Record<MediaType, string> = {
   [MEDIA_TYPE.MOVIE]: 'movie',
   [MEDIA_TYPE.SHOW]: 'tv',
@@ -46,8 +44,6 @@ export function posterUrl(posterPath: string | null | undefined): string | null 
   return posterPath ? `https://image.tmdb.org/t/p/${TMDB_POSTER_SIZE}${posterPath}` : null;
 }
 
-// --- MAPPERS ---
-// Estrategia de transformación para evitar if/else dentro de la función
 const mappers = {
   [MEDIA_TYPE.MOVIE]: (data: TmdbMovieDetails): MovieDetail => ({
     type: MEDIA_TYPE.MOVIE,
@@ -138,7 +134,6 @@ export class TmdbClient implements MovieDBClient {
     };
   }
 
-  // 'thing' sería "movie", "tv", "person", "multi", etc.
   async search<T>(thing: string, query: string, page: number = 1): Promise<T[]> {
     return await this.fetchPage(`search/${thing}`, query, page) as T[];
   }
@@ -166,17 +161,14 @@ export class TmdbClient implements MovieDBClient {
   async details(thing: MediaType, id: number): Promise<MediaDetail> {
     const endpoint = TMDB_ENDPOINT[thing];
 
-    // Obtenemos los datos crudos
     const data = await this.fetchOne<TmdbMovieDetails | TmdbShowDetails>(`${endpoint}/${id}`);
 
-    // Seleccionamos la estrategia de mapeo adecuada
     const transform = mappers[thing];
 
     if (!transform) {
       throw new Error(`Media type not supported: ${thing}`);
     }
 
-    // Ejecutamos la transformación
     return transform(data as any);
   }
 

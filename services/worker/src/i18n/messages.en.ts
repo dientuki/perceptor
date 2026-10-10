@@ -1,8 +1,4 @@
-// English rendering for every key in error-keys.ts, used as the required
-// `errorMessage` argument to `encodeFailed` (docs/spec/graphql-contract.md).
-// `{param}` placeholders are filled by renderMessage below with the values
-// carried on KeyedError.params — this is the sentence that ends up in
-// ProcessJob.errorMessage and in api's/worker's logs, per NFR-3.
+// Spec 018, REQ-11
 
 import {
   ERROR_ENCODE_EPISODE_NUMBERS_MISSING,

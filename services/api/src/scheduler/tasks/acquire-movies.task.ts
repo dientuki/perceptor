@@ -44,7 +44,8 @@ export class AcquireMoviesTask implements ScheduledTaskHandler {
     const missing = rows.filter(
       (movie) =>
         deriveTitleStatus({
-          status: movie.status,
+          filePath: movie.filePath,
+          mediaServerPresentAt: movie.mediaServerPresentAt,
           sources: movie.mediaSources,
           jobs: movie.processJobs,
         }) === 'MISSING',

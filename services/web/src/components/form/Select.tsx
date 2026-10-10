@@ -19,11 +19,6 @@ interface SelectProps {
   disabled?: boolean;
 }
 
-// Mismas clases que InputField.tsx (h-11 w-full rounded-lg border ...
-// shadow-theme-xs ... dark:bg-gray-900) para que ambos controles se vean
-// iguales en el mismo form. A diferencia de components/form/input/Checkbox.tsx
-// (sin `name`, por eso SettingsForm usa un <input type="checkbox"> crudo),
-// este SÍ lleva `name` — es lo que lo hace usable dentro de un <form action>.
 const Select: FC<SelectProps> = ({
   id,
   name,

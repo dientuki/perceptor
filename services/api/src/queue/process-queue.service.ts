@@ -10,11 +10,6 @@ export class ProcessQueueService implements OnModuleDestroy {
   });
 
   async addSourceReady(payload: SourceReadyJob) {
-    // jobId derivado de mediaSourceId: si el AutoRun dispara dos veces por el
-    // mismo torrent, BullMQ descarta el duplicado en vez de encolarlo de nuevo.
-    // Nota: no puede ser un string puramente numérico ("11"), BullMQ 6.x lo
-    // rechaza porque esos ids quedan reservados para el contador interno
-    // autogenerado (ver `Job.validateOptions`). Se prefija para evitarlo.
     return this.queue.add(SOURCE_READY_JOB, payload, {
       jobId: `media-source-${payload.mediaSourceId}`,
     });

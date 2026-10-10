@@ -34,7 +34,7 @@ export class PopularMediaService {
   ) {}
 
   async list(type: string, userId: string): Promise<MediaSearchResultEntity[]> {
-    // 1. Throws for an unsupported type before any Redis read or TMDB call (REQ-15).
+    // Spec 033, REQ-15
     const service = this.mediaDispatch.resolve(type);
 
     // 2. The caller's effective UI locale — never a hardcoded default beside DEFAULT_LOCALE.
@@ -66,8 +66,7 @@ export class PopularMediaService {
       await this.writeCache(cacheKey, rows);
     }
 
-    // 6. Cache-then-enrich: ownership and mediaId are computed per caller,
-    // after anything was written to the shared cache (REQ-11).
+    // Spec 033, REQ-11
     return service.cacheAndEnrich(rows, userId);
   }
 
@@ -86,13 +85,11 @@ export class PopularMediaService {
     try {
       await this.redis.set(cacheKey, JSON.stringify(rows), 'EX', POPULAR_LIST_TTL_SECONDS);
     } catch (err) {
-      console.error(`Error guardando cache de populares de TMDB (${cacheKey}):`, err);
+      console.error(`Error caching TMDB popular list (${cacheKey}):`, err);
     }
   }
 
-  // The caller's uiLocale, else the installation's ui_locale setting, else
-  // DEFAULT_LOCALE — every candidate clamped through isSupportedLocale so an
-  // unsupported value is skipped rather than used (REQ-12).
+  // Spec 033, REQ-12
   private async resolveCatalogLocale(userId: string): Promise<string> {
     if (userId) {
       const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { uiLocale: true } });

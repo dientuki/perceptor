@@ -117,36 +117,116 @@ None.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: On a wide viewport, `/movies/<id>` for a registered film renders three columns:
+- [x] **AC-1**: On a wide viewport, `/movies/<id>` for a registered film renders three columns:
       the poster; the title heading with its status badge above the file and magnet buttons above
       the synopsis; Refresh and Remove above the short switch, the content kind selector and the
       language panel.
-- [ ] **AC-2**: On the same page, the downloads panel, the torrent search and the search results
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`, emulating a 1600x1000 viewport. The grid resolves to
+      `grid-template-columns: 256px 798px 320px`, its three children share `top: 173` at
+      `left: 74 / 362 / 1192`. In DOM order the centre column is the `Inception` heading, the
+      `2010 - EN - Downloading` line carrying the status badge, the File and Magnet buttons, then
+      the synopsis; the right column is Refresh, Remove, the "Registered as a short" switch, the
+      content-kind combobox and the Languages panel. (The `RankingDebugPanel` that also renders in
+      the centre column is gated on `process.env.NODE_ENV !== "production"`, so it is absent from
+      the shipped page.)
+- [x] **AC-2**: On the same page, the downloads panel, the torrent search and the search results
       appear in that order below the three columns, each at the page's full width.
-- [ ] **AC-3**: `/shows/<id>` renders the same three columns with no file or magnet button in the
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`. Below the grid, and siblings of it, the downloads panel sits at
+      `top: 705` and the torrent search - its form and its results table, one block - at `top: 929`,
+      both `width: 1438`, the full inner width of the page card, against the grid's own 1438.
+- [x] **AC-3**: `/shows/<id>` renders the same three columns with no file or magnet button in the
       centre column and no short switch in the right column; the season accordion is still below
       the downloads panel at full width.
-- [ ] **AC-4**: `/movies/<id>` for a film registered as a short renders the short switch checked;
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000` on `/shows/1` (Reacher). Same three columns
+      (`256px 597px 320px`, all at `top: 173`); the centre column reads
+      `Reacher | 2022 - EN - MISSING | SYNOPSIS | ...` with **no** File or Magnet button, and the
+      right column reads `Refresh | Remove | Content kind | ... | Languages | ...` with **no** short
+      switch. The season accordion is a separate block below the card - the card bottom is at 750,
+      the accordion starts at 799 - at `width: 1287`, the full page width, newest season first
+      (`Season 4`).
+- [x] **AC-4**: `/movies/<id>` for a film registered as a short renders the short switch checked;
       toggling it off and reloading shows it off.
-- [ ] **AC-5**: Given a film with no audio languages of its own and a user whose `/preferences`
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`, round-tripped in both directions on `/movies/1`. The switch
+      read off (`bg-gray-200`); toggling it on and **reloading the page** rendered it checked
+      (`bg-brand-500`), with `movies.isShort = 1` in the database; toggling it off and reloading
+      rendered it off again, with `isShort = 0`. The film was left in its original state.
+- [x] **AC-5**: Given a film with no audio languages of its own and a user whose `/preferences`
       sets audio to `es`, the language panel shows `es` marked as inherited. Setting the film's own
       audio to `ja` through the modal makes the panel show `ja` unmarked, with no page reload.
-- [ ] **AC-6**: Given a user whose `/preferences` sets no subtitle language and a title with none
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`, substituting `es-ES` for the criterion's bare `es` because the
+      seeded language catalog offers no plain Spanish - only `es-ES` ("European Spanish") and
+      `es-419` ("Latin American Spanish"). With `/preferences` audio set to European Spanish and
+      `/movies/2` (Spider-Man: Brand New Day) holding no audio language of its own, the panel read
+      `Audio (from your preferences) European Spanish`. Setting the film's own audio to Japanese
+      through the modal made it read `Audio | Japanese` with **no** inheritance marker, while the
+      subtitle line kept its `(from your preferences)` marker. No page reload: a sentinel assigned
+      to `window` before the save was still readable afterwards.
+- [x] **AC-6**: Given a user whose `/preferences` sets no subtitle language and a title with none
       of its own, the subtitle line of the panel reads the explicit empty-state text, not a blank
       area.
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`, on both page kinds. With the user holding no subtitle
+      preference and neither title holding one of its own, the panel's subtitle line reads
+      `Subtitles (from your preferences) / None set` - the explicit empty-state string, not a blank
+      area - on `/shows/1` and on `/movies/2`.
 - [ ] **AC-7** *(failure path)*: With `api` stopped (`docker compose stop api`), opening the modal
       on `/movies/<id>` and saving shows the refusal message inside the still-open modal; closing
       it leaves the panel showing the values from before the attempt, and reloading after
       `docker compose start api` confirms nothing was stored.
-- [ ] **AC-8**: Opening the modal, changing the audio selection, closing it with its dismiss
+      **Run 2026-10-09, and it does not hold.** With `/movies/2` already rendered and then
+      `docker compose stop api`, opening the modal, adding Korean (the chips read
+      `Quitar japonés, Quitar coreano`) and pressing Guardar **closes the modal and replaces the
+      page with Next's server-error overlay** - `TypeError: fetch failed`, caused by
+      `getaddrinfo ENOTFOUND api`. Measured immediately after the save: `modalOpen: false`,
+      the form's error box empty, `nextjs-portal` present. Reproduced twice.
+
+      The refusal path itself is written correctly - `setMoviePreferredTrackLanguagesAction`
+      (`services/web/src/actions/languages.ts`) wraps `fetchGraphQL` in try/catch and returns
+      `{ error: t("network.connectionFailed") }`, and `TitleLanguagesForm` only calls `onSaved()`
+      when it collected no errors. It never gets the chance: a Next Server Action's response also
+      carries a re-render of the current route, and that re-render runs `getMovie`/`getLanguages`
+      against the same unreachable `api`, so the whole action response fails and the client never
+      receives the value the action returned. **The criterion as written cannot hold while the
+      route's own RSC data comes from the service being stopped** - this is a design question for
+      the feature, not a measurement still to take.
+
+      The criterion's last clause does hold: nothing was stored. After
+      `docker compose start api`, `user_movie_languages` for movie 2 still reads `ja AUDIO` alone,
+      with no Korean row.
+- [x] **AC-8**: Opening the modal, changing the audio selection, closing it with its dismiss
       control and reopening it shows the stored selection, not the discarded one.
-- [ ] **AC-9**: At a phone width the three columns stack poster, centre, right with no horizontal
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000` on `/movies/1`, whose own audio is
+      `es-419, cs`. Removing Czech inside the modal, dismissing it with its Close control, and
+      reopening it showed both chips back (`Remove Latin American Spanish`, `Remove Czech`), and the
+      panel behind it never stopped reading `Latin American Spanish, Czech`.
+- [x] **AC-9**: At a phone width the three columns stack poster, centre, right with no horizontal
       page scroll.
-- [ ] **AC-10**: `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift, and
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`, at the 375x812 mobile preset. The grid collapses to a single
+      `301px` column and the three children stack in order - poster `top: 153`, centre (`Inception`)
+      `top: 635`, right (`Refresh`) `top: 1439` - all at `left: 37`, with
+      `document.documentElement.scrollWidth === window.innerWidth === 375`, so no horizontal page
+      scroll.
+- [x] **AC-10**: `bin/cli web node scripts/check-messages.mjs` reports no `en`/`es` drift, and
       switching the UI locale to `es` shows every new label translated.
-- [ ] **AC-11**: `git diff --stat services/api services/worker` is empty and `services/api/src/schema.gql`
-      does not appear in the diff.
-- [ ] **AC-12**: `bin/npm web run build` exits 0 and `bin/cli web npx --no tsc --noEmit` reports 0 errors.
+      **Confirmed 2026-10-09, both halves.** The parity check reports `OK: en.json and es.json
+      match exactly (602 keys)`. Switching the interface language to Spanish in `/preferences` and
+      reloading `/movies/2` renders every label this feature introduced in Spanish, not as a
+      present-but-untranslated key: `Actualizar`, `Quitar`, `Registrado como corto`,
+      `Tipo de contenido`, `CGI / Animación 3D`, `Idiomas`, `El audio no es obligatorio`,
+      `Subtítulos (de tus preferencias)`, `Ninguno definido`, `Cambiar`, plus `SINOPSIS`, `Archivo`
+      and the `FALTA` status badge, with `<html lang="es">`.
+- [x] **AC-11**: `git diff --stat services/api services/worker` is empty and `services/api/src/schema.gql`
+      does not appear in the diff. Confirmed 2026-10-09 against the feature's commit (`c219812`,
+      "add & implement 077 spec, movie/short/serie detail"): its 23 files are this spec's own
+      documents, `CLAUDE.md`, `README.md`, `site/index.html`, `services/web/CLAUDE.md`, the two
+      message catalogs and fifteen files under `services/web/src/` — nothing under
+      `services/api/` or `services/worker/`, so `schema.gql` never appears.
+- [x] **AC-12**: `bin/npm web run build` exits 0 and `bin/cli web npx --no tsc --noEmit` reports 0 errors.
+      Both run 2026-10-09. The build was run in a throwaway container from the `perceptor-web:local-dev`
+      image (node 24.18.0) with `services/web` bind-mounted as uid 1000, because `bin/npm` shells into
+      the running container and the root `CLAUDE.md` forbids a build against a live dev stack — the dev
+      `.next` was parked before the run and restored after, so the stack was never un-hydrated. It
+      exited 0 and emitted the full route table, including `/movies/[id]` and `/shows/[id]`, the two
+      routes this feature rewrote. `tsc --noEmit` is clean.
 
 ## Out of Scope
 

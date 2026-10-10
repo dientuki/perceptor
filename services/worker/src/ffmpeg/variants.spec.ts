@@ -1,9 +1,4 @@
-// Defends src/ffmpeg/variants.ts — the vocabulary and the three named
-// functions REQ-4/REQ-5/REQ-6/REQ-9 of
-// docs/spec/features/031-worker-language-variants/spec.md build selection
-// on. Nothing here is consumed by params.ts yet (that lands with the rule
-// change); these cases pin the module in isolation, the way
-// params.spec.ts pins the existing predicates.
+// Spec 031, REQ-4 REQ-5 REQ-6 REQ-9
 
 import { describe, expect, it, vi } from 'vitest';
 import { detectVariant, narrowToVariants, requestedVariants } from './variants';
@@ -60,7 +55,7 @@ describe('requestedVariants', () => {
     expect(requestedVariants('eng', ['en', 'es-419'])).toEqual([]);
   });
 
-  it('is empty for a bare tag with no region subtag — not a variant request (REQ-6)', () => {
+  it('is empty for a bare tag with no region subtag — not a variant request (Spec 031, REQ-6)', () => {
     expect(requestedVariants('spa', ['es'])).toEqual([]);
   });
 
@@ -78,7 +73,7 @@ describe('requestedVariants', () => {
 });
 
 describe('narrowToVariants', () => {
-  it('keeps only the streams matching a requested variant when at least one matches (REQ-4)', () => {
+  it('keeps only the streams matching a requested variant when at least one matches (Spec 031, REQ-4)', () => {
     const streams = [
       stream({ index: 1, tags: { title: 'Latino' } }),
       stream({ index: 2, tags: { title: 'BTM' } }),
@@ -108,7 +103,7 @@ describe('narrowToVariants', () => {
     });
   });
 
-  it('keeps every stream, ungrouped, when no requested variant matches anything (REQ-5)', () => {
+  it('keeps every stream, ungrouped, when no requested variant matches anything (Spec 031, REQ-5)', () => {
     const streams = [
       stream({ index: 1, tags: { title: 'BTM' } }),
       stream({ index: 2, tags: { title: 'BTM' } }),
@@ -120,7 +115,7 @@ describe('narrowToVariants', () => {
     expect(result).toEqual({ matched: false, streams });
   });
 
-  it('groups matches per requested tag when both variants are requested and both match (REQ-9)', () => {
+  it('groups matches per requested tag when both variants are requested and both match (Spec 031, REQ-9)', () => {
     const streams = [
       stream({ index: 1, tags: { title: 'Latino' } }),
       stream({ index: 2, tags: { title: 'Castellano' } }),

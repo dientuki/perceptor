@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { buildContainerTitle, buildSourceTag } from './container-tags';
 
 describe('buildContainerTitle', () => {
-  it('returns the film title verbatim, punctuation intact (AC-1)', () => {
+  it('returns the film title verbatim, punctuation intact (Spec 046, AC-1)', () => {
     expect(
       buildContainerTitle({
         kind: 'MOVIE',
@@ -19,7 +19,7 @@ describe('buildContainerTitle', () => {
     ).toBe('The Martian');
   });
 
-  it('pads single-digit season/episode and keeps commas and apostrophes in the episode title (AC-2)', () => {
+  it('pads single-digit season/episode and keeps commas and apostrophes in the episode title (Spec 046, AC-2)', () => {
     expect(
       buildContainerTitle({
         kind: 'EPISODE',
@@ -31,7 +31,7 @@ describe('buildContainerTitle', () => {
     ).toBe("The Boys S05-E07 The Frenchman, the Female, and the Man Called Mother's Milk");
   });
 
-  it('omits the trailing separator when episodeTitle is null (AC-3)', () => {
+  it('omits the trailing separator when episodeTitle is null (Spec 046, AC-3)', () => {
     expect(
       buildContainerTitle({
         kind: 'EPISODE',
@@ -45,7 +45,7 @@ describe('buildContainerTitle', () => {
 });
 
 describe('buildSourceTag', () => {
-  it('returns the path relative to downloadsRoot when downloadPath is null and the input is inside it (AC-4)', () => {
+  it('returns the path relative to downloadsRoot when downloadPath is null and the input is inside it (Spec 046, AC-4)', () => {
     expect(
       buildSourceTag(
         '/downloads',
@@ -55,14 +55,14 @@ describe('buildSourceTag', () => {
     ).toBe('Some.Release-GRP/Some.Release-GRP.mkv');
   });
 
-  it('falls back to the base name with no slash when the input lies outside downloadsRoot and downloadPath is null (AC-5)', () => {
+  it('falls back to the base name with no slash when the input lies outside downloadsRoot and downloadPath is null (Spec 046, AC-5)', () => {
     const result = buildSourceTag('/downloads', '/elsewhere/Some.Release-GRP.mkv', null);
 
     expect(result).toBe('Some.Release-GRP.mkv');
     expect(result).not.toContain('/');
   });
 
-  it('returns the base name, never empty, when downloadPath resolves to the input file itself (REQ-17, uploaded file)', () => {
+  it('returns the base name, never empty, when downloadPath resolves to the input file itself (Spec 058, REQ-17; uploaded file)', () => {
     const result = buildSourceTag(
       '/downloads',
       '/downloads/imports/abc/Some.Release-GRP.mkv',
@@ -74,7 +74,7 @@ describe('buildSourceTag', () => {
     expect(result).not.toContain('imports/');
   });
 
-  it('treats a non-normalized but equivalent downloadPath as the same loose file (REQ-17)', () => {
+  it('treats a non-normalized but equivalent downloadPath as the same loose file (Spec 058, REQ-17)', () => {
     const result = buildSourceTag(
       '/downloads',
       '/downloads/imports/abc/Some.Release-GRP.mkv',
