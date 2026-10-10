@@ -11,7 +11,6 @@ export class SourceFileInput {
   @IsNotEmpty()
   fileName: string;
 
-  // Float y no Int: los releases pasan el techo de Int con facilidad.
   @Field(() => Float, { nullable: true })
   @IsOptional()
   @IsNumber()

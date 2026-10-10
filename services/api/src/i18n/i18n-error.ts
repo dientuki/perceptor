@@ -18,11 +18,7 @@ import { MESSAGES_EN } from '@/i18n/messages.en';
  */
 export type I18nParams = Record<string, string | number>;
 
-/**
- * The response body every factory below produces. `graphql-error.formatter.ts`
- * (T004) lifts `i18n` into the GraphQL error's `extensions`; the REST surface
- * in `uploads/` serializes this shape directly per REQ-10.
- */
+// Spec 018, T004; Spec 018, REQ-10
 export interface I18nExceptionResponse {
   message: string;
   i18n: {
@@ -59,15 +55,7 @@ function buildResponse(key: ErrorKey, params?: I18nParams): I18nExceptionRespons
   return params !== undefined ? { message, i18n: { key, params } } : { message, i18n: { key } };
 }
 
-/**
- * One factory per Nest exception type used across `../spec.md`'s error
- * tables. Each returns a **real** `HttpException` subclass — not a custom
- * exception hierarchy — so every existing `catch`, guard and status mapping
- * in the app keeps working unchanged. The response body is always
- * `{ message, i18n: { key, params? } }`: `message` is the rendered English
- * sentence (REQ-8), `i18n` is what `graphql-error.formatter.ts` lifts into
- * `extensions` (REQ-7).
- */
+// Spec 018, REQ-7 REQ-8
 export const i18nError = {
   notFound(key: ErrorKey, params?: I18nParams): NotFoundException {
     return new NotFoundException(buildResponse(key, params));

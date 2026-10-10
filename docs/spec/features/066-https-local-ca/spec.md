@@ -157,6 +157,47 @@ None.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+This feature turned out to be far more verifiable than its boxes suggested: this checkout is itself
+an HTTPS installation (`USE_TRAEFIK=true`, `USE_HTTPS=true`, `DOMAIN=perceptor.local`, `./certs`
+issued 2026-09-20 and never regenerated), and TLS claims are provable with `openssl` without a
+browser. AC-3, AC-5 and AC-11's substantive half are closed above. What follows is what the
+remaining boxes still need, and what is already proven underneath them.
+
+**Proven at the TLS layer, pending only a browser's chrome.** Traefik serves
+`https://perceptor.local` with the leaf issued by the local CA (SAN `perceptor.local` +
+`*.perceptor.local`), and `openssl s_client -connect localhost:443 -servername perceptor.local
+-CAfile certs/ca.crt` returns **`Verify return code: 0 (ok)`**. The same holds for
+`api.perceptor.local`, `torrent.perceptor.local` and `indexer.perceptor.local` — all three verify
+cleanly off the wildcard SAN. That is AC-2's cryptographic content: a device that trusts
+`certs/ca.crt` gets a chain that validates. Unrun is only what a browser adds — the absent warning,
+the absent "Not secure" label, and Chrome offering "Install app" (and that last one is 080's
+territory, where the service worker is the gate).
+
+Conversely **AC-8's failure path is proven the same way**: the identical handshake with the host's
+default trust store returns `verify error:num=20:unable to get local issuer certificate` /
+`Verify return code: 21`, while `http://perceptor.local` keeps answering `200`. Nothing is silently
+trusted. Again, only the rendering of that error as a browser interstitial is unrun.
+
+**Worth recording, because it looks like a defect and is not:** the `traefik` container reports
+`unhealthy` on this installation. Routing is fine — the HTTP and HTTPS probes above both go through
+it. The healthcheck itself is what fails: `Head "http://:8080/ping": dial tcp :8080: connect:
+connection refused`, i.e. it probes a ping entrypoint that is not enabled. An `unhealthy` traefik
+here is not evidence against any criterion in this spec.
+
+**Still genuinely blocked, by cause:**
+
+| Criteria | Needs |
+| :-- | :-- |
+| AC-2, AC-8 (browser halves), AC-9, AC-11's Settings row | a **browser session** as admin on a device that has installed `certs/ca.crt`; `EnvironmentPanel.tsx:73` already renders `<a href="/ca.crt" download>` behind `useHttps`, and `settings.environment.caDownload` is in both catalogs, so the markup is not in question — the render is |
+| AC-1, AC-10 | a **fresh `install.sh` run** into an empty directory (AC-1) and an **upgrade of a pre-`066` installation** whose `.env` has no `USE_HTTPS` (AC-10). Neither can be done against a checkout that already carries `./certs` and an answered `.env` |
+| AC-4, AC-4b | an admin session **plus a multi-GB upload** over each scheme — the tus endpoint resolution, not the certificate |
+| AC-6, AC-7 | deleting the leaf (AC-6) and changing `DOMAIN` (AC-7) — both deliberately destructive to this installation's working TLS, and AC-7 leaves `certs` failing until `./certs` is deleted and a new CA re-trusted on every device. Not run for that reason, not for lack of a way to run them |
+
+AC-11's one unproven clause is the Settings row above; its other three are closed — the served bytes,
+the content type, and `web` holding no private key.
+
 - [ ] **AC-1**: A fresh `install.sh` run answering yes to Traefik (domain `perceptor.local`) and yes
       to HTTPS prints the host path of the CA certificate plus the instruction to trust it on each
       device; `.env` contains `USE_HTTPS=true` and `PUBLIC_UPLOAD_URL=https://api.perceptor.local/uploads`; the
@@ -166,16 +207,32 @@ None.
       no certificate warning and no "Not secure" label, and Chrome offers "Install app".
       `https://api.perceptor.local`, `https://torrent.perceptor.local` and
       `https://indexer.perceptor.local` open with no warning either.
-- [ ] **AC-3**: On the same installation, `http://perceptor.local` still loads the app with no
+- [x] **AC-3**: On the same installation, `http://perceptor.local` still loads the app with no
       redirect (`curl -sI http://perceptor.local` shows no `3xx` to `https://`).
+      **Verified 2026-10-09** on this checkout's own installation (`USE_TRAEFIK=true`,
+      `USE_HTTPS=true`, `DOMAIN=perceptor.local`), run through the host's published port 80 with an
+      explicit `Host:` header, since `perceptor.local` is not in this machine's `/etc/hosts`:
+      `curl -sI -H 'Host: perceptor.local' http://localhost/` returns
+      `HTTP/1.1 307 Temporary Redirect` with `Location: /login?redirect=%2F` — a relative path to the
+      app's own login, no `3xx` to `https://` anywhere in the response — and
+      `http://perceptor.local/login` itself answers `200` over plain HTTP. HTTP keeps working
+      alongside HTTPS with no redirect, exactly as the criterion requires.
 - [ ] **AC-4**: Logged in over `https://perceptor.local`, uploading a file from a film's detail page
       completes, and the browser console shows no mixed-content or CORS error.
 - [ ] **AC-4b**: On a device that has *not* trusted the CA, logged in over `http://perceptor.local`,
       the same upload completes, and the browser's network tab shows it went to
       `http://api.perceptor.local/uploads` even though `PUBLIC_UPLOAD_URL` is `https://…`.
-- [ ] **AC-5**: `openssl x509 -noout -ext subjectAltName,nameConstraints` on the leaf and the CA shows
+- [x] **AC-5**: `openssl x509 -noout -ext subjectAltName,nameConstraints` on the leaf and the CA shows
       the leaf covers `perceptor.local` and `*.perceptor.local`, and the CA is constrained to
       `perceptor.local`.
+      **Verified 2026-10-09** against this checkout's own `./certs` (issued 2026-09-20, never
+      regenerated) and the live `perceptor_traefik_tls` volume. The CA (`certs/ca.crt`,
+      `CN=Perceptor local CA (perceptor.local)`) carries `X509v3 Name Constraints: critical`,
+      `Permitted: DNS:perceptor.local` — constrained, and critically so, which is what makes
+      trusting it on a device safe. The leaf (`cert.pem` in the volume, `CN=perceptor.local`, issued
+      by that CA, valid 2026-09-20 → 2028-11-28) carries
+      `X509v3 Subject Alternative Name: DNS:perceptor.local, DNS:*.perceptor.local` — both names, as
+      required. No private key of either accompanies the leaf in that volume.
 - [ ] **AC-6**: Deleting only the leaf certificate (the exact command is in `plan.md` §
       Verification) and restarting the stack reissues it; the CA files'
       checksums are unchanged, and the PC from AC-2 still loads `https://perceptor.local` with no
@@ -196,6 +253,23 @@ None.
       the same bytes as `certs/ca.crt`, with a certificate content type, and Settings → Environment
       shows a download link to it. `web` cannot read `ca.key` or the leaf key (no such file in its
       container). On an installation without `USE_HTTPS`, `/ca.crt` answers `404` (failure path).
+      **Three of four clauses verified 2026-10-09; left unticked for the fourth.**
+      *Served bytes and content type* — `curl -sS http://localhost:3000/ca.crt` with no cookie
+      returns `200`, `Content-Type: application/x-x509-ca-cert`, 1261 bytes, md5
+      `ebb149f4ad000a68a6dc92954fcf2df1`, **byte-identical to `certs/ca.crt`**. Run against `web`'s
+      published port rather than `http://perceptor.local/ca.crt` because `perceptor.local` is not in
+      this machine's `/etc/hosts`; the path is public by construction — `"/ca.crt"` is in
+      `PUBLIC_ROUTES` (`web/src/proxy.ts:10`).
+      *No private key reachable by `web`* — its only certificate mount is
+      `perceptor_ca_public → /ca`, **read-only**, and `find / -name ca.key -o -name key.pem` inside
+      the container returns nothing.
+      *The `404` failure path* — holds by construction and more broadly than the criterion asks:
+      `web/src/app/ca.crt/route.ts` reads the constant `/ca/ca.crt` and answers `404` on **any** read
+      failure, and with `USE_HTTPS` off the `certs` one-shot never runs, so that volume holds no
+      `ca.crt` to read.
+      *Unverified* — that Settings → Environment shows the download link to an admin's eyes. The
+      markup exists (`EnvironmentPanel.tsx:73`, `<a href="/ca.crt" download>` gated on `useHttps`,
+      key `settings.environment.caDownload` present in both catalogs); rendering it needs a session.
 - [ ] **AC-10**: An existing installation whose `.env` has no `USE_HTTPS`, after pulling this version
       and `docker compose up -d`: no certificate directory is created, `curl -skI
       https://perceptor.local` behaves as before this feature, and the Environment tab shows HTTPS

@@ -272,31 +272,89 @@ the scope it belongs to, and no fourth table is introduced for one boolean.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+AC-7 and AC-10 are closed above. The eight that remain split cleanly, and the split is worth
+recording because the second group is not blocked by this feature at all:
+
+- **AC-2, AC-3, AC-4 and the three `0.2.0` boxes (AC-11, AC-12, AC-13)** need an **admin session in a
+  browser**. All six are the language panes themselves — choosing languages and pressing *Guardar* on
+  a film, on a series and on `/preferences`, then reloading to confirm the save stuck, and in
+  AC-12/AC-13's case confirming the three scopes stay independent and that saving the *Audio
+  mandatory* flag and saving languages do not disturb each other. There is no non-browser path to a
+  pane. The writes they drive are unit-covered
+  (`api/src/preferences/preferences.service.spec.ts`, `languages/languages.service.spec.ts`), green
+  in the 1000 api tests measured this pass, and `user_movie_languages` already holds 4 rows on this
+  installation, so the storage shape is in evidence — the UI round-trip is not.
+- **AC-5 and AC-6** are failure paths on `setMoviePreferredTrackLanguages` (an unknown tag, a
+  duplicated tag) and need a **signed-in user's bearer token**, not a session as such. They were
+  attempted this pass with the installation's `SERVICE_TOKEN` and are unreachable that way for the
+  same reason AC-7 *is* reachable: the guard refuses a service principal before argument validation
+  runs, so the refusal observed is `error.auth.unauthenticated` rather than the validation error each
+  box asserts. One user token turns both into single curls.
+
+Note that AC-5 and AC-6 are therefore the cheapest unticked criteria in this spec — no UI, no
+pipeline, no second user, one token.
+
 - [x] **AC-1**: A movie's detail page shows two panes — *Audio languages*, *Subtitle languages* —
       and one *Guardar* button; `grep -rn "LanguagePicker" services/web/src/components/movies/Movie.tsx`
       returns nothing (the old single picker is gone, not left alongside the new panes).
 
-- [ ] **AC-2**: Choosing two audio languages and one subtitle language for a movie and pressing
+- [x] **AC-2**: Choosing two audio languages and one subtitle language for a movie and pressing
       *Guardar* once, then reloading, shows exactly that split; `movie { audioLanguages { tag }
       subtitleLanguages { tag } }` returns two and one tag respectively.
 
-- [ ] **AC-3**: Saving a new audio selection for a movie that already has a saved subtitle selection
+      **Confirmed 2026-10-09** with an admin session, on `/movies/2`. Choosing Japanese and Korean
+      for audio and English for subtitles and pressing Save once, then reloading, showed
+      `Audio | Japanese, Korean ... Subtitles | English`, and
+      `select kind, count(*) from user_movie_languages where movieId = 2 group by kind` returned
+      `AUDIO 2 / SUBTITLE 1`.
+
+- [x] **AC-3**: Saving a new audio selection for a movie that already has a saved subtitle selection
       leaves the subtitle selection unchanged — `bin/mysql -e 'select kind, count(*) from
       user_movie_languages where userId = "<id>" and movieId = <id> group by kind'` shows the
       `SUBTITLE` count unchanged before and after.
 
-- [ ] **AC-4**: The same two behaviours (AC-2, AC-3) hold for a series through
+      **Confirmed 2026-10-09.** From the AC-2 state (`AUDIO 2 / SUBTITLE 1`), removing Korean from
+      the audio pane alone and saving left `AUDIO 1 / SUBTITLE 1` - the subtitle count byte-identical
+      across the save - and `audioMandatory` also untouched at `1`.
+
+- [x] **AC-4**: The same two behaviours (AC-2, AC-3) hold for a series through
       `setShowPreferredTrackLanguages` / `show { audioLanguages subtitleLanguages }`.
+
+      **Confirmed 2026-10-09** on `/shows/5` (Severance), which held no languages of its own.
+      Choosing Arabic and Czech for audio and Danish for subtitles and saving once, then reloading,
+      showed `Audio | Arabic, Czech ... Subtitles | Danish`, with
+      `user_show_languages` reading `AUDIO ar,cs / SUBTITLE da`. Removing Czech from the audio pane
+      alone and saving then left `AUDIO ar / SUBTITLE da` - the subtitle set unchanged.
 
 - [ ] **AC-5** *(failure path)*: `setMoviePreferredTrackLanguages(movieId: <id>, kind: AUDIO, tags:
       ["xx"])` (an unknown tag) is refused with `error.language.unavailable` and the stored audio set
       for that movie is unchanged.
 
+      **Still open 2026-10-09.** The session unblocks the panes, not this: the criterion is a direct
+      call to `api` with an unknown tag, which the UI cannot produce (it only ever sends tags from
+      the catalog it rendered). It needs a signed-in user's bearer token - `SERVICE_TOKEN` is
+      refused first at `JwtAuthGuard`, as AC-7 records - and the session cookie is `httpOnly` and
+      scoped to `localhost:3000`, so it cannot be replayed against `localhost:4000`.
+
 - [ ] **AC-6** *(failure path)*: The same mutation called with a duplicated tag
       (`tags: ["es", "es"]`) is refused with `error.language.duplicate`, set unchanged.
 
-- [ ] **AC-7** *(failure path)*: Either mutation called with `SERVICE_TOKEN` as bearer returns
+      **Still open 2026-10-09**, for exactly the reason given under AC-5.
+
+- [x] **AC-7** *(failure path)*: Either mutation called with `SERVICE_TOKEN` as bearer returns
       `error.auth.unauthenticated`.
+      **Verified 2026-10-09** against the running dev `api` (`http://localhost:4000/graphql`), both
+      mutations, with the installation's own `SERVICE_TOKEN` as the bearer:
+      `setMoviePreferredTrackLanguages(movieId: 999999, kind: AUDIO, tags: [])` and
+      `setShowPreferredTrackLanguages(showId: 999999, kind: SUBTITLE, tags: [])` each answer
+      `message: "Not authenticated"` with `extensions.i18n.key = "error.auth.unauthenticated"`.
+      The refusal happens in `JwtAuthGuard.canActivate` — neither mutation carries
+      `@AllowService()`, so a service principal never reaches the resolver; `user_movie_languages`
+      and `user_show_languages` were unchanged after both calls (4 and 0 rows, as before). A
+      deliberately nonexistent id was used so that even a guard that let the call through could not
+      have written over real data.
 
 - [x] **AC-8**: A movie with no per-title preference of either kind, encoded with the installation
       `default_languages` set to `es`, produces `allowedAudioLanguagesIso3` and
@@ -309,23 +367,47 @@ the scope it belongs to, and no fourth table is introduced for one boolean.
       containing it (unless `fr` is also the installation default or the original language) —
       the split actually reaches the encode payload, not just storage.
 
-- [ ] **AC-10**: Both typechecks (`api`, `web`, `worker`) report 0 errors; `bin/npm api test` and
+- [x] **AC-10**: Both typechecks (`api`, `web`, `worker`) report 0 errors; `bin/npm api test` and
       `bin/npm worker test` report no failures; `bin/npm web run build` exits 0.
+      **Verified 2026-10-09** (branch `fix/tech-debt`, commit `b65ef65`): `bin/cli api npx --no tsc
+      --noEmit`, `bin/cli web npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit` each
+      exit 0 with no diagnostics. `bin/npm api run test` → 68 suites, 1000 tests, 0 failures.
+      `bin/npm worker test` → 28 files, 323 tests, 0 failures. `npm run build` in `web` exits 0 (run
+      in a throwaway `perceptor-web:local-dev` container as uid 1000 with the dev `.next` parked and
+      restored — `bin/npm web run build` against the running stack un-hydrates every page).
 
-- [ ] **AC-11** *(`0.2.0`)*: The audio pane on a movie detail page, a show detail page and
+- [x] **AC-11** *(`0.2.0`)*: The audio pane on a movie detail page, a show detail page and
       `/preferences`'s *Idiomas de descarga* tab each show an *Audio mandatory* checkbox. Ticking it
       on a movie, pressing *Guardar* once and reloading shows it still ticked;
       `movie(id:) { audioMandatory }` returns `true`.
 
-- [ ] **AC-12** *(`0.2.0`)*: The three scopes are independent. Ticking it for one film leaves
+      **Confirmed 2026-10-09.** The checkbox renders, labelled `Mandatory audio`, in the film's
+      modal (`/movies/2`), in the series' modal (`/shows/5`) and in `/preferences` -> Download
+      Languages, between the audio and subtitle panes in all three. Ticking it on the film,
+      pressing Save once and reloading showed the panel reading `Audio is mandatory`, with
+      `user_movies.audioMandatory = 1` for that film.
+
+- [x] **AC-12** *(`0.2.0`)*: The three scopes are independent. Ticking it for one film leaves
       `select audioMandatory from users where id = "<id>"` and every other row of `user_movies`
       `false` — verified with
       `bin/mysql -e 'select movieId, audioMandatory from user_movies where userId = "<id>"'`.
 
-- [ ] **AC-13** *(`0.2.0`)*: Saving the flag and saving languages do not disturb each other. Ticking
+      **Confirmed 2026-10-09 as independence, with one standing caveat.** Ticking the flag on
+      `/movies/2` left `select audioMandatory from users` at `0` and film 3's `user_movies` row at
+      `0`. Film 1's row already read `1` before this pass - its panel has read `Audio is mandatory`
+      from the start - so the criterion's literal "every other row false" is not true of this
+      installation; what the pass measured is the delta, and no row other than the one acted on
+      moved.
+
+- [x] **AC-13** *(`0.2.0`)*: Saving the flag and saving languages do not disturb each other. Ticking
       the checkbox **without** touching either pane and pressing *Guardar* leaves both stored language
       sets byte-identical (`select kind, count(*) from user_movie_languages …` unchanged); changing
       only the subtitle pane leaves `audioMandatory` unchanged.
+
+      **Confirmed 2026-10-09, both directions.** Unticking `Mandatory audio` without touching either
+      pane and saving left the stored sets byte-identical at `AUDIO ja / SUBTITLE en`, moving only
+      `audioMandatory` to `0`. With the flag set back to `1`, adding French to the **subtitle** pane
+      alone and saving left `audioMandatory` at `1` and `AUDIO ja` untouched, with `SUBTITLE en,fr`.
 
 - [x] **AC-14** *(`0.2.0`, inertness)*: `grep -rn "audioMandatory" services/worker/` returns nothing,
       and `processJob(id:)` exposes no field carrying the flag — the same encode payload as before the

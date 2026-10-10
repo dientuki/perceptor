@@ -146,47 +146,96 @@ second timestamp column is added.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a registered series, when `bin/mysql -e "select tmdbStatus, seasonsSyncedAt from
+- [x] **AC-1**: Given a registered series, when `bin/mysql -e "select tmdbStatus, seasonsSyncedAt from
       shows"` is run after its registration completes, then `tmdbStatus` holds TMDB's value for that
       series (e.g. `Ended` for a finished series) and `seasonsSyncedAt` is set.
-- [ ] **AC-2**: Given a series whose `tmdbStatus` is `Returning Series` and whose `seasonsSyncedAt`
+      **Confirmed 2026-10-09.** A series registered this session (Severance, 19:42:21) carried
+      `tmdbStatus = 'Returning Series'` - TMDB's own value for it - and a non-null `seasonsSyncedAt`
+      (19:42:22) by the time registration finished, with no sweep having run.
+- [x] **AC-2**: Given a series whose `tmdbStatus` is `Returning Series` and whose `seasonsSyncedAt`
       was set 40 days back by hand, when `refresh_shows` is triggered from Settings → Scheduling
       ("Ejecutar ahora"), then the run reads `SUCCESS` with `itemsProcessed: 1` and that series'
       `seasonsSyncedAt` is now.
-- [ ] **AC-3**: Given the same series with `seasonsSyncedAt` set 20 days back, when the task is
+      **Confirmed 2026-10-09.** With that series' `seasonsSyncedAt` aged 40 days by hand and the
+      other two left at 12 days, "Run now" on Refresh shows produced run #2:
+      `SUCCESS / itemsProcessed 1`, and its `seasonsSyncedAt` moved to the moment of the run. The
+      two under-30-day series were not touched.
+- [x] **AC-3**: Given the same series with `seasonsSyncedAt` set 20 days back, when the task is
       triggered, then the run reads `SUCCESS` with `itemsProcessed: 0` and `seasonsSyncedAt` is
       unchanged.
-- [ ] **AC-4**: Given a series whose `tmdbStatus` is `Ended` and whose `seasonsSyncedAt` was set 100
+      **Confirmed 2026-10-09.** Same series aged 20 days: run #3 reads `SUCCESS / itemsProcessed 0`
+      and `seasonsSyncedAt` is byte-identical to the fixture value.
+- [x] **AC-4**: Given a series whose `tmdbStatus` is `Ended` and whose `seasonsSyncedAt` was set 100
       days back, when the task is triggered, then it is not selected (`itemsProcessed: 0`); with
       `seasonsSyncedAt` set 200 days back instead, the same trigger selects it (`itemsProcessed: 1`).
-- [ ] **AC-5**: Given a series with `tmdbStatus` set to `NULL` and `seasonsSyncedAt` set 40 days back,
+      **Confirmed 2026-10-09, both arms.** `tmdbStatus = 'Ended'` with `seasonsSyncedAt` 100 days
+      back → run #4 `SUCCESS / itemsProcessed 0`. The same series at 200 days back → run #5
+      `SUCCESS / itemsProcessed 1`, and the refresh also corrected the hand-written `Ended` back to
+      TMDB's real `Returning Series`.
+- [x] **AC-5**: Given a series with `tmdbStatus` set to `NULL` and `seasonsSyncedAt` set 40 days back,
       when the task is triggered, then it is selected and `tmdbStatus` is no longer `NULL` afterwards.
-- [ ] **AC-6**: Given a series whose `seasonsSyncedAt` is `NULL`, when the task is triggered, then it
+      **Confirmed 2026-10-09.** `tmdbStatus` set to `NULL` with `seasonsSyncedAt` 40 days back →
+      run #6 `SUCCESS / itemsProcessed 1`, and `tmdbStatus` afterwards reads `Returning Series`.
+- [x] **AC-6**: Given a series whose `seasonsSyncedAt` is `NULL`, when the task is triggered, then it
       is selected regardless of how long ago it was created.
-- [ ] **AC-7 (revival)**: Given a series stored as `Ended` with `seasonsSyncedAt` 200 days back, and
+      **Confirmed 2026-10-09.** `seasonsSyncedAt` set to `NULL` on a series created 17 minutes
+      earlier → run #7 `SUCCESS / itemsProcessed 1`, so age of creation does not gate it.
+- [x] **AC-7 (revival)**: Given a series stored as `Ended` with `seasonsSyncedAt` 200 days back, and
       one of its seasons deleted from `seasons` by hand to stand in for a season TMDB has since
       announced, when the task is triggered, then the deleted season and its episodes reappear with
       their TMDB titles, `tmdbStatus` reads whatever TMDB answers now, and `itemsProcessed` is 1.
-- [ ] **AC-8**: Given a series manually set to `ANIME` (`setShowContentKind`) and due for a refresh,
+      **Confirmed 2026-10-09.** With the series stored `Ended`, `seasonsSyncedAt` 200 days back,
+      and its season 2 (`seasons.id = 17`) plus that season's ten episodes deleted by hand, run #8
+      reads `SUCCESS / itemsProcessed 1`; the season reappears as a new row (`id = 19`) carrying ten
+      episodes with their real TMDB titles (`Hello, Ms. Cobel`, `Goodbye, Mrs. Selvig`,
+      `Who Is Alive?`, ...) and air dates, and `tmdbStatus` reads `Returning Series` again.
+- [x] **AC-8**: Given a series manually set to `ANIME` (`setShowContentKind`) and due for a refresh,
       when the task runs, then `shows.contentKind` is unchanged.
-- [ ] **AC-9**: Given a due series with an episode that is stored `COMPLETED` and a `MediaSource` in
+      **Confirmed 2026-10-09.** `contentKind` set to `ANIME` by hand with `seasonsSyncedAt` null:
+      run #9 reads `SUCCESS / itemsProcessed 1` and `shows.contentKind` still reads `ANIME`
+      afterwards. Reverted to `LIVE_ACTION`.
+- [x] **AC-9**: Given a due series with an episode that is stored `COMPLETED` and a `MediaSource` in
       `DOWNLOADING`, when the task runs, then no `episodes.status`, `movies.status`,
       `media_sources` or `process_jobs` row changed — only catalog columns and `seasonsSyncedAt`.
-- [ ] **AC-10 (failure)**: Given two due series and the TMDB key set to an invalid value in Settings,
+      **Confirmed 2026-10-09** by checksum. With one episode written `COMPLETED`, the
+      installation's `DOWNLOADING` `MediaSource` in place and the series due, run #10 reads
+      `SUCCESS / itemsProcessed 1`, and `CHECKSUM TABLE` is **identical before and after** for
+      `movies`, `media_sources` and `process_jobs`. The `episodes` checksum does move - that is the
+      catalog write the criterion allows - and the statuses did not: the `COMPLETED` episode still
+      reads `COMPLETED`, and the whole table is still exactly `83 MISSING / 1 COMPLETED`, with the
+      swept episode showing a fresh `title`/`releaseDate`/`updatedAt` and an untouched `status`.
+- [x] **AC-10 (failure)**: Given two due series and the TMDB key set to an invalid value in Settings,
       when the task is triggered, then the run reads `FAILED`, its error names 2 of 2 series failed,
       both series' `seasonsSyncedAt` are unchanged, and no catalog column was blanked. Triggering it
       again with a valid key then refreshes both and reads `SUCCESS`.
-- [ ] **AC-11 (failure)**: Given `shows_enabled` set to `false`, when `refresh_shows` is triggered
+      **Confirmed 2026-10-09, both arms.** With two series aged 40 days and the
+      `movie_db_api_key` Setting invalidated (prefixed, never read), run #11 reads `FAILED /
+      itemsProcessed 0` with the error
+      `refresh_shows: 2 of 2 series failed; 0 refreshed successfully`; both series'
+      `seasonsSyncedAt` were byte-identical to the fixture afterwards and neither `tmdbStatus` was
+      blanked. Restoring the key and triggering again produced run #12,
+      `SUCCESS / itemsProcessed 2`, with both timestamps moved to the run.
+- [x] **AC-11 (failure)**: Given `shows_enabled` set to `false`, when `refresh_shows` is triggered
       manually, then the existing `error.schedule.task_unavailable` refusal is shown and no run row is
       created — unchanged behaviour from `045`/`035`, verified not to have regressed.
+      **Confirmed 2026-10-09.** With `shows_enabled` set to `false`, the Scheduling screen renders
+      `Unavailable: its media type is disabled in Media Manager.` under Refresh shows (and under
+      Refresh episodes), the trigger does not run, and `scheduled_task_runs` still held exactly ten
+      rows with `max(id) = 10` afterwards - no run row created.
 - [x] **AC-12**: `git status --short services/api/prisma` shows both a modified `schema.prisma` and
       one new migration directory, and `bin/cli api npx prisma migrate status` reports no pending
       migration after `bin/npm api run prisma:migrate`.
 
 ### Live pass
 
-Not run: AC-1 to AC-11. The dev stack has no registered series, `shows_enabled` is `false` and no
-live TMDB call was made, so nothing could be aged by hand or triggered. Their rules are pinned by
+**Run 2026-10-09, and all of AC-1 to AC-11 hold** - see each criterion for its measurement. The
+pass used an admin session at `http://localhost:3000`, a series registered for the purpose
+(Severance), hand-aged `seasonsSyncedAt` values, and "Run now" on Settings -> Scheduling; runs #2
+to #12 in `scheduled_task_runs` are this pass. Every fixture was reverted.
+
+The original note, now superseded: *Not run: AC-1 to AC-11. The dev stack has no registered series,
+`shows_enabled` is `false` and no live TMDB call was made, so nothing could be aged by hand or
+triggered.* Their rules are pinned by
 unit tests (`refresh-shows.task.spec.ts`, 8 cases including the `NULL`-status arm, both cadence
 boundaries and the failure/held-claim paths; `shows.service.spec.ts`, 3 cases) but not exercised
 end to end. AC-12 held: `git diff --stat services/api/src/schema.gql` is empty.

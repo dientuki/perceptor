@@ -5,12 +5,7 @@ import { FfprobeLog } from './entities/ffprobe-log.entity';
 import { AllowService } from '@/auth/decorators/allow-service.decorator';
 import { AdminGuard } from '@/auth/guards/admin.guard';
 
-// Guards are applied per method, never at class level: `recordFfprobe` is
-// the worker's write path (SERVICE_TOKEN, @AllowService()), the other three
-// are admin-only reads/deletes (@UseGuards(AdminGuard)). AdminGuard rejects
-// any principal whose type isn't 'user', so putting it at class level would
-// also reject the worker's recordFfprobe call — and the worker swallows that
-// error by design (NFR-1), leaving the table silently empty forever.
+// Spec 023, NFR-1
 @Resolver()
 export class FfprobeLogsResolver {
   constructor(private readonly ffprobeLogsService: FfprobeLogsService) {}

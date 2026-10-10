@@ -154,7 +154,7 @@ export const createPlexClient = (
 
     if (!response.ok) {
       throw new Error(
-        `Plex respondió ${response.status} al ${what}: ${await response.text()}`,
+        `Plex responded ${response.status} while trying to ${what}: ${await response.text()}`,
       );
     }
 
@@ -164,7 +164,7 @@ export const createPlexClient = (
   async function listSections(): Promise<PlexSection[]> {
     const response = await request(
       new URL('library/sections', baseUrl),
-      'listar las secciones',
+      'list sections',
       READ_TIMEOUT_MS,
     );
     const body = (await response.json()) as PlexContainer<never>;
@@ -174,7 +174,7 @@ export const createPlexClient = (
   async function refreshAll(): Promise<void> {
     await request(
       new URL('library/sections/all/refresh', baseUrl),
-      'refrescar la biblioteca',
+      'refresh the library',
       READ_TIMEOUT_MS,
     );
   }
@@ -192,7 +192,7 @@ export const createPlexClient = (
 
       const response = await request(
         endpoint,
-        `listar la sección ${section.key}`,
+        `list section ${section.key}`,
         LIST_LIBRARY_TIMEOUT_MS,
         HTTP_METHOD.GET,
         {
@@ -228,7 +228,7 @@ export const createPlexClient = (
 
       if (!section) {
         console.warn(
-          `[media-server] ninguna sección de Plex contiene "${media}" — se refrescan todas`,
+          `[media-server] no Plex section contains "${media}" — refreshing all of them`,
         );
         await refreshAll();
         return;
@@ -241,11 +241,11 @@ export const createPlexClient = (
       endpoint.searchParams.set('path', posix.dirname(media));
       await request(
         endpoint,
-        `avisar de ${media}`,
+        `notify about ${media}`,
         READ_TIMEOUT_MS,
       );
       console.log(
-        `[media-server] sección de Plex escaneada: ${section.key} (${posix.dirname(media)})`,
+        `[media-server] Plex section scanned: ${section.key} (${posix.dirname(media)})`,
       );
     },
 
@@ -256,7 +256,7 @@ export const createPlexClient = (
     async listPresentEpisodes(externalSeriesId: string) {
       const response = await request(
         new URL(`library/metadata/${externalSeriesId}/allLeaves`, baseUrl),
-        `listar episodios de ${externalSeriesId}`,
+        `list episodes of ${externalSeriesId}`,
         READ_TIMEOUT_MS,
       );
       const body = (await response.json()) as PlexContainer<PlexEpisode>;

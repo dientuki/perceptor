@@ -7,6 +7,9 @@ import { LanguagesModule } from '@/languages/languages.module';
 import { MediaServerModule } from '@/media-server/media-server.module';
 import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
 import { DownloadsModule } from '@/downloads/downloads.module';
+import { AcquisitionModule } from '@/acquisition/acquisition.module';
+import { CatalogSearchModule } from '@/media/catalog-search.module';
+import { TitleStatusModule } from '@/title-status/title-status.module';
 
 @Module({
   imports: [
@@ -16,6 +19,9 @@ import { DownloadsModule } from '@/downloads/downloads.module';
     MediaServerModule,
     MediaCapabilitiesModule,
     DownloadsModule,
+    AcquisitionModule,
+    CatalogSearchModule,
+    TitleStatusModule,
   ],
   providers: [MoviesResolver, MoviesService],
   exports: [MoviesService],

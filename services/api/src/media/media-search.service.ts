@@ -30,10 +30,7 @@ export class MediaSearchService {
 
     const rows = await this.tmdb.searchMulti(query);
 
-    // Narrow to the enabled types *before* any grouping/caching happens — a
-    // disabled type's rows must never reach dispatch.resolve(type).cacheAndEnrich,
-    // which would write them into that type's Redis cache with no error
-    // anywhere (045-media-type-availability spec.md § REQ-10, ../plan.md § Risks).
+    // Spec 045, REQ-10
     const enabledRows = rows.filter((row) => (enabledTypes as string[]).includes(row.type));
 
     // Group the catalog-ordered rows by type so each group can be handed to
@@ -48,7 +45,7 @@ export class MediaSearchService {
       }
     }
 
-    // One cacheAndEnrich call per type present, never per row (NFR-3).
+    // Spec 026, NFR-3
     const enrichedByKey = new Map<string, MediaSearchResultEntity>();
     for (const [type, group] of groups) {
       const enriched = await this.dispatch.resolve(type).cacheAndEnrich(group, userId);

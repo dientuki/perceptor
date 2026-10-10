@@ -24,7 +24,7 @@ export default async function BillboardPage() {
   const { moviesEnabled, showsEnabled, catalogKeyConfigured } =
     await getMediaCapabilities();
 
-  // No key: show the onboarding panel and never call popularMedia (071).
+  // Spec 071, REQ-3
   if (!catalogKeyConfigured && (moviesEnabled || showsEnabled)) {
     const { isAdmin } = await getCurrentUser();
     return (
@@ -35,9 +35,7 @@ export default async function BillboardPage() {
     );
   }
 
-  // Only build a Promise.allSettled entry for an enabled type — a disabled
-  // type gets no getPopularMedia call at all (REQ-3), not a call whose
-  // result is discarded.
+  // Spec 045, REQ-3
   const jobs: Array<{
     type: "movie" | "show";
     promise: ReturnType<typeof getPopularMedia>;

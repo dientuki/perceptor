@@ -1,7 +1,6 @@
 // components/Media/MediaList.tsx
 "use client";
 
-//import { MediaSearchResult } from "@/search/types";
 import { useTranslations } from "next-intl";
 import { MEDIA_TYPE } from "@/types/media";
 import { MediaCard } from "./MediaCard";
@@ -9,9 +8,9 @@ import { MediaCard } from "./MediaCard";
 interface MediaListProps {
   items: any[];
   renderAction?: (item: any) => React.ReactNode;
-  mediaType?: (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE]; // Puedes agregar más tipos si es necesario
-  showLink?: boolean; // Nueva propiedad para controlar si se muestra el enlace
-  emptyMessage?: string; // Sobreescribe el vacío por defecto ("registradas" no aplica en búsquedas)
+  mediaType?: (typeof MEDIA_TYPE)[keyof typeof MEDIA_TYPE];
+  showLink?: boolean;
+  emptyMessage?: string;
   showTypeBadge?: boolean; // Opt-in: only a mixed-type grid (the multi search) needs it
   showShortBadge?: boolean; // Opt-in: only while shorts are effectively enabled
 }

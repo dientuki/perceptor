@@ -1,9 +1,4 @@
-// English display names for every `tag` row seeded by
-// `prisma/seeds/languages.ts`. This is what the `languages` query's `name`
-// field is derived from, never stored on the `Language` row itself.
-// `web` renders the locale-appropriate name via `Intl.DisplayNames`
-// (REQ-7, 030-language-regional-variants) — this map is no longer the
-// display authority, just a stable English fallback/internal label.
+// Spec 030, REQ-7
 export const LANGUAGE_NAMES: Record<string, string> = {
   es: 'Spanish',
   'es-419': 'Latin American Spanish',

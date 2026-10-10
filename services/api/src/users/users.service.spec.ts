@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../auth/session.service';
 import { User } from './entities/user.entity';
 
-// This suite exists because otherwise the deletion safeguards (REQ-5) fail
+// This suite exists because otherwise the deletion safeguards (Spec 003, REQ-5) fail
 // silently: without them, a user can delete their own account or the last
 // administrator, and the app is locked with no error anywhere — the exact
 // failure mode this feature was written to close. It also covers the
@@ -15,10 +15,10 @@ import { User } from './entities/user.entity';
 //
 // The `update` describe block also covers `004-user-disable`'s two safeguards
 // (self-disable, last-*enabled*-admin) and the session revocation that makes
-// REQ-3 real — a disable that silently fails to revoke the live session is
-// exactly the Article IX failure NFR-3 names: nothing errors anywhere, and
+// Spec 004, REQ-3's realness — a disable that silently fails to revoke the live session is
+// exactly the Article IX failure Spec 004, NFR-3 names: nothing errors anywhere, and
 // the administrator believes the user is locked out when they are not.
-// `028-users-screen-refactor` added the duplicate-username guard: without
+// Spec 028, REQ-9 added the duplicate-username guard: without
 // it, renaming a user onto another user's username reaches Prisma's unique
 // constraint and surfaces as `error.user.not_found`, a misleading message
 // for a conflict that has nothing to do with a missing row.
@@ -159,10 +159,7 @@ describe('UsersService', () => {
     });
 
     it('refuses to disable the last enabled administrator, even with a disabled admin also present', async () => {
-      // AC-7 shape: a second administrator exists but is already disabled.
-      // A naive count({ isAdmin: true }) would see 2 and let this through,
-      // leaving zero enabled admins with no way back in short of
-      // bin/reset-password.
+      // Spec 004, AC-7
       prisma.user.findUnique.mockResolvedValue(admin);
       prisma.user.count.mockResolvedValue(1);
 
@@ -323,11 +320,7 @@ describe('UsersService', () => {
     });
   });
 
-  // AC-6: a rejected locale must not be indistinguishable, at render time,
-  // from a bug in the resolver — `web` never ships a catalog for a locale
-  // that isn't in SUPPORTED_LOCALES, so the write must be refused before it
-  // ever reaches the database, and the previous value must be provably
-  // untouched afterwards.
+  // Spec 018, AC-6
   describe('setUiLocale', () => {
     it('stores an accepted locale', async () => {
       prisma.user.update.mockResolvedValue({ ...other, uiLocale: 'es' });

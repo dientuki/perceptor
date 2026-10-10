@@ -1,17 +1,4 @@
-// src/ffmpeg/variants.ts
-//
-// Worker-local knowledge about how a language's regional variants appear in
-// a file — the title vocabulary (L1 in .claude/agents/ffmpeg.md) and the
-// primitives the audio/subtitle rules narrow selection with. Only `spa` has
-// seeded variants today (es-419, es-ES); the shape below is written to be
-// generic over "a language with requested variants" rather than a
-// Spanish-specific rule, per REQ-2 of
-// docs/spec/features/031-worker-language-variants/spec.md.
-//
-// params.ts imports from here; nothing here imports from params.ts. Keeping
-// the dependency one-directional is what lets both files reuse the same
-// word-boundary matcher and the same "keep everything rather than empty the
-// set" decision without a circular import.
+// Spec 031, REQ-2
 
 import { normalizeIso3 } from './iso639';
 
@@ -53,17 +40,13 @@ const LANGUAGE_VARIANTS: LanguageVariant[] = [
   { tag: 'es-ES', iso3: 'spa', markers: CASTILIAN_MARKERS, title: 'Español (España)' },
 ];
 
-// REQ-3: unconditional — this runs whether or not the user requested a
-// variant, because the output track title depends on it regardless of who
-// triggered the encode. Never takes the request into account.
+// Spec 031, REQ-3
 export function detectVariant(stream: any): string | undefined {
   const variant = LANGUAGE_VARIANTS.find((v) => titleMarks(stream, v.markers));
   return variant?.tag;
 }
 
-// REQ-12/REQ-18: the title a detected variant writes to the output. Kept
-// beside the tag table so a new variant row carries its title with it
-// rather than a second, separately-maintained map in params.ts.
+// Spec 031, REQ-12 REQ-18
 export function variantTitle(tag: string): string | undefined {
   return LANGUAGE_VARIANTS.find((v) => v.tag === tag)?.title;
 }
@@ -83,12 +66,7 @@ function warnUnresolvedTagOnce(allowedLanguageTags: string[], tag: string): void
   );
 }
 
-// REQ-2: which of the caller's requested tags are regional variants of
-// `iso3`. A bare tag with no region subtag ("es", "en") is never a variant
-// request — that is REQ-6, the no-preference case. A tag that does carry a
-// region subtag but resolves to no row in LANGUAGE_VARIANTS is logged once
-// per distinct `allowedLanguageTags` array and otherwise ignored, never
-// thrown and never read as a request for a language it cannot identify.
+// Spec 031, REQ-2 REQ-6
 export function requestedVariants(
   iso3: string,
   allowedLanguageTags: string[],
@@ -112,21 +90,12 @@ export function requestedVariants(
   );
 }
 
-// The caller's two REQ-4/REQ-5 branches, discriminated by value rather than
-// by the caller checking whether narrowToVariants happened to return its own
-// array back by reference — that coupling breaks silently the day this
-// function's internals change shape without changing behaviour.
+// Spec 031, REQ-4 REQ-5
 export type VariantNarrowing<T> =
   | { matched: true; groups: { tag: string; streams: T[] }[] }
   | { matched: false; streams: T[] };
 
-// REQ-4/REQ-5: `streams` is already narrowed to one language. With at least
-// one stream detected as a requested variant, `matched: true` and every
-// requested tag with at least one surviving stream gets its own group. With
-// none, `matched: false` and every stream of the language survives,
-// ungrouped — the "keep everything rather than empty the set" fallback,
-// built on `preferring`'s decision rather than a second reimplementation of
-// it.
+// Spec 031, REQ-4 REQ-5
 export function narrowToVariants<T>(
   streams: T[],
   requestedForLang: LanguageVariant[],

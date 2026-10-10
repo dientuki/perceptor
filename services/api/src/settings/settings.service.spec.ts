@@ -124,12 +124,7 @@ describe('SettingsService — languages kind', () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
-  // T007 (030-language-regional-variants): the branch forwards whatever
-  // string it is given to validateAndResolveLanguageIds without inspecting
-  // its shape, so a BCP-47 variant tag like `es-419` must survive the same
-  // split/trim/join untouched — the risk this defends against is the branch
-  // silently gaining an iso2-only assumption (e.g. a length check) that
-  // would reject a real tag with no error message pointing at the cause.
+  // Spec 030, T007
   it('accepts a regional variant tag and stores it unmodified', async () => {
     validateAndResolveLanguageIds.mockResolvedValue([spanishLatam.id]);
 

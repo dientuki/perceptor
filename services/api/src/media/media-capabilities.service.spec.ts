@@ -8,7 +8,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 // table — one missing `movies_enabled`/`shows_enabled` row — presents the
 // whole install as switched off with no error anywhere: the sidebar empty,
 // the carousels gone, search dead, and nothing in the logs to say why. The
-// only thing standing between that and REQ-7's "absent reads as enabled" is
+// only thing standing between that and Spec 045, REQ-7's "absent reads as enabled" is
 // the `!== 'false'` comparison below, so this suite pins that direction and
 // fails loudly if it is ever flipped to `=== 'true'`.
 describe('MediaCapabilitiesService', () => {

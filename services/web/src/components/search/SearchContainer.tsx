@@ -44,7 +44,6 @@ export default function SearchContainer({
       const data = await searchAction(query, type);
       setResults(data);
     } catch (err) {
-      // Sin este catch el finally no corre y el botón queda deshabilitado para siempre
       console.error("Error al buscar:", err);
       setResults([]);
       setError(t("errorSearch"));

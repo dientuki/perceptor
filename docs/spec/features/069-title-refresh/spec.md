@@ -208,6 +208,29 @@ None.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Every open criterion here is blocked on something this installation does not have, and the blockers
+are three, not eight:
+
+- **A configured media server.** `media_server_client` reads **`none`** in `settings`, and no
+  Jellyfin or Plex container is part of `docker-compose.yaml` (deliberate — see the root
+  `CLAUDE.md`). AC-2, AC-4, AC-5, AC-5b, AC-5c, AC-6 and AC-7 each open with "Given Jellyfin
+  configured"; AC-7 additionally wants it configured *and stopped*. Nothing short of a reachable
+  media server with a library on disk can run them. The promote/demote rules themselves are covered
+  by `api/src/media-server/media-server-reconcile.service.spec.ts` and
+  `api/src/media-server-index/media-server-index.service.spec.ts`, and a failed rebuild writing
+  nothing is an asserted case there — so what is missing is the integration, not the logic.
+- **A second user.** AC-11 ("a film held only by user A, when user B calls `refreshMovie(id)`") needs
+  two accounts; the `users` table holds **exactly one row**, the seeded admin. There is no public
+  registration, so a second user is an admin creating one from `/users` — which needs a session too.
+- **An admin session in a browser.** Everything above is driven from a title's Refresh button.
+
+For whoever runs this: the library state to build on is 3 films, 2 series, 64 episodes, and
+`media_server_index_state` reads `never` — the index has never been built on this installation, so
+AC-2's and AC-4's "rebuild, wait, then reconcile" path would be exercised from cold, which is the
+interesting case rather than a limitation.
+
 - [x] **AC-1**: Given a registered film whose `overview` was changed by hand in the database
       (`bin/mysql -e "update movies set overview='x' where id=<id>"`), when the owner presses Refresh
       on `/movies/<id>`, then the page shows TMDB's current overview and `catalog` is `DONE`.

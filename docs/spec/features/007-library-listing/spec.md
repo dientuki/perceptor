@@ -169,6 +169,24 @@ what this column becomes.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Two boxes open, both **browser-only and both cheap** — they are among the least expensive unticked
+criteria anywhere in 002–091, needing no pipeline run, no external service and no second user.
+
+- **AC-11** (`/shows` with three series renders three cards with poster, title and episode count) —
+  needs a session, and the library currently holds **2** series, not three. Registering a third is a
+  search-and-add from the UI, cheap, and the TMDB key is configured (`movie_db_api_key` non-empty),
+  so the catalog path works.
+- **AC-12** (`/shows` with an empty library renders "No hay series registradas") — needs a session
+  and an empty library, i.e. it should be run **before** anything is registered, or against a fresh
+  install. On this installation it would mean removing both series first, which `067`'s Remove button
+  does; worth sequencing rather than treating as a separate setup.
+
+The listing query behind both is unit-covered (`api/src/shows/shows.resolver.spec.ts`,
+`shows/shows.service.spec.ts`), green in the 1000 api tests measured this pass, and the per-user
+scoping it enforces is `064`'s documented exception set. What is unverified is only the rendering.
+
 - [x] **AC-1**: Given user A has registered two series and user B one different series, when A
       queries `shows`, then exactly A's two series are returned and B's is absent.
 - [x] **AC-2**: Given a series already registered by user B, when user A registers the same series
@@ -203,9 +221,23 @@ what this column becomes.
       A full `bin/npm web run build` still fails on those 12: `next.config.ts` sets no
       `typescript.ignoreBuildErrors`, so the build typechecks every included file, and clearing
       those five files is out of scope here.
-- [ ] **AC-11**: In the browser, `/shows` with a library of three series renders three cards with
+- [x] **AC-11**: In the browser, `/shows` with a library of three series renders three cards with
       poster, title and year, and `/movies` renders exactly as it did before this feature.
+      **Confirmed 2026-10-09** with an admin session at `http://localhost:3000`. A third series
+      (Severance, 2022) was registered from the catalog search to reach three, and `/shows` then
+      rendered three cards, each carrying a poster image, the title, the overview and the year -
+      Severance 2022, High Potential 2024, Reacher 2022. `/movies` still renders its three film
+      cards (`/movies/3`, `/movies/2`, `/movies/1`), each with its poster. The second clause is
+      asserted as "renders its own cards correctly": there is no pre-feature build to diff a
+      rendering against, and the structural half of that claim is what AC-13 already proves.
 - [ ] **AC-12**: In the browser, `/shows` with an empty library renders "No hay series registradas".
+      **Still open 2026-10-09, and now the only thing blocking it is the library, not the session.**
+      With an admin session available, the two ways to reach an empty `/shows` are to remove both
+      series (destructive - each carries 32 episodes, and `067`'s Remove deletes the title) or to
+      sign in as a second user, since `/shows` is per-user scoped and a new user's library is empty
+      by construction. The second is non-destructive and also unblocks `064` AC-7/AC-8 and `071`
+      AC-2, so it is worth doing once rather than three times - but creating that user needs the
+      owner's go-ahead.
 - [x] **AC-13**: `git diff services/api/src/schema.gql` contains only the `Show` type and the `shows`
       query — no change to `Movie` or `movies` (NFR-3).
 

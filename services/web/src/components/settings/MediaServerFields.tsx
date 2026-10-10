@@ -102,12 +102,6 @@ function MediaServerIndexPanel({ status }: { status: MediaServerIndexStatus }) {
   );
 }
 
-// Combo "none"/"jellyfin"/... (las opciones salen de mediaServerClients, ver
-// actions/media-server.ts — nunca hardcodeadas acá) + los campos de conexión,
-// que sólo se muestran y sólo viajan en el FormData cuando el cliente elegido
-// no es 'none'. Con 'none' esos tres inputs no se renderizan → no viajan →
-// EDITABLE_KEYS los descarta y la DB conserva la config anterior (ver
-// actions/settings.ts): volver a elegir Jellyfin recupera host/port/api key.
 export default function MediaServerFields({
   options,
   client,

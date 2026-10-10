@@ -17,7 +17,6 @@ export default function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
 
-  // Enlazamos el argumento a la acción
   const loginWithRedirect = loginAction.bind(null, redirectTo);
 
   const [state, formAction, isPending] = useActionState(

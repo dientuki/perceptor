@@ -148,8 +148,6 @@ export async function getShowById(id: number): Promise<Show | null> {
     throw new Error(await translateGraphQLError(errors[0]));
   }
 
-  // El API devuelve null cuando el id no existe o no pertenece al usuario;
-  // la página lo traduce a notFound()
   return data?.show ?? null;
 }
 

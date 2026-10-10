@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { EncodeStatus, MediaStatus, SourceStatus } from '@prisma/client';
+import { MediaStatus } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -12,16 +12,17 @@ import { MEDIA_TYPE } from '@/types/media';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
-import { deriveEpisodeStatus } from '@/pipeline-status/pipeline-status';
 import { CalendarEpisodeRow } from '@/calendar/group-episodes';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { classifyContentKind } from '@/media/content-kind';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { CatalogSearchService } from '@/media/catalog-search.service';
+import {
+  CatalogDescriptor,
+  RegisteredCatalogRow,
+} from '@/media/catalog-descriptor';
 import { RefreshCatalogOutcome, TitleRefresh } from '@/media/entities/title-refresh.entity';
 
-// TTL de la cache de resultados de TMDB en Redis (24hs) — same value as
-// MoviesService, kept as its own constant here on purpose (see class doc
-// comment in movies.service.ts: no shared base/mixin between the two).
 const TMDB_CACHE_TTL_SECONDS = 60 * 60 * 24;
 
 // TTL of the hydration claim key — long enough to cover a slow N-season
@@ -41,9 +42,7 @@ const HYDRATE_CLAIM_TTL_SECONDS = 60 * 10;
 // movies-only.
 const SHOW_ANIMATION_GENRE_ID = 16;
 
-// Structural twin of MoviesService, scoped to Show for this task: catalog
-// search + registration, plus the background season/episode hydration
-// (T007) that registration kicks off but never waits for.
+// Spec 006, T007
 @Injectable()
 export class ShowsService implements MediaTypeService {
   constructor(
@@ -52,6 +51,7 @@ export class ShowsService implements MediaTypeService {
     private readonly tmdb: TmdbClient,
     private readonly mediaServerReconcile: MediaServerReconcileService,
     private readonly downloadsService: DownloadsService,
+    private readonly catalogSearch: CatalogSearchService,
   ) {}
 
   // The library belongs to the user: only returns series this userId has
@@ -66,18 +66,7 @@ export class ShowsService implements MediaTypeService {
     });
   }
 
-  // Same ownership clause as findAll, narrowed to a single row and deepened
-  // two levels (seasons, then each season's episodes), both ordered
-  // server-side (NFR-2). Returns null both when the id does not exist and
-  // when it exists but belongs to someone else — the two are deliberately
-  // indistinguishable from here on, same rule as MoviesService.findOneFromDb
-  // (008-movie-detail, see spec.md § Errors there and in 009-show-detail).
-  //
-  // Each episode also carries mediaSources/processJobs (043 REQ-4): an
-  // episode inside a season pack has no MediaSource of its own (the source
-  // targets the season) but does have processJobs, denormalized per episode
-  // by sourceScanned — that is the only path that reaches its derived
-  // status. Show.status itself is left untouched (out of scope).
+  // Spec 009, NFR-2; Spec 043, REQ-4
   async findOneFromDb(id: number, userId: string) {
     const show = await this.prisma.show.findFirst({
       where: { id, users: { some: { userId } } },
@@ -113,17 +102,14 @@ export class ShowsService implements MediaTypeService {
         season: { show: { users: { some: { userId } } } },
       },
       include: {
-        mediaSources: true,
-        processJobs: true,
         season: {
           include: {
             show: { select: { id: true, title: true } },
-            mediaSources: { where: { status: { not: 'ERROR' } } },
           },
         },
       },
     });
-    const now = new Date();
+    // Spec 089, REQ-6
     return episodes.map((episode) => ({
       showId: episode.season.show.id,
       showTitle: episode.season.show.title,
@@ -131,67 +117,37 @@ export class ShowsService implements MediaTypeService {
       episodeNumber: episode.episodeNumber,
       episodeTitle: episode.title,
       releaseDate: episode.releaseDate as Date,
-      status: deriveEpisodeStatus(episode.season.mediaSources, episode, now),
+      status: episode.status,
     }));
   }
 
-  // Shared by findOneFromDb and setContentKind (059-season-pack-acquisition-ui T003): per
-  // episode, feeds deriveTitleStatus its own sources/jobs plus one extra { status: 'QUEUED' }
-  // source when isLiftedBySeasonPack's predicate holds for the episode's season — an unscanned
-  // season-pack source in flight for an already-aired episode must not leave it reading MISSING
-  // just because no MediaSource targets the episode directly. `now` is computed once per call,
-  // not once per episode, so a slow request can't have some episodes lifted against an earlier
-  // instant than others. Never writes Episode.status anywhere.
+  // Spec 059, T003; Spec 089, REQ-6
   private deriveSeasonEpisodeStatuses<
     TSeason extends {
-      mediaSources: { status: SourceStatus }[];
       episodes: {
         status: MediaStatus;
-        releaseDate: Date | null;
-        mediaSources: { status: SourceStatus }[];
-        processJobs: { status: EncodeStatus }[];
       }[];
     },
   >(seasons: TSeason[]) {
-    const now = new Date();
     return seasons.map((season) => ({
       ...season,
       episodes: season.episodes.map((episode) => ({
         ...episode,
-        status: deriveEpisodeStatus(season.mediaSources, episode, now),
+        status: episode.status,
       })),
     }));
   }
 
-  // Única definición de la clave de cache, compartida por el write de la búsqueda
-  // y el read del add: evita que ambos lados se desincronicen.
-  private cacheKey(tmdbId: number): string {
-    return `tmdb:show:${tmdbId}`;
-  }
-
-  // Registra en MariaDB una serie ya vista en una búsqueda de TMDB. Idempotente:
-  // si ya está en la biblioteca (por cualquier usuario), devuelve el registro
-  // existente sin reescribir nada. En ambas ramas nos aseguramos de que exista
-  // el vínculo con el usuario que llama: la fila de la serie es compartida,
-  // pero cada usuario necesita su propio user_shows.
   async register(tmdbId: number, userId: string): Promise<MediaRef> {
     const existing = await this.prisma.show.findUnique({ where: { tmdbId } });
     if (existing) {
       await this.linkUserToShow(userId, existing.id);
 
-      // Retry path (REQ-14): the happy path never reaches this, because a
-      // fully-hydrated show has seasonsSyncedAt set. A prior hydration that
-      // failed — or never ran — leaves it null, and every subsequent
-      // register() for the same show is what gives it another chance.
+      // Spec 006, REQ-14
       if (existing.seasonsSyncedAt === null) {
         void this.hydrate(existing.id, tmdbId);
       } else {
-        // hydrate() already reconciles at its own tail (034), but that only
-        // runs the first time a show is hydrated. Without this, re-adding an
-        // already-hydrated series would skip reconciliation entirely and
-        // REQ-18's documented retry ("re-add to force another check") would
-        // silently do nothing. Detached: register() must not wait on a
-        // media-server round trip to answer the caller.
+        // Spec 034, REQ-18
         void this.mediaServerReconcile.reconcileShow(existing.id, tmdbId);
       }
 
@@ -217,9 +173,7 @@ export class ShowsService implements MediaTypeService {
 
     await this.linkUserToShow(userId, show.id);
 
-    // Detached on purpose (REQ-13): register() must respond before seasons
-    // and episodes are fetched. Never awaited, and hydrate() itself is a
-    // try/catch/finally so this can never surface as an unhandled rejection.
+    // Spec 006, REQ-13
     void this.hydrate(show.id, tmdbId);
 
     return { id: show.id, type: MEDIA_TYPE.SHOW };
@@ -239,10 +193,7 @@ export class ShowsService implements MediaTypeService {
     tmdbId: number,
     seasons: ShowDetail['seasons'],
   ): Promise<void> {
-    // Sequential on purpose (NFR-6): a Promise.all over N seasons bursts
-    // requests at TMDB's rate limit and can leave the series
-    // half-populated with no error anywhere. Season 0 (specials) is not
-    // filtered — REQ-12.
+    // Spec 006, NFR-6; Spec 006, REQ-12
     for (const season of seasons) {
       const seasonRow = await this.prisma.season.upsert({
         where: {
@@ -296,20 +247,11 @@ export class ShowsService implements MediaTypeService {
     }
   }
 
-  // Fetches every season and episode a series' catalog entry lists and
-  // writes them in. Detached from register() (REQ-13), so nothing here can
-  // reach a caller: the whole body is try/catch/finally, and the only traces
-  // a failure leaves are the console.error below and shows.seasonsSyncedAt
-  // staying null (NFR-4) — that null is also what makes the next register()
-  // for this show retry (REQ-14).
+  // Spec 006, REQ-13; Spec 006, NFR-4; Spec 006, REQ-14
   private async hydrate(showId: number, tmdbId: number): Promise<void> {
     const claimKey = this.hydrateClaimKey(tmdbId);
 
-    // Atomic SET ... NX: only the first concurrent hydration for a given
-    // tmdbId wins the claim (NFR-5). A GET-then-SET here would pass a
-    // single-request test and still let two concurrent registrations both
-    // fetch — see uploads/upload-tickets.service.ts:verifyAndSpend for the
-    // same pattern and the same reasoning.
+    // Spec 006, NFR-5
     const claimed = await this.redis.set(
       claimKey,
       '1',
@@ -327,17 +269,13 @@ export class ShowsService implements MediaTypeService {
 
       await this.syncSeasonsAndEpisodes(showId, tmdbId, detail.seasons);
 
-      // Only reached once every season and every episode above has been
-      // written — any earlier and a partial fetch would look complete
-      // (REQ-14).
+      // Spec 006, REQ-14
       await this.prisma.show.update({
         where: { id: showId },
         data: { seasonsSyncedAt: new Date(), tmdbStatus: detail.status },
       });
 
-      // After, never before: a reconcile failure here must not make the
-      // next register() re-fetch the whole catalog from TMDB (REQ-19) —
-      // seasonsSyncedAt is already committed by the time this runs.
+      // Spec 034, REQ-19
       await this.mediaServerReconcile.reconcileShow(showId, tmdbId);
     } catch (err) {
       console.error(
@@ -442,12 +380,7 @@ export class ShowsService implements MediaTypeService {
     });
   }
 
-  // 067-title-removal: twin of MoviesService.remove. A shared series drops
-  // only the caller's ownership row; the last owner unwinds every source
-  // (season packs and single episodes) before the series row is deleted, so
-  // a torrent client failure aborts with nothing removed (NFR-2). The
-  // resolver has already run the ownership gate (this service's template),
-  // and the re-read here keeps a second removal an ordinary refusal.
+  // Spec 067, NFR-2
   async remove(id: number, userId: string): Promise<{ deleted: boolean; remainingOwners: number }> {
     const show = await this.findOneFromDb(id, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
@@ -465,9 +398,7 @@ export class ShowsService implements MediaTypeService {
     return { deleted: true, remainingOwners: 0 };
   }
 
-  // The caller's own `audioMandatory` flag for this series, read off the
-  // ownership row (039-per-title-language-split REQ-9). No fallback default
-  // beyond `false`: a missing row means the caller has no business asking.
+  // Spec 039, REQ-9
   async findAudioMandatoryFor(userId: string, showId: number): Promise<boolean> {
     const row = await this.prisma.userShow.findUnique({
       where: { userId_showId: { userId, showId } },
@@ -490,13 +421,7 @@ export class ShowsService implements MediaTypeService {
     return mandatory;
   }
 
-  // 057-content-kind-classification REQ-9: the plain update + return, shaped
-  // exactly like `show(id)`'s own resolution (seasons/episodes included,
-  // each episode's status re-derived) — unlike setShort's film-side
-  // template, the ownership gate lives in the resolver here
-  // (ShowsResolver.setShowAudioMandatory's pattern), not in this method; the
-  // caller already ran findOneFromDb before this is reached, so the row is
-  // guaranteed to exist and `update` (not `upsert`) is safe.
+  // Spec 057, REQ-9
   async setContentKind(id: number, contentKind: ContentKind) {
     const show = await this.prisma.show.update({
       where: { id },
@@ -521,10 +446,6 @@ export class ShowsService implements MediaTypeService {
     };
   }
 
-  // upsert en vez de create: un segundo addMedia del mismo usuario para la misma
-  // serie no debe explotar con un P2002 sobre la primary key compuesta — el
-  // botón que dispara esto en el UI puede volver a llamarse antes de que
-  // desaparezca.
   private async linkUserToShow(userId: string, showId: number): Promise<void> {
     await this.prisma.userShow.upsert({
       where: { userId_showId: { userId, showId } },
@@ -533,13 +454,14 @@ export class ShowsService implements MediaTypeService {
     });
   }
 
-  // A diferencia de cacheShows, acá Redis es la fuente de datos (no un cache
-  // oportunista): un error no se silencia, se propaga como error de GraphQL.
   private async getCachedShow(tmdbId: number): Promise<MediaSearchResult> {
-    const raw = await this.redis.get(this.cacheKey(tmdbId));
+    const raw = await this.redis.get(this.catalogSearch.cacheKey('show', tmdbId));
     if (raw) return JSON.parse(raw) as MediaSearchResult;
 
-    return this.fetchShowFromTMDB(tmdbId);
+    const fetched = await this.fetchShowFromTMDB(tmdbId);
+    // Spec 088, REQ-7
+    void this.cacheShows([fetched]);
+    return fetched;
   }
 
   // Falls back to the catalog itself when the Redis cache has expired, been
@@ -565,27 +487,12 @@ export class ShowsService implements MediaTypeService {
       originalLanguage: detail.originalLanguage,
       overview: detail.overview,
       type: MEDIA_TYPE.SHOW,
-      // 057-content-kind-classification: this details() call already
-      // carries genres — forwarding them here is what lets a fully-cold
-      // cache (no Redis entry at all) satisfy deriveContentKind's genre
-      // check without a second, redundant details() request for the same
-      // tmdbId (NFR-1).
+      // Spec 057, NFR-1
       genreIds: detail.genreIds,
     };
   }
 
-  // 057-content-kind-classification REQ-6: the same genre-then-keywords rule
-  // MoviesService applies, minus a runtime top-up (a series has none). A
-  // cache entry written by search() already carries genreIds — TMDB's
-  // search/tv rows include genre_ids — so most cold registrations need no
-  // extra request at all (NFR-1). Only a warm entry missing genreIds (e.g.
-  // one seeded by fetchShowFromTMDB's own not-in-catalog fallback path, or a
-  // future caller of this cache that never populated it) tops up with one
-  // details() call. Every failure below degrades to
-  // classifyContentKind's own fallback rather than rethrowing (NFR-2):
-  // unreadable genres -> LIVE_ACTION, genres known-animated but unreadable
-  // keywords -> CGI (REQ-5) — a registration must never fail because TMDB
-  // could not answer one of these two requests.
+  // Spec 057, REQ-6 NFR-1 NFR-2 REQ-5
   private async deriveContentKind(
     cached: MediaSearchResult,
   ): Promise<ContentKind> {
@@ -598,16 +505,13 @@ export class ShowsService implements MediaTypeService {
           cached.id,
         )) as ShowDetail;
         genreIds = detail.genreIds ?? [];
-        // Best-effort, never awaited into the caller's path: getCachedShow(),
-        // unlike MoviesService's getCachedMovie(), does not write its own
-        // fallback fetch back to Redis, so without this the same cold title
-        // would re-ask TMDB for its genres on every registration inside the
-        // TTL. cacheShows() already logs and swallows its own failures.
+        // Best-effort, never awaited into the caller's path: a cache hit
+        // whose stored entry predates genre data still lacks it, so this
+        // tops the cached entry up rather than re-asking TMDB on every
+        // registration inside the TTL. cacheShows() already logs and
+        // swallows its own failures.
         void this.cacheShows([{ ...cached, genreIds }]);
       } catch {
-        // NFR-2: genres could not be established at all. Per REQ-2 no
-        // keyword lookup is attempted below, and classifyContentKind reads
-        // an undefined genreIds list as LIVE_ACTION.
         genreIds = undefined;
       }
     }
@@ -623,10 +527,6 @@ export class ShowsService implements MediaTypeService {
         keywordIds = await this.tmdb.keywords(MEDIA_TYPE.SHOW, cached.id);
         void this.cacheShows([{ ...cached, genreIds, keywordIds }]);
       } catch {
-        // NFR-2 / REQ-5: the genre already says animated — only the style
-        // lookup failed, so this must land on CGI (classifyContentKind's own
-        // fallback for an animated title with no usable keyword data), not
-        // on the generic LIVE_ACTION default.
         keywordIds = undefined;
       }
     }
@@ -634,92 +534,69 @@ export class ShowsService implements MediaTypeService {
     return classifyContentKind({ genreIds, keywordIds });
   }
 
+  // Spec 088, REQ-6
+  private buildCatalogDescriptor(): CatalogDescriptor<TmdbShow> {
+    return {
+      mediaType: MEDIA_TYPE.SHOW,
+      tmdbSearchPath: 'tv',
+
+      toSearchResult: (item: TmdbShow): MediaSearchResult => ({
+        id: item.id,
+        title: item.name,
+        releaseDate: item.first_air_date || null,
+        posterUrl: posterUrl(item.poster_path),
+        originalLanguage: item.original_language,
+        overview: item.overview,
+        type: MEDIA_TYPE.SHOW,
+        genreIds: item.genre_ids,
+      }),
+
+      findRegistered: async (
+        prisma,
+        tmdbIds,
+        userId,
+      ): Promise<RegisteredCatalogRow[]> => {
+        const shows = await prisma.show.findMany({
+          where: { tmdbId: { in: tmdbIds } },
+          select: {
+            id: true,
+            tmdbId: true,
+            users: { where: { userId }, select: { userId: true } },
+          },
+        });
+
+        return shows.map((show) => ({
+          id: show.id,
+          tmdbId: show.tmdbId,
+          inLibrary: show.users.length > 0,
+          isShort: false,
+        }));
+      },
+    };
+  }
+
   async search(
     query: string,
     userId: string,
   ): Promise<MediaSearchResultEntity[]> {
-    if (!query.trim()) return [];
-
-    // 1. Consultar TMDB.
-    const items = await this.tmdb.search<TmdbShow>('tv', query);
-
-    // 2. Traducir la respuesta cruda de TMDB a nuestro formato
-    const results: MediaSearchResult[] = items.map((item) => ({
-      id: item.id,
-      title: item.name,
-      releaseDate: item.first_air_date || null,
-      posterUrl: posterUrl(item.poster_path),
-      originalLanguage: item.original_language,
-      overview: item.overview,
-      type: MEDIA_TYPE.SHOW,
-      genreIds: item.genre_ids,
-    }));
-
-    return this.cacheAndEnrich(results, userId);
+    return this.catalogSearch.search(
+      this.buildCatalogDescriptor(),
+      query,
+      userId,
+    );
   }
 
-  // Steps 3-4 of the former search(): the cache write and the ownership
-  // enrichment, in this order and only this order — see 026-multi-search's
-  // MediaSearchService, the second caller of this method.
   async cacheAndEnrich(
     results: MediaSearchResult[],
     userId: string,
   ): Promise<MediaSearchResultEntity[]> {
-    // 3. Disparar el upsert en Redis en BACKGROUND (sin 'await'). This MUST
-    // run on the catalog-only `results` before ownership is attached below:
-    // cacheShows() serialises whatever it is handed into a shared, global
-    // Redis key (tmdb:show:<id>, 24h TTL) read by every user who searches
-    // this series. Enriching first would leak this caller's inLibrary/mediaId
-    // into that cache and serve it to everyone else for the next 24 hours,
-    // with no error anywhere.
-    void this.cacheShows(results);
-
-    // 4. Enriquecer con la ownership del usuario que llama, en una sola
-    // query por página (no una por resultado). mediaId/inLibrary son
-    // per-request y nunca tocan el objeto cacheado en el paso anterior.
-    const enriched = await this.enrichWithOwnership(results, userId);
-
-    // 5. Responder INMEDIATAMENTE al cliente GraphQL
-    return enriched;
+    return this.catalogSearch.cacheAndEnrich(
+      this.buildCatalogDescriptor(),
+      results,
+      userId,
+    );
   }
 
-  // Attaches mediaId (registered by anyone, or null) and inLibrary (owned by
-  // this caller) to a page of catalog results, from a single query — not one
-  // per result. Deliberately not merged into the objects passed to
-  // cacheShows(): see the ordering note in search().
-  private async enrichWithOwnership(
-    results: MediaSearchResult[],
-    userId: string,
-  ): Promise<MediaSearchResultEntity[]> {
-    if (!results.length) return [];
-
-    const shows = await this.prisma.show.findMany({
-      where: { tmdbId: { in: results.map((r) => r.id) } },
-      select: {
-        id: true,
-        tmdbId: true,
-        users: { where: { userId }, select: { userId: true } },
-      },
-    });
-
-    const byTmdbId = new Map(shows.map((s) => [s.tmdbId, s]));
-
-    return results.map((result) => {
-      const registered = byTmdbId.get(result.id);
-      return {
-        ...result,
-        mediaId: registered?.id ?? null,
-        inLibrary: (registered?.users.length ?? 0) > 0,
-        // 048-shorts-category: a series is never a short (isShort exists
-        // on Movie only), and the field is non-null on every search result.
-        isShort: false,
-      };
-    });
-  }
-
-  // Guarda/actualiza (upsert) cada serie en Redis con TTL. No bloquea la
-  // respuesta al cliente y no debe poder tirar abajo el proceso: cualquier
-  // error se loguea y se descarta acá mismo.
   private async cacheShows(results: MediaSearchResult[]): Promise<void> {
     if (!results.length) return;
 
@@ -728,7 +605,7 @@ export class ShowsService implements MediaTypeService {
 
       for (const show of results) {
         pipeline.set(
-          this.cacheKey(show.id),
+          this.catalogSearch.cacheKey('show', show.id),
           JSON.stringify(show),
           'EX',
           TMDB_CACHE_TTL_SECONDS,
@@ -740,12 +617,12 @@ export class ShowsService implements MediaTypeService {
       const failed = (execResults ?? []).filter(([err]) => err);
       if (failed.length) {
         console.error(
-          `Error guardando ${failed.length} serie(s) de TMDB en Redis:`,
+          `Error caching ${failed.length} TMDB show(s) in Redis:`,
           failed.map(([err]) => err?.message),
         );
       }
     } catch (err) {
-      console.error('Error guardando resultados de TMDB en Redis:', err);
+      console.error('Error caching TMDB results in Redis:', err);
     }
   }
 }

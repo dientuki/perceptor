@@ -14,17 +14,9 @@ export type ScanResult = {
   files: ScannedFile[];
 };
 
-// Enumera (no parsea): readdir + extensión + tamaño. Sin temporada, episodio,
-// calidad ni selección de candidato — esa distinción es de un paso posterior
-// (src/scan/select-matches.ts), que decide qué archivos son candidatos y cómo
-// se resuelven contra episodios.
 export async function scanFolder(root: string): Promise<ScanResult> {
   const rootStats = await stat(root);
 
-  // downloadPath normalmente es una carpeta (el savepath por torrent que arma
-  // la api), pero para SourceKind.LOCAL_FILE es la ruta de un archivo suelto —
-  // readdir tira ENOTDIR en ese caso. Un archivo único entra igual al mismo
-  // inventario, marcado con su propio isVideo.
   const files: ScannedFile[] = rootStats.isFile()
     ? [
         {

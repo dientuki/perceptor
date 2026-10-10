@@ -290,6 +290,25 @@ None.
       diff is exactly the three new fields on `MediaServerOption` plus `libraryLayout` on
       `EncodeJobDetails`.
 
+**Verification status as of 2026-10-09.** AC-1 to AC-13 are blocked on a reachable Plex server, and
+there is none: `bin/mysql` reports `media_server_client` at `none` with `media_server_host` empty, and
+the root `CLAUDE.md` records that the media server deliberately runs outside the stack, so no
+container here can stand in for one. The owner of this installation has none available and has asked
+that nothing be exercised against Plex, so these boxes stay unticked rather than being approximated.
+
+What *is* established without one, and what it does not cover:
+
+| Claim | Evidence | What is still unproven |
+| :-- | :-- | :-- |
+| the two layouts build the paths AC-6, AC-7 and AC-8 name | `services/worker/src/paths/build-output-path.spec.ts`, 18 cases covering both the `jellyfin` (`Title (Year) [tmdbid=N]/…`) and `plex` (`Title (Year) {tmdb-N}/Title - SNNENN - Episode.mkv`) spellings, plus `library-layout.spec.ts`'s 6 cases for normalising an absent or unrecognised value to `jellyfin` | that a real encode writes them, and that Plex then *matches* the file to the right title or episode — the half of AC-6/AC-7 only a Plex library can answer |
+| the client is index-backed and falls back to a full refresh | `services/api/src/clients/media-server/plex.spec.ts` | AC-11's log line on a real path outside every Plex library location |
+
+AC-1, AC-2, AC-3, AC-9 and AC-13 are Settings-screen and index behaviour that needs both a Plex token
+and an admin session; AC-4, AC-5, AC-6, AC-7, AC-10 and AC-11 additionally need a real encode, so
+they belong with the pending live pass (`091` § Verification) once a Plex server exists. Until then
+this feature is **shipped and unit-tested but not verified against the product it integrates with** —
+the honest reading of `status: Implemented` here.
+
 ## Out of Scope
 
 - **A plex.tv sign-in flow.** The admin pastes an `X-Plex-Token`, decided explicitly. Signing in

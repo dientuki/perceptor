@@ -141,6 +141,11 @@ None.
       every REQ-11 route was measured and computes to `text-base` (16px) or above, which is the
       documented mechanism that prevents the zoom — but the actual on-device behaviour was not
       observed, so this stays unticked rather than claimed.
+      **Re-checked 2026-10-09 and the mechanism still holds**: grepping every `<input>`,
+      `<textarea>` and `<select>` in `services/web/src` for a `text-sm` or `text-xs` in its
+      className returns nothing, and `components/form/input/InputField.tsx:46` still sets
+      `text-base` on the shared field. Still no iOS device, so the box stays unticked — the only
+      thing that can tick it is a physical one.
 - [x] **AC-7**: `bin/npm web run build` exits 0 and `bin/cli web npx --no tsc --noEmit` reports 0
       errors. A stale utility left behind by REQ-3 that is reached through `@apply` in
       `globals.css` fails this build rather than degrading silently — that is the intended

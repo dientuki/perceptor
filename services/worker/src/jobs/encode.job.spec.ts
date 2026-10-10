@@ -1,12 +1,4 @@
-// Defends REQ-11's sharpest failure mode (docs/spec/features/018-ui-i18n/worker/plan.md
-// § Tests): encode.job.ts:139-144 (pre-018) ended in
-// `.catch((err) => console.error(...))`. If the encodeFailed call is malformed —
-// wrong arity, a missing errorKey, an unstringified errorParams object — the
-// rejection is swallowed into a console line, the ProcessJob stays ENCODING
-// forever, and nothing anywhere surfaces the problem. This suite asserts the
-// mutation is always called with all four arguments, that errorParams is a
-// JSON string (or undefined), and that a failure never reports without a key
-// — including one raised from a plain, non-KeyedError throw.
+// Spec 018, REQ-11
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -102,7 +94,7 @@ beforeEach(() => {
   });
 });
 
-describe('handleEncode — encodeFailed reporting (018-ui-i18n REQ-11)', () => {
+describe('handleEncode — encodeFailed reporting (Spec 018, REQ-11)', () => {
   it('reports a KeyedError with its own key, JSON-stringified params and a rendered English message', async () => {
     const thrown = new KeyedError(
       ERROR_ENCODE_FFMPEG_FAILED,
@@ -111,10 +103,7 @@ describe('handleEncode — encodeFailed reporting (018-ui-i18n REQ-11)', () => {
     );
     encodeMock.mockRejectedValue(thrown);
 
-    // REQ-9 (054-interrupted-encode-recovery): a KeyedError leaves the
-    // handler wrapped in UnrecoverableError, not as the original error — see
-    // the dedicated describe block below for the classification itself; this
-    // case only needs the wrapping not to break the report already sent.
+    // Spec 054, REQ-9
     await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
     const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
@@ -151,7 +140,7 @@ describe('handleEncode — encodeFailed reporting (018-ui-i18n REQ-11)', () => {
     expect(failedCall).toBeDefined();
     const [, variables] = failedCall as [string, Record<string, unknown>];
 
-    // A failure must never report with no key — the whole point of REQ-11.
+    // Spec 018, REQ-11
     expect(variables.key).toBe(ERROR_ENCODE_UNEXPECTED);
     expect(typeof variables.params).toBe('string');
     expect(JSON.parse(variables.params as string)).toEqual({ detail: 'unexpected library crash' });
@@ -175,20 +164,19 @@ describe('handleEncode — encodeFailed reporting (018-ui-i18n REQ-11)', () => {
   });
 });
 
-// Defends the payload seam of 031-worker-language-variants, extended by
-// 039-per-title-language-split (worker/plan.md § Steps 1-3): the single
-// `allowedLanguagesIso3`/`allowedLanguageTags` pair became four hand-retyped
-// fields — `allowedAudioLanguagesIso3`, `allowedAudioLanguageTags`,
+// Defends the payload seam of Spec 031, extended by Spec 039, REQ-6: the
+// single `allowedLanguagesIso3`/`allowedLanguageTags` pair became four
+// hand-retyped fields — `allowedAudioLanguagesIso3`, `allowedAudioLanguageTags`,
 // `allowedSubtitleLanguagesIso3`, `allowedSubtitleLanguageTags` — with no
 // compiler across the GraphQL boundary. Three of the four renamed correctly
 // and the fourth missed is exactly the failure mode this suite exists to
 // catch: the field arrives `undefined`, reads as "no preference of that
 // kind", and the feature does nothing for that list forever. These cases pin
 // that all four reach the driver under their own name, and that the two
-// **tag** lists specifically degrade to `[]` (NFR-2) rather than throwing —
-// the two iso3 lists stay undefended per worker/plan.md § Existing code to
-// reuse, so a missing one still fails loudly instead of degrading here.
-describe('handleEncode — allowed*Language* payload seam (031-worker-language-variants, 039-per-title-language-split)', () => {
+// **tag** lists specifically degrade to `[]` rather than throwing — the two
+// iso3 lists stay undefended per worker/plan.md § Existing code to reuse, so
+// a missing one still fails loudly instead of degrading here.
+describe('handleEncode — allowed*Language* payload seam (Spec 031; Spec 039, REQ-6)', () => {
   function mockSuccessfulGraphQL(processJob: Record<string, unknown>) {
     fetchGraphQLMock.mockImplementation((query: string) => {
       if (query.includes('processJob(id:')) {
@@ -228,7 +216,7 @@ describe('handleEncode — allowed*Language* payload seam (031-worker-language-v
     expect(details.allowedSubtitleLanguageTags).toEqual(['es-419']);
   });
 
-  it('degrades a processJob with no allowedAudioLanguageTags/allowedSubtitleLanguageTags to [] rather than throwing (NFR-2)', async () => {
+  it('degrades a processJob with no allowedAudioLanguageTags/allowedSubtitleLanguageTags to [] rather than throwing (Spec 039, REQ-6)', async () => {
     const {
       allowedAudioLanguageTags: _omitAudio,
       allowedSubtitleLanguageTags: _omitSubtitle,
@@ -307,15 +295,15 @@ describe('handleEncode — compressionResolution payload seam (058-compression-r
   });
 });
 
-// Defends REQ-1/NFR-1 of 023-ffprobe-log at the one call site that could get
-// them backwards: recordFfprobe must fire before encodeCompleted (REQ-1), a
-// recordFfprobe failure must never touch encodeCompleted or encodeFailed
-// (NFR-1), and a genuine ffprobe failure — which never reaches onProbe at
-// all — must still fail the encode and must never call recordFfprobe. Each
+// Defends Spec 023, REQ-1 NFR-1 at the one call site that could get them
+// backwards: recordFfprobe must fire before encodeCompleted, a recordFfprobe
+// failure must never touch encodeCompleted or encodeFailed, and a genuine
+// ffprobe failure — which never reaches onProbe at all — must still fail the
+// encode and must never call recordFfprobe. Each
 // case guards a different way the try/catch around onProbe's fetchGraphQL
 // call (worker/plan.md § Steps 5) could be written wrong: too late, too
 // wide, or not at all.
-describe('handleEncode — ffprobe log recording (023-ffprobe-log)', () => {
+describe('handleEncode — ffprobe log recording (Spec 023, REQ-1)', () => {
   const RAW_PROBE = '{"streams":[{"codec_type":"video"}],"format":{"duration":"120"}}';
 
   function mockSuccessfulGraphQL() {
@@ -337,7 +325,7 @@ describe('handleEncode — ffprobe log recording (023-ffprobe-log)', () => {
     });
   }
 
-  it('sends recordFfprobe with the driver-reported raw string before encodeCompleted (REQ-1)', async () => {
+  it('sends recordFfprobe with the driver-reported raw string before encodeCompleted (Spec 023, REQ-1)', async () => {
     mockSuccessfulGraphQL();
     encodeMock.mockImplementation(async (...args: unknown[]) => {
       const [input, , , , onProbe] = args as [
@@ -371,7 +359,7 @@ describe('handleEncode — ffprobe log recording (023-ffprobe-log)', () => {
     expect(probeVariables.ffprobe).toBe(RAW_PROBE);
   });
 
-  it('reaches encodeCompleted and sends no encodeFailed when recordFfprobe rejects (NFR-1)', async () => {
+  it('reaches encodeCompleted and sends no encodeFailed when recordFfprobe rejects (Spec 023, NFR-1)', async () => {
     fetchGraphQLMock.mockImplementation((query: string) => {
       if (query.includes('processJob(id:')) {
         return Promise.resolve({ processJob: PROCESS_JOB_DETAILS });
@@ -427,8 +415,7 @@ describe('handleEncode — ffprobe log recording (023-ffprobe-log)', () => {
     // swallow this too.
     encodeMock.mockRejectedValue(probeError);
 
-    // Wrapped in UnrecoverableError (REQ-9) — see the dedicated describe
-    // block below for the classification itself.
+    // Spec 054, REQ-9
     await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
     const probeCall = fetchGraphQLMock.mock.calls.find(([query]) =>
@@ -445,15 +432,15 @@ describe('handleEncode — ffprobe log recording (023-ffprobe-log)', () => {
   });
 });
 
-// Defends the branch 032-optional-compression adds to handleEncode
-// (worker/plan.md § Tests): `compressionEnabled` must be tested with `=== false`,
-// never with falsiness. Rewriting the guard as `if (!details.compressionEnabled)`
-// would still pass the two straightforward cases below — it only breaks the
-// third one, where the field is missing entirely (NFR-2). That third case is
-// the whole point of this suite: a version-skewed api or a hand-edited query
-// selection that drops the field must still compress, since nothing about a
-// filed-but-uncompressed library announces itself as wrong.
-describe('handleEncode — compressionEnabled branch (032-optional-compression)', () => {
+// Defends the branch Spec 032, NFR-2 adds to handleEncode: `compressionEnabled`
+// must be tested with `=== false`, never with falsiness. Rewriting the guard
+// as `if (!details.compressionEnabled)` would still pass the two
+// straightforward cases below — it only breaks the third one, where the
+// field is missing entirely. That third case is the whole point of this
+// suite: a version-skewed api or a hand-edited query selection that drops
+// the field must still compress, since nothing about a filed-but-uncompressed
+// library announces itself as wrong.
+describe('handleEncode — compressionEnabled branch (Spec 032, NFR-2)', () => {
   function mockSuccessfulGraphQL(processJob: Record<string, unknown>) {
     fetchGraphQLMock.mockImplementation((query: string) => {
       if (query.includes('processJob(id:')) {
@@ -491,10 +478,7 @@ describe('handleEncode — compressionEnabled branch (032-optional-compression)'
     expect(passthroughMock).toHaveBeenCalledTimes(1);
     const [passInput, passOutput] = passthroughMock.mock.calls[0] as [string, string];
     expect(passInput).toBe('/downloads/A Movie.mp4');
-    // withSourceExtension swaps the .mkv buildOutputPath produced for the
-    // source's own .mp4 (REQ-10) — asserted here via the real output path,
-    // not a mocked withSourceExtension, since it's a pure function this test
-    // exercises for real.
+    // Spec 032, REQ-10
     expect(passOutput).toBe('/library/movies/A Movie (2020)/A Movie (2020).mp4');
 
     const completedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
@@ -530,7 +514,7 @@ describe('handleEncode — compressionEnabled branch (032-optional-compression)'
     expect(completedVariables.cmd).toBe('ffmpeg -i ...');
   });
 
-  it('compressionEnabled absent -> compresses (NFR-2): the field arriving undefined must never be read as "off"', async () => {
+  it('compressionEnabled absent -> compresses (Spec 032, NFR-2): the field arriving undefined must never be read as "off"', async () => {
     const { compressionEnabled: _omit, ...withoutFlag } = {
       ...PROCESS_JOB_DETAILS,
       compressionEnabled: true,
@@ -549,12 +533,12 @@ describe('handleEncode — compressionEnabled branch (032-optional-compression)'
   });
 });
 
-// Defends REQ-1 of 038-encode-report-durability directly, the incident case
-// stated in worker/plan.md § Tests: an encode that succeeded must never be
-// reported as encodeFailed just because delivering encodeCompleted hit a
-// transport failure. The fault-injection case at the end proves this suite
-// actually exercises the fix (moving the call back inside the try goes red).
-describe('handleEncode — encodeCompleted delivered through deliverReport (038-encode-report-durability)', () => {
+// Defends Spec 038, REQ-1 directly, the incident case stated in
+// worker/plan.md § Tests: an encode that succeeded must never be reported
+// as encodeFailed just because delivering encodeCompleted hit a transport
+// failure. The fault-injection case at the end proves this suite actually
+// exercises the fix (moving the call back inside the try goes red).
+describe('handleEncode — encodeCompleted delivered through deliverReport (Spec 038, REQ-1)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -622,16 +606,8 @@ describe('handleEncode — encodeCompleted delivered through deliverReport (038-
     expect(cleanupArgs.deleteDownloadPath).toBe(false);
   });
 
-  // Structurally the sharpest of this describe block: a rejection here is
-  // *terminal* (REQ-3), not a transport failure, so deliverReport doesn't
-  // retry it either — it propagates straight out of handleEncode. What this
-  // pins is that it must propagate WITHOUT being caught by the encode's own
-  // catch and reported as encodeFailed, since the encode already succeeded.
-  // This is the case that actually discriminates on the encodeCompleted
-  // call's position: with it outside the try (the fix), the rejection never
-  // reaches the catch at all. Moving it back inside the try makes the catch
-  // see it and call encodeFailed — red, as verified below.
-  it('never calls encodeFailed when encodeCompleted itself terminally rejects after a successful encode (REQ-1)', async () => {
+  // Spec 038, REQ-3
+  it('never calls encodeFailed when encodeCompleted itself terminally rejects after a successful encode (Spec 038, REQ-1)', async () => {
     const terminalRejection = new Error('encodeCompleted rejected: processJob already reported');
     mockGraphQL({
       encodeCompletedImpl: () => Promise.reject(terminalRejection),
@@ -663,8 +639,7 @@ describe('handleEncode — encodeCompleted delivered through deliverReport (038-
     });
     encodeMock.mockRejectedValue(thrown);
 
-    // Wrapped in UnrecoverableError (REQ-9) — see the dedicated describe
-    // block below for the classification itself.
+    // Spec 054, REQ-9
     await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
     const failedCall = fetchGraphQLMock.mock.calls.find(([query]) =>
@@ -776,16 +751,16 @@ describe('handleEncode — encode speed forwarded to encodeProgress (053-downloa
   });
 });
 
-// Defends REQ-6 of 047-source-deletion (worker/plan.md § Tests): a job
-// abandoned because its source was deleted must report nothing at all — no
-// encodeCompleted, no encodeFailed — and must never run cleanupSource, since
-// there is no row left for either outcome to land on. Both call sites that
+// Defends Spec 047, REQ-6 (worker/plan.md § Tests): a job abandoned because
+// its source was deleted must report nothing at all — no encodeCompleted,
+// no encodeFailed — and must never run cleanupSource, since there is no row
+// left for either outcome to land on. Both call sites that
 // EncodeCancelledError can come from (encode() and passthrough(), picked at
 // runtime by compressionEnabled) are exercised separately: wiring the signal
 // into only one of them would leave the other uncancellable with no compile
 // error anywhere, exactly the failure mode worker/plan.md § Steps 8 warns
 // about.
-describe('handleEncode — a cancelled encode reports nothing (047-source-deletion REQ-6)', () => {
+describe('handleEncode — a cancelled encode reports nothing (Spec 047, REQ-6)', () => {
   function mockSuccessfulGraphQL(processJob: Record<string, unknown> = PROCESS_JOB_DETAILS) {
     fetchGraphQLMock.mockImplementation((query: string) => {
       if (query.includes('processJob(id:')) {
@@ -800,9 +775,7 @@ describe('handleEncode — a cancelled encode reports nothing (047-source-deleti
     const cancelled = new EncodeCancelledError();
     encodeMock.mockRejectedValue(cancelled);
 
-    // REQ-8 (054-interrupted-encode-recovery): wrapped in UnrecoverableError,
-    // not the original EncodeCancelledError — see the dedicated describe
-    // block below for the classification itself.
+    // Spec 054, REQ-8
     await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
     expect(passthroughMock).not.toHaveBeenCalled();
@@ -837,17 +810,16 @@ describe('handleEncode — a cancelled encode reports nothing (047-source-deleti
   });
 });
 
-// Defends REQ-8/REQ-9 of 054-interrupted-encode-recovery (worker/plan.md
-// § Steps 3, § Tests): once REQ-7 gives the encode queue real retries, a
-// plain throw is no longer just a failed job — it's a job BullMQ will
-// re-attempt. Only two classes must be exempted from that: a cancellation
-// (REQ-8, which must also keep reporting nothing — the 047-source-deletion
-// regression this feature's own plan.md § Risks names as its most likely
-// bug) and a KeyedError (REQ-9, a diagnosed failure that will recur
-// identically). Anything else must stay a plain, retryable throw — the case
-// that proves steps 3/4 didn't just wrap everything, which would leave REQ-7
-// inert while looking implemented.
-describe('handleEncode — non-retryable classification (054-interrupted-encode-recovery REQ-8/REQ-9)', () => {
+// Defends Spec 054, REQ-7 REQ-8 REQ-9 (worker/plan.md § Steps 3, § Tests):
+// once the encode queue gets real retries, a plain throw is no longer just
+// a failed job — it's a job BullMQ will re-attempt. Only two classes must
+// be exempted from that: a cancellation, which must also keep reporting
+// nothing — the Spec 047 regression this feature's own plan.md § Risks
+// names as its most likely bug — and a KeyedError, a diagnosed failure that
+// will recur identically. Anything else must stay a plain, retryable throw
+// — the case that proves steps 3/4 didn't just wrap everything, which would
+// leave the retry budget inert while looking implemented.
+describe('handleEncode — non-retryable classification (Spec 054, REQ-7 REQ-8 REQ-9)', () => {
   function mockSuccessfulGraphQL(processJob: Record<string, unknown> = PROCESS_JOB_DETAILS) {
     fetchGraphQLMock.mockImplementation((query: string) => {
       if (query.includes('processJob(id:')) {
@@ -871,8 +843,7 @@ describe('handleEncode — non-retryable classification (054-interrupted-encode-
     expect(rejection).toBeInstanceOf(UnrecoverableError);
     expect((rejection as Error).message).toBe('encode cancelled: source deleted');
 
-    // Still reports nothing to api — 047-source-deletion's behaviour, which
-    // this feature's REQ-8 explicitly promises to keep intact.
+    // Spec 054, REQ-8
     expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeCompleted'))).toBe(false);
     expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeFailed'))).toBe(false);
     expect(cleanupSourceMock).not.toHaveBeenCalled();
@@ -905,11 +876,7 @@ describe('handleEncode — non-retryable classification (054-interrupted-encode-
 
     const rejection = await handleEncode(makeJob()).catch((err) => err);
 
-    // Proves steps 3/4 classify rather than blanket-wrap: neither
-    // EncodeCancelledError nor KeyedError, so it must leave the handler as
-    // the exact original error, not an UnrecoverableError — otherwise REQ-7's
-    // retries would be inert for every unclassified failure while looking
-    // implemented.
+    // Spec 054, REQ-7
     expect(rejection).toBe(thrown);
     expect(rejection).not.toBeInstanceOf(UnrecoverableError);
 

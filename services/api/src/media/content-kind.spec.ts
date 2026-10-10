@@ -45,8 +45,7 @@ describe('classifyContentKind', () => {
     ).toBe(ContentKind.ANIME);
   });
 
-  // REQ-4's precedence — the case the author reversed once. 3d-animation must win even when
-  // anime/cartoon are also present, and the check must run first.
+  // Spec 057, REQ-4
   it('classifies an animated title with both anime and 3d-animation keywords as CGI, not ANIME', () => {
     expect(
       classifyContentKind({

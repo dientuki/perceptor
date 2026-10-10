@@ -246,7 +246,7 @@ describe('SchedulerService', () => {
     });
   });
 
-  // 045-media-type-availability (AC-6): a disabled media type must not leave
+  // Spec 045, AC-6: a disabled media type must not leave
   // a cron ticking behind a UI that shows the task as unavailable, and a
   // hand-issued manual trigger must not slip through just because the
   // task's own `schedule_*_enabled` flag is still stored `true`.

@@ -7,14 +7,7 @@ interface ReplaceWarningProps {
   target: string;
 }
 
-/**
- * The one warning block every replacement entry point shares (REQ-4): the
- * file already in the library is about to be replaced, and the old one
- * deleted. Purely presentational — the confirm control stays with each
- * caller, since a form button, a per-row button and a file input each own a
- * differently-shaped submit. Rendered inline, never through
- * `window.confirm()` (services/web/CLAUDE.md § Small conventions).
- */
+// Spec 027, REQ-4
 export default function ReplaceWarning({ target }: ReplaceWarningProps) {
   const t = useTranslations("import.replace");
 

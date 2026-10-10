@@ -39,8 +39,7 @@ export default function ProfileModal({
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
-  // Re-seed from `user` and clear any leftover state every time the modal
-  // opens, so a cancel-then-reopen never shows stale values (REQ-2).
+  // Spec 020, REQ-2
   useEffect(() => {
     if (isOpen) {
       setName(user.name);

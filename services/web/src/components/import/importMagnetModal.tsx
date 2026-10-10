@@ -25,9 +25,7 @@ interface ImportMagnetModalProps {
   target: AcquisitionTarget | null;
 }
 
-// The three "a finished file is about to be destroyed" keys. A downloading
-// target no longer conflicts at all (022-download-status-tags REQ-7), so
-// there is no second, weaker key family to sit beside these.
+// Spec 022, REQ-7
 const ALREADY_COMPLETED_KEYS = [
   "error.movie.already_completed",
   "error.episode.already_completed",
@@ -49,9 +47,7 @@ export default function ImportMagnetModal({
 
   const isCompleted = target !== null && isAcquisitionTargetCompleted(target);
 
-  // Limpiar todo cuando cambia el target o se reabre el modal. A COMPLETED
-  // target starts with the warning already shown and force already implied
-  // — the user has read the warning before typing, no wasted round trip.
+  // Spec 027, REQ-4
   useEffect(() => {
     if (isOpen) {
       setMagnet("");
@@ -95,8 +91,6 @@ export default function ImportMagnetModal({
     }
 
     onClose();
-    // Mismo criterio que ImportFileModal/SearchTorrent: refrescar el server
-    // component para que la película aparezca con su estado nuevo.
     router.refresh();
     setIsPending(false);
   };

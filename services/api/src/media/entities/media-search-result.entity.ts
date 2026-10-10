@@ -1,7 +1,5 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
 
-// Resultado de búsqueda en TMDB (no confundir con la entidad Movie, que es
-// lo que ya está registrado en nuestra DB). El campo `id` es el id de TMDB.
 @ObjectType()
 export class MediaSearchResult {
   @Field(() => Int)
@@ -22,8 +20,6 @@ export class MediaSearchResult {
   @Field({ nullable: true })
   overview?: string;
 
-  // "movie" | "show" — string plano (no enum) para no romper la comparación
-  // por valor que ya hace la UI de web (item.type === MEDIA_TYPE.SHOW).
   @Field()
   type: string;
 
@@ -44,12 +40,7 @@ export class MediaSearchResult {
   @Field()
   inLibrary: boolean;
 
-  // 048-shorts-category REQ-7: false for a title nobody has registered,
-  // otherwise reflects the registered row's flag. Attached in
-  // enrichWithOwnership alongside mediaId/inLibrary, per-request and after
-  // the cache write — deliberately absent from clients/types.ts's
-  // MediaSearchResult, the shared Redis-cached shape, for the same leak
-  // reason documented on mediaId above.
+  // Spec 048, REQ-7
   @Field()
   isShort: boolean;
 }

@@ -22,11 +22,7 @@ export function ttlToSeconds(ttl: string): number {
   return Number(amount) * secondsPerUnit[unit];
 }
 
-/**
- * The JWT signing secret. No fallback literal here, ever (REQ-6): a default
- * would mean every deployment that forgets to set JWT_SECRET silently signs
- * and verifies tokens with a secret sitting in this repository's history.
- */
+// Spec 002, REQ-6
 export function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -38,10 +34,7 @@ export function getJwtSecret(): string {
   return secret;
 }
 
-/**
- * Called as the first statement of bootstrap() so a missing secret fails
- * loudly at boot (AC-8), not silently on the first login attempt.
- */
+// Spec 002, AC-8
 export function assertAuthEnv(): void {
   getJwtSecret();
 }

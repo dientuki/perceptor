@@ -19,18 +19,12 @@ import type { SingleFileAcquisitionTarget } from "@/types/media";
 interface ImportFileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // A season target has no upload entry point (REQ-2,
-  // 059-season-pack-acquisition-ui) — the type checker, not a runtime guard,
-  // is what keeps one from reaching this modal.
+  // Spec 059, REQ-2
   target: SingleFileAcquisitionTarget | null;
 }
 
 type UploadStatus = "idle" | "uploading" | "paused" | "error" | "done";
 
-// tus-js-client no acepta re-arrancar con abort(true) (eso termina la subida
-// del todo); pausar es simplemente dejar de mandar chunks y reanudar es
-// volver a llamar start() sobre la misma instancia — retoma solo desde el
-// Upload-Offset que ya tiene el server (ver services/api/src/uploads/).
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const RETRY_DELAYS = [0, 1000, 3000, 5000, 10000];
 
@@ -132,8 +126,6 @@ export default function ImportFileModal({
   };
 
   const handleClose = () => {
-    // Pausa (no termina) una subida en curso: cerrar el modal no debe tirar
-    // el progreso ya subido, el usuario puede reabrir y seguir después.
     uploadRef.current?.abort();
     reset();
     onClose();
@@ -148,11 +140,7 @@ export default function ImportFileModal({
     setProgress({ sent: 0, total: file.size });
     setStatus("uploading");
 
-    // El ticket se pide antes de crear la subida: onUploadCreate lo verifica
-    // una sola vez, en el POST inicial (ver spec 002-auth-login). `force`
-    // travels into the ticket itself (REQ-7) — the refusal for a COMPLETED
-    // target with no confirmation arrives here, before a single byte is
-    // sent (REQ-6).
+    // Spec 002, REQ-11; Spec 027, REQ-6 REQ-7
     const ticketResult = await createUploadTicketAction(
       target,
       isCompleted && replaceConfirmed,
@@ -164,8 +152,7 @@ export default function ImportFileModal({
     }
     const ticket = ticketResult.ticket;
 
-    // El metadata key movieId mantiene su nombre y significado exactos aun
-    // para un film (NFR-1); episodeId es la contraparte para un episodio.
+    // Spec 010, NFR-1; Spec 006, NFR-1b
     const targetMetadata: Record<string, string> = {};
     if (target.kind === "movie") {
       targetMetadata.movieId = String(target.movie.id);
@@ -192,8 +179,6 @@ export default function ImportFileModal({
         // open shows this file's progress instead of the file picker.
         reset();
         onClose();
-        // Mismo criterio que SearchTorrent: refrescar el server component
-        // para que la película aparezca con su estado nuevo.
         router.refresh();
       },
       onError: (err) => {
@@ -218,8 +203,6 @@ export default function ImportFileModal({
   };
 
   const handleCancel = () => {
-    // true = le avisa al server que borre lo subido hasta ahora (DELETE), a
-    // diferencia de abort() en handleClose/handlePause.
     uploadRef.current?.abort(true).catch(() => {});
     reset();
   };

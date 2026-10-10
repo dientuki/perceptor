@@ -46,15 +46,11 @@ export async function getMovies(isShort?: boolean): Promise<Movie[]> {
     }
   `;
 
-  // The GraphQL argument is optional and tri-state: omitted/null means
-  // "every film the caller owns" (spec REQ-8/REQ-11). `undefined` here is
-  // stripped by fetchGraphQL's variable serialization the same way as not
-  // sending the key at all.
+  // Spec 048, REQ-8 REQ-11
   const { data, errors } = await fetchGraphQL<{ movies: Movie[] }>(query, {
     isShort,
   });
 
-  // GraphQL responde 200 con `errors` poblado: sin este chequeo `data` viene undefined
   if (errors && errors.length > 0) {
     // Called directly from MoviesPage's Server Component render — cookie
     // mutation is illegal there, so hand off to the Route Handler instead of
@@ -118,7 +114,6 @@ export async function getMovieById(id: number): Promise<Movie | null> {
     throw new Error(await translateGraphQLError(errors[0]));
   }
 
-  // El API devuelve null cuando el id no existe; la página lo traduce a notFound()
   return data?.movie ?? null;
 }
 

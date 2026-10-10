@@ -9,7 +9,6 @@ interface PathPickerProps {
   settingKey: string;
   label: string;
   root: MediaRoot;
-  // Valor guardado, relativo a la raíz ('.' significa "la raíz misma").
   value: string;
   // When true, the visible input becomes read-only — the hidden input below
   // keeps submitting `segment`'s current value regardless, so a gating
@@ -18,12 +17,6 @@ interface PathPickerProps {
   disabled?: boolean;
 }
 
-// La ruta de container nunca se muestra ni se tipea acá — sólo la raíz del
-// lado del host (root.hostPath, la que el usuario configuró en .env al
-// instalar) más el segmento que el usuario elige. El input visible no lleva
-// `name`: lo que viaja en el FormData es el hidden de abajo, que traduce
-// "vacío" a "." antes de que updateSettingsAction (actions/settings.ts) lo
-// vea — así ese filtro de blancos no descarta "quiero la raíz misma".
 export default function PathPicker({
   settingKey,
   label,

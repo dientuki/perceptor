@@ -19,21 +19,10 @@ const UPLOAD_OWNER_KEY_PREFIX = 'upload:owner:';
 // a stale marker for an abandoned upload eventually stops mattering.
 const REPLACE_MARKER_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-// A ticket is minted for exactly one target — a movie or an episode — never
-// both. `movieId` keeps its name and meaning (010-episode-acquisition §
-// NFR-1); `episodeId` sits beside it rather than generalising into a single
-// `mediaId`, the same restraint `006-media-search` applied everywhere except
-// `MediaSearchResult`.
-//
-// 068-season-multi-file-upload: a third target, `{ mediaSourceId }`, names an
-// open season upload session (a PENDING LOCAL_FOLDER source). It is bound the
-// same way — a ticket for session A never authorises a file for session B.
+// Spec 010, NFR-1
 export type UploadTicketTarget = { movieId: number } | { episodeId: number } | { mediaSourceId: number };
 
-// Typed twins of the plain `Error`s this service used to throw, so callers
-// (`uploads.service.ts`) can branch on `instanceof` instead of matching
-// English message text — the exact coupling REQ-14/`error.magnet.*` already
-// broke elsewhere in this feature (spec.md § "Error table — uploads").
+// Spec 018, REQ-14
 export class UploadTicketExpiredError extends Error {}
 
 export class UploadTicketMismatchError extends Error {
@@ -49,11 +38,7 @@ type UploadTicketPayload = {
   mediaSourceId?: number;
   typ: 'upload';
   jti: string;
-  // 027-replace-completed-media: the confirmed-replacement decision, signed
-  // into the ticket at mint time (REQ-7) so `onUploadFinish` never has to
-  // re-derive it from anything the browser controls. Absent on every ticket
-  // minted before this feature — `verifyAndSpend` below defaults it to
-  // `false` for that reason.
+  // Spec 027, REQ-7
   force?: boolean;
 };
 
@@ -62,15 +47,7 @@ type UploadTicketPayload = {
 // it is not part of the payload this service signs, `jsonwebtoken` adds it.
 type DecodedUploadTicket = UploadTicketPayload & { exp: number };
 
-/**
- * The upload ticket is the session, delegated: the HttpOnly session cookie
- * cannot reach the tus endpoint on a different origin, so a short-lived
- * signed token minted by an authenticated GraphQL call stands in for it at
- * the tus `POST` (REQ-11). `mint` is a thin JWT sign; `verifyAndSpend` is
- * where every failure mode this ticket exists to prevent actually lives —
- * replay, cross-movie use, expiry — so it is the part this file's spec
- * exercises hardest.
- */
+// Spec 002, REQ-11
 @Injectable()
 export class UploadTicketsService {
   constructor(
@@ -100,18 +77,7 @@ export class UploadTicketsService {
     };
   }
 
-  /**
-   * Verifies a ticket and, on success, spends it so it cannot be replayed.
-   * The target check runs BEFORE the spend on purpose (AC-12/AC-11): a
-   * ticket minted for one movie/episode and presented for another must not
-   * be burned by the mismatch, or a client that mistakenly races two
-   * uploads with the same ticket would lose the ticket it actually needed.
-   * Returns the ticket's owner `userId` and its signed `force` decision on
-   * success, throws on any failure — callers decide the exact HTTP shape of
-   * that failure. Returning an object rather than a bare string is
-   * deliberate (027-replace-completed-media): it makes `force` impossible
-   * to drop silently at the one call site that reads it.
-   */
+  // Spec 002, AC-12; Spec 002, AC-11; Spec 027, REQ-7
   async verifyAndSpend(token: string, target: UploadTicketTarget): Promise<{ userId: string; force: boolean }> {
     let payload: DecodedUploadTicket;
     try {

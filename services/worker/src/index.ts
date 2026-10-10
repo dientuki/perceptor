@@ -11,36 +11,68 @@ import type { SourceReadyJob, EncodeJob, EncodeCancelMessage } from './queue/typ
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
 import { cancelEncode } from './encode/cancellation';
+import {
+  LEASE_RENEW_INTERVAL_MS,
+  acquireWorkerLease,
+  newLeaseId,
+  releaseWorkerLease,
+  renewWorkerLease,
+} from './lease/worker-lease';
 import { reportEncodeWorkerStarted } from './api/encode-worker-started';
 import { deliverReport } from './api/deliver-report';
 import { fetchGraphQL } from './api/graphql-client';
 import { ERROR_ENCODE_UNEXPECTED } from './i18n/error-keys';
 import { renderMessage } from './i18n/messages.en';
 
-// El container corre como PUID:PGID (ver docker-compose.yaml, "user:"), no
-// root: sin esto el umask por defecto (022) deja carpetas 755/root y archivos
-// 644, que Jellyfin (mismo grupo, pero otro uid) no puede escribir — necesita
-// meter folder.jpg/.nfo/.trickplay adentro de cada carpeta que arma el
-// worker. Con 002, sobre carpetas setgid (la biblioteca real ya lo tiene)
-// queda 2775/664: mismo dueño de grupo, escribible por el grupo entero. Se
-// hereda a ffmpeg/mkvmerge como hijos, así que no hace falta tocar runner.ts.
 process.umask(0o002);
 
-// Conexión con opciones planas, igual que los productores (process-queue.service.ts
-// y encode-queue.service.ts en la api): BullMQ arma su propia conexión con los
-// settings que necesita.
 const connection = {
   host: process.env.REDIS_HOST ?? 'redis',
   port: Number(process.env.REDIS_PORT ?? 6379),
 };
 
-// This service is "type": "commonjs" — no top-level await. The probe result
-// must be memoized before either Worker starts pulling encode jobs (REQ-1,
-// NFR-1), so the whole startup is wrapped in this async bootstrap rather
-// than switching the package to ESM as a side effect of this feature.
+// Spec 017, REQ-1 NFR-1
 async function main() {
-  // 054-interrupted-encode-recovery (REQ-1, NFR-4): sound only because exactly
-  // one worker container runs — "I just booted" and "nothing is encoding" coincide.
+  // The gate comes before the announcement, not after: announcing is itself the
+  // destructive act, so a second instance must be turned away while it still
+  // has done nothing.
+
+  // Spec 054, NFR-4
+  const leaseClient = new Redis(connection);
+  const leaseId = newLeaseId();
+  const leaseAcquired = await acquireWorkerLease(leaseClient, leaseId, {
+    onWait: (holder) =>
+      console.log(`[worker] worker lease held by ${holder ?? 'another instance'}, retrying`),
+  });
+
+  if (!leaseAcquired) {
+    console.error(
+      '[worker] another worker already holds the singleton lease: Perceptor runs exactly one ' +
+        'worker container, and a second one would reconcile the first one\'s live encodes. Exiting.',
+    );
+    await leaseClient.quit();
+    process.exit(1);
+  }
+
+  // A failed renewal is logged, never fatal: a Redis blip is not worth killing a
+  // multi-hour encode over, and an api unreachable through the same outage would
+  // not be reconciling anything either.
+
+  // Spec 054, NFR-4
+  const leaseRenewal = setInterval(() => {
+    void renewWorkerLease(leaseClient, leaseId)
+      .then((renewed) => {
+        if (!renewed) {
+          console.error('[worker] worker lease renewal rejected, this instance no longer holds it');
+        }
+      })
+      .catch((err) => {
+        console.error('[worker] worker lease renewal failed:', err);
+      });
+  }, LEASE_RENEW_INTERVAL_MS);
+  leaseRenewal.unref();
+
+  // Spec 054, REQ-1 NFR-4
   const reconciledCount = await deliverReport('encodeWorkerStarted', () =>
     reportEncodeWorkerStarted(),
   );
@@ -50,7 +82,7 @@ async function main() {
     PROCESS_QUEUE,
     async (job) => {
       if (job.name !== SOURCE_READY_JOB) {
-        console.log(`[worker] job desconocido ${job.name}, se ignora`);
+        console.log(`[worker] unknown job ${job.name}, ignoring`);
         return;
       }
 
@@ -58,22 +90,15 @@ async function main() {
     },
     {
       connection,
-      // Un escaneo es IO sobre una carpeta y un encode no debe arrancar N veces
-      // por accidente.
       concurrency: 1,
     },
   );
 
-  // Worker separado, no un job name más en `process`: un encode puede tardar
-  // horas, y con concurrency:1 en una sola cola compartida o los escaneos
-  // quedan bloqueados detrás de FFmpeg, o se arriesgan N FFmpeg simultáneos.
-  // Cada Worker abre su propia conexión bloqueante, así que este puede estar
-  // horas ocupado sin frenar al de arriba.
   const encodeWorker = new Worker<EncodeJob>(
     ENCODE_QUEUE,
     async (job) => {
       if (job.name !== ENCODE_JOB) {
-        console.log(`[worker] job desconocido ${job.name}, se ignora`);
+        console.log(`[worker] unknown job ${job.name}, ignoring`);
         return;
       }
 
@@ -85,9 +110,7 @@ async function main() {
     },
   );
 
-  // 047-source-deletion: encode:cancel is a Redis pub/sub channel, not a
-  // queue — only meaningful to a worker running the job right now, so no
-  // separate BullMQ connection is warranted here, just a plain subscriber.
+  // Spec 047, REQ-4
   const cancelSubscriber = new Redis(connection);
   await cancelSubscriber.subscribe(ENCODE_CANCEL_CHANNEL);
 
@@ -99,44 +122,34 @@ async function main() {
         throw new Error('processJobId is not a number');
       }
     } catch (err) {
-      console.error(`[worker] mensaje de cancelación malformado, se descarta: ${message}`, err);
+      console.error(`[worker] malformed cancellation message, discarding: ${message}`, err);
       return;
     }
 
     const cancelled = cancelEncode(parsed.processJobId);
     if (cancelled) {
-      console.log(`[worker] cancelación aplicada al processJob ${parsed.processJobId}`);
+      console.log(`[worker] cancellation applied to processJob ${parsed.processJobId}`);
     } else {
-      console.log(`[worker] cancelación recibida para ${parsed.processJobId}, no está corriendo acá`);
+      console.log(`[worker] cancellation received for ${parsed.processJobId}, not running here`);
     }
   });
 
   scanWorker.on('completed', (job) => {
-    console.log(`[worker] completado ${job.id}`);
+    console.log(`[worker] completed ${job.id}`);
   });
 
   scanWorker.on('failed', (job, err) => {
-    console.error(`[worker] falló ${job?.id}:`, err);
+    console.error(`[worker] failed ${job?.id}:`, err);
   });
 
   encodeWorker.on('completed', (job) => {
-    console.log(`[worker] encode completado ${job.id}`);
+    console.log(`[worker] encode completed ${job.id}`);
   });
 
   encodeWorker.on('failed', (job, err) => {
-    console.error(`[worker] encode falló ${job?.id}:`, err);
+    console.error(`[worker] encode failed ${job?.id}:`, err);
 
-    // 054-interrupted-encode-recovery (REQ-10): this listener only reacts to
-    // a BullMQ-level outcome, never to a plain diagnosed failure. If `err` is
-    // an UnrecoverableError, encode.job.ts already decided whether to report
-    // (KeyedError -> encodeFailed already sent; EncodeCancelledError ->
-    // deliberately nothing, per REQ-8) before converting its error, so there
-    // is nothing left to do here. Only an unclassified, still-plain throw
-    // reaches this branch, and only once BullMQ has actually exhausted every
-    // configured attempt (job.attemptsMade >= job.opts.attempts) does it mean
-    // "nobody will retry this" rather than "a retry is already queued" — the
-    // latter must never be reported, or a title would turn red while its
-    // encode is still coming.
+    // Spec 054, REQ-10 REQ-8
     if (err instanceof UnrecoverableError) return;
     if (!job) return;
 
@@ -161,7 +174,7 @@ async function main() {
       ),
     ).catch((reportErr) => {
       console.error(
-        `[worker] no se pudo reportar encodeFailed por agotamiento de reintentos (${job.data.processJobId}):`,
+        `[worker] could not report encodeFailed for exhausted retries (${job.data.processJobId}):`,
         reportErr,
       );
     });
@@ -171,14 +184,21 @@ async function main() {
     void scanWorker.close();
     void encodeWorker.close();
     void cancelSubscriber.quit();
+
+    // Releasing on the way out is what makes an orderly restart instant instead
+    // of waiting out the TTL.
+
+    // Spec 054, NFR-4
+    clearInterval(leaseRenewal);
+    void releaseWorkerLease(leaseClient, leaseId).finally(() => leaseClient.quit());
   });
 
-  console.log('[worker] escuchando la cola', PROCESS_QUEUE);
-  console.log('[worker] escuchando la cola', ENCODE_QUEUE);
-  console.log('[worker] escuchando el canal', ENCODE_CANCEL_CHANNEL);
+  console.log('[worker] listening on queue', PROCESS_QUEUE);
+  console.log('[worker] listening on queue', ENCODE_QUEUE);
+  console.log('[worker] listening on channel', ENCODE_CANCEL_CHANNEL);
 }
 
 main().catch((error) => {
-  console.error('[worker] fatal error en el bootstrap:', error);
+  console.error('[worker] fatal error during bootstrap:', error);
   process.exit(1);
 });

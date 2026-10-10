@@ -7,16 +7,18 @@ import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
+import { TitleStatusService } from '@/title-status/title-status.service';
+import { DownloadsService } from '@/downloads/downloads.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 
-// This suite exists because getEncodeJobDetails's REQ-3 merge is the only
+// This suite exists because getEncodeJobDetails's Spec 011, REQ-3 merge is the only
 // place that decides which audio/subtitle languages an encode is allowed to
 // keep. A wrong `where` clause here — scoping to the wrong id, reading the
 // wrong join, or selecting `iso2` where `iso3` belongs — drops a language a
 // user asked for. The encode still completes, ffprobe still reports valid
 // output, and nothing anywhere logs an error: the user only finds out while
-// watching a file that is missing a track (Article IX, spec.md's REQ-3/NFR-4).
+// watching a file that is missing a track (Article IX, Spec 011, REQ-3 NFR-4).
 describe('ProcessJobsService', () => {
   let service: ProcessJobsService;
   let prisma: {
@@ -34,6 +36,8 @@ describe('ProcessJobsService', () => {
   let torrentClient: { remove: jest.Mock };
   let mediaCapabilities: { isShortsEnabled: jest.Mock };
   let encodeQueue: { addEncode: jest.Mock; removeEncode: jest.Mock };
+  let titleStatus: { recomputeMovie: jest.Mock; recomputeEpisode: jest.Mock };
+  let downloads: { unwindLosingSiblings: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -61,6 +65,8 @@ describe('ProcessJobsService', () => {
     torrentClient = { remove: jest.fn().mockResolvedValue(undefined) };
     mediaCapabilities = { isShortsEnabled: jest.fn().mockResolvedValue(false) };
     encodeQueue = { addEncode: jest.fn().mockResolvedValue(undefined), removeEncode: jest.fn().mockResolvedValue(undefined) };
+    titleStatus = { recomputeMovie: jest.fn().mockResolvedValue(undefined), recomputeEpisode: jest.fn().mockResolvedValue(undefined) };
+    downloads = { unwindLosingSiblings: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -72,6 +78,8 @@ describe('ProcessJobsService', () => {
         { provide: MediaServerService, useValue: mediaServer },
         { provide: MediaCapabilitiesService, useValue: mediaCapabilities },
         { provide: EncodeQueueService, useValue: encodeQueue },
+        { provide: TitleStatusService, useValue: titleStatus },
+        { provide: DownloadsService, useValue: downloads },
       ],
     }).compile();
 
@@ -160,13 +168,13 @@ describe('ProcessJobsService', () => {
   });
 
   // This block exists because getEncodeJobDetails's downloadsRoot is the only
-  // input the worker's cleanup containment check (REQ-12) has to decide
-  // whether a path is safe to delete. Resolving the narrower `path_downloads`
-  // setting instead of the downloads root itself would make every uploaded
-  // file — staged under `<root>/imports/<uploadId>`, outside `path_downloads`
-  // — fail that check, so cleanup would silently skip it forever, with no
-  // error anywhere and the disk filling up (012-post-download-processing's
-  // REQ-10/REQ-12, and the bug this feature exists to fix).
+  // input the worker's cleanup containment check (Spec 012, REQ-12) has to
+  // decide whether a path is safe to delete. Resolving the narrower
+  // `path_downloads` setting instead of the downloads root itself would make
+  // every uploaded file — staged under `<root>/imports/<uploadId>`, outside
+  // `path_downloads` — fail that check, so cleanup would silently skip it
+  // forever, with no error anywhere and the disk filling up (Spec 012,
+  // REQ-10 REQ-12, and the bug this feature exists to fix).
   describe('getEncodeJobDetails — downloadsRoot', () => {
     it('resolves the downloads root itself, not the path_downloads setting', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
@@ -205,10 +213,10 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // REQ-7: reading a missing/unexpected `compression_enabled` row as "off"
-  // produces no error anywhere — every job still completes, every file still
-  // lands in the right place, and an entire library is quietly left
-  // un-transcoded, discovered only by disk usage months later.
+  // Spec 032, REQ-7: reading a missing/unexpected `compression_enabled` row
+  // as "off" produces no error anywhere — every job still completes, every
+  // file still lands in the right place, and an entire library is quietly
+  // left un-transcoded, discovered only by disk usage months later.
   describe('getEncodeJobDetails — REQ-7 compressionEnabled', () => {
     it('resolves to true when the compression_enabled row is missing', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
@@ -266,7 +274,7 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // REQ-2/REQ-4 (058-compression-resolution): the worker never sees the raw
+  // Spec 058, REQ-2 REQ-4: the worker never sees the raw
   // `compression_resolution` row — it sees whatever this method resolves.
   // A fallback that leaks an unrecognised or missing value through as-is
   // produces no error anywhere: the encode still completes, just at the
@@ -348,7 +356,7 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // REQ-7 (070-subtitle-format-selection): the effective format list lives in
+  // Spec 070, REQ-7: the effective format list lives in
   // `base`, so a refactor that moved it into one branch would leave the other
   // job type with an undefined field and every such encode would silently
   // keep or drop the wrong subtitles.
@@ -370,7 +378,7 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // REQ-15 (072-plex-media-server): the layout rides `base`, so a refactor
+  // Spec 072, REQ-15: the layout rides `base`, so a refactor
   // that moved it into one branch would leave the other job type without it
   // and every such encode would be filed under the wrong naming scheme with
   // no error anywhere.
@@ -416,7 +424,7 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // REQ-12/REQ-13 (048-shorts-category): a film flagged `isShort` must land
+  // Spec 048, REQ-12 REQ-13: a film flagged `isShort` must land
   // under `path_shorts` instead of `path_movies`, but only while the shorts
   // category is *effectively* enabled — a wrong branch here transcodes
   // successfully (no ffmpeg error, no status change) and just files the
@@ -602,10 +610,7 @@ describe('ProcessJobsService', () => {
       expect(details.allowedAudioLanguagesIso3).toEqual(['jpn']);
     });
 
-    // AC-8 / T011: the plan's headline silent failure — a forgotten
-    // `default_languages` read narrows every future encode with no error.
-    // This asserts the setting's codes land in the union alongside a
-    // per-title preference, original first, deduplicated.
+    // Spec 029, AC-8 T011
     it('unions default_languages with a per-title preference, original first, no duplicates', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -620,14 +625,7 @@ describe('ProcessJobsService', () => {
       expect(new Set(details.allowedAudioLanguagesIso3).size).toBe(details.allowedAudioLanguagesIso3.length);
     });
 
-    // AC-10 / T008: `resolveOriginalLanguage` looks up by `tag`, not by
-    // `findFirst` on `iso2`. Once `es-419`/`es-ES` exist, `iso2` is no
-    // longer unique — a `findFirst({ where: { iso2: 'es' } })` could
-    // nondeterministically return a variant row instead of the base `es`
-    // row. That would still resolve `originalLanguageIso3` to `spa`
-    // (harmless), but it would resolve `tag` to a variant the film's TMDB
-    // metadata never asked for — the exact bug the follow-up spec's
-    // `allowedLanguageTags` merge depends on this method getting right.
+    // Spec 030, AC-10 T008
     it('resolves a Spanish film\'s original language to the base `es` row, never a variant', async () => {
       prisma.processJob.findUnique.mockResolvedValue(
         movieProcessJob({ movie: { ...movieProcessJob().movie, originalLanguage: 'es' } }),
@@ -647,16 +645,14 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // 039-per-title-language-split, REQ-5: the two silent failures the plan
+  // Spec 039, REQ-5: the two silent failures the plan
   // names for this merge — a kind-blind filter that starves the subtitle
-  // pair of the original language/default (AC-8), and an owner preference
-  // that leaks into the pair it does not belong to (AC-9). Neither produces
-  // an error anywhere: the encode still completes, just with the wrong
-  // tracks kept or dropped.
+  // pair of the original language/default (Spec 039, AC-8), and an owner
+  // preference that leaks into the pair it does not belong to (Spec 039,
+  // AC-9). Neither produces an error anywhere: the encode still completes,
+  // just with the wrong tracks kept or dropped.
   describe('getEncodeJobDetails — REQ-5 audio/subtitle split', () => {
-    // AC-8: with no per-title preference of either kind, both pairs must be
-    // identical to each other and to what the single pre-split list would
-    // have produced (original + installation default).
+    // Spec 039, AC-8
     it('AC-8: with no per-title preference, both pairs are identical to each other and to the single-list case', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -671,8 +667,7 @@ describe('ProcessJobsService', () => {
       expect(details.allowedSubtitleLanguageTags.sort()).toEqual(details.allowedAudioLanguageTags.sort());
     });
 
-    // AC-9: an audio-only per-title preference must reach the audio pair and
-    // must not leak into the subtitle pair.
+    // Spec 039, AC-9
     it('AC-9: an audio-only per-title preference reaches only the audio pair, not the subtitle one', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -697,13 +692,13 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // 030-language-regional-variants, T009: `allowedAudioLanguageTags` and
+  // Spec 030, T009: `allowedAudioLanguageTags` and
   // `allowedAudioLanguagesIso3` are produced from the SAME merge walk
   // (`collectAllowedLanguages`), not two separate ones. A drift between them
   // — e.g. a tag added to one Set but not the other, or `resolveDefaultLanguages`
   // left querying by `iso2` instead of `tag` — ships an `allowedAudioLanguageTags`
   // that silently disagrees with `allowedAudioLanguagesIso3`, or an empty one, with
-  // no error anywhere: the worker doesn't read the field yet (NFR-4), so
+  // no error anywhere: the worker doesn't read the field yet (Spec 030, NFR-4), so
   // nothing fails until the follow-up spec ships and its rules see a stale or
   // empty tag list.
   describe('getEncodeJobDetails — allowedAudioLanguageTags (030-language-regional-variants)', () => {
@@ -759,21 +754,14 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // 042-encode-global-language-preferences, REQ-1/REQ-2/REQ-3/REQ-5: every
+  // Spec 042, REQ-1 REQ-2 REQ-3 REQ-5: every
   // owner's global `UserLanguagePreference` (not just their per-title one)
   // must reach the merge, additively, scoped to owners only, matched by
   // `kind`, and on both the movie and episode branch. Each case here is
   // verified to fail when the fold in `collectAllowedLanguages` is removed
   // (Article IX) — done by hand for this diff and restored before reporting.
   describe('getEncodeJobDetails — 042 global language preference merge', () => {
-    // AC-1: a language with NO per-title row at all, contributed only
-    // through the owner's global preference, still reaches both lists of
-    // its kind. `kor`/`ko` is distinct from the fixture's original (`ja`/
-    // `jpn`) and from every per-title fixture value in this file, so a
-    // regression that reads `User.languages` (a different, unrelated
-    // relation than the global-preference one this select actually nests
-    // under `user`) instead of the global preference relation returns no
-    // rows and this assertion goes red too, not just an empty-fold bug.
+    // Spec 042, AC-1
     it('AC-1: a global-only audio preference reaches both the iso3 and the tag list', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -785,9 +773,7 @@ describe('ProcessJobsService', () => {
       expect(details.allowedAudioLanguageTags).toContain('ko');
     });
 
-    // AC-2 (failure path): a global AUDIO-only preference must not widen the
-    // subtitle allow-list — the same kind-blind-leak bug class REQ-5 (039)
-    // exists to forbid, now reachable a second way through the global level.
+    // Spec 042, AC-2; Spec 039, REQ-5
     it('AC-2: a global AUDIO-only preference does not leak into either subtitle list', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -799,13 +785,7 @@ describe('ProcessJobsService', () => {
       expect(details.allowedSubtitleLanguageTags).not.toContain('es-419');
     });
 
-    // AC-3 (failure path): a user who does not own the title never shapes
-    // its encode. `userMovie.findMany`'s own `where: { movieId }` is the
-    // only thing enforcing that — there is no second, narrower filter to
-    // drop — so this asserts that scope directly: a fold that started
-    // reading every user's global preference instead of only the rows this
-    // query returns would still pass every other case in this file, since
-    // none of them mocks a second, unrelated owner.
+    // Spec 042, AC-3
     it('AC-3: a non-owner never contributes, because they never appear in the scoped owners row', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -824,10 +804,7 @@ describe('ProcessJobsService', () => {
       expect(details.allowedSubtitleLanguageTags).not.toContain('fr');
     });
 
-    // AC-4: two owners' global preferences, plus one owner's per-title
-    // override duplicating the *other* owner's global entry — the union
-    // stays deduplicated across sources and across owners, and the
-    // per-title level neither replaces nor duplicates the global one.
+    // Spec 042, AC-4
     it('AC-4: two owners plus a per-title override duplicating a global entry — each language exactly once', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -843,8 +820,7 @@ describe('ProcessJobsService', () => {
       expect(details.allowedAudioLanguageTags.filter((tag) => tag === 'es-419')).toHaveLength(1);
     });
 
-    // REQ-5: mergeShowAllowedLanguages is an independent copy of the same
-    // select — a correct movie branch proves nothing about it.
+    // Spec 042, REQ-5
     it('REQ-5: a global preference reaches the episode branch too', async () => {
       prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -856,10 +832,7 @@ describe('ProcessJobsService', () => {
       expect(details.allowedAudioLanguageTags).toContain('ko');
     });
 
-    // NFR-2: folding the global list must not cost a second query — a
-    // per-owner `findPreferredTrackLanguagesFor` call (the alternative
-    // ../plan.md rejects) would multiply calls here instead of staying at
-    // one, on a resolver the worker hits once per encode job.
+    // Spec 042, NFR-2
     it('NFR-2: userMovie.findMany / userShow.findMany stay at exactly one call each with the global fold in place', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());
       prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
@@ -879,7 +852,7 @@ describe('ProcessJobsService', () => {
   });
 
   // This block exists because encodeCompleted's three cleanup instructions
-  // (013-season-pack-processing, REQ-8/REQ-9/REQ-10/REQ-11) are the only
+  // (Spec 013, REQ-8 REQ-9 REQ-10 REQ-11) are the only
   // signal the worker gets for when it is safe to delete a file. A wrong
   // verdict here either deletes the input of a sibling episode that hasn't
   // encoded yet — with every job still reporting COMPLETED — or never
@@ -897,11 +870,7 @@ describe('ProcessJobsService', () => {
       ...overrides,
     });
 
-    // The `findUnique` read `encodeCompleted` does before writing anything
-    // (REQ-5/REQ-8): a fresh job, still ENCODING, whose source has not been
-    // demoted. Every cleanup-verdict case below is about the verdict
-    // computed *after* that read, not about the read itself, so they all
-    // share this default.
+    // Spec 038, REQ-5; Spec 038, REQ-8
     const freshExisting = {
       status: 'ENCODING',
       outputFilePath: null,
@@ -991,7 +960,7 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // 038-encode-report-durability, REQ-5/REQ-8/T006: the worker retries a
+  // Spec 038, REQ-5 REQ-8 T006: the worker retries a
   // report it could not deliver, so both mutations must tolerate a second
   // delivery for the same job, and a demoted source's report must not move
   // the title a newer upload has already taken over. Neither failure throws
@@ -1006,11 +975,7 @@ describe('ProcessJobsService', () => {
       prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
     });
 
-    // AC-8: a retry whose predecessor already landed must not notify the
-    // media server a second time, and must leave the stored row exactly as
-    // it already was. Remove the `!alreadyDeliveredSame` guard on the
-    // `notifyCreated` call (or on the movie/episode update) and this case
-    // goes red — verified by hand below, guard left in place.
+    // Spec 038, AC-8
     it('a second encodeCompleted for the same job does not notify the media server again and leaves the row unchanged', async () => {
       const existing = {
         status: 'COMPLETED',
@@ -1035,11 +1000,7 @@ describe('ProcessJobsService', () => {
       expect(result.removeTorrent).toBe(true);
     });
 
-    // AC-7: the source lost its race to a newer upload after this job was
-    // enqueued. Remove the `sourceDemoted` check in front of the movie/
-    // episode update and this case goes red, because the encode that
-    // finished *after* losing the race would drag the title's status/
-    // filePath back to what the loser produced.
+    // Spec 038, AC-7
     it('encodeCompleted for a job whose MediaSource is ERROR leaves episode.status and filePath untouched', async () => {
       const existing = {
         status: 'ENCODING',
@@ -1109,87 +1070,38 @@ describe('ProcessJobsService', () => {
     });
   });
 
-  // This suite exists because REQ-15's sweep has two failure classes that
-  // both produce no error anywhere (spec.md NFR-5 (b)/(c)):
-  //
-  //  - selecting siblings by tag instead of by target id: a second title
-  //    that happens to share a tag string loses downloads the user never
-  //    touched, and the deletion *succeeds*, so there is nothing to catch it;
-  //  - an upload winning a race and sweeping nothing, because the
-  //    `!infoHash` early return fired in front of the sweep instead of only
-  //    guarding the winner's own `remove` call — the upload files
-  //    correctly, the encode succeeds, and two losing torrents keep
-  //    downloading and seeding forever with no row and no log pointing at
-  //    them.
-  describe('downloadRemove — REQ-15 loser sweep', () => {
-    it('removes every other sibling of the same movie, with files, and deletes their rows', async () => {
-      prisma.mediaSource.findUnique.mockResolvedValue({ id: 10, infoHash: 'winner-hash', movieId: 7 });
-      prisma.mediaSource.findMany.mockResolvedValue([
-        { id: 11, infoHash: 'loser-hash-1' },
-        { id: 12, infoHash: 'loser-hash-2' },
-      ]);
-
-      await service.downloadRemove(10, false);
-
-      // Selected by movieId — never by tag (REQ-14). Removing this `where`
-      // and matching by a tag string instead would let a second title
-      // sharing that tag lose downloads it never asked to touch, silently.
-      expect(prisma.mediaSource.findMany).toHaveBeenCalledWith({
-        where: { movieId: 7, id: { not: 10 } },
-      });
-
-      // The winner's own removal keeps whatever deleteFiles the caller
-      // passed (the worker always passes false); the losers are always
-      // removed WITH their files — the two must never be swapped.
-      expect(torrentClient.remove).toHaveBeenCalledWith('winner-hash', false);
-      expect(torrentClient.remove).toHaveBeenCalledWith('loser-hash-1', true);
-      expect(torrentClient.remove).toHaveBeenCalledWith('loser-hash-2', true);
-
-      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 11 } });
-      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 12 } });
-      // The winner's own row is never deleted here — only its torrent is
-      // removed; the caller (cleanup-source.ts) owns the winner's row.
-      expect(prisma.mediaSource.delete).not.toHaveBeenCalledWith({ where: { id: 10 } });
-    });
-
-    // NFR-5 (c): the sweep must run for a winner of either kind — restoring
-    // the old `!infoHash` early return in front of it (instead of only
-    // guarding the winner's own torrentClient.remove call) makes this case
-    // fail, because the sweep would never run for an upload winner.
-    it('still sweeps losing torrent siblings when the winner itself is a LOCAL_FILE upload with no infoHash', async () => {
+  // The loser sweep itself moved to DownloadsService.unwindLosingSiblings
+  // (Spec 091, REQ-1 REQ-2 REQ-3; see downloads.service.spec.ts for its own
+  // suite). What is owed here is that downloadRemove still delegates to it
+  // — including for a winner with no infoHash, which is the exact hole
+  // Spec 091 closes: an upload winner used to never reach the sweep at all.
+  describe('downloadRemove — delegates the loser sweep to DownloadsService', () => {
+    it('calls unwindLosingSiblings and still answers the not-a-torrent string for a LOCAL_FILE winner', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({ id: 20, infoHash: null, movieId: 8 });
-      prisma.mediaSource.findMany.mockResolvedValue([{ id: 21, infoHash: 'loser-hash' }]);
 
       const result = await service.downloadRemove(20, false);
 
       expect(result).toBe('omitido: mediaSource 20 no es un torrent');
-      // The winner has no infoHash, so torrentClient.remove must be called
-      // exactly once — for the losing torrent, never for the winner itself.
-      expect(torrentClient.remove).toHaveBeenCalledTimes(1);
-      expect(torrentClient.remove).toHaveBeenCalledWith('loser-hash', true);
-      expect(prisma.mediaSource.delete).toHaveBeenCalledWith({ where: { id: 21 } });
+      expect(torrentClient.remove).not.toHaveBeenCalled();
+      expect(downloads.unwindLosingSiblings).toHaveBeenCalledWith({ id: 20, infoHash: null, movieId: 8 });
     });
 
-    it('does not delete a loser whose torrent removal the client rejected, and leaves its row intact', async () => {
+    it('calls unwindLosingSiblings for a torrent winner too, after its own remove', async () => {
       prisma.mediaSource.findUnique.mockResolvedValue({ id: 10, infoHash: 'winner-hash', movieId: 7 });
-      prisma.mediaSource.findMany.mockResolvedValue([{ id: 11, infoHash: 'unreachable-hash' }]);
-      torrentClient.remove.mockImplementation(async (hash: string) => {
-        if (hash === 'unreachable-hash') throw new Error('qBittorrent unreachable');
-      });
 
-      await service.downloadRemove(10, false);
+      const result = await service.downloadRemove(10, false);
 
-      // NFR-6: an unacknowledged delete must not delete the row either —
-      // that would leave the file on disk with nothing tracking it.
-      expect(prisma.mediaSource.delete).not.toHaveBeenCalledWith({ where: { id: 11 } });
+      expect(result).toBe('removido: mediaSource 10');
+      expect(torrentClient.remove).toHaveBeenCalledWith('winner-hash', false);
+      expect(downloads.unwindLosingSiblings).toHaveBeenCalledWith({ id: 10, infoHash: 'winner-hash', movieId: 7 });
     });
   });
 
-  // 054-interrupted-encode-recovery: reconcileOrphanedEncodes is the boot
+  // Spec 054: reconcileOrphanedEncodes is the boot
   // reconciliation for a ProcessJob a dead worker left in ENCODING. Every
   // case below defends against a failure that leaves the row looking healthy
   // (QUEUED, or just ENCODING) while nothing ever runs it again, since
-  // NFR-6/REQ-2 mean this method is the only place that ever touches these
+  // Spec 054, NFR-6 REQ-2 mean this method is the only place that ever touches these
   // rows and there is no watchdog behind it.
   describe('reconcileOrphanedEncodes', () => {
     const orphan = (overrides: Partial<Record<string, unknown>> = {}) => ({
@@ -1267,9 +1179,7 @@ describe('ProcessJobsService', () => {
       });
     });
 
-    // REQ-4: the allowance is exactly one. A job that has already used it
-    // must fail outright rather than be re-armed — an off-by-one here is a
-    // reboot loop on a host the encode itself is killing.
+    // Spec 054, REQ-4
     it('fails a job at the allowance with the exhaustion key instead of requeuing it, and does not grow its counter', async () => {
       prisma.processJob.findMany.mockResolvedValue([orphan({ id: 9, recoveryCount: 1, movieId: 3, movie: { status: 'ENCODING' } })]);
 
@@ -1289,7 +1199,7 @@ describe('ProcessJobsService', () => {
       });
       // Same propagation encodeFailed performs — the title must not sit at
       // "encoding" once its ProcessJob is a permanent ERROR.
-      expect(prisma.movie.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { status: 'ERROR' } });
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(3);
       // No call anywhere touches recoveryCount for this job.
       for (const call of prisma.processJob.updateMany.mock.calls) {
         if (call[0].where.id.in.includes(9)) {
@@ -1298,10 +1208,7 @@ describe('ProcessJobsService', () => {
       }
     });
 
-    // REQ-5, case 1: the source row is gone. A defensive case — a real
-    // cascade delete would take the ProcessJob down with it — but an
-    // include that resolves no mediaSource must never be read as
-    // recoverable.
+    // Spec 054, REQ-5
     it('skips a job whose source row is missing, without consuming the allowance', async () => {
       prisma.processJob.findMany.mockResolvedValue([
         orphan({ id: 1, sourceFile: { mediaSource: null } }),
@@ -1314,9 +1221,7 @@ describe('ProcessJobsService', () => {
       expect(encodeQueue.addEncode).not.toHaveBeenCalled();
     });
 
-    // REQ-5, case 2: the source lost a race and was demoted to ERROR
-    // (038-encode-report-durability). Resurrecting it would overwrite the
-    // winner's file with the loser's stale one.
+    // Spec 054, REQ-5
     it('skips a job whose source has been demoted to ERROR, without consuming the allowance', async () => {
       prisma.processJob.findMany.mockResolvedValue([
         orphan({ id: 2, sourceFile: { mediaSource: { status: 'ERROR' } } }),
@@ -1329,9 +1234,7 @@ describe('ProcessJobsService', () => {
       expect(encodeQueue.addEncode).not.toHaveBeenCalled();
     });
 
-    // REQ-5, case 3: the target already holds a COMPLETED file — since this
-    // job is itself still ENCODING, that completion can only have come from
-    // a different, winning source.
+    // Spec 054, REQ-5
     it('skips a job whose target already reads COMPLETED, without consuming the allowance', async () => {
       prisma.processJob.findMany.mockResolvedValue([
         orphan({ id: 3, movie: { status: 'COMPLETED' } }),

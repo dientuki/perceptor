@@ -11,7 +11,7 @@ export interface DownloadError {
 
 export interface Download {
   mediaSourceId: number;
-  // null for a LOCAL_FILE upload racing alongside torrents (REQ-18).
+  // Spec 022, REQ-18
   infoHash: string | null;
   // SourceKind as a plain string — for display only, never for branching.
   // Use `infoHash != null` to decide whether a row is controllable.
@@ -42,5 +42,11 @@ export interface Download {
   encodeSpeed: number | null;
   lastError: DownloadError | null;
   retryable: boolean;
+  // Spec 091: true when another source of this target has already won the
+  // race. Derived per request from the sibling rows, never stored.
+  lostRace: boolean;
   readAt: string;
+  // Spec 090: non-null when the source delivered a file and was later
+  // retired in favour of a replacement; an ISO string, never the Date itself.
+  retiredAt: string | null;
 }

@@ -146,6 +146,30 @@ None.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Nine of ten open, and every one of them is an **admin session in a browser plus sources in flight**.
+The panel this feature filters lives on `/movies/<id>` and `/shows/<id>`; the filter chips, the
+badge counts and the ordering it asserts have no non-browser equivalent to read them from.
+
+What this installation can offer towards the setup: 3 films, 2 series, 64 episodes — and
+`media_sources` holds **one** row, a pre-`053` orphan. AC-1 needs a film with four sources in four
+distinct states (`COMPLETED`, two in progress, one `ERROR`), AC-5 two idle sources with different
+ages, AC-6 and AC-7 a season-3 pack. Those are live acquisitions; the rows carry live qBittorrent
+state, so writing them by hand would produce rows that read as errors rather than as the scenario.
+
+Two boxes are cheaper than the rest and worth doing first once a session exists:
+
+- **AC-4** (a title whose sources are all `COMPLETED`, **error** clicked → the empty-state copy, not
+  an error) needs one completed title and no in-flight anything.
+- **AC-7** is not a page assertion at all — `showDownloads(showId)` returning `seasonNumber: 3` and a
+  season label, read through GraphiQL. It needs a signed-in user's token and a season-scoped source,
+  nothing more. Its data half is unit-covered: `downloads.service.spec.ts` asserts
+  `'showDownloads orders the same way and labels a season row with its number'`.
+
+AC-8's refusal copy (a magnet whose hash is already attached elsewhere) is `060`'s territory and
+blocked the same way — see that spec's own note.
+
 - [ ] **AC-1**: Given a film with one `COMPLETED`, two in-progress (e.g. `DOWNLOADING`, `ENCODING`)
       and one `ERROR` source, when `/movies/<id>` loads, then the panel header shows, left of
       Refresh, `completed 1`, `working 2`, `error 1`, no toggle active, and all four rows listed.
@@ -168,9 +192,17 @@ None.
 - [ ] **AC-8 (failure path)**: With the UI in English, pasting into season 2's magnet modal a magnet
       already attached to season 3 of the same show fails with
       `That magnet is already attached to «Reacher Season 3»`; in Spanish, with `«Reacher Temporada 3»`.
-- [ ] **AC-9**: On `/movies/<id>` (a film and a short) the panel appears inside the detail card, above
+- [x] **AC-9**: On `/movies/<id>` (a film and a short) the panel appears inside the detail card, above
       the torrent search; on `/shows/<id>` it appears inside the detail card, above the first season
       accordion.
+      **Confirmed 2026-10-09** with an admin session at `http://localhost:3000`, emulating a
+      1600x1000 viewport and reading the rendered geometry. On `/movies/1` (a film) the panel is a
+      sibling of the three-column header **inside** the detail card and sits at `top: 705`, above
+      the torrent search at `top: 929`. On `/movies/3` with `isShort` set (a short, reverted after)
+      the same holds - header grid at 173, panel at 725, the release-search input at 904 - so the
+      short renders the panel in the same place, which is the half of this criterion that needed a
+      second subject. On `/shows/1` the panel is inside the card, whose bottom edge is at 750, and
+      the first season accordion starts at 799, outside and below it.
 - [x] **AC-10**: `bin/npm api run test` passes, including the NFR-5 ordering test;
       `git status --short services/api/prisma` is empty; `bin/cli web node scripts/check-messages.mjs`
       reports no drift; `bin/npm web run build` exits 0.

@@ -230,6 +230,25 @@ does not need it (Constitution, Article VII).
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Twelve of thirteen boxes are closed. The one open is **AC-9** — a full pipeline run (add a magnet,
+let it download, let it encode) completing with the auth guard in place, the `ProcessJob` reaching a
+terminal state, and nothing in `docker compose logs worker` mentioning an authentication error.
+
+It is blocked on the same thing as every other end-to-end criterion in this band: no pipeline run has
+ever completed on this installation. `process_jobs` holds **0** rows and `ffprobe_logs` **0** as of
+2026-10-09, so there is no job whose terminal state could be read and no worker log to search.
+
+What *is* established about the machine credential, measured this pass: the `SERVICE_TOKEN` in this
+installation's `.env` authenticates successfully against `http://localhost:4000/graphql`, and the
+guard discriminates correctly — operations carrying `@AllowService()` accept it, while those without
+(`calendar`, `setMoviePreferredTrackLanguages`, `setShowPreferredTrackLanguages`, tried directly) are
+refused in `JwtAuthGuard.canActivate` with `extensions.i18n.key = "error.auth.unauthenticated"`
+before the resolver runs. That is the half of AC-9 that is really about this spec — the credential
+works and the guard holds. The unverified half is that a complete transcode runs under it without
+tripping on auth, which is `012` AC-1/AC-2's run seen from the auth side.
+
 - [x] **AC-1**: A `POST` to `/graphql` with `query { users { id } }` and no cookie or header returns
       an error and no data. Same for a movies query, a settings mutation and `encodeStarted`.
 - [x] **AC-2**: The same request with a valid bearer token returns data.

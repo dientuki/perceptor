@@ -26,9 +26,7 @@ interface SearchTorrentProps {
   onClose?: () => void;
 }
 
-// The three "a finished file is about to be destroyed" keys. A downloading
-// target no longer conflicts at all (022-download-status-tags REQ-7), so
-// there is no second, weaker key family to sit beside these.
+// Spec 022, REQ-7
 const ALREADY_COMPLETED_KEYS = [
   "error.movie.already_completed",
   "error.episode.already_completed",
@@ -65,7 +63,6 @@ export default function SearchTorrent({ target, onClose }: SearchTorrentProps) {
     if (target.kind === "movie") {
       setQuery(target.movie.title);
     } else if (target.kind === "episode") {
-      // Limpiar caracteres raros del nombre de la serie
       const cleanShowTitle = (target.showTitle || "")
         .replace(/[^a-zA-Z0-9 ]/g, "")
         .replace(/\s+/g, " ")

@@ -366,6 +366,14 @@ services:
   worker:
     image: ghcr.io/dientuki/perceptor-worker:${PERCEPTOR_TAG:-latest}
     restart: unless-stopped
+    # Perceptor runs exactly one worker (054-interrupted-encode-recovery, NFR-4).
+    # This declares the default; it does not enforce it, since `--scale worker=2`
+    # overrides the file. The enforcement is the Redis lease the worker takes at
+    # boot (services/worker/src/lease/worker-lease.ts), which also covers the
+    # paths Docker cannot see: a one-off `docker compose run worker`, a leftover
+    # container, or a second stack pointed at the same REDIS_HOST.
+    deploy:
+      replicas: 1
     # Verificado en vivo: ffmpeg con SVT-AV1 puede tardar ~9s en morir tras
     # SIGTERM (multi-hilo, necesita desarmar el encoder) — el default de
     # Docker (10s) deja casi sin margen para que corra el resto de la

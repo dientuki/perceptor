@@ -1,14 +1,3 @@
-// Defends the shape of NFR-2 (docs/spec/features/002-auth-login/spec.md): an
-// auth failure, or any transport failure, must fail the BullMQ job loudly
-// rather than being swallowed. Three classes of bug this guards against:
-//   1. A 401 (or any error) response body is ignored because only json.errors
-//      was checked, and the job silently reports success.
-//   2. SERVICE_TOKEN is absent and the worker sends an anonymous request
-//      instead of failing before any network call is made.
-//   3. A non-2xx response with a non-JSON body (e.g. an HTML error page from
-//      a proxy) makes res.json() throw an opaque SyntaxError instead of a
-//      legible error naming the HTTP status.
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiUnreachableError, fetchGraphQL } from './graphql-client';
 import { KeyedError } from '../i18n/keyed-error';
@@ -23,6 +12,16 @@ function setEnv(url?: string, token?: string) {
   else process.env.SERVICE_TOKEN = token;
 }
 
+// Defends the shape of Spec 002, NFR-2: an auth failure, or any transport
+// failure, must fail the BullMQ job loudly rather than being swallowed.
+// Three classes of bug this guards against:
+//   1. A 401 (or any error) response body is ignored because only json.errors
+//      was checked, and the job silently reports success.
+//   2. SERVICE_TOKEN is absent and the worker sends an anonymous request
+//      instead of failing before any network call is made.
+//   3. A non-2xx response with a non-JSON body (e.g. an HTML error page from
+//      a proxy) makes res.json() throw an opaque SyntaxError instead of a
+//      legible error naming the HTTP status.
 describe('fetchGraphQL', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
@@ -81,7 +80,7 @@ describe('fetchGraphQL', () => {
     expect((caught as Error).message).toMatch(/401/);
   });
 
-  it('throws a KeyedError carrying the key and params from a 200 response with a keyed GraphQL error (018-ui-i18n REQ-11)', async () => {
+  it('throws a KeyedError carrying the key and params from a 200 response with a keyed GraphQL error (Spec 018, REQ-11)', async () => {
     setEnv('http://api:4000/graphql', 'service-token');
 
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({

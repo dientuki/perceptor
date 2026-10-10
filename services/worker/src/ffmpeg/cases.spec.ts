@@ -135,9 +135,7 @@ function validate(fileName: string, raw: unknown): Case {
   if (typeof originalLanguageIso3 !== 'string') {
     fail(fileName, 'input.originalLanguageIso3 must be a string');
   }
-  // NFR-7: a fixture that regressed to the retired `isLiveAction` boolean (or
-  // any other non-member string) must fail collection loudly, naming this
-  // file — never silently default to a content kind nobody wrote down.
+  // Spec 057, NFR-7
   if (
     typeof contentKind !== 'string' ||
     !(CONTENT_KIND_VALUES as readonly string[]).includes(contentKind)

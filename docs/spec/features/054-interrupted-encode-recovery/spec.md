@@ -3,9 +3,9 @@ title: Interrupted Encode Recovery
 spec_version: 1.0.0
 author: Juan Farias
 created_at: 2026-09-11
-last_updated: 2026-09-11
+last_updated: 2026-10-05
 status: Implemented
-services: [api, worker]
+services: [api, infra, worker]
 ---
 
 # SPEC: Interrupted Encode Recovery (`spec.md`)
@@ -122,6 +122,22 @@ file changes.
       jobs. This is an invariant of the deployment, recorded here so a future scaling change knows
       what it breaks — the same way `035-scheduled-tasks` records the equivalent assumption for
       `SchedulerService`'s in-process guard.
+
+      **Addendum, 2026-10-05 — the invariant is now enforced, not merely recorded.** The paragraph
+      above described the deployment as it stood: nothing stopped `docker compose up --scale
+      worker=2`, and the second container's boot announcement would have reconciled the first one's
+      live encode. `worker` now takes a Redis lease (`perceptor:worker:lease`, `SET NX PX` 30s,
+      renewed every 10s, released on `SIGTERM`) in `src/lease/worker-lease.ts` **before** calling
+      `encodeWorkerStarted`, and a second instance logs why and exits 1 without ever announcing.
+      `docker-compose.yaml` additionally declares `deploy: replicas: 1` for the worker — the
+      declaration of intent, not the enforcement, since a CLI `--scale` overrides the file and
+      Docker sees neither a one-off `docker compose run worker` nor a second stack pointed at the
+      same `REDIS_HOST`. The arbiter is Redis because the invariant is "one consumer of this queue",
+      which is also what keeps two separate installations from interfering. REQ-1 through REQ-10 and
+      every other NFR are unchanged, as is the GraphQL contract: `encodeWorkerStarted` still takes
+      no arguments, and `api` still cannot tell one worker from another — deliberately, per the note
+      added to `docs/spec/graphql-contract.md`. The analogous `SchedulerService` assumption named
+      above remains unenforced and is not addressed here.
 - [ ] **NFR-5 (No library deletion)**: The `.part.mkv` scratch file lives under the **destinations**
       root. Article XII permits exactly one removal there — the cleanup in
       `services/worker/src/ffmpeg/runner.ts` — so REQ-6's cleanup belongs to `worker` and stays
@@ -226,6 +242,27 @@ Per Article III the migration is generated through `bin/npm api run prisma:migra
 `services/api/prisma/migrations/`.
 
 ## Acceptance Criteria
+
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+Two boxes open, both needing **a live encode to interrupt**, which this installation cannot supply:
+`process_jobs` holds **0** rows and no encode has ever run on this branch.
+
+- **AC-4** (deleting a source mid-encode) is `047`'s guarantee seen from this feature's side: the
+  cancellation must win over the recovery. Covered at unit level by
+  `worker/src/encode/cancellation.spec.ts` (including the registry keeping the first controller when
+  an id is registered twice) and by the two rethrow-as-non-retryable paths that keep BullMQ from
+  retrying a cancellation. Unrun live.
+- **AC-5** (an orphaned `<input>.working.mkv` and `<final>.part.mkv` left from a crash) needs those
+  files to exist on disk from a killed FFmpeg. The clearing itself is unconditional before every
+  encode, not only a recovered one, so the criterion is really "a crash leaves nothing that poisons
+  the next run" — and that is the kind of claim only a real crash establishes.
+
+The rest of the feature's machinery is covered and green in this pass's suites:
+`worker/src/lease/worker-lease.spec.ts` (the NFR-4 Redis lease — a second instance exits 1 rather
+than resetting the first one's live encode) and `api/src/process-jobs/process-jobs.service.spec.ts`
+(the boot-time reconciliation of every job still reading `ENCODING`, requeued once and failed outright
+on a second orphaning).
 
 - [x] **AC-1**: Given a movie whose encode is in progress, when the stack is killed outright
       (`docker compose kill worker api`, simulating a host reset) and brought back with `bin/dev`,

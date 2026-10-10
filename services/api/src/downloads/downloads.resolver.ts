@@ -5,9 +5,6 @@ import { AllowService } from '@/auth/decorators/allow-service.decorator';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
 
-// Canal de aviso qBittorrent -> api, más el read/control surface de
-// 022-download-status-tags (REQ-8 a REQ-19). La lógica vive en
-// DownloadsService; el resolver sólo delega.
 @Resolver()
 export class DownloadsResolver {
   constructor(private readonly downloadsService: DownloadsService) {}
@@ -23,11 +20,7 @@ export class DownloadsResolver {
     return this.downloadsService.handleTorrentCompleted(infoHash);
   }
 
-  // No @AllowService() — REQ-17: resolves through the same ownership clause
-  // as movie(id), and answers a title the caller does not own exactly as it
-  // answers one that does not exist. The global JwtAuthGuard already
-  // requires a credential, so principal should always be 'user' — narrowed
-  // anyway, for structural safety (see auth.types.ts).
+  // Spec 022, REQ-17
   @Query(() => [Download], { name: 'movieDownloads' })
   async movieDownloads(
     @Args('movieId', { type: () => Int }) movieId: number,

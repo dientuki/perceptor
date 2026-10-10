@@ -1,14 +1,4 @@
-// 038-encode-report-durability (REQ-2..REQ-4, NFR-1, NFR-2): a finished
-// job's outcome (encodeCompleted/encodeFailed) must be delivered eventually,
-// however long api is unreachable, without spinning at full speed for the
-// whole outage. Only ApiUnreachableError (graphql-client.ts) is retried —
-// that is the one failure mode meaning "no response arrived", as opposed to
-// a rejection api actually answered (REQ-3), which must propagate on the
-// first attempt.
-//
-// The encode Worker runs at concurrency: 1 (src/index.ts), so an awaited
-// retry here blocks the next job from starting — that blocking is REQ-4,
-// not a bug to route around.
+// Spec 038, REQ-2 REQ-3 REQ-4 NFR-1 NFR-2
 
 import { ApiUnreachableError } from './graphql-client';
 

@@ -31,12 +31,7 @@ interface TitleLanguagesFormProps {
   onSaved?: () => void;
 }
 
-// Two LanguagePickerField panes, side by side, under one Guardar (REQ-1) —
-// the same submit shape PreferencesForm.tsx already established for its
-// downloadLanguages tab, applied here to a single title's own audio and
-// subtitle preferences instead of the user's general ones. The Audio
-// mandatory checkbox (REQ-8) rides the same submit as a third action,
-// rendered inside the audio pane under its badge list.
+// Spec 039, REQ-1 REQ-8
 export default function TitleLanguagesForm({
   options,
   audioSelected,

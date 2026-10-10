@@ -56,12 +56,7 @@ const TABS = [
 ] as const;
 type TabKey = (typeof TABS)[number];
 
-// One main <form>, five panels, all mounted at once — inactive ones hidden
-// with `className="hidden"` rather than conditionally rendered. FormData
-// reads the DOM, so a conditionally rendered panel would drop its fields the
-// moment the user leaves that tab, and the save would silently persist only
-// a subset (REQ-3, AC-2). This is the one structural rule the main form must
-// not violate.
+// Spec 029, REQ-3 AC-2
 export default function SettingsForm({
   settings,
   mediaRoots,
@@ -138,11 +133,7 @@ export default function SettingsForm({
     <div>
       <TabNav items={tabItems} active={activeTab} onChange={handleTabChange} />
 
-      {/* The Environment tab is read-only (REQ-10) and rendered as a
-          sibling of the main <form>, never a child — see EnvironmentPanel's
-          own comment. The form below stays mounted at all times, just
-          hidden, so switching to this tab and back never drops an unsaved
-          edit on any of the other six panels. */}
+      {/* Spec 055, REQ-10 */}
       <div className={activeTab === "environment" ? "mt-6" : "hidden"}>
         <EnvironmentPanel
           environment={environment}

@@ -10,13 +10,6 @@ import {
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 
-// ─────────────────────────────────────────────────────────────────────────
-// Para agregar un media server: escribí clients/media-server/<nombre>.ts que
-// exporte una MediaServerFactory, y sumá UNA línea acá. Nada más.
-// Las opciones válidas del setting media_server_client (settings.catalog.ts),
-// su validación server-side y el combo de la UI (vía la query
-// mediaServerClients) salen todos de este mapa.
-// ─────────────────────────────────────────────────────────────────────────
 export const MEDIA_SERVERS = {
   jellyfin: {
     label: 'Jellyfin',
@@ -36,7 +29,6 @@ export const MEDIA_SERVERS = {
   },
 } satisfies Record<string, MediaServerRegistryEntry>;
 
-// Derivados: nadie los mantiene a mano.
 export type MediaServerOptionData = {
   id: string;
   label: string;
@@ -68,8 +60,6 @@ export const MEDIA_SERVER_IDS: string[] = MEDIA_SERVER_OPTIONS.map(
   (option) => option.id,
 );
 
-// Lookup, no cadena de ifs. `none` devuelve null en vez de tirar: es una
-// opción válida del combo, no un error de configuración.
 export function createMediaServerClient(
   id: string,
   config: MediaServerConfig,

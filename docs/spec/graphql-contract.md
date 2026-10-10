@@ -825,7 +825,7 @@ The full vocabulary, by owner:
 | `api` — magnet parsing | `error.magnet.not_a_magnet`, `error.magnet.invalid_infohash`, `error.magnet.v2_unsupported` |
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
 | `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash` |
-| `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.processJob.not_found` |
+| `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.source.superseded` (`087-force-replacement-arbitration`), `error.processJob.not_found` |
 | `api` — ffprobe-logs | `error.ffprobeLog.not_found`, `error.ffprobeLog.empty_payload` |
 | `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
 | `api` — uploads (REST) | `error.upload.ticket_expired`, `error.upload.ticket_wrong_movie`, `error.upload.ticket_wrong_episode`, `error.upload.metadata_incomplete` |
@@ -1030,12 +1030,46 @@ touch. The `…_DOWNLOAD_IN_PROGRESS` keys themselves are deleted, not narrowed:
 `messages.en.ts` and both `services/web/messages/*.json` catalogs, plus the key arrays in
 `importMagnetModal.tsx`/`SearchTorrent.tsx`.
 
+**`087-force-replacement-arbitration` broadens the three `…_ALREADY_COMPLETED` conditions, not
+their names, status or copy.** Each of `attachTorrentSource` (movies/episodes/seasons),
+`startSeasonUpload` and `createUploadTicket`/`handleUploadFinish` (uploads) now refuses without
+`force` when the target's stored status is `COMPLETED` **or** the target holds a *delivered
+source* — a `MediaSource` in `SCANNED` with no `ProcessJob` in `WAITING`/`QUEUED`/`ENCODING` and at
+least one in `COMPLETED` (`isDeliveredSource`, `pipeline-status.ts`, beside `isRaceWinner`). This
+closes the gap where a film replaced through a torrent/magnet, not an upload, never demoted its old
+delivered source and stalled in `DOWNLOADING` forever with no error anywhere — `027`'s REQ-1 for
+films, which the torrent/magnet path never actually implemented. `force` itself still means nothing
+but "the user was shown the replacement warning and accepted it" (REQ-1); the demotion it now
+authorises everywhere runs through the shared `DownloadsService.demoteDeliveredSources`.
+
+**Correction (`088-acquisition-path-unification`):** the paragraph above, and every other mention
+in this file of `attachTorrentSource` (movies/episodes/seasons) as three independent
+implementations, is no longer accurate about the body — only about the names and the error
+conditions, which are unchanged. `088` moved the one shared attach body (resolve `infoHash`, the
+no-op/reactivation branch, the `COMPLETED`/delivered refusal, `add()` before any write, demote on
+`force`, the update-or-create) onto `src/acquisition/attach-source.service.ts`'s
+`AttachSourceService.attach()`, parameterized by a four-member `AttachTarget` descriptor per
+target kind (`resolve`, `refuse`, `labels`, `column`). `MoviesService`/`EpisodesService` still
+expose a thin private `attachTorrentSource` wrapper that builds the descriptor and delegates;
+`SeasonsService` calls `AttachSourceService.attach()` directly from each public method with no
+wrapper at all. The three error conditions, their keys, and every mutation's signature are exactly
+as this file already describes — only "their own copy of the logic" is now false. `088` also added
+two refusals (an `infoHash` already attached to a season, refused on a film or episode target) and
+corrected one (an episode-to-episode collision now names the holder, not the target) — see
+`spec.md`'s § GraphQL Contract Delta for the exact table.
+
 **The race arbiter is one shared method on `DownloadsService`, entered from two places.** A torrent
 announces completion through the existing `torrentCompleted` webhook; a tus upload announces its own
 completion through `UploadsService.onUploadFinish`, which never passes through `DownloadsService`
-otherwise. Both call the same `resolveRace(mediaSourceId)`: if a sibling of the same target already
-reached `READY`/`SCANNED`, the call is a no-op; otherwise every other non-terminal sibling is stopped
-in qBittorrent and moved to `PAUSED`, and the winner is left running to keep seeding. Siblings are
+otherwise. Both call the same `resolveRace(mediaSourceId)`, which since `087` returns
+`{ outcome: 'WON' | 'SUPERSEDED' | 'IGNORED', message }` rather than a message string alone: if a
+sibling of the same target already reached `READY`/`SCANNED` first, the call no longer swallows the
+loser in silence — it writes the loser to `ERROR`/`error.source.superseded` and stops its torrent
+when it has one, then returns `SUPERSEDED` (`IGNORED` covers the other no-op branches, e.g. no
+winner found). Otherwise every other non-terminal sibling is stopped in qBittorrent and moved to
+`PAUSED`, and the winner is left running to keep seeding (`outcome: 'WON'`). `message` stays
+byte-identical to what each branch returned before `087` — it is still `torrentCompleted`'s response
+body. Siblings are
 always selected by `movieId`/`episodeId`/`seasonId`, never by tag — a tag is a title string two
 different shows can share. When the winner's post-encode cleanup runs, `downloadRemove` sweeps the
 losing siblings too: removed from the client with their files, rows deleted outright. This holds
@@ -1546,6 +1580,14 @@ answers (including the unauthorized case, which cannot actually occur with `SERV
 the bootstrap loudly. See `services/worker/CLAUDE.md` and `services/api/CLAUDE.md` for the
 reconciliation this triggers.
 
+Because the mutation carries no arguments and every worker presents the same `SERVICE_TOKEN`, `api`
+cannot tell one caller from another — which is why the one-worker invariant this mutation rests on
+(`054`'s NFR-4) is enforced on the **worker** side, by the Redis lease in
+`services/worker/src/lease/worker-lease.ts`, and not here. An `api` that wanted to validate it
+itself would need the mutation to carry a worker identity and `ProcessJob` to record which worker
+took it; that is a contract change nobody has needed, since Perceptor runs one encode at a time by
+design.
+
 ### The environment panel is read-only (`055-environment-panel`)
 
 ```graphql
@@ -1810,8 +1852,11 @@ type Mutation {
 `addTorrentToSeason` is the season twin of `addTorrentToEpisode`: the same lazy `infoHash`
 resolution (`resolveInfoHash` when the row supplied none), the same conflict/`force`/demotion rules
 and qBittorrent tagging that `addMagnetToSeason` already applies, via the existing private
-`SeasonsService.attachTorrentSource` — unchanged. `Season` gains no field; `web` selects only `id`
-and refreshes the page rather than patching state from the response.
+`SeasonsService.attachTorrentSource` — unchanged (as of `088-acquisition-path-unification`,
+`SeasonsService` calls the shared `AttachSourceService.attach()` directly from each public method,
+with no private `attachTorrentSource` wrapper of its own; `MoviesService`/`EpisodesService` still
+keep theirs). `Season` gains no field; `web` selects only `id` and refreshes the page rather than
+patching state from the response.
 
 `013-season-pack-processing`'s `addMagnetToSeason` gets its first consumer here — `web`'s season
 accordion header now has search, import-file (rendered disabled — a season file import is a
@@ -2087,6 +2132,67 @@ Things the schema cannot express, all load-bearing:
   `COMPLETED` job) no longer lifts the derived status: the stored column decides it, and only live
   work lifts it. `Download.status` per source row is unchanged.
 - **`isShort` and `contentKind` are never re-derived by a refresh.**
+
+### `Show.status` moves off `MISSING`, and a column replaces a projection (`089-status-materialization`)
+
+No schema change — `Show.status` was already `String!` since `007-library-listing`; this feature
+only changes where its value comes from and, for the first time, moves it off `MISSING` in
+practice. Beside the `Episode.status` note from `059` above: a series now reads `COMPLETED` once
+every **aired** episode is `COMPLETED` (an unaired next episode never holds it back), and drops to a
+ladder maximum — never back to `COMPLETED` by an older episode's own completion — the moment a new
+episode airs with nothing acquired for it yet. This is visible on any screen rendering a series'
+`StatusBadge`, with no consumer change owed: the field is still `String!`, still the same
+eight-value vocabulary (`MISSING`/`QUEUED`/`PAUSED`/`DOWNLOADING`/`DOWNLOADED`/`ENCODING`/
+`COMPLETED`/`ERROR`) `Movie`/`Episode` already use.
+
+`Movie.status`/`Episode.status`/`Show.status` are now written once, by `api`'s internal
+`TitleStatusService`, instead of being re-derived from sources/jobs on every read (`043`'s REQ-17
+posture — a finished pipeline run doesn't lift the stored value — is superseded: the column is no
+longer fed a finished-run signal at read time at all, because nothing derives at read time for
+these three fields any more). The two acquisition sweeps (`acquire_movies`/`acquire_episodes`) are
+the one deliberate exception: they still call the pure derivation fresh from live rows rather than
+trust the column, since a momentarily stale `MISSING` would make a sweep double-acquire with no
+error anywhere.
+
+**`mediaServerPresentAt` (new `Movie`/`Episode` column) never crosses the boundary.** It exists
+only so a demotion (`069`'s media-server reconciliation) and the derivation agree on possession
+without reading the status column back into its own derivation — not exposed on any GraphQL type,
+not read by `web` or `worker`.
+
+### A replaced delivered source is retired, not errored (`090-replaced-source-not-an-error`)
+
+```graphql
+type Download {
+  # ...unchanged fields...
+  retiredAt: DateTime   # non-null once this source delivered a file and was then replaced
+}
+```
+
+Things the schema cannot express, all load-bearing:
+
+- **`status`/`lastError`/`retryable` are unaffected.** A retired source keeps reading whatever its
+  status already derives to (`COMPLETED` via the title's possession, `SCANNED` via `pipeline-
+  status/`'s Rule 2) — `retiredAt` is the only new signal, answered alongside the existing fields,
+  never folded into them. There is no ninth `SourceStatus`/`MediaStatus` value.
+  `MediaSource.status` itself never becomes `ERROR` for this case; `demoteDeliveredSources` writes
+  `retiredAt` instead of the `error.source.replaced` key it used to write.
+- **Only a *delivered* source is retired.** A source still mid-encode or never-delivered when it
+  loses a race or is replaced still goes to `ERROR`/`error.source.replaced` exactly as before —
+  `uploads/`'s `demoteSupersededSources` splits its candidates by `isDeliveredSource` and routes
+  only the delivered ones through the shared retirement write.
+- **A retired source is never a race winner and never counts as delivered again.**
+  `isRaceWinner`/`isDeliveredSource` (`pipeline-status/`) both read `retiredAt` and answer `false`
+  for a retired row — closing the case where a retired sibling looked like a live blocking winner
+  to a brand-new replacement's own race resolution.
+- **No live controls.** `downloadStart` on a retired source throws `error.download.retry_replaced`
+  (`409`, reusing the existing key rather than inventing one) before any torrent-client call; `web`
+  withholds both Play and Stop for a retired row (`DownloadRow.tsx`'s `canStart`/`isControllable`).
+  Delete is unaffected — it is still the way to remove what the torrent client holds for a retired
+  row.
+- **Re-adding the same release reactivates it.** Attaching the same `infoHash` to a retired row's
+  target (`060`'s reactivation path) clears `retiredAt` in the same write that flips `status` back
+  to `QUEUED` — the one way back from retirement, and it is atomic with the status flip so the row
+  is never live while still excluded from its own race.
 
 ### What never crosses the boundary
 

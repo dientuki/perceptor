@@ -9,18 +9,7 @@ export type Match = {
   episodeNumber: number | null;
 };
 
-// Two selection rules, kept pure and separate from I/O (see scan-folder.ts's
-// header comment). `single` is today's film/episode rule moved verbatim: the
-// largest video file wins, filenames are never parsed, so a bystander
-// "SxxEyy" in the name of a single-episode download cannot redirect it.
-// `season` parses every video file's base name and keeps the largest file
-// per resolved episode; anything unparseable, or a duplicate loser, is
-// simply absent from the result — the caller logs the gap and `api` derives
-// `hasUnmatchedFiles` from the difference against `files`.
-//
-// The candidate set is narrowed to `isDownloaded` files before either rule
-// runs (REQ-3) — a deselected torrent file reports its full announced size
-// on disk with no real content, and would otherwise win the "largest" race.
+// Spec 052, REQ-3
 export function selectMatches(files: InventoriedFile[], mode: SelectMatchesMode): Match[] {
   const videos = files.filter((file) => file.isVideo && file.isDownloaded);
 

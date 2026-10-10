@@ -8,6 +8,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { MESSAGES_EN } from '@/i18n/messages.en';
 import { QbittorrentClient } from '@/clients/torrent/client';
+import { TitleStatusService } from '@/title-status/title-status.service';
 
 @Injectable()
 export class MediaSourcesService {
@@ -15,14 +16,10 @@ export class MediaSourcesService {
     private readonly prisma: PrismaService,
     private readonly encodeQueue: EncodeQueueService,
     private readonly torrentClient: QbittorrentClient,
+    private readonly titleStatus: TitleStatusService,
   ) {}
 
-  // Resolved on demand (@ResolveField), never eagerly — NFR-1: one torrent-
-  // client call per asking caller, zero for everyone else. `null` means
-  // "nobody knows" (no infoHash, unknown hash, client unreachable), which the
-  // worker reads as "fall back to today's behaviour" (REQ-2/REQ-4/REQ-8) —
-  // never `[]`, which would instead mean "the client answered, nothing was
-  // downloaded" and fail the scan under REQ-7.
+  // Spec 052, NFR-1; Spec 052, REQ-2; Spec 052, REQ-4; Spec 052, REQ-8; Spec 052, REQ-7
   async downloadedFiles(source: { infoHash: string | null }): Promise<string[] | null> {
     if (!source.infoHash) return null;
 
@@ -51,9 +48,10 @@ export class MediaSourcesService {
     return this.findOneFlat(id);
   }
 
+  // Spec 089, REQ-1 REQ-5
   private async markScanFailed(
     tx: Prisma.TransactionClient,
-    mediaSource: { id: number; episodeId: number | null; movie?: { id: number } | null },
+    mediaSource: { id: number },
     errorKey: string,
     errorParams: string | null,
     errorMessage: string,
@@ -63,14 +61,6 @@ export class MediaSourcesService {
       where: { id: mediaSource.id },
       data: { status: 'ERROR', errorMessage, errorKey, errorParams, hasUnmatchedFiles },
     });
-
-    if (mediaSource.movie) {
-      await tx.movie.update({ where: { id: mediaSource.movie.id }, data: { status: 'ERROR' } });
-    }
-
-    if (mediaSource.episodeId) {
-      await tx.episode.update({ where: { id: mediaSource.episodeId }, data: { status: 'ERROR' } });
-    }
   }
 
   async sourceScanFailed(
@@ -79,6 +69,8 @@ export class MediaSourcesService {
     errorParams: string | null,
     errorMessage: string,
   ): Promise<boolean> {
+    let recomputeTarget: { movieId: number | null; episodeId: number | null } | null = null;
+
     await this.prisma.$transaction(async (tx) => {
       const mediaSource = await tx.mediaSource.findUnique({
         where: { id: mediaSourceId },
@@ -89,16 +81,23 @@ export class MediaSourcesService {
         return;
       }
       await this.markScanFailed(tx, mediaSource, errorKey, errorParams, errorMessage);
+      recomputeTarget = { movieId: mediaSource.movie?.id ?? null, episodeId: mediaSource.episodeId };
     });
+
+    // Spec 089, REQ-1 REQ-2
+    if (recomputeTarget) {
+      const target: { movieId: number | null; episodeId: number | null } = recomputeTarget;
+      if (target.movieId) await this.titleStatus.recomputeMovie(target.movieId);
+      if (target.episodeId) await this.titleStatus.recomputeEpisode(target.episodeId);
+    }
+
     return true;
   }
 
   async sourceScanned(mediaSourceId: number, files: SourceFileInput[], matches: ScannedMatchInput[]) {
-    // Ids de ProcessJob a encolar en bull:encode. Se juntan durante la
-    // transacción pero se encolan después de commitear (ver más abajo): si se
-    // encolara adentro, el worker podría tomar el job antes de que la fila
-    // exista para él.
     const processJobIdsToQueue: number[] = [];
+    let scanFailedTarget: { movieId: number | null; episodeId: number | null } | null = null;
+    const episodeIdsToRecompute = new Set<number>();
 
     await this.prisma.$transaction(async (tx) => {
       const mediaSource = await tx.mediaSource.findUnique({
@@ -114,9 +113,7 @@ export class MediaSourcesService {
 
       const movieId = mediaSource.movie?.id ?? null;
 
-      // Sin early-return: un mediaSource ya SCANNED se re-escanea igual y
-      // converge (upsert), en vez de hacer un no-op silencioso de un re-scan
-      // legítimo.
+      // Spec 013, NFR-7
       if (mediaSource.status === 'SCANNED') {
         console.log(`[sourceScanned] mediaSource ${mediaSourceId} ya estaba SCANNED, re-escaneando`);
       }
@@ -125,10 +122,6 @@ export class MediaSourcesService {
         throw i18nError.badRequest(ERROR_KEYS.SOURCE_NO_TARGET, { id: mediaSourceId });
       }
 
-      // El .find() valida que cada match.filePath sea uno de los archivos que el
-      // worker reportó haber escaneado, aunque de la fila en sí ya no se
-      // persista nada más que filePath (fileName/size vivían sólo para
-      // mostrarse, y nunca se leyeron de vuelta — ver plan).
       for (const match of matches) {
         const inFiles = files.some((file) => file.filePath === match.filePath);
         if (!inFiles) {
@@ -136,9 +129,7 @@ export class MediaSourcesService {
         }
       }
 
-      // Un episodio o una película ignoran los números parseados por el
-      // worker: la búsqueda de S01E02 en el nombre del archivo sólo importa
-      // cuando el mediaSource apunta a una temporada entera.
+      // Spec 013, REQ-4
       const episodeIdByNumber = new Map<number, number>();
       if (mediaSource.season) {
         for (const episode of mediaSource.season.episodes) {
@@ -159,9 +150,7 @@ export class MediaSourcesService {
           continue;
         }
 
-        // Sólo queda el caso temporada: un match cuyo seasonNumber parseado no
-        // coincide con el de la temporada pedida, o cuyo episodeNumber no
-        // existe en ella, queda sin resolver — no se adivina.
+        // Spec 013, REQ-7
         if (mediaSource.season) {
           if (match.seasonNumber != null && match.seasonNumber !== mediaSource.season.seasonNumber) {
             console.log(
@@ -183,38 +172,27 @@ export class MediaSourcesService {
         }
       }
 
-      // hasUnmatchedFiles: sólo cuenta lo que el worker marcó como video, que
-      // efectivamente se descargó (052-deselected-torrent-files, REQ-6) y que
-      // no terminó resuelto — un .nfo/.srt nunca lo activa (ver dto isVideo),
-      // y un .mkv deseleccionado en el cliente de torrents tampoco.
+      // Spec 052, REQ-6
       const resolvedPaths = new Set(resolvedMatches.map((m) => m.filePath));
       const hasUnmatchedFiles = files.some(
         (file) => file.isVideo && file.isDownloaded && !resolvedPaths.has(file.filePath),
       );
 
       if (resolvedMatches.length === 0) {
-        // Empty folder, no video, or (for a season) no video could be resolved
-        // to an episode: the only error branch this service handles. No
-        // SourceFile or ProcessJob is created. If video was reported but none
-        // of it was downloaded (REQ-7), the message must say that instead of
-        // the generic "no video found" — otherwise the downstream ffprobe
-        // failure surfaces with a message that names the wrong cause.
+        // Spec 052, REQ-7
         const errorKey = files.some((file) => file.isVideo && !file.isDownloaded)
           ? ERROR_KEYS.SOURCE_SCAN_NO_DOWNLOADED_VIDEO
           : ERROR_KEYS.SOURCE_SCAN_NO_VIDEO;
         const errorMessage = MESSAGES_EN[errorKey];
 
         await this.markScanFailed(tx, mediaSource, errorKey, null, errorMessage, hasUnmatchedFiles);
+        scanFailedTarget = { movieId, episodeId: mediaSource.episodeId };
 
         return;
       }
 
       for (const resolved of resolvedMatches) {
-        // SourceFile no es un inventario de la carpeta: es "qué archivo
-        // pertenece a esta película/episodio". Un torrent puede traer el .mkv
-        // junto con varios .nfo, samples o .parts — sólo los ganadores (uno
-        // por episodio, o el video más grande para una película/episodio
-        // suelto, ya elegidos por el worker) se persisten.
+        // Spec 013, REQ-5
         const sourceFile = await tx.sourceFile.upsert({
           where: { mediaSourceId_filePath: { mediaSourceId, filePath: resolved.filePath } },
           create: {
@@ -227,9 +205,7 @@ export class MediaSourcesService {
         });
         const sourceFileId = sourceFile.id;
 
-        // Find-or-create: si ya existe un ProcessJob para este SourceFile no se
-        // toca ni se resetea — un re-scan no puede tirar para atrás un job que
-        // ya está ENCODING.
+        // Spec 013, NFR-7
         const existing = await tx.processJob.findUnique({
           where: { sourceFileId },
         });
@@ -237,10 +213,7 @@ export class MediaSourcesService {
         let jobCreatedOrRequeued = false;
 
         if (existing) {
-          // WAITING acá significa que la fila se creó en un re-scan anterior
-          // pero nunca se llegó a encolar (por ejemplo, si el add() de abajo
-          // falló esa vez) — este re-scan es la palanca para recuperarlo. Si
-          // ya está QUEUED/ENCODING/COMPLETED/ERROR no se toca.
+          // Spec 013, NFR-7
           if (existing.status === 'WAITING') {
             processJobIdsToQueue.push(existing.id);
             jobCreatedOrRequeued = true;
@@ -262,21 +235,13 @@ export class MediaSourcesService {
           jobCreatedOrRequeued = true;
         }
 
-        // Cada episodio sigue su propio job: para un episodio suelto esto
-        // repite lo que DownloadsService ya hizo (inofensivo); para una
-        // temporada es el único lugar donde pasa.
+        // Spec 013, REQ-6; Spec 089, REQ-2
         if (jobCreatedOrRequeued && resolved.episodeId) {
-          await tx.episode.update({
-            where: { id: resolved.episodeId },
-            data: { status: 'ENCODING' },
-          });
+          episodeIdsToRecompute.add(resolved.episodeId);
         }
       }
 
-      // SCANNED = "el/los archivo(s) del release quedaron identificados en
-      // source_files". errorMessage se limpia para que un re-scan exitoso
-      // borre el diagnóstico del intento anterior. Movie.status no se toca:
-      // downloads.service ya lo puso en ENCODING y sigue siendo verdad.
+      // Spec 013, NFR-7
       await tx.mediaSource.update({
         where: { id: mediaSourceId },
         data: {
@@ -289,11 +254,16 @@ export class MediaSourcesService {
       });
     });
 
-    // Fuera de la transacción, ya commiteada: encolar antes dejaría al worker
-    // tomar el job y consultar por GraphQL una fila que todavía no existe.
-    // Recién tras el add() exitoso se pasa a QUEUED — si el add() falla, la
-    // fila queda en WAITING, que es la verdad (y el próximo re-scan la
-    // recupera, ver arriba).
+    // Spec 089, REQ-1 REQ-2
+    if (scanFailedTarget) {
+      const target: { movieId: number | null; episodeId: number | null } = scanFailedTarget;
+      if (target.movieId) await this.titleStatus.recomputeMovie(target.movieId);
+      if (target.episodeId) await this.titleStatus.recomputeEpisode(target.episodeId);
+    }
+    for (const episodeId of episodeIdsToRecompute) {
+      await this.titleStatus.recomputeEpisode(episodeId);
+    }
+
     for (const processJobId of processJobIdsToQueue) {
       await this.encodeQueue.addEncode({ processJobId });
     }

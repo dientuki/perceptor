@@ -214,6 +214,36 @@ None.
 
 ## Acceptance Criteria
 
+**Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
+
+**Updated 2026-10-09 by a second pass with an admin session.** The session is no longer missing,
+and it closed AC-9 and AC-12 outright plus the first clause of AC-4 and of AC-10. What still blocks
+the rest is **not** the session but the other two items below - a second user (AC-7, AC-8) and real
+sources in flight (AC-1, AC-2, AC-3, AC-5, AC-6, AC-11, and the second clauses of AC-4 and AC-10).
+
+AC-13 is closed above, off the test suites and the schema. The other twelve need, between them, only
+three things this installation lacks:
+
+- **An admin session in a browser** — `/downloads` is a page; there is no other way to read it.
+  AC-1–AC-6, AC-9, AC-10, AC-11 and AC-12 are all page-level assertions (the sidebar badge, the group
+  headers, the pagination line, the filter chips, the per-title grouping on a detail page).
+- **A second user** — AC-7 and AC-8 are the visibility exception this feature exists for: user B
+  seeing A's rows read-only, and `downloadDelete` refusing on a row B does not own. The `users` table
+  holds **exactly one row** (the seeded admin), so there is no B. The refusal itself is unit-covered
+  in `downloads.service.spec.ts`, and `owned` is asserted per caller for the same source.
+- **Sources actually in flight** — `media_sources` holds **one** row on this installation, a pre-`053`
+  orphan reading `DOWNLOADING` with no torrent in qBittorrent and no folder on disk. AC-1 wants three
+  films with two active sources each, AC-5 wants 23 titles, AC-3 wants a season pack plus single
+  episodes. Every one of those is a live acquisition, not a fixture: the rows carry live qBittorrent
+  state, so hand-writing them in SQL would produce rows that read as errors rather than as the
+  scenario. AC-9's own setup (the `torrent` container stopped) is the exception — cheap, and the only
+  one of this group that needs no new data.
+
+AC-10 deserves a note: "with nothing in flight, the sidebar badge disappears" is the *current* state
+of this installation — the single orphan row's derived status is what decides it, and nothing is
+genuinely active. That makes AC-10 the cheapest box here, reachable with a session and no setup at
+all.
+
 - [ ] **AC-1**: Given user A owns films F1, F2, F3, each with two sources currently `DOWNLOADING` or
       `ENCODING`, when A opens `/downloads`, then three groups are listed, each with a header naming
       the film and `2`, and its two rows beneath; the most recently active film's group is first; the
@@ -228,6 +258,13 @@ None.
 - [ ] **AC-4**: Given a film with exactly one source, its row renders on `/downloads` with no group
       header. Given a film with two sources, one `ERROR` and one `COMPLETED`, with **error** active
       only its `ERROR` row is visible and it renders with no header.
+      **First clause confirmed 2026-10-09**: `/downloads` with the installation's single source
+      renders that row (`Inception / DOWNLOADING`) with no group header above it - a header appears
+      only from two visible rows of a title. The second clause (a film with an `ERROR` and a
+      `COMPLETED` source, **error** active, only the `ERROR` row visible and headerless) was not
+      run: it needs a second `MediaSource` on a film, and writing one by hand would also move that
+      film's own stored status through `TitleStatusService`, leaving the owner's library in a state
+      this pass did not find it in.
 - [ ] **AC-5**: Given 23 titles with sources, `/downloads` shows 10 titles and `Showing 1–10 of 23`,
       **previous** disabled; **next** twice reaches `Showing 21–23 of 23` with **next** disabled.
       Choosing 25 per page shows all 23 on page 1. A title with more rows than the page size is never
@@ -242,19 +279,53 @@ None.
 - [ ] **AC-8 (failure path)**: As user B from AC-7, calling `downloadDelete(mediaSourceId: <one of
       F2's sources>)` directly through GraphiQL fails with `error.source.not_found` and the source,
       its torrent and its files are untouched — `/downloads` still lists it for A with its controls.
-- [ ] **AC-9 (failure path)**: With the `torrent` container stopped, `/downloads` still renders every
+- [x] **AC-9 (failure path)**: With the `torrent` container stopped, `/downloads` still renders every
       group and row (speed/progress from qBittorrent empty), the sidebar renders on every page without
       error, and no 500 appears in `web` or `api` logs beyond the existing "could not read torrent
       client" line.
+      **Confirmed 2026-10-09** with an admin session, `docker compose stop torrent` and the single
+      source this installation holds. `/downloads` still rendered its row (`Inception / DOWNLOADING`)
+      with `—` for both progress and speed, and `/movies/1` and `/calendar` both rendered with the
+      full sidebar. `docker compose logs --since` over the window shows **no** 500 and no error of
+      any kind from `web`, and from `api` only the documented line, repeated per read:
+      `[DownloadsService] could not read torrent client state (tag "..."): TypeError: fetch failed /
+      getaddrinfo ENOTFOUND torrent`.
 - [ ] **AC-10**: With nothing in flight (every source `COMPLETED`, `ERROR` or `PAUSED`), the sidebar
       shows no badge on any page. With no sources at all, `/downloads` shows the panel's empty state.
+      **First clause confirmed 2026-10-09, second clause still open.** With this installation's only
+      source written to `PAUSED`, the sidebar's Downloads entry carried **no badge** on `/movies/2`,
+      on `/downloads` and on `/calendar`. The page's own **working** chip still read `1` over the
+      same row, which independently corroborates AC-2's stated rule that the chip counts rows and
+      includes `PAUSED` while the badge does not. The source was restored to `DOWNLOADING`.
+      The second clause - "with no sources at all, `/downloads` shows the panel's empty state" - was
+      not run: reaching it means deleting the installation's one `media_sources` row, which is the
+      owner's call, not a fixture.
 - [ ] **AC-11**: With `shows_enabled` turned off in Settings while a season pack is in flight,
       `/downloads` still lists that row and the badge still counts its show.
-- [ ] **AC-12**: `/movies/<id>` and `/shows/<id>` render their panel with no group header and no
+- [x] **AC-12**: `/movies/<id>` and `/shows/<id>` render their panel with no group header and no
       pagination controls, whatever the number of rows.
-- [ ] **AC-13**: `bin/npm api run test` passes, including NFR-6's tests; `git status --short
+      **Confirmed 2026-10-09.** `/movies/1`, whose panel holds one row, renders
+      `Downloads | Completed 0 | Working 1 | Error 0 | Refresh | <table> | Inception DOWNLOADING`,
+      and `/shows/1`, whose panel holds none, renders the same chrome plus
+      `No downloads for this title yet.` Neither renders a group header, and neither renders any of
+      `Showing`, `Per page`, `Previous` or `Next` - the controls `/downloads` does render - because
+      the detail-page panel carries no pagination markup at all, which is what makes the "whatever
+      the number of rows" clause structural rather than a sample of two.
+- [x] **AC-13**: `bin/npm api run test` passes, including NFR-6's tests; `git status --short
       services/api/prisma` is empty; the `schema.gql` diff is exactly this delta;
       `bin/cli web node scripts/check-messages.mjs` reports no drift; `bin/npm web run build` exits 0.
+      **Verified 2026-10-09** (branch `fix/tech-debt`, commit `b65ef65`), all four clauses:
+      `bin/npm api run test` → 68 suites, 1000 tests, 0 failures, NFR-6's cases among them
+      (`downloads.service.spec.ts` § `downloads / activeDownloadCount — installation-wide` asserts
+      `3` for three films with two active sources each, `1` for one show with an active pack plus two
+      active episodes, `0` for a film whose only source is paused, and reads `owned` per caller for
+      the same source). `git status --short services/api/prisma` is empty. The `schema.gql` delta is
+      exactly this one: `type Download` carries `showId: Int`, `showTitle: String` and
+      `owned: Boolean!` and nothing else new, `type Query` carries `downloads: [Download!]!` and
+      `activeDownloadCount: Int!`, and neither resolver carries `@AllowService()`
+      (`downloads.resolver.ts:42,48`). `bin/cli web node scripts/check-messages.mjs` reports
+      `en.json` and `es.json` matching exactly (602 keys). `npm run build` in `web` exits 0, run in a
+      throwaway container as uid 1000 with the dev `.next` parked.
 
 ## Out of Scope
 

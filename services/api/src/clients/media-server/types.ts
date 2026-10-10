@@ -16,10 +16,7 @@ export type MediaServerEpisodeRef = {
   episodeNumber: number;
 };
 
-// The one-method port a client reaches for its own TMDB-id lookups when it
-// cannot resolve one natively against the server itself (034). A client that
-// *can* resolve natively (e.g. Emby's AnyProviderIdEquals) ignores this and
-// never populates the shared index — see registry.ts / REQ-8.
+// Spec 034, REQ-8
 export type MediaServerIndexPort = {
   lookup: (mediaType: MediaType, tmdbId: number) => Promise<string | null>;
 };
@@ -39,16 +36,10 @@ export type MediaServerClient = {
   listPresentEpisodes: (
     externalSeriesId: string,
   ) => Promise<MediaServerEpisodeRef[]>;
-  // Enumerate the whole library for the shared index to consume. Optional on
-  // purpose (REQ-8): a client that resolves findByTmdbId natively never
-  // implements this, and a rebuild is a no-op for it.
+  // Spec 034, REQ-8
   listLibrary?: () => Promise<MediaServerLibraryEntry[]>;
 };
 
-// Lo que necesita cualquier implementación. Sale de SettingsService.getMap(),
-// pero el cliente no lo sabe: recibe un objeto plano y es testeable sin Nest.
-// Jellyfin y Plex se configuran igual (host + puerto + token); el día que un
-// media server necesite otra cosa, este tipo es lo único que cambia.
 export type MediaServerConfig = {
   host: string;
   port: string;
@@ -60,7 +51,6 @@ export type MediaServerFactory = (
   index: MediaServerIndexPort,
 ) => MediaServerClient;
 
-// 'none' no es un cliente: es la ausencia de uno. Vive fuera del registro.
 export const MEDIA_SERVER_NONE = 'none';
 
 export type LibraryLayout = 'jellyfin' | 'plex';

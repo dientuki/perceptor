@@ -10,10 +10,7 @@ interface GeneralPanelProps {
   uiLocale: string;
 }
 
-// The installation's default UI language (REQ-2, General tab). Options are
-// SUPPORTED_LOCALES — the one list every locale consumer reads — never a
-// hardcoded pair. Names are rendered through Intl.DisplayNames for the
-// active locale, the same display-authority pattern LanguagePicker uses.
+// Spec 029, REQ-2
 export default function GeneralPanel({ uiLocale }: GeneralPanelProps) {
   const t = useTranslations("settings.general");
   const activeLocale = useLocale();

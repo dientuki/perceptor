@@ -88,12 +88,7 @@ describe('MediaResolver capability enforcement', () => {
     expect(register).toHaveBeenCalledWith(1399, 'u1');
   });
 
-  // The ordering guarantee itself: a bogus type must still fail as
-  // "unsupported", not as "disabled" — even though the resolver calls
-  // `assertEnabled` first, `MediaCapabilitiesService.assertEnabled` (T002)
-  // returns silently for a type it doesn't recognise, so the real
-  // `MediaDispatchService.resolve()` behaviour is exercised end to end here
-  // rather than stubbed away.
+  // Spec 045, T002
   it('still surfaces MEDIA_UNSUPPORTED_TYPE for an unsupported type, not MEDIA_TYPE_DISABLED', async () => {
     const realDispatch = new MediaDispatchService(
       {} as never,

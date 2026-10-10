@@ -39,9 +39,7 @@ export type AcquisitionTarget =
       episode: Episode;
       showTitle: string;
       seasonNumber: number;
-      // The parent series' language preference (`039-per-title-language-split`) —
-      // an episode has none of its own, so the ranking heuristic (`036`, REQ-25)
-      // reads the series' flag through this branch instead.
+      // Spec 036, REQ-25
       audioMandatory: boolean;
       audioLanguages: Language[];
     }
@@ -49,19 +47,12 @@ export type AcquisitionTarget =
       kind: "season";
       season: Season;
       showTitle: string;
-      // Same parent-series fallback as the episode branch above — a season has
-      // no audio preference of its own either (059-season-pack-acquisition-ui).
+      // Spec 036, REQ-25
       audioMandatory: boolean;
       audioLanguages: Language[];
     };
 
-// Every acquisition target can reach a file upload since 068 (season
-// multi-file upload), which supersedes 059's REQ-2 exclusion of the season
-// branch. The single-file path (`createUploadTicketAction`,
-// `importFileModal.tsx`) still cannot take a season: it narrows to
-// `SingleFileAcquisitionTarget` at its own boundary so a season can never
-// reach `movieId: undefined, episodeId: undefined` — enforced by the type
-// checker, not by a runtime guard.
+// Spec 068, REQ-1; Spec 059, REQ-2
 export type FileAcquisitionTarget = AcquisitionTarget;
 
 export type SingleFileAcquisitionTarget = Exclude<

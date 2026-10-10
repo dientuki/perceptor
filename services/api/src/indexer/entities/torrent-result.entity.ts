@@ -40,7 +40,6 @@ export class TorrentResult {
   @Field(() => String, { nullable: true })
   title: string | null;
 
-  // Float y no Int: los releases pasan el techo de Int con facilidad (73GB medidos)
   @Field(() => Float, { nullable: true })
   size: number | null;
 
