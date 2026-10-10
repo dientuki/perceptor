@@ -1,4 +1,4 @@
-FROM lscr.io/linuxserver/qbittorrent:5.2.3
+FROM lscr.io/linuxserver/qbittorrent:5.2.4
 
 # Bypass de auth para la red interna de Docker y un save path que sí tiene volumen atrás.
 # Se inyectan en el default de la imagen: init-qbittorrent-config lo copia a /config
