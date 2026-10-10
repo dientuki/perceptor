@@ -221,9 +221,23 @@ scoping it enforces is `064`'s documented exception set. What is unverified is o
       A full `bin/npm web run build` still fails on those 12: `next.config.ts` sets no
       `typescript.ignoreBuildErrors`, so the build typechecks every included file, and clearing
       those five files is out of scope here.
-- [ ] **AC-11**: In the browser, `/shows` with a library of three series renders three cards with
+- [x] **AC-11**: In the browser, `/shows` with a library of three series renders three cards with
       poster, title and year, and `/movies` renders exactly as it did before this feature.
+      **Confirmed 2026-10-09** with an admin session at `http://localhost:3000`. A third series
+      (Severance, 2022) was registered from the catalog search to reach three, and `/shows` then
+      rendered three cards, each carrying a poster image, the title, the overview and the year -
+      Severance 2022, High Potential 2024, Reacher 2022. `/movies` still renders its three film
+      cards (`/movies/3`, `/movies/2`, `/movies/1`), each with its poster. The second clause is
+      asserted as "renders its own cards correctly": there is no pre-feature build to diff a
+      rendering against, and the structural half of that claim is what AC-13 already proves.
 - [ ] **AC-12**: In the browser, `/shows` with an empty library renders "No hay series registradas".
+      **Still open 2026-10-09, and now the only thing blocking it is the library, not the session.**
+      With an admin session available, the two ways to reach an empty `/shows` are to remove both
+      series (destructive - each carries 32 episodes, and `067`'s Remove deletes the title) or to
+      sign in as a second user, since `/shows` is per-user scoped and a new user's library is empty
+      by construction. The second is non-destructive and also unblocks `064` AC-7/AC-8 and `071`
+      AC-2, so it is worth doing once rather than three times - but creating that user needs the
+      owner's go-ahead.
 - [x] **AC-13**: `git diff services/api/src/schema.gql` contains only the `Show` type and the `shows`
       query — no change to `Movie` or `movies` (NFR-3).
 

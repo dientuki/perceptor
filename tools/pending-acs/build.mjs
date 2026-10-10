@@ -17,7 +17,10 @@ const OBS_PLACEHOLDER = "**[OBS PENDIENTE DE ESCRIBIR]**";
 
 const AC_LINE = /^- \[([ x])\] \*\*([^*]+?)\*\*/gm;
 const SECTION = /^## Acceptance Criteria\s*$([\s\S]*?)(?=^## )/m;
-const STATUS = /^status:\s*(.+)$/m;
+// Some spec headers keep the template's legend on the same line
+// ("status: Implemented         # Draft | Approved | ..."). Stop at the comment:
+// those pipes would otherwise land in the table and shift every column after it.
+const STATUS = /^status:\s*([^#\n]+)/m;
 
 function marker(name) {
   return {

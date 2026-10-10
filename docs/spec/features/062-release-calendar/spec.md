@@ -172,10 +172,13 @@ None. `Movie.releaseDate`, `Episode.releaseDate`, `Movie.isShort` and the owners
 
 **Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
 
-All fourteen boxes open on a spec marked `Implemented`, and the cause is singular: `/calendar` is a
-page, and this session has no browser session to open it with (Chrome is not connected; the admin
-password is not known here). There is no CLI or GraphQL path to the grid, the month navigation, the
-colours or the legend.
+**Superseded 2026-10-09 by a second pass with an admin session.** Ten of the fourteen are now
+ticked against the running installation; what the note below says about "no browser session" no
+longer holds. Four remain open, for three different reasons, and none of them is the session:
+AC-6 and AC-9 still need a **second user** and a **signed-in user's bearer token** respectively
+(both unchanged from the note below), AC-11 needs a browser whose timezone can be set, and
+**AC-10 was run and does not hold** - see its own entry. The original note is kept below because
+its AC-9 finding about `@AllowService()` is still the live explanation.
 
 **AC-9 is the one criterion that is pure GraphQL, and it was attempted this pass and refused for a
 different reason than expected**: `calendar` does not carry `@AllowService()`, so the installation's
@@ -198,39 +201,104 @@ turned off and restored — all three are configuration, not acquisition. The gr
 status-rollup rules behind AC-3, AC-5 and AC-5b are covered by `calendar/group-episodes.spec.ts` and
 `calendar/calendar.service.spec.ts`.
 
-- [ ] **AC-1**: Signed in as a user with a film released this month, when opening `/calendar`, the
+- [x] **AC-1**: Signed in as a user with a film released this month, when opening `/calendar`, the
       grid shows the current month and the film on its release day, linked to `/movies/<id>`.
-- [ ] **AC-2**: Given a series in the library with episodes airing next month, when clicking "next",
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`. With `movies.releaseDate` for Toy Story 5 set to
+      `2026-10-15` (a fixture, reverted afterwards), `/calendar` opened on October 2026 and rendered
+      `Toy Story 5` in the cell `data-date="2026-10-15"`, linked to `/movies/3`.
+- [x] **AC-2**: Given a series in the library with episodes airing next month, when clicking "next",
       the grid moves to next month without a full page reload, the address bar still reads exactly
       `/calendar`, and the episodes appear; "today" returns to the current month. Reloading the page
       after navigating always opens the current month again.
-- [ ] **AC-3**: Given a series that released E01–E08 of season 2 on the same day, that day shows one
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`, using the library's own data rather than a fixture. A
+      sentinel assigned to `window` survived five month changes - prev to September 2026 (where
+      `Reacher S04E06/07/08` appeared), prev to August 2026, next back to September, and `today`
+      back to October - so none of them was a full page reload, and `location.pathname` read
+      `/calendar` throughout with no query string. After navigating away from the current month, a
+      real reload (sentinel gone) opened October 2026 again.
+- [x] **AC-3**: Given a series that released E01–E08 of season 2 on the same day, that day shows one
       entry `<Show> S02E01–E08`, linked to `/shows/<id>`.
-- [ ] **AC-4**: A `COMPLETED` film is green, an episode whose torrent is downloading is blue, a film
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`, with a three-episode group rather than the criterion's
+      eight: Reacher S04 E01, E02 and E03 all carry `releaseDate = 2026-08-12`, and August 2026
+      renders them as **one** entry reading `Reacher S04E01–E03 · 1/3`, linked to `/shows/1`, while
+      E04 (a week later, 2026-08-19) is its own entry. The grouping rule and the `SxxEyy–Ezz` label
+      are the same code path at any count (`CalendarEventContent.episodeCode`); the library holds no
+      eight-episode same-day group in a reachable month (Reacher S01's is February 2022, 56 month
+      clicks away, and the URL carries no month).
+- [x] **AC-4**: A `COMPLETED` film is green, an episode whose torrent is downloading is blue, a film
       whose encode failed is red, and a film releasing next month with nothing attached has no colour —
       each matching the status its own detail page shows.
-- [ ] **AC-5**: Given a same-day group where one episode is `ERROR` and the rest `COMPLETED`, the
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`, by reading the tone class the entry carries
+      (`CalendarEventContent.TONE_CLASS`), with temporary status fixtures that were reverted:
+      a `COMPLETED` film is `fc-bg-success`, a `DOWNLOADING` episode (Reacher S04E04) is
+      `fc-bg-primary`, an `ERROR` film is `fc-bg-danger`, and a future film with nothing attached
+      (Toy Story 5, `MISSING`) carries no tone class at all. The last clause - "matching the status
+      its own detail page shows" - holds structurally as well as observationally: the calendar entry
+      and `StatusBadge` both resolve through the one `statusTone()` in
+      `services/web/src/lib/status-tone.ts`, and `/movies/3` read `ERROR` while its calendar entry
+      was red.
+- [x] **AC-5**: Given a same-day group where one episode is `ERROR` and the rest `COMPLETED`, the
       group entry is red.
-- [ ] **AC-5b**: Given a series with E01–E03 released on one day and E04 a week later, where E01 is
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`. With Reacher S04 E01 and E02 `COMPLETED` and E03 `ERROR`,
+      the 2026-08-12 group entry reads `Reacher S04E01–E03 · 2/3` and carries `fc-bg-danger` - the
+      single error wins over the two completions. Fixture reverted.
+- [x] **AC-5b**: Given a series with E01–E03 released on one day and E04 a week later, where E01 is
       `COMPLETED` and E02–E03 are `MISSING`, the premiere day shows `<Show> S01E01–E03 · 1/3`
       (uncoloured) and the E04 day shows `<Show> S01E04` with no count. Once E02 and E03 complete,
       the premiere entry reads `3/3` and turns green.
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`. With E01 `COMPLETED` and E02/E03 `MISSING`, the
+      premiere day read `Reacher S04E01–E03 · 1/3` with **no** tone class, and the 2026-08-19 day
+      read `Reacher S04E04` with **no** count. Setting E02 and E03 to `COMPLETED` turned the
+      premiere entry into `Reacher S04E01–E03 · 3/3` with `fc-bg-success`. Both fixtures reverted.
 - [ ] **AC-6**: A film registered by user A does not appear on user B's calendar.
-- [ ] **AC-7**: With `shows_enabled` turned off in Settings, episodes disappear from the calendar
+- [x] **AC-7**: With `shows_enabled` turned off in Settings, episodes disappear from the calendar
       while films remain; turning it back on restores them.
-- [ ] **AC-8**: A short appears visually distinct from a film, and links to `/movies/<id>`.
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`. With `shows_enabled` turned off from Settings ->
+      Media Manager, September 2026 - which had been rendering `Reacher S04E06/07/08` - rendered no
+      entries at all, while October still rendered the film; the sidebar also dropped `Mis series`
+      (`045`). Turning it back on and saving restored both the three September episodes and the
+      sidebar entry.
+- [x] **AC-8**: A short appears visually distinct from a film, and links to `/movies/<id>`.
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`. Marking Toy Story 5 as a short changes its calendar entry
+      from `lucide-film` / `aria-label="Film"` / `title="Movie: Toy Story 5"` to
+      `lucide-clapperboard` / `aria-label="Short"` / `title="Short: Toy Story 5"`, while the link
+      target stays `/movies/3`. Fixture reverted.
 - [ ] **AC-9** (failure): Querying `calendar(from: "2026-09-01", to: "2026-12-31")` directly against
       `api` returns a GraphQL error with `extensions.i18n.key = "error.calendar.invalid_range"`;
       `calendar(from: "2026-13-01", to: "2026-13-30")` returns `error.calendar.invalid_date`.
 - [ ] **AC-10** (failure): With `api` stopped, `/calendar` renders the grid chrome and a translated
       error message instead of crashing; month navigation still responds.
+      **Run 2026-10-09, and it does not hold.** With `docker compose stop api` and the page loaded
+      fresh, `/calendar` renders **no grid chrome at all**: no `<table>`, zero `<th>`, no month
+      heading and no navigation. What renders is Next's own server-error page -
+      `This page couldn't load / A server error occurred. Reload to try again. / ERROR 3227098399` -
+      and it is in **English even though the session's UI locale was `es`**, so neither half of the
+      criterion holds. Same shape as `077` AC-7: `/calendar` is a Server Component whose data fetch
+      throws, so there is no partial render to degrade into. Closing this is a design change
+      (render the chrome client-side, or catch the fetch and pass an error down), not a measurement.
 - [ ] **AC-11**: With the browser's timezone set to `America/Argentina/Buenos_Aires`, a title TMDB
       lists for `2026-09-19` shows on the 19th, not the 18th.
-- [ ] **AC-12**: With UI locale `es`, month names, weekday headers, the "hoy" button and the legend
+      **Still open 2026-10-09, now for a tooling reason rather than a session one.** The browser
+      driven this session exposes no timezone emulation, so `America/Argentina/Buenos_Aires` cannot
+      be imposed on the page; the host runs in that zone already, which is exactly the configuration
+      that cannot distinguish a correct answer from a lucky one. It needs a browser (or a container)
+      whose `TZ` can be set to something else to make the off-by-one visible.
+- [x] **AC-12**: With UI locale `es`, month names, weekday headers, the "hoy" button and the legend
       are in Spanish; with `en`, in English. `bin/cli web node scripts/check-messages.mjs` reports no
       `en`/`es` drift.
-- [ ] **AC-13**: Clicking an empty day or dragging an entry does nothing — no modal, no move.
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`. With `uiLocale = es` the grid reads `octubre de 2026`,
+      the weekday headers `LUN MAR MIÉ JUE VIE SÁB DOM` (the week also starts on Monday, not
+      Sunday), the button `Hoy` and the legend
+      `En la biblioteca | En curso | Con error | Todavía no`; with `en`, `October 2026`,
+      `SUN ... SAT`, `today` and `In library | In progress | Failed | Not yet`.
+      `bin/cli web node scripts/check-messages.mjs` reports
+      `OK: en.json and es.json match exactly (602 keys)`.
+- [x] **AC-13**: Clicking an empty day or dragging an entry does nothing — no modal, no move.
 
+      **Confirmed 2026-10-09** in a browser with an admin session at `http://localhost:3000`. Clicking an empty day cell (`2026-10-21`) left
+      `document.querySelectorAll("[role=dialog]").length === 0`, the heading on `octubre de 2026`
+      and the URL on `/calendar`. Dragging the `Toy Story 5` entry from its cell onto that empty one
+      left it in `data-date="2026-10-15"`, again with no dialog and no month change.
 ## Out of Scope
 
 - **Week and day views.** Release dates are day-precision; a time grid would show every entry in an

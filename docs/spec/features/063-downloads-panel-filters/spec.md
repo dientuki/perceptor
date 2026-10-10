@@ -192,9 +192,17 @@ blocked the same way — see that spec's own note.
 - [ ] **AC-8 (failure path)**: With the UI in English, pasting into season 2's magnet modal a magnet
       already attached to season 3 of the same show fails with
       `That magnet is already attached to «Reacher Season 3»`; in Spanish, with `«Reacher Temporada 3»`.
-- [ ] **AC-9**: On `/movies/<id>` (a film and a short) the panel appears inside the detail card, above
+- [x] **AC-9**: On `/movies/<id>` (a film and a short) the panel appears inside the detail card, above
       the torrent search; on `/shows/<id>` it appears inside the detail card, above the first season
       accordion.
+      **Confirmed 2026-10-09** with an admin session at `http://localhost:3000`, emulating a
+      1600x1000 viewport and reading the rendered geometry. On `/movies/1` (a film) the panel is a
+      sibling of the three-column header **inside** the detail card and sits at `top: 705`, above
+      the torrent search at `top: 929`. On `/movies/3` with `isShort` set (a short, reverted after)
+      the same holds - header grid at 173, panel at 725, the release-search input at 904 - so the
+      short renders the panel in the same place, which is the half of this criterion that needed a
+      second subject. On `/shows/1` the panel is inside the card, whose bottom edge is at 750, and
+      the first season accordion starts at 799, outside and below it.
 - [x] **AC-10**: `bin/npm api run test` passes, including the NFR-5 ordering test;
       `git status --short services/api/prisma` is empty; `bin/cli web node scripts/check-messages.mjs`
       reports no drift; `bin/npm web run build` exits 0.

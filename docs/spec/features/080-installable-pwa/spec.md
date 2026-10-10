@@ -149,7 +149,32 @@ None.
       with no `(ServiceWorker)` in their size column.
 - [ ] **AC-8**: On iOS Safari, *Add to Home Screen* produces a Perceptor icon that launches without
       Safari's chrome.
-**Verification status as of 2026-10-09.** AC-1 to AC-8 need a browser this session does not have.
+**Verification status as of 2026-10-09 (second pass).** An admin session in a browser now exists,
+and it changes AC-9 but not AC-1 to AC-8:
+
+- **AC-9, available half: confirmed.** With `USE_TRAEFIK=true` and `USE_HTTPS=true`, Settings ->
+  Environment renders an "Installable as an app" row reading **Available**, immediately below the
+  existing HTTPS badge ("Enabled (local certificate authority)") and its CA download link.
+  `bin/cli web node scripts/check-messages.mjs` reports `OK: en.json and es.json match exactly
+  (602 keys)`, and the unavailable string does name the reason in both locales
+  (`Unavailable - requires HTTPS` / `No disponible - requiere HTTPS`).
+- **AC-9, unavailable half: still open, and the criterion as written cannot hold.** The row is
+  driven by `window.isSecureContext && "serviceWorker" in navigator`
+  (`components/settings/EnvironmentPanel.tsx`), not by the `useHttps` the panel already receives from
+  `api`. On a `localhost` install with `USE_HTTPS=false` the row would therefore still read
+  **Available**, and the string "requires HTTPS" would be wrong twice over - the requirement is a
+  secure context, which `http://localhost` satisfies without any TLS. Rendering the unavailable
+  branch needs a non-secure origin (`http://<lan-ip>:3000`), and the panel is behind the session,
+  whose cookie is host-scoped - so that origin needs its own login. Left unticked deliberately: this
+  is an implementation/criterion divergence to resolve, not a measurement still to take.
+
+**AC-1 to AC-8 remain blocked on the browser, re-confirmed.** The session's browser reaches
+`http://localhost:3000` with `isSecureContext` true and `"serviceWorker" in navigator` true, yet
+`navigator.serviceWorker.getRegistrations()` answers `[]` and an explicit
+`register("/sw.js", { scope: "/", updateViaCache: "none" })` - the component's exact call - fails
+with the identical `TypeError: ... An unknown error occurred when fetching the script`, while
+`GET /sw.js` answers `200 application/javascript`. The first pass already ruled this out as a
+Perceptor fault against a control origin; the finding below stands unchanged.
 The attempt and what it established, so the next pass does not repeat it:
 
 - The registration gate is `window.isSecureContext` (`components/pwa/ServiceWorkerRegistration.tsx`),

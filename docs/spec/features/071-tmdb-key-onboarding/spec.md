@@ -126,14 +126,33 @@ exactly one row (the seeded admin). So: a second user, a session, and a delibera
       appears, and the api logs show no TMDB request for that page load.
 - [ ] **AC-2**: Given the same state, a non-admin opening `/` sees the same reason and steps, with a
       clear note that only an administrator can finish, and no link to Settings.
+      **Still open 2026-10-09, and the key is no longer what blocks it.** Emptying
+      `movie_db_api_key` is safe and reversible (done twice this pass, via a scratch table, with the
+      key never read), and the panel renders. What is missing is the subject: the criterion is about
+      a **non-admin's** view of that panel - the same reason and steps, the "only an administrator
+      can finish" note, and no Settings link - and the `users` table holds one row, an admin. The
+      admin's view of the same panel does carry both the note
+      ("Only an administrator can complete the last step.") and the Settings link, measured on
+      `/first-step`, which repeats this block.
+
 - [x] **AC-3 (failure)**: Given `movie_db_api_key` set to `garbage`, opening `/` shows the "your key
       does not work" notice followed by the onboarding panel.
 - [x] **AC-4 (failure)**: Given a valid key but TMDB unreachable (e.g. network cut from the `api`
       container), `/` shows today's `catalog_unavailable` error, not the onboarding panel.
 - [x] **AC-5**: After an admin saves a valid key in Settings, reloading `/` shows the popular
       carousels.
-- [ ] **AC-6**: Every link in the panel opens the expected TMDB page (signup, login, API settings,
+- [x] **AC-6**: Every link in the panel opens the expected TMDB page (signup, login, API settings,
       API terms) — checked by hand on the day the spec is approved.
+      **Confirmed 2026-10-09.** With `movie_db_api_key` emptied (saved to a scratch table and
+      restored immediately, never read), `/` rendered the onboarding panel instead of the
+      carousels, and its four links are
+      `https://www.themoviedb.org/signup`, `https://www.themoviedb.org/login`,
+      `https://www.themoviedb.org/settings/api` and
+      `https://www.themoviedb.org/api-terms-of-use`. Fetched: signup, login and the terms answer
+      `200`; the API settings page answers `401`, which is TMDB's own sign-in gate on a page that
+      requires an account - the step before it in the panel is "Confirm the e-mail TMDB sends you,
+      then sign in" - not a broken link.
+
 - [x] **AC-7**: A non-admin's `mediaCapabilities` response contains `catalogKeyConfigured` and
       nothing derived from the key's value; `bin/cli web node scripts/check-messages.mjs` reports no
       `en`/`es` drift.

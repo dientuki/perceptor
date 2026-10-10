@@ -216,6 +216,11 @@ None.
 
 **Verification status — 2026-10-09** (pass over 002–071 on `fix/tech-debt`, no code change)
 
+**Updated 2026-10-09 by a second pass with an admin session.** The session is no longer missing,
+and it closed AC-9 and AC-12 outright plus the first clause of AC-4 and of AC-10. What still blocks
+the rest is **not** the session but the other two items below - a second user (AC-7, AC-8) and real
+sources in flight (AC-1, AC-2, AC-3, AC-5, AC-6, AC-11, and the second clauses of AC-4 and AC-10).
+
 AC-13 is closed above, off the test suites and the schema. The other twelve need, between them, only
 three things this installation lacks:
 
@@ -253,6 +258,13 @@ all.
 - [ ] **AC-4**: Given a film with exactly one source, its row renders on `/downloads` with no group
       header. Given a film with two sources, one `ERROR` and one `COMPLETED`, with **error** active
       only its `ERROR` row is visible and it renders with no header.
+      **First clause confirmed 2026-10-09**: `/downloads` with the installation's single source
+      renders that row (`Inception / DOWNLOADING`) with no group header above it - a header appears
+      only from two visible rows of a title. The second clause (a film with an `ERROR` and a
+      `COMPLETED` source, **error** active, only the `ERROR` row visible and headerless) was not
+      run: it needs a second `MediaSource` on a film, and writing one by hand would also move that
+      film's own stored status through `TitleStatusService`, leaving the owner's library in a state
+      this pass did not find it in.
 - [ ] **AC-5**: Given 23 titles with sources, `/downloads` shows 10 titles and `Showing 1–10 of 23`,
       **previous** disabled; **next** twice reaches `Showing 21–23 of 23` with **next** disabled.
       Choosing 25 per page shows all 23 on page 1. A title with more rows than the page size is never
@@ -267,16 +279,38 @@ all.
 - [ ] **AC-8 (failure path)**: As user B from AC-7, calling `downloadDelete(mediaSourceId: <one of
       F2's sources>)` directly through GraphiQL fails with `error.source.not_found` and the source,
       its torrent and its files are untouched — `/downloads` still lists it for A with its controls.
-- [ ] **AC-9 (failure path)**: With the `torrent` container stopped, `/downloads` still renders every
+- [x] **AC-9 (failure path)**: With the `torrent` container stopped, `/downloads` still renders every
       group and row (speed/progress from qBittorrent empty), the sidebar renders on every page without
       error, and no 500 appears in `web` or `api` logs beyond the existing "could not read torrent
       client" line.
+      **Confirmed 2026-10-09** with an admin session, `docker compose stop torrent` and the single
+      source this installation holds. `/downloads` still rendered its row (`Inception / DOWNLOADING`)
+      with `—` for both progress and speed, and `/movies/1` and `/calendar` both rendered with the
+      full sidebar. `docker compose logs --since` over the window shows **no** 500 and no error of
+      any kind from `web`, and from `api` only the documented line, repeated per read:
+      `[DownloadsService] could not read torrent client state (tag "..."): TypeError: fetch failed /
+      getaddrinfo ENOTFOUND torrent`.
 - [ ] **AC-10**: With nothing in flight (every source `COMPLETED`, `ERROR` or `PAUSED`), the sidebar
       shows no badge on any page. With no sources at all, `/downloads` shows the panel's empty state.
+      **First clause confirmed 2026-10-09, second clause still open.** With this installation's only
+      source written to `PAUSED`, the sidebar's Downloads entry carried **no badge** on `/movies/2`,
+      on `/downloads` and on `/calendar`. The page's own **working** chip still read `1` over the
+      same row, which independently corroborates AC-2's stated rule that the chip counts rows and
+      includes `PAUSED` while the badge does not. The source was restored to `DOWNLOADING`.
+      The second clause - "with no sources at all, `/downloads` shows the panel's empty state" - was
+      not run: reaching it means deleting the installation's one `media_sources` row, which is the
+      owner's call, not a fixture.
 - [ ] **AC-11**: With `shows_enabled` turned off in Settings while a season pack is in flight,
       `/downloads` still lists that row and the badge still counts its show.
-- [ ] **AC-12**: `/movies/<id>` and `/shows/<id>` render their panel with no group header and no
+- [x] **AC-12**: `/movies/<id>` and `/shows/<id>` render their panel with no group header and no
       pagination controls, whatever the number of rows.
+      **Confirmed 2026-10-09.** `/movies/1`, whose panel holds one row, renders
+      `Downloads | Completed 0 | Working 1 | Error 0 | Refresh | <table> | Inception DOWNLOADING`,
+      and `/shows/1`, whose panel holds none, renders the same chrome plus
+      `No downloads for this title yet.` Neither renders a group header, and neither renders any of
+      `Showing`, `Per page`, `Previous` or `Next` - the controls `/downloads` does render - because
+      the detail-page panel carries no pagination markup at all, which is what makes the "whatever
+      the number of rows" clause structural rather than a sample of two.
 - [x] **AC-13**: `bin/npm api run test` passes, including NFR-6's tests; `git status --short
       services/api/prisma` is empty; the `schema.gql` diff is exactly this delta;
       `bin/cli web node scripts/check-messages.mjs` reports no drift; `bin/npm web run build` exits 0.

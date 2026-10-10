@@ -233,27 +233,66 @@ Also relevant to anyone picking this up: `media_sources` holds **one** row on th
 clean slate — and AC-8 needs a `COMPLETED` episode to exist first, which on this data means running a
 full pipeline pass before the criterion can even be set up.
 
-- [ ] **AC-1**: On `/shows/<id>`, the import-file button on a season header is enabled, and clicking
+- [x] **AC-1**: On `/shows/<id>`, the import-file button on a season header is enabled, and clicking
       it opens the season import modal titled with `<Show> Temporada N` without expanding or
       collapsing the accordion.
+      **Confirmed 2026-10-09** with an admin session on `/shows/1`. The import button on the
+      Season 4 header is enabled (`disabled === false`), and clicking it opens a modal headed
+      `Import Season Files` whose body names the target - *"Choose the video files for **Reacher
+      Season 4**. They upload over the network - you can pause and resume the whole batch if it
+      drops."* - with a file input and a Close control. The accordion did not move: the page still
+      rendered exactly one episode table and the same four headers (`Season 4`, `Season 3`,
+      `Season 2`, `Season 1`) with Season 4 still the open one. The criterion's `<Show> Temporada N`
+      is the Spanish rendering of that same string; this pass ran in the `en` locale.
+
 - [ ] **AC-2**: Given a season with 8 episodes and 3 local files named `...S02E01...`, `...S02E02...`
       and `...S02E05...`, when all three are selected and uploaded, then a single row appears in
       `bin/mysql -e 'select id, kind, status, seasonId, downloadPath from media_sources order by id
       desc limit 1'` with `kind=LOCAL_FOLDER` and the session's `seasonId`, and that folder on disk
       holds exactly the three files.
+      **Not run 2026-10-09, and the session is no longer the blocker.** What it needs is **local
+      video files** and a real upload: the tus route writes them into the installation's downloads
+      root and the session closes into a season scan that enqueues encodes. This pass holds no
+      video files to upload, and fabricating some would put junk under the owner's downloads root
+      and start FFmpeg jobs over it. It needs their files and their go-ahead.
+
 - [ ] **AC-3**: Continuing AC-2, after the batch finishes the source reads `SCANNED`, three
       `ProcessJob` rows exist (one per resolved episode), and on `/shows/<id>` episodes 1, 2 and 5
       advance through `ENCODING` to `COMPLETED` while episodes 3, 4, 6, 7 and 8 stay `MISSING`.
+      **Not run 2026-10-09, and the session is no longer the blocker.** What it needs is **local
+      video files** and a real upload: the tus route writes them into the installation's downloads
+      root and the session closes into a season scan that enqueues encodes. This pass holds no
+      video files to upload, and fabricating some would put junk under the owner's downloads root
+      and start FFmpeg jobs over it. It needs their files and their go-ahead.
+
 - [ ] **AC-4**: While the batch is uploading, the modal shows one progress row per file and an
       overall reading; pressing pause once stops **every** in-flight file, and pressing resume
       restarts them all from the offsets the server already holds.
+      **Not run 2026-10-09, and the session is no longer the blocker.** What it needs is **local
+      video files** and a real upload: the tus route writes them into the installation's downloads
+      root and the session closes into a season scan that enqueues encodes. This pass holds no
+      video files to upload, and fabricating some would put junk under the owner's downloads root
+      and start FFmpeg jobs over it. It needs their files and their go-ahead.
+
 - [ ] **AC-5**: While the batch is uploading, `/shows/<id>` reloaded in another tab shows every aired
       episode of that season at `QUEUED`, and `/downloads` lists the season as one active row.
+      **Not run 2026-10-09, and the session is no longer the blocker.** What it needs is **local
+      video files** and a real upload: the tus route writes them into the installation's downloads
+      root and the session closes into a season scan that enqueues encodes. This pass holds no
+      video files to upload, and fabricating some would put junk under the owner's downloads root
+      and start FFmpeg jobs over it. It needs their files and their go-ahead.
+
 - [ ] **AC-6** *(failure)*: Given an open session, when `downloadDelete` removes it (from
       `/downloads`, or by the modal's cancel action) while a file is still uploading, then that
       file's next tus request answers `409` with `error.upload.session_closed`, the modal shows the
       translated message in the active locale rather than a key or English text, the session folder
       is gone from disk, and the season's aired episodes fall back to `MISSING`.
+      **Not run 2026-10-09, and the session is no longer the blocker.** What it needs is **local
+      video files** and a real upload: the tus route writes them into the installation's downloads
+      root and the session closes into a season scan that enqueues encodes. This pass holds no
+      video files to upload, and fabricating some would put junk under the owner's downloads root
+      and start FFmpeg jobs over it. It needs their files and their go-ahead.
+
 - [x] **AC-7** *(failure)*: Given a ticket minted by `createSeasonUploadTicket` for session A,
       when it is presented at the tus `POST` of a file whose metadata names session B, then the
       request answers `403` with `error.upload.ticket_wrong_source` **and** the ticket is not spent —
@@ -263,6 +302,12 @@ full pipeline pass before the criterion can even be set up.
       for that season with `force: false` answers `error.season.already_completed`, and confirming
       the replacement starts the session and demotes the season's previous `READY`/`SCANNED` source
       to `ERROR` with `error.source.replaced`.
+      **Not run 2026-10-09, and the session is no longer the blocker.** What it needs is **local
+      video files** and a real upload: the tus route writes them into the installation's downloads
+      root and the session closes into a season scan that enqueues encodes. This pass holds no
+      video files to upload, and fabricating some would put junk under the owner's downloads root
+      and start FFmpeg jobs over it. It needs their files and their go-ahead.
+
 - [x] **AC-9** *(failure)*: Given an open session with no file uploaded, `finishSeasonUpload` answers
       `error.upload.session_empty` and the session row is still `PENDING`.
 - [x] **AC-10**: `git diff --stat services/worker` is empty and `git status --short
