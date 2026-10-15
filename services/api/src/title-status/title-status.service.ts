@@ -53,7 +53,10 @@ export class TitleStatusService {
       where: { id: showId },
       select: {
         status: true,
-        seasons: { select: { episodes: { select: { status: true, releaseDate: true } } } },
+        seasons: {
+          where: { seasonNumber: { not: 0 } },
+          select: { episodes: { select: { status: true, releaseDate: true } } },
+        },
       },
     });
     if (!show) return;

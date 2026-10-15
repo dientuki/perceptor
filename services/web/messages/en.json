@@ -462,7 +462,8 @@
       "synopsisTitle": "Synopsis",
       "noOverview": "No overview available.",
       "shortLabel": "Registered as a short",
-      "contentKindLabel": "Content kind"
+      "contentKindLabel": "Content kind",
+      "grainModeLabel": "Grain Optimization"
     }
   },
   "shows": {
@@ -471,7 +472,8 @@
       "unknownYear": "Unknown Year",
       "synopsisTitle": "Synopsis",
       "noOverview": "No overview available.",
-      "contentKindLabel": "Content kind"
+      "contentKindLabel": "Content kind",
+      "grainModeLabel": "Grain Optimization"
     },
     "seasonAccordion": {
       "seasonLabel": "Season {number}",
@@ -633,6 +635,7 @@
         "480p": "480p",
         "360p": "360p"
       },
+      "grainAutoLabel": "Automatic Grain Optimization",
       "subtitles": {
         "label": "Subtitles",
         "none": "No subtitles",
@@ -735,6 +738,11 @@
     "LIVE_ACTION": "Live action",
     "ANIME": "Anime",
     "CGI": "CGI / 3D animation"
+  },
+  "grainMode": {
+    "INHERIT": "Use the installation default",
+    "ON": "On",
+    "OFF": "Off"
   },
   "users": {
     "add": {

@@ -1,5 +1,6 @@
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 import { ContentKind } from '@/media/entities/content-kind.enum';
+import { EffectiveGrainMode } from '@/media/entities/grain-mode.enum';
 
 @ObjectType()
 export class EncodeJobDetails {
@@ -47,6 +48,10 @@ export class EncodeJobDetails {
 
   @Field(() => ContentKind)
   contentKind: ContentKind;
+
+  // Spec 092, REQ-6 NFR-4
+  @Field(() => EffectiveGrainMode)
+  grainMode: EffectiveGrainMode;
 
   @Field(() => Int, { nullable: true })
   seasonNumber: number | null;

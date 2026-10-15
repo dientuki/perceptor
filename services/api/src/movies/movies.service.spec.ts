@@ -846,6 +846,7 @@ describe('MoviesService', () => {
         id: 7,
         mediaSources: [{ id: 99 }],
         status: 'COMPLETED',
+        filePath: '/media/movies/transformers.mkv',
       });
 
       await expectI18nKey(
@@ -1196,6 +1197,7 @@ describe('MoviesService', () => {
       prisma.movie.findFirst.mockResolvedValue({
         ...COMPLETED_FILM,
         status: 'MISSING',
+        filePath: null,
       });
       prisma.mediaSource.findUnique.mockResolvedValue(null);
       downloads.hasDeliveredSource.mockResolvedValue(true);
@@ -1206,6 +1208,23 @@ describe('MoviesService', () => {
       );
 
       expect(downloads.hasDeliveredSource).toHaveBeenCalledWith({ movieId: 7 });
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+    });
+
+    // Spec 089, REQ-16 AC-22
+    it.each([
+      ['filePath', { filePath: '/media/movies/transformers.mkv', mediaServerPresentAt: null }],
+      ['mediaServerPresentAt', { filePath: null, mediaServerPresentAt: new Date() }],
+    ])('refuses a possessed film reading ENCODING without force (%s)', async (_label, possession) => {
+      prisma.movie.findFirst.mockResolvedValue({ ...COMPLETED_FILM, ...possession, status: 'ENCODING' });
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+      downloads.hasDeliveredSource.mockResolvedValue(false);
+
+      await expectI18nKey(
+        service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
+        ERROR_KEYS.MOVIE_ALREADY_COMPLETED,
+      );
+
       expect(qbittorrent.add).not.toHaveBeenCalled();
     });
 

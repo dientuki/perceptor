@@ -240,5 +240,22 @@ describe('TitleStatusService', () => {
         data: { status: 'MISSING' },
       });
     });
+
+    // Spec 089, REQ-14 AC-17 AC-18
+    it('excludes season 0 from the read and writes COMPLETED when every regular episode is COMPLETED', async () => {
+      prisma.show.findUnique.mockResolvedValue({
+        status: 'MISSING',
+        seasons: [{ episodes: [{ status: 'COMPLETED', releaseDate: new Date('2000-01-01') }] }],
+      });
+
+      await service.recomputeShow(6);
+
+      const args = prisma.show.findUnique.mock.calls[0][0];
+      expect(args.select.seasons.where).toEqual({ seasonNumber: { not: 0 } });
+      expect(prisma.show.updateMany).toHaveBeenCalledWith({
+        where: { id: 6, status: 'MISSING' },
+        data: { status: 'COMPLETED' },
+      });
+    });
   });
 });

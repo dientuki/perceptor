@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE `movies` ADD COLUMN `grainMode` ENUM('INHERIT', 'ON', 'OFF') NOT NULL DEFAULT 'INHERIT';
+
+-- AlterTable
+ALTER TABLE `shows` ADD COLUMN `grainMode` ENUM('INHERIT', 'ON', 'OFF') NOT NULL DEFAULT 'INHERIT';

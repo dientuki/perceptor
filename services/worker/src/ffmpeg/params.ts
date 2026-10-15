@@ -18,15 +18,17 @@ function getQuality(contentKind: ContentKind, quality: quality) {
   return "24";
 }
 
-// Spec 057, REQ-11
-function svtav1KindParams(contentKind: ContentKind): string[] {
+// Spec 057, REQ-11; Spec 092, REQ-7 REQ-8
+function svtav1KindParams(contentKind: ContentKind, filmGrain: boolean): string[] {
+  const grainParams = filmGrain ? ["film-grain=8", "film-grain-denoise=1"] : ["film-grain=0"];
+
   switch (contentKind) {
     case 'LIVE_ACTION':
-      return ["scm=0", "aq-mode=2", "sharpness=0", "film-grain=0"];
+      return ["scm=0", "aq-mode=2", "sharpness=0", ...grainParams];
     case 'ANIME':
-      return ["scm=2", "aq-mode=2", "enable-qm=1", "qm-min=4", "sharpness=2", "film-grain=0"];
+      return ["scm=2", "aq-mode=2", "enable-qm=1", "qm-min=4", "sharpness=2", ...grainParams];
     case 'CGI':
-      return ["scm=2", "aq-mode=2", "enable-qm=1", "qm-min=4", "sharpness=2", "film-grain=0"];
+      return ["scm=2", "aq-mode=2", "enable-qm=1", "qm-min=4", "sharpness=2", ...grainParams];
   }
 }
 
@@ -40,6 +42,7 @@ function buildAv1EncodeArgs(
   contentKind: ContentKind,
   quality: quality,
   options: Av1EncodeOptions,
+  filmGrain: boolean,
 ): string[] {
   const svtav1 = [
     "keyint=10s",
@@ -47,7 +50,7 @@ function buildAv1EncodeArgs(
     "enable-overlays=1",
     "tune=0",
     "input-depth=10",
-    ...svtav1KindParams(contentKind),
+    ...svtav1KindParams(contentKind, filmGrain),
   ].join(":");
 
   const args: string[] = ["-map", "0:v:0"];
@@ -193,6 +196,7 @@ export function getVideoParams(
   contentKind: ContentKind,
   compressionResolution: CompressionResolution,
   quality: quality = 'web',
+  filmGrain: boolean = false,
 ) {
   if (!videoStream) {
     throw new KeyedError(
@@ -227,11 +231,16 @@ export function getVideoParams(
     ? `scale=${box.width}:${box.height}:force_original_aspect_ratio=decrease:force_divisible_by=2`
     : undefined;
 
-  return buildAv1EncodeArgs(contentKind, quality, {
-    vf,
-    colorTags: colorTagsFor(form),
-    title: videoTitle(codec, exceeds, sourceTierLabel(width, height)),
-  });
+  return buildAv1EncodeArgs(
+    contentKind,
+    quality,
+    {
+      vf,
+      colorTags: colorTagsFor(form),
+      title: videoTitle(codec, exceeds, sourceTierLabel(width, height)),
+    },
+    filmGrain,
+  );
 }
 
 // Spec 011, REQ-3 REQ-4 REQ-6 REQ-7

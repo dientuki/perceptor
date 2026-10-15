@@ -1,7 +1,7 @@
 ---
 title: Status materialization — api slice
 service: api
-last_updated: 2026-10-06
+last_updated: 2026-10-15
 status: Implemented
 ---
 
@@ -205,6 +205,57 @@ report.
 `migrate deploy`; it is what un-sticks every title left at `DOWNLOADING` by the ratchet and the only
 thing that moves `Show.status` off `MISSING` on an existing install (NFR-3).
 
+**Step 11 — specials leave the series aggregation (REQ-14, amendment 0.2.0).** Steps 1–10 shipped;
+this is the only open work. In `title-status/title-status.service.ts`, `recomputeShow`'s
+`seasons` select gains `where: { seasonNumber: { not: 0 } }` — the exact predicate
+`scheduler/tasks/acquire-episodes.task.ts` uses for `073` REQ-7, reused rather than re-expressed.
+Nothing else moves:
+
+- `deriveShowStatus` and `ShowEpisodeAltitude` in `pipeline-status/` are **not** changed — the filter
+  is about which rows make up a series, and the reader owns that (`../plan.md` § Amendment 0.2.0).
+- `writeEpisodeStatus`, `recomputeEpisode`, `recomputeSeason` and the `059` lift keep treating a
+  special as an ordinary episode. Do not add a season-0 short-circuit to the cascade.
+- `show-status-sweep.service.ts` and `scripts/recompute-statuses.ts` are unchanged; the boot-time
+  `recomputeAllStatuses` already re-derives every existing series on deploy (AC-19).
+
+**Step 12 — a replacement in flight outranks possession (REQ-15, amendment 0.3.0).** Steps 1–11
+shipped. In `pipeline-status/pipeline-status.ts`:
+
+- Add and export `hasPossession(row: { filePath: string | null; mediaServerPresentAt: Date | null })`
+  and a Prisma `where` fragment with the same two columns as an `OR`, beside it. Use the predicate in
+  `deriveTitleStatus` instead of its inline test.
+- `deriveTitleStatus` computes the in-flight best (non-`ERROR`, non-`SCANNED` sources, active jobs)
+  **before** deciding. Possession with an in-flight best above `MISSING` returns it; possession with
+  none returns `COMPLETED`; no possession is unchanged. Do not duplicate the loop.
+- `deriveEpisodeStatus`: for an episode **not** in possession, unchanged (synthetic `QUEUED`). For a
+  possessed one, when `isLiftedBySeasonPack` holds, add the season's real pack sources (already passed
+  in as `seasonSources`, each with its `status`) to the episode's own sources instead of the synthetic
+  `QUEUED`, so the highest translated status wins (`../plan.md` § Amendment 0.3.0). The pack set is
+  the same unscanned, non-`ERROR` one REQ-13 uses; do not re-express it.
+- `deriveShowStatus` is **not** changed: a `COMPLETED`-contributes-`DOWNLOADED` fold already reads an
+  `ENCODING` episode as `ENCODING`.
+
+Check that `TitleStatusService` selects what the derivation now needs for a possessed target (its
+sources and jobs were already selected; nothing new is expected, but confirm for movie and episode).
+
+**Step 13 — readers that mean possession (REQ-16).** Switch these from the status to
+`hasPossession` (or the `where` fragment), loading `filePath`/`mediaServerPresentAt` where the row is
+not already fully selected:
+
+- `movies/movies.service.ts` — the attach target's `refuse` (`target.status === 'COMPLETED'`).
+- `episodes/episodes.service.ts` — the attach target's `refuse`.
+- `seasons/seasons.service.ts` — both `episode.count({ where: { seasonId, status: 'COMPLETED' } })`
+  sites become the possession `where` fragment.
+- `uploads/uploads.resolver.ts` (film and episode ticket) and `uploads/uploads.service.ts` (episode
+  and film at upload finish) — the `movie.status`/`episode.status === 'COMPLETED'` tests.
+- `process-jobs/process-jobs.service.ts`, orphan recovery: `targetStatus === 'COMPLETED'` becomes
+  `hasPossession` over the job's movie or episode.
+
+Leave alone, deliberately: `calendar/group-episodes.ts`, `scheduler/tasks/refresh-movies.task.ts`,
+the reconcile demotion (`status: 'COMPLETED', ...IN_FLIGHT_GUARD`, which already refuses a title with
+work in flight) and `process-jobs.service.ts`'s job-level `COMPLETED` comparisons (about jobs, not
+titles). Do not touch `web`.
+
 ## Contract obligations
 
 `api` exposes **no new GraphQL surface**, and that is the obligation: `../spec.md` § GraphQL Contract
@@ -254,7 +305,20 @@ what it defends against. The two standards to imitate are
   media-server-promoted target with no `filePath`, no source and no job is **not** demoted — a film (AC-8)
   and an episode (AC-9), the case the index could never express. Plus: a demotion clears both columns
   so a recompute does not promote the title straight back (AC-10), and a null possession value never
-  demotes on its own (AC-11, NFR-5).
+  demotes on its own (AC-11, NFR-5). **Amendment 0.2.0 (Step 11):** that `recomputeShow` asks for
+  seasons with `seasonNumber` not 0 — asserted on the Prisma call's `where`, since the mock returns
+  whatever it is given and a test that only feeds it regular episodes proves nothing — and that a
+  series with regular episodes `COMPLETED` writes `COMPLETED` (AC-17, AC-18). Failure is silent: a
+  dropped filter leaves every series with an unacquired special below `COMPLETED`, with no error.
+  **Amendment 0.3.0 (Steps 12–13):** that a possessed target with an `ENCODING` job (or a
+  `DOWNLOADING` source) reads that, and falls back to `COMPLETED` when it holds only an `ERROR` source
+  or job, or a `SCANNED`/retired source (AC-20, AC-21); that a possessed aired episode under a
+  transferring pack reads `DOWNLOADING`, under a paused one `PAUSED`, and an unaired one `COMPLETED`
+  (AC-24) — each is a plausible wrong implementation that returns a status and raises nothing. Plus
+  `hasPossession` itself, and that a series with one `ENCODING` episode reads `ENCODING`.
+- **The guard and recovery specs** (modified: `movies`, `episodes`, `seasons`, `uploads`,
+  `process-jobs`) — one case each: a possessed target reading `ENCODING` is still refused without
+  `force`, and recovery still skips it (AC-22). The failure is the guard silently not firing.
 - **`src/downloads/downloads.service.spec.ts`** (modified) — defends against the two destructive
   write-back failures. A `SCANNED` source whose torrent is seeding must not be demoted to `READY`
   (AC-4): unguarded, `isRaceWinner` hands the race to a source whose encode already failed. And a

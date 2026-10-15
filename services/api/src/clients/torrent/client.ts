@@ -39,7 +39,6 @@ const PAUSED_STATES = new Set([
   "pausedUP",     // Torrent is paused and has finished downloading (pre-5.0 name)
   "stoppedDL",    // Torrent is stopped and has NOT finished downloading (5.0 name)
   "stoppedUP",    // Torrent is stopped and has finished downloading (5.0 name)
-  "error",        // Some error occurred, applies to paused torrents
   "missingFiles", // Torrent data files is missing
   "unknown",      // Unknown status
 ]);

@@ -12,6 +12,7 @@ import type { Language } from "@/types/languages";
 import type {
   AcquisitionResult,
   ContentKind,
+  GrainMode,
   TitleRefreshResult,
   TitleRemovalResult,
 } from "@/types/media";
@@ -41,6 +42,7 @@ export interface Show {
   releaseDate?: string;
   originalLanguage: string;
   contentKind: ContentKind;
+  grainMode: GrainMode;
   status: string;
   seasonsSyncedAt?: string;
   // Only present when fetched via getShowById — getShows() doesn't request it
@@ -99,6 +101,7 @@ const GET_SHOW_QUERY = `
       releaseDate
       originalLanguage
       contentKind
+      grainMode
       status
       seasonsSyncedAt
       audioLanguages {
@@ -170,6 +173,41 @@ export async function setShowContentKindAction(
     result = await fetchGraphQL(SET_SHOW_CONTENT_KIND_MUTATION, {
       showId,
       contentKind,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
+}
+
+const SET_SHOW_GRAIN_MODE_MUTATION = `
+  mutation SetShowGrainMode($showId: Int!, $grainMode: GrainMode!) {
+    setShowGrainMode(showId: $showId, grainMode: $grainMode) {
+      id
+    }
+  }
+`;
+
+// Same shape as setShowContentKindAction: the enum argument is sent as a
+// plain variable typed `GrainMode!`, never a quoted string.
+export async function setShowGrainModeAction(
+  showId: number,
+  grainMode: GrainMode,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_SHOW_GRAIN_MODE_MUTATION, {
+      showId,
+      grainMode,
     });
   } catch (_err) {
     const t = await getTranslations("errors");

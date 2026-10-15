@@ -1,5 +1,6 @@
 import type { CompressionResolution } from './compression-resolution';
 import type { ContentKind } from './content-kind';
+import type { GrainMode } from './grain-mode';
 import type { SubtitleFormat } from './subtitle-formats';
 
 export type EncodeInput = {
@@ -11,6 +12,7 @@ export type EncodeInput = {
   allowedSubtitleFormats: SubtitleFormat[];
   contentKind: ContentKind;
   compressionResolution: CompressionResolution;
+  grainMode: GrainMode;
   containerTitle: string;
   sourceTag: string;
   trackTitles: Record<string, string>;

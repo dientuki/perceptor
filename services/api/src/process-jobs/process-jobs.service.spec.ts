@@ -356,6 +356,85 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // Spec 092, REQ-6 REQ-5: a wrong read here silently produces a grain-free
+  // (or grain-on) encode with no error anywhere. The episode case is the one
+  // that matters most — reading a non-existent per-episode value instead of
+  // the series' own would fall back to a default silently (api/plan.md's
+  // risk table).
+  describe('getEncodeJobDetails — grainMode', () => {
+    it("carries the film's own resolved value", async () => {
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({ movie: { ...movieProcessJob().movie, grainMode: 'ON' } }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        grain_auto_enabled: 'false',
+      });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.grainMode).toBe('ON');
+    });
+
+    it("carries the series' resolved value on the episode arm, never a per-episode one", async () => {
+      const episode = episodeProcessJob();
+      prisma.processJob.findUnique.mockResolvedValue({
+        ...episode,
+        episode: {
+          ...episode.episode,
+          season: {
+            ...episode.episode.season,
+            show: { ...episode.episode.season.show, grainMode: 'ON' },
+          },
+        },
+      });
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userShow.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        grain_auto_enabled: 'false',
+      });
+
+      const details = await service.getEncodeJobDetails(2);
+
+      expect(details.grainMode).toBe('ON');
+    });
+
+    it('resolves INHERIT to AUTO only when grain_auto_enabled reads true', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({ movie: { ...movieProcessJob().movie, grainMode: 'INHERIT' } }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        grain_auto_enabled: 'true',
+      });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.grainMode).toBe('AUTO');
+    });
+
+    it('resolves INHERIT to OFF when grain_auto_enabled is absent', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({ movie: { ...movieProcessJob().movie, grainMode: 'INHERIT' } }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.grainMode).toBe('OFF');
+    });
+  });
+
   // Spec 070, REQ-7: the effective format list lives in
   // `base`, so a refactor that moved it into one branch would leave the other
   // job type with an undefined field and every such encode would silently
@@ -851,6 +930,30 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // encodeStarted used to write ProcessJob.status to ENCODING with no
+  // recompute call, unlike encodeCompleted/encodeFailed — the title column
+  // stayed on whatever it read before the job started (e.g. DOWNLOADED)
+  // for the entire encode, with no error anywhere to catch it.
+  describe('encodeStarted', () => {
+    it('recomputes the movie once the job is marked ENCODING', async () => {
+      prisma.processJob.update.mockResolvedValue({ id: 1, movieId: 9, episodeId: null });
+
+      await service.encodeStarted(1);
+
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(9);
+      expect(titleStatus.recomputeEpisode).not.toHaveBeenCalled();
+    });
+
+    it('recomputes the episode, not the movie, for an episode job', async () => {
+      prisma.processJob.update.mockResolvedValue({ id: 2, movieId: null, episodeId: 21 });
+
+      await service.encodeStarted(2);
+
+      expect(titleStatus.recomputeEpisode).toHaveBeenCalledWith(21);
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+    });
+  });
+
   // This block exists because encodeCompleted's three cleanup instructions
   // (Spec 013, REQ-8 REQ-9 REQ-10 REQ-11) are the only
   // signal the worker gets for when it is safe to delete a file. A wrong
@@ -1109,7 +1212,7 @@ describe('ProcessJobsService', () => {
       movieId: 1,
       episodeId: null,
       recoveryCount: 0,
-      movie: { status: 'ENCODING' },
+      movie: { filePath: null, mediaServerPresentAt: null },
       episode: null,
       sourceFile: { mediaSource: { status: 'DOWNLOADING' } },
       ...overrides,
@@ -1235,9 +1338,9 @@ describe('ProcessJobsService', () => {
     });
 
     // Spec 054, REQ-5
-    it('skips a job whose target already reads COMPLETED, without consuming the allowance', async () => {
+    it('skips a job whose target is already possessed, without consuming the allowance', async () => {
       prisma.processJob.findMany.mockResolvedValue([
-        orphan({ id: 3, movie: { status: 'COMPLETED' } }),
+        orphan({ id: 3, movie: { filePath: '/media/movies/x.mkv', mediaServerPresentAt: null } }),
       ]);
 
       const result = await service.reconcileOrphanedEncodes();
@@ -1247,9 +1350,9 @@ describe('ProcessJobsService', () => {
       expect(encodeQueue.addEncode).not.toHaveBeenCalled();
     });
 
-    it('skips an episode-owned job whose show target already reads COMPLETED', async () => {
+    it('skips an episode-owned job whose target is already possessed', async () => {
       prisma.processJob.findMany.mockResolvedValue([
-        orphan({ id: 4, movieId: null, movie: null, episodeId: 8, episode: { status: 'COMPLETED' } }),
+        orphan({ id: 4, movieId: null, movie: null, episodeId: 8, episode: { filePath: null, mediaServerPresentAt: new Date() } }),
       ]);
 
       const result = await service.reconcileOrphanedEncodes();

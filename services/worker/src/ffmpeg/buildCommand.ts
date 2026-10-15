@@ -1,5 +1,6 @@
 import { getVideoParams, getAudioParams, getSubtitleParams } from './params';
 import { isRemux } from './remux-detection';
+import { resolveFilmGrain } from '../encode/grain-mode';
 import type { EncodeInput } from '../encode/types';
 
 interface FfmpegMetadata {
@@ -30,6 +31,8 @@ export function buildFfmpegCommand(
 
   // Spec 011, REQ-10
   const quality = isRemux(metadata, input) ? "remux" : "web";
+  // Spec 092, REQ-9
+  const filmGrain = resolveFilmGrain(details.grainMode, metadata);
 
   const args = [
     "-i",
@@ -41,7 +44,7 @@ export function buildFfmpegCommand(
     "-nostats",
     "-loglevel",
     "error",
-    ...getVideoParams(vStream, details.contentKind, details.compressionResolution, quality),
+    ...getVideoParams(vStream, details.contentKind, details.compressionResolution, quality, filmGrain),
     ...getAudioParams(
       aStreams,
       details.allowedAudioLanguagesIso3,

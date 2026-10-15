@@ -1,7 +1,7 @@
 ---
 title: Status materialization — Implementation Plan
-spec_version: 0.1.0
-last_updated: 2026-10-06
+spec_version: 0.3.0
+last_updated: 2026-10-15
 status: Implemented
 ---
 
@@ -190,6 +190,93 @@ takes before migrating, not a `migrate resolve`.
 | **Concurrent recomputes of the same target.** Two events land at once. | Silent: the column holds the loser's answer and disagrees with the rows until the next event. | NFR-2. Each write is a guarded `updateMany` naming the status it expects to replace, the pattern already used at `media-server-reconcile.service.ts` and `process-jobs.service.ts:402`. |
 | **The `059` season-pack lift now needs an un-write.** It was a read-time projection that un-did itself. | An episode reads `QUEUED` forever after its pack is deleted, with nothing in flight — the ratchet, reintroduced in a new place. | Season-scoped source transitions must recompute **every episode of the season**, not just the season. REQ-13, AC-14, and a named step in `api/plan.md`. |
 | **Backfill recomputes a title mid-flight during deploy.** | A title downloading while the migration runs could be written from a half-read view. | The recompute is idempotent and derives only from rows; the worst case self-corrects on the next event or the next `/downloads` load. `api` applies migrations before it starts listening (`049` REQ-10), so no request races the backfill. |
+
+## Amendment 0.2.0 — specials leave the series aggregation (REQ-14)
+
+Added 2026-10-15, after the original 23 tasks shipped. One service, no contract or schema change.
+
+**Where the filter goes.** In `TitleStatusService.recomputeShow`, which today builds the episode list
+as `show.seasons.flatMap((season) => season.episodes)` with no `seasonNumber` in the select. The
+query gains a `where: { seasonNumber: { not: 0 } }` on `seasons`, the same predicate
+`acquire-episodes.task.ts` already uses for `073` REQ-7 — so the sweep and the badge draw the line
+with one spelling.
+
+**The alternative, rejected.** Adding `seasonNumber` to `ShowEpisodeAltitude` and filtering inside
+`deriveShowStatus`. It keeps the rule in the pure, unit-tested module, which is attractive, but it
+widens a type every caller must then fill for a rule that is about *which rows are the series*, not
+about how a set of statuses aggregates. `deriveShowStatus` stays a pure fold over whatever episodes it
+is handed; selecting them is the reader's job, and the reader is the one place that reads them. The
+cost is that the rule is proved in `title-status.service.spec.ts` rather than `pipeline-status.spec.ts`
+— acceptable, since that suite already exists to defend the recompute's inputs.
+
+**Every other path is untouched, by design.** `writeEpisodeStatus`, `recomputeEpisode`,
+`recomputeSeason` and the `059` lift keep treating a special as an episode: its own badge stays
+truthful. `recomputeEpisode` on a special still cascades to `recomputeShow` — which now simply ignores
+it — rather than gaining a season-0 short-circuit, so there is one place that knows the rule, not two.
+`ShowStatusSweepService` (REQ-12) needs no change: a special airing inside its lookback triggers a
+recompute that no longer reacts to it, which is correct and costs one read.
+
+**Existing rows (AC-19).** No event fires for a series stuck below `COMPLETED` only because of its
+specials. `recomputeAllStatuses` (`scripts/recompute-statuses.ts`) already runs on every boot under
+`PERCEPTOR_AUTO_MIGRATE` (`main.ts`, NFR-3), so the deploy that ships the filter fixes those rows by
+itself — no new migration, no new script. An install running with `PERCEPTOR_AUTO_MIGRATE=false` gets
+the same result by running the script by hand, which is the posture that variable already implies.
+
+**Risk.** Silent in one direction only: if the filter is put on the episode query instead of the
+season query (or on `releaseDate`), nothing fails and specials keep counting. AC-17 against
+`shows.id = 6` on the live install is the check that catches it, alongside the unit test.
+
+## Amendment 0.3.0 — a replacement in flight outranks possession (REQ-15, REQ-16)
+
+Added 2026-10-15, after 0.2.0 shipped. One service, no contract or schema change.
+
+**The rule moves inside `deriveTitleStatus`.** Today possession is an early return: `filePath` or
+`mediaServerPresentAt` non-null returns `COMPLETED` before sources and jobs are read. The amendment
+reads them first. A possessed target returns the in-flight answer when one exists and `COMPLETED`
+otherwise; a target with no possession is unchanged. The in-flight set is the one the function already
+builds for the unpossessed case, so there is no second definition of "in flight" to drift — the loop
+is the same, only its position relative to the early return changes.
+
+**The pack counts for a possessed episode, at the pack's own status.** An earlier draft of this
+amendment kept the season-pack lift out of a possessed episode, on the reasoning that a pack is only
+an inference about a file the episode does not have. Rejected: replacing a season is one season-scoped
+source and no episode job until the scan, so the whole season would read `COMPLETED` through the
+download. `deriveEpisodeStatus` therefore keeps the lift for an aired possessed episode but, instead of
+the synthetic `QUEUED`, passes the season's unscanned pack sources with their real status, so a
+transferring pack reads `DOWNLOADING`, a paused one `PAUSED`. `isLiftedBySeasonPack` still decides
+*whether* (aired, a non-`ERROR`, unscanned pack exists); `deriveTitleStatus` stays ignorant of where a
+source came from. For an episode with no possession the synthetic `QUEUED` is unchanged (REQ-13).
+
+**One predicate, six readers (REQ-16).** `pipeline-status/` gains `hasPossession({ filePath,
+mediaServerPresentAt })`, the single spelling of REQ-4's two-column test, also used by
+`deriveTitleStatus` itself. The `087` guards and the `054` recovery switch to it. A `where`-clause
+form is needed for the season guard, which counts episodes in the database rather than testing a
+loaded row; it is the same two columns as an `OR`, kept beside the predicate so the two cannot drift.
+
+**Why not leave the readers on the status and accept the gap.** Considered, because the
+`web` hints already do. Rejected for these six: the guard is a destructive-overwrite protection
+(Article XII's neighbourhood) and the recovery decides whether an encode is repeated. Both fail with
+no error, and the fix is mechanical.
+
+**What shows up elsewhere, and is accepted.** The calendar's `completed/total` drops for an episode
+mid-replacement; `refresh_movies` (`status != COMPLETED`) now also refreshes a film mid-replacement,
+which is read-only catalog work; a series reads `ENCODING` while one of its episodes is being
+replaced. The two daily sweeps derive fresh and already treat anything but `MISSING` as "not mine to
+acquire", so a possessed title mid-replacement is skipped as before. A pack that does not contain
+every episode leaves the unmatched ones reading `DOWNLOADING`/`QUEUED` until the scan, then
+`COMPLETED` again — accepted, and the reason the scan's season-scoped recompute (REQ-13) matters more
+than before.
+
+**Existing rows (AC-23).** As in 0.2.0, the boot-time `recomputeAllStatuses` re-derives every title
+on deploy: `episodes.id = 195` flips to `ENCODING` by itself, and so does its series.
+
+**Risks.**
+
+| Risk | What it looks like | Mitigation |
+| :-- | :-- | :-- |
+| A `COMPLETED` write races an in-flight job. `encodeCompleted` marks the job `COMPLETED`, writes `filePath`, then notifies; a recompute landing between the two reads a `COMPLETED` job and a stale `filePath`. | None harmful — still `COMPLETED` through the old possession, or through the new one once written. | The existing order (job first, `filePath` second, recompute last) is kept; the guarded `updateMany` (NFR-2) covers the interleaving. |
+| `encodeStarted` / source transitions on a possessed title previously needed no recompute (the answer could not change). Now it does. | A missed notification leaves the title at `COMPLETED` during a replacement — the same silent class as movie 9 earlier today. | The notifications already exist for every transition; AC-20 against a live replacement is the check that catches a gap. |
+| A reader of `status === 'COMPLETED'` that means possession and was not listed. | A guard or skip that quietly stops firing during a replacement. | `grep -rn "'COMPLETED'" src` over non-spec files is part of the verification; each hit is either on the REQ-16 list or a display reader. |
 
 ## Verification
 

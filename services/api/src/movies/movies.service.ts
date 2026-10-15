@@ -1,3 +1,4 @@
+import { hasPossession } from '@/pipeline-status/pipeline-status';
 import { Injectable } from '@nestjs/common';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
@@ -10,7 +11,7 @@ import { MediaSearchResult as MediaSearchResultEntity } from '@/media/entities/m
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
-import { ContentKind as PrismaContentKind } from '@prisma/client';
+import { ContentKind as PrismaContentKind, GrainMode as PrismaGrainMode } from '@prisma/client';
 import { isReleaseWindowClosed } from './release-window';
 import { classifyContentKind } from '@/media/content-kind';
 import { QbittorrentClient, TorrentCategory } from '@/clients/torrent/client';
@@ -48,6 +49,8 @@ type MovieAttachTarget = {
   title: string;
   isShort: boolean;
   status: string;
+  filePath: string | null;
+  mediaServerPresentAt: Date | null;
 };
 
 // Spec 056, NFR-3
@@ -388,6 +391,22 @@ export class MoviesService implements MediaTypeService {
     return this.withDerivedStatus(updated);
   }
 
+  // Spec 092, REQ-3
+  async setGrainMode(id: number, userId: string, grainMode: PrismaGrainMode) {
+    const movie = await this.findOneFromDb(id, userId);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
+
+    const updated = await this.prisma.movie.update({
+      where: { id },
+      data: { grainMode },
+      include: {
+        mediaSources: true,
+        processJobs: true,
+      },
+    });
+    return this.withDerivedStatus(updated);
+  }
+
   // Spec 005, T004
   private async linkUserToMovie(
     userId: string,
@@ -643,8 +662,9 @@ export class MoviesService implements MediaTypeService {
         target: MovieAttachTarget,
         force: boolean,
       ): Promise<void> => {
+        // Spec 089, REQ-16 AC-22
         if (
-          (target.status === 'COMPLETED' ||
+          (hasPossession(target) ||
             (await this.downloadsService.hasDeliveredSource({
               movieId: target.id,
             }))) &&

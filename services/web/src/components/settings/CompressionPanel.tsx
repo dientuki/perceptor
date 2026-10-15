@@ -58,6 +58,7 @@ function toggleFormat(selected: Set<string>, id: string, on: boolean) {
 interface CompressionPanelProps {
   compressionEnabled: boolean;
   compressionResolution: string;
+  grainAutoEnabled: boolean;
   subtitlesEnabled: boolean;
   subtitlesTextEnabled: boolean;
   subtitlesTextFormats: string;
@@ -69,6 +70,7 @@ interface CompressionPanelProps {
 export default function CompressionPanel({
   compressionEnabled,
   compressionResolution,
+  grainAutoEnabled,
   subtitlesEnabled,
   subtitlesTextEnabled,
   subtitlesTextFormats,
@@ -82,6 +84,7 @@ export default function CompressionPanel({
       ? (compressionResolution as Resolution)
       : DEFAULT_RESOLUTION,
   );
+  const [grainAuto, setGrainAuto] = useState(grainAutoEnabled);
 
   const [noSubtitles, setNoSubtitles] = useState(!subtitlesEnabled);
   const [textEnabled, setTextEnabled] = useState(subtitlesTextEnabled);
@@ -138,6 +141,20 @@ export default function CompressionPanel({
           ))}
         </div>
         <input type="hidden" name="compression_resolution" value={resolution} />
+      </div>
+
+      <div>
+        <Switch
+          label={t("grainAutoLabel")}
+          defaultChecked={grainAutoEnabled}
+          onChange={setGrainAuto}
+          disabled={!enabled}
+        />
+        <input
+          type="hidden"
+          name="grain_auto_enabled"
+          value={grainAuto ? "true" : "false"}
+        />
       </div>
 
       <div>
