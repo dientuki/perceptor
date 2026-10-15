@@ -195,7 +195,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   Every failure in this path degrades to `LIVE_ACTION` (unreadable genres) or `CGI` (animated but
   unreadable keywords) and never fails registration. `contentKind` never enters the cached object,
   same rule as `isShort`. `setContentKind(id, userId, kind)` follows `setShort`'s exact shape, exposed
-  as `setMovieContentKind`.
+  as `setMovieContentKind`. Since `092-film-grain-optimization`, `Movie.grainMode` (`GrainMode
+  @default(INHERIT)`, no registration-time derivation — every title starts at `INHERIT`) follows the
+  identical shape: `setGrainMode(id, userId, grainMode)` clones `setContentKind`, exposed as
+  `setMovieGrainMode`.
 - **`shows/`** — `ShowsService`, `MoviesService`'s structural twin for registration, hydration and
   catalog refresh — **deliberately not factored into a shared base class** for those (see
   `006-media-search/spec.md` § Out of Scope). Since `088-acquisition-path-unification`, the one
@@ -218,7 +221,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   best-effort (never awaited into the caller's path); `setContentKind` is a plain update with no
   ownership gate of its own — that gate lives in the resolver (`ShowsResolver.setShowContentKind`),
   not the service, following `setShowAudioMandatory`'s existing asymmetry with the film side rather
-  than unifying it.
+  than unifying it. Since `092-film-grain-optimization`, `Show.grainMode` (`GrainMode
+  @default(INHERIT)`) follows the same shape — `setGrainMode(id, grainMode)` is a plain update, and
+  `ShowsResolver.setShowGrainMode` owns the ownership gate, preserving the asymmetry rather than
+  unifying it.
 - **`languages/`** — the `languages` query (reads the seeded `Language` table, deriving an English
   `name` per `tag` from `language-names.ts`, not stored — `web` renders the localized display name
   via `Intl.DisplayNames` since `018-ui-i18n`; this map is an internal English label, not the UI
@@ -569,6 +575,11 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   (`ContentKind!`, replacing a write-only `isLiveAction` boolean): the film arm reads
   `movie.contentKind` directly, the episode arm reads its **series'** `contentKind` — an episode is
   never classified on its own.
+  Since `092-film-grain-optimization`, it also resolves `grainMode` (`EffectiveGrainMode!`) off the
+  same `settingsMap` already read for `compressionEnabled`/`compressionResolution` (no new query):
+  the film arm passes `movie.grainMode` into `resolveEffectiveGrainMode`, the episode arm passes its
+  **series'** `show.grainMode` — the same no-per-episode-override rule `contentKind` already
+  established. The resolved value is never snapshotted onto `ProcessJob`.
   `getEncodeJobDetails` resolves four fields, an audio pair and a subtitle pair — since
   `039-per-title-language-split` this is no longer one merged list: `allowedAudioLanguagesIso3`/
   `allowedAudioLanguageTags` and `allowedSubtitleLanguagesIso3`/`allowedSubtitleLanguageTags`. Each
@@ -627,7 +638,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `getMap()` call onto `EncodeJobDetails.compressionResolution`, resolved at the same query-time
   moment as `compressionEnabled`: the raw row if it is one of the five values, else
   `DEFAULT_COMPRESSION_RESOLUTION` (`'1080p'`) — a missing or hand-edited-invalid row never fails the
-  query. Since `070-subtitle-format-selection`, five `subtitles_*` rows (a new `enum_list` `SettingKind`, which validates, dedupes and stores catalog order; `""` is a valid empty list) are resolved by the pure `resolveAllowedSubtitleFormats` (`settings/subtitle-formats.ts`) onto `EncodeJobDetails.allowedSubtitleFormats`, and the seed does not back-fill the two list rows when empty. Three more rows — `media_server_index_state`,
+  query. Since `070-subtitle-format-selection`, five `subtitles_*` rows (a new `enum_list` `SettingKind`, which validates, dedupes and stores catalog order; `""` is a valid empty list) are resolved by the pure `resolveAllowedSubtitleFormats` (`settings/subtitle-formats.ts`) onto `EncodeJobDetails.allowedSubtitleFormats`, and the seed does not back-fill the two list rows when empty. Since `092-film-grain-optimization`, `grain_auto_enabled` (`kind: 'boolean'`, seeded `"false"`) is resolved — together with a title's own `Movie.grainMode`/`Show.grainMode` — by the pure `resolveEffectiveGrainMode` (`settings/grain-mode.ts`) onto `EncodeJobDetails.grainMode`: a title's explicit `ON`/`OFF` wins outright, `INHERIT` becomes `AUTO` only when the row reads the literal string `"true"` (never `!== "false"`), else `OFF`. Three more rows — `media_server_index_state`,
   `media_server_index_synced_at`, `media_server_index_count` (`034-jellyfin-library-reconciliation`)
   — are seeded but **absent from `settings.catalog.ts`**, the same non-editable treatment as
   `torrent_port`: they are state the system writes about the media-server index rebuild, not
@@ -878,9 +889,8 @@ refuse every path on a default install.
 
 ## Schema/enum reality check
 
-`prisma/schema.prisma` defines exactly eight enums (this list previously undercounted — it had missed
-`ScheduledTaskOutcome`) — verify with `grep -n '^enum' prisma/schema.prisma` rather than trusting this
-list:
+`prisma/schema.prisma` defines exactly nine enums — verify with `grep -n '^enum' prisma/schema.prisma`
+rather than trusting this list:
 
 | Enum | Values |
 | :-- | :-- |
@@ -892,15 +902,15 @@ list:
 | `TorrentGroupScope` | `MOVIE`, `SHOW` (`021-user-preferences`) |
 | `ScheduledTaskOutcome` | see `src/scheduler/` (`035-scheduled-tasks`) |
 | `ContentKind` | `LIVE_ACTION`, `ANIME`, `CGI` — replaces `Movie.isLiveAction`/`Show.isLiveAction`, a boolean no code path had ever written (`057-content-kind-classification`) |
+| `GrainMode` | `INHERIT`, `ON`, `OFF` — a title's own override of the installation's grain-optimization switch; the worker-facing `EffectiveGrainMode` (`AUTO`/`ON`/`OFF`, `INHERIT` resolved away) is a GraphQL-only enum with no Prisma counterpart (`092-film-grain-optimization`) |
 
 **There is no `MEDIA_TYPE` or `MediaType` enum**, here or anywhere in Prisma. `services/web` declares
 its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — a web-side type, not a database one.
 A movie/show discriminator in `api` would have to be added to `schema.prisma` and migrated first.
 
-There are 20 models and 32 migrations (counted 2026-09-15, after
-`057-content-kind-classification`, which added no model — only `Movie.contentKind`/
-`Show.contentKind ContentKind @default(LIVE_ACTION)` replacing `isLiveAction`, and its migration) —
-verify with
+There are 20 models and 40 migrations (counted 2026-10-15, after `092-film-grain-optimization`,
+which added no model — only `Movie.grainMode`/`Show.grainMode GrainMode @default(INHERIT)`, no
+backfill, and its migration) — verify with
 `grep -c "^model " prisma/schema.prisma` rather than trusting the number. Worth knowing: the three
 `*Language` join tables reference `UserMovie`/`UserShow` through their composite FK rather than
 `User`+`Movie`/`Show` separately, so a language preference disappears automatically when the title

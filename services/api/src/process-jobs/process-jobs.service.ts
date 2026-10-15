@@ -13,6 +13,7 @@ import { MESSAGES_EN } from '@/i18n/messages.en';
 import { EncodeJobDetails } from './entities/encode-job-details.entity';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { resolveAllowedSubtitleFormats } from '@/settings/subtitle-formats';
+import { resolveEffectiveGrainMode } from '@/settings/grain-mode';
 import { COMPRESSION_RESOLUTIONS, DEFAULT_COMPRESSION_RESOLUTION } from '@/settings/settings.catalog';
 import { TitleStatusService } from '@/title-status/title-status.service';
 import { DownloadsService } from '@/downloads/downloads.service';
@@ -100,6 +101,9 @@ export class ProcessJobsService {
         // field — same cross-boundary cast `preferences.resolver.ts` uses for
         // `LanguageTrackKind`, just in the opposite (read) direction.
         contentKind: movie.contentKind as unknown as ContentKind,
+        // 092-film-grain-optimization: the film's own override over the
+        // installation switch, off the same settingsMap read above.
+        grainMode: resolveEffectiveGrainMode(movie.grainMode, settingsMap),
         seasonNumber: null,
         episodeNumber: null,
         episodeTitle: null,
@@ -130,6 +134,10 @@ export class ProcessJobsService {
         originalLanguage: show.originalLanguage,
         originalLanguageIso3: original.iso3,
         contentKind: show.contentKind as unknown as ContentKind,
+        // 092-film-grain-optimization: an episode is never classified on
+        // its own — it reads its series' grainMode, exactly as contentKind
+        // does above.
+        grainMode: resolveEffectiveGrainMode(show.grainMode, settingsMap),
         seasonNumber: episode.season.seasonNumber,
         episodeNumber: episode.episodeNumber,
         episodeTitle: episode.title,

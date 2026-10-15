@@ -2,6 +2,7 @@ import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 import { Season } from './season.entity';
 import { Language } from '@/languages/entities/language.entity';
 import { ContentKind } from '@/media/entities/content-kind.enum';
+import { GrainMode } from '@/media/entities/grain-mode.enum';
 
 // Field-for-field twin of Movie (movies/entities/movies.entity.ts), minus the
 // film-only file/source fields and plus seasonsSyncedAt — with one exception:
@@ -35,6 +36,10 @@ export class Show {
 
   @Field(() => ContentKind)
   contentKind: ContentKind;
+
+  // Spec 092, REQ-3
+  @Field(() => GrainMode)
+  grainMode: GrainMode;
 
   @Field()
   status: string;

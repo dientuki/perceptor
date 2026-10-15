@@ -122,6 +122,56 @@ describe('MoviesResolver.setMovieContentKind guard order', () => {
   });
 });
 
+// This suite exists for the same reason as setMovieContentKind's above: a
+// resolver that read the film before checking assertEnabled(MOVIE) would
+// leak whether movieId exists to a caller in an installation with movies
+// turned off, even though grain optimization has no capability flag of its
+// own (092-film-grain-optimization's frozen contract has no
+// assertShortsEnabled-style analogue here).
+describe('MoviesResolver.setMovieGrainMode guard order', () => {
+  const principal: AuthPrincipal = { type: 'user', id: 'u1', username: 'alice', jti: 'session-1' };
+
+  const buildResolver = () => {
+    const moviesService = {
+      setGrainMode: jest.fn(),
+    } as unknown as MoviesService;
+    const languagesService = {} as unknown as LanguagesService;
+    const mediaCapabilitiesService = {
+      assertEnabled: jest.fn(),
+    } as unknown as MediaCapabilitiesService;
+
+    const resolver = new MoviesResolver(moviesService, languagesService, mediaCapabilitiesService);
+
+    return { resolver, moviesService, mediaCapabilitiesService };
+  };
+
+  it('refuses with error.media.type_disabled before the service is ever called, when movies are disabled', async () => {
+    const { resolver, moviesService, mediaCapabilitiesService } = buildResolver();
+    (mediaCapabilitiesService.assertEnabled as jest.Mock).mockRejectedValue(
+      new ForbiddenException({ i18n: { key: ERROR_KEYS.MEDIA_TYPE_DISABLED, params: { type: MEDIA_TYPE.MOVIE } } }),
+    );
+
+    await expect(
+      resolver.setMovieGrainMode(7, 'ON' as never, principal),
+    ).rejects.toMatchObject({
+      response: { i18n: { key: ERROR_KEYS.MEDIA_TYPE_DISABLED } },
+    });
+    expect(moviesService.setGrainMode).not.toHaveBeenCalled();
+  });
+
+  it('dispatches to the service once the capability guard passes', async () => {
+    const { resolver, moviesService, mediaCapabilitiesService } = buildResolver();
+    (mediaCapabilitiesService.assertEnabled as jest.Mock).mockResolvedValue(undefined);
+    (moviesService.setGrainMode as jest.Mock).mockResolvedValue({ id: 7, grainMode: 'ON' });
+
+    const result = await resolver.setMovieGrainMode(7, 'ON' as never, principal);
+
+    expect(mediaCapabilitiesService.assertEnabled).toHaveBeenCalledWith(MEDIA_TYPE.MOVIE);
+    expect(moviesService.setGrainMode).toHaveBeenCalledWith(7, 'u1', 'ON');
+    expect(result).toEqual({ id: 7, grainMode: 'ON' });
+  });
+});
+
 // This suite exists because a removeMovie that read the film before
 // assertEnabled(MOVIE) would tell a caller in an installation with movies
 // off whether an id exists, and one that skipped the guard would let a

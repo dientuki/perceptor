@@ -12,6 +12,7 @@ function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
     allowedSubtitleFormats: ['srt', 'mov_text'],
     contentKind: 'LIVE_ACTION',
     compressionResolution: '1080p',
+    grainMode: 'OFF',
     containerTitle: 'Some Title',
     sourceTag: 'some/source.mkv',
     trackTitles: { eng: 'English', spa: 'Español' },

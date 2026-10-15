@@ -356,6 +356,85 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // Spec 092, REQ-6 REQ-5: a wrong read here silently produces a grain-free
+  // (or grain-on) encode with no error anywhere. The episode case is the one
+  // that matters most — reading a non-existent per-episode value instead of
+  // the series' own would fall back to a default silently (api/plan.md's
+  // risk table).
+  describe('getEncodeJobDetails — grainMode', () => {
+    it("carries the film's own resolved value", async () => {
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({ movie: { ...movieProcessJob().movie, grainMode: 'ON' } }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        grain_auto_enabled: 'false',
+      });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.grainMode).toBe('ON');
+    });
+
+    it("carries the series' resolved value on the episode arm, never a per-episode one", async () => {
+      const episode = episodeProcessJob();
+      prisma.processJob.findUnique.mockResolvedValue({
+        ...episode,
+        episode: {
+          ...episode.episode,
+          season: {
+            ...episode.episode.season,
+            show: { ...episode.episode.season.show, grainMode: 'ON' },
+          },
+        },
+      });
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userShow.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        grain_auto_enabled: 'false',
+      });
+
+      const details = await service.getEncodeJobDetails(2);
+
+      expect(details.grainMode).toBe('ON');
+    });
+
+    it('resolves INHERIT to AUTO only when grain_auto_enabled reads true', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({ movie: { ...movieProcessJob().movie, grainMode: 'INHERIT' } }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({
+        path_movies: 'Movies',
+        path_shows: 'Shows',
+        grain_auto_enabled: 'true',
+      });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.grainMode).toBe('AUTO');
+    });
+
+    it('resolves INHERIT to OFF when grain_auto_enabled is absent', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(
+        movieProcessJob({ movie: { ...movieProcessJob().movie, grainMode: 'INHERIT' } }),
+      );
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' });
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.grainMode).toBe('OFF');
+    });
+  });
+
   // Spec 070, REQ-7: the effective format list lives in
   // `base`, so a refactor that moved it into one branch would leave the other
   // job type with an undefined field and every such encode would silently

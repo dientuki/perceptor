@@ -2194,6 +2194,95 @@ Things the schema cannot express, all load-bearing:
   to `QUEUED` — the one way back from retirement, and it is atomic with the status flip so the row
   is never live while still excluded from its own race.
 
+### Two enums, one for the title and one for the worker (`092-film-grain-optimization`)
+
+```graphql
+enum GrainMode {
+  INHERIT
+  ON
+  OFF
+}
+
+"""The value the worker consumes — already resolved, never INHERIT."""
+enum EffectiveGrainMode {
+  AUTO
+  ON
+  OFF
+}
+
+type Movie {
+  grainMode: GrainMode!
+}
+
+type Show {
+  grainMode: GrainMode!
+}
+
+type EncodeJobDetails {
+  grainMode: EffectiveGrainMode!
+}
+
+type Mutation {
+  setMovieGrainMode(movieId: Int!, grainMode: GrainMode!): Movie!
+  setShowGrainMode(showId: Int!, grainMode: GrainMode!): Show!
+}
+```
+
+**Two enums on purpose, not one reused for both ends.** `GrainMode` is what a title stores —
+`INHERIT`, meaning "defer to the installation setting", plus the two explicit overrides. `INHERIT`
+is a stored value with no meaning to the worker, so it never crosses into `EncodeJobDetails`:
+`api` resolves it away first, onto `EffectiveGrainMode` (`AUTO`/`ON`/`OFF`), the tri-state the
+worker actually consumes. A single shared enum would force the worker to special-case a value it
+can never act on — a defensive branch for a condition that should be structurally unreachable.
+
+**Resolution happens in two places, deliberately split across two services, with `AUTO`
+unresolved in between.** `api`'s `resolveEffectiveGrainMode(titleGrainMode, settingsMap)`
+(`src/settings/grain-mode.ts`) does the *first* resolution — a title's own `ON`/`OFF` wins outright;
+`INHERIT` becomes `AUTO` only when the installation's `grain_auto_enabled` setting reads the literal
+string `"true"` (never `!== "false"` — an absent or malformed row must read as off, the same idiom
+`058`/`070` already use), otherwise `OFF`. `AUTO` crosses the wire as-is and reaches the worker's
+`resolveFilmGrain(mode, metadata)` (`src/encode/grain-mode.ts`) unresolved: in this feature that
+function is a stub that always answers `false` for `AUTO`, deliberately — the heuristic that gives
+`AUTO` real meaning is the next spec's entire subject, and keeping the *where* vs the *what* split
+across the api/worker boundary now is what confines that next spec to one function in one service.
+`resolveFilmGrain` already accepts a `metadata` parameter, unused today, as that spec's seam.
+
+**An episode inherits its series' value, never its own** — there is no `Episode.grainMode` anywhere
+in the schema. `processJob(id)` for an episode job resolves `grainMode` from `Episode.show.grainMode`,
+the same pattern `057` already established for `contentKind`.
+
+**Compression off means grain is never resolved, not just never applied (REQ-10).** With
+`compressionEnabled: false` the worker takes the `passthrough` path, which never calls
+`buildFfmpegCommand` and never reads `EncodeInput.grainMode` at all — `encode.job.ts` gates its own
+`normalizeGrainMode` call on the same `compressing` boolean that already decides the FFmpeg-or-not
+branch, so an unconditional call that would print `NFR-3`'s degradation warning for a job that was
+never going to reach FFmpeg cannot happen. `web`'s Settings switch for `grain_auto_enabled` mirrors
+this at the control level: it locks (disabled, state preserved, hidden input still emitting the
+stored value) exactly the way `070`'s subtitle-format controls already lock when compression is off,
+rather than letting its own switch disagree with a setting that no longer does anything.
+
+| Condition | HTTP / GraphQL error |
+| :-- | :-- |
+| `setMovieGrainMode` for a film id the caller does not own, or that does not exist | `error.movie.not_found` (404, existing) |
+| `setShowGrainMode` for a series id the caller does not own, or that does not exist | `error.show.not_available` (404, existing) |
+| `setMovieGrainMode`/`setShowGrainMode` while the type is disabled | `error.media.type_disabled` (403, existing) |
+| `updateSettings` with `grain_auto_enabled` set to anything but `"true"`/`"false"` | `error.setting.expected_boolean` (400, existing) |
+
+No new error key was added anywhere in this feature — all four above pre-date it.
+
+**The worker trusts nothing it reads off the payload**, the same posture `057`/`058`/`070` already
+take: `normalizeGrainMode()` maps an absent, `null`, or unrecognised value — including the literal
+`'INHERIT'`, which `api` must never send and which the worker must not try to interpret — to `OFF`
+and logs once, never throwing. An `api` that has not shipped this field yet yields `undefined`,
+which resolves to `OFF`: byte-identical to the worker's behaviour before this feature.
+
+Consumer obligations: `web`'s two detail queries (`src/actions/movies.ts`, `src/actions/shows.ts`)
+select `grainMode`; the listing queries must not. `GrainModeSelect` sends the enum argument as an
+unquoted `GrainMode!` variable, never a quoted string, and reverts to the previous value on a
+refusal rather than using the shorts `Switch`'s key-remount trick — the same controlled-`<select>`
+shape `057`'s `ContentKindSelect` already uses. `worker` adds `grainMode` to `encode.job.ts`'s
+hand-written `processJob` query and never calls either mutation.
+
 ### What never crosses the boundary
 
 - **Absolute container paths.** Constitution, Article V — `web` sees host paths, `worker` receives

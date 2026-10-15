@@ -1,8 +1,8 @@
 # Specs con Acceptance Criteria pendientes
 
 <!-- pending-acs:begin intro -->
-Medido el **2026-10-10**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
-`## Acceptance Criteria`; las 50 specs que no aparecen estan en 100%.
+Medido el **2026-10-15**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
+`## Acceptance Criteria`; las 51 specs que no aparecen estan en 100%.
 <!-- pending-acs:end intro -->
 
 **No editar a mano los bloques entre los marcadores `pending-acs:begin`/`end`.** Los regenera
@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **41** de 91 |
+| Specs con ACs pendientes | **41** de 92 |
 | ACs pendientes | **244** |
-| ACs totales del proyecto | 1084 |
-| ACs verificados | 840 (77%) |
+| ACs totales del proyecto | 1096 |
+| ACs verificados | 852 (78%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec

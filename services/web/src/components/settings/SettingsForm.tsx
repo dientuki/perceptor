@@ -190,6 +190,9 @@ export default function SettingsForm({
                 getSettingValue("compression_enabled") === "true"
               }
               compressionResolution={getSettingValue("compression_resolution")}
+              grainAutoEnabled={
+                getSettingValue("grain_auto_enabled") === "true"
+              }
               subtitlesEnabled={getSettingValue("subtitles_enabled") === "true"}
               subtitlesTextEnabled={
                 getSettingValue("subtitles_text_enabled") === "true"

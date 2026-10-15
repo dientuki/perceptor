@@ -14,6 +14,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { MEDIA_TYPE } from '@/types/media';
 import { ContentKind } from '@/media/entities/content-kind.enum';
+import { GrainMode } from '@/media/entities/grain-mode.enum';
 
 @Resolver(() => Show)
 export class ShowsResolver {
@@ -151,6 +152,27 @@ export class ShowsResolver {
     const show = await this.showsService.findOneFromDb(showId, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
     return this.showsService.setContentKind(showId, contentKind);
+  }
+
+  @Mutation(() => Show, {
+    name: 'setShowGrainMode',
+    description: 'Sets the grain-optimization control of a series (092-film-grain-optimization)',
+  })
+  async setShowGrainMode(
+    @Args('showId', { type: () => Int }) showId: number,
+    @Args('grainMode', { type: () => GrainMode }) grainMode: GrainMode,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    // Spec 092: assertEnabled first, before the ownership read, as
+    // setShowContentKind does. No shorts-style second capability check —
+    // grain has no installation on/off switch that gates the control.
+    await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.SHOW);
+    const userId = principal.type === 'user' ? principal.id : '';
+    // Ownership gate lives in the resolver, as setShowContentKind's does —
+    // the deliberate asymmetry with the film side, see api/plan.md.
+    const show = await this.showsService.findOneFromDb(showId, userId);
+    if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
+    return this.showsService.setGrainMode(showId, grainMode);
   }
 
   @Mutation(() => TitleRemoval, {

@@ -10,7 +10,7 @@ import { MediaSearchResult as MediaSearchResultEntity } from '@/media/entities/m
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
-import { ContentKind as PrismaContentKind } from '@prisma/client';
+import { ContentKind as PrismaContentKind, GrainMode as PrismaGrainMode } from '@prisma/client';
 import { isReleaseWindowClosed } from './release-window';
 import { classifyContentKind } from '@/media/content-kind';
 import { QbittorrentClient, TorrentCategory } from '@/clients/torrent/client';
@@ -380,6 +380,22 @@ export class MoviesService implements MediaTypeService {
     const updated = await this.prisma.movie.update({
       where: { id },
       data: { contentKind },
+      include: {
+        mediaSources: true,
+        processJobs: true,
+      },
+    });
+    return this.withDerivedStatus(updated);
+  }
+
+  // Spec 092, REQ-3
+  async setGrainMode(id: number, userId: string, grainMode: PrismaGrainMode) {
+    const movie = await this.findOneFromDb(id, userId);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id });
+
+    const updated = await this.prisma.movie.update({
+      where: { id },
+      data: { grainMode },
       include: {
         mediaSources: true,
         processJobs: true,

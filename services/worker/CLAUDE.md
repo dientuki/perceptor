@@ -216,8 +216,9 @@ filename substring is the last resort only, reached when no bitrate at all can b
 (`'LIVE_ACTION' | 'ANIME' | 'CGI'`, `src/encode/content-kind.ts`) instead of the old `isLiveAction`
 boolean, which nothing on the `api` side had ever actually set. The SVT-AV1 parameter string is built
 from three `switch` cases — `LIVE_ACTION`: `scm=0`, `aq-mode=2`, no `enable-qm`/`qm-min`,
-`sharpness=0`, `film-grain=0`; `ANIME` and `CGI`: `scm=2`, `aq-mode=2`, `enable-qm=1`, `qm-min=4`,
-`sharpness=2`, `film-grain=0`. **`ANIME` and `CGI` are written as two independent case bodies, not a
+`sharpness=0`; `ANIME` and `CGI`: `scm=2`, `aq-mode=2`, `enable-qm=1`, `qm-min=4`, `sharpness=2`;
+each case's trailing grain terms are conditional since `092-film-grain-optimization` (see below).
+**`ANIME` and `CGI` are written as two independent case bodies, not a
 shared fallthrough arm**, even though they produce identical output today — the two are meant to be
 tuned against each other, and the spec explicitly forbids collapsing them just because they currently
 agree (Article X does not apply here; REQ-11 overrides it). `getQuality` keeps returning exactly the
@@ -249,6 +250,32 @@ the ceiling has nothing to apply to (REQ-16) — the field is still computed and
 What that decision is — which box each tier names, when a source counts as exceeding it, which
 codecs get re-encoded to AV1 versus copied — lives in `src/ffmpeg/params.ts`, owned by the `ffmpeg`
 agent; see the section below.
+
+## Film grain is a boolean the worker resolves from a tri-state, and never interprets `AUTO` yet (`092-film-grain-optimization`)
+
+`EncodeJobDetails.grainMode: EffectiveGrainMode!` (`'AUTO' | 'ON' | 'OFF'`, never `'INHERIT'` — `api`
+has already resolved a title's own override against the installation setting before this service
+ever sees it) reaches `src/encode/grain-mode.ts` via two functions, mirroring `content-kind.ts`'s
+shape: `normalizeGrainMode()` degrades an absent, `null` or unrecognised value — including the
+literal `'INHERIT'`, which this service must never try to interpret — to `'OFF'` and warns once,
+same defensive posture as `contentKind`/`compressionResolution`; `resolveFilmGrain(mode, metadata)`
+turns the normalized tri-state into the boolean `src/ffmpeg/params.ts` actually consumes — `'ON'`
+→ `true`, `'OFF'`/`'AUTO'` → `false`. **`AUTO` always resolving to `false` is this feature's entire
+scope**: the heuristic that gives `AUTO` real meaning is a future spec's whole subject, and
+`resolveFilmGrain` already takes the probed `metadata` as an unused parameter — the seam that spec
+replaces, not something to build out now.
+
+`src/jobs/encode.job.ts` resolves `grainMode` through `normalizeGrainMode()` **gated on the
+`compressing` boolean**, unlike `contentKind`/`compressionResolution` which normalize
+unconditionally: with compression off nothing about grain may run at all (REQ-10), and an
+unconditional call would print the degradation warning for a job that is never going to reach
+FFmpeg. `src/ffmpeg/buildCommand.ts` resolves the boolean via `resolveFilmGrain(details.grainMode,
+metadata)` next to the `quality` line — reached only on the compressing path, since `passthrough`
+never calls `buildFfmpegCommand` at all, which is what makes REQ-10 structural rather than a check
+someone has to remember. `src/ffmpeg/params.ts`'s three `svtav1KindParams` cases (see below) each
+substitute their trailing `film-grain=0` for `film-grain=8`/`film-grain-denoise=1` when the boolean
+is true — no `film-grain-denoise` term is ever present when it's false, since a leftover denoise
+term with no grain synthesis looks like nothing more than a slightly soft encode.
 
 ## The rules in `src/ffmpeg/` have their own agent and their own corpus
 

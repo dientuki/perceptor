@@ -19,6 +19,17 @@ export const CONTENT_KINDS: readonly ContentKind[] = [
   "CGI",
 ] as const;
 
+// Order here is the single source of `<select>` option order and must stay in
+// sync with `api`'s `GrainMode` enum declaration order. Inherit first since
+// it is the default.
+export type GrainMode = "INHERIT" | "ON" | "OFF";
+
+export const GRAIN_MODES: readonly GrainMode[] = [
+  "INHERIT",
+  "ON",
+  "OFF",
+] as const;
+
 // System-wide capability flags — identical for every user, read from the
 // `movies_enabled` / `shows_enabled` Settings rows (045-media-type-availability).
 export interface MediaCapabilities {

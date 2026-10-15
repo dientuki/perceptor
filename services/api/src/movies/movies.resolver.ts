@@ -1,7 +1,8 @@
 import { Resolver, Query, Mutation, Args, Int, ResolveField, Parent } from '@nestjs/graphql';
-import { LanguageTrackKind as PrismaLanguageTrackKind, ContentKind as PrismaContentKind } from '@prisma/client';
+import { LanguageTrackKind as PrismaLanguageTrackKind, ContentKind as PrismaContentKind, GrainMode as PrismaGrainMode } from '@prisma/client';
 import { MoviesService } from './movies.service';
 import { ContentKind } from '@/media/entities/content-kind.enum';
+import { GrainMode } from '@/media/entities/grain-mode.enum';
 import { Movie } from './entities/movies.entity';
 import { TitleRefresh } from '@/media/entities/title-refresh.entity';
 import { TitleRemoval } from '@/media/entities/title-removal.entity';
@@ -197,6 +198,27 @@ export class MoviesResolver {
       movieId,
       userId,
       contentKind as unknown as PrismaContentKind,
+    );
+  }
+
+  @Mutation(() => Movie, {
+    name: 'setMovieGrainMode',
+    description: 'Sets the grain-optimization control of a film (092-film-grain-optimization)',
+  })
+  async setMovieGrainMode(
+    @Args('movieId', { type: () => Int }) movieId: number,
+    @Args('grainMode', { type: () => GrainMode }) grainMode: GrainMode,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    // Spec 092, api/plan.md "Existing code to reuse": assertEnabled before
+    // the ownership read, no shorts-style second capability check — grain
+    // has no installation on/off switch that gates the control itself.
+    await this.mediaCapabilitiesService.assertEnabled(MEDIA_TYPE.MOVIE);
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.setGrainMode(
+      movieId,
+      userId,
+      grainMode as unknown as PrismaGrainMode,
     );
   }
 
