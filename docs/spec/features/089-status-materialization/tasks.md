@@ -1,6 +1,6 @@
 ---
 title: Status materialization — Tasks
-last_updated: 2026-10-06
+last_updated: 2026-10-15
 status: Done
 ---
 
@@ -12,10 +12,11 @@ status: Done
 | :-- | :-- |
 | `[api]` `[web]` `[worker]` `[infra]` | Which subagent owns the task. Exactly one per task. |
 | `[docs]` | Documentation only. Owned by the orchestrator, not a service agent. |
+| `[orch]` | A check the orchestrator runs itself against the live install; writes no code. |
 | `[P]` | May run in parallel with the other `[P]` tasks in the same group. |
 | `→ Tnnn` | Blocked by that task. |
 
-Only `api` and `docs` appear. `services: [api]`, and the GraphQL surface does not change
+Only `api`, `docs` and (from amendment 0.2.0) one `orch` check appear. `services: [api]`, and the GraphQL surface does not change
 (`spec.md` § GraphQL Contract Delta: **None**), so `web` and `worker` are owed nothing — `web`'s
 `StatusBadge` already renders all eight values and `worker` reads no title status. **An agent that
 finds itself needing to edit `services/web/` or `services/worker/` has hit a contract problem: stop
@@ -262,6 +263,88 @@ Independent of Groups 4–6 except where noted, so T016 can start as soon as Gro
       measurement entry to `docs/spec/history.md` (newest first — never to the root `CLAUDE.md`,
       `086` REQ-11), and set `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md` and this
       file. → T021, T022
+
+### Group 10 — amendment 0.2.0: specials leave the series aggregation (REQ-14)
+
+T001–T023 shipped under 0.1.0 and stay ticked. Only the tasks below are open.
+
+- [x] **T024** `[api]` In `title-status/title-status.service.ts`, `recomputeShow`'s `seasons` select
+      gains `where: { seasonNumber: { not: 0 } }` — the predicate `acquire-episodes.task.ts` already
+      uses for `073` REQ-7. `deriveShowStatus`, `ShowEpisodeAltitude`, `writeEpisodeStatus`,
+      `recomputeEpisode`, `recomputeSeason`, the sweep and the backfill script are **not** touched
+      (`api/plan.md` Step 11). → T023
+      *Done when:* `title-status.service.spec.ts` asserts the `seasonNumber: { not: 0 }` filter on the
+      `show.findUnique` call and that a series with every regular episode `COMPLETED` writes
+      `COMPLETED` (AC-17, AC-18); `bin/npm api run test`, `bin/cli api npx tsc --noEmit` and
+      `bin/comments api` are clean.
+
+- [x] **T025** `[orch]` Live check on the dev install, after `api` reloads with T024. → T024
+      *Done when:* `bin/mysql -e "select status from shows where id = 6"` reads `COMPLETED` (it read
+      `DOWNLOADED` before) once `api` has restarted through its boot-time `recomputeAllStatuses`, with
+      no episode of that series touched (AC-17, AC-19); and `select status from episodes e join
+      seasons s on s.id = e.seasonId where s.showId = 6 and s.seasonNumber = 0` still reads `MISSING`
+      for all five specials — their own status is unchanged.
+
+- [x] **T026** `[docs]` Record REQ-14. → T025
+      - `docs/spec/graphql-contract.md`: the `Show.status` note from T021 gains that season 0 is
+        excluded from the aggregation; no field, type or vocabulary change.
+      - Root `CLAUDE.md`, **Browse library** row: "`COMPLETED` once every aired episode is
+        `COMPLETED`" becomes "every aired episode outside season 0".
+      - `services/api/CLAUDE.md`: the `title-status/` entry names the season-0 exclusion.
+
+- [x] **T027** `[docs]` Tick REQ-14 and AC-17–AC-19 in `spec.md`, append a measurement entry to
+      `docs/spec/history.md` (newest first), and set `status: Implemented` on `spec.md`, `plan.md`,
+      `api/plan.md` and `status: Done` on this file. → T026
+
+### Group 11 — amendment 0.3.0: a replacement in flight outranks possession (REQ-15, REQ-16)
+
+T001–T027 shipped and stay ticked. Only the tasks below are open.
+
+- [x] **T028** `[api]` In `pipeline-status/pipeline-status.ts`: add `hasPossession` and its Prisma
+      `where` fragment; make `deriveTitleStatus` return the in-flight answer for a possessed target
+      that has one, `COMPLETED` otherwise; make `deriveEpisodeStatus` count the season's real pack sources
+      for a possessed aired episode, at their own status. `deriveShowStatus`, `isLiftedBySeasonPack` and `TitleStatusService` are not
+      otherwise changed (`api/plan.md` Step 12). → T027
+      *Done when:* `pipeline-status.spec.ts` asserts a possessed target with an `ENCODING` job reads
+      `ENCODING`, with a `DOWNLOADING` source reads `DOWNLOADING`, with only an `ERROR` source/job, a
+      `SCANNED` source or an `ERROR` pack reads `COMPLETED` (AC-20, AC-21), a possessed aired episode
+      under a transferring pack reads `DOWNLOADING` and an unaired one `COMPLETED` (AC-24), and a
+      series with one `ENCODING` episode reads `ENCODING`; `bin/npm api run test`, `bin/cli api npx tsc --noEmit`
+      and `bin/comments api` are clean.
+
+- [x] **T029** `[api]` Switch the five acquisition entry points' `force` guard from
+      `status === 'COMPLETED'` to possession: `movies.service.ts`, `episodes.service.ts`,
+      `seasons.service.ts` (two sites), `uploads.resolver.ts` and `uploads.service.ts`
+      (`api/plan.md` Step 13). → T028
+      *Done when:* each of the five specs has a case where the target is possessed and reads
+      `ENCODING` and the call without `force` is refused with the existing conflict (AC-22); the
+      three commands above are clean.
+
+- [x] **T030** `[api]` Switch `054`'s orphaned-encode recovery in `process-jobs.service.ts` from
+      `targetStatus === 'COMPLETED'` to possession over the job's movie or episode. → T028
+      *Done when:* `process-jobs.service.spec.ts` has a case where the target is possessed and the
+      orphaned job is skipped, not requeued (AC-22); the three commands above are clean.
+
+- [x] **T031** `[orch]` Live check on the dev install, after `api` reloads with T028–T030. Do **not**
+      stop or restart `worker`: a film may be mid-encode. → T030
+      *Done when:* `bin/mysql -e "select status from episodes where id = 195"` reads `ENCODING` (it
+      read `COMPLETED`) and `select status from shows where id = 6` reads `ENCODING`, with no row
+      touched by hand (AC-20, AC-23); every other episode of series 6 still reads `COMPLETED`; and
+      `grep -rn "'COMPLETED'" services/api/src --include=*.ts` (excluding specs) leaves only the
+      readers named in `api/plan.md` Step 13's "leave alone" list.
+
+- [x] **T032** `[docs]` Record REQ-15 and REQ-16. → T031
+      - `docs/spec/graphql-contract.md`: the `Show.status`/`Episode.status` note gains that a title
+        in possession reads the status of work in flight on it rather than `COMPLETED`.
+      - Root `CLAUDE.md`, **Browse library** row (and the `087` guard sentence in **Download**):
+        possession, not the status column, is what the `force` guard tests.
+      - `services/api/CLAUDE.md`: the `pipeline-status/` and `title-status/` entries name
+        `hasPossession` and the replacement rule.
+
+- [x] **T033** `[docs]` Tick REQ-15, REQ-16 and AC-20–AC-24 in `spec.md` for what was observed,
+      append a measurement entry to `docs/spec/history.md` (newest first), and set
+      `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md` and `status: Done` on this file.
+      → T032
 
 ## Blocked
 

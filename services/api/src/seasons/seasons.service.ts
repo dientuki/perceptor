@@ -1,3 +1,4 @@
+import { POSSESSION_WHERE } from '@/pipeline-status/pipeline-status';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Dirent } from 'node:fs';
@@ -63,8 +64,9 @@ export class SeasonsService {
       // Spec 022, REQ-7 REQ-6; Spec 087, REQ-2
       refuse: async (target, force) => {
         if (force) return;
+        // Spec 089, REQ-16 AC-22
         const hasCompletedEpisode =
-          (await this.prisma.episode.count({ where: { seasonId: target.id, status: 'COMPLETED' } })) > 0;
+          (await this.prisma.episode.count({ where: { seasonId: target.id, ...POSSESSION_WHERE } })) > 0;
         if (hasCompletedEpisode || (await this.downloadsService.hasDeliveredSource({ seasonId: target.id }))) {
           throw i18nError.conflict(ERROR_KEYS.SEASON_ALREADY_COMPLETED);
         }
@@ -123,7 +125,7 @@ export class SeasonsService {
     // Spec 087, REQ-2
     if (!force) {
       const hasCompletedEpisode =
-        (await this.prisma.episode.count({ where: { seasonId, status: 'COMPLETED' } })) > 0;
+        (await this.prisma.episode.count({ where: { seasonId, ...POSSESSION_WHERE } })) > 0;
       if (hasCompletedEpisode || (await this.downloadsService.hasDeliveredSource({ seasonId }))) {
         throw i18nError.conflict(ERROR_KEYS.SEASON_ALREADY_COMPLETED);
       }

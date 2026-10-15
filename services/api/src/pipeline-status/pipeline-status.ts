@@ -197,13 +197,24 @@ export type TitleAltitudeInput = {
   jobs: TitleAltitudeJob[];
 };
 
-// Spec 089, REQ-2 REQ-3 REQ-4
-export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
-  const { filePath, mediaServerPresentAt, sources, jobs } = input;
+export type PossessionInput = {
+  filePath: string | null;
+  mediaServerPresentAt: Date | null;
+};
 
-  if (filePath != null || mediaServerPresentAt != null) {
-    return 'COMPLETED';
-  }
+// Spec 089, REQ-16
+export function hasPossession(row: PossessionInput): boolean {
+  return row.filePath != null || row.mediaServerPresentAt != null;
+}
+
+// Spec 089, REQ-16
+export const POSSESSION_WHERE = {
+  OR: [{ filePath: { not: null } }, { mediaServerPresentAt: { not: null } }],
+};
+
+// Spec 089, REQ-2 REQ-3 REQ-4 REQ-15
+export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
+  const { sources, jobs } = input;
 
   let best: Exclude<PipelineStatus, 'ERROR'> = 'MISSING';
 
@@ -216,6 +227,10 @@ export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
 
   if (jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status))) {
     best = maxStatus(best, 'ENCODING');
+  }
+
+  if (hasPossession(input) && best === 'MISSING') {
+    return 'COMPLETED';
   }
 
   return best;
@@ -235,10 +250,17 @@ export function deriveEpisodeStatus(
   now: Date,
 ): PipelineStatus {
   const lifted = isLiftedBySeasonPack(seasonSources, episode.releaseDate, now);
+  let sources = episode.mediaSources;
+  if (lifted) {
+    // Spec 089, REQ-13 REQ-15
+    sources = hasPossession(episode)
+      ? [...episode.mediaSources, ...seasonSources]
+      : [...episode.mediaSources, { status: 'QUEUED' as const }];
+  }
   return deriveTitleStatus({
     filePath: episode.filePath,
     mediaServerPresentAt: episode.mediaServerPresentAt,
-    sources: lifted ? [...episode.mediaSources, { status: 'QUEUED' as const }] : episode.mediaSources,
+    sources,
     jobs: episode.processJobs,
   });
 }

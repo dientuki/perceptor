@@ -1,3 +1,4 @@
+import { hasPossession } from '@/pipeline-status/pipeline-status';
 import { Injectable } from '@nestjs/common';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
@@ -48,6 +49,8 @@ type MovieAttachTarget = {
   title: string;
   isShort: boolean;
   status: string;
+  filePath: string | null;
+  mediaServerPresentAt: Date | null;
 };
 
 // Spec 056, NFR-3
@@ -659,8 +662,9 @@ export class MoviesService implements MediaTypeService {
         target: MovieAttachTarget,
         force: boolean,
       ): Promise<void> => {
+        // Spec 089, REQ-16 AC-22
         if (
-          (target.status === 'COMPLETED' ||
+          (hasPossession(target) ||
             (await this.downloadsService.hasDeliveredSource({
               movieId: target.id,
             }))) &&

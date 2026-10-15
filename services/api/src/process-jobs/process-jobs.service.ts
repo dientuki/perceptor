@@ -1,3 +1,4 @@
+import { hasPossession } from '@/pipeline-status/pipeline-status';
 import { Injectable } from '@nestjs/common';
 import { LanguageTrackKind } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -270,10 +271,16 @@ export class ProcessJobsService {
   }
 
   async encodeStarted(processJobId: number) {
-    await this.prisma.processJob.update({
+    const processJob = await this.prisma.processJob.update({
       where: { id: processJobId },
       data: { status: 'ENCODING' },
     });
+
+    if (processJob.movieId) {
+      await this.titleStatus.recomputeMovie(processJob.movieId);
+    } else if (processJob.episodeId) {
+      await this.titleStatus.recomputeEpisode(processJob.episodeId);
+    }
 
     return `encoding: processJob ${processJobId}`;
   }
@@ -421,8 +428,8 @@ export class ProcessJobsService {
         movieId: true,
         episodeId: true,
         recoveryCount: true,
-        movie: { select: { status: true } },
-        episode: { select: { status: true } },
+        movie: { select: { filePath: true, mediaServerPresentAt: true } },
+        episode: { select: { filePath: true, mediaServerPresentAt: true } },
         sourceFile: { select: { mediaSource: { select: { status: true } } } },
       },
     });
@@ -436,8 +443,9 @@ export class ProcessJobsService {
     for (const job of orphaned) {
       // Spec 054, REQ-5; Spec 038, REQ-8
       const mediaSource = job.sourceFile?.mediaSource;
-      const targetStatus = job.movie?.status ?? job.episode?.status;
-      if (!mediaSource || mediaSource.status === 'ERROR' || targetStatus === 'COMPLETED') {
+      // Spec 089, REQ-16 AC-22
+      const target = job.movie ?? job.episode;
+      if (!mediaSource || mediaSource.status === 'ERROR' || (target != null && hasPossession(target))) {
         skipped += 1;
         continue;
       }

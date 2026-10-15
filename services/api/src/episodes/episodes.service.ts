@@ -1,3 +1,4 @@
+import { hasPossession } from '@/pipeline-status/pipeline-status';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { parseMagnet } from '@/clients/torrent/magnet';
@@ -25,6 +26,8 @@ function episodeTags(episode: {
 interface EpisodeTarget {
   id: number;
   status: string;
+  filePath: string | null;
+  mediaServerPresentAt: Date | null;
   episodeNumber: number;
   season: { seasonNumber: number; show: { id: number; title: string } };
 }
@@ -83,8 +86,9 @@ export class EpisodesService {
 
       // Spec 087, REQ-2
       refuse: async (episode, force) => {
+        // Spec 089, REQ-16 AC-22
         const alreadyComplete =
-          episode.status === 'COMPLETED' ||
+          hasPossession(episode) ||
           (await this.downloadsService.hasDeliveredSource({ episodeId: episode.id }));
         if (alreadyComplete && !force) {
           throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);

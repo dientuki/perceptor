@@ -2,7 +2,7 @@
 
 <!-- pending-acs:begin intro -->
 Medido el **2026-10-15**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
-`## Acceptance Criteria`; las 51 specs que no aparecen estan en 100%.
+`## Acceptance Criteria`; las 50 specs que no aparecen estan en 100%.
 <!-- pending-acs:end intro -->
 
 **No editar a mano los bloques entre los marcadores `pending-acs:begin`/`end`.** Los regenera
@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **41** de 92 |
-| ACs pendientes | **244** |
-| ACs totales del proyecto | 1096 |
-| ACs verificados | 852 (78%) |
+| Specs con ACs pendientes | **42** de 92 |
+| ACs pendientes | **249** |
+| ACs totales del proyecto | 1104 |
+| ACs verificados | 855 (77%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -29,6 +29,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
 | 091 | race-loser-cleanup | Approved | 8/9 | 1, 2, 3, 4, 5, 6, 7, 8 | **Una corrida de pipeline.** Las ocho son carreras reales: dos o tres torrents sobre un mismo titulo, uno gana, y hay que ver que los perdedores se barran. Necesita pipeline corrido mas limpiar el huerfano de Inception desde la UI (su propio Out of Scope prohibe hacerlo por SQL). |
+| 089 | status-materialization | Implemented | 5/24 | 18, 20, 21, 22, 24 | **Un reemplazo forzado (`force`) en una instalacion real.** Todo esta probado en unitario (`pipeline-status.spec.ts`, los specs de los guards y de la recuperacion de 054), pero no se vio en vivo: AC-20 el regreso a `COMPLETED` cuando termina el job 11 de `episodes.id = 195` (medido: `ENCODING` al 24%, la serie 6 tambien en `ENCODING`), AC-21 un reemplazo que falla, AC-22 un segundo intento sin `force` contra un titulo a mitad de reemplazo, AC-24 un pack de temporada sobre episodios con archivo. AC-18 sigue pendiente aparte: un especial de la temporada 0 forzado a `ERROR`/`DOWNLOADING` (medido: 5 especiales `MISSING`, serie 6 sin ellos en la cuenta). Sin spec propio para `uploads.resolver.ts`; comparte el guard `hasPossession` con `uploads.service.ts`, que si esta cubierto. |
 | 087 | force-replacement-arbitration | Implemented | 1/12 | 3 | **Una corrida de pipeline.** AC-3 pide que la carpeta de biblioteca del film quede con exactamente un archivo despues de que el reemplazo encodee. Es el paso 7 de la pasada viva de 091. |
 | 085 | dependency-update-cadence | Implemented | 3/17 | 1, 2, 3 | **La UI de GitHub.** Las tres se leen en la UI de GitHub (Insights -> Dependency graph -> Dependabot) y dependen de que Dependabot haya abierto PRs. No hay camino local. |
 | 083 | multi-arch-images | Implemented | 5/11 | 2, 3, 3b, 5, 6c | **Un host arm64 / GHCR.** AC-6/6b/7/8 fueron corridas el 2026-10-02 y observadas. Lo que falta: AC-2/AC-3/AC-3b leen manifests publicados en GHCR, y la clausula de `bin/dev` sobre un host arm64 de desarrollo no se puede correr aca (este host es x86_64). |
@@ -74,7 +75,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 244 ACs pendientes no son 244 problemas distintos. Se reducen a 21 destrabes, y los dos primeros se llevan el 52%:
+Los 249 ACs pendientes no son 249 problemas distintos. Se reducen a 22 destrabes, y los dos primeros se llevan el 51%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
@@ -89,6 +90,7 @@ Los 244 ACs pendientes no son 244 problemas distintos. Se reducen a 21 destrabes
 | Un media server configurado | 8 | 069 |
 | Archivos de video locales | 6 | 068 |
 | Un host arm64 / GHCR | 5 | 083 |
+| Un reemplazo forzado (`force`) en una instalacion real | 5 | 089 |
 | Tres cosas distintas, ninguna la sesion | 4 | 062 |
 | Un segundo usuario, y decisiones del duenio | 4 | 078 |
 | Sujetos que el indexer no devuelve | 3 | 036 |

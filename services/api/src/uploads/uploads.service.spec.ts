@@ -42,6 +42,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
     existing: Row[];
     jobs?: JobRow[];
     movieStatus?: string;
+    possessed?: boolean;
   }) {
     const rows = options.existing.map((row) => ({ ...row }));
     const jobRows = (options.jobs ?? []).map((row) => ({ ...row }));
@@ -50,7 +51,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       movie: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: MOVIE_ID, status: options.movieStatus ?? 'COMPLETED' }),
+          .mockResolvedValue({ id: MOVIE_ID, status: options.movieStatus ?? 'COMPLETED', filePath: options.possessed === false ? null : '/media/movies/x.mkv', mediaServerPresentAt: null }),
         update: jest.fn().mockResolvedValue({}),
       },
       mediaSource: {
@@ -249,6 +250,21 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
     expect(queue.addSourceReady).not.toHaveBeenCalled();
   });
 
+  // Spec 089, REQ-16 AC-22
+  it('refuses an unauthorised upload against a possessed film whose status reads ENCODING', async () => {
+    const { service, prisma, queue } = build({
+      replaceAuthorised: false,
+      movieStatus: 'ENCODING',
+      existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
+    });
+
+    await expect(
+      (service as any).handleUploadFinish(await stageUpload('upload-encoding')),
+    ).rejects.toMatchObject({ status_code: 409 });
+    expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+    expect(queue.addSourceReady).not.toHaveBeenCalled();
+  });
+
   // Spec 038, T007: this is the incident Spec 038, REQ-6 exists to
   // close. The pre-fix code opened demoteSupersededSources with
   // `if (!(await this.uploadTickets.isReplaceAuthorised(uploadId))) return;`
@@ -264,6 +280,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       const { service, prisma, queue, rows, titleStatus } = build({
         replaceAuthorised: false,
         movieStatus: 'DOWNLOADING',
+        possessed: false,
         existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
       });
 
@@ -282,6 +299,7 @@ describe('UploadsService.handleUploadFinish (replacement)', () => {
       const { service, downloads } = build({
         replaceAuthorised: false,
         movieStatus: 'DOWNLOADING',
+        possessed: false,
         existing: [{ id: 2, status: 'SCANNED', movieId: MOVIE_ID }],
       });
 

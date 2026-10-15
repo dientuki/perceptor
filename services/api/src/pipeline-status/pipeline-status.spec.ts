@@ -7,6 +7,8 @@ import {
   ResumeInput,
   deriveSourceStatus,
   deriveTitleStatus,
+  hasPossession,
+  POSSESSION_WHERE,
   isLiftedBySeasonPack,
 } from './pipeline-status';
 import { SourceStatus } from '@prisma/client';
@@ -399,10 +401,10 @@ describe('deriveEpisodeStatus', () => {
     expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode(future), now)).toBe('MISSING');
   });
 
-  it('lets possession win over a lift', () => {
+  it('lets possession win over a lift when the pack is not in flight', () => {
     expect(
       deriveEpisodeStatus(
-        [{ status: 'DOWNLOADING' }],
+        [{ status: 'SCANNED' }],
         episode(aired, { filePath: '/library/ep.mkv' }),
         now,
       ),
@@ -794,5 +796,124 @@ describe('deriveResume', () => {
       input({ siblings: [{ status: 'SCANNED', jobs: [{ status: 'ERROR' }] }] }),
     );
     expect(result.retryable).toBe(true);
+  });
+});
+
+// Spec 089, REQ-15 REQ-16 — possession used to short-circuit the derivation, so a title being
+// replaced kept reading COMPLETED for the whole encode: the badge hid work the downloads queue
+// was showing, and nothing threw. Each case pins one way the new rule can be wrong silently:
+// ignoring an in-flight job, counting a failed or finished replacement as work, or lifting a
+// possessed episode from a pack it should not follow.
+describe('possession with a replacement in flight', () => {
+  const possessed = { filePath: '/library/movie.mkv', mediaServerPresentAt: null };
+
+  // Spec 089, REQ-15 AC-20
+  it.each(['ENCODING', 'QUEUED', 'WAITING'] as const)('reads ENCODING for a possessed target with a %s job', (status) => {
+    expect(deriveTitleStatus({ ...possessed, sources: [], jobs: [{ status }] })).toBe('ENCODING');
+  });
+
+  // Spec 089, REQ-15 AC-20
+  it('reads DOWNLOADING for a possessed target with a DOWNLOADING source', () => {
+    expect(deriveTitleStatus({ ...possessed, sources: [{ status: 'DOWNLOADING' }], jobs: [] })).toBe(
+      'DOWNLOADING',
+    );
+  });
+
+  // Spec 089, REQ-15 AC-21
+  it('keeps COMPLETED when the only source or job is ERROR', () => {
+    expect(deriveTitleStatus({ ...possessed, sources: [{ status: 'ERROR' }], jobs: [] })).toBe('COMPLETED');
+    expect(deriveTitleStatus({ ...possessed, sources: [], jobs: [{ status: 'ERROR' }] })).toBe('COMPLETED');
+  });
+
+  // Spec 089, REQ-15 AC-21
+  it('keeps COMPLETED for a SCANNED source with a COMPLETED job', () => {
+    expect(
+      deriveTitleStatus({
+        ...possessed,
+        sources: [{ status: 'SCANNED' }],
+        jobs: [{ status: 'COMPLETED' }],
+      }),
+    ).toBe('COMPLETED');
+  });
+
+  // Spec 089, REQ-15
+  it('reads the media-server-only possession the same way', () => {
+    const serverOnly = { filePath: null, mediaServerPresentAt: new Date('2026-01-01') };
+    expect(deriveTitleStatus({ ...serverOnly, sources: [{ status: 'SCANNED' }], jobs: [{ status: 'QUEUED' }] })).toBe(
+      'ENCODING',
+    );
+  });
+
+  describe('episodes under a season pack', () => {
+    const now = new Date('2026-09-16T00:00:00Z');
+    const aired = new Date('2026-09-01T00:00:00Z');
+    const future = new Date('2026-10-01T00:00:00Z');
+    const episode = (releaseDate: Date | null) => ({
+      ...possessed,
+      releaseDate,
+      mediaSources: [] as { status: SourceStatus }[],
+      processJobs: [] as { status: 'WAITING' | 'QUEUED' | 'ENCODING' | 'COMPLETED' | 'ERROR' }[],
+    });
+
+    // Spec 089, REQ-15 AC-24
+    it('reads DOWNLOADING for a possessed aired episode under a transferring pack', () => {
+      expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode(aired), now)).toBe('DOWNLOADING');
+    });
+
+    // Spec 089, REQ-15 AC-24
+    it('reads PAUSED for a possessed aired episode under a paused pack', () => {
+      expect(deriveEpisodeStatus([{ status: 'PAUSED' }], episode(aired), now)).toBe('PAUSED');
+    });
+
+    // Spec 089, REQ-15 AC-24
+    it('keeps COMPLETED for a possessed unaired episode under a transferring pack', () => {
+      expect(deriveEpisodeStatus([{ status: 'DOWNLOADING' }], episode(future), now)).toBe('COMPLETED');
+    });
+
+    // Spec 089, REQ-15 AC-24
+    it('keeps COMPLETED for a possessed episode under an ERROR pack', () => {
+      expect(deriveEpisodeStatus([{ status: 'ERROR' }], episode(aired), now)).toBe('COMPLETED');
+    });
+
+    // Spec 089, REQ-13
+    it('still lifts an unpossessed aired episode to the synthetic QUEUED, not the pack status', () => {
+      expect(
+        deriveEpisodeStatus(
+          [{ status: 'DOWNLOADING' }],
+          { ...episode(aired), filePath: null },
+          now,
+        ),
+      ).toBe('QUEUED');
+    });
+  });
+
+  // Spec 089, REQ-15 REQ-11
+  it('reads ENCODING for a series with one ENCODING episode and the rest COMPLETED', () => {
+    const aired = new Date('2026-09-01T00:00:00Z');
+    expect(
+      deriveShowStatus(
+        [
+          { status: 'COMPLETED', releaseDate: aired },
+          { status: 'ENCODING', releaseDate: aired },
+        ],
+        new Date('2026-09-16T00:00:00Z'),
+      ),
+    ).toBe('ENCODING');
+  });
+});
+
+// Spec 089, REQ-16 — the predicate and its Prisma form are two spellings of one test; if they
+// drift, a guard counting rows in SQL and a guard testing a loaded row disagree with no error.
+describe('hasPossession', () => {
+  it('is true for either column alone and false for neither', () => {
+    expect(hasPossession({ filePath: '/a.mkv', mediaServerPresentAt: null })).toBe(true);
+    expect(hasPossession({ filePath: null, mediaServerPresentAt: new Date() })).toBe(true);
+    expect(hasPossession({ filePath: null, mediaServerPresentAt: null })).toBe(false);
+  });
+
+  it('exposes a where fragment over the same two columns', () => {
+    expect(POSSESSION_WHERE).toEqual({
+      OR: [{ filePath: { not: null } }, { mediaServerPresentAt: { not: null } }],
+    });
   });
 });

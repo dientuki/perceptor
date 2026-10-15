@@ -1,9 +1,9 @@
 ---
 title: Status materialization — one owner, one vocabulary, one writer per column
-spec_version: 0.1.0
+spec_version: 0.3.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-06
-last_updated: 2026-10-06
+last_updated: 2026-10-15
 status: Implemented
 services: [api]
 ---
@@ -88,7 +88,9 @@ moves differently as a result of this feature.
 
 - [ ] **REQ-3 (Possession outranks derivation)**: A target in possession reads `COMPLETED` regardless
       of what its sources and jobs say (today's behaviour for the `filePath` half,
-      `047-source-deletion` REQ-13). A recompute must not demote it.
+      `047-source-deletion` REQ-13). A recompute must not demote it. *Amended 0.3.0: this holds
+      against a source that is gone, failed or merely historical; it no longer holds against work
+      actually in flight on the target — REQ-15.*
 
 - [ ] **REQ-4 (Possession is recorded on the row, in two columns, and the status column is neither)**:
       A target is in possession when **either**:
@@ -178,7 +180,8 @@ moves differently as a result of this feature.
       same ladder a title already uses. A series with no aired episode reads `MISSING`.
       `Show.tmdbStatus` is untouched and keeps meaning what it means: a `"Returning Series"` reading
       `COMPLETED` is a series that is up to date, not one that has finished. A `Show` has no
-      possession column of its own and no `filePath`; it aggregates only.
+      possession column of its own and no `filePath`; it aggregates only. "Its episodes" means the
+      episodes of every season **except season 0** — see REQ-14 (amended 2026-10-15).
 
 - [ ] **REQ-12 (A status that changes only because time passed still changes)**: A series at
       `COMPLETED` whose next episode has just aired must stop reading `COMPLETED`, within 24 hours of
@@ -197,6 +200,81 @@ moves differently as a result of this feature.
       that un-write now has to exist, triggered by the season's source transitions and by airing.
       Every episode of the season is in the recompute's blast radius when a season-scoped source
       changes.
+
+- [ ] **REQ-14 (Specials do not count toward a series)** *(amendment, 2026-10-15)*: Season 0 —
+      TMDB's bucket for specials, extras, recaps and shorts — is excluded from REQ-11's aggregation
+      entirely. A series whose every aired regular episode is `COMPLETED` reads `COMPLETED` no matter
+      what its specials read; a special that is `MISSING`, in flight or `ERROR` neither holds the
+      series back nor raises or lowers it on the ladder, and a special airing is not REQ-12's "next
+      episode". A series whose only aired episodes are specials reads `MISSING`, exactly as a series
+      with no aired episode does today. Only the aggregation changes: a special's own
+      `Episode.status` is still derived and written like any other episode's (REQ-1–REQ-4, REQ-13),
+      and a user can still acquire one by hand.
+
+      Why: some specials belong to the plot and most do not, and TMDB's season 0 is uneven enough
+      (behind-the-scenes, recaps, trailers next to the occasional real episode) that "every aired
+      episode" read literally makes a fully acquired series read anything but `COMPLETED` for as long
+      as it has an unacquired extra — observed on a live install, where an ended series with all 28
+      regular episodes `COMPLETED` and five unacquired specials read `DOWNLOADED`, and earlier
+      `MISSING`. The project already draws this line in one place: `073-automatic-episode-acquisition`
+      REQ-7 makes a season-0 episode ineligible for the automatic sweep. This requirement draws the
+      same line for status, so the sweep and the badge agree on what "the series" is.
+
+      Existing rows: the change moves `Show.status` for every series holding an unacquired aired
+      special, and no event fires for them — the fix has to reach them the same way NFR-3's backfill
+      did, not wait for an episode of theirs to change.
+
+- [ ] **REQ-15 (A replacement in flight outranks possession)** *(amendment, 2026-10-15)*: A target
+      in possession (REQ-4) whose **own** `MediaSource` rows or `ProcessJob` rows show work in flight
+      reads the status of that work, not `COMPLETED`. "In flight" is exactly what the derivation
+      already counts for a target with no possession: a source that is not `ERROR`, not `SCANNED` and
+      not retired, or a job that is `WAITING`, `QUEUED` or `ENCODING`. The answer is the highest rung
+      those reach on the ladder (REQ-2) — a queued or running encode reads `ENCODING`, a transferring
+      torrent `DOWNLOADING`, a paused one `PAUSED`. When the work finishes, the title falls back to
+      `COMPLETED` by the same rule as before: the job is `COMPLETED`, `filePath` is the new file.
+
+      Three limits, each a way for this requirement to go wrong silently:
+
+      - **A failed replacement is not an error on the title.** A source in `ERROR`, or a job in
+        `ERROR`, is not "in flight" (above), so the title keeps reading `COMPLETED`: the old copy is
+        still there. The failure lives on the `Download` row (`065`), where it already is.
+      - **A season pack in flight counts for an aired episode in possession.** Replacing a whole
+        season is one source on the season, with no job on any episode until it is scanned; if only
+        an episode's own rows counted, the season would keep reading `COMPLETED` for the whole
+        download. So an aired, possessed episode also reads the highest status among the unscanned,
+        non-`ERROR` pack sources of its season (REQ-13's set), translated like any source: a
+        transferring pack reads `DOWNLOADING`, a queued one `QUEUED`, a paused one `PAUSED`. Accepted
+        cost: a pack may not contain every episode, so an episode it never matches reads that status
+        until the pack is scanned and then returns to `COMPLETED` (REQ-13's un-write). An unaired
+        episode is never lifted, as before.
+      - **A retired source (`090`) never counts.** It is `SCANNED` and excluded already.
+
+      Why: a user who uploads a better file over a `COMPLETED` episode, or replaces a film through a
+      magnet, is working on that title; a badge that keeps reading `COMPLETED` for the hours the
+      encode takes hides work that the `/downloads` queue is showing in the same moment. Observed on a
+      live install: `shows.id = 6`, S02E09, `COMPLETED` (media server presence only, `filePath` null)
+      with a `QUEUED` job and a `SCANNED` replacement source.
+
+      Consequence for a series (REQ-11, unchanged): an episode reading `DOWNLOADING` or `ENCODING` is
+      not `COMPLETED`, so `Show.status` reads the highest rung among its aired regular episodes while
+      one episode, or a whole season, is being replaced, and returns to `COMPLETED` when it
+      finishes. This is intended.
+
+- [ ] **REQ-16 (Readers that mean "holds a file" ask about possession, not about the status)**
+      *(amendment, 2026-10-15)*: Until REQ-15, `status === 'COMPLETED'` and "in possession" were the
+      same fact, and six code paths use the first to mean the second. REQ-15 splits them, so each of
+      those paths must now ask the possession question directly, through one shared predicate over
+      `filePath` and `mediaServerPresentAt` (REQ-4) — the same two columns, so the answer is the one
+      the status column gave before. The paths are the replacement-warning guard `087` REQ-2 put on
+      every acquisition entry point (film attach, episode attach, season attach, and the two upload
+      entry points that create a ticket and close a session) and the orphaned-encode recovery in
+      `054` REQ-5, which skips a job whose target is already delivered.
+
+      Why: left on the status, a second acquisition attempt against a title that is mid-replacement
+      slips past the `force` confirmation because the title now reads `ENCODING`, and a worker restart
+      mid-replacement reads the title as not yet delivered and re-queues work `054` would have
+      skipped. Neither raises an error. A reader whose meaning is *display* (the calendar's
+      `completed/total` count, `web`'s badge) stays on the status, and shows the replacement.
 
 ### Non-Functional & Operational Requirements
 
@@ -270,6 +348,11 @@ construction, which is worth stating precisely because the data model changes un
   the same field, in the same vocabulary, that `Movie` and `Episode` already use — but it is a
   **behavioural** change visible to any screen that renders a series' badge, and
   `docs/spec/graphql-contract.md` must record it beside the existing `Episode.status` note from `059`.
+  REQ-14 narrows what that value aggregates (season 0 excluded) without changing the field, its type
+  or its vocabulary; the same contract note must say so.
+  REQ-15 changes **when** `Movie.status`/`Episode.status`/`Show.status` read `COMPLETED` — not while a
+  replacement is in flight on a title that already holds a file — again without changing any field,
+  type or vocabulary; the same contract note must say so.
 - `mediaServerPresentAt` is **not** exposed on any GraphQL type. It is an internal possession record,
   like `ProcessJob.errorKey`, and no consumer has any business reading it.
 
@@ -370,6 +453,49 @@ No model, relation or index is added or dropped. `Show` gains no possession colu
       migration plus backfill applied to a database holding a title stuck at `DOWNLOADING` leaves that
       title reading its true status (NFR-3).
 
+- [x] **AC-17** *(REQ-14)*: Given a series whose every aired episode in seasons 1..n is `COMPLETED`
+      and whose season 0 holds aired episodes reading `MISSING`, then `Show.status` reads
+      `COMPLETED`. Checked on a live install against `shows.id = 6` ("Lost in Space": 28 regular
+      episodes `COMPLETED`, 5 specials `MISSING`), which read `DOWNLOADED` before this amendment.
+
+- [ ] **AC-18 (failure path)** *(REQ-14)*: Given the same series, when one of its specials goes to
+      `ERROR` (or `DOWNLOADING`), then `Show.status` still reads `COMPLETED` — season 0 does not
+      reach the ladder in either direction. And given a series whose only aired episodes are specials,
+      then `Show.status` reads `MISSING`.
+
+- [x] **AC-19** *(REQ-14)*: After the amendment is deployed to an install holding series stuck below
+      `COMPLETED` only because of their specials, those series read `COMPLETED` with no user action
+      and no episode event — the same path NFR-3's backfill used.
+
+- [ ] **AC-20** *(REQ-15)*: Given a film with `filePath` non-null and no job, when a magnet is
+      attached to it with `force`, then the film reads `QUEUED`/`DOWNLOADING` per the torrent client,
+      then `ENCODING` while the encode is `QUEUED` or `ENCODING`, and `COMPLETED` again once the job
+      is `COMPLETED` and `filePath` holds the new file. Checked on a live install against
+      `episodes.id = 195` (`shows.id = 6`, S02E09): `COMPLETED` with `filePath` null and
+      `mediaServerPresentAt` set, one `QUEUED` job — it must read `ENCODING`, and so must its series
+      while that job is open.
+
+- [ ] **AC-21 (failure path)** *(REQ-15)*: Given a possessed title whose replacement source goes to
+      `ERROR` (or whose replacement job does), then the title reads `COMPLETED`, not `ERROR` and not
+      `MISSING`. The same holds for a season pack that goes to `ERROR`: its episodes return to
+      `COMPLETED`.
+
+- [ ] **AC-22 (failure path)** *(REQ-16)*: Given a possessed title with a replacement mid-encode, when
+      any of the five acquisition entry points is called without `force`, then it is refused with the
+      same conflict it returns for a title reading `COMPLETED`. And given an orphaned `ENCODING` job
+      whose target is in possession, then `054`'s recovery skips it exactly as it did before this
+      amendment.
+
+- [ ] **AC-24** *(REQ-15)*: Given a season whose aired episodes are all in possession, when a pack is
+      attached to the season with `force` and is transferring, then every aired episode of that season
+      reads `DOWNLOADING` and the series reads `DOWNLOADING`; when the pack is scanned, each episode
+      with a job reads `ENCODING`; and an episode the pack did not contain reads `COMPLETED` again.
+      Given an unaired episode in the same season, it is never lifted.
+
+- [x] **AC-23** *(REQ-15)*: After the amendment is deployed to an install holding a possessed title
+      with a source or job in flight, that title reads the status of that work with no user action and
+      no event on it — the same path NFR-3's backfill used. Checked with `episodes.id = 195`.
+
 ## Out of Scope
 
 - **A background poller or sweep for torrent state.** Considered and rejected in REQ-10: every surface
@@ -417,5 +543,22 @@ No model, relation or index is added or dropped. `Show` gains no possession colu
 
 - **The `movieId` rename** (root `CLAUDE.md` § Known debt). Untouched, as always.
 
+- **A per-series or per-special opt-in for counting specials** *(REQ-14)*. Considered and rejected:
+  the cases where a special belongs to the plot are the minority, and a toggle would add a column, a
+  mutation and a UI control to answer a question the badge does not need answered. A user who wants a
+  plot-relevant special still acquires it by hand; it simply does not gate the series' badge.
+
+- **Hiding or de-emphasising season 0 anywhere in `web`.** REQ-14 changes what `Show.status` is
+  computed from, not what the detail page or the calendar shows. A special keeps its own badge.
+
 - **Deciding what a series' *editorial* status means.** `Show.tmdbStatus` is TMDB's word, written by
   `074`, and this feature neither reads nor writes it. REQ-11 is about possession only.
+
+- **`web` pre-flight hints that read `status === "COMPLETED"`** *(REQ-15, REQ-16)*:
+  `lib/acquisition-target.ts` and `Movie.tsx`'s `hasLibraryFile`. They are hints to show the
+  replacement warning early; the authority is the `api` refusal (REQ-16), which `web` already handles
+  through the `already_completed` error keys. During a replacement the hint goes quiet and the refusal
+  still fires. Giving `web` a possession field would be a contract change and is a separate spec.
+- **Showing a failed replacement on the title's badge** *(REQ-15)*. Rejected: the old file is intact,
+  so `ERROR` would be false; the failure is on the `Download` row.
+- **Changing what `Download.status` reports for a retired or replaced source** (`090`). Untouched.

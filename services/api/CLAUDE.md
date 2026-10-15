@@ -398,7 +398,14 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   notified by **identity only** — no caller passes a status, the service re-reads the target's own
   rows and derives the answer itself through `pipeline-status/`, which is what makes the answer able
   to fall as well as rise. `recomputeEpisode` cascades to its series; `recomputeSeason` recomputes
-  every episode of the season first, then the show once, not per episode. Every write is a guarded
+  every episode of the season first, then the show once, not per episode. `recomputeShow` reads
+  only seasons with `seasonNumber` not 0 (REQ-14): a special has its own status but never counts
+  toward the series' — the same line `acquire-episodes` draws for `073`. Since REQ-15, a title in
+  possession reads the work in flight on its own sources and jobs instead of `COMPLETED` (a possessed
+  aired episode also counts its season's unscanned pack, at the pack's own status); a failed
+  replacement leaves it `COMPLETED`. `pipeline-status/`'s `hasPossession`/`POSSESSION_WHERE` is the
+  one spelling of "holds a file", and the `087` `force` guards and `054`'s orphan recovery use it
+  rather than `status === 'COMPLETED'` (REQ-16). Every write is a guarded
   `updateMany` naming the status it expects to replace (NFR-2, following
   `media-server-reconcile.service.ts`'s existing convention); a missing target is a silent no-op.
   `TitleStatusModule` imports only `PrismaModule` — nothing injects into it, so the Nest graph stays

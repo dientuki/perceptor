@@ -266,7 +266,10 @@ describe('SeasonsService', () => {
       ).rejects.toThrow('This season already has downloaded episodes. Confirm to replace the current files.');
 
       expect(prisma.episode.count).toHaveBeenCalledWith({
-        where: { seasonId: 42, status: 'COMPLETED' },
+        where: {
+          seasonId: 42,
+          OR: [{ filePath: { not: null } }, { mediaServerPresentAt: { not: null } }],
+        },
       });
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();

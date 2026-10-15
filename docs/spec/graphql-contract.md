@@ -2138,11 +2138,17 @@ Things the schema cannot express, all load-bearing:
 No schema change — `Show.status` was already `String!` since `007-library-listing`; this feature
 only changes where its value comes from and, for the first time, moves it off `MISSING` in
 practice. Beside the `Episode.status` note from `059` above: a series now reads `COMPLETED` once
-every **aired** episode is `COMPLETED` (an unaired next episode never holds it back), and drops to a
+every **aired** episode outside season 0 is `COMPLETED` (an unaired next episode never holds it
+back, and neither does an unacquired special — season 0 is excluded from the aggregation entirely,
+`089` REQ-14; a special keeps its own `Episode.status`), and drops to a
 ladder maximum — never back to `COMPLETED` by an older episode's own completion — the moment a new
 episode airs with nothing acquired for it yet. This is visible on any screen rendering a series'
-`StatusBadge`, with no consumer change owed: the field is still `String!`, still the same
-eight-value vocabulary (`MISSING`/`QUEUED`/`PAUSED`/`DOWNLOADING`/`DOWNLOADED`/`ENCODING`/
+`StatusBadge`, with no consumer change owed. Since `089` REQ-15, a title that already holds a file
+(`filePath` or `mediaServerPresentAt`) no longer reads `COMPLETED` while work is in flight on it: a
+replacement reads `DOWNLOADING`/`ENCODING` per the source or job, an aired episode also reads its
+season's unscanned pack, and a series reads the highest of its episodes, returning to `COMPLETED`
+when the work ends. A failed replacement leaves the title `COMPLETED`. The field is still
+`String!`, still the same eight-value vocabulary (`MISSING`/`QUEUED`/`PAUSED`/`DOWNLOADING`/`DOWNLOADED`/`ENCODING`/
 `COMPLETED`/`ERROR`) `Movie`/`Episode` already use.
 
 `Movie.status`/`Episode.status`/`Show.status` are now written once, by `api`'s internal

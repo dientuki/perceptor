@@ -23,6 +23,41 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-15 — `089-status-materialization`, amendment 0.3.0 (a replacement in flight outranks possession)
+
+`api` only; no GraphQL, schema or migration change (`git status` on `services/api/prisma` and the
+schema file: clean). `deriveTitleStatus` now reads sources and jobs before possession, so a title
+holding a file reads the work in flight on it (REQ-15); a possessed aired episode also counts its
+season's real unscanned pack sources, at their own status. `hasPossession`/`POSSESSION_WHERE` became
+the one spelling of "holds a file", and the five `087` `force` guards plus `054`'s orphan recovery
+switched to it (REQ-16). Found on `shows.id = 6`, S02E09: `COMPLETED` while its replacement was queued.
+
+`api` 69/69 suites, 1034/1034 tests — up from 1015 (+15 in `pipeline-status.spec.ts`, +4 across the
+guard and recovery specs). `bin/cli api npx --no tsc --noEmit`: 0 errors. `bin/comments api`: PASS,
+793 locators resolved.
+
+Live pass: `episodes.id = 195` read `COMPLETED` before and `ENCODING` after `api` hot-reloaded
+(job 11, `ENCODING` at 24%); `shows.id = 6` read `ENCODING`; every other episode stayed `COMPLETED`
+and the five specials `MISSING` (AC-23). Not observed live: the return to `COMPLETED` when job 11
+finishes (AC-20), a failed replacement (AC-21), a refused second attempt (AC-22) and a season-pack
+replacement (AC-24) — all four are covered by unit tests only. `uploads.resolver.ts` has no spec
+file; its guard is the same `hasPossession` call as `uploads.service.ts`'s, which is covered.
+
+## 2026-10-15 — `089-status-materialization`, amendment 0.2.0 (specials leave the series aggregation)
+
+`api` only; no GraphQL, schema or migration change. `TitleStatusService.recomputeShow` now reads only
+seasons with `seasonNumber` not 0 (REQ-14). The same session also fixed `ProcessJobsService.encodeStarted`,
+which wrote `ProcessJob.status = ENCODING` without notifying `TitleStatusService` — a title sat on its
+pre-encode status for the whole encode (found on `movies.id = 9`); two tests added, no spec amendment.
+
+`api` 69/69 suites, 1015/1015 tests — up from 1012 (+2 `encodeStarted`, +1 season-0 filter). `bin/cli
+api npx tsc --noEmit`: 0 errors. `bin/comments api`: PASS, 751 locators resolved, 0 malformed.
+
+Live pass: `shows.id = 6` ("Lost in Space", 28 regular episodes `COMPLETED`, 5 specials `MISSING`) read
+`DOWNLOADED` before and `COMPLETED` after `api` hot-reloaded through its boot-time `recomputeAllStatuses`,
+with the five specials still `MISSING` (AC-17, AC-19). AC-18's second half (a series with only aired
+specials reads `MISSING`) is the existing no-aired-episode rule, covered by `pipeline-status.spec.ts`.
+
 ## 2026-10-15 — `092-film-grain-optimization`
 
 `api`, `web` and `worker` all touched. GraphQL Contract Delta matches `spec.md` exactly: two new

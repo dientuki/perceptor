@@ -1,3 +1,4 @@
+import { hasPossession } from '@/pipeline-status/pipeline-status';
 import { BadRequestException, NotFoundException, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { Resolver, Mutation, Args, Int } from '@nestjs/graphql';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -50,7 +51,7 @@ export class UploadsResolver {
 
       // Spec 022, REQ-7 REQ-6 REQ-19; Spec 087, REQ-2
       if (
-        (movie.status === 'COMPLETED' || (await this.downloads.hasDeliveredSource({ movieId: movieId as number }))) &&
+        (hasPossession(movie) || (await this.downloads.hasDeliveredSource({ movieId: movieId as number }))) &&
         !force
       ) {
         throw i18nError.conflict(ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
@@ -66,7 +67,7 @@ export class UploadsResolver {
 
     // Spec 022, REQ-7; Spec 087, REQ-2
     if (
-      (episode.status === 'COMPLETED' || (await this.downloads.hasDeliveredSource({ episodeId: episodeId as number }))) &&
+      (hasPossession(episode) || (await this.downloads.hasDeliveredSource({ episodeId: episodeId as number }))) &&
       !force
     ) {
       throw i18nError.conflict(ERROR_KEYS.EPISODE_ALREADY_COMPLETED);

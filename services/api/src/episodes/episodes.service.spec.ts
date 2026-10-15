@@ -384,6 +384,21 @@ describe('EpisodesService', () => {
       expectNoWrites();
     });
 
+    // Spec 089, REQ-16 AC-22
+    it('refuses a possessed episode reading ENCODING without force', async () => {
+      prisma.episode.findFirst.mockResolvedValue({
+        ...episode,
+        status: 'ENCODING',
+        filePath: '/media/shows/reacher/s04e01.mkv',
+        mediaServerPresentAt: null,
+      });
+      prisma.mediaSource.findUnique.mockResolvedValue(null);
+
+      await expect(service.addTorrentToEpisode(42, input(false), 'user-1')).rejects.toThrow();
+
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+    });
+
     it.each([true, false])('stays a no-op for a COMPLETED episode with force=%s', async (force) => {
       prisma.episode.findFirst.mockResolvedValue({ ...episode, status: 'COMPLETED' });
       prisma.mediaSource.findUnique.mockResolvedValue(own('SCANNED'));
