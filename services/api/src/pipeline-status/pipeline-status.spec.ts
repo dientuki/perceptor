@@ -690,6 +690,22 @@ describe('deriveResume', () => {
     expect(result.refusalKey).toBe('error.download.retry_unavailable');
   });
 
+  it('maps a stored torrent_client_error to DOWNLOAD and keeps it retryable', () => {
+    const result = deriveResume(
+      input({
+        source: source({
+          status: 'ERROR',
+          errorKey: 'error.download.torrent_client_error',
+          errorParams: '{"state":"error"}',
+          errorMessage: 'x',
+        }),
+        jobs: [],
+      }),
+    );
+    expect(result.lastError?.stage).toBe('DOWNLOAD');
+    expect(result.retryable).toBe(true);
+  });
+
   it('refuses a SCAN-stage error when the source has no download path', () => {
     const result = deriveResume(
       input({

@@ -406,7 +406,10 @@ function stageOf(candidate: Candidate): ResumeStage {
   if (candidate.fromJob) {
     return 'ENCODE';
   }
-  if (candidate.errorKey === ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH) {
+  if (
+    candidate.errorKey === ERROR_KEYS.SOURCE_NO_DOWNLOAD_PATH ||
+    candidate.errorKey === ERROR_KEYS.DOWNLOAD_TORRENT_CLIENT_ERROR
+  ) {
     return 'DOWNLOAD';
   }
   return 'SCAN';

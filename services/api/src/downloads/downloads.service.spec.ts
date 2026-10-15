@@ -408,6 +408,55 @@ describe('DownloadsService', () => {
     });
   });
 
+  describe('handleTorrentCompleted — a torrent-client error the torrent recovered from', () => {
+    // Fault injection: drop the errorKey test in handleTorrentCompleted's
+    // ERROR rung and the first case stops enqueuing — the torrent finished,
+    // the file is on disk, and nothing ever scans it. Widen it to every
+    // ERROR and the second case starts enqueuing a source the race already
+    // discarded.
+    const errored = (errorKey: string) => ({
+      id: 1,
+      infoHash: 'hash-1',
+      status: 'ERROR',
+      errorKey,
+      downloadPath: '/media/downloads/abc123',
+      movieId: 7,
+      episodeId: null,
+      seasonId: null,
+      movie: { id: 7 },
+      episode: null,
+    });
+
+    it('clears a torrent-client error and enqueues the scan once the torrent completes', async () => {
+      prisma.mediaSource.findUnique
+        .mockResolvedValueOnce(errored('error.download.torrent_client_error'))
+        .mockResolvedValue({ ...errored('error.download.torrent_client_error'), status: 'DOWNLOADING', errorKey: null });
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.handleTorrentCompleted('hash-1');
+
+      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: 'ERROR', errorKey: 'error.download.torrent_client_error' },
+        data: { status: 'DOWNLOADING', errorKey: null, errorParams: null, errorMessage: null },
+      });
+      expect(result).toMatch(/^encolado/);
+      expect(queue.addSourceReady).toHaveBeenCalledWith({ mediaSourceId: 1 });
+    });
+
+    it.each(['error.source.superseded', 'error.source.replaced'])(
+      'still ignores a %s source',
+      async (errorKey) => {
+        prisma.mediaSource.findUnique.mockResolvedValue(errored(errorKey));
+
+        const result = await service.handleTorrentCompleted('hash-1');
+
+        expect(result).toMatch(/^ignorado/);
+        expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+        expect(queue.addSourceReady).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe('downloadStart/downloadStop — REQ-7 guarded write', () => {
     // ../plan.md § Approach decision 2: the write must be an `updateMany`
     // guarded on non-terminal statuses in its `where`, never a
@@ -1304,6 +1353,30 @@ describe('DownloadsService', () => {
       expect(writes[writes.length - 1]).toEqual({ where: { id: { in: [11, 12] }, status: 'WAITING' }, data: { status: 'QUEUED' } });
     });
 
+    // Fault injection: map error.download.torrent_client_error back to the
+    // SCAN stage in stageOf and this case enqueues a scan of a half-written
+    // torrent instead of restarting it.
+    it('restarts the torrent and clears a torrent-client error instead of scanning', async () => {
+      prisma.mediaSource.findUnique.mockResolvedValue(
+        sourceRow({
+          status: 'ERROR',
+          errorKey: 'error.download.torrent_client_error',
+          errorParams: '{"state":"error"}',
+          errorMessage: 'stopped',
+        }),
+      );
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.downloadStart(1, 'user-1');
+
+      expect(qbittorrent.start).toHaveBeenCalledWith('hash-1');
+      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: 'ERROR', errorKey: 'error.download.torrent_client_error' },
+        data: { status: 'QUEUED', errorKey: null, errorParams: null, errorMessage: null },
+      });
+      expect(queue.addSourceReady).not.toHaveBeenCalled();
+    });
+
     it('withdraws the scan entry before re-adding it', async () => {
       const order: string[] = [];
       queue.removeSourceReady.mockImplementation(async () => void order.push('remove'));
@@ -1836,6 +1909,96 @@ describe('DownloadsService', () => {
       const call = prisma.mediaSource.updateMany.mock.calls.find((c) => c[0].where.id === 1);
       expect(call?.[0].where.status.in).not.toContain('SCANNED');
       expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+    });
+
+    const sourceList = (status: string) => [
+      { id: 1, kind: 'TORRENT_SEARCH', status, infoHash: 'hash-1', releaseTitle: null, movieId: 7, seasonId: null, episodeId: null, updatedAt: new Date(0) },
+    ];
+    const writeBackRow = (status: string, errorKey: string | null) => [
+      { id: 1, infoHash: 'hash-1', status, errorKey, movieId: 7, episodeId: null, seasonId: null },
+    ];
+
+    // Fault injection: write a live ERROR through writeStatusIfNonTerminal
+    // (status only) and the row loses the one marker that lets it recover —
+    // Play then reads it as a failed scan.
+    it('records a torrent-client error with its key and the raw state', async () => {
+      prisma.mediaSource.findMany
+        .mockResolvedValueOnce(sourceList('DOWNLOADING'))
+        .mockResolvedValueOnce(writeBackRow('DOWNLOADING', null));
+      qbittorrent.info.mockResolvedValue([liveRow('hash-1', 'ERROR', 'error')]);
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.movieDownloads(7, 'user-1');
+
+      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: { in: ['PENDING', 'QUEUED', 'DOWNLOADING', 'PAUSED'] } },
+        data: {
+          status: 'ERROR',
+          errorKey: 'error.download.torrent_client_error',
+          errorParams: '{"state":"error"}',
+          errorMessage: expect.stringContaining('(error)'),
+        },
+      });
+    });
+
+    // Fault injection: drop the errorKey condition and this case starts
+    // writing DOWNLOADING over a superseded source; drop the recovery branch
+    // and the first case leaves a downloading torrent reading ERROR forever.
+    it('clears a torrent-client error once the torrent is downloading again', async () => {
+      prisma.mediaSource.findMany
+        .mockResolvedValueOnce(sourceList('ERROR'))
+        .mockResolvedValueOnce(writeBackRow('ERROR', 'error.download.torrent_client_error'));
+      qbittorrent.info.mockResolvedValue([liveRow('hash-1', 'DOWNLOADING', 'downloading')]);
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.movieDownloads(7, 'user-1');
+
+      expect(prisma.mediaSource.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: 'ERROR', errorKey: 'error.download.torrent_client_error' },
+        data: { status: 'DOWNLOADING', errorKey: null, errorParams: null, errorMessage: null },
+      });
+      expect(titleStatus.recomputeMovie).toHaveBeenCalledWith(7);
+    });
+
+    it.each(['error.source.superseded', 'error.source.replaced', null])(
+      'never lifts a %s ERROR source on a live reading',
+      async (errorKey) => {
+        prisma.mediaSource.findMany
+          .mockResolvedValueOnce(sourceList('ERROR'))
+          .mockResolvedValueOnce(writeBackRow('ERROR', errorKey));
+        qbittorrent.info.mockResolvedValue([liveRow('hash-1', 'DOWNLOADING', 'downloading')]);
+
+        await service.movieDownloads(7, 'user-1');
+
+        expect(prisma.mediaSource.updateMany).not.toHaveBeenCalled();
+        expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+      },
+    );
+
+    it('hands a torrent that recovered and finished to the completion path', async () => {
+      prisma.mediaSource.findMany
+        .mockResolvedValueOnce(sourceList('ERROR'))
+        .mockResolvedValueOnce(writeBackRow('ERROR', 'error.download.torrent_client_error'))
+        .mockResolvedValue([]);
+      prisma.mediaSource.findUnique.mockResolvedValue({
+        id: 1,
+        infoHash: 'hash-1',
+        status: 'DOWNLOADING',
+        errorKey: null,
+        downloadPath: '/media/downloads/abc123',
+        movieId: 7,
+        episodeId: null,
+        seasonId: null,
+        movie: { id: 7 },
+        episode: null,
+      });
+      qbittorrent.info.mockResolvedValue([liveRow('hash-1', 'READY', 'stalledUP')]);
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.movieDownloads(7, 'user-1');
+
+      expect(prisma.mediaSource.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { status: 'READY' } });
+      expect(queue.addSourceReady).toHaveBeenCalledWith({ mediaSourceId: 1 });
     });
 
     it('writes nothing when the torrent client is unreachable (AC-5)', async () => {
