@@ -12,12 +12,14 @@ import {
   refreshMovieAction,
   removeMovieAction,
   setMovieContentKindAction,
+  setMovieGrainModeAction,
   setMovieShortAction,
 } from "@/actions/movies";
 import Switch from "@/components/form/switch/Switch";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
+import GrainModeSelect from "@/components/media/GrainModeSelect";
 import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
 import RemoveTitleButton from "@/components/media/RemoveTitleButton";
@@ -27,7 +29,7 @@ import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import { effectiveLanguages } from "@/lib/effective-languages";
 import type { Language } from "@/types/languages";
-import type { AcquisitionTarget, ContentKind } from "@/types/media";
+import type { AcquisitionTarget, ContentKind, GrainMode } from "@/types/media";
 import type { UserPreferences } from "@/types/preferences";
 
 export default function Movie({
@@ -78,6 +80,8 @@ export default function Movie({
   );
   const handleContentKindSave = (kind: ContentKind) =>
     setMovieContentKindAction(Number(movie.id), kind);
+  const handleGrainModeSave = (mode: GrainMode) =>
+    setMovieGrainModeAction(Number(movie.id), mode);
 
   // The Switch component owns its own display state internally
   // (defaultChecked, not a controlled `checked`), so reverting it on a
@@ -196,6 +200,12 @@ export default function Movie({
           value={movie.contentKind}
           onSave={handleContentKindSave}
           label={t("contentKindLabel")}
+        />
+
+        <GrainModeSelect
+          value={movie.grainMode}
+          onSave={handleGrainModeSave}
+          label={t("grainModeLabel")}
         />
 
         <TitleLanguagesPanel

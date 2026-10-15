@@ -9,8 +9,10 @@ import {
   refreshShowAction,
   removeShowAction,
   setShowContentKindAction,
+  setShowGrainModeAction,
 } from "@/actions/shows";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
+import GrainModeSelect from "@/components/media/GrainModeSelect";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
 import RemoveTitleButton from "@/components/media/RemoveTitleButton";
 import TitleLanguagesPanel from "@/components/media/TitleLanguagesPanel";
@@ -44,6 +46,7 @@ export default async function Show({
     null,
     Number(show.id),
   );
+  const setShowGrainMode = setShowGrainModeAction.bind(null, Number(show.id));
 
   const audioLanguages = show.audioLanguages ?? [];
   const subtitleLanguages = show.subtitleLanguages ?? [];
@@ -116,6 +119,12 @@ export default async function Show({
           value={show.contentKind}
           onSave={setShowContentKind}
           label={t("contentKindLabel")}
+        />
+
+        <GrainModeSelect
+          value={show.grainMode}
+          onSave={setShowGrainMode}
+          label={t("grainModeLabel")}
         />
 
         <TitleLanguagesPanel

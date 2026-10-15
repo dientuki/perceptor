@@ -1,3 +1,4 @@
+import { hasPossession } from '@/pipeline-status/pipeline-status';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { join, parse } from 'node:path';
 import { access, mkdir, rename } from 'node:fs/promises';
@@ -202,7 +203,7 @@ export class UploadsService implements OnModuleInit {
 
       // Spec 027, REQ-7; Spec 022, REQ-7; Spec 022, REQ-19; Spec 087, REQ-2
       const episodeNeedsConfirmation =
-        episode.status === 'COMPLETED' || (await this.downloads.hasDeliveredSource({ episodeId }));
+        hasPossession(episode) || (await this.downloads.hasDeliveredSource({ episodeId }));
       if (episodeNeedsConfirmation && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
         throw new UploadHttpError(409, ERROR_KEYS.EPISODE_ALREADY_COMPLETED);
       }
@@ -248,7 +249,7 @@ export class UploadsService implements OnModuleInit {
     if (!movie) throw new UploadHttpError(404, ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
 
     // Spec 027, REQ-7; Spec 022, REQ-7; Spec 022, REQ-19; Spec 087, REQ-2
-    const movieNeedsConfirmation = movie.status === 'COMPLETED' || (await this.downloads.hasDeliveredSource({ movieId }));
+    const movieNeedsConfirmation = hasPossession(movie) || (await this.downloads.hasDeliveredSource({ movieId }));
     if (movieNeedsConfirmation && !(await this.uploadTickets.isReplaceAuthorised(upload.id))) {
       throw new UploadHttpError(409, ERROR_KEYS.MOVIE_ALREADY_COMPLETED);
     }

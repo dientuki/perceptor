@@ -11,6 +11,7 @@ import { translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
 import type {
   ContentKind,
+  GrainMode,
   TitleRefreshResult,
   TitleRemovalResult,
 } from "@/types/media";
@@ -24,6 +25,7 @@ export interface Movie {
   releaseDate?: string;
   originalLanguage: string;
   contentKind: ContentKind;
+  grainMode: GrainMode;
   isShort: boolean;
   status: string;
   audioLanguages: Language[];
@@ -78,6 +80,7 @@ const GET_MOVIE_QUERY = `
       releaseDate
       originalLanguage
       contentKind
+      grainMode
       isShort
       status
       audioLanguages {
@@ -150,6 +153,41 @@ export async function setMovieContentKindAction(
     result = await fetchGraphQL(SET_MOVIE_CONTENT_KIND_MUTATION, {
       movieId,
       contentKind,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
+}
+
+const SET_MOVIE_GRAIN_MODE_MUTATION = `
+  mutation SetMovieGrainMode($movieId: Int!, $grainMode: GrainMode!) {
+    setMovieGrainMode(movieId: $movieId, grainMode: $grainMode) {
+      id
+    }
+  }
+`;
+
+// Same shape as setMovieContentKindAction: the enum argument is sent as a
+// plain variable typed `GrainMode!`, never a quoted string.
+export async function setMovieGrainModeAction(
+  movieId: number,
+  grainMode: GrainMode,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_MOVIE_GRAIN_MODE_MUTATION, {
+      movieId,
+      grainMode,
     });
   } catch (_err) {
     const t = await getTranslations("errors");

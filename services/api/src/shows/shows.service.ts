@@ -14,6 +14,7 @@ import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { CalendarEpisodeRow } from '@/calendar/group-episodes';
 import { ContentKind } from '@/media/entities/content-kind.enum';
+import { GrainMode } from '@/media/entities/grain-mode.enum';
 import { classifyContentKind } from '@/media/content-kind';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { CatalogSearchService } from '@/media/catalog-search.service';
@@ -426,6 +427,31 @@ export class ShowsService implements MediaTypeService {
     const show = await this.prisma.show.update({
       where: { id },
       data: { contentKind },
+      include: {
+        seasons: {
+          orderBy: { seasonNumber: 'asc' },
+          include: {
+            mediaSources: { where: { status: { not: 'ERROR' } } },
+            episodes: {
+              orderBy: { episodeNumber: 'asc' },
+              include: { mediaSources: true, processJobs: true },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      ...show,
+      seasons: this.deriveSeasonEpisodeStatuses(show.seasons),
+    };
+  }
+
+  // 092-film-grain-optimization: ownership gate lives in ShowsResolver, as setContentKind's does.
+  async setGrainMode(id: number, grainMode: GrainMode) {
+    const show = await this.prisma.show.update({
+      where: { id },
+      data: { grainMode },
       include: {
         seasons: {
           orderBy: { seasonNumber: 'asc' },

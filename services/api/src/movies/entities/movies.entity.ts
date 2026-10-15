@@ -1,6 +1,7 @@
 import { ObjectType, Field, ID, Int } from '@nestjs/graphql';
 import { Language } from '@/languages/entities/language.entity';
 import { ContentKind } from '@/media/entities/content-kind.enum';
+import { GrainMode } from '@/media/entities/grain-mode.enum';
 
 @ObjectType()
 export class Movie {
@@ -31,6 +32,10 @@ export class Movie {
   // Spec 048, REQ-1
   @Field()
   isShort: boolean;
+
+  // Spec 092, REQ-3
+  @Field(() => GrainMode)
+  grainMode: GrainMode;
 
   @Field()
   status: string;

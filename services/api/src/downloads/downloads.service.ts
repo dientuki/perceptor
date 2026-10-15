@@ -187,19 +187,59 @@ export class DownloadsService {
     const liveByHash = new Map(rows.map((row) => [row.hash.toLowerCase(), row]));
     const sources = await this.prisma.mediaSource.findMany({
       where: { infoHash: { in: [...liveByHash.keys()] } },
-      select: { id: true, infoHash: true, status: true, movieId: true, episodeId: true, seasonId: true },
+      select: { id: true, infoHash: true, status: true, errorKey: true, movieId: true, episodeId: true, seasonId: true },
     });
 
     for (const source of sources) {
       if (!source.infoHash) continue;
       const live = liveByHash.get(source.infoHash.toLowerCase());
-      if (!live || live.state === source.status) continue;
+      if (!live) continue;
 
-      const changed = await this.writeStatusIfNonTerminal(source.id, live.state);
+      let changed: boolean;
+      if (source.status === 'ERROR') {
+        if (source.errorKey !== ERROR_KEYS.DOWNLOAD_TORRENT_CLIENT_ERROR || live.state === 'ERROR') continue;
+        if (live.state === 'READY') {
+          if (await this.clearTorrentClientError(source.id, 'DOWNLOADING')) {
+            await this.handleTorrentCompleted(source.infoHash);
+            await this.recomputeStatus(source);
+          }
+          continue;
+        }
+        changed = await this.clearTorrentClientError(source.id, live.state);
+      } else if (live.state === source.status) {
+        continue;
+      } else if (live.state === 'ERROR') {
+        changed = await this.writeTorrentClientError(source.id, live.rawState);
+      } else {
+        changed = await this.writeStatusIfNonTerminal(source.id, live.state);
+      }
+
       if (changed) {
         await this.recomputeStatus(source);
       }
     }
+  }
+
+  private async writeTorrentClientError(mediaSourceId: number, rawState: string): Promise<boolean> {
+    const key = ERROR_KEYS.DOWNLOAD_TORRENT_CLIENT_ERROR;
+    const result = await this.prisma.mediaSource.updateMany({
+      where: { id: mediaSourceId, status: { in: DownloadsService.NON_TERMINAL_STATUSES } },
+      data: {
+        status: 'ERROR',
+        errorKey: key,
+        errorParams: JSON.stringify({ state: rawState }),
+        errorMessage: MESSAGES_EN[key].replace('{state}', rawState),
+      },
+    });
+    return result.count > 0;
+  }
+
+  private async clearTorrentClientError(mediaSourceId: number, status: SourceStatus): Promise<boolean> {
+    const result = await this.prisma.mediaSource.updateMany({
+      where: { id: mediaSourceId, status: 'ERROR', errorKey: ERROR_KEYS.DOWNLOAD_TORRENT_CLIENT_ERROR },
+      data: { status, errorKey: null, errorParams: null, errorMessage: null },
+    });
+    return result.count > 0;
   }
 
   // Spec 053, REQ-2
@@ -616,6 +656,7 @@ export class DownloadsService {
     } else if (stage === 'DOWNLOAD' && source.infoHash) {
       const infoHash = source.infoHash;
       await this.callTorrentClient(() => this.qbittorrent.start(infoHash));
+      await this.clearTorrentClientError(source.id, 'QUEUED');
     }
 
     await this.recomputeStatus(source);
@@ -1048,7 +1089,11 @@ export class DownloadsService {
     // Deliberately still runs before resolveRace below: resolveRace pauses
     // this source's *siblings*, and an ERROR source's late completion must
     // never pause whatever superseded it.
-    if (mediaSource.status === 'ERROR') {
+    if (
+      mediaSource.status === 'ERROR' &&
+      (mediaSource.errorKey !== ERROR_KEYS.DOWNLOAD_TORRENT_CLIENT_ERROR ||
+        !(await this.clearTorrentClientError(mediaSource.id, 'DOWNLOADING')))
+    ) {
       console.log(
         `[torrentCompleted] ignored: mediaSource ${mediaSource.id} is in ERROR (replaced)`,
       );

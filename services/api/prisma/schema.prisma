@@ -72,6 +72,14 @@ enum ContentKind {
   CGI
 }
 
+// Spec 092, REQ-3: a title's own override over the installation's
+// grain_auto_enabled Setting; INHERIT never crosses the GraphQL wire.
+enum GrainMode {
+  INHERIT
+  ON
+  OFF
+}
+
 model Setting {
   id    Int    @id @default(autoincrement())
   key   String @unique
@@ -363,6 +371,8 @@ model Movie {
   originalLanguage String
   contentKind      ContentKind @default(LIVE_ACTION)
   isShort          Boolean   @default(false)
+  // Spec 092, NFR-2: default covers every existing row, no backfill needed.
+  grainMode        GrainMode @default(INHERIT)
 
   theatricalReleaseDate DateTime?
   digitalReleaseDate    DateTime?
@@ -400,6 +410,8 @@ model Show {
   posterUrl        String?
   status           MediaStatus @default(MISSING)
   contentKind      ContentKind @default(LIVE_ACTION)
+  // Spec 092, NFR-2: default covers every existing row, no backfill needed.
+  grainMode        GrainMode   @default(INHERIT)
   originalLanguage String
   releaseDate      DateTime?
   seasonsSyncedAt  DateTime?

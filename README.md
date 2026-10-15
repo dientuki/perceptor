@@ -34,10 +34,10 @@ browse — and from here the work is stabilising what exists, not adding to it. 
 are not being taken; bug reports are. It has no production deployment and no users besides its
 author.
 
-The published images are release candidates (`v0.1.0-rc1` through `v0.4.0-rc2`); there is no stable
+The published images are release candidates (`v0.1.0-rc1` through `v0.5.0-rc1`); there is no stable
 release yet, so `latest` resolves to the newest release candidate rather than to a final version.
 
-Eighty feature specs (`001` through `080`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
+Ninety-two feature specs (`001` through `092`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
 stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -99,7 +99,9 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   trackers.
 - ⬇️ **Downloads through qBittorrent**, each with its own save path, with live progress and speed in
   the UI and start/stop/delete from Perceptor itself. A title can race several sources at once —
-  the first one to finish wins, the losers are demoted.
+  the first one to finish wins. The losers are actually cleaned up — stopped and unwound whatever
+  kind of source won, torrent or upload — and marked as having lost, so they can't be restarted by
+  mistake.
 - 🗑️ **Deleting a source deletes it everywhere.** A running encode is cancelled, its queue entries
   are withdrawn and the download is cleaned up. The finished library is never touched.
 - 🔁 **Adding the same torrent twice is harmless.** Re-adding a release already attached to the
@@ -107,7 +109,11 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
 - 🩺 **A failed source says why, and resumes where it broke.** An errored download shows its last
   error, and Play picks it back up from the stage that failed — the file is never downloaded again.
 - ♻️ **A finished title can be replaced.** A bad cut, a broken encode or the wrong language isn't a
-  dead end: point a new torrent or a new upload at it and it supersedes what's there.
+  dead end: point a new torrent or a new upload at it and it supersedes what's there. Every way in —
+  torrent, magnet, upload, for a film, an episode or a season — asks first when the title already
+  holds a file, and the automatic sweeps never replace anything. The source being replaced is
+  retired, not marked as an error: it keeps its history, offers only Delete, and re-adding the same
+  release brings it back.
 - 🔑 **No API-key copy-paste on a fresh checkout.** The installer generates Prowlarr's key and the
   container adopts it before boot.
 
@@ -147,7 +153,11 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   worker keeps retrying until it's acknowledged; both outcome mutations are safe to receive twice.
 - 🩹 **A crashed encode picks itself back up.** If the worker container dies mid-encode, the job is
   requeued from scratch when the worker boots again. A second crash on the same job marks it as
-  failed instead of looping forever.
+  failed instead of looping forever. Only one worker runs at a time: a second instance exits
+  instead of resetting the first one's live encode.
+- 🌾 **Film grain, per title.** AV1 can strip a film's grain and resynthesize it on playback, which
+  saves a lot of bits on grainy sources. Each film or series has its own On / Off / Inherit choice on
+  its detail page; Inherit defers to the installation-wide setting in Settings → Compression.
 
 ### Enjoy
 - 🗂️ **Automatic filing** into your library layout.
@@ -179,7 +189,12 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   holds it, it stays for them; if you were the last owner, everything in flight is unwound first.
   The file already in your library is never deleted.
 - 📊 **One status vocabulary.** Queued, downloading, encoding, done — the same words everywhere, so
-  two screens never disagree about the same title. The downloads panel shows live progress and
+  two screens never disagree about the same title. Status is recomputed from the title's sources,
+  jobs and media server every time one of them changes, so a title no longer gets stuck reading
+  "downloading" after its encode finished. A series is complete once every aired episode is —
+  specials don't count, and a newly aired episode with nothing acquired takes it off complete. A
+  title being replaced shows the replacement's progress rather than "done", and a torrent waiting in
+  qBittorrent's queue reads as queued, not downloading. The downloads panel shows live progress and
   speed for every torrent, plus how fast FFmpeg is encoding, filterable by completed, working or
   error.
 - ⏰ **Scheduled tasks** an admin can enable and pace from Settings, for the work that has to happen
@@ -278,6 +293,9 @@ pipeline stage. Several specs open with the real incident that motivated them.
   implements the `/specify` → `/plan-feature` → `/tasks` → `/implement` flow, and
   [`.claude/agents/`](.claude/agents/) defines one implementer per service that writes only inside
   its own service. `/implement` dispatches the tasks and verifies the diff after each batch.
+- **What isn't verified is written down.** [`docs/spec/pending-acs.md`](docs/spec/pending-acs.md)
+  lists every acceptance criterion still unticked, per spec, with the blocker named; `bin/audit` and
+  `bin/comments` gate dependencies and comments the same mechanical way.
 - **Docker-first.** Nothing runs on the host — no host Node, no local MariaDB or Redis. Every
   command goes through a wrapper in `bin/`, and source is bind-mounted so every service hot-reloads.
 
@@ -438,6 +456,10 @@ of failing halfway through:
 | `bin/dbinit` | Grant Prisma its privileges (once, per fresh `db` volume) |
 | `bin/dbreset` | Reset the schema, reseed, and flush Redis — dev state only |
 | `bin/reset-password <user>` | Reset a user's password — the recovery path when no admin can log in; for `ADMIN_USER` it also resets qBittorrent and Prowlarr |
+| `bin/audit [service]` | Production npm advisory gate: fails on any `high`/`critical` finding not in `tools/audit/allowlist.json` with a reachability argument |
+| `bin/comments [service]` | Comment convention gate: fails on a Spanish comment or test description, or a malformed/dangling `// Spec NNN, <ref>` locator |
+| `bin/pending-acs [--check]` | Regenerate `docs/spec/pending-acs.md`, the list of acceptance criteria not yet verified; `--check` only reports staleness |
+| `bin/site [--serve]` | Rebuild the public landing page in English and Spanish; `--serve` previews it on `http://localhost:8089/` |
 
 Common Prisma tasks:
 
@@ -563,6 +585,9 @@ Rough edges, stated plainly:
   answers "not available for this user" rather than rendering. There is no shared or household
   library. The one exception is the `/downloads` queue, which shows every title's sources to any
   signed-in user, read-only for the ones they don't hold.
+- **Automatic film grain is a placeholder.** The installation-wide grain setting exists, but its
+  "on" path doesn't analyse the source yet and still produces no grain; only a title explicitly set
+  to On gets it.
 - **No quality profiles, no upgrade loop.** Perceptor normalizes what it gets rather than chasing a
   better release later — a deliberate omission, not a backlog item.
 - **The installer only knows how to repair a *finished* installation.** Re-running `install.sh`

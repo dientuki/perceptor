@@ -76,8 +76,9 @@ function colorTrcOf(args: string[]): string | undefined {
 }
 
 describe('getVideoParams', () => {
-  it('builds LIVE_ACTION svtav1 params: scm=0, aq-mode=2, sharpness=0, film-grain=0, no enable-qm', () => {
-    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p');
+  // Spec 092, REQ-7 REQ-8
+  it('builds LIVE_ACTION svtav1 params: scm=0, aq-mode=2, sharpness=0, film-grain=0, no enable-qm (grain off)', () => {
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p', 'web', false);
 
     const svtav1 = svtav1ParamsOf(args);
     expect(svtav1).toContain('scm=0');
@@ -85,10 +86,24 @@ describe('getVideoParams', () => {
     expect(svtav1).toContain('sharpness=0');
     expect(svtav1).toContain('film-grain=0');
     expect(svtav1).not.toContain('enable-qm');
+    expect(svtav1).not.toContain('film-grain-denoise');
   });
 
-  it('builds ANIME svtav1 params: scm=2, aq-mode=2, enable-qm=1, qm-min=4, sharpness=2, film-grain=0', () => {
-    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'ANIME', '1080p');
+  it('builds LIVE_ACTION svtav1 params with film-grain=8:film-grain-denoise=1 when grain is on', () => {
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p', 'web', true);
+
+    const svtav1 = svtav1ParamsOf(args);
+    expect(svtav1).toContain('scm=0');
+    expect(svtav1).toContain('aq-mode=2');
+    expect(svtav1).toContain('sharpness=0');
+    expect(svtav1).toContain('film-grain=8');
+    expect(svtav1).toContain('film-grain-denoise=1');
+    expect(svtav1).not.toContain('film-grain=0');
+    expect(svtav1).not.toContain('enable-qm');
+  });
+
+  it('builds ANIME svtav1 params: scm=2, aq-mode=2, enable-qm=1, qm-min=4, sharpness=2, film-grain=0 (grain off)', () => {
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'ANIME', '1080p', 'web', false);
 
     const svtav1 = svtav1ParamsOf(args);
     expect(svtav1).toContain('scm=2');
@@ -97,10 +112,25 @@ describe('getVideoParams', () => {
     expect(svtav1).toContain('qm-min=4');
     expect(svtav1).toContain('sharpness=2');
     expect(svtav1).toContain('film-grain=0');
+    expect(svtav1).not.toContain('film-grain-denoise');
   });
 
-  it('builds CGI svtav1 params identical to ANIME today, as its own separately editable case', () => {
-    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'CGI', '1080p');
+  it('builds ANIME svtav1 params with film-grain=8:film-grain-denoise=1 when grain is on', () => {
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'ANIME', '1080p', 'web', true);
+
+    const svtav1 = svtav1ParamsOf(args);
+    expect(svtav1).toContain('scm=2');
+    expect(svtav1).toContain('aq-mode=2');
+    expect(svtav1).toContain('enable-qm=1');
+    expect(svtav1).toContain('qm-min=4');
+    expect(svtav1).toContain('sharpness=2');
+    expect(svtav1).toContain('film-grain=8');
+    expect(svtav1).toContain('film-grain-denoise=1');
+    expect(svtav1).not.toContain('film-grain=0');
+  });
+
+  it('builds CGI svtav1 params identical to ANIME today, as its own separately editable case (grain off)', () => {
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'CGI', '1080p', 'web', false);
 
     const svtav1 = svtav1ParamsOf(args);
     expect(svtav1).toContain('scm=2');
@@ -109,6 +139,21 @@ describe('getVideoParams', () => {
     expect(svtav1).toContain('qm-min=4');
     expect(svtav1).toContain('sharpness=2');
     expect(svtav1).toContain('film-grain=0');
+    expect(svtav1).not.toContain('film-grain-denoise');
+  });
+
+  it('builds CGI svtav1 params with film-grain=8:film-grain-denoise=1 when grain is on', () => {
+    const args = getVideoParams(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'CGI', '1080p', 'web', true);
+
+    const svtav1 = svtav1ParamsOf(args);
+    expect(svtav1).toContain('scm=2');
+    expect(svtav1).toContain('aq-mode=2');
+    expect(svtav1).toContain('enable-qm=1');
+    expect(svtav1).toContain('qm-min=4');
+    expect(svtav1).toContain('sharpness=2');
+    expect(svtav1).toContain('film-grain=8');
+    expect(svtav1).toContain('film-grain-denoise=1');
+    expect(svtav1).not.toContain('film-grain=0');
   });
 
   // Spec 058, REQ-7 NFR-2

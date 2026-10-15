@@ -375,7 +375,8 @@ and for a title the caller does not own, and **these pages cannot and must not t
 Since `077-title-detail-three-column-layout`, both headers are three columns (stacked below `md`):
 poster on the left; on the centre the heading (title, year, original language, `StatusBadge`), then a
 film's file and magnet buttons, then the synopsis; on the right Refresh and Remove, then a film's
-short switch, `ContentKindSelect` and `TitleLanguagesPanel`. Both pages join `getPreferences()` into
+short switch, `ContentKindSelect`, `GrainModeSelect` (`092-film-grain-optimization`) and
+`TitleLanguagesPanel` — grain sits below content kind on both pages. Both pages join `getPreferences()` into
 their existing `Promise.all`, wrapped so a rejection yields `null` with `unstable_rethrow(error)` as
 the catch's first statement — without it an expired session is swallowed and the panel stays
 unmarked forever, with no error anywhere. The rows below the header are unchanged.
@@ -851,6 +852,13 @@ confirms `en.json`/`es.json` match exactly (594 keys — this feature added none
 services/web/src` returns nothing tree-wide. This feature touched no message catalog, no schema, no
 `api`/`worker` file — presentation-only, per its own contract delta ("None").
 
+As of 2026-10-15 (`092-film-grain-optimization`): `bin/cli web npx --no tsc --noEmit` reports **0
+errors** and `bin/cli web node scripts/check-messages.mjs` confirms `en.json`/`es.json` match
+exactly (608 keys — the new `grainMode` namespace plus `grainAutoLabel` under
+`settings.compression` and `grainModeLabel` under `movies.detail`/`shows.detail`). `bin/npm web run
+build` was not re-run for this entry — the dev stack was up (never run a production build while it
+is, per this file's own convention above).
+
 ## Settings → Compression carries the subtitle format choice (`070-subtitle-format-selection`)
 
 `CompressionPanel.tsx` renders a "no subtitles" checkbox and two groups (text: SRT, ASS/SSA, WebVTT,
@@ -860,6 +868,26 @@ restores what the administrator had. The controls carry no `name`; five hidden i
 values. `actions/settings.ts` sends the two list keys through `LIST_KEYS`, always, the empty string
 included — `EDITABLE_KEYS`' blank filter would silently drop an empty list. `web` never selects
 `EncodeJobDetails.allowedSubtitleFormats`.
+
+## A per-title grain override, and the installation default it falls back to (`092-film-grain-optimization`)
+
+`GrainModeSelect.tsx` (`src/components/media/`) is `ContentKindSelect.tsx`'s clone — a controlled
+`<select>` over `GRAIN_MODES` (`src/types/media.ts`), reverting to the previous value on a refusal
+rather than using the shorts `Switch`'s key-remount trick. Both detail pages render it unconditional
+(not gated on any capability flag), and no episode row anywhere renders one — there is no
+`Episode.grainMode`, so an episode's grain always follows its series. `setMovieGrainModeAction`/
+`setShowGrainModeAction` (`src/actions/movies.ts`/`src/actions/shows.ts`) follow
+`setMovieContentKindAction`'s shape exactly; the two **detail** queries select `grainMode`, the
+listing queries do not.
+
+Settings → Compression gained a sixth control, `grain_auto_enabled` (a plain `Switch` + hidden
+input, same idiom as every other boolean row), placed after the resolution radios and before the
+subtitle-format controls. It locks — `disabled`, state preserved, hidden input still emitting the
+stored value — under the exact same `enabled` (compression-on) condition `070`'s subtitle controls
+already lock under, since with compression off the setting it controls never runs on the worker
+side (REQ-10). `grain_auto_enabled` is in `BOOLEAN_KEYS`, not `EDITABLE_KEYS` — `actions/
+settings.ts`'s boolean path, like the resolution/subtitle rows beside it. `web` never selects
+`EncodeJobDetails.grainMode`.
 
 ## Installable PWA (`080-installable-pwa`)
 

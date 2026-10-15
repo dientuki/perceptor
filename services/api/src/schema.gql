@@ -71,6 +71,7 @@ type Movie {
   originalLanguage: String!
   contentKind: ContentKind!
   isShort: Boolean!
+  grainMode: GrainMode!
   status: String!
   filePath: String
   createdAt: DateTime!
@@ -97,6 +98,15 @@ enum ContentKind {
   LIVE_ACTION
   ANIME
   CGI
+}
+
+"""
+A title's own override of the installation's grain-optimization switch.
+"""
+enum GrainMode {
+  INHERIT
+  ON
+  OFF
 }
 
 """The outcome of removing a title from the caller's library."""
@@ -282,6 +292,7 @@ type Show {
   releaseDate: DateTime
   originalLanguage: String!
   contentKind: ContentKind!
+  grainMode: GrainMode!
   status: String!
   seasonsSyncedAt: DateTime
   createdAt: DateTime!
@@ -383,6 +394,7 @@ type EncodeJobDetails {
   allowedSubtitleLanguagesIso3: [String!]!
   allowedSubtitleLanguageTags: [String!]!
   contentKind: ContentKind!
+  grainMode: EffectiveGrainMode!
   seasonNumber: Int
   episodeNumber: Int
   episodeTitle: String
@@ -396,6 +408,13 @@ type EncodeJobDetails {
   compressionResolution: String!
   allowedSubtitleFormats: [String!]!
   libraryLayout: String!
+}
+
+"""The value the worker consumes — already resolved, never INHERIT."""
+enum EffectiveGrainMode {
+  AUTO
+  ON
+  OFF
 }
 
 type EncodeCompletedResult {
@@ -620,6 +639,11 @@ type Mutation {
   setMovieContentKind(movieId: Int!, contentKind: ContentKind!): Movie!
 
   """
+  Sets the grain-optimization control of a film (092-film-grain-optimization)
+  """
+  setMovieGrainMode(movieId: Int!, grainMode: GrainMode!): Movie!
+
+  """
   Removes a film from the caller's library; deletes it from Perceptor when they were the last owner (067)
   """
   removeMovie(id: Int!): TitleRemoval!
@@ -659,6 +683,11 @@ type Mutation {
   Reclasifica el estilo de animación de una serie (057-content-kind-classification)
   """
   setShowContentKind(showId: Int!, contentKind: ContentKind!): Show!
+
+  """
+  Sets the grain-optimization control of a series (092-film-grain-optimization)
+  """
+  setShowGrainMode(showId: Int!, grainMode: GrainMode!): Show!
 
   """
   Removes a series from the caller's library; deletes it from Perceptor when they were the last owner (067)

@@ -245,6 +245,7 @@ describe('ffmpeg cases', () => {
       allowedSubtitleFormats: input.allowedSubtitleFormats ?? ['srt', 'mov_text'],
       contentKind: input.contentKind,
       compressionResolution: input.compressionResolution ?? '1080p',
+      grainMode: 'OFF' as const,
       containerTitle: input.containerTitle,
       sourceTag: input.sourceTag,
       trackTitles: input.trackTitles ?? SEEDED_TRACK_TITLES,

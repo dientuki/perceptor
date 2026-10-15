@@ -49,6 +49,9 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'shorts_enabled', value: 'false' },
     { key: 'compression_enabled', value: 'true' },
     { key: 'compression_resolution', value: '1080p' },
+    // Spec 092, REQ-2: off by default — a heuristic nobody enabled must not
+    // switch itself on at upgrade.
+    { key: 'grain_auto_enabled', value: 'false' },
     { key: 'subtitles_enabled', value: 'true' },
     { key: 'subtitles_text_enabled', value: 'true' },
     { key: 'subtitles_text_formats', value: 'srt,ass,webvtt,mov_text', backfillEmpty: false },

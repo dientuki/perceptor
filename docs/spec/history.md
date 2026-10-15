@@ -23,6 +23,90 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-15 — `089-status-materialization`, amendment 0.3.0 (a replacement in flight outranks possession)
+
+`api` only; no GraphQL, schema or migration change (`git status` on `services/api/prisma` and the
+schema file: clean). `deriveTitleStatus` now reads sources and jobs before possession, so a title
+holding a file reads the work in flight on it (REQ-15); a possessed aired episode also counts its
+season's real unscanned pack sources, at their own status. `hasPossession`/`POSSESSION_WHERE` became
+the one spelling of "holds a file", and the five `087` `force` guards plus `054`'s orphan recovery
+switched to it (REQ-16). Found on `shows.id = 6`, S02E09: `COMPLETED` while its replacement was queued.
+
+`api` 69/69 suites, 1034/1034 tests — up from 1015 (+15 in `pipeline-status.spec.ts`, +4 across the
+guard and recovery specs). `bin/cli api npx --no tsc --noEmit`: 0 errors. `bin/comments api`: PASS,
+793 locators resolved.
+
+Live pass: `episodes.id = 195` read `COMPLETED` before and `ENCODING` after `api` hot-reloaded
+(job 11, `ENCODING` at 24%); `shows.id = 6` read `ENCODING`; every other episode stayed `COMPLETED`
+and the five specials `MISSING` (AC-23). Not observed live: the return to `COMPLETED` when job 11
+finishes (AC-20), a failed replacement (AC-21), a refused second attempt (AC-22) and a season-pack
+replacement (AC-24) — all four are covered by unit tests only. `uploads.resolver.ts` has no spec
+file; its guard is the same `hasPossession` call as `uploads.service.ts`'s, which is covered.
+
+## 2026-10-15 — `089-status-materialization`, amendment 0.2.0 (specials leave the series aggregation)
+
+`api` only; no GraphQL, schema or migration change. `TitleStatusService.recomputeShow` now reads only
+seasons with `seasonNumber` not 0 (REQ-14). The same session also fixed `ProcessJobsService.encodeStarted`,
+which wrote `ProcessJob.status = ENCODING` without notifying `TitleStatusService` — a title sat on its
+pre-encode status for the whole encode (found on `movies.id = 9`); two tests added, no spec amendment.
+
+`api` 69/69 suites, 1015/1015 tests — up from 1012 (+2 `encodeStarted`, +1 season-0 filter). `bin/cli
+api npx tsc --noEmit`: 0 errors. `bin/comments api`: PASS, 751 locators resolved, 0 malformed.
+
+Live pass: `shows.id = 6` ("Lost in Space", 28 regular episodes `COMPLETED`, 5 specials `MISSING`) read
+`DOWNLOADED` before and `COMPLETED` after `api` hot-reloaded through its boot-time `recomputeAllStatuses`,
+with the five specials still `MISSING` (AC-17, AC-19). AC-18's second half (a series with only aired
+specials reads `MISSING`) is the existing no-aired-episode rule, covered by `pipeline-status.spec.ts`.
+
+## 2026-10-15 — `092-film-grain-optimization`
+
+`api`, `web` and `worker` all touched. GraphQL Contract Delta matches `spec.md` exactly: two new
+enums (`GrainMode`, `EffectiveGrainMode`), `Movie.grainMode`/`Show.grainMode: GrainMode!`,
+`EncodeJobDetails.grainMode: EffectiveGrainMode!`, and `setMovieGrainMode`/`setShowGrainMode` on
+`Mutation` — nothing else changed. One migration, `20261015041754_add_grain_mode` — additive
+(`Movie.grainMode`/`Show.grainMode GrainMode @default(INHERIT)`, no backfill); `prisma migrate
+status` reports up to date. `git status --short services/api/prisma` shows the modified
+`schema.prisma`, the modified `prisma/seeds/settings.ts` (seeds `grain_auto_enabled: 'false'`) and
+the new migration directory.
+
+`api` 69/69 suites, 1012/1012 tests — up from the pre-feature baseline of 68 suites / 1000 tests
+(+12: 6 in the new `settings/grain-mode.spec.ts` fault-injection suite, 2 in
+`movies.resolver.spec.ts`'s guard-order case, 4 in `process-jobs.service.spec.ts`'s film/episode
+resolution cases). `bin/cli api npx tsc --noEmit`: 0 errors. `bin/comments api`: PASS, 748 locators
+resolved, 0 malformed.
+
+`worker` 29/29 suites, 337/337 tests — up from the pre-feature baseline of 28 suites / 323 tests
+(+14: 11 in the new `encode/grain-mode.spec.ts`, net +3 in `ffmpeg/params.spec.ts` where the three
+pre-existing `film-grain=0` assertions became six on/off cases across the three content kinds;
+`buildCommand.spec.ts`/`cases.spec.ts` gained only a fixture field, no new cases).
+`bin/cli worker npx tsc --noEmit`: 0 errors. `bin/comments worker`: PASS, 176 locators resolved, 0
+malformed.
+
+`web`: `bin/cli web npx tsc --noEmit` 0 errors; `bin/comments web`: PASS, 76 locators resolved, 0
+malformed (after fixing two malformed-reference comments — prose mixed into a `// Spec NNN, <ref>`
+locator line — found by the gate and corrected to match the precedent `ContentKindSelect.tsx`
+already sets: plain explanatory prose with no locator at all, rather than a locator carrying
+trailing prose); `bin/cli web node scripts/check-messages.mjs`: en/es catalogs match exactly (608
+keys, +14: the `grainMode` namespace, `settings.compression.grainAutoLabel`, and `grainModeLabel`
+under both `movies.detail` and `shows.detail`). `web` has no `test` script in this repo
+(pre-existing, not a gap introduced by this feature) — `web/plan.md` recorded no tests owed here,
+matching `070`'s precedent for the same kind of control.
+
+Live manual pass, against the running dev stack: `setMovieGrainMode(movieId: 1, grainMode: ON)`
+over raw GraphQL, confirmed via `bin/mysql` and a `/movies/1` re-fetch that the select persists the
+value across a reload (AC-2's settings half); `setMovieGrainMode` for a nonexistent id returned
+`error.movie.not_found` with no stored-value change (AC-7); `/shows/1` rendered the control exactly
+once with no per-episode duplicate (AC-5's web half); the Settings switch rendered off on the
+seeded `grain_auto_enabled: 'false'` row (AC-9), and rendered disabled with its hidden input still
+emitting the stored value once `compression_enabled` was flipped off (AC-12's settings half). The
+database was restored to its pre-test state afterward. AC-1/AC-2/AC-3/AC-4/AC-6/AC-8/AC-10's
+encode-side claims and AC-12's worker-side claim (no FFmpeg invocation, no `[grain]` line with
+compression off) rest on the unit-test coverage above and direct code reading of the
+`compressing`-gated ternary in `encode.job.ts` rather than a live encode against a real video
+file — the same standard `057`/`058`/`070` closed their argument-string-level criteria against,
+and neither appears in `docs/spec/pending-acs.md` as a result. AC-11 is the gate commands
+themselves, all green as reported above.
+
 ## 2026-10-09 — verification pass over `002`–`071` (no code change)
 
 Third and widest pass of the same exercise, working downwards from `071`. `git diff --stat --
