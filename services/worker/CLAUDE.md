@@ -251,31 +251,44 @@ What that decision is — which box each tier names, when a source counts as exc
 codecs get re-encoded to AV1 versus copied — lives in `src/ffmpeg/params.ts`, owned by the `ffmpeg`
 agent; see the section below.
 
-## Film grain is a boolean the worker resolves from a tri-state, and never interprets `AUTO` yet (`092-film-grain-optimization`)
+## Film grain is a boolean the worker resolves in the encode driver (`092-film-grain-optimization`, `094-automatic-grain-detection`)
 
 `EncodeJobDetails.grainMode: EffectiveGrainMode!` (`'AUTO' | 'ON' | 'OFF'`, never `'INHERIT'` — `api`
 has already resolved a title's own override against the installation setting before this service
-ever sees it) reaches `src/encode/grain-mode.ts` via two functions, mirroring `content-kind.ts`'s
-shape: `normalizeGrainMode()` degrades an absent, `null` or unrecognised value — including the
-literal `'INHERIT'`, which this service must never try to interpret — to `'OFF'` and warns once,
-same defensive posture as `contentKind`/`compressionResolution`; `resolveFilmGrain(mode, metadata)`
-turns the normalized tri-state into the boolean `src/ffmpeg/params.ts` actually consumes — `'ON'`
-→ `true`, `'OFF'`/`'AUTO'` → `false`. **`AUTO` always resolving to `false` is this feature's entire
-scope**: the heuristic that gives `AUTO` real meaning is a future spec's whole subject, and
-`resolveFilmGrain` already takes the probed `metadata` as an unused parameter — the seam that spec
-replaces, not something to build out now.
+ever sees it) reaches `src/encode/grain-mode.ts`. `normalizeGrainMode()` degrades an absent, `null`
+or unrecognised value — including the literal `'INHERIT'` — to `'OFF'` and warns once;
+`normalizeIsShort()` does the same for `EncodeJobDetails.isShort` (`false` plus one warning, never a
+throw). Both follow the `contentKind`/`compressionResolution` posture.
 
-`src/jobs/encode.job.ts` resolves `grainMode` through `normalizeGrainMode()` **gated on the
-`compressing` boolean**, unlike `contentKind`/`compressionResolution` which normalize
-unconditionally: with compression off nothing about grain may run at all (REQ-10), and an
-unconditional call would print the degradation warning for a job that is never going to reach
-FFmpeg. `src/ffmpeg/buildCommand.ts` resolves the boolean via `resolveFilmGrain(details.grainMode,
-metadata)` next to the `quality` line — reached only on the compressing path, since `passthrough`
-never calls `buildFfmpegCommand` at all, which is what makes REQ-10 structural rather than a check
-someone has to remember. `src/ffmpeg/params.ts`'s three `svtav1KindParams` cases (see below) each
-substitute their trailing `film-grain=0` for `film-grain=8`/`film-grain-denoise=1` when the boolean
-is true — no `film-grain-denoise` term is ever present when it's false, since a leftover denoise
-term with no grain synthesis looks like nothing more than a slightly soft encode.
+**Resolution lives in the driver, not in `buildFfmpegCommand`.** `src/encode/encode.ffmpeg.ts` awaits
+`resolveFilmGrain(details, input, metadata, signal)` right after `getMetadata`/`onProbe` and passes the
+boolean into `buildFfmpegCommand(..., filmGrain)`, which stays synchronous and pure — so the
+`services/worker/ffmpeg/` case corpus never spawns anything (NFR-5). `passthrough` and the `mock`
+driver never enter `encode.ffmpeg.ts`, so with compression off nothing about grain runs (REQ-10 of
+`092`, NFR-4 of `094`); `src/jobs/encode.job.ts` still gates `normalizeGrainMode()` on `compressing`.
+
+`'ON'` → `true` and `'OFF'` → `false` short-circuit: neither stage runs. `'AUTO'` runs two stages, the
+second only if the first passes:
+
+- **Gate** (`src/encode/grain-gate.ts`, pure): `scoreGrainGate(metadata, inputPath, year)` sums
+  weighted signals from the already-parsed `ffprobe` output (grain tags, codec-normalized
+  bits-per-pixel-per-frame, lossless audio, disc/streaming markers read from the input path's parent
+  directory plus basename — never `sourceTag`, which collapses to the bare filename — and the catalog
+  year). Passes at score ≥ 2. A short film (`isShort`) stops here.
+- **Probe** (`src/encode/grain-probe.ts`): a fixed measurement — five `cropdetect` samples, then nine
+  six-second windows each encoded twice (grain synthesis off/on) at CRF 22, preset 8, at a
+  `min(source, 1080p)` box that never reads `compressionResolution`, with the job's content-kind
+  parameters built by the same `buildSvtav1Params` the real encode uses. Output goes to
+  `-f matroska pipe:1` and only stdout bytes are counted; no scratch file exists. Passes when the
+  saved bitrate is ≥ `GRAIN_PROBE_SAVED_MBPS_THRESHOLD` (0.886 Mbps, **provisional**: measured at
+  CRF 24, to be refitted at CRF 22).
+
+Definite verdicts are cached in a module-level `Map` by `mediaSourceId` (a season pack probes once;
+a worker restart re-probes). A failure is never cached and never fails the job: every non-cancellation
+throw becomes `false` with one warning; `EncodeCancelledError` is rethrown untouched. Each resolution
+prints one `[grain]` line naming the stage that decided and the figures. `src/ffmpeg/params.ts`'s
+three `svtav1KindParams` cases substitute `film-grain=8`/`film-grain-denoise=1` for `film-grain=0`
+when the boolean is true.
 
 ## The rules in `src/ffmpeg/` have their own agent and their own corpus
 

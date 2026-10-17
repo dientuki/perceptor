@@ -246,6 +246,9 @@ describe('ffmpeg cases', () => {
       contentKind: input.contentKind,
       compressionResolution: input.compressionResolution ?? '1080p',
       grainMode: 'OFF' as const,
+      year: null,
+      isShort: false,
+      mediaSourceId: 1,
       containerTitle: input.containerTitle,
       sourceTag: input.sourceTag,
       trackTitles: input.trackTitles ?? SEEDED_TRACK_TITLES,
@@ -257,6 +260,7 @@ describe('ffmpeg cases', () => {
         input.output,
         parsed.ffprobe as any,
         details,
+        false,
       );
 
     if (parsed.throws !== undefined) {

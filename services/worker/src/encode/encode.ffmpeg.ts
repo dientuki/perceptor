@@ -1,6 +1,7 @@
 import { dirname, join, basename, extname } from 'node:path';
 import type { EncodeFn } from './types';
 import { getMetadata } from '../ffmpeg/metadata';
+import { resolveFilmGrain } from './grain-mode';
 import { buildFfmpegCommand } from '../ffmpeg/buildCommand';
 import { runFfmpeg } from '../ffmpeg/runner';
 
@@ -25,7 +26,9 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress,
   const sampleSeconds = process.env.ENCODE_SAMPLE_SECONDS;
   const durationSeconds = sampleSeconds ? Number(sampleSeconds) : Number(metadata.format?.duration ?? 0);
 
-  const args = buildFfmpegCommand(input, workingPath, metadata, details);
+  // Spec 092, REQ-9; Spec 094, REQ-3 NFR-1
+  const filmGrain = await resolveFilmGrain(details, input, metadata, signal);
+  const args = buildFfmpegCommand(input, workingPath, metadata, details, filmGrain);
   const ffmpegCommand = await runFfmpeg(
     args,
     workingPath,

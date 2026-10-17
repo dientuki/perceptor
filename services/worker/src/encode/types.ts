@@ -13,6 +13,10 @@ export type EncodeInput = {
   contentKind: ContentKind;
   compressionResolution: CompressionResolution;
   grainMode: GrainMode;
+  // Spec 094, REQ-1
+  year: number | null;
+  isShort: boolean;
+  mediaSourceId: number;
   containerTitle: string;
   sourceTag: string;
   trackTitles: Record<string, string>;

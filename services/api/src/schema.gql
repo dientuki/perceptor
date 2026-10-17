@@ -395,6 +395,7 @@ type EncodeJobDetails {
   allowedSubtitleLanguageTags: [String!]!
   contentKind: ContentKind!
   grainMode: EffectiveGrainMode!
+  isShort: Boolean!
   seasonNumber: Int
   episodeNumber: Int
   episodeTitle: String

@@ -105,6 +105,8 @@ export class ProcessJobsService {
         // 092-film-grain-optimization: the film's own override over the
         // installation switch, off the same settingsMap read above.
         grainMode: resolveEffectiveGrainMode(movie.grainMode, settingsMap),
+        // Spec 094, REQ-12
+        isShort: movie.isShort,
         seasonNumber: null,
         episodeNumber: null,
         episodeTitle: null,
@@ -139,6 +141,8 @@ export class ProcessJobsService {
         // its own — it reads its series' grainMode, exactly as contentKind
         // does above.
         grainMode: resolveEffectiveGrainMode(show.grainMode, settingsMap),
+        // Spec 094, REQ-12
+        isShort: false,
         seasonNumber: episode.season.seasonNumber,
         episodeNumber: episode.episodeNumber,
         episodeTitle: episode.title,

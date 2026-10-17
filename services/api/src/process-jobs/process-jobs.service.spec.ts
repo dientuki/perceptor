@@ -621,6 +621,51 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // Spec 094, REQ-12: the worker skips its grain probe for a short, and the
+  // only thing it can read is this flag. If it were combined with
+  // `shorts_enabled` (as outputRoot does), disabling the category would make a
+  // real short get probed and given grain settings with no error anywhere; if
+  // an episode ever reported true, its grain would be skipped just as silently.
+  describe('getEncodeJobDetails — isShort', () => {
+    const shortFilm = () =>
+      movieProcessJob({
+        movie: { ...movieProcessJob().movie, isShort: true },
+      });
+
+    beforeEach(() => {
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      prisma.userShow.findMany.mockResolvedValue([]);
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', path_shorts: 'Shorts' });
+    });
+
+    it('is true for a short film while shorts are enabled', async () => {
+      mediaCapabilities.isShortsEnabled.mockResolvedValue(true);
+      prisma.processJob.findUnique.mockResolvedValue(shortFilm());
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.isShort).toBe(true);
+    });
+
+    it('is still true for a short film while shorts are disabled (raw column, not the outputRoot expression)', async () => {
+      mediaCapabilities.isShortsEnabled.mockResolvedValue(false);
+      prisma.processJob.findUnique.mockResolvedValue(shortFilm());
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.isShort).toBe(true);
+    });
+
+    it('is false for an episode job', async () => {
+      prisma.processJob.findUnique.mockResolvedValue(episodeProcessJob());
+
+      const details = await service.getEncodeJobDetails(1);
+
+      expect(details.isShort).toBe(false);
+    });
+  });
+
   describe('getEncodeJobDetails — REQ-3/REQ-8 language merge', () => {
     it('unions the original language, the installation default and one per-title extra', async () => {
       prisma.processJob.findUnique.mockResolvedValue(movieProcessJob());

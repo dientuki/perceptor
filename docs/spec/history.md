@@ -23,6 +23,25 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-17 — `094-automatic-grain-detection` (code complete; calibration pending)
+
+`api` + `worker`. `api` exposes `EncodeJobDetails.isShort: Boolean!` (raw `Movie.isShort`, `false` for
+an episode); the `schema.gql` diff is exactly that one line, `git status` on `services/api/prisma`
+is clean. `worker` moves grain resolution from `buildFfmpegCommand` into the async encode driver and
+replaces `092`'s stub with a metadata gate (`grain-gate.ts`) and an encode probe (`grain-probe.ts`),
+cached per `mediaSourceId`.
+
+`api` 69/69 suites, 1048/1048 tests (+3 `isShort` cases). `worker` 31 files, 378 tests, all passing.
+`bin/cli api npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit`: 0 errors.
+`bin/comments api`: PASS, 797 locators; `bin/comments worker`: PASS, 215 locators. No JSON case under
+`services/worker/ffmpeg/` was edited.
+
+**Not verified.** `GRAIN_PROBE_SAVED_MBPS_THRESHOLD = 0.886` is the CRF 24 fit; T008 (re-measure the
+corpus at CRF 22, two runs per file, cross-check Lionheart through the worker) is deferred to the
+maintainer's own files, so REQ-7 stays provisional and the live acceptance criteria are unticked.
+The Lionheart unit test reproduces the arithmetic from a synthetic split of the published sum, not
+from real windows.
+
 ## 2026-10-15 — `089-status-materialization`, amendment 0.3.0 (a replacement in flight outranks possession)
 
 `api` only; no GraphQL, schema or migration change (`git status` on `services/api/prisma` and the

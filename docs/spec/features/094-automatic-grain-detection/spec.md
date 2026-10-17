@@ -262,11 +262,11 @@ saved *percentage* of 14.94% — below three of the clean files.
 - [ ] **AC-9**: Two copies of one source, one named with its year and provenance and one renamed to
       `mipeli.mkv` in a bare directory, both registered to the same title, produce the same gate
       score on the year signal (REQ-5).
-- [ ] **AC-10**: `bin/cli worker npx --no tsc --noEmit` passes and `bin/npm worker test` shows the
+- [x] **AC-10**: `bin/cli worker npx --no tsc --noEmit` passes and `bin/npm worker test` shows the
       `services/worker/ffmpeg/` case corpus still running every case green, proving
       `buildFfmpegCommand` stayed synchronous and pure, with each case now passing `filmGrain: false`
       where it passed `grainMode: 'OFF'` (NFR-5).
-- [ ] **AC-11**: `bin/comments worker` passes, confirming the thresholds carry spec locators rather
+- [x] **AC-11**: `bin/comments worker` passes, confirming the thresholds carry spec locators rather
       than explanatory comments (NFR-6).
 - [ ] **AC-12**: A film registered as a short whose gate passes encodes with `film-grain=0`, logs
       that it resolved on the gate alone, and spawns no probe process; an episode of the same

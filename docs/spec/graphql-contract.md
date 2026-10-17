@@ -2289,6 +2289,42 @@ refusal rather than using the shorts `Switch`'s key-remount trick — the same c
 shape `057`'s `ContentKindSelect` already uses. `worker` adds `grainMode` to `encode.job.ts`'s
 hand-written `processJob` query and never calls either mutation.
 
+### The raw short flag, for the grain probe (`094-automatic-grain-detection`)
+
+```graphql
+type EncodeJobDetails {
+  isShort: Boolean!
+}
+```
+
+`092`'s stub is gone: `AUTO` now resolves in the worker's encode driver through a metadata gate and,
+only when it passes, an encode probe. `isShort` exists for one reason — a short film skips the probe
+and resolves on the gate alone (REQ-11), since minutes of probing on a ten-minute title cost more
+than the bitrate they could save.
+
+**Raw, not effective.** A film job carries `Movie.isShort` exactly as stored, **regardless of
+`shorts_enabled`**. Inside `getEncodeJobDetails` the tempting value is `movie.isShort &&
+isShortsEnabled()`, because `outputRoot` already computes it a few lines above — but that expression
+decides a destination folder, and the probe is skipped on runtime, not on folder. A short in an
+installation with shorts disabled still files under `path_movies` and still reports `isShort: true`.
+
+**Non-null, `false` for every episode job.** Not nullable, not omitted. The worker must not infer
+"episode" from `isShort` or read `kind` to decide REQ-11; `isShort: false` alone is what lets an
+episode probe.
+
+No error condition: the field is a column read on a row the query already loaded, and a job with
+neither a film nor an episode already throws before either arm returns.
+
+The worker trusts nothing it reads off the payload: an absent, `null` or non-boolean `isShort`
+normalizes to `false` with one warning (REQ-12), so the title probes and the encode never fails.
+That fallback covers a **response** missing the field — never a **query** asking for one the schema
+lacks. Selecting `isShort` against an `api` that predates this feature is a GraphQL validation error
+that fails the whole `processJob` query, which is why the worker's query change ships after `api`'s,
+never before.
+
+Consumer obligations: `worker` adds `isShort` to `encode.job.ts`'s hand-written `processJob` query
+and local `EncodeJobDetails` type in the same edit. `web` never selects it.
+
 ### What never crosses the boundary
 
 - **Absolute container paths.** Constitution, Article V — `web` sees host paths, `worker` receives

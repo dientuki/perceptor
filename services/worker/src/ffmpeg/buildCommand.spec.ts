@@ -13,6 +13,9 @@ function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
     contentKind: 'LIVE_ACTION',
     compressionResolution: '1080p',
     grainMode: 'OFF',
+    year: null,
+    isShort: false,
+    mediaSourceId: 1,
     containerTitle: 'Some Title',
     sourceTag: 'some/source.mkv',
     trackTitles: { eng: 'English', spa: 'Español' },
@@ -72,6 +75,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       '/out/Some.Anime.Movie.mkv',
       metadata,
       details({ contentKind: 'ANIME' }),
+      false,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -90,6 +94,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       '/out/Some.CGI.Movie.mkv',
       metadata,
       details({ contentKind: 'CGI' }),
+      false,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -109,6 +114,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       '/out/Some.Movie.Blu-ray.mkv',
       metadata,
       details({ contentKind: 'LIVE_ACTION' }),
+      false,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -127,6 +133,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       '/out/Some.Movie.WEB-DL.mkv',
       metadata,
       details({ contentKind: 'LIVE_ACTION' }),
+      false,
     );
 
     expect(crfOf(args)).toBe('24');
@@ -147,6 +154,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       '/out/Some.Movie.WEB-DL.mkv',
       metadata,
       details({ contentKind: 'LIVE_ACTION' }),
+      false,
     );
 
     const i = args.indexOf('-t');
@@ -172,6 +180,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
         allowedAudioLanguagesIso3: ['eng', 'spa'],
         allowedAudioLanguageTags: ['en', 'es-419'],
       }),
+      false,
     );
 
     // One -map per selected audio stream: 0:0 (video) implicitly handled by
@@ -199,6 +208,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
           allowedAudioLanguageTags: ['en', 'es-419'],
           allowedSubtitleLanguageTags: ['en', 'es-419'],
         }),
+        false,
       ),
     ).not.toThrow();
   });
@@ -242,6 +252,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
         allowedSubtitleLanguagesIso3: ['spa'],
         allowedSubtitleLanguageTags: [],
       }),
+      false,
     );
 
     // Audio: 0:1 (jpn) and 0:2 (eng) selected, 0:3 (spa) never — spa is not

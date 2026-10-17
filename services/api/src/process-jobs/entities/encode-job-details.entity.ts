@@ -53,6 +53,10 @@ export class EncodeJobDetails {
   @Field(() => EffectiveGrainMode)
   grainMode: EffectiveGrainMode;
 
+  // Spec 094, REQ-12
+  @Field()
+  isShort: boolean;
+
   @Field(() => Int, { nullable: true })
   seasonNumber: number | null;
 
