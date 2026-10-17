@@ -2,7 +2,7 @@
 title: Movie Release Dates Display — api slice
 service: api
 last_updated: 2026-10-16
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Movie Release Dates Display — `api` (`api/plan.md`)

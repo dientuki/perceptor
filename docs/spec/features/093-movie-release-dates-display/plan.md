@@ -2,7 +2,7 @@
 title: Movie Release Dates Display — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-10-16
-status: Approved
+status: Implemented
 ---
 
 # PLAN: Movie Release Dates Display (`plan.md`)

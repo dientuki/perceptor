@@ -1,5 +1,7 @@
 export type CalendarEntryKind = "MOVIE" | "SHORT" | "EPISODES";
 
+export type MovieReleaseType = "THEATRICAL" | "DIGITAL" | "PHYSICAL";
+
 export type CalendarEntry = {
   kind: CalendarEntryKind;
   mediaId: number;
@@ -12,4 +14,5 @@ export type CalendarEntry = {
   episodeTitle: string | null;
   episodeCount: number | null;
   completedCount: number | null;
+  releaseTypes: MovieReleaseType[] | null;
 };

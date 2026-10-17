@@ -496,7 +496,7 @@ changes refetch through the `getCalendarEntries` server action via FullCalendar'
 `events`; the URL stays `/calendar` and nothing navigates. The action returns `{ entries } | { error }`
 rather than throwing, so the translated message survives a production build. Colours come from
 `lib/status-tone.ts`'s `statusTone`, shared with `StatusBadge`, mapped onto the template's `fc-bg-*`
-classes in `globals.css`. The page has no capability gate: a disabled media type is filtered by `api`.
+classes in `globals.css`. The page has no capability gate: a disabled media type is filtered by `api`. Since `093`, a film can come back as several entries with the same `mediaId`; the event id keeps `date` and `index`, and nothing is keyed by `mediaId` alone. The `(cine)`/`(digital)`/`(físico)` prefix comes from `releaseTypePrefix` in `lib/calendar-label.ts`, the one helper both the event title and `CalendarEventContent` call; `null` and `[]` give no prefix and an unknown enum value is skipped. The film's detail page renders its typed dates through `components/movies/MovieReleaseDates.tsx`, formatted with `timeZone: "UTC"`.
 
 ## The `AcquisitionTarget` union
 

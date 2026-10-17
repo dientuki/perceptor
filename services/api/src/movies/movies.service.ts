@@ -112,7 +112,13 @@ export class MoviesService implements MediaTypeService {
     const movies = await this.prisma.movie.findMany({
       where: {
         users: { some: { userId } },
-        releaseDate: { gte: from, lt: toExclusive },
+        // Spec 093, REQ-6
+        OR: [
+          { releaseDate: { gte: from, lt: toExclusive } },
+          { theatricalReleaseDate: { gte: from, lt: toExclusive } },
+          { digitalReleaseDate: { gte: from, lt: toExclusive } },
+          { physicalReleaseDate: { gte: from, lt: toExclusive } },
+        ],
       },
       include: {
         mediaSources: true,

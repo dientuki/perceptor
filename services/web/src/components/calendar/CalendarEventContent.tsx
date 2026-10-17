@@ -1,6 +1,7 @@
 import { Clapperboard, Film, Tv } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { releaseTypePrefix } from "@/lib/calendar-label";
 import type { StatusTone } from "@/lib/status-tone";
 import type { CalendarEntry, CalendarEntryKind } from "@/types/calendar";
 
@@ -67,6 +68,7 @@ export default function CalendarEventContent({
           className="fc-event-icon mr-1 inline-block size-3 align-[-1px] text-gray-700"
           aria-label={kindLabel}
         />
+        {releaseTypePrefix(entry.releaseTypes, t)}
         {entry.title}
       </span>
       {code ? <span className="fc-event-count block">{code}</span> : null}

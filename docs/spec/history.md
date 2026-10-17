@@ -23,6 +23,26 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-17 — `093-movie-release-dates-display` (code complete; live pass pending)
+
+`api` + `web`, no migration (`git status --short services/api/prisma` empty). `api` exposes
+`Movie.theatricalReleaseDate`/`digitalReleaseDate`/`physicalReleaseDate`, the `MovieReleaseType` enum
+and `CalendarEntry.releaseTypes`; the `schema.gql` diff is exactly those (26 insertions, nothing
+else). `calendar(from, to)` now expands a film into one entry per distinct in-range typed day
+(`calendar/movie-release-days.ts`), falling back to `releaseDate` with `[]` only when all three typed
+dates are `NULL`; `findReleasedBetween` is an `OR` over the four columns. `web` renders the typed
+dates under the year on the detail page and prefixes calendar entries with `(cine)`/`(digital)`/
+`(físico)`.
+
+- `api`: `bin/npm api test` 70 suites / 1062 tests passed; `tsc --noEmit` 0 errors; `bin/comments api`
+  PASS (803 locators). New `movie-release-days.spec.ts` (8 cases) and six new cases in
+  `calendar.service.spec.ts`.
+- `web`: `tsc --noEmit` 0 errors; `check-messages.mjs` OK (614 keys); `bin/comments web` PASS (77
+  locators); `next build` exit 0, run in a throwaway container with the dev stack stopped, then
+  `.next` removed and the stack restarted.
+- Not measured: no signed-in session was available, so the detail page and `/calendar` were not
+  opened and `calendar` was not queried live; `worker` untouched and not re-run.
+
 ## 2026-10-17 — `094-automatic-grain-detection` (code complete; calibration pending)
 
 `api` + `worker`. `api` exposes `EncodeJobDetails.isShort: Boolean!` (raw `Movie.isShort`, `false` for

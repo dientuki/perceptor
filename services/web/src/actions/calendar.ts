@@ -19,6 +19,7 @@ const CALENDAR_QUERY = `
       episodeTitle
       episodeCount
       completedCount
+      releaseTypes
     }
   }
 `;

@@ -70,6 +70,21 @@ type Movie {
   releaseDate: DateTime
   originalLanguage: String!
   contentKind: ContentKind!
+
+  """
+  Earliest theatrical (TMDB types 2 and 3) day across every country, or null (075 REQ-1).
+  """
+  theatricalReleaseDate: DateTime
+
+  """
+  Earliest digital (TMDB type 4) day across every country, or null (075 REQ-1).
+  """
+  digitalReleaseDate: DateTime
+
+  """
+  Earliest physical (TMDB type 5) day across every country, or null (075 REQ-1).
+  """
+  physicalReleaseDate: DateTime
   isShort: Boolean!
   grainMode: GrainMode!
   status: String!
@@ -514,6 +529,11 @@ type CalendarEntry {
   Null unless kind is EPISODES. Number of episodes in the group whose status is COMPLETED (REQ-7b).
   """
   completedCount: Int
+
+  """
+  Null unless kind is MOVIE or SHORT. The release types whose date is this entry's day, ordered THEATRICAL, DIGITAL, PHYSICAL. Empty when the film has no typed date and the entry sits on releaseDate (093 REQ-6).
+  """
+  releaseTypes: [MovieReleaseType!]
 }
 
 """
@@ -523,6 +543,12 @@ enum CalendarEntryKind {
   MOVIE
   SHORT
   EPISODES
+}
+
+enum MovieReleaseType {
+  THEATRICAL
+  DIGITAL
+  PHYSICAL
 }
 
 type Query {

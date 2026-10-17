@@ -457,6 +457,9 @@
     "detail": {
       "noPoster": "No hay póster disponible",
       "unknownYear": "Año desconocido",
+      "releaseTheatrical": "Cine",
+      "releaseDigital": "Digital",
+      "releasePhysical": "Físico",
       "fileButton": "Archivo",
       "magnetButton": "Magnet",
       "synopsisTitle": "Sinopsis",
@@ -793,7 +796,10 @@
     "loadError": "No se pudo cargar el calendario",
     "kindMovie": "Película",
     "kindShort": "Corto",
-    "kindEpisodes": "Episodios"
+    "kindEpisodes": "Episodios",
+    "releaseTheatrical": "(cine)",
+    "releaseDigital": "(digital)",
+    "releasePhysical": "(físico)"
   },
   "onboarding": {
     "tmdb": {

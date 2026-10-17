@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-16
 last_updated: 2026-10-16
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -175,7 +175,7 @@ None. `Movie.theatricalReleaseDate`, `digitalReleaseDate` and `physicalReleaseDa
       calendar and `Theatrical`/`Digital`/`Physical` on the detail page.
 - [ ] **AC-9**: Episode entries on `/calendar` render exactly as before and carry
       `releaseTypes: null` in the `calendar` response.
-- [ ] **AC-10**: The final `services/api/src/schema.gql` diff contains exactly the three `Movie`
+- [x] **AC-10**: The final `services/api/src/schema.gql` diff contains exactly the three `Movie`
       fields, the `MovieReleaseType` enum and `CalendarEntry.releaseTypes` (Article VIII).
 
 ## Out of Scope

@@ -2325,6 +2325,44 @@ never before.
 Consumer obligations: `worker` adds `isShort` to `encode.job.ts`'s hand-written `processJob` query
 and local `EncodeJobDetails` type in the same edit. `web` never selects it.
 
+### A film's typed release dates, and one calendar entry per release day (`093-movie-release-dates-display`)
+
+```graphql
+type Movie {
+  theatricalReleaseDate: DateTime
+  digitalReleaseDate: DateTime
+  physicalReleaseDate: DateTime
+}
+
+enum MovieReleaseType {
+  THEATRICAL
+  DIGITAL
+  PHYSICAL
+}
+
+type CalendarEntry {
+  releaseTypes: [MovieReleaseType!]
+}
+```
+
+The three `Movie` fields expose what `075` already stores: the earliest day across every country for
+each release type, `null` when TMDB lists none. `releaseDate` keeps its meaning (the earliest date of
+any type, often a premiere). No new argument, no new error.
+
+**`releaseTypes` is `null` for episodes and `[]` for the fallback.** A film or short with at least one
+typed date yields one entry per distinct typed day in range, each carrying the types whose date is that
+day, ordered `THEATRICAL`, `DIGITAL`, `PHYSICAL`. A film with all three typed dates `null` keeps the
+single entry on `releaseDate` with `releaseTypes: []`. A film with typed dates is never also listed on
+`releaseDate`. `web` renders `null` and `[]` identically (no prefix) and skips an enum value it does not
+know.
+
+**A film can now yield several entries in one response.** Same `kind`, `mediaId`, `title` and `status`,
+different `date`. `(mediaId, date)` is unique for `MOVIE`/`SHORT` entries; a consumer must not key by
+`mediaId` alone. `api` returns enum values only; the `(cine)`/`(digital)`/`(físico)` labels are `web`
+copy.
+
+Additive: an un-updated `web` keeps working against the new `api`.
+
 ### What never crosses the boundary
 
 - **Absolute container paths.** Constitution, Article V — `web` sees host paths, `worker` receives

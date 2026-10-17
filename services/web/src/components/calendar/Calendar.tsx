@@ -46,7 +46,7 @@ export default function Calendar() {
       success(
         result.entries.map((entry, index) => ({
           id: `${entry.kind}-${entry.mediaId}-${entry.date}-${index}`,
-          title: calendarEntryLabel(entry),
+          title: calendarEntryLabel(entry, t),
           start: entry.date,
           allDay: true,
           extendedProps: { entry },

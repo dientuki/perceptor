@@ -457,6 +457,9 @@
     "detail": {
       "noPoster": "No poster available",
       "unknownYear": "Unknown Year",
+      "releaseTheatrical": "Theatrical",
+      "releaseDigital": "Digital",
+      "releasePhysical": "Physical",
       "fileButton": "File",
       "magnetButton": "Magnet",
       "synopsisTitle": "Synopsis",
@@ -793,7 +796,10 @@
     "loadError": "Could not load the calendar",
     "kindMovie": "Film",
     "kindShort": "Short",
-    "kindEpisodes": "Episodes"
+    "kindEpisodes": "Episodes",
+    "releaseTheatrical": "(theatrical)",
+    "releaseDigital": "(digital)",
+    "releasePhysical": "(physical)"
   },
   "onboarding": {
     "tmdb": {

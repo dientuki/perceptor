@@ -18,9 +18,9 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 | | |
 | :-- | --: |
 | Specs con ACs pendientes | **45** de 95 |
-| ACs pendientes | **284** |
+| ACs pendientes | **283** |
 | ACs totales del proyecto | 1141 |
-| ACs verificados | 857 (75%) |
+| ACs verificados | 858 (75%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -30,7 +30,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 | :-- | :-- | :-- | :-- | :-- | :-- |
 | 095 | encode-stop | Approved | 11/11 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | Código completo (api + worker). AC-10 y AC-11 verificados. El resto necesita encodes reales con `ENCODE_DRIVER=ffmpeg`; el umbral 0.886 es provisional hasta re-medir el corpus a CRF 22 (T008, lo corre el mantenedor). |
 | 094 | automatic-grain-detection | Approved | 14/16 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16 | Código completo (api + worker); AC-10 y AC-11 verificados. El resto necesita encodes reales con `ENCODE_DRIVER=ffmpeg`; el umbral 0.886 es provisional hasta re-medir el corpus a CRF 22 (T008, lo corre el mantenedor). |
-| 093 | movie-release-dates-display | Approved | 10/10 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 | **[OBS PENDIENTE DE ESCRIBIR]** |
+| 093 | movie-release-dates-display | Implemented | 9/10 | 1, 2, 3, 4, 5, 6, 7, 8, 9 | **Un token de usuario logueado.** Los nueve son de UI o de la respuesta de `calendar`/`movie`, que exigen una sesion de usuario; ni el browser ni la credencial del worker (`Not authenticated`) sirvieron. Ya probado debajo: `movie-release-days.spec.ts` (8 casos: fallback, mismo dia, fuera de rango, limites) y 6 casos nuevos de `calendar.service.spec.ts` cubren la mitad de `api` de AC-3, 5, 6, 7 y 9; el build de `web` pasa. Datos reales que sirven para la pasada: films 1, 2 y 3 (tres fechas distintas, AC-1/4/6) y 9 (teatral y fisico el mismo dia, AC-5); AC-2 y AC-3 piden fixture temporal (revertir). |
 | 091 | race-loser-cleanup | Approved | 8/9 | 1, 2, 3, 4, 5, 6, 7, 8 | **Una corrida de pipeline.** Las ocho son carreras reales: dos o tres torrents sobre un mismo titulo, uno gana, y hay que ver que los perdedores se barran. Necesita pipeline corrido mas limpiar el huerfano de Inception desde la UI (su propio Out of Scope prohibe hacerlo por SQL). |
 | 089 | status-materialization | Implemented | 5/24 | 18, 20, 21, 22, 24 | **Un reemplazo forzado (`force`) en una instalacion real.** Todo esta probado en unitario (`pipeline-status.spec.ts`, los specs de los guards y de la recuperacion de 054), pero no se vio en vivo: AC-20 el regreso a `COMPLETED` cuando termina el job 11 de `episodes.id = 195` (medido: `ENCODING` al 24%, la serie 6 tambien en `ENCODING`), AC-21 un reemplazo que falla, AC-22 un segundo intento sin `force` contra un titulo a mitad de reemplazo, AC-24 un pack de temporada sobre episodios con archivo. AC-18 sigue pendiente aparte: un especial de la temporada 0 forzado a `ERROR`/`DOWNLOADING` (medido: 5 especiales `MISSING`, serie 6 sin ellos en la cuenta). Sin spec propio para `uploads.resolver.ts`; comparte el guard `hasPossession` con `uploads.service.ts`, que si esta cubierto. |
 | 087 | force-replacement-arbitration | Implemented | 1/12 | 3 | **Una corrida de pipeline.** AC-3 pide que la carpeta de biblioteca del film quede con exactamente un archivo despues de que el reemplazo encodee. Es el paso 7 de la pasada viva de 091. |
@@ -78,15 +78,16 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 284 ACs pendientes no son 284 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 48%:
+Los 283 ACs pendientes no son 283 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 45%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
 | Una corrida de pipeline | 102 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091 |
-| Sin clasificar | 35 | 093, 094, 095 |
 | Una instalacion fresca | 25 | 015, 049, 061, 066 |
+| Sin clasificar | 25 | 094, 095 |
 | Adquisiciones reales | 18 | 073, 076 |
 | Nada: no esta implementada | 17 | 081 |
+| Un token de usuario logueado | 12 | 037, 039, 093 |
 | Plex (descartado) | 12 | 072 |
 | Fuentes en vuelo, y un segundo usuario | 10 | 064 |
 | Un browser que registre service workers | 9 | 080 |
@@ -98,7 +99,6 @@ Los 284 ACs pendientes no son 284 problemas distintos. Se reducen a 23 destrabes
 | Tres cosas distintas, ninguna la sesion | 4 | 062 |
 | Un segundo usuario, y decisiones del duenio | 4 | 078 |
 | Sujetos que el indexer no devuelve | 3 | 036 |
-| Un token de usuario logueado | 3 | 037, 039 |
 | La UI de GitHub | 3 | 085 |
 | Un segundo usuario | 2 | 042, 071 |
 | Dos peliculas que esta biblioteca no tiene | 2 | 075 |
