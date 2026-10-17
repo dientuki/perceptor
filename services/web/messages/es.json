@@ -142,7 +142,9 @@
     },
     "processJob": {
       "not_found": "El trabajo {id} no existe",
-      "recovery_exhausted": "La recuperación automática de esta codificación ya se usó una vez y volvió a fallar"
+      "recovery_exhausted": "La recuperación automática de esta codificación ya se usó una vez y volvió a fallar",
+      "not_resumable": "Este archivo no se puede reintentar",
+      "not_discardable": "Este archivo ya no se puede descartar"
     },
     "encode": {
       "no_video_stream": "El archivo de entrada no tiene pista de video",
@@ -524,7 +526,14 @@
         "SCAN": "Escaneo",
         "ENCODE": "Codificación",
         "REPLACED": "Reemplazado"
-      }
+      },
+      "expand": "Ver archivos",
+      "collapse": "Ocultar archivos",
+      "jobsProgress": "{done} de {total}",
+      "retryJobTitle": "Reintentar",
+      "discardJobTitle": "Descartar",
+      "retryErrorDefault": "No se pudo reintentar el archivo.",
+      "discardErrorDefault": "No se pudo descartar el archivo."
     },
     "deleteModal": {
       "title": "Eliminar descarga",
@@ -534,6 +543,13 @@
       "confirm": "Eliminar",
       "cancel": "Cancelar",
       "deleting": "Eliminando..."
+    },
+    "discardModal": {
+      "title": "Descartar archivo",
+      "message": "¿Descartar <b>{target}</b>? Se va a eliminar el archivo descargado, no se va a comprimir y el episodio va a volver a figurar como faltante. El resto de la fuente no se ve afectado.",
+      "confirm": "Descartar",
+      "cancel": "Cancelar",
+      "discarding": "Descartando..."
     }
   },
   "settings": {
@@ -737,7 +753,8 @@
     "downloaded": "Descargado",
     "encoding": "Comprimiendo",
     "completed": "Completado",
-    "error": "Error"
+    "error": "Error",
+    "discarded": "Descartado"
   },
   "contentKind": {
     "LIVE_ACTION": "Live action",

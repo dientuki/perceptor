@@ -31,6 +31,14 @@ export class EncodeQueueService implements OnModuleDestroy {
     }
   }
 
+  // Spec 095, REQ-11
+  async isEncodePending(processJobId: number): Promise<boolean> {
+    const job = await this.queue.getJob(`job-${processJobId}`);
+    if (!job) return false;
+    const state = await job.getState();
+    return state === 'waiting' || state === 'active' || state === 'delayed' || state === 'prioritized';
+  }
+
   // Spec 047, NFR-1
   async publishCancel(processJobId: number): Promise<void> {
     const message: EncodeCancelMessage = { processJobId };

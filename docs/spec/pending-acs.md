@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **46** de 96 |
-| ACs pendientes | **293** |
-| ACs totales del proyecto | 1153 |
-| ACs verificados | 860 (75%) |
+| Specs con ACs pendientes | **47** de 97 |
+| ACs pendientes | **309** |
+| ACs totales del proyecto | 1169 |
+| ACs verificados | 860 (74%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,8 +28,9 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 097 | encode-stop | Draft | 14/14 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 | Spec en Draft: sin plan regenerado ni código. Depende de 095 (ya implementada); falta `/plan-feature 097`. |
 | 096 | date-format | Implemented | 10/12 | 1, 2, 3, 4, 5, 6, 7, 10, 11, 12 | Needs a signed-in browser pass (film 2026-09-07 digital date, season episode, Settings → General, /preferences, Scheduling stamp, console for hydration) and an admin `updateSettings` call for AC-7; the code, typecheck and comments gate are green. |
-| 095 | encode-stop | Approved | 11/11 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | Código completo (api + worker). AC-10 y AC-11 verificados. El resto necesita encodes reales con `ENCODE_DRIVER=ffmpeg`; el umbral 0.886 es provisional hasta re-medir el corpus a CRF 22 (T008, lo corre el mantenedor). |
+| 095 | season-pack-per-file-encode | Implemented | 13/13 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | Código completo (api + worker + web), tests y chequeos verdes (api 1111, worker 379). Ningún AC observado: todos necesitan una sesión autenticada y un season pack real en el stack dev (sin credenciales en la corrida del agente) |
 | 094 | automatic-grain-detection | Approved | 14/16 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16 | Código completo (api + worker); AC-10 y AC-11 verificados. El resto necesita encodes reales con `ENCODE_DRIVER=ffmpeg`; el umbral 0.886 es provisional hasta re-medir el corpus a CRF 22 (T008, lo corre el mantenedor). |
 | 093 | movie-release-dates-display | Implemented | 9/10 | 1, 2, 3, 4, 5, 6, 7, 8, 9 | **Un token de usuario logueado.** Los nueve son de UI o de la respuesta de `calendar`/`movie`, que exigen una sesion de usuario; ni el browser ni la credencial del worker (`Not authenticated`) sirvieron. Ya probado debajo: `movie-release-days.spec.ts` (8 casos: fallback, mismo dia, fuera de rango, limites) y 6 casos nuevos de `calendar.service.spec.ts` cubren la mitad de `api` de AC-3, 5, 6, 7 y 9; el build de `web` pasa. Datos reales que sirven para la pasada: films 1, 2 y 3 (tres fechas distintas, AC-1/4/6) y 9 (teatral y fisico el mismo dia, AC-5); AC-2 y AC-3 piden fixture temporal (revertir). |
 | 091 | race-loser-cleanup | Approved | 8/9 | 1, 2, 3, 4, 5, 6, 7, 8 | **Una corrida de pipeline.** Las ocho son carreras reales: dos o tres torrents sobre un mismo titulo, uno gana, y hay que ver que los perdedores se barran. Necesita pipeline corrido mas limpiar el huerfano de Inception desde la UI (su propio Out of Scope prohibe hacerlo por SQL). |
@@ -79,12 +80,12 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 293 ACs pendientes no son 293 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 47%:
+Los 309 ACs pendientes no son 309 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 50%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
 | Una corrida de pipeline | 102 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091 |
-| Sin clasificar | 35 | 094, 095, 096 |
+| Sin clasificar | 51 | 094, 095, 096, 097 |
 | Una instalacion fresca | 25 | 015, 049, 061, 066 |
 | Adquisiciones reales | 18 | 073, 076 |
 | Nada: no esta implementada | 17 | 081 |

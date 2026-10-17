@@ -448,6 +448,8 @@ progress bars per row (via `DownloadProgressBar`) from `download.downloadProgres
 second only when `download.compressionEnabled` is `true`. `Download.progress` was renamed to
 `downloadProgress` in `043` — there is no back-compat alias.
 
+**Per-file rows, since `095-season-pack-per-file-encode`**: `DownloadRow.tsx` shows a chevron (local, unpersisted state, collapsed by default) when `download.jobs.length >= 2` and then renders one `DownloadJobRow.tsx` per job after its own `<tr>`; the parent labels its overall progress `N de M` (`COMPLETED` over non-`DISCARDED` jobs). `DownloadJobRow` offers Retry on a retryable `ERROR` and Discard on `QUEUED`/`ENCODING`/`ERROR`, both gated on the parent being owned, not retired and not a race loser; Discard opens `DiscardJobModal.tsx`. `web` derives nothing: status, progress and `retryable` come from `api`. A `DISCARDED` parent offers only Delete (`isControllable` excludes it).
+
 **The Speed column, since `053-downloads-panel-repair`**: `DownloadRow.tsx` branches on the
 derived `download.status === "ENCODING"` — never on `download.encodeSpeed != null` alone, since
 that condition would silently change meaning the day `api` has any reason to populate both fields

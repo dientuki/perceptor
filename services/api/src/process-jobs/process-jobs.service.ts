@@ -1,4 +1,4 @@
-import { hasPossession } from '@/pipeline-status/pipeline-status';
+import { cleanupDecision, hasPossession } from '@/pipeline-status/pipeline-status';
 import { Injectable } from '@nestjs/common';
 import { LanguageTrackKind } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -275,10 +275,24 @@ export class ProcessJobsService {
   }
 
   async encodeStarted(processJobId: number) {
-    const processJob = await this.prisma.processJob.update({
-      where: { id: processJobId },
+    // Spec 095, REQ-13
+    const { count } = await this.prisma.processJob.updateMany({
+      where: { id: processJobId, status: { not: 'DISCARDED' } },
       data: { status: 'ENCODING' },
     });
+
+    const processJob = await this.prisma.processJob.findUnique({
+      where: { id: processJobId },
+      select: { status: true, movieId: true, episodeId: true },
+    });
+
+    if (!processJob) {
+      throw i18nError.notFound(ERROR_KEYS.PROCESS_JOB_NOT_FOUND, { id: processJobId });
+    }
+
+    if (count === 0) {
+      throw i18nError.conflict(ERROR_KEYS.ENCODE_DISCARDED);
+    }
 
     if (processJob.movieId) {
       await this.titleStatus.recomputeMovie(processJob.movieId);
@@ -293,8 +307,9 @@ export class ProcessJobsService {
     // Spec 053, NFR-3
     const encodeSpeed = speed === null || speed === undefined || !Number.isFinite(speed) || speed < 0 ? null : speed;
 
-    await this.prisma.processJob.update({
-      where: { id: processJobId },
+    // Spec 095, REQ-14
+    await this.prisma.processJob.updateMany({
+      where: { id: processJobId, status: 'ENCODING' },
       data: { progress, encodeSpeed },
     });
 
@@ -361,16 +376,17 @@ export class ProcessJobsService {
       }),
     ]);
 
-    const nonTerminalStatuses = new Set(['WAITING', 'QUEUED', 'ENCODING']);
     // Last to *finish*, not last to *succeed*: a pack whose fifth episode
     // failed still drops the torrent once the tenth finishes.
-    const removeTorrent = !siblings.some((sibling) => nonTerminalStatuses.has(sibling.status));
     // A season pack (>1 ProcessJob) releases each episode's input as it is
     // consumed; a single-job source (film/single episode) leaves this false
     // because deleteDownloadPath already removes everything.
     const deleteInputFile = siblings.length > 1;
-    const deleteDownloadPath =
-      siblings.every((sibling) => sibling.status === 'COMPLETED') && mediaSource?.hasUnmatchedFiles === false;
+    // Spec 095, REQ-15 REQ-16
+    const { removeTorrent, deleteDownloadPath } = cleanupDecision(
+      siblings,
+      mediaSource?.hasUnmatchedFiles !== false,
+    );
 
     return {
       message: `completado: processJob ${processJobId}`,
@@ -394,6 +410,11 @@ export class ProcessJobsService {
 
     if (!existing) {
       throw i18nError.notFound(ERROR_KEYS.PROCESS_JOB_NOT_FOUND, { id: processJobId });
+    }
+
+    // Spec 095, REQ-14
+    if (existing.status === 'DISCARDED') {
+      return true;
     }
 
     const sourceDemoted = existing.sourceFile.mediaSource.status === 'ERROR';

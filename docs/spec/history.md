@@ -23,6 +23,30 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-17 — `095-season-pack-per-file-encode` (code complete; live pass pending)
+
+`api` + `worker` + `web`, one migration (`20261017183533_encode_status_discarded`, widens
+`process_jobs.status` with `DISCARDED`, no backfill). `api` stops a finished torrent, exposes
+`Download.jobs`/`DownloadJob`, `encodeJobStart` and `encodeJobDiscard`, derives the per-file rules in
+`pipeline-status.ts` (`cleanupDecision` shared with `encodeCompleted`) and guards the worker's reports;
+`worker` abandons an `error.encode.discarded` refusal silently; `web` adds the chevron, child rows and
+the discard dialog. The `schema.gql` diff is exactly `DownloadJob`, `Download.jobs`, `encodeJobStart` and
+`encodeJobDiscard` (22 insertions, nothing else).
+
+- `api`: `bin/npm api test` 70 suites / 1111 tests passed (was 1068; 25 new in
+  `downloads.service.spec.ts`); `tsc --noEmit` 0 errors; `bin/comments api` PASS (854 locators);
+  `prisma migrate status` up to date, 41 migrations.
+- `worker`: `bin/npm worker test` 31 files / 379 tests passed; `tsc --noEmit` 0 errors; `bin/comments
+  worker` PASS (218 locators).
+- `web`: `tsc --noEmit` 0 errors; `check-messages.mjs` OK (631 keys); `bin/comments web` PASS (97
+  locators). `bin/npm web run build` not run (dev stack up). `web` has no test runner.
+- Fault injection: swapping the active and job-`ERROR` rules in `deriveSourceStatus` fails the
+  "reads ENCODING while a job is active even if another job is ERROR" case.
+- Not observed: AC-1 through AC-13 all need a signed-in session and a real season pack in the dev
+  stack; none was run, so none is ticked. Recorded in `pending-acs.md`.
+- Found while implementing: the plan assumed a `DISCARDED` parent already hid Play/Stop; it did not
+  (`isControllable` never read `status`), fixed under REQ-9.
+
 ## 2026-10-17 — `096-date-format` (code complete; live pass pending)
 
 `api` + `web`, one migration (`20261017074958_add_user_date_month_first`, nullable `users.dateMonthFirst`).

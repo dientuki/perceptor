@@ -73,18 +73,13 @@ export type SourceAltitudeInput = {
 };
 
 export type DerivedProgress = {
-  status: PipelineStatus;
+  status: PipelineStatus | 'DISCARDED';
   downloadProgress: number | null; // 0..100 or null
   encodeProgress: number | null; // 0..100 or null
   encodeSpeed: number | null; // Spec 053, REQ-10
 };
 
 const ACTIVE_ENCODE_STATUSES: EncodeStatus[] = ['WAITING', 'QUEUED', 'ENCODING'];
-
-function meanProgress(jobs: SourceAltitudeJob[]): number {
-  const sum = jobs.reduce((acc, job) => acc + job.progress, 0);
-  return Math.floor(sum / jobs.length);
-}
 
 // Spec 053, REQ-10
 function meanEncodeSpeed(jobs: SourceAltitudeJob[]): number | null {
@@ -104,33 +99,63 @@ function liveProgressToPercent(live: LiveTorrentReading): number {
   return Math.floor(live.progress * 100 + 1e-9);
 }
 
-// Spec 043, REQ-3
+// Spec 095, REQ-7
+function countedProgress(counted: SourceAltitudeJob[]): number {
+  const sum = counted.reduce((acc, job) => {
+    if (job.status === 'COMPLETED') {
+      return acc + 100;
+    }
+    if (job.status === 'ERROR') {
+      return acc;
+    }
+    return acc + job.progress;
+  }, 0);
+  return Math.floor(sum / counted.length);
+}
+
+// Spec 043, REQ-3; Spec 095, REQ-7 REQ-8 REQ-9
 export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress {
   const { sourceStatus, jobs, live } = input;
+  const counted = jobs.filter((job) => job.status !== 'DISCARDED');
 
-  // Rule 1: source is ERROR, or any job is ERROR.
-  if (sourceStatus === 'ERROR' || jobs.some((job) => job.status === 'ERROR')) {
+  // Rule 1: source is ERROR.
+  if (sourceStatus === 'ERROR') {
     return {
       status: 'ERROR',
       downloadProgress: live ? liveProgressToPercent(live) : null,
-      encodeProgress: jobs.length > 0 ? meanProgress(jobs) : null,
+      encodeProgress: counted.length > 0 ? countedProgress(counted) : null,
       encodeSpeed: null,
     };
   }
 
-  // Rule 2: jobs exist and every one is COMPLETED.
-  if (jobs.length > 0 && jobs.every((job) => job.status === 'COMPLETED')) {
-    return { status: 'COMPLETED', downloadProgress: 100, encodeProgress: 100, encodeSpeed: null };
+  // Rule 2: jobs exist and every one is DISCARDED.
+  if (jobs.length > 0 && counted.length === 0) {
+    return { status: 'DISCARDED', downloadProgress: null, encodeProgress: null, encodeSpeed: null };
   }
 
-  // Rule 3: jobs exist, some WAITING/QUEUED/ENCODING.
-  if (jobs.length > 0 && jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status))) {
+  // Rule 3: some job is WAITING/QUEUED/ENCODING, whatever the others ended as.
+  if (counted.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status))) {
     return {
       status: 'ENCODING',
       downloadProgress: 100,
-      encodeProgress: meanProgress(jobs),
-      encodeSpeed: meanEncodeSpeed(jobs),
+      encodeProgress: countedProgress(counted),
+      encodeSpeed: meanEncodeSpeed(counted),
     };
+  }
+
+  // Rule 3b: no job is active and some job is ERROR.
+  if (counted.some((job) => job.status === 'ERROR')) {
+    return {
+      status: 'ERROR',
+      downloadProgress: live ? liveProgressToPercent(live) : null,
+      encodeProgress: countedProgress(counted),
+      encodeSpeed: null,
+    };
+  }
+
+  // Rule 3c: jobs exist and every counted one is COMPLETED.
+  if (counted.length > 0 && counted.every((job) => job.status === 'COMPLETED')) {
+    return { status: 'COMPLETED', downloadProgress: 100, encodeProgress: 100, encodeSpeed: null };
   }
 
   // Rule 4: no jobs, source is READY or SCANNED.
@@ -299,7 +324,7 @@ export type RaceJob = {
   status: EncodeStatus;
 };
 
-// Spec 090, REQ-3
+// Spec 090, REQ-3; Spec 095, NFR-1
 export function isRaceWinner(
   status: SourceStatus,
   jobs: RaceJob[],
@@ -312,6 +337,9 @@ export function isRaceWinner(
     return true;
   }
   if (status !== 'SCANNED') {
+    return false;
+  }
+  if (jobs.length > 0 && jobs.every((job) => job.status === 'DISCARDED')) {
     return false;
   }
   const failed = jobs.some((job) => job.status === 'ERROR');
@@ -371,7 +399,7 @@ export function hasRaceWinner(siblings: ResumeSibling[]): boolean {
 }
 
 export type ResumeInput = {
-  status: PipelineStatus;
+  status: PipelineStatus | 'DISCARDED';
   source: ResumeSource;
   jobs: ResumeJob[];
   liveState: string | null;
@@ -415,6 +443,66 @@ function stageOf(candidate: Candidate): ResumeStage {
   return 'SCAN';
 }
 
+function candidateLastError(winner: Candidate, stage: ResumeStage): LastError {
+  const nullKey = winner.errorKey === null;
+  const key = nullKey
+    ? winner.fromJob
+      ? 'error.encode.unexpected'
+      : ERROR_KEYS.SOURCE_SCAN_FAILED
+    : winner.errorKey!;
+  return {
+    stage,
+    key,
+    params: nullKey ? JSON.stringify({ detail: winner.errorMessage ?? '' }) : winner.errorParams,
+    message: winner.errorMessage ?? MESSAGES_EN[key] ?? key,
+  };
+}
+
+// Spec 095, REQ-10
+export function jobLastError(job: ResumeJob): LastError | null {
+  if (job.status !== 'ERROR') {
+    return null;
+  }
+  const candidate: Candidate = { fromJob: true, ...job };
+  return candidateLastError(candidate, stageOf(candidate));
+}
+
+// Spec 095, REQ-10 REQ-11
+export function jobRetryable(
+  job: ResumeJob,
+  source: { retiredAt?: Date | null },
+  siblings: ResumeSibling[],
+): boolean {
+  const error = jobLastError(job);
+  if (error === null || error.stage === 'REPLACED') {
+    return false;
+  }
+  if ((source.retiredAt ?? null) !== null) {
+    return false;
+  }
+  return !hasRaceWinner(siblings);
+}
+
+// Spec 095, REQ-10
+export function projectJobStatus(
+  status: EncodeStatus,
+): 'QUEUED' | 'ENCODING' | 'COMPLETED' | 'ERROR' | 'DISCARDED' {
+  return status === 'WAITING' ? 'QUEUED' : status;
+}
+
+// Spec 095, REQ-15 REQ-16
+export function cleanupDecision(
+  jobs: RaceJob[],
+  hasUnmatchedFiles: boolean,
+): { removeTorrent: boolean; deleteDownloadPath: boolean } {
+  return {
+    removeTorrent: !jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status)),
+    deleteDownloadPath:
+      jobs.every((job) => job.status === 'COMPLETED' || job.status === 'DISCARDED') &&
+      !hasUnmatchedFiles,
+  };
+}
+
 const NOT_RETRYABLE_STATES = ['error', 'missingFiles'];
 
 export function deriveResume(input: ResumeInput): ResumeVerdict {
@@ -442,20 +530,7 @@ export function deriveResume(input: ResumeInput): ResumeVerdict {
       next.updatedAt.getTime() > best.updatedAt.getTime() ? next : best,
     );
     stage = stageOf(winner);
-    const nullKey = winner.errorKey === null;
-    const key = nullKey
-      ? winner.fromJob
-        ? 'error.encode.unexpected'
-        : ERROR_KEYS.SOURCE_SCAN_FAILED
-      : winner.errorKey!;
-    lastError = {
-      stage,
-      key,
-      params: nullKey
-        ? JSON.stringify({ detail: winner.errorMessage ?? '' })
-        : winner.errorParams,
-      message: winner.errorMessage ?? MESSAGES_EN[key] ?? key,
-    };
+    lastError = candidateLastError(winner, stage);
   } else if (liveState !== null && NOT_RETRYABLE_STATES.includes(liveState)) {
     stage = 'DOWNLOAD';
     const key = ERROR_KEYS.DOWNLOAD_TORRENT_CLIENT_ERROR;

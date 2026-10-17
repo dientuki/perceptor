@@ -36,6 +36,7 @@ enum EncodeStatus {
   ENCODING
   COMPLETED
   ERROR
+  DISCARDED
 }
 
 // Estado simplificado / consolidado para la UI (Movie, Episode, Track)

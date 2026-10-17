@@ -904,7 +904,7 @@ rather than trusting this list:
 | :-- | :-- |
 | `SourceKind` | `TORRENT_SEARCH`, `TORRENT_FILE`, `LOCAL_FILE`, `LOCAL_FOLDER` |
 | `SourceStatus` | `PENDING`, `QUEUED`, `DOWNLOADING`, `PAUSED`, `READY`, `SCANNED`, `ERROR` |
-| `EncodeStatus` | `WAITING`, `QUEUED`, `ENCODING`, `COMPLETED`, `ERROR` |
+| `EncodeStatus` | `WAITING`, `QUEUED`, `ENCODING`, `COMPLETED`, `ERROR`, `DISCARDED` (`095-season-pack-per-file-encode`: a file the user dropped; terminal, counts as finished for cleanup, never as delivered) |
 | `MediaStatus` | `MISSING`, `DOWNLOADING`, `ENCODING`, `COMPLETED`, `ERROR` |
 | `LanguageTrackKind` | `AUDIO`, `SUBTITLE` (`021-user-preferences`) |
 | `TorrentGroupScope` | `MOVIE`, `SHOW` (`021-user-preferences`) |
@@ -916,7 +916,7 @@ rather than trusting this list:
 its own `MEDIA_TYPE` (`MOVIE`/`SHOW`) in `src/types/media.ts` — a web-side type, not a database one.
 A movie/show discriminator in `api` would have to be added to `schema.prisma` and migrated first.
 
-There are 20 models and 40 migrations (counted 2026-10-15, after `092-film-grain-optimization`,
+There are 20 models and 41 migrations (counted 2026-10-17, after `095-season-pack-per-file-encode`, whose `encode_status_discarded` only widens `EncodeStatus`; previously 40 after `092-film-grain-optimization`,
 which added no model — only `Movie.grainMode`/`Show.grainMode GrainMode @default(INHERIT)`, no
 backfill, and its migration) — verify with
 `grep -c "^model " prisma/schema.prisma` rather than trusting the number. Worth knowing: the three
@@ -994,3 +994,20 @@ As of 2026-09-26 (`076-automatic-movie-acquisition`, code complete, live pass pe
 ## Known debt
 
 None currently recorded for this service.
+
+## Per-file encode control (`095-season-pack-per-file-encode`)
+
+- `pipeline-status/pipeline-status.ts` owns the per-file rules: `deriveSourceStatus` drops `DISCARDED`
+  jobs, reads `ENCODING` while any job is active even if a sibling is `ERROR`, and yields `DISCARDED`
+  only when every job is; `cleanupDecision(jobs, hasUnmatchedFiles)` is the one place that decides
+  `removeTorrent`/`deleteDownloadPath`, shared by `ProcessJobsService.encodeCompleted` and
+  `DownloadsService.encodeJobDiscard`. `jobLastError`/`jobRetryable`/`projectJobStatus` feed
+  `DownloadJob` (`WAITING` is projected as `QUEUED`).
+- `process-jobs/` guards the worker's reports: `encodeStarted` refuses a `DISCARDED` row with
+  `error.encode.discarded`, `encodeProgress` writes only an `ENCODING` row, `encodeFailed` ignores a
+  `DISCARDED` one, and `encodeCompleted` still lands `COMPLETED`.
+- `downloads/`: `encodeJobStart` retries one `ERROR` job through `resumeEncodeStage`, which now
+  verifies the BullMQ entry landed (`EncodeQueueService.isEncodePending`) and rolls back otherwise;
+  `encodeJobDiscard` acts on cleanup only on a false-to-true change and runs `unwindLosingSiblings`
+  only when the source delivered something. `handleTorrentCompleted` stops the torrent after
+  `addSourceReady`, logging a failure instead of throwing.

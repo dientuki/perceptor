@@ -91,4 +91,30 @@ export class DownloadsResolver {
     const userId = principal.type === 'user' ? principal.id : '';
     return this.downloadsService.downloadDelete(mediaSourceId, userId);
   }
+
+  // Spec 095, REQ-11
+  @Mutation(() => Download, {
+    name: 'encodeJobStart',
+    description: 'Reintenta la codificación de un solo archivo con error',
+  })
+  async encodeJobStart(
+    @Args('processJobId', { type: () => Int }) processJobId: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ): Promise<Download> {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.downloadsService.encodeJobStart(processJobId, userId);
+  }
+
+  // Spec 095, REQ-12
+  @Mutation(() => Download, {
+    name: 'encodeJobDiscard',
+    description: 'Descarta un archivo de una fuente: cancela su codificación y borra su entrada',
+  })
+  async encodeJobDiscard(
+    @Args('processJobId', { type: () => Int }) processJobId: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ): Promise<Download> {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.downloadsService.encodeJobDiscard(processJobId, userId);
+  }
 }

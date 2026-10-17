@@ -39,6 +39,7 @@ import { KeyedError } from '../i18n/keyed-error';
 import { EncodeCancelledError } from '../encode/cancellation';
 import { ApiUnreachableError } from '../api/graphql-client';
 import {
+  ERROR_ENCODE_DISCARDED,
   ERROR_ENCODE_FFMPEG_FAILED,
   ERROR_ENCODE_PROBE_FAILED,
   ERROR_ENCODE_UNEXPECTED,
@@ -884,5 +885,32 @@ describe('handleEncode — non-retryable classification (Spec 054, REQ-7 REQ-8 R
       (query as string).includes('encodeFailed'),
     );
     expect(failedCall).toBeDefined();
+  });
+});
+
+// Defends Spec 095, REQ-13: a job the user discarded is dequeued anyway and
+// api refuses encodeStarted. Reporting that as a failed encode, or letting
+// BullMQ retry it against an input api already deleted, would resurrect a
+// discarded file as an error with no one having asked for it.
+describe('handleEncode — encodeStarted refused as discarded (Spec 095, REQ-13)', () => {
+  it('reports nothing, never runs the encode driver and is non-retryable', async () => {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob: PROCESS_JOB_DETAILS });
+      }
+      if (query.includes('encodeStarted')) {
+        return Promise.reject(new KeyedError(ERROR_ENCODE_DISCARDED, 'Encode was discarded by the user'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const rejection = await handleEncode(makeJob()).catch((err) => err);
+
+    expect(rejection).toBeInstanceOf(UnrecoverableError);
+    expect(encodeMock).not.toHaveBeenCalled();
+    expect(passthroughMock).not.toHaveBeenCalled();
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeFailed'))).toBe(false);
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeCompleted'))).toBe(false);
+    expect(cleanupSourceMock).not.toHaveBeenCalled();
   });
 });

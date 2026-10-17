@@ -2404,6 +2404,55 @@ A failed read falls through to the language order in `web`. No new error key.
 
 Additive: an un-updated `web` keeps working against the new `api`.
 
+### A multi-file source lists one job per file, and a file can be retried or discarded (`095-season-pack-per-file-encode`)
+
+```graphql
+type DownloadJob {
+  processJobId: Int!
+  label: String!
+  episodeId: Int
+  seasonNumber: Int
+  episodeNumber: Int
+  status: String!
+  progress: Float!
+  encodeSpeed: Float
+  lastError: DownloadError
+  retryable: Boolean!
+}
+
+type Download {
+  jobs: [DownloadJob!]!
+}
+
+type Mutation {
+  """Retries the encode of a single failed file"""
+  encodeJobStart(processJobId: Int!): Download!
+  """Discards one file of a source: cancels its encode and deletes its input"""
+  encodeJobDiscard(processJobId: Int!): Download!
+}
+```
+
+**`DownloadJob.status` is a projected `String`, not the `EncodeStatus` enum.** Its vocabulary is
+`QUEUED` / `ENCODING` / `COMPLETED` / `ERROR` / `DISCARDED`: the stored `WAITING` is folded into
+`QUEUED`. `097` will add `STOPPED` as `PAUSED` in the same projection; a consumer must tolerate an
+unknown value.
+
+**`DISCARDED` is a `Download.status` value only at the source altitude**, when every job of the source
+is discarded. It never surfaces on a `Movie`/`Episode`/`Show`: a discarded episode derives as if the
+source never brought it.
+
+**Both mutations return the parent `Download`**, freshly derived, never the job. Errors:
+`error.processJob.not_found`, `error.download.retry_replaced`, `error.download.retry_superseded`,
+`error.processJob.not_resumable` (start) and `error.processJob.not_discardable` (discard);
+`error.download.retry_enqueue_failed` when the retried job does not land in the queue.
+
+**`encodeStarted` now refuses a discarded job with `error.encode.discarded`.** That key travels
+`api` → `worker` only: the worker abandons the job silently, reports nothing and does not retry. It
+never reaches `web`.
+
+Additive: an un-updated `web` or `worker` keeps working against the new `api`, except that a `web`
+that does not know `DISCARDED` paints it with the default gray tone.
+
 ### What never crosses the boundary
 
 - **Absolute container paths.** Constitution, Article V — `web` sees host paths, `worker` receives

@@ -205,6 +205,19 @@ type DownloadError {
   message: String!
 }
 
+type DownloadJob {
+  processJobId: Int!
+  label: String!
+  episodeId: Int
+  seasonNumber: Int
+  episodeNumber: Int
+  status: String!
+  progress: Float!
+  encodeSpeed: Float
+  lastError: DownloadError
+  retryable: Boolean!
+}
+
 type Download {
   mediaSourceId: Int!
   infoHash: String
@@ -230,6 +243,7 @@ type Download {
   lostRace: Boolean!
   readAt: DateTime!
   retiredAt: DateTime
+  jobs: [DownloadJob!]!
 }
 
 type TorrentLink {
@@ -708,6 +722,14 @@ type Mutation {
   Borra un torrent del cliente de torrents junto con sus archivos, y su fila
   """
   downloadDelete(mediaSourceId: Int!): Boolean!
+
+  """Reintenta la codificación de un solo archivo con error"""
+  encodeJobStart(processJobId: Int!): Download!
+
+  """
+  Descarta un archivo de una fuente: cancela su codificación y borra su entrada
+  """
+  encodeJobDiscard(processJobId: Int!): Download!
 
   """
   Reemplaza la preferencia de idiomas del usuario para una serie puntual, para un tipo de pista

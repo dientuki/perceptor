@@ -2,7 +2,7 @@
  * The frozen error-key vocabulary from `docs/spec/features/018-ui-i18n/spec.md`'s
  * "GraphQL Contract Delta" error tables. `api` owns every key here; `worker`'s own
  * `error.encode.*` keys live in `worker` and are not transcribed here — the two
- * exceptions are `error.processJob.not_found` and `error.source.no_download_path` /
+ * exceptions are `error.processJob.not_found`, `error.encode.discarded` and `error.source.no_download_path` /
  * `error.source.no_target`, which `worker` reuses but `api` defines and owns.
  *
  * This is the read-only vocabulary the rest of the slice keys its throw sites
@@ -90,6 +90,9 @@ export const ERROR_KEYS = {
   SOURCE_SUPERSEDED: 'error.source.superseded',
   PROCESS_JOB_NOT_FOUND: 'error.processJob.not_found',
   PROCESS_JOB_RECOVERY_EXHAUSTED: 'error.processJob.recovery_exhausted',
+  PROCESS_JOB_NOT_RESUMABLE: 'error.processJob.not_resumable',
+  PROCESS_JOB_NOT_DISCARDABLE: 'error.processJob.not_discardable',
+  ENCODE_DISCARDED: 'error.encode.discarded',
   DOWNLOAD_NOT_A_TORRENT: 'error.download.not_a_torrent',
   TORRENT_CLIENT_REJECTED: 'error.download.torrent_client_rejected',
 

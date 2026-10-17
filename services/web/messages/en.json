@@ -142,7 +142,9 @@
     },
     "processJob": {
       "not_found": "Process job {id} does not exist",
-      "recovery_exhausted": "Automatic recovery for this encode has already been used once and failed again"
+      "recovery_exhausted": "Automatic recovery for this encode has already been used once and failed again",
+      "not_resumable": "This file cannot be retried",
+      "not_discardable": "This file can no longer be discarded"
     },
     "encode": {
       "no_video_stream": "The input file has no video stream",
@@ -524,7 +526,14 @@
         "SCAN": "Scan",
         "ENCODE": "Encode",
         "REPLACED": "Replaced"
-      }
+      },
+      "expand": "Show files",
+      "collapse": "Hide files",
+      "jobsProgress": "{done} of {total}",
+      "retryJobTitle": "Retry",
+      "discardJobTitle": "Discard",
+      "retryErrorDefault": "Could not retry the file.",
+      "discardErrorDefault": "Could not discard the file."
     },
     "deleteModal": {
       "title": "Delete download",
@@ -534,6 +543,13 @@
       "confirm": "Delete",
       "cancel": "Cancel",
       "deleting": "Deleting..."
+    },
+    "discardModal": {
+      "title": "Discard file",
+      "message": "Discard <b>{target}</b>? Its downloaded file will be deleted, it will not be encoded, and the episode will go back to missing. The rest of the source is unaffected.",
+      "confirm": "Discard",
+      "cancel": "Cancel",
+      "discarding": "Discarding..."
     }
   },
   "settings": {
@@ -737,7 +753,8 @@
     "downloaded": "Downloaded",
     "encoding": "Encoding",
     "completed": "Completed",
-    "error": "Error"
+    "error": "Error",
+    "discarded": "Discarded"
   },
   "contentKind": {
     "LIVE_ACTION": "Live action",

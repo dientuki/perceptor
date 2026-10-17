@@ -981,7 +981,8 @@ describe('ProcessJobsService', () => {
   // for the entire encode, with no error anywhere to catch it.
   describe('encodeStarted', () => {
     it('recomputes the movie once the job is marked ENCODING', async () => {
-      prisma.processJob.update.mockResolvedValue({ id: 1, movieId: 9, episodeId: null });
+      prisma.processJob.updateMany.mockResolvedValue({ count: 1 });
+      prisma.processJob.findUnique.mockResolvedValue({ status: 'ENCODING', movieId: 9, episodeId: null });
 
       await service.encodeStarted(1);
 
@@ -990,7 +991,8 @@ describe('ProcessJobsService', () => {
     });
 
     it('recomputes the episode, not the movie, for an episode job', async () => {
-      prisma.processJob.update.mockResolvedValue({ id: 2, movieId: null, episodeId: 21 });
+      prisma.processJob.updateMany.mockResolvedValue({ count: 1 });
+      prisma.processJob.findUnique.mockResolvedValue({ status: 'ENCODING', movieId: null, episodeId: 21 });
 
       await service.encodeStarted(2);
 
@@ -1192,6 +1194,100 @@ describe('ProcessJobsService', () => {
       expect(prisma.processJob.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ status: 'ERROR' }) }),
       );
+    });
+  });
+
+  // Spec 095, REQ-13 REQ-14 REQ-15. The silent failures: a discarded file being encoded anyway
+  // because the worker dequeued it before the cancel landed, a stale progress or failure report
+  // resurrecting a discarded row, and a late completion being thrown away (the output exists on
+  // disk, so the row must say COMPLETED). None of these throws without the guards.
+  describe('reports for a DISCARDED job (095)', () => {
+    it('encodeStarted refuses a DISCARDED job with error.encode.discarded and leaves the row', async () => {
+      prisma.processJob.updateMany.mockResolvedValue({ count: 0 });
+      prisma.processJob.findUnique.mockResolvedValue({ status: 'DISCARDED', movieId: null, episodeId: 5 });
+
+      await expect(service.encodeStarted(1)).rejects.toMatchObject({
+        response: { i18n: { key: 'error.encode.discarded' } },
+      });
+
+      expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: { not: 'DISCARDED' } },
+        data: { status: 'ENCODING' },
+      });
+      expect(prisma.processJob.update).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeEpisode).not.toHaveBeenCalled();
+    });
+
+    it('encodeProgress writes only where the job is ENCODING', async () => {
+      await service.encodeProgress(1, 50, 1.5);
+
+      expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: 'ENCODING' },
+        data: { progress: 50, encodeSpeed: 1.5 },
+      });
+      expect(prisma.processJob.update).not.toHaveBeenCalled();
+    });
+
+    it('encodeFailed on a DISCARDED job writes nothing and recomputes nothing', async () => {
+      prisma.processJob.findUnique.mockResolvedValue({
+        status: 'DISCARDED',
+        sourceFile: { mediaSource: { status: 'SCANNED' } },
+      });
+
+      await service.encodeFailed(1, 'error.encode.corrupt_input', undefined, 'ffmpeg exited 1');
+
+      expect(prisma.processJob.update).not.toHaveBeenCalled();
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeEpisode).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+    });
+
+    it('encodeCompleted on a DISCARDED job lands COMPLETED', async () => {
+      prisma.processJob.findUnique.mockResolvedValue({
+        status: 'DISCARDED',
+        outputFilePath: null,
+        sourceFile: { mediaSourceId: 10, mediaSource: { status: 'SCANNED' } },
+      });
+      prisma.processJob.update.mockResolvedValue({
+        id: 1,
+        movieId: null,
+        episodeId: 5,
+        sourceFile: { mediaSourceId: 10 },
+      });
+      prisma.episode.update.mockResolvedValue({});
+      prisma.processJob.findMany.mockResolvedValue([{ id: 1, status: 'COMPLETED' }]);
+      prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
+
+      await service.encodeCompleted(1, '/library/ep.mkv', 'ffmpeg …');
+
+      expect(prisma.processJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }),
+      );
+    });
+
+    it('encodeCompleted tells the worker to delete the folder when siblings are COMPLETED and DISCARDED', async () => {
+      prisma.processJob.findUnique.mockResolvedValue({
+        status: 'ENCODING',
+        outputFilePath: null,
+        sourceFile: { mediaSourceId: 10, mediaSource: { status: 'SCANNED' } },
+      });
+      prisma.processJob.update.mockResolvedValue({
+        id: 1,
+        movieId: null,
+        episodeId: 5,
+        sourceFile: { mediaSourceId: 10 },
+      });
+      prisma.episode.update.mockResolvedValue({});
+      prisma.processJob.findMany.mockResolvedValue([
+        { id: 1, status: 'COMPLETED' },
+        { id: 2, status: 'DISCARDED' },
+      ]);
+      prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
+
+      const result = await service.encodeCompleted(1, '/library/ep.mkv', 'ffmpeg …');
+
+      expect(result.removeTorrent).toBe(true);
+      expect(result.deleteDownloadPath).toBe(true);
     });
   });
 
