@@ -39,6 +39,7 @@ const KNOWN_PARAMS: Record<string, Record<string, string | number>> = {
   [errorKeys.ERROR_ENCODE_MKVMERGE_FAILED]: { code: 2, stderr: 'mkvmerge tail' },
   [errorKeys.ERROR_ENCODE_MOVE_FAILED]: { detail: 'EACCES: permission denied' },
   [errorKeys.ERROR_ENCODE_DISCARDED]: {},
+  [errorKeys.ERROR_ENCODE_STOPPED]: {},
   [errorKeys.ERROR_ENCODE_EPISODE_NUMBERS_MISSING]: {},
   [errorKeys.ERROR_ENCODE_UNKNOWN_DRIVER]: { driver: 'bogus' },
   [errorKeys.ERROR_ENCODE_UNEXPECTED]: { detail: 'some unexpected throw' },

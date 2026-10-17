@@ -5,15 +5,16 @@
 // (./services/worker) physically cannot see ../api, same reasoning as
 // src/queue/types.ts's hand-sync rule.
 //
-// Four keys below are NOT owned by this service — they are api's, spelled
+// Five keys below are NOT owned by this service — they are api's, spelled
 // identically on purpose, because they are the same key, not a worker-local
 // variant: ERROR_PROCESS_JOB_NOT_FOUND, ERROR_SOURCE_NO_TARGET,
-// ERROR_SOURCE_NO_DOWNLOAD_PATH, ERROR_ENCODE_DISCARDED. Confirmed against
+// ERROR_SOURCE_NO_DOWNLOAD_PATH, ERROR_ENCODE_DISCARDED, ERROR_ENCODE_STOPPED. Confirmed against
 // services/api/src/i18n/error-keys.ts:
 //   error.processJob.not_found
 //   error.source.no_target
 //   error.source.no_download_path
 //   error.encode.discarded
+//   error.encode.stopped
 
 export const ERROR_ENCODE_NO_VIDEO_STREAM = 'error.encode.no_video_stream';
 export const ERROR_ENCODE_NO_ORIGINAL_AUDIO = 'error.encode.no_original_audio';
@@ -38,3 +39,6 @@ export const ERROR_SOURCE_SCAN_FAILED = 'error.source.scan_failed';
 
 // Spec 095, REQ-13
 export const ERROR_ENCODE_DISCARDED = 'error.encode.discarded';
+
+// Spec 097, REQ-6
+export const ERROR_ENCODE_STOPPED = 'error.encode.stopped';

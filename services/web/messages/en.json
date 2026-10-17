@@ -144,7 +144,8 @@
       "not_found": "Process job {id} does not exist",
       "recovery_exhausted": "Automatic recovery for this encode has already been used once and failed again",
       "not_resumable": "This file cannot be retried",
-      "not_discardable": "This file can no longer be discarded"
+      "not_discardable": "This file can no longer be discarded",
+      "not_running": "This file is not being encoded"
     },
     "encode": {
       "no_video_stream": "The input file has no video stream",
@@ -532,7 +533,10 @@
       "jobsProgress": "{done} of {total}",
       "retryJobTitle": "Retry",
       "discardJobTitle": "Discard",
+      "pauseJobTitle": "Pause",
+      "resumeJobTitle": "Resume",
       "retryErrorDefault": "Could not retry the file.",
+      "pauseErrorDefault": "Could not pause the file.",
       "discardErrorDefault": "Could not discard the file."
     },
     "deleteModal": {

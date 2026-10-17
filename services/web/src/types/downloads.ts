@@ -16,7 +16,7 @@ export interface DownloadJob {
   episodeId: number | null;
   seasonNumber: number | null;
   episodeNumber: number | null;
-  // QUEUED | ENCODING | COMPLETED | ERROR | DISCARDED
+  // QUEUED | ENCODING | PAUSED | COMPLETED | ERROR | DISCARDED
   status: string;
   progress: number;
   encodeSpeed: number | null;

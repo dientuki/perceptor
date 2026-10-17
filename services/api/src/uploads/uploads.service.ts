@@ -1,4 +1,4 @@
-import { hasPossession } from '@/pipeline-status/pipeline-status';
+import { IN_FLIGHT_ENCODE_STATUSES, hasPossession } from '@/pipeline-status/pipeline-status';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { join, parse } from 'node:path';
 import { access, mkdir, rename } from 'node:fs/promises';
@@ -320,7 +320,7 @@ export class UploadsService implements OnModuleInit {
       const { count: jobsClosed } = await tx.processJob.updateMany({
         where: {
           sourceFile: { mediaSourceId: { in: demotedIds } },
-          status: { in: ['WAITING', 'QUEUED', 'ENCODING'] },
+          status: { in: IN_FLIGHT_ENCODE_STATUSES },
         },
         data: {
           status: 'ERROR',

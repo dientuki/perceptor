@@ -12,7 +12,7 @@ import { fetchTrackTitles } from '../api/track-titles';
 import type { EncodeJob } from '../queue/types';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
-import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED, ERROR_ENCODE_DISCARDED } from '../i18n/error-keys';
+import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED, ERROR_ENCODE_DISCARDED, ERROR_ENCODE_STOPPED } from '../i18n/error-keys';
 import { EncodeCancelledError, registerEncode, releaseEncode } from '../encode/cancellation';
 import { normalizeContentKind } from '../encode/content-kind';
 import { normalizeLibraryLayout } from '../paths/library-layout';
@@ -225,12 +225,17 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       finalOutputPathForReport = finalOutputPath;
       ffmpegCommandForReport = ffmpegCommand;
     } catch (error) {
-      // Spec 047, REQ-6; Spec 095, REQ-13
-      const discarded = error instanceof KeyedError && error.key === ERROR_ENCODE_DISCARDED;
-      if (error instanceof EncodeCancelledError || discarded) {
-        console.log(`[encode] ${processJobId}: ${discarded ? 'discarded' : 'cancelled'}, reporting nothing`);
+      // Spec 047, REQ-6; Spec 095, REQ-13; Spec 097, REQ-6
+      const refusal =
+        error instanceof KeyedError && error.key === ERROR_ENCODE_DISCARDED
+          ? 'discarded'
+          : error instanceof KeyedError && error.key === ERROR_ENCODE_STOPPED
+            ? 'stopped'
+            : null;
+      if (error instanceof EncodeCancelledError || refusal) {
+        console.log(`[encode] ${processJobId}: ${refusal ?? 'cancelled'}, reporting nothing`);
         // Spec 054, REQ-8
-        throw new UnrecoverableError(error.message);
+        throw new UnrecoverableError(error instanceof Error ? error.message : String(error));
       }
 
       // Spec 018, REQ-11

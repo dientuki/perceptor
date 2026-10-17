@@ -18,9 +18,9 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 | | |
 | :-- | --: |
 | Specs con ACs pendientes | **47** de 97 |
-| ACs pendientes | **309** |
-| ACs totales del proyecto | 1169 |
-| ACs verificados | 860 (74%) |
+| ACs pendientes | **313** |
+| ACs totales del proyecto | 1173 |
+| ACs verificados | 860 (73%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,7 +28,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
-| 097 | encode-stop | Draft | 14/14 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 | Spec en Draft: sin plan regenerado ni código. Depende de 095 (ya implementada); falta `/plan-feature 097`. |
+| 097 | encode-stop | Implemented | 18/18 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 10, 11, 12, 13, 14, 16, 17, 18 | Código completo y cubierto por tests unitarios; falta la pasada manual contra un encode real (`plan.md` § Verification). Depende de una corrida completa del pipeline. |
 | 096 | date-format | Implemented | 10/12 | 1, 2, 3, 4, 5, 6, 7, 10, 11, 12 | Needs a signed-in browser pass (film 2026-09-07 digital date, season episode, Settings → General, /preferences, Scheduling stamp, console for hydration) and an admin `updateSettings` call for AC-7; the code, typecheck and comments gate are green. |
 | 095 | season-pack-per-file-encode | Implemented | 13/13 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | Código completo (api + worker + web), tests y chequeos verdes (api 1111, worker 379). Ningún AC observado: todos necesitan una sesión autenticada y un season pack real en el stack dev (sin credenciales en la corrida del agente) |
 | 094 | automatic-grain-detection | Approved | 14/16 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16 | Código completo (api + worker); AC-10 y AC-11 verificados. El resto necesita encodes reales con `ENCODE_DRIVER=ffmpeg`; el umbral 0.886 es provisional hasta re-medir el corpus a CRF 22 (T008, lo corre el mantenedor). |
@@ -80,12 +80,12 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 309 ACs pendientes no son 309 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 50%:
+Los 313 ACs pendientes no son 313 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 50%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
 | Una corrida de pipeline | 102 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091 |
-| Sin clasificar | 51 | 094, 095, 096, 097 |
+| Sin clasificar | 55 | 094, 095, 096, 097 |
 | Una instalacion fresca | 25 | 015, 049, 061, 066 |
 | Adquisiciones reales | 18 | 073, 076 |
 | Nada: no esta implementada | 17 | 081 |

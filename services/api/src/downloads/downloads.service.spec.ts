@@ -85,7 +85,7 @@ describe('DownloadsService', () => {
     queue = { addSourceReady: jest.fn(), removeSourceReady: jest.fn() };
     encodeQueue = {
       publishCancel: jest.fn(),
-      removeEncode: jest.fn(),
+      removeEncode: jest.fn().mockResolvedValue(true),
       addEncode: jest.fn(),
       isEncodePending: jest.fn().mockResolvedValue(true),
     };
@@ -1343,7 +1343,10 @@ describe('DownloadsService', () => {
 
     it('withdraws each encode before re-adding it and ends QUEUED', async () => {
       const order: string[] = [];
-      encodeQueue.removeEncode.mockImplementation(async (id: number) => void order.push(`remove:${id}`));
+      encodeQueue.removeEncode.mockImplementation(async (id: number) => {
+        order.push(`remove:${id}`);
+        return true;
+      });
       encodeQueue.addEncode.mockImplementation(async ({ processJobId }: { processJobId: number }) => {
         order.push(`add:${processJobId}`);
       });
@@ -1608,7 +1611,7 @@ describe('DownloadsService', () => {
           data: { retiredAt: expect.any(Date) },
         });
         expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
-          where: { sourceFile: { mediaSourceId: { in: [1] } }, status: { in: ['WAITING', 'QUEUED', 'ENCODING'] } },
+          where: { sourceFile: { mediaSourceId: { in: [1] } }, status: { in: ['WAITING', 'QUEUED', 'ENCODING', 'STOPPED'] } },
           data: expect.objectContaining({ status: 'ERROR', errorKey: 'error.source.replaced' }),
         });
       });
@@ -2201,7 +2204,7 @@ describe('DownloadsService', () => {
         await service.encodeJobDiscard(11, 'user-1');
 
         expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
-          where: { id: 11, status: { in: ['WAITING', 'QUEUED', 'ENCODING', 'ERROR'] } },
+          where: { id: 11, status: { in: ['WAITING', 'QUEUED', 'ENCODING', 'ERROR', 'STOPPED'] } },
           data: { status: 'DISCARDED', encodeSpeed: null },
         });
         expect(encodeQueue.publishCancel).toHaveBeenCalledWith(11);
@@ -2290,6 +2293,215 @@ describe('DownloadsService', () => {
 
         await expect(service.encodeJobDiscard(11, 'user-1')).resolves.toBeDefined();
         expect(rm).toHaveBeenCalledWith('/media/downloads/pack/e2.mkv', { force: true });
+      });
+    });
+  });
+
+  // Spec 097. The silent failures: Stop reaching the torrent client instead of the encode (FFmpeg
+  // keeps running), Stop cancelling the running encode before withdrawing the queued ones (the freed
+  // worker dequeues the next episode), Play on a stopped source while a sibling holds the race (two
+  // sources encode one title), and Play inside the kill grace leaving a row QUEUED with nothing queued.
+  describe('stop and resume an encode (Spec 097)', () => {
+    const at = new Date('2026-10-17T10:00:00Z');
+    const sourceRow = (over: Record<string, unknown> = {}) => ({
+      id: 1,
+      kind: 'TORRENT_SEARCH',
+      status: 'SCANNED',
+      infoHash: 'hash-1',
+      releaseTitle: null,
+      downloadPath: '/media/downloads/pack',
+      hasUnmatchedFiles: false,
+      errorKey: null,
+      errorParams: null,
+      errorMessage: null,
+      updatedAt: at,
+      movieId: null,
+      seasonId: 30,
+      episodeId: null,
+      retiredAt: null,
+      movie: null,
+      episode: null,
+      season: { id: 30, seasonNumber: 1, show: { id: 9, title: 'Show', users: [{ userId: 'user-1' }] } },
+      ...over,
+    });
+    const jobRow = (id: number, status: string) => ({
+      id,
+      status,
+      progress: 40,
+      encodeSpeed: null,
+      errorKey: null,
+      errorParams: null,
+      errorMessage: null,
+      updatedAt: at,
+      sourceFile: { mediaSourceId: 1, episode: null, movie: null },
+    });
+    const writes = () => prisma.processJob.updateMany.mock.calls.map((c) => c[0]);
+
+    beforeEach(() => {
+      prisma.processJob.findUnique.mockResolvedValue({ sourceFile: { mediaSourceId: 1, filePath: '/x' } });
+      prisma.mediaSource.findUnique.mockResolvedValue(sourceRow());
+      prisma.processJob.updateMany.mockResolvedValue({ count: 1 });
+      encodeQueue.removeEncode.mockResolvedValue(true);
+    });
+
+    describe('downloadStop', () => {
+      it('stops every active job, withdraws the queued ones before cancelling the running one, and never calls the torrent client', async () => {
+        prisma.processJob.findMany.mockResolvedValue([
+          jobRow(10, 'COMPLETED'),
+          jobRow(11, 'ENCODING'),
+          jobRow(12, 'QUEUED'),
+          jobRow(13, 'WAITING'),
+        ]);
+        const order: string[] = [];
+        encodeQueue.removeEncode.mockImplementation(async (id: number) => {
+          order.push(`remove:${id}`);
+          return true;
+        });
+        encodeQueue.publishCancel.mockImplementation(async (id: number) => {
+          order.push(`cancel:${id}`);
+        });
+
+        await service.downloadStop(1, 'user-1');
+
+        expect(writes()[0]).toEqual({
+          where: { id: { in: [11, 12, 13] }, status: { in: ['WAITING', 'QUEUED', 'ENCODING'] } },
+          data: { status: 'STOPPED', progress: 0, encodeSpeed: null },
+        });
+        expect(order).toEqual(['remove:12', 'remove:13', 'cancel:11', 'remove:11']);
+        expect(qbittorrent.stop).not.toHaveBeenCalled();
+        expect(qbittorrent.remove).not.toHaveBeenCalled();
+        expect(titleStatus.recomputeSeason).toHaveBeenCalledWith(30);
+      });
+
+      it('still writes STOPPED when Redis is down', async () => {
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 'ENCODING')]);
+        encodeQueue.publishCancel.mockRejectedValue(new Error('redis down'));
+
+        await expect(service.downloadStop(1, 'user-1')).resolves.toBeDefined();
+
+        expect(writes()[0]).toMatchObject({ data: { status: 'STOPPED' } });
+      });
+
+      it('stops the encode of an upload instead of raising not_a_torrent', async () => {
+        prisma.mediaSource.findUnique.mockResolvedValue(sourceRow({ infoHash: null }));
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 'ENCODING')]);
+
+        await expect(service.downloadStop(1, 'user-1')).resolves.toBeDefined();
+        expect(qbittorrent.stop).not.toHaveBeenCalled();
+      });
+
+      it('keeps the torrent-only path when nothing is encoding', async () => {
+        prisma.mediaSource.findUnique.mockResolvedValue(sourceRow({ status: 'DOWNLOADING' }));
+        prisma.processJob.findMany.mockResolvedValue([]);
+
+        await service.downloadStop(1, 'user-1');
+
+        expect(qbittorrent.stop).toHaveBeenCalledWith('hash-1');
+        expect(encodeQueue.publishCancel).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('downloadStart', () => {
+      it('re-enqueues every stopped job, never calls the torrent client, and works for an upload', async () => {
+        prisma.mediaSource.findUnique.mockResolvedValue(sourceRow({ infoHash: null }));
+        prisma.processJob.findMany.mockResolvedValue([jobRow(10, 'COMPLETED'), jobRow(11, 'STOPPED'), jobRow(12, 'STOPPED')]);
+
+        await service.downloadStart(1, 'user-1');
+
+        expect(encodeQueue.addEncode).toHaveBeenCalledTimes(2);
+        expect(encodeQueue.addEncode).toHaveBeenNthCalledWith(1, { processJobId: 11 });
+        expect(encodeQueue.addEncode).toHaveBeenNthCalledWith(2, { processJobId: 12 });
+        expect(qbittorrent.start).not.toHaveBeenCalled();
+        expect(titleStatus.recomputeSeason).toHaveBeenCalledWith(30);
+      });
+
+      // Fault injection: move the stopped branch above the hasRaceWinner refusal and this resumes B
+      // while C holds the race.
+      it('refuses with retry_superseded and writes nothing while a sibling holds the race', async () => {
+        prisma.mediaSource.findMany.mockResolvedValue([
+          { id: 2, status: 'READY', movieId: null, seasonId: 30, episodeId: null, retiredAt: null },
+        ]);
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 'STOPPED')]);
+
+        await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+          response: { i18n: { key: 'error.download.retry_superseded' } },
+        });
+        expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+        expect(encodeQueue.addEncode).not.toHaveBeenCalled();
+      });
+
+      // Fault injection: drop the removeEncode result check and a cancelled entry still inside the
+      // kill grace makes addEncode a no-op while the row reads QUEUED forever.
+      it('rolls back to STOPPED and never adds when the cancelled entry is still present', async () => {
+        encodeQueue.removeEncode.mockResolvedValue(false);
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 'STOPPED')]);
+
+        await expect(service.downloadStart(1, 'user-1')).rejects.toMatchObject({
+          response: { i18n: { key: 'error.download.retry_enqueue_failed' } },
+        });
+
+        expect(encodeQueue.addEncode).not.toHaveBeenCalled();
+        expect(writes()).toContainEqual({
+          where: { id: 11, status: 'WAITING' },
+          data: { status: 'STOPPED', errorKey: null, errorParams: null, errorMessage: null },
+        });
+        expect(writes()).not.toContainEqual(expect.objectContaining({ data: { status: 'QUEUED' } }));
+      });
+    });
+
+    describe('encodeJobStop / encodeJobStart', () => {
+      it('refuses a COMPLETED job with not_running and changes nothing', async () => {
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 'COMPLETED')]);
+
+        await expect(service.encodeJobStop(11, 'user-1')).rejects.toMatchObject({
+          response: { i18n: { key: 'error.processJob.not_running' } },
+        });
+        expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+        expect(encodeQueue.publishCancel).not.toHaveBeenCalled();
+      });
+
+      it('stops only the named job, leaving its siblings untouched', async () => {
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 'ENCODING'), jobRow(12, 'QUEUED')]);
+
+        await service.encodeJobStop(11, 'user-1');
+
+        expect(writes()).toEqual([
+          {
+            where: { id: { in: [11] }, status: { in: ['WAITING', 'QUEUED', 'ENCODING'] } },
+            data: { status: 'STOPPED', progress: 0, encodeSpeed: null },
+          },
+        ]);
+        expect(encodeQueue.publishCancel).toHaveBeenCalledWith(11);
+        expect(encodeQueue.removeEncode).not.toHaveBeenCalledWith(12);
+      });
+
+      it('does not cancel a job that is only queued', async () => {
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 'QUEUED')]);
+
+        await service.encodeJobStop(11, 'user-1');
+
+        expect(encodeQueue.publishCancel).not.toHaveBeenCalled();
+        expect(encodeQueue.removeEncode).toHaveBeenCalledWith(11);
+      });
+
+      it('resumes a STOPPED job and leaves a STOPPED sibling stopped', async () => {
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 'STOPPED'), jobRow(12, 'STOPPED')]);
+
+        await service.encodeJobStart(11, 'user-1');
+
+        expect(encodeQueue.addEncode).toHaveBeenCalledTimes(1);
+        expect(encodeQueue.addEncode).toHaveBeenCalledWith({ processJobId: 11 });
+      });
+
+      it('discards a STOPPED job', async () => {
+        prisma.processJob.findMany.mockResolvedValue([jobRow(11, 'STOPPED'), jobRow(12, 'QUEUED')]);
+
+        await service.encodeJobDiscard(11, 'user-1');
+
+        expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
+          where: { id: 11, status: { in: ['WAITING', 'QUEUED', 'ENCODING', 'ERROR', 'STOPPED'] } },
+          data: { status: 'DISCARDED', encodeSpeed: null },
+        });
       });
     });
   });

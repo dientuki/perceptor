@@ -1007,3 +1007,66 @@ describe('per-file derivation (095)', () => {
     expect(projectJobStatus('DISCARDED')).toBe('DISCARDED');
   });
 });
+
+// Spec 097. The silent failures: a stopped film reading MISSING (the acquisition sweeps attach another
+// release), a stopped source still winning the race (siblings stay refused and a stopped bad release
+// blocks the title forever), a stopped pack counted as delivered (the loser sweep skips it) and the
+// torrent removed while a stopped file still needs its input. None of these throws.
+describe('stopped encodes (097)', () => {
+  const job = (status: EncodeStatus, progress = 0) => ({ status, progress, encodeSpeed: null });
+  const derive = (jobs: ReturnType<typeof job>[]) =>
+    deriveSourceStatus({ sourceStatus: 'SCANNED', jobs, live: null });
+
+  it('reads PAUSED, with no speed, when jobs are STOPPED and none is active or ERROR', () => {
+    expect(derive([job('COMPLETED', 100), job('STOPPED', 60)])).toEqual({
+      status: 'PAUSED',
+      downloadProgress: 100,
+      encodeProgress: 50,
+      encodeSpeed: null,
+    });
+  });
+
+  it('reads ENCODING while a job is active even if another is STOPPED', () => {
+    expect(derive([job('STOPPED'), job('QUEUED')]).status).toBe('ENCODING');
+  });
+
+  it('reads ERROR when a job failed, even with a STOPPED sibling', () => {
+    expect(derive([job('ERROR'), job('STOPPED')]).status).toBe('ERROR');
+  });
+
+  it('counts a STOPPED job as 0 progress', () => {
+    expect(derive([job('STOPPED', 90), job('COMPLETED', 100)]).encodeProgress).toBe(50);
+  });
+
+  it('reads a title with a SCANNED source, a STOPPED job and no file as PAUSED, not MISSING', () => {
+    expect(
+      deriveTitleStatus({
+        filePath: null,
+        mediaServerPresentAt: null,
+        sources: [{ status: 'SCANNED' }],
+        jobs: [{ status: 'STOPPED' }],
+      }),
+    ).toBe('PAUSED');
+  });
+
+  it('gives up the race: SCANNED with STOPPED and nothing active is not the winner', () => {
+    expect(isRaceWinner('SCANNED', [{ status: 'STOPPED' }])).toBe(false);
+    expect(isRaceWinner('SCANNED', [{ status: 'COMPLETED' }, { status: 'STOPPED' }])).toBe(false);
+    expect(isRaceWinner('SCANNED', [{ status: 'STOPPED' }, { status: 'QUEUED' }])).toBe(true);
+  });
+
+  it('does not count COMPLETED plus STOPPED as a delivered source', () => {
+    expect(isDeliveredSource('SCANNED', [{ status: 'COMPLETED' }, { status: 'STOPPED' }])).toBe(false);
+  });
+
+  it('keeps the torrent and the folder while a job is STOPPED', () => {
+    expect(cleanupDecision([{ status: 'COMPLETED' }, { status: 'STOPPED' }], false)).toEqual({
+      removeTorrent: false,
+      deleteDownloadPath: false,
+    });
+  });
+
+  it('exposes STOPPED as PAUSED', () => {
+    expect(projectJobStatus('STOPPED')).toBe('PAUSED');
+  });
+});

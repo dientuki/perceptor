@@ -23,6 +23,32 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-17 — `097-encode-stop` (code complete; live pass pending)
+
+`api` + `worker` + `web`, one migration (`20261017200942_encode_status_stopped`, widens
+`process_jobs.status` with `STOPPED`, no backfill). `api` adds `EncodeStatus.STOPPED` (exposed as
+`PAUSED`), `IN_FLIGHT_ENCODE_STATUSES` beside `ACTIVE_ENCODE_STATUSES`, `encodeJobStop`, the encode
+branch of `downloadStop`/`downloadStart`, `resumeEncodeStage` over `ERROR` and `STOPPED` (a queue entry
+`removeEncode` cannot remove is an enqueue failure), the `encodeStarted`/`encodeFailed` guards, and
+`isRaceWinner` false for a stopped source (REQ-15). `worker` abandons silently on
+`error.encode.stopped`. `web` shows Stop/Play on the encode and Pause/Play per file.
+
+| Check | Result |
+| :-- | :-- |
+| `bin/npm api run test` | 70 suites, 1135 tests passed |
+| `bin/cli api npx tsc --noEmit` | 0 `error TS` |
+| `bin/npm worker test` | 31 files, 380 tests passed |
+| `bin/cli worker npx tsc --noEmit` | 0 `error TS` |
+| `bin/cli web npx tsc --noEmit` | 0 `error TS` |
+| `bin/cli web node scripts/check-messages.mjs` | OK, 635 keys |
+| `bin/comments api` / `web` / `worker` | PASS (887 / 100 / 221 locators) |
+| `git status --short services/api/prisma` | `schema.prisma` + one new migration |
+| `schema.gql` diff | only `encodeJobStop` added |
+
+`web` has no test suite for this change (Article IX); `bin/npm web run lint` reports 1545 errors across
+176 files, none in the touched files (baseline not compared). The manual pass in `plan.md` §
+Verification (AC-1..AC-18 against a live encode) has not been run.
+
 ## 2026-10-17 — `095-season-pack-per-file-encode` (code complete; live pass pending)
 
 `api` + `worker` + `web`, one migration (`20261017183533_encode_status_discarded`, widens

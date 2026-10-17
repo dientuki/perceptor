@@ -275,9 +275,9 @@ export class ProcessJobsService {
   }
 
   async encodeStarted(processJobId: number) {
-    // Spec 095, REQ-13
+    // Spec 095, REQ-13; Spec 097, REQ-7
     const { count } = await this.prisma.processJob.updateMany({
-      where: { id: processJobId, status: { not: 'DISCARDED' } },
+      where: { id: processJobId, status: { notIn: ['DISCARDED', 'STOPPED'] } },
       data: { status: 'ENCODING' },
     });
 
@@ -291,7 +291,9 @@ export class ProcessJobsService {
     }
 
     if (count === 0) {
-      throw i18nError.conflict(ERROR_KEYS.ENCODE_DISCARDED);
+      throw i18nError.conflict(
+        processJob.status === 'STOPPED' ? ERROR_KEYS.ENCODE_STOPPED : ERROR_KEYS.ENCODE_DISCARDED,
+      );
     }
 
     if (processJob.movieId) {
@@ -412,8 +414,8 @@ export class ProcessJobsService {
       throw i18nError.notFound(ERROR_KEYS.PROCESS_JOB_NOT_FOUND, { id: processJobId });
     }
 
-    // Spec 095, REQ-14
-    if (existing.status === 'DISCARDED') {
+    // Spec 095, REQ-14; Spec 097, REQ-8
+    if (existing.status === 'DISCARDED' || existing.status === 'STOPPED') {
       return true;
     }
 

@@ -40,6 +40,7 @@ import { EncodeCancelledError } from '../encode/cancellation';
 import { ApiUnreachableError } from '../api/graphql-client';
 import {
   ERROR_ENCODE_DISCARDED,
+  ERROR_ENCODE_STOPPED,
   ERROR_ENCODE_FFMPEG_FAILED,
   ERROR_ENCODE_PROBE_FAILED,
   ERROR_ENCODE_UNEXPECTED,
@@ -900,6 +901,32 @@ describe('handleEncode — encodeStarted refused as discarded (Spec 095, REQ-13)
       }
       if (query.includes('encodeStarted')) {
         return Promise.reject(new KeyedError(ERROR_ENCODE_DISCARDED, 'Encode was discarded by the user'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const rejection = await handleEncode(makeJob()).catch((err) => err);
+
+    expect(rejection).toBeInstanceOf(UnrecoverableError);
+    expect(encodeMock).not.toHaveBeenCalled();
+    expect(passthroughMock).not.toHaveBeenCalled();
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeFailed'))).toBe(false);
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeCompleted'))).toBe(false);
+    expect(cleanupSourceMock).not.toHaveBeenCalled();
+  });
+});
+
+// Defends Spec 097, REQ-6: a stopped job is dequeued anyway and api refuses
+// encodeStarted. Reporting that as a failure would flip it to ERROR if api's
+// guard regressed, and a BullMQ retry would restart what the user stopped.
+describe('handleEncode — encodeStarted refused as stopped (Spec 097, REQ-6)', () => {
+  it('reports nothing, never runs the encode driver and is non-retryable', async () => {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob: PROCESS_JOB_DETAILS });
+      }
+      if (query.includes('encodeStarted')) {
+        return Promise.reject(new KeyedError(ERROR_ENCODE_STOPPED, 'Encode was stopped by the user'));
       }
       return Promise.resolve(undefined);
     });

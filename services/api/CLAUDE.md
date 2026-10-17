@@ -904,7 +904,7 @@ rather than trusting this list:
 | :-- | :-- |
 | `SourceKind` | `TORRENT_SEARCH`, `TORRENT_FILE`, `LOCAL_FILE`, `LOCAL_FOLDER` |
 | `SourceStatus` | `PENDING`, `QUEUED`, `DOWNLOADING`, `PAUSED`, `READY`, `SCANNED`, `ERROR` |
-| `EncodeStatus` | `WAITING`, `QUEUED`, `ENCODING`, `COMPLETED`, `ERROR`, `DISCARDED` (`095-season-pack-per-file-encode`: a file the user dropped; terminal, counts as finished for cleanup, never as delivered) |
+| `EncodeStatus` | `WAITING`, `QUEUED`, `ENCODING`, `COMPLETED`, `ERROR`, `DISCARDED`, `STOPPED` (`097-encode-stop`: a file the user paused, exposed as `PAUSED`; in flight but not active, never a race winner; `054`'s boot reconcile never selects it) (`095-season-pack-per-file-encode`: a file the user dropped; terminal, counts as finished for cleanup, never as delivered) |
 | `MediaStatus` | `MISSING`, `DOWNLOADING`, `ENCODING`, `COMPLETED`, `ERROR` |
 | `LanguageTrackKind` | `AUDIO`, `SUBTITLE` (`021-user-preferences`) |
 | `TorrentGroupScope` | `MOVIE`, `SHOW` (`021-user-preferences`) |
@@ -1003,6 +1003,7 @@ None currently recorded for this service.
   `removeTorrent`/`deleteDownloadPath`, shared by `ProcessJobsService.encodeCompleted` and
   `DownloadsService.encodeJobDiscard`. `jobLastError`/`jobRetryable`/`projectJobStatus` feed
   `DownloadJob` (`WAITING` is projected as `QUEUED`).
+- `097-encode-stop`: `pipeline-status.ts` splits `ACTIVE_ENCODE_STATUSES` (FFmpeg runs or will) from `IN_FLIGHT_ENCODE_STATUSES` (plus `STOPPED`); `DownloadsService.stopJobs` writes `STOPPED`, withdraws queued entries first and cancels the running one last; `resumeEncodeStage` resumes `ERROR` and `STOPPED` and treats a still-present queue entry (`removeEncode` false) as an enqueue failure.
 - `process-jobs/` guards the worker's reports: `encodeStarted` refuses a `DISCARDED` row with
   `error.encode.discarded`, `encodeProgress` writes only an `ENCODING` row, `encodeFailed` ignores a
   `DISCARDED` one, and `encodeCompleted` still lands `COMPLETED`.

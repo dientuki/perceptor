@@ -24,11 +24,13 @@ export class EncodeQueueService implements OnModuleDestroy {
   // Mirror of addEncode: same derived id. A 0 return means there was nothing to
   // remove (already processed) or the entry is currently active — an active
   // encode is handled by publishCancel below, not by withdrawal. Never thrown.
-  async removeEncode(processJobId: number): Promise<void> {
+  async removeEncode(processJobId: number): Promise<boolean> {
     const removed = await this.queue.remove(`job-${processJobId}`);
     if (!removed) {
       console.log(`EncodeQueueService.removeEncode: nothing removed for job-${processJobId}`);
     }
+    // Spec 097, REQ-5
+    return (await this.queue.getJob(`job-${processJobId}`)) == null;
   }
 
   // Spec 095, REQ-11

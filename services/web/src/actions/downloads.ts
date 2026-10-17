@@ -112,6 +112,15 @@ const ENCODE_JOB_START_MUTATION = `
   }
 `;
 
+// Spec 097, REQ-14
+const ENCODE_JOB_STOP_MUTATION = `
+  mutation EncodeJobStop($processJobId: Int!) {
+    encodeJobStop(processJobId: $processJobId) {
+      ${DOWNLOAD_FIELDS}
+    }
+  }
+`;
+
 const ENCODE_JOB_DISCARD_MUTATION = `
   mutation EncodeJobDiscard($processJobId: Int!) {
     encodeJobDiscard(processJobId: $processJobId) {
@@ -255,6 +264,23 @@ export async function startEncodeJobAction(
   }
 
   return { success: true, download: data!.encodeJobStart };
+}
+
+// Spec 097, REQ-14
+export async function stopEncodeJobAction(
+  processJobId: number,
+): Promise<DownloadActionResult> {
+  const { data, errors } = await fetchGraphQL<{ encodeJobStop: Download }>(
+    ENCODE_JOB_STOP_MUTATION,
+    { processJobId },
+  );
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  return { success: true, download: data!.encodeJobStop };
 }
 
 export async function discardEncodeJobAction(

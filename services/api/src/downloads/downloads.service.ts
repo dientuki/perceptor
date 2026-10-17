@@ -25,6 +25,8 @@ import {
   projectJobStatus,
   cleanupDecision,
   SourceAltitudeJob,
+  ACTIVE_ENCODE_STATUSES,
+  IN_FLIGHT_ENCODE_STATUSES,
   ResumeJob,
   ResumeSibling,
 } from '@/pipeline-status/pipeline-status';
@@ -391,7 +393,7 @@ export class DownloadsService {
       const { count: jobsClosed } = await tx.processJob.updateMany({
         where: {
           sourceFile: { mediaSourceId: { in: deliveredIds } },
-          status: { in: ['WAITING', 'QUEUED', 'ENCODING'] },
+          status: { in: IN_FLIGHT_ENCODE_STATUSES },
         },
         data: {
           status: 'ERROR',
@@ -668,6 +670,13 @@ export class DownloadsService {
       throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED);
     }
 
+    // Spec 097, REQ-5 REQ-9 REQ-16
+    if (jobs.some((job) => job.status === 'STOPPED')) {
+      await this.resumeEncodeStage(jobs);
+      await this.recomputeStatus(source);
+      return this.reloadDownload(source.id, userId);
+    }
+
     const infoHash = this.requireTorrent(source);
 
     await this.callTorrentClient(() => this.qbittorrent.start(infoHash));
@@ -746,12 +755,13 @@ export class DownloadsService {
     );
   }
 
+  // Spec 097, REQ-5 REQ-12 NFR-5
   private async resumeEncodeStage(jobs: DownloadJob[]): Promise<void> {
-    const failed = jobs.filter((job) => job.status === 'ERROR');
+    const resumable = jobs.filter((job) => job.status === 'ERROR' || job.status === 'STOPPED');
     const matched: DownloadJob[] = [];
-    for (const job of failed) {
+    for (const job of resumable) {
       const result = await this.prisma.processJob.updateMany({
-        where: { id: job.id, status: 'ERROR' },
+        where: { id: job.id, status: job.status },
         data: {
           status: 'WAITING',
           progress: 0,
@@ -768,7 +778,10 @@ export class DownloadsService {
 
     try {
       for (const job of matched) {
-        await this.encodeQueue.removeEncode(job.id);
+        // Spec 097, REQ-5
+        if (!(await this.encodeQueue.removeEncode(job.id))) {
+          throw new Error(`job-${job.id} is still present in the encode queue after removeEncode`);
+        }
         await this.encodeQueue.addEncode({ processJobId: job.id });
         // Spec 095, REQ-11
         if (!(await this.encodeQueue.isEncodePending(job.id))) {
@@ -780,12 +793,15 @@ export class DownloadsService {
       for (const job of matched) {
         await this.prisma.processJob.updateMany({
           where: { id: job.id, status: 'WAITING' },
-          data: {
-            status: 'ERROR',
-            errorKey: job.errorKey,
-            errorParams: job.errorParams,
-            errorMessage: job.errorMessage,
-          },
+          data:
+            job.status === 'STOPPED'
+              ? { status: 'STOPPED', errorKey: null, errorParams: null, errorMessage: null }
+              : {
+                  status: 'ERROR',
+                  errorKey: job.errorKey,
+                  errorParams: job.errorParams,
+                  errorMessage: job.errorMessage,
+                },
         });
       }
       throw i18nError.serviceUnavailable(ERROR_KEYS.DOWNLOAD_RETRY_ENQUEUE_FAILED);
@@ -873,11 +889,55 @@ export class DownloadsService {
   async encodeJobStart(processJobId: number, userId: string): Promise<Download> {
     const { source, job, siblings } = await this.loadOwnedJob(processJobId, userId);
 
-    if (job.status !== 'ERROR' || !jobRetryable(job, source, siblings)) {
+    // Spec 097, REQ-12
+    const resumable = job.status === 'STOPPED' || (job.status === 'ERROR' && jobRetryable(job, source, siblings));
+    if (!resumable) {
       throw i18nError.conflict(ERROR_KEYS.PROCESS_JOB_NOT_RESUMABLE);
     }
 
     await this.resumeEncodeStage([job]);
+    await this.recomputeStatus(source);
+
+    return this.reloadDownload(source.id, userId);
+  }
+
+  // Spec 097, REQ-2 REQ-6 REQ-7 REQ-9
+  private async stopJobs(jobIds: number[], runningId?: number): Promise<void> {
+    await this.prisma.processJob.updateMany({
+      where: { id: { in: jobIds }, status: { in: ACTIVE_ENCODE_STATUSES } },
+      data: { status: 'STOPPED', progress: 0, encodeSpeed: null },
+    });
+    await this.withdrawAndCancel(jobIds, runningId);
+  }
+
+  // Spec 097, REQ-2 REQ-6
+  private async withdrawAndCancel(jobIds: number[], runningId?: number): Promise<void> {
+    for (const id of jobIds.filter((candidate) => candidate !== runningId)) {
+      try {
+        await this.encodeQueue.removeEncode(id);
+      } catch (err) {
+        console.error(`[DownloadsService] could not withdraw job ${id} from the encode queue:`, err);
+      }
+    }
+    if (runningId !== undefined) {
+      try {
+        await this.encodeQueue.publishCancel(runningId);
+        await this.encodeQueue.removeEncode(runningId);
+      } catch (err) {
+        console.error(`[DownloadsService] could not cancel or withdraw job ${runningId}:`, err);
+      }
+    }
+  }
+
+  // Spec 097, REQ-11
+  async encodeJobStop(processJobId: number, userId: string): Promise<Download> {
+    const { source, job } = await this.loadOwnedJob(processJobId, userId);
+
+    if (job.status !== 'WAITING' && job.status !== 'QUEUED' && job.status !== 'ENCODING') {
+      throw i18nError.conflict(ERROR_KEYS.PROCESS_JOB_NOT_RUNNING);
+    }
+
+    await this.stopJobs([job.id], job.status === 'ENCODING' ? job.id : undefined);
     await this.recomputeStatus(source);
 
     return this.reloadDownload(source.id, userId);
@@ -892,19 +952,14 @@ export class DownloadsService {
     }
 
     const written = await this.prisma.processJob.updateMany({
-      where: { id: processJobId, status: { in: ['WAITING', 'QUEUED', 'ENCODING', 'ERROR'] } },
+      where: { id: processJobId, status: { in: [...ACTIVE_ENCODE_STATUSES, 'ERROR', 'STOPPED'] } },
       data: { status: 'DISCARDED', encodeSpeed: null },
     });
     if (written.count === 0) {
       throw i18nError.conflict(ERROR_KEYS.PROCESS_JOB_NOT_DISCARDABLE);
     }
 
-    try {
-      await this.encodeQueue.publishCancel(processJobId);
-      await this.encodeQueue.removeEncode(processJobId);
-    } catch (err) {
-      console.error(`[DownloadsService] encodeJobDiscard: could not cancel or withdraw job ${processJobId}:`, err);
-    }
+    await this.withdrawAndCancel([processJobId], processJobId);
 
     try {
       if (await this.mediaRoots.isInsideRoot('downloads', filePath)) {
@@ -949,6 +1004,20 @@ export class DownloadsService {
 
   async downloadStop(mediaSourceId: number, userId: string): Promise<Download> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
+
+    // Spec 097, REQ-1 REQ-2 REQ-3 REQ-9
+    const jobs = (await this.jobsBySourceId([source.id])).get(source.id)?.jobs ?? [];
+    const active = jobs.filter((job) => ACTIVE_ENCODE_STATUSES.includes(job.status));
+    if (active.length > 0) {
+      const running = active.find((job) => job.status === 'ENCODING');
+      await this.stopJobs(
+        active.map((job) => job.id),
+        running?.id,
+      );
+      await this.recomputeStatus(source);
+      return this.reloadDownload(source.id, userId);
+    }
+
     const infoHash = this.requireTorrent(source);
 
     await this.callTorrentClient(() => this.qbittorrent.stop(infoHash));

@@ -144,7 +144,8 @@
       "not_found": "El trabajo {id} no existe",
       "recovery_exhausted": "La recuperación automática de esta codificación ya se usó una vez y volvió a fallar",
       "not_resumable": "Este archivo no se puede reintentar",
-      "not_discardable": "Este archivo ya no se puede descartar"
+      "not_discardable": "Este archivo ya no se puede descartar",
+      "not_running": "Este archivo no se está codificando"
     },
     "encode": {
       "no_video_stream": "El archivo de entrada no tiene pista de video",
@@ -532,7 +533,10 @@
       "jobsProgress": "{done} de {total}",
       "retryJobTitle": "Reintentar",
       "discardJobTitle": "Descartar",
+      "pauseJobTitle": "Pausar",
+      "resumeJobTitle": "Reanudar",
       "retryErrorDefault": "No se pudo reintentar el archivo.",
+      "pauseErrorDefault": "No se pudo pausar el archivo.",
       "discardErrorDefault": "No se pudo descartar el archivo."
     },
     "deleteModal": {

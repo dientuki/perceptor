@@ -96,7 +96,7 @@ its existing `activeChild` (already pointed at whichever of FFmpeg/mkvmerge is r
 listener kills `activeChild` with `SIGTERM`, then `SIGKILL` after a 10s grace, and the rejection that
 follows is `EncodeCancelledError` rather than the usual ffmpeg/mkvmerge `KeyedError`.
 
-Since `095-season-pack-per-file-encode`, `encode.job.ts`'s cancellation arm also covers `encodeStarted` being refused with `error.encode.discarded` (the user discarded that file before it started): it logs `discarded, reporting nothing`, reports no `encodeFailed` and rethrows `UnrecoverableError`, so BullMQ does not retry against an input `api` already deleted.
+Since `097-encode-stop`, the same arm also covers `error.encode.stopped` (the user stopped that file before it started), logging `stopped, reporting nothing`. Since `095-season-pack-per-file-encode`, `encode.job.ts`'s cancellation arm also covers `encodeStarted` being refused with `error.encode.discarded` (the user discarded that file before it started): it logs `discarded, reporting nothing`, reports no `encodeFailed` and rethrows `UnrecoverableError`, so BullMQ does not retry against an input `api` already deleted.
 
 `EncodeInput` in `encode/types.ts` is a deliberate *subset* of `EncodeJobDetails`
 (`jobs/encode.job.ts`), retyped locally rather than imported, so the driver isn't coupled to the

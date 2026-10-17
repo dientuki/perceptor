@@ -79,7 +79,10 @@ export type DerivedProgress = {
   encodeSpeed: number | null; // Spec 053, REQ-10
 };
 
-const ACTIVE_ENCODE_STATUSES: EncodeStatus[] = ['WAITING', 'QUEUED', 'ENCODING'];
+export const ACTIVE_ENCODE_STATUSES: EncodeStatus[] = ['WAITING', 'QUEUED', 'ENCODING'];
+
+// Spec 097, NFR-1
+export const IN_FLIGHT_ENCODE_STATUSES: EncodeStatus[] = [...ACTIVE_ENCODE_STATUSES, 'STOPPED'];
 
 // Spec 053, REQ-10
 function meanEncodeSpeed(jobs: SourceAltitudeJob[]): number | null {
@@ -105,7 +108,8 @@ function countedProgress(counted: SourceAltitudeJob[]): number {
     if (job.status === 'COMPLETED') {
       return acc + 100;
     }
-    if (job.status === 'ERROR') {
+    // Spec 097, REQ-13
+    if (job.status === 'ERROR' || job.status === 'STOPPED') {
       return acc;
     }
     return acc + job.progress;
@@ -148,6 +152,16 @@ export function deriveSourceStatus(input: SourceAltitudeInput): DerivedProgress 
     return {
       status: 'ERROR',
       downloadProgress: live ? liveProgressToPercent(live) : null,
+      encodeProgress: countedProgress(counted),
+      encodeSpeed: null,
+    };
+  }
+
+  // Spec 097, REQ-4
+  if (counted.some((job) => job.status === 'STOPPED')) {
+    return {
+      status: 'PAUSED',
+      downloadProgress: 100,
       encodeProgress: countedProgress(counted),
       encodeSpeed: null,
     };
@@ -254,6 +268,11 @@ export function deriveTitleStatus(input: TitleAltitudeInput): PipelineStatus {
     best = maxStatus(best, 'ENCODING');
   }
 
+  // Spec 097, REQ-4
+  if (jobs.some((job) => job.status === 'STOPPED')) {
+    best = maxStatus(best, 'PAUSED');
+  }
+
   if (hasPossession(input) && best === 'MISSING') {
     return 'COMPLETED';
   }
@@ -324,7 +343,7 @@ export type RaceJob = {
   status: EncodeStatus;
 };
 
-// Spec 090, REQ-3; Spec 095, NFR-1
+// Spec 090, REQ-3; Spec 095, NFR-1; Spec 097, REQ-15
 export function isRaceWinner(
   status: SourceStatus,
   jobs: RaceJob[],
@@ -344,10 +363,13 @@ export function isRaceWinner(
   }
   const failed = jobs.some((job) => job.status === 'ERROR');
   const active = jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status));
+  if (!active && jobs.some((job) => job.status === 'STOPPED')) {
+    return false;
+  }
   return !(failed && !active);
 }
 
-// Spec 087, REQ-2; Spec 090, REQ-3
+// Spec 087, REQ-2; Spec 090, REQ-3; Spec 097, NFR-1
 export function isDeliveredSource(
   status: SourceStatus,
   jobs: RaceJob[],
@@ -359,7 +381,7 @@ export function isDeliveredSource(
   if (status !== 'SCANNED') {
     return false;
   }
-  const active = jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status));
+  const active = jobs.some((job) => IN_FLIGHT_ENCODE_STATUSES.includes(job.status));
   if (active) {
     return false;
   }
@@ -483,20 +505,23 @@ export function jobRetryable(
   return !hasRaceWinner(siblings);
 }
 
-// Spec 095, REQ-10
+// Spec 095, REQ-10; Spec 097, REQ-13
 export function projectJobStatus(
   status: EncodeStatus,
-): 'QUEUED' | 'ENCODING' | 'COMPLETED' | 'ERROR' | 'DISCARDED' {
-  return status === 'WAITING' ? 'QUEUED' : status;
+): 'QUEUED' | 'ENCODING' | 'PAUSED' | 'COMPLETED' | 'ERROR' | 'DISCARDED' {
+  if (status === 'WAITING') {
+    return 'QUEUED';
+  }
+  return status === 'STOPPED' ? 'PAUSED' : status;
 }
 
-// Spec 095, REQ-15 REQ-16
+// Spec 095, REQ-15 REQ-16; Spec 097, NFR-1
 export function cleanupDecision(
   jobs: RaceJob[],
   hasUnmatchedFiles: boolean,
 ): { removeTorrent: boolean; deleteDownloadPath: boolean } {
   return {
-    removeTorrent: !jobs.some((job) => ACTIVE_ENCODE_STATUSES.includes(job.status)),
+    removeTorrent: !jobs.some((job) => IN_FLIGHT_ENCODE_STATUSES.includes(job.status)),
     deleteDownloadPath:
       jobs.every((job) => job.status === 'COMPLETED' || job.status === 'DISCARDED') &&
       !hasUnmatchedFiles,

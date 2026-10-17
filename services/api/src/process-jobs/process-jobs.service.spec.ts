@@ -1211,7 +1211,7 @@ describe('ProcessJobsService', () => {
       });
 
       expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
-        where: { id: 1, status: { not: 'DISCARDED' } },
+        where: { id: 1, status: { notIn: ['DISCARDED', 'STOPPED'] } },
         data: { status: 'ENCODING' },
       });
       expect(prisma.processJob.update).not.toHaveBeenCalled();
@@ -1289,6 +1289,59 @@ describe('ProcessJobsService', () => {
       expect(result.removeTorrent).toBe(true);
       expect(result.deleteDownloadPath).toBe(true);
     });
+  });
+
+  // Spec 097, REQ-7 REQ-8. The silent failures: a stopped job being encoded anyway because the worker
+  // dequeued it before the cancel landed, a late failure report turning it into ERROR, and a late
+  // completion being thrown away although the file is already in the library. None of these throws.
+  describe('reports for a STOPPED job (097)', () => {
+      it('encodeStarted refuses a STOPPED job with error.encode.stopped and leaves the row', async () => {
+        prisma.processJob.updateMany.mockResolvedValue({ count: 0 });
+        prisma.processJob.findUnique.mockResolvedValue({ status: 'STOPPED', movieId: 9, episodeId: null });
+
+        await expect(service.encodeStarted(1)).rejects.toMatchObject({
+          response: { i18n: { key: 'error.encode.stopped' } },
+        });
+
+        expect(prisma.processJob.update).not.toHaveBeenCalled();
+        expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+      });
+
+      it('encodeFailed on a STOPPED job writes nothing and recomputes nothing', async () => {
+        prisma.processJob.findUnique.mockResolvedValue({
+          status: 'STOPPED',
+          sourceFile: { mediaSource: { status: 'SCANNED' } },
+        });
+
+        await service.encodeFailed(1, 'error.encode.corrupt_input', undefined, 'ffmpeg exited 1');
+
+        expect(prisma.processJob.update).not.toHaveBeenCalled();
+        expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+        expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+      });
+
+      it('encodeCompleted on a STOPPED job lands COMPLETED', async () => {
+        prisma.processJob.findUnique.mockResolvedValue({
+          status: 'STOPPED',
+          outputFilePath: null,
+          sourceFile: { mediaSourceId: 10, mediaSource: { status: 'SCANNED' } },
+        });
+        prisma.processJob.update.mockResolvedValue({
+          id: 1,
+          movieId: null,
+          episodeId: 5,
+          sourceFile: { mediaSourceId: 10 },
+        });
+        prisma.episode.update.mockResolvedValue({});
+        prisma.processJob.findMany.mockResolvedValue([{ id: 1, status: 'COMPLETED' }]);
+        prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
+
+        await service.encodeCompleted(1, '/library/ep.mkv', 'ffmpeg …');
+
+        expect(prisma.processJob.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }),
+        );
+      });
   });
 
   // downloadRemove is the only path that reaches the torrent client's own

@@ -105,6 +105,19 @@ export class DownloadsResolver {
     return this.downloadsService.encodeJobStart(processJobId, userId);
   }
 
+  // Spec 097, REQ-11
+  @Mutation(() => Download, {
+    name: 'encodeJobStop',
+    description: 'Pausa un archivo de una fuente: cancela su codificación y lo deja detenido',
+  })
+  async encodeJobStop(
+    @Args('processJobId', { type: () => Int }) processJobId: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ): Promise<Download> {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.downloadsService.encodeJobStop(processJobId, userId);
+  }
+
   // Spec 095, REQ-12
   @Mutation(() => Download, {
     name: 'encodeJobDiscard',

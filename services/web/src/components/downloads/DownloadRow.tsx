@@ -53,12 +53,22 @@ export default function DownloadRow({
     !isRetired &&
     download.status !== "DISCARDED";
 
+  // Spec 097, REQ-10
+  const canStop =
+    download.owned &&
+    !isRetired &&
+    download.status !== "DISCARDED" &&
+    (download.status === "ENCODING" || download.infoHash != null);
+
   const canStart =
     !isRetired &&
     !download.lostRace &&
+    download.status !== "ENCODING" &&
     (download.status === "ERROR"
       ? download.owned && download.retryable
-      : isControllable);
+      : download.status === "PAUSED"
+        ? download.owned
+        : isControllable);
 
   const handleStart = () => {
     setRowError(null);
@@ -171,7 +181,7 @@ export default function DownloadRow({
                 <Play size={16} />
               </Button>
             )}
-            {isControllable && (
+            {canStop && (
               <Button
                 size="sm"
                 variant="outline"

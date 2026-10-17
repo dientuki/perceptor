@@ -727,6 +727,11 @@ type Mutation {
   encodeJobStart(processJobId: Int!): Download!
 
   """
+  Pausa un archivo de una fuente: cancela su codificación y lo deja detenido
+  """
+  encodeJobStop(processJobId: Int!): Download!
+
+  """
   Descarta un archivo de una fuente: cancela su codificación y borra su entrada
   """
   encodeJobDiscard(processJobId: Int!): Download!
