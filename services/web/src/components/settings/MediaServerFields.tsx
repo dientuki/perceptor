@@ -1,13 +1,15 @@
 "use client";
 
-import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { resyncMediaServerIndexAction } from "@/actions/media-server";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Select from "@/components/form/Select";
 import Button from "@/components/ui/button/Button";
+import { useDateMonthFirst } from "@/context/DateFormatContext";
+import { formatDateTime } from "@/lib/format";
 import type {
   MediaServerIndexStatus,
   MediaServerOption,
@@ -31,16 +33,12 @@ const NONE = "none";
 // and silently save every setting on every tab).
 function MediaServerIndexPanel({ status }: { status: MediaServerIndexStatus }) {
   const t = useTranslations("settings.mediaServer.index");
-  const activeLocale = useLocale();
+  const monthFirst = useDateMonthFirst();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [current, setCurrent] = useState(status);
   const [error, setError] = useState<string | null>(null);
-  // toLocaleString() renders differently on the server (container timezone)
-  // and the browser (the viewer's own) — formatting syncedAt during SSR
-  // produces a hydration mismatch. Deferring it to after mount, the standard
-  // fix for this exact class of bug, means the timestamp is simply absent
-  // for one paint rather than wrong.
+  // Spec 096, REQ-7a NFR-2
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -83,7 +81,7 @@ function MediaServerIndexPanel({ status }: { status: MediaServerIndexStatus }) {
         {mounted && current.syncedAt && (
           <span className="text-gray-500 dark:text-gray-400">
             {t("syncedAt", {
-              date: new Date(current.syncedAt).toLocaleString(activeLocale),
+              date: formatDateTime(current.syncedAt, monthFirst),
             })}
           </span>
         )}
@@ -165,7 +163,8 @@ export default function MediaServerFields({
           </div>
 
           <div>
-            <Label htmlFor="media_server_api_key">{selectedOption?.credentialLabel || t("apiKeyLabel")}
+            <Label htmlFor="media_server_api_key">
+              {selectedOption?.credentialLabel || t("apiKeyLabel")}
             </Label>
             <Input
               id="media_server_api_key"

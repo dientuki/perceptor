@@ -45,3 +45,35 @@ export async function setUiLocaleAction(
 
   return { success: true };
 }
+
+const SET_DATE_MONTH_FIRST_MUTATION = `
+  mutation SetDateMonthFirst($monthFirst: Boolean!) {
+    setDateMonthFirst(monthFirst: $monthFirst) {
+      id
+      dateMonthFirst
+    }
+  }
+`;
+
+// Spec 096, REQ-3
+export async function setDateMonthFirstAction(
+  monthFirst: boolean,
+): Promise<{ error?: string } | { success: true }> {
+  const t = await getTranslations("errors");
+
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_DATE_MONTH_FIRST_MUTATION, { monthFirst });
+  } catch (err) {
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
+}

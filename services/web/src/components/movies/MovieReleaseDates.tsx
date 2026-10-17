@@ -1,9 +1,11 @@
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import type { Movie } from "@/actions/movies";
+import { useDateMonthFirst } from "@/context/DateFormatContext";
+import { formatDate } from "@/lib/format";
 
 export default function MovieReleaseDates({ movie }: { movie: Movie }) {
   const t = useTranslations("movies.detail");
-  const locale = useLocale();
+  const monthFirst = useDateMonthFirst();
 
   // Spec 093, REQ-1
   const entries = [
@@ -30,10 +32,7 @@ export default function MovieReleaseDates({ movie }: { movie: Movie }) {
     <p className="mt-1 flex flex-wrap gap-x-4 text-theme-sm text-gray-500 dark:text-gray-400">
       {entries.map((entry) => (
         <span key={entry.key}>
-          {entry.label}:{" "}
-          {new Date(entry.value as string).toLocaleDateString(locale, {
-            timeZone: "UTC",
-          })}
+          {entry.label}: {formatDate(entry.value as string, monthFirst)}
         </span>
       ))}
     </p>

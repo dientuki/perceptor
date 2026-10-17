@@ -2363,6 +2363,47 @@ copy.
 
 Additive: an un-updated `web` keeps working against the new `api`.
 
+### A date order per user and per installation (`096-date-format`)
+
+```graphql
+type User {
+  """
+  Date order chosen by this user: true = MM/DD/YYYY, false = DD/MM/YYYY.
+  Null means unset — fall through to defaultDateMonthFirst, then the UI language.
+  """
+  dateMonthFirst: Boolean
+}
+
+type Query {
+  """
+  Installation-wide date order: true = MM/DD/YYYY, false = DD/MM/YYYY.
+  Null when the date_month_first setting is unset — fall through to the UI language.
+  Any authenticated user; not public.
+  """
+  defaultDateMonthFirst: Boolean
+}
+
+type Mutation {
+  """Sets the caller's own date order. Never another user's."""
+  setDateMonthFirst(monthFirst: Boolean!): User!
+}
+```
+
+The settings catalog gains `date_month_first` (kind `boolean`), seeded `""` (unset), written through
+the existing admin-only `updateSettings` and read through the existing admin-only `settings`. A write
+must be `"true"` or `"false"`; anything else, `""` included, is refused with the existing
+`error.setting.expected_boolean`. Like `ui_locale`, it cannot be returned to unset from the UI.
+
+**The boolean means "month first".** `true` is `MM/DD/YYYY`. `web` resolves the order in effect as
+`User.dateMonthFirst` → `defaultDateMonthFirst` → the active UI language (`en` month first, `es` day
+first); `api` never resolves it.
+
+**`defaultDateMonthFirst` is authenticated, not `@Public()`, and answers `null` for an unset or
+unrecognised value, never `false`.** Non-admins cannot read `settings`, which is why this query exists.
+A failed read falls through to the language order in `web`. No new error key.
+
+Additive: an un-updated `web` keeps working against the new `api`.
+
 ### What never crosses the boundary
 
 - **Absolute container paths.** Constitution, Article V — `web` sees host paths, `worker` receives

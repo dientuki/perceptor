@@ -14,6 +14,11 @@ type User {
   isAdmin: Boolean!
   isEnabled: Boolean!
   uiLocale: String
+
+  """
+  Date order chosen by this user: true = MM/DD/YYYY, false = DD/MM/YYYY. Null means unset — fall through to defaultDateMonthFirst, then the UI language.
+  """
+  dateMonthFirst: Boolean
 }
 
 type LoginResponse {
@@ -561,6 +566,11 @@ type Query {
   movies(isShort: Boolean): [Movie!]!
   movie(id: Int!): Movie
   defaultUiLocale: String
+
+  """
+  Installation-wide date order: true = MM/DD/YYYY, false = DD/MM/YYYY. Null when the date_month_first setting is unset — fall through to the UI language. Any authenticated user; not public.
+  """
+  defaultDateMonthFirst: Boolean
   settings: [Setting!]!
 
   """
@@ -630,6 +640,9 @@ type Query {
 
 type Mutation {
   setUiLocale(locale: String!): User!
+
+  """Sets the caller's own date order. Never another user's."""
+  setDateMonthFirst(monthFirst: Boolean!): User!
 
   """Inicia sesión y retorna un JWT"""
   login(loginInput: LoginInput!): LoginResponse!

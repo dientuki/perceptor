@@ -44,6 +44,21 @@ export class AuthResolver {
     return await this.usersService.setUiLocale(principal.id, locale);
   }
 
+  // Spec 096, REQ-3 NFR-4
+  @UseGuards(JwtAuthGuard)
+  @Mutation(() => User, {
+    description: "Sets the caller's own date order. Never another user's.",
+  })
+  async setDateMonthFirst(
+    @CurrentUser() principal: AuthPrincipal,
+    @Args('monthFirst') monthFirst: boolean,
+  ): Promise<User> {
+    if (principal.type !== 'user') {
+      throw i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED);
+    }
+    return await this.usersService.setDateMonthFirst(principal.id, monthFirst);
+  }
+
   // Spec 002, REQ-4
   @Public()
   @Mutation(() => LoginResponse, { description: 'Inicia sesión y retorna un JWT' })

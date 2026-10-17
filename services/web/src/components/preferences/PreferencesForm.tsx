@@ -4,7 +4,7 @@ import { Film, Globe, Languages, TvMinimal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { setUiLocaleAction } from "@/actions/locale";
+import { setDateMonthFirstAction, setUiLocaleAction } from "@/actions/locale";
 import {
   setAcquisitionWindowsAction,
   setAllowCinemaReleasesAction,
@@ -20,6 +20,7 @@ import LanguagePickerField from "@/components/preferences/LanguagePickerField";
 import TorrentGroupPickerField from "@/components/preferences/TorrentGroupPickerField";
 import Button from "@/components/ui/button/Button";
 import TabNav, { type TabNavItem } from "@/components/ui/tabs/TabNav";
+import { useDateMonthFirst } from "@/context/DateFormatContext";
 import { SUPPORTED_LOCALES } from "@/i18n/locales";
 import type { Language } from "@/types/languages";
 import type { MediaCapabilities } from "@/types/media";
@@ -27,6 +28,7 @@ import type { TorrentGroup, UserPreferences } from "@/types/preferences";
 
 interface PreferencesFormProps {
   currentLocale: string | null;
+  currentDateMonthFirst: boolean | null;
   preferences: UserPreferences;
   languages: Language[];
   torrentGroups: TorrentGroup[];
@@ -47,6 +49,7 @@ function idsFrom(groups: TorrentGroup[]) {
 // Spec 021, REQ-8
 export default function PreferencesForm({
   currentLocale,
+  currentDateMonthFirst,
   preferences,
   languages,
   torrentGroups,
@@ -63,6 +66,9 @@ export default function PreferencesForm({
   const [errors, setErrors] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
 
+  const effectiveMonthFirst = useDateMonthFirst();
+  const initialMonthFirst = currentDateMonthFirst ?? effectiveMonthFirst;
+  const [monthFirst, setMonthFirst] = useState(initialMonthFirst);
   const [locale, setLocale] = useState(currentLocale ?? activeLocale);
   const [audioTags, setAudioTags] = useState<string[]>(() =>
     tagsFrom(preferences.audioLanguages),
@@ -100,6 +106,11 @@ export default function PreferencesForm({
     value: code,
     label: displayNames.of(code) ?? code,
   }));
+
+  const dateOptions = [
+    { value: "false", label: "DD/MM/YYYY" },
+    { value: "true", label: "MM/DD/YYYY" },
+  ];
 
   // The catalog is no longer scoped — both tabs offer the whole thing, and
   // which titles each id applies to is decided by which list it's saved
@@ -144,6 +155,8 @@ export default function PreferencesForm({
     startTransition(async () => {
       const localeChanged = locale !== (currentLocale ?? activeLocale);
 
+      const monthFirstChanged = monthFirst !== initialMonthFirst;
+
       const localeForm = new FormData();
       localeForm.set("locale", locale);
       const audioForm = new FormData();
@@ -164,6 +177,7 @@ export default function PreferencesForm({
         movieResult,
         windowsResult,
         showResult,
+        dateFormatResult,
       ] = await Promise.all([
         setUiLocaleAction(null, localeForm),
         setPreferredTrackLanguagesAction("AUDIO", null, audioForm),
@@ -183,6 +197,7 @@ export default function PreferencesForm({
         showShowsTab
           ? setPreferredTorrentGroupsAction("SHOW", null, showForm)
           : Promise.resolve(null),
+        setDateMonthFirstAction(monthFirst),
       ]);
 
       const newErrors: string[] = [];
@@ -221,10 +236,17 @@ export default function PreferencesForm({
         setAudioMandatory(preferences.audioMandatory);
       }
 
+      if ("error" in dateFormatResult && dateFormatResult.error) {
+        newErrors.push(dateFormatResult.error);
+        setMonthFirst(initialMonthFirst);
+      }
+
       setErrors(newErrors);
       setSaved(newErrors.length === 0);
 
-      if (localeChanged && !(localeResult && "error" in localeResult)) {
+      const localeOk = !(localeResult && "error" in localeResult);
+      const dateOk = !("error" in dateFormatResult);
+      if ((localeChanged && localeOk) || (monthFirstChanged && dateOk)) {
         router.refresh();
       }
     });
@@ -247,6 +269,17 @@ export default function PreferencesForm({
               value={locale}
               options={localeOptions}
               onChange={(event) => setLocale(event.target.value)}
+            />
+          </div>
+          <div className="mt-6">
+            <Label htmlFor="preferences-date-format">
+              {t("dateFormatLabel")}
+            </Label>
+            <Select
+              id="preferences-date-format"
+              value={String(monthFirst)}
+              options={dateOptions}
+              onChange={(event) => setMonthFirst(event.target.value === "true")}
             />
           </div>
         </div>

@@ -55,6 +55,7 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   media_server_port: { kind: 'int' },
   media_server_api_key: { kind: 'secret' },
   ui_locale: { kind: 'enum', options: [...SUPPORTED_LOCALES] },
+  date_month_first: { kind: 'boolean' },
   default_languages: { kind: 'languages' },
   // Cadence and enablement for the scheduler (src/scheduler/) — keys are
   // derived from the registry's task ids, not written out twice.

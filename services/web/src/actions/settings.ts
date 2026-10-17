@@ -7,7 +7,7 @@ import {
 } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
 import { translateGraphQLError } from "@/lib/graphql-error";
-import { Setting } from "@/types/settings";
+import type { Setting } from "@/types/settings";
 
 const SETTINGS_QUERY = `
   query Settings {
@@ -58,6 +58,29 @@ export async function getDefaultUiLocale(): Promise<string | null> {
   return data?.defaultUiLocale ?? null;
 }
 
+const DEFAULT_DATE_MONTH_FIRST_QUERY = `
+  query DefaultDateMonthFirst {
+    defaultDateMonthFirst
+  }
+`;
+
+// Spec 096, REQ-4 AC-9
+export async function getDefaultDateMonthFirst(): Promise<boolean | null> {
+  try {
+    const { data, errors } = await fetchGraphQL<{
+      defaultDateMonthFirst: boolean | null;
+    }>(DEFAULT_DATE_MONTH_FIRST_QUERY);
+
+    if (errors && errors.length > 0) {
+      return null;
+    }
+
+    return data?.defaultDateMonthFirst ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const UPDATE_SETTINGS_MUTATION = `
   mutation UpdateSettings($entries: [SettingInput!]!) {
     updateSettings(entries: $entries) {
@@ -90,6 +113,7 @@ const EDITABLE_KEYS = [
 // present, so presence alone can no longer distinguish checked from
 // unchecked the way a native unchecked checkbox (absent from FormData) did.
 const BOOLEAN_KEYS = [
+  "date_month_first",
   "movies_enabled",
   "shows_enabled",
   "shorts_enabled",

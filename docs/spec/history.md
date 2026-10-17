@@ -23,6 +23,26 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-17 — `096-date-format` (code complete; live pass pending)
+
+`api` + `web`, one migration (`20261017074958_add_user_date_month_first`, nullable `users.dateMonthFirst`).
+`api` exposes `User.dateMonthFirst`, `Query.defaultDateMonthFirst` (authenticated, `null` for unset) and
+`Mutation.setDateMonthFirst`, plus the `date_month_first` catalog key and `""` seed row; the
+`schema.gql` diff is exactly those three additions. `web` formats every date through
+`formatDate`/`formatDateTime` (zero-padded, Settings stamps 24-hour) with the order resolved once in
+`(dashboard)/layout.tsx`, and adds the Settings → General and `/preferences` pickers.
+
+- `api`: `bin/npm api run test` 70 suites / 1068 tests passed (six new cases in
+  `settings.resolver.spec.ts`); `tsc --noEmit` 0 errors; `bin/comments api` PASS (811 locators).
+- `web`: `tsc --noEmit` 0 errors; `check-messages.mjs` OK (616 keys); `bin/comments web` PASS (91
+  locators); `grep -rn "toLocaleDateString\|toLocaleString" services/web/src` prints nothing.
+  `bin/npm web run build` not run (dev stack up). `web` has no test runner.
+- Observed holding: AC-8 (unauthenticated `defaultDateMonthFirst` refused with
+  `error.auth.unauthenticated`, re-run by curl) and AC-9 (read `getDefaultDateMonthFirst`: every error
+  branch returns `null`).
+- Not observed: AC-1…AC-7, AC-10…AC-12 need a signed-in session (no credentials in the agent run);
+  recorded in `pending-acs.md`.
+
 ## 2026-10-17 — `093-movie-release-dates-display` (code complete; live pass pending)
 
 `api` + `web`, no migration (`git status --short services/api/prisma` empty). `api` exposes

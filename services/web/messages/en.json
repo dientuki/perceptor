@@ -623,7 +623,8 @@
       }
     },
     "general": {
-      "uiLocaleLabel": "App language"
+      "uiLocaleLabel": "App language",
+      "dateFormatLabel": "Date format"
     },
     "download": {
       "defaultLanguagesLabel": "Default download languages"
@@ -707,6 +708,7 @@
     },
     "form": {
       "uiLocaleLabel": "Perceptor language",
+      "dateFormatLabel": "Date format",
       "audioLanguagesLabel": "Audio languages",
       "audioMandatoryLabel": "Mandatory audio",
       "subtitleLanguagesLabel": "Subtitle languages",

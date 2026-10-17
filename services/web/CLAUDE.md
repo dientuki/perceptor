@@ -496,7 +496,7 @@ changes refetch through the `getCalendarEntries` server action via FullCalendar'
 `events`; the URL stays `/calendar` and nothing navigates. The action returns `{ entries } | { error }`
 rather than throwing, so the translated message survives a production build. Colours come from
 `lib/status-tone.ts`'s `statusTone`, shared with `StatusBadge`, mapped onto the template's `fc-bg-*`
-classes in `globals.css`. The page has no capability gate: a disabled media type is filtered by `api`. Since `093`, a film can come back as several entries with the same `mediaId`; the event id keeps `date` and `index`, and nothing is keyed by `mediaId` alone. The `(cine)`/`(digital)`/`(físico)` prefix comes from `releaseTypePrefix` in `lib/calendar-label.ts`, the one helper both the event title and `CalendarEventContent` call; `null` and `[]` give no prefix and an unknown enum value is skipped. The film's detail page renders its typed dates through `components/movies/MovieReleaseDates.tsx`, formatted with `timeZone: "UTC"`.
+classes in `globals.css`. The page has no capability gate: a disabled media type is filtered by `api`. Since `093`, a film can come back as several entries with the same `mediaId`; the event id keeps `date` and `index`, and nothing is keyed by `mediaId` alone. The `(cine)`/`(digital)`/`(físico)` prefix comes from `releaseTypePrefix` in `lib/calendar-label.ts`, the one helper both the event title and `CalendarEventContent` call; `null` and `[]` give no prefix and an unknown enum value is skipped. The film's detail page renders its typed dates through `components/movies/MovieReleaseDates.tsx`, formatted through `formatDate` (UTC parts).
 
 ## The `AcquisitionTarget` union
 
@@ -644,9 +644,20 @@ calling `resyncMediaServerIndexAction()` directly — `Button` already defaults 
 nothing here can accidentally submit `SettingsForm`'s main form the way a raw `<button>` would
 (it defaults to `type="submit"`). `getMediaServerIndexStatus()`/`resyncMediaServerIndexAction()` live
 in `src/actions/media-server.ts`, beside the existing `getMediaServerOptions()`. The syncedAt
-timestamp is rendered only after mount (`useEffect`-gated) — `toLocaleString()` depends on the
-runtime's timezone, and formatting it during SSR produces a hydration mismatch between the container
-and the viewer's own timezone.
+timestamp is rendered only after mount (`useEffect`-gated) — local time depends on the runtime's
+timezone, and formatting it during SSR produces a hydration mismatch between the container and the
+viewer's own timezone.
+
+## Date format (`096-date-format`)
+
+No component formats a date with `toLocaleDateString`/`toLocaleString`. `lib/format.ts`'s `formatDate`
+(UTC parts, for calendar days) and `formatDateTime` (local parts plus 24-hour `HH:mm:ss`, for the
+Settings stamps) build `DD/MM/YYYY`/`MM/DD/YYYY` from plain `Date` getters, always zero-padded. The
+order is resolved once per request in `(dashboard)/layout.tsx` — `User.dateMonthFirst` →
+`getDefaultDateMonthFirst()` (installation, `null` on any error, never redirects) →
+`MONTH_FIRST_BY_LOCALE[locale]` in `i18n/locales.ts` — and reaches client components through
+`context/DateFormatContext.tsx`'s `useDateMonthFirst()`. The two pickers are in Settings → General
+(`date_month_first`, in `BOOLEAN_KEYS`) and `/preferences` (`setDateMonthFirstAction`).
 
 **The listing queries deliberately do not select `audioLanguages`/`subtitleLanguages`/
 `audioMandatory`.** They are `api` field resolvers that only run when selected — `getMovieById`/

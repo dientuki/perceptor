@@ -16,6 +16,7 @@ export interface CurrentUser {
   username: string;
   isAdmin: boolean;
   uiLocale: string | null;
+  dateMonthFirst: boolean | null;
 }
 
 const LOGIN_MUTATION = `
@@ -105,6 +106,7 @@ const ME_QUERY = `
       username
       isAdmin
       uiLocale
+      dateMonthFirst
     }
   }
 `;

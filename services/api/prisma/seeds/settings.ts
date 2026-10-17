@@ -59,6 +59,7 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'subtitles_image_formats', value: 'pgs,vobsub,dvb', backfillEmpty: false },
 
     { key: 'ui_locale', value: '' },
+    { key: 'date_month_first', value: '' },
     { key: 'default_languages', value: '' },
 
     // Cadence + enablement for the scheduler (src/scheduler/). Every task ships

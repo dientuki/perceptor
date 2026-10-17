@@ -583,7 +583,8 @@
       "installableUnavailable": "No disponible — requiere HTTPS"
     },
     "general": {
-      "uiLocaleLabel": "Idioma de la aplicación"
+      "uiLocaleLabel": "Idioma de la aplicación",
+      "dateFormatLabel": "Formato de fecha"
     },
     "scheduling": {
       "timezoneNote": "Los horarios se evalúan en la zona horaria del contenedor de la API (UTC salvo que el host configure TZ). \"03:00\" se refiere a esa zona, no a la tuya.",
@@ -707,6 +708,7 @@
     },
     "form": {
       "uiLocaleLabel": "Idioma de Perceptor",
+      "dateFormatLabel": "Formato de fecha",
       "audioLanguagesLabel": "Idiomas de audio",
       "audioMandatoryLabel": "Audio obligatorio",
       "subtitleLanguagesLabel": "Idiomas de subtítulos",

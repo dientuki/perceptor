@@ -630,6 +630,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `@UseGuards(AdminGuard)` **per method** (the `ffprobe-logs.resolver.ts` split, not
   `UsersResolver`'s class-level form), and a third method, `@Public() defaultUiLocale`, deliberately
   sits outside that guard — `web` reads it while rendering `/login`, before it knows who is asking.
+  Since `096-date-format`, `date_month_first` (`kind: 'boolean'`, seeded `""` = unset) is the installation's date order, read through `defaultDateMonthFirst` — **authenticated, not `@Public()`** (no anonymous page shows a date, so there is no reason to widen that surface) and no `AdminGuard` (every user's dashboard reads it). It maps only the literal `"true"`/`"false"` and answers `null` for anything else, `""` included — never `false`, which would force day-first on every user who never chose. `User.dateMonthFirst` is the per-user nullable twin, written by `setDateMonthFirst` beside `setUiLocale`.
   The catalog's newest keys are `ui_locale` (an ordinary `kind: 'enum'` entry, options from
   `SUPPORTED_LOCALES`) and `default_languages` (a new `kind: 'languages'`, delegating to
   `LanguagesService.validateAndResolveLanguageIds` — the installation-wide replacement for the old
