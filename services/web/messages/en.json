@@ -660,6 +660,7 @@
         "360p": "360p"
       },
       "grainAutoLabel": "Automatic Grain Optimization",
+      "dubTrimLabel": "Trim dubbing credit cards at the end",
       "subtitles": {
         "label": "Subtitles",
         "none": "No subtitles",

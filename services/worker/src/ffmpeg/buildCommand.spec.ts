@@ -15,6 +15,7 @@ function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
     grainMode: 'OFF',
     year: null,
     isShort: false,
+    dubTrimEnabled: false,
     mediaSourceId: 1,
     containerTitle: 'Some Title',
     sourceTag: 'some/source.mkv',
@@ -76,6 +77,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       metadata,
       details({ contentKind: 'ANIME' }),
       false,
+      null,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -95,6 +97,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       metadata,
       details({ contentKind: 'CGI' }),
       false,
+      null,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -115,6 +118,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       metadata,
       details({ contentKind: 'LIVE_ACTION' }),
       false,
+      null,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -134,6 +138,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       metadata,
       details({ contentKind: 'LIVE_ACTION' }),
       false,
+      null,
     );
 
     expect(crfOf(args)).toBe('24');
@@ -155,11 +160,12 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       metadata,
       details({ contentKind: 'LIVE_ACTION' }),
       false,
+      null,
     );
 
     const i = args.indexOf('-t');
     expect(i).toBeGreaterThan(-1);
-    expect(args[i + 1]).toBe('5');
+    expect(args[i + 1]).toBe('5.000');
   });
 
   it('forwards allowedAudioLanguagesIso3 into the audio arguments', () => {
@@ -181,6 +187,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
         allowedAudioLanguageTags: ['en', 'es-419'],
       }),
       false,
+      null,
     );
 
     // One -map per selected audio stream: 0:0 (video) implicitly handled by
@@ -209,6 +216,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
           allowedSubtitleLanguageTags: ['en', 'es-419'],
         }),
         false,
+        null,
       ),
     ).not.toThrow();
   });
@@ -253,6 +261,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
         allowedSubtitleLanguageTags: [],
       }),
       false,
+      null,
     );
 
     // Audio: 0:1 (jpn) and 0:2 (eng) selected, 0:3 (spa) never — spa is not
@@ -265,5 +274,47 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
     // subtitle allow-list.
     expect(args).toContain('0:4');
     expect(args).not.toContain('0:5');
+  });
+});
+
+// Spec 098, REQ-8 REQ-10
+// Defends against the tail cut being silently lost or doubled: a missing -t
+// keeps the dub-card tail, a second -t makes FFmpeg honour only the last one.
+describe('buildFfmpegCommand — trimAt (Spec 098, REQ-8)', () => {
+  const metadata = {
+    streams: [videoStream({ bit_rate: '8000000' }), audioStream({ codec_name: 'ac3' })],
+  };
+  const build = (trimAt: number | null) =>
+    buildFfmpegCommand('Some.Movie.WEB-DL.mkv', '/out/Some.Movie.WEB-DL.mkv', metadata, details(), false, trimAt);
+
+  afterEach(() => {
+    delete process.env.ENCODE_SAMPLE_SECONDS;
+  });
+
+  it('emits -t with three decimals when only trimAt is set', () => {
+    delete process.env.ENCODE_SAMPLE_SECONDS;
+    const args = build(1234.5673);
+    expect(args.filter((a) => a === '-t')).toHaveLength(1);
+    expect(args[args.indexOf('-t') + 1]).toBe('1234.567');
+    expect(args.indexOf('-t')).toBeLessThan(args.indexOf('-y'));
+  });
+
+  it('emits one -t carrying the smaller limit when ENCODE_SAMPLE_SECONDS is below trimAt', () => {
+    process.env.ENCODE_SAMPLE_SECONDS = '5';
+    const args = build(1234.567);
+    expect(args.filter((a) => a === '-t')).toHaveLength(1);
+    expect(args[args.indexOf('-t') + 1]).toBe('5.000');
+  });
+
+  it('emits one -t carrying trimAt when it is below ENCODE_SAMPLE_SECONDS', () => {
+    process.env.ENCODE_SAMPLE_SECONDS = '9999';
+    const args = build(100.25);
+    expect(args.filter((a) => a === '-t')).toHaveLength(1);
+    expect(args[args.indexOf('-t') + 1]).toBe('100.250');
+  });
+
+  it('emits no -t when neither limit is set', () => {
+    delete process.env.ENCODE_SAMPLE_SECONDS;
+    expect(build(null)).not.toContain('-t');
   });
 });

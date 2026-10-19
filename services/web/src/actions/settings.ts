@@ -119,6 +119,7 @@ const BOOLEAN_KEYS = [
   "shorts_enabled",
   "compression_enabled",
   "grain_auto_enabled",
+  "dub_trim_enabled",
   "subtitles_enabled",
   "subtitles_text_enabled",
   "subtitles_image_enabled",

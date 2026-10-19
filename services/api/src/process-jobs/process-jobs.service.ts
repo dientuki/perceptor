@@ -73,6 +73,8 @@ export class ProcessJobsService {
       downloadsRoot: await this.mediaRoots.resolveFromRoot('downloads', '.'),
       compressionEnabled,
       compressionResolution,
+      // Spec 098, REQ-2
+      dubTrimEnabled: settingsMap['dub_trim_enabled'] === 'true',
       allowedSubtitleFormats: resolveAllowedSubtitleFormats(settingsMap),
       libraryLayout: this.mediaServer.resolveLibraryLayout(settingsMap),
     };

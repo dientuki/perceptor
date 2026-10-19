@@ -16,6 +16,8 @@ export type EncodeInput = {
   // Spec 094, REQ-1
   year: number | null;
   isShort: boolean;
+  // Spec 098, REQ-3
+  dubTrimEnabled: boolean;
   mediaSourceId: number;
   containerTitle: string;
   sourceTag: string;

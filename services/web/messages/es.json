@@ -660,6 +660,7 @@
         "360p": "360p"
       },
       "grainAutoLabel": "Optimización automática de grano",
+      "dubTrimLabel": "Recortar placas de doblaje al final",
       "subtitles": {
         "label": "Subtítulos",
         "none": "Sin subtítulos",

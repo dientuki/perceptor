@@ -23,6 +23,31 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-19 — `098-dub-card-tail-trim` (code complete; live pass pending)
+
+`api` + `worker` + `web`, no migration. `api` makes `dub_trim_enabled` an editable boolean setting
+(seeded `"false"`) and hands it to the worker as `EncodeJobDetails.dubTrimEnabled`, not combined with
+`compressionEnabled`. `worker` gains `src/encode/dub-trim.ts` (freezedetect over the last 300 s of the
+video stream, 2.002 s card-ratio rule, per-input-path verdict cache, silent on failure),
+`src/ffmpeg/capture.ts` (the grain probe's spawn helper, moved) and a `trimAt` parameter folded into
+`buildFfmpegCommand`'s single `-t`. `web` adds the Compression-tab switch.
+
+| Check | Result |
+| :-- | :-- |
+| `bin/npm api run test` | 70 suites, 1146 tests passed |
+| `bin/cli api npx tsc --noEmit` | 0 `error TS` |
+| `bin/npm worker test` | 32 files, 405 tests passed |
+| `bin/cli worker npx tsc --noEmit` | 0 `error TS` |
+| `bin/cli web npx tsc --noEmit` | 7 `error TS`, all in `src/components/calendar/Calendar.tsx` (missing `@fullcalendar/react` submodules in the image); no file of this feature is involved |
+| `check-messages.mjs` | OK, 636 keys |
+| `bin/comments api` / `web` / `worker` | PASS (891 / 100 / 246 locators) |
+| migrations | none; `git status --short services/api/prisma` shows only `seeds/settings.ts` |
+| `schema.gql` diff | exactly `+  dubTrimEnabled: Boolean!` on `EncodeJobDetails` |
+| live manual pass | not run: no stack was reachable for this session (host ports held by another install) and the AC-1 sources are the maintainer's own files |
+
+The worker and web checks ran through `docker compose run --rm --no-deps` because their containers
+were not up.
+
 ## 2026-10-17 — `097-encode-stop` (code complete; live pass pending)
 
 `api` + `worker` + `web`, one migration (`20261017200942_encode_status_stopped`, widens

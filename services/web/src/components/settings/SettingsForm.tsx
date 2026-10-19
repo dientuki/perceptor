@@ -196,6 +196,7 @@ export default function SettingsForm({
               grainAutoEnabled={
                 getSettingValue("grain_auto_enabled") === "true"
               }
+              dubTrimEnabled={getSettingValue("dub_trim_enabled") === "true"}
               subtitlesEnabled={getSettingValue("subtitles_enabled") === "true"}
               subtitlesTextEnabled={
                 getSettingValue("subtitles_text_enabled") === "true"

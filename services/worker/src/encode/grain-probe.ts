@@ -1,9 +1,7 @@
 // Spec 094, REQ-6 REQ-7 REQ-8
-import { spawn } from 'node:child_process';
-import { EncodeCancelledError } from './cancellation';
 import type { ContentKind } from './content-kind';
 import { RESOLUTION_BOXES, buildSvtav1Params, exceedsBox } from '../ffmpeg/params';
-import { ABORT_KILL_GRACE_MS } from '../ffmpeg/runner';
+import { runFfmpegCapture } from '../ffmpeg/capture';
 
 // Spec 094, REQ-7
 export const GRAIN_PROBE_SAVED_MBPS_THRESHOLD = 0.886;
@@ -116,60 +114,8 @@ export function buildWindowEncodeArgs(
   return args;
 }
 
-interface RunResult {
-  code: number | null;
-  stdoutBytes: number;
-  stderr: string;
-}
-
-function runProbeFfmpeg(args: string[], signal: AbortSignal): Promise<RunResult> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new EncodeCancelledError());
-      return;
-    }
-    const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdoutBytes = 0;
-    let stderr = '';
-    let cancelled = false;
-    let killTimer: NodeJS.Timeout | null = null;
-
-    const onAbort = () => {
-      cancelled = true;
-      if (!child.killed) {
-        child.kill('SIGTERM');
-        killTimer = setTimeout(() => {
-          if (child.exitCode === null) child.kill('SIGKILL');
-        }, ABORT_KILL_GRACE_MS);
-      }
-    };
-    const cleanup = () => {
-      signal.removeEventListener('abort', onAbort);
-      if (killTimer) clearTimeout(killTimer);
-    };
-    signal.addEventListener('abort', onAbort);
-
-    child.stdout.on('data', (data: Buffer) => {
-      stdoutBytes += data.length;
-    });
-    child.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
-      if (stderr.length > 200_000) stderr = stderr.slice(-100_000);
-    });
-    child.on('error', (err) => {
-      cleanup();
-      reject(err);
-    });
-    child.on('close', (code) => {
-      cleanup();
-      if (cancelled) reject(new EncodeCancelledError());
-      else resolve({ code, stdoutBytes, stderr });
-    });
-  });
-}
-
 async function detectCrop(input: string, at: number, signal: AbortSignal): Promise<string | null> {
-  const { stderr } = await runProbeFfmpeg(
+  const { stderr } = await runFfmpegCapture(
     [
       '-hide_banner', '-nostdin', '-nostats', '-ss', at.toFixed(2),
       '-t', String(GRAIN_PROBE_CROP_SECONDS), '-i', input, '-an', '-sn',
@@ -182,7 +128,7 @@ async function detectCrop(input: string, at: number, signal: AbortSignal): Promi
 }
 
 async function encodedBytes(args: string[], signal: AbortSignal): Promise<number> {
-  const { code, stdoutBytes } = await runProbeFfmpeg(args, signal);
+  const { code, stdoutBytes } = await runFfmpegCapture(args, signal);
   return code === 0 ? stdoutBytes : 0;
 }
 

@@ -2461,6 +2461,25 @@ that does not know `DISCARDED` paints it with the default gray tone.
   nothing. Enums crossing the boundary are re-declared as GraphQL enums or plain string unions
   (`services/web/src/types/media.ts`).
 
+### The dub-card trim switch, for the worker (`098-dub-card-tail-trim`)
+
+```graphql
+type EncodeJobDetails {
+  dubTrimEnabled: Boolean!
+}
+```
+
+One field added to an existing type. It is the raw `dub_trim_enabled` setting (a boolean catalog key,
+seeded `"false"`, editable from Settings → Compression): `ProcessJobsService.getEncodeJobDetails`
+sets it from the same `SettingsService.getMap()` result as `compressionEnabled`, and only the exact
+string `"true"` reads as `true` — a missing row or any other value is `false`. It is **not** combined
+with `compressionEnabled` by `api`; the worker gates it on compression (with compression off the file
+is moved untouched and detection never runs). `web` never selects it. Resolved at query time, not at
+enqueue time.
+
+No new error key and no new mutation: a non-boolean write goes through the existing
+`error.setting.expected_boolean`, and a failed detection never leaves the worker.
+
 ## Known debt
 
 - **No codegen.** The whole "gap" section above exists because of this. Fixing it means adding

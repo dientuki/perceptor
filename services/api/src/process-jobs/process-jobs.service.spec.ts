@@ -435,6 +435,38 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // Spec 098, REQ-2: a wrong read here silently trims every encode, or none,
+  // with no error anywhere. Only the exact string 'true' enables it, and the
+  // episode arm must read the same installation value as the film arm.
+  describe('getEncodeJobDetails — dubTrimEnabled', () => {
+    const read = async (map: Record<string, string>, kind: 'movie' | 'episode') => {
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      prisma.userShow.findMany.mockResolvedValue([]);
+      prisma.processJob.findUnique.mockResolvedValue(kind === 'movie' ? movieProcessJob() : episodeProcessJob());
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', ...map });
+      return service.getEncodeJobDetails(kind === 'movie' ? 1 : 2);
+    };
+
+    it.each([
+      ['true', true],
+      ['false', false],
+      ['TRUE', false],
+      ['1', false],
+    ])('reads %j as %s', async (value, expected) => {
+      expect((await read({ dub_trim_enabled: value }, 'movie')).dubTrimEnabled).toBe(expected);
+    });
+
+    it('is false when the row is absent', async () => {
+      expect((await read({}, 'movie')).dubTrimEnabled).toBe(false);
+    });
+
+    it('reads the same value on the episode arm', async () => {
+      expect((await read({ dub_trim_enabled: 'true' }, 'episode')).dubTrimEnabled).toBe(true);
+      expect((await read({}, 'episode')).dubTrimEnabled).toBe(false);
+    });
+  });
+
   // Spec 070, REQ-7: the effective format list lives in
   // `base`, so a refactor that moved it into one branch would leave the other
   // job type with an undefined field and every such encode would silently

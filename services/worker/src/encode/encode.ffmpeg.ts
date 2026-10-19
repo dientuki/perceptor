@@ -2,6 +2,7 @@ import { dirname, join, basename, extname } from 'node:path';
 import type { EncodeFn } from './types';
 import { getMetadata } from '../ffmpeg/metadata';
 import { resolveFilmGrain } from './grain-mode';
+import { resolveDubTrim } from './dub-trim';
 import { buildFfmpegCommand } from '../ffmpeg/buildCommand';
 import { runFfmpeg } from '../ffmpeg/runner';
 
@@ -24,11 +25,20 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress,
   await onProbe(input, raw);
 
   const sampleSeconds = process.env.ENCODE_SAMPLE_SECONDS;
-  const durationSeconds = sampleSeconds ? Number(sampleSeconds) : Number(metadata.format?.duration ?? 0);
+  const sourceDuration = Number(metadata.format?.duration ?? 0);
+  const sample = sampleSeconds ? Number(sampleSeconds) : NaN;
 
   // Spec 092, REQ-9; Spec 094, REQ-3 NFR-1
   const filmGrain = await resolveFilmGrain(details, input, metadata, signal);
-  const args = buildFfmpegCommand(input, workingPath, metadata, details, filmGrain);
+  // Spec 098, REQ-3
+  const trimAt = await resolveDubTrim(details, input, metadata, signal);
+  const args = buildFfmpegCommand(input, workingPath, metadata, details, filmGrain, trimAt);
+  // Spec 098, REQ-10
+  const candidates = [sourceDuration];
+  if (Number.isFinite(sample) && sample > 0) candidates.push(sample);
+  if (trimAt !== null) candidates.push(trimAt);
+  const valid = candidates.filter((n) => Number.isFinite(n) && n > 0);
+  const durationSeconds = valid.length > 0 ? Math.min(...valid) : 0;
   const ffmpegCommand = await runFfmpeg(
     args,
     workingPath,

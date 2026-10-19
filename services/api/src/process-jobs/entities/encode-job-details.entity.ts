@@ -89,6 +89,10 @@ export class EncodeJobDetails {
   @Field()
   compressionEnabled: boolean;
 
+  // Spec 098, REQ-2
+  @Field()
+  dubTrimEnabled: boolean;
+
   @Field()
   compressionResolution: string;
 

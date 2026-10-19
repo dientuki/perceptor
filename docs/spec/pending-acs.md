@@ -1,7 +1,7 @@
 # Specs con Acceptance Criteria pendientes
 
 <!-- pending-acs:begin intro -->
-Medido el **2026-10-17**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
+Medido el **2026-10-19**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
 `## Acceptance Criteria`; las 50 specs que no aparecen estan en 100%.
 <!-- pending-acs:end intro -->
 
@@ -17,9 +17,9 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **47** de 97 |
-| ACs pendientes | **313** |
-| ACs totales del proyecto | 1173 |
+| Specs con ACs pendientes | **48** de 98 |
+| ACs pendientes | **324** |
+| ACs totales del proyecto | 1184 |
 | ACs verificados | 860 (73%) |
 <!-- pending-acs:end stats -->
 
@@ -28,6 +28,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 098 | dub-card-tail-trim | Implemented | 11/11 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | **Una corrida de pipeline.** AC-1 a AC-10 piden encodear archivos reales (Neagley, Voltron, War Machine, Wrecking Crew, Chernobyl, Reacher, Foundation) con la instalación en marcha; la sesión no tenía stack accesible (puertos del host tomados por otra instalación) y las fuentes son archivos del mantenedor. Debajo está probado por unit tests: el clasificador contra los 7 `.freezes.txt` reales (cortes 173.822 / 273.862 / 140.905 / 168.909 y keep en los otros tres), `videoEndSeconds`, el caché por ruta, el silencio ante fallo, `-t` en `buildCommand` y la lectura del setting en `api`. AC-11 sigue abierto porque `bin/cli web npx --no tsc --noEmit` da 7 errores en `Calendar.tsx` (faltan submódulos de `@fullcalendar/react`), ajenos a esta feature; el resto del conjunto pasa. |
 | 097 | encode-stop | Implemented | 18/18 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 10, 11, 12, 13, 14, 16, 17, 18 | Código completo y cubierto por tests unitarios; falta la pasada manual contra un encode real (`plan.md` § Verification). Depende de una corrida completa del pipeline. |
 | 096 | date-format | Implemented | 10/12 | 1, 2, 3, 4, 5, 6, 7, 10, 11, 12 | Needs a signed-in browser pass (film 2026-09-07 digital date, season episode, Settings → General, /preferences, Scheduling stamp, console for hydration) and an admin `updateSettings` call for AC-7; the code, typecheck and comments gate are green. |
 | 095 | season-pack-per-file-encode | Implemented | 13/13 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | Código completo (api + worker + web), tests y chequeos verdes (api 1111, worker 379). Ningún AC observado: todos necesitan una sesión autenticada y un season pack real en el stack dev (sin credenciales en la corrida del agente) |
@@ -80,11 +81,11 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 313 ACs pendientes no son 313 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 50%:
+Los 324 ACs pendientes no son 324 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 52%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
-| Una corrida de pipeline | 102 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091 |
+| Una corrida de pipeline | 113 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091, 098 |
 | Sin clasificar | 55 | 094, 095, 096, 097 |
 | Una instalacion fresca | 25 | 015, 049, 061, 066 |
 | Adquisiciones reales | 18 | 073, 076 |

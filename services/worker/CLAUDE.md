@@ -292,6 +292,26 @@ prints one `[grain]` line naming the stage that decided and the figures. `src/ff
 three `svtav1KindParams` cases substitute `film-grain=8`/`film-grain-denoise=1` for `film-grain=0`
 when the boolean is true.
 
+## Dub-card tail trim is resolved in the encode driver (`098-dub-card-tail-trim`)
+
+`EncodeJobDetails.dubTrimEnabled` (the raw `dub_trim_enabled` setting; `api` does not combine it with
+`compressionEnabled`) is gated on `compressing` in `src/jobs/encode.job.ts` and carried on
+`EncodeInput.dubTrimEnabled`. When true, `resolveDubTrim` (`src/encode/dub-trim.ts`, called in
+`encode.ffmpeg.ts` after `resolveFilmGrain`) runs `freezedetect` over the last 300 s of the **video
+stream** (`videoEndSeconds` reads the stream duration, then its Matroska `DURATION` tag, then the
+container) through `runFfmpegCapture` (`src/ffmpeg/capture.ts`, the AbortSignal-aware spawn moved out
+of `grain-probe.ts`). The filter logs at info level, so the call must not pass `-v error`. A tail is
+cut when the contiguous freeze run reaching the window end has at least 5 cards and at least 80% of
+them last a whole multiple of 2.002 s; the cut is the start of the whole run, returned as an absolute
+second that `buildFfmpegCommand`'s `trimAt` folds into the single `-t` (the minimum with
+`ENCODE_SAMPLE_SECONDS`). Progress uses the trimmed duration. A cut at or below 0 means keep.
+
+Verdicts are cached in a module-level `Map` keyed by **input path** (not `mediaSourceId`, since a
+season pack has many files); a failure is never cached. It is a luxury, so a failed detection is
+completely silent (no warning, no log) and the whole file is encoded; only `EncodeCancelledError`
+propagates. A success prints one `[dubtrim]` line. The seven real-file freeze logs the rule was
+validated on live in `fixtures/dub-trim/` (excluded from the image by `.dockerignore`).
+
 ## The rules in `src/ffmpeg/` have their own agent and their own corpus
 
 `services/worker/ffmpeg/` — outside `src/`, one JSON per case — holds the **verbatim `ffprobe`

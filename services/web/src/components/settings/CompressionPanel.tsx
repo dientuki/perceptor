@@ -59,6 +59,7 @@ interface CompressionPanelProps {
   compressionEnabled: boolean;
   compressionResolution: string;
   grainAutoEnabled: boolean;
+  dubTrimEnabled: boolean;
   subtitlesEnabled: boolean;
   subtitlesTextEnabled: boolean;
   subtitlesTextFormats: string;
@@ -71,6 +72,7 @@ export default function CompressionPanel({
   compressionEnabled,
   compressionResolution,
   grainAutoEnabled,
+  dubTrimEnabled,
   subtitlesEnabled,
   subtitlesTextEnabled,
   subtitlesTextFormats,
@@ -85,6 +87,7 @@ export default function CompressionPanel({
       : DEFAULT_RESOLUTION,
   );
   const [grainAuto, setGrainAuto] = useState(grainAutoEnabled);
+  const [dubTrim, setDubTrim] = useState(dubTrimEnabled);
 
   const [noSubtitles, setNoSubtitles] = useState(!subtitlesEnabled);
   const [textEnabled, setTextEnabled] = useState(subtitlesTextEnabled);
@@ -154,6 +157,20 @@ export default function CompressionPanel({
           type="hidden"
           name="grain_auto_enabled"
           value={grainAuto ? "true" : "false"}
+        />
+      </div>
+
+      <div>
+        <Switch
+          label={t("dubTrimLabel")}
+          defaultChecked={dubTrimEnabled}
+          onChange={setDubTrim}
+          disabled={!enabled}
+        />
+        <input
+          type="hidden"
+          name="dub_trim_enabled"
+          value={dubTrim ? "true" : "false"}
         />
       </div>
 

@@ -248,6 +248,7 @@ describe('ffmpeg cases', () => {
       grainMode: 'OFF' as const,
       year: null,
       isShort: false,
+      dubTrimEnabled: false,
       mediaSourceId: 1,
       containerTitle: input.containerTitle,
       sourceTag: input.sourceTag,
@@ -261,6 +262,7 @@ describe('ffmpeg cases', () => {
         parsed.ffprobe as any,
         details,
         false,
+        null,
       );
 
     if (parsed.throws !== undefined) {

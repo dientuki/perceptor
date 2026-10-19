@@ -45,6 +45,8 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   compression_resolution: { kind: 'enum', options: [...COMPRESSION_RESOLUTIONS] },
   // Spec 092, REQ-1
   grain_auto_enabled: { kind: 'boolean' },
+  // Spec 098, REQ-1
+  dub_trim_enabled: { kind: 'boolean' },
   subtitles_enabled: { kind: 'boolean' },
   subtitles_text_enabled: { kind: 'boolean' },
   subtitles_text_formats: { kind: 'enum_list', options: [...SUBTITLE_TEXT_FORMATS] },

@@ -440,6 +440,7 @@ type EncodeJobDetails {
   outputRoot: String!
   downloadsRoot: String!
   compressionEnabled: Boolean!
+  dubTrimEnabled: Boolean!
   compressionResolution: String!
   allowedSubtitleFormats: [String!]!
   libraryLayout: String!
