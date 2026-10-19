@@ -1,9 +1,9 @@
 ---
 title: Release Calendar
-spec_version: 0.2.0
+spec_version: 0.3.0
 author: Juan Farias
 created_at: 2026-09-19
-last_updated: 2026-09-19
+last_updated: 2026-10-19
 status: Implemented
 services: [api, web]
 ---
@@ -316,6 +316,31 @@ status-rollup rules behind AC-3, AC-5 and AC-5b are covered by `calendar/group-e
 - **Live updates.** Statuses are read when the month is fetched; no polling, no push.
 - **Season-level entries.** A season pack in flight shows through its episodes' lifted `QUEUED`
   status (`059`), not as its own calendar entry.
+
+## Amendment (2026-10-19): FullCalendar 7
+
+A Dependabot major bump moved `@fullcalendar/*` to 7.x, which removed `@fullcalendar/core` and
+`@fullcalendar/daygrid` (the 6.x `daygrid` peer pins `core` to `~6.1`, so `npm ci` failed with
+ERESOLVE) and no longer ships its own CSS. `Calendar.tsx` was migrated; no requirement or acceptance
+criterion changes, and neither `api` nor the GraphQL contract is touched. Where the text above or
+`plan.md`, `web/plan.md` and `tasks.md` names the old mechanism, the current one is:
+
+- **Dependencies (NFR-5)**: `@fullcalendar/react` and `temporal-polyfill` only. The day-grid view and
+  the Spanish locale come from `@fullcalendar/react/daygrid` and `@fullcalendar/react/locales/es`.
+- **Styling**: the stock `classic` theme plus `skeleton.css`, `theme.css` and `palette.css`, imported
+  in `Calendar.tsx`. The old `.fc-*` rules in `globals.css` are gone, replaced by `--fc-classic-*`
+  variables mapped to the app's colour tokens under `.custom-calendar` (and `.dark .custom-calendar`).
+  The status tones that the ACs call `fc-bg-success` / `fc-bg-primary` / `fc-bg-danger` / none are now
+  Tailwind classes in `CalendarEventContent.tsx` (`success` / `brand` / `error` border and background,
+  a neutral gray border for no tone) - same colours, same mapping from `statusTone()`.
+- **Loading (REQ-1, REQ-2, NFR-3)**: the function-valued `events` source is gone. FullCalendar 7 renders
+  on the server and calls that source during render, where a Server Action is forbidden. `Calendar.tsx`
+  instead fetches from the `datesSet` handler (after render), keeps the entries in state and discards a
+  response that a newer navigation has superseded. One fetch per visible range, as before; the URL is
+  still never touched.
+- **Verification**: re-checked in a browser against mocked entries (light and dark, month navigation,
+  "+N more" overflow, long titles); `web` `npm ci`, typecheck, catalog check and `next build` clean.
+  Not re-run against a live `api`, so the unticked live ACs above stay unticked.
 
 ## Verification Record (2026-09-19)
 
