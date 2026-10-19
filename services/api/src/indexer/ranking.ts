@@ -77,6 +77,7 @@ export type RankingContext = {
   preferredGroups: string[];
   allowCinemaReleases: boolean;
   minSourceRank?: number | null;
+  mediaTitle?: string | null;
 };
 
 export type RankedTorrentResult = TorrentResult & {
@@ -128,9 +129,33 @@ function isDeadSwarm(result: TorrentResult): boolean {
 }
 
 function isUpscaled(title: string): boolean {
-  return /(?<![\dA-Za-z])(?:ai[\s._-]?)?upscal(?:ed|e)(?![\dA-Za-z])/.test(
+  return /(?<![\dA-Za-z])(?:(?:ai[\s._-]?)?upscal(?:ed|e)|ai[\s._-]?enc?hanced?|ups)(?![\dA-Za-z])/.test(
     title,
   );
+}
+
+const WORD_SEPARATOR = /[^\da-z]+/;
+
+function titleWords(mediaTitle: string | null | undefined): Set<string> {
+  if (!mediaTitle) return new Set();
+  const lower = mediaTitle.toLowerCase();
+  const collapsedInitials = lower.replace(
+    /(?<![\da-z])(?:[\da-z]\.)+[\da-z]?(?![\da-z])/g,
+    (initials) => initials.replace(/\./g, ''),
+  );
+  return new Set(
+    [...lower.split(WORD_SEPARATOR), ...collapsedInitials.split(WORD_SEPARATOR)].filter(
+      (word) => word.length > 0,
+    ),
+  );
+}
+
+function withoutTitleWords(title: string, words: Set<string>): string {
+  if (words.size === 0) return title;
+  return title
+    .split(WORD_SEPARATOR)
+    .filter((word) => word.length > 0 && !words.has(word))
+    .join('.');
 }
 
 const CINEMA_CAPTURE_TOKENS = [
@@ -374,12 +399,16 @@ export function rankTorrentResults(
     ),
   }));
 
+  const mediaWords = titleWords(context.mediaTitle);
+  const vetoText = (entry: Ranked) =>
+    withoutTitleWords(lowerTitle(entry), mediaWords);
+
   const survivors = ranked.filter(
     (entry) =>
-      !isVetoed(lowerTitle(entry)) &&
+      !isVetoed(vetoText(entry)) &&
       !isDeadSwarm(entry) &&
-      !isUpscaled(lowerTitle(entry)) &&
-      !(!context.allowCinemaReleases && isCinemaCapture(lowerTitle(entry))) &&
+      !isUpscaled(vetoText(entry)) &&
+      !(!context.allowCinemaReleases && isCinemaCapture(vetoText(entry))) &&
       !(
         entry.ranking.resolutionTier >= UHD_RESOLUTION_TIER &&
         entry.ranking.codecLabel === 'AVC'
