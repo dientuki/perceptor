@@ -57,6 +57,8 @@ jobs:
       - run: npx tsc --noEmit
 
       - run: npx jest --ci
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
 
   web:
     name: web — typecheck and messages
