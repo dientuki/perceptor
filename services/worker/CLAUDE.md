@@ -312,6 +312,22 @@ completely silent (no warning, no log) and the whole file is encoded; only `Enco
 propagates. A success prints one `[dubtrim]` line. The seven real-file freeze logs the rule was
 validated on live in `fixtures/dub-trim/` (excluded from the image by `.dockerignore`).
 
+## Stream-end trim is resolved in the encode driver (`099-stream-end-trim`)
+
+`EncodeJobDetails.streamEndTrimEnabled` (the raw `stream_end_trim_enabled` setting; `api` combines it
+with neither `compressionEnabled` nor `dubTrimEnabled`) is gated on `compressing` in
+`src/jobs/encode.job.ts` and carried on `EncodeInput.streamEndTrimEnabled`. When true,
+`resolveStreamEndTrim` (`src/encode/stream-end-trim.ts`, called in `encode.ffmpeg.ts` after
+`resolveDubTrim`) reads the last 300 s of **packet** timestamps with `ffprobe` (`-show_entries
+packet=stream_index,pts_time,duration_time -of compact`, decoding nothing) through `runFfmpegCapture`'s
+`{ binary: 'ffprobe', keepStdout: true }` option (stdout capped at 32 MB) and never from tags. Only the
+first video stream and the audio tracks `selectAudioStreams` (extracted from `getAudioParams` in
+`src/ffmpeg/params.ts`) keeps count. It cuts at `min(video end, longest kept audio end)` when the two
+differ by more than 2 s; a kept track with no packet in the window means keep. `encode.ffmpeg.ts`
+passes the minimum of this cut and `098`'s as `trimAt`, so `buildCommand.ts` and the progress
+denominator are unchanged. There is no cache; a failure is silent and encodes the whole file, only
+`EncodeCancelledError` propagates. A completed analysis prints one `[streamtrim]` line.
+
 ## The rules in `src/ffmpeg/` have their own agent and their own corpus
 
 `services/worker/ffmpeg/` — outside `src/`, one JSON per case — holds the **verbatim `ffprobe`

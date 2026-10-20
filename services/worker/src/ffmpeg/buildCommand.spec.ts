@@ -16,6 +16,7 @@ function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
     year: null,
     isShort: false,
     dubTrimEnabled: false,
+    streamEndTrimEnabled: false,
     mediaSourceId: 1,
     containerTitle: 'Some Title',
     sourceTag: 'some/source.mkv',

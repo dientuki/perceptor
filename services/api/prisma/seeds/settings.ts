@@ -54,6 +54,8 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'grain_auto_enabled', value: 'false' },
     // Spec 098, REQ-2: off by default.
     { key: 'dub_trim_enabled', value: 'false' },
+    // Spec 099, REQ-2: off by default.
+    { key: 'stream_end_trim_enabled', value: 'false' },
     { key: 'subtitles_enabled', value: 'true' },
     { key: 'subtitles_text_enabled', value: 'true' },
     { key: 'subtitles_text_formats', value: 'srt,ass,webvtt,mov_text', backfillEmpty: false },

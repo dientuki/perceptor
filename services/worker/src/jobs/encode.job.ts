@@ -43,6 +43,8 @@ export type EncodeJobDetails = {
   isShort: boolean;
   // Spec 098, REQ-3
   dubTrimEnabled: boolean;
+  // Spec 099, REQ-3
+  streamEndTrimEnabled: boolean;
   libraryLayout: string;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -81,7 +83,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags allowedSubtitleFormats contentKind compressionResolution grainMode isShort dubTrimEnabled libraryLayout
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags allowedSubtitleFormats contentKind compressionResolution grainMode isShort dubTrimEnabled streamEndTrimEnabled libraryLayout
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
         compressionEnabled
@@ -106,8 +108,10 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const isShort = normalizeIsShort(details.isShort);
   // Spec 098, REQ-3
   const dubTrimEnabled = compressing && details.dubTrimEnabled === true;
+  // Spec 099, REQ-3 NFR-2
+  const streamEndTrimEnabled = compressing && details.streamEndTrimEnabled === true;
   console.log(
-    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution} grainMode=${grainMode} libraryLayout=${libraryLayout} allowedSubtitleFormats=${JSON.stringify(allowedSubtitleFormats)} isShort=${isShort} dubTrimEnabled=${dubTrimEnabled}`,
+    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution} grainMode=${grainMode} libraryLayout=${libraryLayout} allowedSubtitleFormats=${JSON.stringify(allowedSubtitleFormats)} isShort=${isShort} dubTrimEnabled=${dubTrimEnabled} streamEndTrimEnabled=${streamEndTrimEnabled}`,
   );
 
   const trackTitles = await fetchTrackTitles();
@@ -188,6 +192,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             year: details.year,
             isShort,
             dubTrimEnabled,
+            streamEndTrimEnabled,
             mediaSourceId: details.mediaSourceId,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
@@ -215,6 +220,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             year: details.year,
             isShort,
             dubTrimEnabled,
+            streamEndTrimEnabled,
             mediaSourceId: details.mediaSourceId,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),

@@ -2480,6 +2480,24 @@ enqueue time.
 No new error key and no new mutation: a non-boolean write goes through the existing
 `error.setting.expected_boolean`, and a failed detection never leaves the worker.
 
+### The stream-end trim switch, for the worker (`099-stream-end-trim`)
+
+```graphql
+type EncodeJobDetails {
+  streamEndTrimEnabled: Boolean!
+}
+```
+
+One field added to an existing type. It is the raw `stream_end_trim_enabled` setting (a boolean
+catalog key, seeded `"false"`, editable from Settings → Compression), resolved from the same
+`SettingsService.getMap()` result as `dubTrimEnabled`; only the exact string `"true"` reads as
+`true`. It is **not** combined with `compressionEnabled` or `dubTrimEnabled` by `api`: the worker
+gates it on compression, and the two switches are independent. `web` never selects it. Resolved at
+query time, not at enqueue time.
+
+No new error key and no new mutation: a non-boolean write goes through the existing
+`error.setting.expected_boolean`, and a failed analysis never leaves the worker.
+
 ## Known debt
 
 - **No codegen.** The whole "gap" section above exists because of this. Fixing it means adding

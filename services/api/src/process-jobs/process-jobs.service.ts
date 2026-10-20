@@ -75,6 +75,8 @@ export class ProcessJobsService {
       compressionResolution,
       // Spec 098, REQ-2
       dubTrimEnabled: settingsMap['dub_trim_enabled'] === 'true',
+      // Spec 099, REQ-2
+      streamEndTrimEnabled: settingsMap['stream_end_trim_enabled'] === 'true',
       allowedSubtitleFormats: resolveAllowedSubtitleFormats(settingsMap),
       libraryLayout: this.mediaServer.resolveLibraryLayout(settingsMap),
     };

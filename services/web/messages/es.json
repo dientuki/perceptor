@@ -661,6 +661,7 @@
       },
       "grainAutoLabel": "Optimización automática de grano",
       "dubTrimLabel": "Recortar placas de doblaje al final",
+      "streamEndTrimLabel": "Recortar el final cuando las pistas no terminan juntas",
       "subtitles": {
         "label": "Subtítulos",
         "none": "Sin subtítulos",

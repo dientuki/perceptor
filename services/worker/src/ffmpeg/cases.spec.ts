@@ -249,6 +249,7 @@ describe('ffmpeg cases', () => {
       year: null,
       isShort: false,
       dubTrimEnabled: false,
+      streamEndTrimEnabled: false,
       mediaSourceId: 1,
       containerTitle: input.containerTitle,
       sourceTag: input.sourceTag,

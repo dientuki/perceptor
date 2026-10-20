@@ -661,6 +661,7 @@
       },
       "grainAutoLabel": "Automatic Grain Optimization",
       "dubTrimLabel": "Trim dubbing credit cards at the end",
+      "streamEndTrimLabel": "Trim the end when tracks don't end together",
       "subtitles": {
         "label": "Subtitles",
         "none": "No subtitles",

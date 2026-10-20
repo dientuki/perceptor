@@ -247,14 +247,18 @@ export function getVideoParams(
   );
 }
 
-// Spec 011, REQ-3 REQ-4 REQ-6 REQ-7
-export function getAudioParams(
+export interface AudioSelection {
+  streams: any[];
+  missingLanguages: string[];
+}
+
+// Spec 011, REQ-3 REQ-4 REQ-6 REQ-7; Spec 099, REQ-7
+export function selectAudioStreams(
   audioStreams: any[],
   allowedLanguagesIso3: string[],
   originalLanguageIso3: string,
   allowedLanguageTags: string[],
-  trackTitles: Record<string, string>,
-) {
+): AudioSelection {
   // Both sides of every comparison go through normalizeIso3: ffprobe may tag
   // a track with the ISO-639-2/T form (e.g. "fra") while the allow-list
   // arrives in the /B form the `languages` table seeds ("fre") — see
@@ -287,6 +291,7 @@ export function getAudioParams(
 
   // Spec 031, REQ-9
   const selectedStreams: any[] = [];
+  const missingLanguages: string[] = [];
   const selectBest = (streams: any[]): any =>
     [...streams].sort((a, b) => {
       const codecA = (a.codec_name || "").toLowerCase();
@@ -316,7 +321,7 @@ export function getAudioParams(
 
     // Spec 011, REQ-7
     if (langStreams.length === 0 && langCode !== originalLang) {
-      console.warn(`[ffmpeg] allowed language "${langCode}" has no audio track in the file; continuing without it.`);
+      missingLanguages.push(langCode);
     }
 
     if (langStreams.length === 0) return;
@@ -341,6 +346,28 @@ export function getAudioParams(
     narrowed.groups.forEach((group) => {
       addSelected(selectBest(group.streams));
     });
+  });
+
+  return { streams: selectedStreams, missingLanguages };
+}
+
+// Spec 011, REQ-3 REQ-4 REQ-6 REQ-7
+export function getAudioParams(
+  audioStreams: any[],
+  allowedLanguagesIso3: string[],
+  originalLanguageIso3: string,
+  allowedLanguageTags: string[],
+  trackTitles: Record<string, string>,
+) {
+  const { streams: selectedStreams, missingLanguages } = selectAudioStreams(
+    audioStreams,
+    allowedLanguagesIso3,
+    originalLanguageIso3,
+    allowedLanguageTags,
+  );
+
+  missingLanguages.forEach((langCode) => {
+    console.warn(`[ffmpeg] allowed language "${langCode}" has no audio track in the file; continuing without it.`);
   });
 
   const params: string[] = [];

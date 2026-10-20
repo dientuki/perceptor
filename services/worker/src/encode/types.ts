@@ -18,6 +18,8 @@ export type EncodeInput = {
   isShort: boolean;
   // Spec 098, REQ-3
   dubTrimEnabled: boolean;
+  // Spec 099, REQ-3
+  streamEndTrimEnabled: boolean;
   mediaSourceId: number;
   containerTitle: string;
   sourceTag: string;

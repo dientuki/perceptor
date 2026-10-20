@@ -47,6 +47,8 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   grain_auto_enabled: { kind: 'boolean' },
   // Spec 098, REQ-1
   dub_trim_enabled: { kind: 'boolean' },
+  // Spec 099, REQ-1
+  stream_end_trim_enabled: { kind: 'boolean' },
   subtitles_enabled: { kind: 'boolean' },
   subtitles_text_enabled: { kind: 'boolean' },
   subtitles_text_formats: { kind: 'enum_list', options: [...SUBTITLE_TEXT_FORMATS] },

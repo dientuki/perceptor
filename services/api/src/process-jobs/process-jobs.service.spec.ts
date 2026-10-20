@@ -467,6 +467,48 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // Spec 099, REQ-2: a wrong read here silently trims every encode's stream
+  // tail, or none, with no error anywhere. Only the exact string 'true'
+  // enables it, it is independent of dub_trim_enabled, and the episode arm
+  // must read the same installation value as the film arm.
+  describe('getEncodeJobDetails — streamEndTrimEnabled', () => {
+    const read = async (map: Record<string, string>, kind: 'movie' | 'episode') => {
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue([]);
+      prisma.userShow.findMany.mockResolvedValue([]);
+      prisma.processJob.findUnique.mockResolvedValue(kind === 'movie' ? movieProcessJob() : episodeProcessJob());
+      settings.getMap.mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows', ...map });
+      return service.getEncodeJobDetails(kind === 'movie' ? 1 : 2);
+    };
+
+    it.each([
+      ['true', true],
+      ['false', false],
+      ['TRUE', false],
+      ['1', false],
+    ])('reads %j as %s', async (value, expected) => {
+      expect((await read({ stream_end_trim_enabled: value }, 'movie')).streamEndTrimEnabled).toBe(expected);
+    });
+
+    it('is false when the row is absent', async () => {
+      expect((await read({}, 'movie')).streamEndTrimEnabled).toBe(false);
+    });
+
+    it('reads the same value on the episode arm', async () => {
+      expect((await read({ stream_end_trim_enabled: 'true' }, 'episode')).streamEndTrimEnabled).toBe(true);
+      expect((await read({}, 'episode')).streamEndTrimEnabled).toBe(false);
+    });
+
+    it('leaves each switch independent of the other', async () => {
+      const streamOnly = await read({ stream_end_trim_enabled: 'true' }, 'movie');
+      expect(streamOnly.streamEndTrimEnabled).toBe(true);
+      expect(streamOnly.dubTrimEnabled).toBe(false);
+      const dubOnly = await read({ dub_trim_enabled: 'true' }, 'movie');
+      expect(dubOnly.dubTrimEnabled).toBe(true);
+      expect(dubOnly.streamEndTrimEnabled).toBe(false);
+    });
+  });
+
   // Spec 070, REQ-7: the effective format list lives in
   // `base`, so a refactor that moved it into one branch would leave the other
   // job type with an undefined field and every such encode would silently

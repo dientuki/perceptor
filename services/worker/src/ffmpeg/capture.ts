@@ -7,17 +7,32 @@ export interface RunResult {
   code: number | null;
   stdoutBytes: number;
   stderr: string;
+  stdout?: string;
 }
 
-export function runFfmpegCapture(args: string[], signal: AbortSignal): Promise<RunResult> {
+export interface CaptureOptions {
+  binary?: 'ffmpeg' | 'ffprobe';
+  keepStdout?: boolean;
+}
+
+// Spec 099, REQ-5
+export const CAPTURE_STDOUT_CAP_BYTES = 32 * 1024 * 1024;
+
+export function runFfmpegCapture(
+  args: string[],
+  signal: AbortSignal,
+  options: CaptureOptions = {},
+): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(new EncodeCancelledError());
       return;
     }
-    const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(options.binary ?? 'ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdoutBytes = 0;
     let stderr = '';
+    const stdoutChunks: Buffer[] = [];
+    let overflow = false;
     let cancelled = false;
     let killTimer: NodeJS.Timeout | null = null;
 
@@ -38,6 +53,15 @@ export function runFfmpegCapture(args: string[], signal: AbortSignal): Promise<R
 
     child.stdout.on('data', (data: Buffer) => {
       stdoutBytes += data.length;
+      if (options.keepStdout && !overflow) {
+        if (stdoutBytes > CAPTURE_STDOUT_CAP_BYTES) {
+          overflow = true;
+          stdoutChunks.length = 0;
+          if (!child.killed) child.kill('SIGTERM');
+        } else {
+          stdoutChunks.push(data);
+        }
+      }
     });
     child.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
@@ -50,7 +74,8 @@ export function runFfmpegCapture(args: string[], signal: AbortSignal): Promise<R
     child.on('close', (code) => {
       cleanup();
       if (cancelled) reject(new EncodeCancelledError());
-      else resolve({ code, stdoutBytes, stderr });
+      else if (overflow) reject(new Error('captured stdout exceeded the size cap'));
+      else resolve({ code, stdoutBytes, stderr, stdout: Buffer.concat(stdoutChunks).toString('utf8') });
     });
   });
 }

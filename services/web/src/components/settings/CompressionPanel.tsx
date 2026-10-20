@@ -60,6 +60,7 @@ interface CompressionPanelProps {
   compressionResolution: string;
   grainAutoEnabled: boolean;
   dubTrimEnabled: boolean;
+  streamEndTrimEnabled: boolean;
   subtitlesEnabled: boolean;
   subtitlesTextEnabled: boolean;
   subtitlesTextFormats: string;
@@ -73,6 +74,7 @@ export default function CompressionPanel({
   compressionResolution,
   grainAutoEnabled,
   dubTrimEnabled,
+  streamEndTrimEnabled,
   subtitlesEnabled,
   subtitlesTextEnabled,
   subtitlesTextFormats,
@@ -88,6 +90,7 @@ export default function CompressionPanel({
   );
   const [grainAuto, setGrainAuto] = useState(grainAutoEnabled);
   const [dubTrim, setDubTrim] = useState(dubTrimEnabled);
+  const [streamEndTrim, setStreamEndTrim] = useState(streamEndTrimEnabled);
 
   const [noSubtitles, setNoSubtitles] = useState(!subtitlesEnabled);
   const [textEnabled, setTextEnabled] = useState(subtitlesTextEnabled);
@@ -171,6 +174,21 @@ export default function CompressionPanel({
           type="hidden"
           name="dub_trim_enabled"
           value={dubTrim ? "true" : "false"}
+        />
+      </div>
+
+      {/* Spec 099, REQ-1 */}
+      <div>
+        <Switch
+          label={t("streamEndTrimLabel")}
+          defaultChecked={streamEndTrimEnabled}
+          onChange={setStreamEndTrim}
+          disabled={!enabled}
+        />
+        <input
+          type="hidden"
+          name="stream_end_trim_enabled"
+          value={streamEndTrim ? "true" : "false"}
         />
       </div>
 
