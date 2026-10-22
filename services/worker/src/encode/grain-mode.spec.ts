@@ -12,7 +12,7 @@
 // never pay for a gate or probe. Gate and probe are mocked here; their own
 // specs prove their arithmetic.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 import { EncodeCancelledError } from './cancellation';
 import { scoreGrainGate } from './grain-gate';
@@ -81,7 +81,7 @@ describe('resolveFilmGrain', () => {
   const probeMock = vi.mocked(probeGrainSaving);
   const signal = new AbortController().signal;
   let warnSpy: ReturnType<typeof vi.spyOn>;
-  let logSpy: ReturnType<typeof vi.spyOn>;
+  let logSpy: MockInstance<typeof console.log>;
 
   function details(overrides: Partial<EncodeInput> = {}): EncodeInput {
     return { grainMode: 'AUTO', isShort: false, mediaSourceId: 1, year: 1998, contentKind: 'LIVE_ACTION', ...overrides } as EncodeInput;
