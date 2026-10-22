@@ -13,7 +13,7 @@ import { EncodeCancelledError } from '../encode/cancellation';
 // Grace period between SIGTERM and SIGKILL for a cancelled encode's active
 // child (whichever of ffmpeg/mkvmerge is running right now) — long enough
 // for either to flush and exit cleanly on its own.
-const ABORT_KILL_GRACE_MS = 10_000;
+export const ABORT_KILL_GRACE_MS = 10_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

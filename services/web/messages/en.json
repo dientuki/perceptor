@@ -138,11 +138,15 @@
       "no_download_path": "Completed with no download path recorded — cannot enqueue",
       "replaced": "Replaced by a new download",
       "superseded": "Another source of this title was already processing",
-      "scan_failed": "The download could not be read: {detail}"
+      "scan_failed": "The download could not be read: {detail}",
+      "disc_playlist_ambiguous": "Could not determine the Blu-ray's main playlist ({playlists}). Assemble the MKV manually and import it from the film's page"
     },
     "processJob": {
       "not_found": "Process job {id} does not exist",
-      "recovery_exhausted": "Automatic recovery for this encode has already been used once and failed again"
+      "recovery_exhausted": "Automatic recovery for this encode has already been used once and failed again",
+      "not_resumable": "This file cannot be retried",
+      "not_discardable": "This file can no longer be discarded",
+      "not_running": "This file is not being encoded"
     },
     "encode": {
       "no_video_stream": "The input file has no video stream",
@@ -154,7 +158,8 @@
       "move_failed": "Could not move the file to its destination: {detail}",
       "episode_numbers_missing": "Episode has no season/episode number: cannot build the output path",
       "unknown_driver": "Unknown ENCODE_DRIVER: {driver}",
-      "unexpected": "Unexpected encode failure: {detail}"
+      "unexpected": "Unexpected encode failure: {detail}",
+      "disc_remux_failed": "Could not assemble the MKV from the Blu-ray (code {code}): {stderr}"
     },
     "show": {
       "not_available": "Resource not available for this user"
@@ -457,6 +462,9 @@
     "detail": {
       "noPoster": "No poster available",
       "unknownYear": "Unknown Year",
+      "releaseTheatrical": "Theatrical",
+      "releaseDigital": "Digital",
+      "releasePhysical": "Physical",
       "fileButton": "File",
       "magnetButton": "Magnet",
       "synopsisTitle": "Synopsis",
@@ -521,7 +529,17 @@
         "SCAN": "Scan",
         "ENCODE": "Encode",
         "REPLACED": "Replaced"
-      }
+      },
+      "expand": "Show files",
+      "collapse": "Hide files",
+      "jobsProgress": "{done} of {total}",
+      "retryJobTitle": "Retry",
+      "discardJobTitle": "Discard",
+      "pauseJobTitle": "Pause",
+      "resumeJobTitle": "Resume",
+      "retryErrorDefault": "Could not retry the file.",
+      "pauseErrorDefault": "Could not pause the file.",
+      "discardErrorDefault": "Could not discard the file."
     },
     "deleteModal": {
       "title": "Delete download",
@@ -531,6 +549,13 @@
       "confirm": "Delete",
       "cancel": "Cancel",
       "deleting": "Deleting..."
+    },
+    "discardModal": {
+      "title": "Discard file",
+      "message": "Discard <b>{target}</b>? Its downloaded file will be deleted, it will not be encoded, and the episode will go back to missing. The rest of the source is unaffected.",
+      "confirm": "Discard",
+      "cancel": "Cancel",
+      "discarding": "Discarding..."
     }
   },
   "settings": {
@@ -620,7 +645,8 @@
       }
     },
     "general": {
-      "uiLocaleLabel": "App language"
+      "uiLocaleLabel": "App language",
+      "dateFormatLabel": "Date format"
     },
     "download": {
       "defaultLanguagesLabel": "Default download languages"
@@ -636,6 +662,8 @@
         "360p": "360p"
       },
       "grainAutoLabel": "Automatic Grain Optimization",
+      "dubTrimLabel": "Trim dubbing credit cards at the end",
+      "streamEndTrimLabel": "Trim the end when tracks don't end together",
       "subtitles": {
         "label": "Subtitles",
         "none": "No subtitles",
@@ -704,6 +732,7 @@
     },
     "form": {
       "uiLocaleLabel": "Perceptor language",
+      "dateFormatLabel": "Date format",
       "audioLanguagesLabel": "Audio languages",
       "audioMandatoryLabel": "Mandatory audio",
       "subtitleLanguagesLabel": "Subtitle languages",
@@ -732,7 +761,8 @@
     "downloaded": "Downloaded",
     "encoding": "Encoding",
     "completed": "Completed",
-    "error": "Error"
+    "error": "Error",
+    "discarded": "Discarded"
   },
   "contentKind": {
     "LIVE_ACTION": "Live action",
@@ -793,7 +823,10 @@
     "loadError": "Could not load the calendar",
     "kindMovie": "Film",
     "kindShort": "Short",
-    "kindEpisodes": "Episodes"
+    "kindEpisodes": "Episodes",
+    "releaseTheatrical": "(theatrical)",
+    "releaseDigital": "(digital)",
+    "releasePhysical": "(physical)"
   },
   "onboarding": {
     "tmdb": {

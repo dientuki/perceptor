@@ -32,6 +32,17 @@ function svtav1KindParams(contentKind: ContentKind, filmGrain: boolean): string[
   }
 }
 
+export function buildSvtav1Params(contentKind: ContentKind, filmGrain: boolean): string {
+  return [
+    "keyint=10s",
+    "scd=1",
+    "enable-overlays=1",
+    "tune=0",
+    "input-depth=10",
+    ...svtav1KindParams(contentKind, filmGrain),
+  ].join(":");
+}
+
 type Av1EncodeOptions = {
   vf?: string;
   colorTags?: string[];
@@ -44,14 +55,7 @@ function buildAv1EncodeArgs(
   options: Av1EncodeOptions,
   filmGrain: boolean,
 ): string[] {
-  const svtav1 = [
-    "keyint=10s",
-    "scd=1",
-    "enable-overlays=1",
-    "tune=0",
-    "input-depth=10",
-    ...svtav1KindParams(contentKind, filmGrain),
-  ].join(":");
+  const svtav1 = buildSvtav1Params(contentKind, filmGrain);
 
   const args: string[] = ["-map", "0:v:0"];
 
@@ -102,7 +106,7 @@ const RECOGNIZED_VIDEO_CODECS = ['h264', 'hevc', 'h265', 'vc1', 'av1'];
 type ResolutionBox = { width: number; height: number; label: string };
 
 // Spec 058, REQ-6
-const RESOLUTION_BOXES: Record<CompressionResolution, ResolutionBox | null> = {
+export const RESOLUTION_BOXES: Record<CompressionResolution, ResolutionBox | null> = {
   '4k': null,
   '1080p': { width: 1920, height: 1080, label: '1080p' },
   '720p': { width: 1280, height: 720, label: '720p' },
@@ -121,7 +125,7 @@ const SOURCE_TIER_BOXES: ResolutionBox[] = [
 // Spec 058, REQ-7
 const BOX_TOLERANCE = 1.02;
 
-function exceedsBox(width: number, height: number, box: ResolutionBox | null): boolean {
+export function exceedsBox(width: number, height: number, box: ResolutionBox | null): boolean {
   if (!box) return false;
   return width > box.width * BOX_TOLERANCE || height > box.height * BOX_TOLERANCE;
 }
@@ -243,14 +247,18 @@ export function getVideoParams(
   );
 }
 
-// Spec 011, REQ-3 REQ-4 REQ-6 REQ-7
-export function getAudioParams(
+export interface AudioSelection {
+  streams: any[];
+  missingLanguages: string[];
+}
+
+// Spec 011, REQ-3 REQ-4 REQ-6 REQ-7; Spec 099, REQ-7
+export function selectAudioStreams(
   audioStreams: any[],
   allowedLanguagesIso3: string[],
   originalLanguageIso3: string,
   allowedLanguageTags: string[],
-  trackTitles: Record<string, string>,
-) {
+): AudioSelection {
   // Both sides of every comparison go through normalizeIso3: ffprobe may tag
   // a track with the ISO-639-2/T form (e.g. "fra") while the allow-list
   // arrives in the /B form the `languages` table seeds ("fre") — see
@@ -283,6 +291,7 @@ export function getAudioParams(
 
   // Spec 031, REQ-9
   const selectedStreams: any[] = [];
+  const missingLanguages: string[] = [];
   const selectBest = (streams: any[]): any =>
     [...streams].sort((a, b) => {
       const codecA = (a.codec_name || "").toLowerCase();
@@ -312,7 +321,7 @@ export function getAudioParams(
 
     // Spec 011, REQ-7
     if (langStreams.length === 0 && langCode !== originalLang) {
-      console.warn(`[ffmpeg] allowed language "${langCode}" has no audio track in the file; continuing without it.`);
+      missingLanguages.push(langCode);
     }
 
     if (langStreams.length === 0) return;
@@ -337,6 +346,28 @@ export function getAudioParams(
     narrowed.groups.forEach((group) => {
       addSelected(selectBest(group.streams));
     });
+  });
+
+  return { streams: selectedStreams, missingLanguages };
+}
+
+// Spec 011, REQ-3 REQ-4 REQ-6 REQ-7
+export function getAudioParams(
+  audioStreams: any[],
+  allowedLanguagesIso3: string[],
+  originalLanguageIso3: string,
+  allowedLanguageTags: string[],
+  trackTitles: Record<string, string>,
+) {
+  const { streams: selectedStreams, missingLanguages } = selectAudioStreams(
+    audioStreams,
+    allowedLanguagesIso3,
+    originalLanguageIso3,
+    allowedLanguageTags,
+  );
+
+  missingLanguages.forEach((langCode) => {
+    console.warn(`[ffmpeg] allowed language "${langCode}" has no audio track in the file; continuing without it.`);
   });
 
   const params: string[] = [];

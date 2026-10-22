@@ -11,11 +11,15 @@ describe('CalendarService', () => {
   const from = new Date('2026-09-01T00:00:00Z');
   type Caps = { moviesEnabled: boolean; showsEnabled: boolean; shortsEnabled: boolean };
 
-  const film = (id: number, title: string, releaseDate: string, isShort = false) => ({
+  type Typed = { theatrical?: string; digital?: string; physical?: string };
+  const film = (id: number, title: string, releaseDate: string, isShort = false, typed: Typed = {}) => ({
     id,
     title,
     isShort,
     releaseDate: new Date(releaseDate),
+    theatricalReleaseDate: typed.theatrical ? new Date(typed.theatrical) : null,
+    digitalReleaseDate: typed.digital ? new Date(typed.digital) : null,
+    physicalReleaseDate: typed.physical ? new Date(typed.physical) : null,
     status: 'COMPLETED',
   });
   const episode = (n: number, releaseDate: string, showId = 1, showTitle = 'Show', season = 1): CalendarEpisodeRow => ({
@@ -122,5 +126,57 @@ describe('CalendarService', () => {
     await expect(service.list('u1', '2026-13-01', '2026-13-30')).rejects.toBeDefined();
     expect(capabilities.read).not.toHaveBeenCalled();
     expect(moviesService.findReleasedBetween).not.toHaveBeenCalled();
+  });
+
+  it('expands one film with typed dates on two days into two entries sharing identity and status', async () => {
+    const f = film(7, 'Split', '2026-09-05T00:00:00Z', false, {
+      theatrical: '2026-09-05T00:00:00Z',
+      digital: '2026-09-20T00:00:00Z',
+      physical: '2026-09-20T00:00:00Z',
+    });
+    const { service } = build(all, [f], []);
+    const result = await service.list('u1', '2026-09-01', '2026-09-30');
+    expect(result.map((e) => [e.mediaId, e.status, e.date, e.releaseTypes])).toEqual([
+      [7, 'COMPLETED', '2026-09-05', ['THEATRICAL']],
+      [7, 'COMPLETED', '2026-09-20', ['DIGITAL', 'PHYSICAL']],
+    ]);
+  });
+
+  it('falls back to a single untyped entry for a film with no typed dates', async () => {
+    const { service } = build(all, [film(1, 'Old', '2026-09-10T00:00:00Z')], []);
+    const result = await service.list('u1', '2026-09-01', '2026-09-30');
+    expect(result.map((e) => [e.date, e.releaseTypes])).toEqual([['2026-09-10', []]]);
+  });
+
+  it('drops a typed day outside the range even when releaseDate is inside it', async () => {
+    const f = film(1, 'Edge', '2026-09-10T00:00:00Z', false, { theatrical: '2026-09-10T00:00:00Z', digital: '2026-11-01T00:00:00Z' });
+    const { service } = build(all, [f], []);
+    const result = await service.list('u1', '2026-09-01', '2026-09-30');
+    expect(result.map((e) => e.date)).toEqual(['2026-09-10']);
+  });
+
+  it('skips a short with typed dates when shorts are disabled', async () => {
+    const f = film(2, 'Short', '2026-09-10T00:00:00Z', true, { digital: '2026-09-10T00:00:00Z' });
+    const { service } = build({ moviesEnabled: true, showsEnabled: false, shortsEnabled: false }, [f], []);
+    expect(await service.list('u1', '2026-09-01', '2026-09-30')).toEqual([]);
+  });
+
+  it('leaves releaseTypes unset on episode entries', async () => {
+    const { service } = build(all, [], [episode(1, '2026-09-10T00:00:00Z')]);
+    const [entry] = await service.list('u1', '2026-09-01', '2026-09-30');
+    expect(entry.releaseTypes ?? null).toBeNull();
+  });
+
+  it('keeps date ordering when one film spans two days around other entries', async () => {
+    const f = film(1, 'Zeta', '2026-09-05T00:00:00Z', false, { theatrical: '2026-09-05T00:00:00Z', digital: '2026-09-20T00:00:00Z' });
+    const other = film(2, 'Alpha', '2026-09-10T00:00:00Z');
+    const { service } = build(all, [f, other], [episode(1, '2026-09-05T00:00:00Z', 1, 'Show')]);
+    const result = await service.list('u1', '2026-09-01', '2026-09-30');
+    expect(result.map((e) => [e.date, e.title])).toEqual([
+      ['2026-09-05', 'Show'],
+      ['2026-09-05', 'Zeta'],
+      ['2026-09-10', 'Alpha'],
+      ['2026-09-20', 'Zeta'],
+    ]);
   });
 });

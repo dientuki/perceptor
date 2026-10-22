@@ -24,6 +24,7 @@ import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
 import RemoveTitleButton from "@/components/media/RemoveTitleButton";
 import TitleLanguagesPanel from "@/components/media/TitleLanguagesPanel";
+import MovieReleaseDates from "@/components/movies/MovieReleaseDates";
 import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
@@ -132,6 +133,7 @@ export default function Movie({
             • {movie.originalLanguage.toUpperCase()} •{" "}
             <StatusBadge status={movie.status} />
           </p>
+          <MovieReleaseDates movie={movie} />
         </div>
 
         <div className="flex flex-wrap gap-3">

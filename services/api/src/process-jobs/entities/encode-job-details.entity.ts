@@ -53,6 +53,10 @@ export class EncodeJobDetails {
   @Field(() => EffectiveGrainMode)
   grainMode: EffectiveGrainMode;
 
+  // Spec 094, REQ-12
+  @Field()
+  isShort: boolean;
+
   @Field(() => Int, { nullable: true })
   seasonNumber: number | null;
 
@@ -84,6 +88,14 @@ export class EncodeJobDetails {
   // Spec 032, REQ-6
   @Field()
   compressionEnabled: boolean;
+
+  // Spec 098, REQ-2
+  @Field()
+  dubTrimEnabled: boolean;
+
+  // Spec 099, REQ-2
+  @Field()
+  streamEndTrimEnabled: boolean;
 
   @Field()
   compressionResolution: string;

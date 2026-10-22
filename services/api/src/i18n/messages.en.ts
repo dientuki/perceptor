@@ -117,6 +117,11 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.PROCESS_JOB_NOT_FOUND]: 'Process job {id} does not exist',
   [ERROR_KEYS.PROCESS_JOB_RECOVERY_EXHAUSTED]:
     'Automatic recovery for this encode has already been used once and failed again',
+  [ERROR_KEYS.PROCESS_JOB_NOT_RESUMABLE]: 'This file cannot be retried',
+  [ERROR_KEYS.PROCESS_JOB_NOT_DISCARDABLE]: 'This file can no longer be discarded',
+  [ERROR_KEYS.PROCESS_JOB_NOT_RUNNING]: 'This file is not being encoded',
+  [ERROR_KEYS.ENCODE_DISCARDED]: 'Encode was discarded by the user',
+  [ERROR_KEYS.ENCODE_STOPPED]: 'Encode was stopped by the user',
   [ERROR_KEYS.DOWNLOAD_NOT_A_TORRENT]:
     'This download has no associated torrent',
   [ERROR_KEYS.TORRENT_CLIENT_REJECTED]:

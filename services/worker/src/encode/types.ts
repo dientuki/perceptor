@@ -13,6 +13,14 @@ export type EncodeInput = {
   contentKind: ContentKind;
   compressionResolution: CompressionResolution;
   grainMode: GrainMode;
+  // Spec 094, REQ-1
+  year: number | null;
+  isShort: boolean;
+  // Spec 098, REQ-3
+  dubTrimEnabled: boolean;
+  // Spec 099, REQ-3
+  streamEndTrimEnabled: boolean;
+  mediaSourceId: number;
   containerTitle: string;
   sourceTag: string;
   trackTitles: Record<string, string>;

@@ -23,6 +23,9 @@ export interface Movie {
   overview?: string;
   posterUrl?: string;
   releaseDate?: string;
+  theatricalReleaseDate?: string | null;
+  digitalReleaseDate?: string | null;
+  physicalReleaseDate?: string | null;
   originalLanguage: string;
   contentKind: ContentKind;
   grainMode: GrainMode;
@@ -78,6 +81,9 @@ const GET_MOVIE_QUERY = `
       overview
       posterUrl
       releaseDate
+      theatricalReleaseDate
+      digitalReleaseDate
+      physicalReleaseDate
       originalLanguage
       contentKind
       grainMode

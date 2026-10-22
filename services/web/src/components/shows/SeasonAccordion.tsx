@@ -1,17 +1,19 @@
 "use client";
 
 import { ChevronDown, FileVideo, Magnet, Search } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { Episode, Season } from "@/actions/shows";
-import ImportFileModal from "@/components/import/importFileModal";
 import ImportSeasonFilesModal from "@/components/import/ImportSeasonFilesModal";
+import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 import SeasonAcquisitionButtons from "@/components/shows/SeasonAcquisitionButtons";
 import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
+import { useDateMonthFirst } from "@/context/DateFormatContext";
 import { useModal } from "@/hooks/useModal";
+import { formatDate } from "@/lib/format";
 import type { Language } from "@/types/languages";
 import type { AcquisitionTarget } from "@/types/media";
 
@@ -27,7 +29,7 @@ function EpisodeRow({
   onOpenMagnetModal: (episode: Episode) => void;
 }) {
   const t = useTranslations("shows.seasonAccordion");
-  const activeLocale = useLocale();
+  const monthFirst = useDateMonthFirst();
   return (
     <tr>
       <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
@@ -46,7 +48,7 @@ function EpisodeRow({
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-gray-700 dark:text-gray-300">
         {episode.releaseDate
-          ? new Date(episode.releaseDate).toLocaleDateString(activeLocale, { timeZone: "UTC" })
+          ? formatDate(episode.releaseDate, monthFirst)
           : "-"}
       </td>
       <td className="px-4 py-3">

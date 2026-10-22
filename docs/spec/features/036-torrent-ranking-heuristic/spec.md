@@ -1,9 +1,9 @@
 ---
 title: Torrent Ranking Heuristic
-spec_version: 0.9.0
+spec_version: 0.9.1
 author: Juan "Dientuki" Farias
 created_at: 2026-08-31
-last_updated: 2026-09-27
+last_updated: 2026-10-19
 status: Implemented
 services: [web]
 ---
@@ -177,9 +177,13 @@ behaviour it has; `web` gains a view over its results.
       a worse source that merely happens to be alive at this moment. Like REQ-4 it runs before the
       tier pass, so a dead 2160p release cannot set the tier and evict every live 1080p one.
 
-- [x] **REQ-4b (Upscale Veto)** *(see § Post-Implementation Amendments)*: A release whose
-      name identifies it as an upscale — `upscaled`, `ai upscale`/`ai-upscale`/`aiupscale`,
-      `upscale` — is discarded in pass 1 alongside REQ-4 and REQ-4a, whatever resolution it claims.
+- [x] **REQ-4b (Upscale Veto)** *(see § Post-Implementation Amendments; widened in `0.9.1`)*: A
+      release whose name identifies it as an upscale — `upscaled`, `ai upscale`/`ai-upscale`/
+      `aiupscale`, `upscale`, `ai enhance`/`ai enhanced` (and the misspelt `ai enchance`/
+      `ai enchanced` real releases carry, any separator or none), `ups` — is discarded in pass 1
+      alongside REQ-4 and REQ-4a, whatever resolution it claims.
+
+      *Since `0.9.1`, a word of the searched title never trips a veto (REQ-4e).*
 
       An upscaled release did not originate at the resolution it advertises — the extra pixels are
       synthesized, not sourced — so a "2160p" upscale is worse evidence of quality than an honest
@@ -1353,3 +1357,37 @@ GraphQL field, no Prisma column, no i18n key, no constant beyond reusing `UHD_RE
 it touches no service other than `api`. It does not re-weight, reorder or merge any criterion of
 REQ-11 — including the size-before-seeders order that made this defect decisive, which is left
 exactly as it is and is not this amendment's business to relitigate.
+
+## Post-Implementation Amendments (2026-10-19, `spec_version` 0.9.1)
+
+- **REQ-4b widened.** `AI.Enhance`, `AI Enchance` (a misspelling real releases carry) and `Ups` are
+  upscale markers too. `enhance` is only a veto behind the `ai` prefix: on its own it names
+  legitimate things (`Enhanced Edition`, `Audio Enhanced`). `ups` is a whole token only, so
+  `Upsilon` is untouched.
+- **REQ-4e (new) — the title's own words are exempt.** `ups` alone would veto every release of
+  *Grown Ups*, and `cam` every release of *Cam* (2018), with no error anywhere — the candidate set
+  just comes back empty or, worse, falls to a lower tier. So before the token vetoes run (REQ-4,
+  REQ-4b, REQ-4c), every word of the searched title is removed from the release name.
+  `RankingContext.mediaTitle` carries it: the film's title, or the series' for a season or episode
+  search, set by every `RankingContextService` entry point (`forCaller`, `forShowOwners`,
+  `forMovieOwners`). A dotted acronym also counts in its collapsed form, so for
+  *A.I. Artificial Intelligence* both `A.I.` and `AI` are title words, and `AI.Enhanced` becomes
+  `Enhanced` and is no longer an upscale. A free search (`target: null`) carries no title and
+  exempts nothing.
+
+  **Accepted consequence.** The exemption is per word, not per position: a release of *Grown Ups*
+  that also labels itself `Ups` is not vetoed, because the word is removed wherever it appears.
+  Telling the title apart from a tag would need a parse of where the title ends, which this module
+  does not do anywhere else. Resolution, source, codec and every comparator criterion still read the
+  full name; only the veto text is affected.
+
+  **What this does not do.** No GraphQL field (`mediaTitle` is internal to `api`), no Prisma column,
+  no i18n key, no service other than `api`. `Movie.title`/`Show.title` are the TMDB titles the search
+  query is already built from, so the words match the release names that query returns.
+
+- [x] **AC-32** `Movie.2024.2160p.AI.Enhance…`, `…AI Enchance…`, `…AI-Enhanced…` and `…Ups…` are
+      not candidates; `…Enhanced.Edition…` and `…Upsilon…` are.
+- [x] **AC-33** `Grown.Ups.2010.1080p.BluRay` is vetoed with no title, and a candidate with
+      `mediaTitle: 'Grown Ups'`; `Cam.2018` likewise for a cinema-blocked context with
+      `mediaTitle: 'Cam'`; for *A.I. Artificial Intelligence*, `…AI.Enhanced…` survives and
+      `…AI.Upscale…` does not. Removing the exemption turns exactly these three cases red.

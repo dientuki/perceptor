@@ -36,6 +36,8 @@ enum EncodeStatus {
   ENCODING
   COMPLETED
   ERROR
+  DISCARDED
+  STOPPED
 }
 
 // Estado simplificado / consolidado para la UI (Movie, Episode, Track)
@@ -103,6 +105,9 @@ model User {
 
   // BCP-47 UI language tag. Null means unset — resolve from Accept-Language, then "en".
   uiLocale String? @db.VarChar(35)
+
+  // Spec 096, REQ-3 NFR-1
+  dateMonthFirst Boolean?
 
   allowCinemaReleases Boolean @default(false)
   acquireTheatrical   Boolean @default(false)

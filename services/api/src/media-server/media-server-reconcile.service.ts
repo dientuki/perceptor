@@ -8,6 +8,7 @@ import {
   MediaServerClient,
   MEDIA_SERVER_NONE,
 } from '@/clients/media-server/types';
+import { IN_FLIGHT_ENCODE_STATUSES } from '@/pipeline-status/pipeline-status';
 import { MEDIA_TYPE } from '@/types/media';
 import { RefreshMediaServerOutcome } from '@/media/entities/title-refresh.entity';
 
@@ -29,7 +30,7 @@ const IN_FLIGHT_GUARD: {
   processJobs: Prisma.ProcessJobListRelationFilter;
 } = {
   mediaSources: NOT_IN_FLIGHT_SOURCE,
-  processJobs: { none: { status: { in: ['WAITING', 'QUEUED', 'ENCODING'] } } },
+  processJobs: { none: { status: { in: IN_FLIGHT_ENCODE_STATUSES } } },
 };
 
 const failed = (): SyncResult => ({

@@ -28,7 +28,7 @@ export interface RemuxMetadata {
 
 const LOSSLESS_AUDIO_CODECS = new Set(['truehd', 'mlp']);
 
-function isLosslessAudioStream(stream: FfprobeStream): boolean {
+export function isLosslessAudioStream(stream: FfprobeStream): boolean {
   const codec = (stream.codec_name || '').toLowerCase();
 
   if (LOSSLESS_AUDIO_CODECS.has(codec)) return true;
@@ -47,7 +47,7 @@ function isLosslessAudioStream(stream: FfprobeStream): boolean {
 // bits-per-pixel-per-frame comparison false and every file classify as
 // non-remux with no error anywhere (the archetypal Article IX bug this
 // function exists to prevent). Parse the fraction instead.
-function parseFrameRate(raw: string | undefined): number | null {
+export function parseFrameRate(raw: string | undefined): number | null {
   if (!raw) return null;
 
   const parts = raw.split('/');
@@ -88,7 +88,7 @@ function resolveVideoBitRate(
 // Returns null when no bitrate at all can be computed, so the caller knows
 // to fall back to the filename — the filename must never silently override
 // a real, computable bitrate.
-function computeBitsPerPixelPerFrame(
+export function computeBitsPerPixelPerFrame(
   videoStream: FfprobeStream | undefined,
   format: FfprobeFormat | undefined,
 ): number | null {

@@ -79,6 +79,68 @@ describe('rankTorrentResults', () => {
     expect(allowed.map((r) => r.candidate)).toEqual([true, false]);
   });
 
+  it('vetoes AI enhanced and Ups releases as upscales', () => {
+    const out = rankTorrentResults(
+      [
+        release('Movie.2024.2160p.AI.Enhance.WEB-DL.x265-GRP'),
+        release('Movie.2024.2160p.AI Enchance.WEB-DL.x265-GRP'),
+        release('Movie.2024.2160p.AI-Enhanced.WEB-DL.x265-GRP'),
+        release('Movie.2024.2160p.Ups.WEB-DL.x265-GRP'),
+        release('Movie.2024.1080p.Enhanced.Edition.WEB-DL.x264-GRP'),
+        release('Movie.2024.1080p.Upsilon.WEB-DL.x264-GRP'),
+      ],
+      UNARMED,
+    );
+
+    expect(out.map((r) => r.candidate)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+    ]);
+  });
+
+  it('lifts a veto whose word belongs to the title being searched', () => {
+    const input = [release('Grown.Ups.2010.1080p.BluRay.x264-GRP')];
+
+    expect(
+      rankTorrentResults(input, UNARMED).map((r) => r.candidate),
+    ).toEqual([false]);
+    expect(
+      rankTorrentResults(input, { ...UNARMED, mediaTitle: 'Grown Ups' }).map(
+        (r) => r.candidate,
+      ),
+    ).toEqual([true]);
+  });
+
+  it('lifts the AI prefix for a title spelled with dotted initials', () => {
+    const out = rankTorrentResults(
+      [
+        release('A.I.Artificial.Intelligence.2001.1080p.AI.Enhanced.BluRay.x264-GRP'),
+        release('AI.Artificial.Intelligence.2001.1080p.AI.Upscale.BluRay.x264-GRP'),
+      ],
+      { ...UNARMED, mediaTitle: 'A.I. Artificial Intelligence' },
+    );
+
+    expect(out.map((r) => r.candidate)).toEqual([true, false]);
+  });
+
+  it('lifts a cinema token that belongs to the title being searched', () => {
+    const input = [release('Cam.2018.1080p.WEB-DL.x264-GRP')];
+    const blocked = { ...UNARMED, allowCinemaReleases: false };
+
+    expect(rankTorrentResults(input, blocked).map((r) => r.candidate)).toEqual([
+      false,
+    ]);
+    expect(
+      rankTorrentResults(input, { ...blocked, mediaTitle: 'Cam' }).map(
+        (r) => r.candidate,
+      ),
+    ).toEqual([true]);
+  });
+
   it('does not let a vetoed 2160p row set the tier for the survivors', () => {
     const out = rankTorrentResults(
       [

@@ -197,6 +197,14 @@ export class UsersService {
     });
   }
 
+  // Spec 096, REQ-3
+  async setDateMonthFirst(userId: string, monthFirst: boolean): Promise<User> {
+    return await this.prisma.user.update({
+      where: { id: userId },
+      data: { dateMonthFirst: monthFirst },
+    });
+  }
+
   // Same shape as setUiLocale: a single-field self-service write, no
   // validation to perform beyond the boolean's own type, so no early throw
   // is needed before the update.

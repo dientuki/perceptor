@@ -5,6 +5,11 @@
 // enum, never on the wire here) is deliberately absent from this union — see
 // `normalizeGrainMode` below.
 
+import type { EncodeInput } from './types';
+import { EncodeCancelledError } from './cancellation';
+import { scoreGrainGate } from './grain-gate';
+import { GRAIN_PROBE_SAVED_MBPS_THRESHOLD, probeGrainSaving } from './grain-probe';
+
 export type GrainMode = 'AUTO' | 'ON' | 'OFF';
 
 export const GRAIN_MODE_VALUES: readonly GrainMode[] = ['AUTO', 'ON', 'OFF'];
@@ -28,11 +33,77 @@ export function normalizeGrainMode(raw: string | null | undefined): GrainMode {
   return 'OFF';
 }
 
-// Spec 092, REQ-9
-export function resolveFilmGrain(mode: GrainMode, metadata: unknown): boolean {
-  const filmGrain = mode === 'ON';
+// Spec 094, REQ-9
+const verdictCache = new Map<number, boolean>();
 
-  console.log(`[grain] resolved grainMode=${mode} -> filmGrain=${filmGrain}`);
+export function resetGrainVerdictCache(): void {
+  verdictCache.clear();
+}
 
-  return filmGrain;
+// Spec 092, REQ-9; Spec 094, REQ-2 REQ-9 REQ-10 REQ-11 NFR-1
+export async function resolveFilmGrain(
+  details: EncodeInput,
+  input: string,
+  metadata: any,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const mode = details.grainMode;
+  const id = details.mediaSourceId;
+
+  if (mode === 'ON' || mode === 'OFF') {
+    const filmGrain = mode === 'ON';
+    console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=mode -> filmGrain=${filmGrain}`);
+    return filmGrain;
+  }
+
+  const cached = verdictCache.get(id);
+  if (cached !== undefined) {
+    console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=cache -> filmGrain=${cached} (reused)`);
+    return cached;
+  }
+
+  try {
+    const gate = scoreGrainGate(metadata, input, details.year);
+    const gateText = `gateScore=${gate.score} reasons=${JSON.stringify(gate.reasons)}`;
+
+    if (!gate.passed) {
+      verdictCache.set(id, false);
+      console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=gate ${gateText} -> filmGrain=false`);
+      return false;
+    }
+
+    if (details.isShort) {
+      verdictCache.set(id, false);
+      console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=short ${gateText} -> filmGrain=false`);
+      return false;
+    }
+
+    console.log(`[grain] mediaSourceId=${id} mode=${mode} probe starting ${gateText}`);
+    const probe = await probeGrainSaving(input, metadata, details.contentKind, signal);
+    verdictCache.set(id, probe.passed);
+    console.log(
+      `[grain] mediaSourceId=${id} mode=${mode} stage=probe ${gateText} ` +
+        `mbpsGrain0=${probe.mbpsGrain0.toFixed(3)} savingPct=${probe.savingPct.toFixed(2)} ` +
+        `savedMbps=${probe.savedMbps.toFixed(3)} threshold=${GRAIN_PROBE_SAVED_MBPS_THRESHOLD} ` +
+        `-> filmGrain=${probe.passed}`,
+    );
+    return probe.passed;
+  } catch (error) {
+    if (error instanceof EncodeCancelledError) {
+      throw error;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    console.warn(`[grain] mediaSourceId=${id} mode=${mode} stage=failure ${detail} -> filmGrain=false`);
+    return false;
+  }
+}
+
+// Spec 094, REQ-1
+export function normalizeIsShort(raw: unknown): boolean {
+  if (typeof raw === 'boolean') {
+    return raw;
+  }
+
+  console.warn(`[grain] unrecognised isShort ${JSON.stringify(raw)}, defaulting to false`);
+  return false;
 }

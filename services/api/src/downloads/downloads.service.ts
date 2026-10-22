@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { dirname } from 'node:path';
 import { rm, rmdir } from 'node:fs/promises';
 import { EncodeStatus, SourceStatus } from '@prisma/client';
@@ -20,11 +20,18 @@ import {
   isRaceWinner,
   isDeliveredSource,
   hasRaceWinner,
+  jobLastError,
+  jobRetryable,
+  projectJobStatus,
+  cleanupDecision,
   SourceAltitudeJob,
+  ACTIVE_ENCODE_STATUSES,
+  IN_FLIGHT_ENCODE_STATUSES,
   ResumeJob,
   ResumeSibling,
 } from '@/pipeline-status/pipeline-status';
 import { Download } from './entities/download.entity';
+import { DownloadJob as DownloadJobView } from './entities/download-job.entity';
 
 function episodeLabel(show: { title: string }, season: { seasonNumber: number }, episode: { episodeNumber: number }): string {
   const s = String(season.seasonNumber).padStart(2, '0');
@@ -36,7 +43,37 @@ function seasonLabel(show: { title: string }, season: { seasonNumber: number }):
   return `${show.title} S${String(season.seasonNumber).padStart(2, '0')}`;
 }
 
-type DownloadJob = SourceAltitudeJob & ResumeJob & { id: number };
+// Spec 095, REQ-4 REQ-10
+type JobLabelFields = {
+  episodeId: number | null;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  episodeTitle: string | null;
+  movieTitle: string | null;
+};
+
+type DownloadJob = SourceAltitudeJob & ResumeJob & { id: number } & Partial<JobLabelFields>;
+
+// Spec 095, REQ-4 REQ-5
+function jobLabel(job: DownloadJob): string {
+  if (job.episodeNumber != null && job.seasonNumber != null) {
+    const s = String(job.seasonNumber).padStart(2, '0');
+    const e = String(job.episodeNumber).padStart(2, '0');
+    return `S${s}E${e} · ${job.episodeTitle ?? ''}`;
+  }
+  return job.movieTitle ?? '';
+}
+
+// Spec 095, REQ-5
+function compareJobs(a: DownloadJob, b: DownloadJob): number {
+  const aEp = a.episodeNumber != null && a.seasonNumber != null;
+  const bEp = b.episodeNumber != null && b.seasonNumber != null;
+  if (aEp && bEp) {
+    return a.seasonNumber! - b.seasonNumber! || a.episodeNumber! - b.episodeNumber! || a.id - b.id;
+  }
+  if (aEp !== bEp) return aEp ? -1 : 1;
+  return a.id - b.id;
+}
 
 type JobsForSource = { jobs: DownloadJob[]; latestUpdatedAt: Date | null };
 
@@ -154,6 +191,7 @@ type MediaSourceRow = {
   seasonId: number | null;
   episodeId: number | null;
   retiredAt: Date | null;
+  hasUnmatchedFiles?: boolean;
 };
 
 @Injectable()
@@ -263,7 +301,15 @@ export class DownloadsService {
         errorParams: true,
         errorMessage: true,
         updatedAt: true,
-        sourceFile: { select: { mediaSourceId: true } },
+        sourceFile: {
+          select: {
+            mediaSourceId: true,
+            episode: {
+              select: { id: true, episodeNumber: true, title: true, season: { select: { seasonNumber: true } } },
+            },
+            movie: { select: { title: true } },
+          },
+        },
       },
     });
 
@@ -280,10 +326,16 @@ export class DownloadsService {
         errorParams: row.errorParams,
         errorMessage: row.errorMessage,
         updatedAt: row.updatedAt,
+        episodeId: row.sourceFile.episode?.id ?? null,
+        seasonNumber: row.sourceFile.episode?.season?.seasonNumber ?? null,
+        episodeNumber: row.sourceFile.episode?.episodeNumber ?? null,
+        episodeTitle: row.sourceFile.episode?.title ?? null,
+        movieTitle: row.sourceFile.movie?.title ?? null,
       });
       if (!entry.latestUpdatedAt || row.updatedAt > entry.latestUpdatedAt) entry.latestUpdatedAt = row.updatedAt;
       grouped.set(mediaSourceId, entry);
     }
+    for (const entry of grouped.values()) entry.jobs.sort(compareJobs);
     return grouped;
   }
 
@@ -341,7 +393,7 @@ export class DownloadsService {
       const { count: jobsClosed } = await tx.processJob.updateMany({
         where: {
           sourceFile: { mediaSourceId: { in: deliveredIds } },
-          status: { in: ['WAITING', 'QUEUED', 'ENCODING'] },
+          status: { in: IN_FLIGHT_ENCODE_STATUSES },
         },
         data: {
           status: 'ERROR',
@@ -411,6 +463,24 @@ export class DownloadsService {
       lostRace: hasRaceWinner(siblings),
       readAt: new Date(),
       retiredAt: source.retiredAt,
+      jobs: jobs.map((job) => this.toDownloadJob(job, source, siblings)),
+    };
+  }
+
+  // Spec 095, REQ-4 REQ-10
+  private toDownloadJob(job: DownloadJob, source: MediaSourceRow, siblings: ResumeSibling[]): DownloadJobView {
+    const status = projectJobStatus(job.status);
+    return {
+      processJobId: job.id,
+      label: jobLabel(job),
+      episodeId: job.episodeId ?? undefined,
+      seasonNumber: job.seasonNumber ?? undefined,
+      episodeNumber: job.episodeNumber ?? undefined,
+      status,
+      progress: job.progress,
+      encodeSpeed: status === 'ENCODING' ? (job.encodeSpeed ?? undefined) : undefined,
+      lastError: jobLastError(job) ?? undefined,
+      retryable: jobRetryable(job, source, siblings),
     };
   }
 
@@ -600,6 +670,13 @@ export class DownloadsService {
       throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED);
     }
 
+    // Spec 097, REQ-5 REQ-9 REQ-16
+    if (jobs.some((job) => job.status === 'STOPPED')) {
+      await this.resumeEncodeStage(jobs);
+      await this.recomputeStatus(source);
+      return this.reloadDownload(source.id, userId);
+    }
+
     const infoHash = this.requireTorrent(source);
 
     await this.callTorrentClient(() => this.qbittorrent.start(infoHash));
@@ -678,12 +755,13 @@ export class DownloadsService {
     );
   }
 
+  // Spec 097, REQ-5 REQ-12 NFR-5
   private async resumeEncodeStage(jobs: DownloadJob[]): Promise<void> {
-    const failed = jobs.filter((job) => job.status === 'ERROR');
+    const resumable = jobs.filter((job) => job.status === 'ERROR' || job.status === 'STOPPED');
     const matched: DownloadJob[] = [];
-    for (const job of failed) {
+    for (const job of resumable) {
       const result = await this.prisma.processJob.updateMany({
-        where: { id: job.id, status: 'ERROR' },
+        where: { id: job.id, status: job.status },
         data: {
           status: 'WAITING',
           progress: 0,
@@ -700,20 +778,30 @@ export class DownloadsService {
 
     try {
       for (const job of matched) {
-        await this.encodeQueue.removeEncode(job.id);
+        // Spec 097, REQ-5
+        if (!(await this.encodeQueue.removeEncode(job.id))) {
+          throw new Error(`job-${job.id} is still present in the encode queue after removeEncode`);
+        }
         await this.encodeQueue.addEncode({ processJobId: job.id });
+        // Spec 095, REQ-11
+        if (!(await this.encodeQueue.isEncodePending(job.id))) {
+          throw new Error(`job-${job.id} is not waiting in the encode queue after addEncode`);
+        }
       }
     } catch (err) {
       console.error('[DownloadsService] failed to re-enqueue encode jobs on resume:', err);
       for (const job of matched) {
         await this.prisma.processJob.updateMany({
           where: { id: job.id, status: 'WAITING' },
-          data: {
-            status: 'ERROR',
-            errorKey: job.errorKey,
-            errorParams: job.errorParams,
-            errorMessage: job.errorMessage,
-          },
+          data:
+            job.status === 'STOPPED'
+              ? { status: 'STOPPED', errorKey: null, errorParams: null, errorMessage: null }
+              : {
+                  status: 'ERROR',
+                  errorKey: job.errorKey,
+                  errorParams: job.errorParams,
+                  errorMessage: job.errorMessage,
+                },
         });
       }
       throw i18nError.serviceUnavailable(ERROR_KEYS.DOWNLOAD_RETRY_ENQUEUE_FAILED);
@@ -749,8 +837,187 @@ export class DownloadsService {
     }
   }
 
+  // Spec 095, REQ-11 REQ-12
+  private async loadOwnedJob(processJobId: number, userId: string) {
+    const row = await this.prisma.processJob.findUnique({
+      where: { id: processJobId },
+      select: { sourceFile: { select: { mediaSourceId: true, filePath: true } } },
+    });
+    if (!row) throw i18nError.notFound(ERROR_KEYS.PROCESS_JOB_NOT_FOUND, { id: processJobId });
+
+    let source: MediaSourceRow & TargetSource;
+    try {
+      source = await this.findOwnedSource(row.sourceFile.mediaSourceId, userId);
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        throw i18nError.notFound(ERROR_KEYS.PROCESS_JOB_NOT_FOUND, { id: processJobId });
+      }
+      throw err;
+    }
+
+    if (source.retiredAt) throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_REPLACED);
+
+    const [jobsBySourceId, siblings] = await Promise.all([this.jobsBySourceId([source.id]), this.siblingsOf(source)]);
+    const jobs = jobsBySourceId.get(source.id)?.jobs ?? [];
+    const job = jobs.find((candidate) => candidate.id === processJobId);
+    if (!job) throw i18nError.notFound(ERROR_KEYS.PROCESS_JOB_NOT_FOUND, { id: processJobId });
+
+    if (hasRaceWinner(siblings)) throw i18nError.conflict(ERROR_KEYS.DOWNLOAD_RETRY_SUPERSEDED);
+
+    return { source, jobs, job, siblings, filePath: row.sourceFile.filePath };
+  }
+
+  private async reloadDownload(mediaSourceId: number, userId: string): Promise<Download> {
+    const fresh = await this.findOwnedSource(mediaSourceId, userId);
+    const [live, jobsAfter, compressionEnabled, siblings] = await Promise.all([
+      fresh.infoHash ? this.liveInfoForHash(fresh.infoHash) : Promise.resolve(undefined),
+      this.jobsBySourceId([fresh.id]),
+      this.compressionEnabled(),
+      this.siblingsOf(fresh),
+    ]);
+    return this.toDownload(
+      fresh,
+      projectTarget(fresh),
+      live,
+      jobsAfter.get(fresh.id)?.jobs ?? [],
+      compressionEnabled,
+      siblings,
+    );
+  }
+
+  // Spec 095, REQ-11 NFR-6
+  async encodeJobStart(processJobId: number, userId: string): Promise<Download> {
+    const { source, job, siblings } = await this.loadOwnedJob(processJobId, userId);
+
+    // Spec 097, REQ-12
+    const resumable = job.status === 'STOPPED' || (job.status === 'ERROR' && jobRetryable(job, source, siblings));
+    if (!resumable) {
+      throw i18nError.conflict(ERROR_KEYS.PROCESS_JOB_NOT_RESUMABLE);
+    }
+
+    await this.resumeEncodeStage([job]);
+    await this.recomputeStatus(source);
+
+    return this.reloadDownload(source.id, userId);
+  }
+
+  // Spec 097, REQ-2 REQ-6 REQ-7 REQ-9
+  private async stopJobs(jobIds: number[], runningId?: number): Promise<void> {
+    await this.prisma.processJob.updateMany({
+      where: { id: { in: jobIds }, status: { in: ACTIVE_ENCODE_STATUSES } },
+      data: { status: 'STOPPED', progress: 0, encodeSpeed: null },
+    });
+    await this.withdrawAndCancel(jobIds, runningId);
+  }
+
+  // Spec 097, REQ-2 REQ-6
+  private async withdrawAndCancel(jobIds: number[], runningId?: number): Promise<void> {
+    for (const id of jobIds.filter((candidate) => candidate !== runningId)) {
+      try {
+        await this.encodeQueue.removeEncode(id);
+      } catch (err) {
+        console.error(`[DownloadsService] could not withdraw job ${id} from the encode queue:`, err);
+      }
+    }
+    if (runningId !== undefined) {
+      try {
+        await this.encodeQueue.publishCancel(runningId);
+        await this.encodeQueue.removeEncode(runningId);
+      } catch (err) {
+        console.error(`[DownloadsService] could not cancel or withdraw job ${runningId}:`, err);
+      }
+    }
+  }
+
+  // Spec 097, REQ-11
+  async encodeJobStop(processJobId: number, userId: string): Promise<Download> {
+    const { source, job } = await this.loadOwnedJob(processJobId, userId);
+
+    if (job.status !== 'WAITING' && job.status !== 'QUEUED' && job.status !== 'ENCODING') {
+      throw i18nError.conflict(ERROR_KEYS.PROCESS_JOB_NOT_RUNNING);
+    }
+
+    await this.stopJobs([job.id], job.status === 'ENCODING' ? job.id : undefined);
+    await this.recomputeStatus(source);
+
+    return this.reloadDownload(source.id, userId);
+  }
+
+  // Spec 095, REQ-12 REQ-16 REQ-18 NFR-5
+  async encodeJobDiscard(processJobId: number, userId: string): Promise<Download> {
+    const { source, jobs, job, filePath } = await this.loadOwnedJob(processJobId, userId);
+
+    if (job.status === 'COMPLETED' || job.status === 'DISCARDED') {
+      throw i18nError.conflict(ERROR_KEYS.PROCESS_JOB_NOT_DISCARDABLE);
+    }
+
+    const written = await this.prisma.processJob.updateMany({
+      where: { id: processJobId, status: { in: [...ACTIVE_ENCODE_STATUSES, 'ERROR', 'STOPPED'] } },
+      data: { status: 'DISCARDED', encodeSpeed: null },
+    });
+    if (written.count === 0) {
+      throw i18nError.conflict(ERROR_KEYS.PROCESS_JOB_NOT_DISCARDABLE);
+    }
+
+    await this.withdrawAndCancel([processJobId], processJobId);
+
+    try {
+      if (await this.mediaRoots.isInsideRoot('downloads', filePath)) {
+        await rm(filePath, { force: true });
+      } else {
+        console.error(
+          `[DownloadsService] encodeJobDiscard: ${filePath} is outside the downloads root — deleting nothing`,
+        );
+      }
+    } catch (err) {
+      console.error(`[DownloadsService] encodeJobDiscard: could not delete ${filePath}:`, err);
+    }
+
+    const hasUnmatchedFiles = source.hasUnmatchedFiles ?? true;
+    const before = cleanupDecision(jobs, hasUnmatchedFiles);
+    const jobsAfter = jobs.map((candidate) =>
+      candidate.id === processJobId ? { ...candidate, status: 'DISCARDED' as EncodeStatus } : candidate,
+    );
+    const after = cleanupDecision(jobsAfter, hasUnmatchedFiles);
+
+    if (after.removeTorrent && !before.removeTorrent) {
+      try {
+        if (source.infoHash) {
+          const infoHash = source.infoHash;
+          await this.callTorrentClient(() => this.qbittorrent.remove(infoHash, false));
+        }
+        if (isDeliveredSource(source.status, jobsAfter, source.retiredAt)) {
+          await this.unwindLosingSiblings(source);
+        }
+      } catch (err) {
+        console.error(`[DownloadsService] encodeJobDiscard: could not finish the torrent cleanup for source ${source.id}:`, err);
+      }
+    }
+    if (after.deleteDownloadPath && !before.deleteDownloadPath) {
+      await this.deleteResidue(source);
+    }
+
+    await this.recomputeStatus(source);
+
+    return this.reloadDownload(source.id, userId);
+  }
+
   async downloadStop(mediaSourceId: number, userId: string): Promise<Download> {
     const source = await this.findOwnedSource(mediaSourceId, userId);
+
+    // Spec 097, REQ-1 REQ-2 REQ-3 REQ-9
+    const jobs = (await this.jobsBySourceId([source.id])).get(source.id)?.jobs ?? [];
+    const active = jobs.filter((job) => ACTIVE_ENCODE_STATUSES.includes(job.status));
+    if (active.length > 0) {
+      const running = active.find((job) => job.status === 'ENCODING');
+      await this.stopJobs(
+        active.map((job) => job.id),
+        running?.id,
+      );
+      await this.recomputeStatus(source);
+      return this.reloadDownload(source.id, userId);
+    }
+
     const infoHash = this.requireTorrent(source);
 
     await this.callTorrentClient(() => this.qbittorrent.stop(infoHash));
@@ -1135,6 +1402,13 @@ export class DownloadsService {
     }
 
     await this.queue.addSourceReady({ mediaSourceId: mediaSource.id });
+
+    // Spec 095, REQ-1 REQ-3
+    try {
+      await this.qbittorrent.stop(infoHash);
+    } catch (err) {
+      console.error(`[torrentCompleted] could not stop mediaSource ${mediaSource.id} after enqueueing its scan:`, err);
+    }
 
     console.log(`[torrentCompleted] encolado: mediaSource ${mediaSource.id}`);
     return `encolado: mediaSource ${mediaSource.id}`;

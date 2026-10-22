@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises';
 import { UnrecoverableError, type Job } from 'bullmq';
 import { fetchGraphQL } from '../api/graphql-client';
 import { deliverReport } from '../api/deliver-report';
@@ -7,18 +8,19 @@ import { passthrough } from '../encode/passthrough';
 import { withSourceExtension } from '../paths/with-source-extension';
 import { isInsideRoot } from '../paths/is-inside-root';
 import { cleanupSource } from './cleanup-source';
+import { assemblePlaylist } from '../disc/assemble-playlist';
 import { buildContainerTitle, buildSourceTag } from '../metadata/container-tags';
 import { fetchTrackTitles } from '../api/track-titles';
 import type { EncodeJob } from '../queue/types';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
-import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED } from '../i18n/error-keys';
+import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED, ERROR_ENCODE_DISCARDED, ERROR_ENCODE_STOPPED } from '../i18n/error-keys';
 import { EncodeCancelledError, registerEncode, releaseEncode } from '../encode/cancellation';
 import { normalizeContentKind } from '../encode/content-kind';
 import { normalizeLibraryLayout } from '../paths/library-layout';
 import { normalizeCompressionResolution } from '../encode/compression-resolution';
 import { normalizeSubtitleFormats } from '../encode/subtitle-formats';
-import { normalizeGrainMode } from '../encode/grain-mode';
+import { normalizeGrainMode, normalizeIsShort } from '../encode/grain-mode';
 
 export type EncodeJobDetails = {
   id: number;
@@ -39,6 +41,12 @@ export type EncodeJobDetails = {
   compressionResolution: string;
   // Spec 092, REQ-6
   grainMode: string;
+  // Spec 094, REQ-1
+  isShort: boolean;
+  // Spec 098, REQ-3
+  dubTrimEnabled: boolean;
+  // Spec 099, REQ-3
+  streamEndTrimEnabled: boolean;
   libraryLayout: string;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -77,7 +85,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags allowedSubtitleFormats contentKind compressionResolution grainMode libraryLayout
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags allowedSubtitleFormats contentKind compressionResolution grainMode isShort dubTrimEnabled streamEndTrimEnabled libraryLayout
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
         compressionEnabled
@@ -98,8 +106,14 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const allowedSubtitleFormats = normalizeSubtitleFormats(details.allowedSubtitleFormats);
   // Spec 092, REQ-10
   const grainMode = compressing ? normalizeGrainMode(details.grainMode) : 'OFF';
+  // Spec 094, REQ-1
+  const isShort = normalizeIsShort(details.isShort);
+  // Spec 098, REQ-3
+  const dubTrimEnabled = compressing && details.dubTrimEnabled === true;
+  // Spec 099, REQ-3 NFR-2
+  const streamEndTrimEnabled = compressing && details.streamEndTrimEnabled === true;
   console.log(
-    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution} grainMode=${grainMode} libraryLayout=${libraryLayout} allowedSubtitleFormats=${JSON.stringify(allowedSubtitleFormats)}`,
+    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution} grainMode=${grainMode} libraryLayout=${libraryLayout} allowedSubtitleFormats=${JSON.stringify(allowedSubtitleFormats)} isShort=${isShort} dubTrimEnabled=${dubTrimEnabled} streamEndTrimEnabled=${streamEndTrimEnabled}`,
   );
 
   const trackTitles = await fetchTrackTitles();
@@ -110,6 +124,9 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     let encodeCompleted: EncodeCompletedResult | undefined;
     let finalOutputPathForReport: string;
     let ffmpegCommandForReport: string;
+    // Spec 100, REQ-9 REQ-10
+    let assembledPath: string | null = null;
+    let assembledMoved = false;
 
     try {
       const outputPath = buildOutputPath({ ...details, layout: libraryLayout });
@@ -149,23 +166,30 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         }
       };
 
+      // Spec 100, REQ-6
+      let encodeInput = details.inputFilePath;
+      if (details.inputFilePath.toLowerCase().endsWith('.mpls')) {
+        assembledPath = await assemblePlaylist(details.inputFilePath, signal);
+        encodeInput = assembledPath;
+      }
+
       // Spec 032, REQ-9 REQ-10 REQ-11 REQ-12 REQ-13 NFR-2
       let finalOutputPath = outputPath;
       let ffmpegCommand: string;
 
       if (details.compressionEnabled === false) {
         // Spec 032, REQ-12
-        if (!isInsideRoot(details.downloadsRoot, details.inputFilePath)) {
-          const detail = `input file ${details.inputFilePath} is not inside downloadsRoot ${details.downloadsRoot}`;
+        if (!isInsideRoot(details.downloadsRoot, encodeInput)) {
+          const detail = `input file ${encodeInput} is not inside downloadsRoot ${details.downloadsRoot}`;
           throw new KeyedError(ERROR_ENCODE_MOVE_FAILED, renderMessage(ERROR_ENCODE_MOVE_FAILED, { detail }), {
             detail,
           });
         }
 
-        finalOutputPath = withSourceExtension(outputPath, details.inputFilePath);
+        finalOutputPath = withSourceExtension(outputPath, encodeInput);
 
         const passthroughResult = await passthrough(
-          details.inputFilePath,
+          encodeInput,
           finalOutputPath,
           {
             originalLanguageIso3: details.originalLanguageIso3,
@@ -177,6 +201,11 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             contentKind,
             compressionResolution,
             grainMode,
+            year: details.year,
+            isShort,
+            dubTrimEnabled,
+            streamEndTrimEnabled,
+            mediaSourceId: details.mediaSourceId,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
             trackTitles: trackTitles,
@@ -185,10 +214,12 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
           onProbe,
           signal,
         );
+        // Spec 100, REQ-9
+        assembledMoved = true;
         ffmpegCommand = passthroughResult.ffmpegCommand;
       } else {
         const encodeResult = await encode(
-          details.inputFilePath,
+          encodeInput,
           outputPath,
           {
             originalLanguageIso3: details.originalLanguageIso3,
@@ -200,6 +231,11 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             contentKind,
             compressionResolution,
             grainMode,
+            year: details.year,
+            isShort,
+            dubTrimEnabled,
+            streamEndTrimEnabled,
+            mediaSourceId: details.mediaSourceId,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
             trackTitles: trackTitles,
@@ -215,11 +251,17 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       finalOutputPathForReport = finalOutputPath;
       ffmpegCommandForReport = ffmpegCommand;
     } catch (error) {
-      // Spec 047, REQ-6
-      if (error instanceof EncodeCancelledError) {
-        console.log(`[encode] ${processJobId}: cancelled, reporting nothing`);
+      // Spec 047, REQ-6; Spec 095, REQ-13; Spec 097, REQ-6
+      const refusal =
+        error instanceof KeyedError && error.key === ERROR_ENCODE_DISCARDED
+          ? 'discarded'
+          : error instanceof KeyedError && error.key === ERROR_ENCODE_STOPPED
+            ? 'stopped'
+            : null;
+      if (error instanceof EncodeCancelledError || refusal) {
+        console.log(`[encode] ${processJobId}: ${refusal ?? 'cancelled'}, reporting nothing`);
         // Spec 054, REQ-8
-        throw new UnrecoverableError(error.message);
+        throw new UnrecoverableError(error instanceof Error ? error.message : String(error));
       }
 
       // Spec 018, REQ-11
@@ -251,6 +293,19 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       }
 
       throw error;
+    } finally {
+      // Spec 100, REQ-9 REQ-10
+      if (assembledPath && !assembledMoved) {
+        if (isInsideRoot(details.downloadsRoot, assembledPath)) {
+          try {
+            await rm(assembledPath, { force: true });
+          } catch (err) {
+            console.error(`[encode] ${processJobId}: could not remove assembled file ${assembledPath}:`, err);
+          }
+        } else {
+          console.error(`[encode] ${processJobId}: refusing to remove ${assembledPath}, outside downloadsRoot`);
+        }
+      }
     }
 
     // Spec 038, REQ-1 REQ-2 REQ-4

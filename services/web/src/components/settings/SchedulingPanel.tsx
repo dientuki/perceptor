@@ -1,10 +1,12 @@
 "use client";
 
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { runScheduledTaskAction } from "@/actions/scheduler";
 import Switch from "@/components/form/switch/Switch";
 import Button from "@/components/ui/button/Button";
+import { useDateMonthFirst } from "@/context/DateFormatContext";
+import { formatDateTime } from "@/lib/format";
 import type { ScheduledTask } from "@/types/scheduler";
 
 interface SchedulingPanelProps {
@@ -22,14 +24,12 @@ interface SchedulingPanelProps {
 // grid cell it would have used.
 function TaskRow({ task }: { task: ScheduledTask }) {
   const t = useTranslations("settings.scheduling");
-  const activeLocale = useLocale();
+  const monthFirst = useDateMonthFirst();
   const [isPending, startTransition] = useTransition();
   const [current, setCurrent] = useState(task);
   const [enabled, setEnabled] = useState(task.enabled);
   const [error, setError] = useState<string | null>(null);
-  // toLocaleString() renders differently during SSR (container timezone)
-  // than in the browser (the viewer's own) — deferring to after mount avoids
-  // a hydration mismatch, same as MediaServerIndexPanel's syncedAt.
+  // Spec 096, REQ-7a NFR-2
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -118,9 +118,7 @@ function TaskRow({ task }: { task: ScheduledTask }) {
                   : current.lastRun.outcome}
                 {" — "}
                 {mounted
-                  ? new Date(current.lastRun.startedAt).toLocaleString(
-                      activeLocale,
-                    )
+                  ? formatDateTime(current.lastRun.startedAt, monthFirst)
                   : ""}
                 {current.lastRun.outcome === "SUCCESS" && (
                   <>
@@ -149,7 +147,7 @@ function TaskRow({ task }: { task: ScheduledTask }) {
             <p>
               {current.nextRunAt
                 ? mounted
-                  ? new Date(current.nextRunAt).toLocaleString(activeLocale)
+                  ? formatDateTime(current.nextRunAt, monthFirst)
                   : ""
                 : t("nextRunNone")}
             </p>

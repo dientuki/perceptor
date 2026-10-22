@@ -10,8 +10,10 @@ import {
   hasPossession,
   POSSESSION_WHERE,
   isLiftedBySeasonPack,
+  cleanupDecision,
+  projectJobStatus,
 } from './pipeline-status';
-import { SourceStatus } from '@prisma/client';
+import { EncodeStatus, SourceStatus } from '@prisma/client';
 
 // The bug class this defends against: four incompatible status vocabularies collapsing into one
 // derivation, wrong. A wrong status here renders as a confident, plausible word on screen — the
@@ -931,5 +933,140 @@ describe('hasPossession', () => {
     expect(POSSESSION_WHERE).toEqual({
       OR: [{ filePath: { not: null } }, { mediaServerPresentAt: { not: null } }],
     });
+  });
+});
+
+// Spec 095. The silent failures: a parent reading ERROR while sibling encodes still run, a
+// fully discarded source winning its target's race (turning real siblings into losers), and
+// cleanup never running or never deleting once a file has been discarded. None of these throws.
+describe('per-file derivation (095)', () => {
+  const job = (status: EncodeStatus, progress = 0) => ({ status, progress, encodeSpeed: null });
+  const derive = (jobs: ReturnType<typeof job>[]) =>
+    deriveSourceStatus({ sourceStatus: 'SCANNED', jobs, live: null });
+
+  it('reads ENCODING while a job is active even if another job is ERROR', () => {
+    // Fails if the job-ERROR rule is checked before the active rule.
+    expect(derive([job('ERROR'), job('ENCODING', 40)]).status).toBe('ENCODING');
+  });
+
+  it('reads ERROR when a job failed and none is active', () => {
+    expect(derive([job('ERROR'), job('COMPLETED', 100)]).status).toBe('ERROR');
+  });
+
+  it('reads DISCARDED when every job is discarded, with no progress', () => {
+    expect(derive([job('DISCARDED'), job('DISCARDED')])).toEqual({
+      status: 'DISCARDED',
+      downloadProgress: null,
+      encodeProgress: null,
+      encodeSpeed: null,
+    });
+  });
+
+  it('reads COMPLETED when jobs are COMPLETED and DISCARDED', () => {
+    expect(derive([job('COMPLETED', 100), job('DISCARDED')]).status).toBe('COMPLETED');
+  });
+
+  it('excludes discarded jobs from progress and counts ERROR as 0 and COMPLETED as 100', () => {
+    const result = derive([job('COMPLETED', 100), job('ERROR', 77), job('ENCODING', 50), job('DISCARDED', 90)]);
+    expect(result.encodeProgress).toBe(50);
+  });
+
+  it('does not let a discarded SCANNED source win the race', () => {
+    expect(isRaceWinner('SCANNED', [{ status: 'DISCARDED' }, { status: 'DISCARDED' }])).toBe(false);
+    expect(isRaceWinner('SCANNED', [{ status: 'COMPLETED' }, { status: 'DISCARDED' }])).toBe(true);
+  });
+
+  it('counts COMPLETED plus DISCARDED as a delivered source', () => {
+    expect(isDeliveredSource('SCANNED', [{ status: 'COMPLETED' }, { status: 'DISCARDED' }])).toBe(true);
+    expect(isDeliveredSource('SCANNED', [{ status: 'DISCARDED' }])).toBe(false);
+  });
+
+  it('cleans up fully when jobs are COMPLETED and DISCARDED with no unmatched files', () => {
+    expect(cleanupDecision([{ status: 'COMPLETED' }, { status: 'DISCARDED' }], false)).toEqual({
+      removeTorrent: true,
+      deleteDownloadPath: true,
+    });
+  });
+
+  it('cleans up nothing while a job is still active', () => {
+    expect(cleanupDecision([{ status: 'ENCODING' }, { status: 'DISCARDED' }], false)).toEqual({
+      removeTorrent: false,
+      deleteDownloadPath: false,
+    });
+  });
+
+  it('removes the torrent but keeps the folder when a job ended ERROR', () => {
+    expect(cleanupDecision([{ status: 'COMPLETED' }, { status: 'ERROR' }], false)).toEqual({
+      removeTorrent: true,
+      deleteDownloadPath: false,
+    });
+  });
+
+  it('projects WAITING as QUEUED and leaves the rest alone', () => {
+    expect(projectJobStatus('WAITING')).toBe('QUEUED');
+    expect(projectJobStatus('DISCARDED')).toBe('DISCARDED');
+  });
+});
+
+// Spec 097. The silent failures: a stopped film reading MISSING (the acquisition sweeps attach another
+// release), a stopped source still winning the race (siblings stay refused and a stopped bad release
+// blocks the title forever), a stopped pack counted as delivered (the loser sweep skips it) and the
+// torrent removed while a stopped file still needs its input. None of these throws.
+describe('stopped encodes (097)', () => {
+  const job = (status: EncodeStatus, progress = 0) => ({ status, progress, encodeSpeed: null });
+  const derive = (jobs: ReturnType<typeof job>[]) =>
+    deriveSourceStatus({ sourceStatus: 'SCANNED', jobs, live: null });
+
+  it('reads PAUSED, with no speed, when jobs are STOPPED and none is active or ERROR', () => {
+    expect(derive([job('COMPLETED', 100), job('STOPPED', 60)])).toEqual({
+      status: 'PAUSED',
+      downloadProgress: 100,
+      encodeProgress: 50,
+      encodeSpeed: null,
+    });
+  });
+
+  it('reads ENCODING while a job is active even if another is STOPPED', () => {
+    expect(derive([job('STOPPED'), job('QUEUED')]).status).toBe('ENCODING');
+  });
+
+  it('reads ERROR when a job failed, even with a STOPPED sibling', () => {
+    expect(derive([job('ERROR'), job('STOPPED')]).status).toBe('ERROR');
+  });
+
+  it('counts a STOPPED job as 0 progress', () => {
+    expect(derive([job('STOPPED', 90), job('COMPLETED', 100)]).encodeProgress).toBe(50);
+  });
+
+  it('reads a title with a SCANNED source, a STOPPED job and no file as PAUSED, not MISSING', () => {
+    expect(
+      deriveTitleStatus({
+        filePath: null,
+        mediaServerPresentAt: null,
+        sources: [{ status: 'SCANNED' }],
+        jobs: [{ status: 'STOPPED' }],
+      }),
+    ).toBe('PAUSED');
+  });
+
+  it('gives up the race: SCANNED with STOPPED and nothing active is not the winner', () => {
+    expect(isRaceWinner('SCANNED', [{ status: 'STOPPED' }])).toBe(false);
+    expect(isRaceWinner('SCANNED', [{ status: 'COMPLETED' }, { status: 'STOPPED' }])).toBe(false);
+    expect(isRaceWinner('SCANNED', [{ status: 'STOPPED' }, { status: 'QUEUED' }])).toBe(true);
+  });
+
+  it('does not count COMPLETED plus STOPPED as a delivered source', () => {
+    expect(isDeliveredSource('SCANNED', [{ status: 'COMPLETED' }, { status: 'STOPPED' }])).toBe(false);
+  });
+
+  it('keeps the torrent and the folder while a job is STOPPED', () => {
+    expect(cleanupDecision([{ status: 'COMPLETED' }, { status: 'STOPPED' }], false)).toEqual({
+      removeTorrent: false,
+      deleteDownloadPath: false,
+    });
+  });
+
+  it('exposes STOPPED as PAUSED', () => {
+    expect(projectJobStatus('STOPPED')).toBe('PAUSED');
   });
 });

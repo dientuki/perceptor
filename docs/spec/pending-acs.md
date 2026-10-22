@@ -1,7 +1,7 @@
 # Specs con Acceptance Criteria pendientes
 
 <!-- pending-acs:begin intro -->
-Medido el **2026-10-15**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
+Medido el **2026-10-21**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
 `## Acceptance Criteria`; las 50 specs que no aparecen estan en 100%.
 <!-- pending-acs:end intro -->
 
@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **42** de 92 |
-| ACs pendientes | **249** |
-| ACs totales del proyecto | 1104 |
-| ACs verificados | 855 (77%) |
+| Specs con ACs pendientes | **50** de 100 |
+| ACs pendientes | **348** |
+| ACs totales del proyecto | 1213 |
+| ACs verificados | 865 (71%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,6 +28,14 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 100 | bluray-disc-remux | Implemented | 11/16 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14 | Falta una corrida del pipeline vivo con un BDMV real (el stack dev no estaba levantado al implementar). Cubierto fuera del pipeline: selección y armado sobre The Transformers 1986 (85 min, MKV de 59 GB, idiomas eng/spa); AC-11/12/13/15 cubiertos por tests sintéticos, sin disco con señuelos/loop/sample a mano. `bin/npm web run lint` tampoco corrió |
+| 099 | stream-end-trim | Approved | 13/13 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | **[OBS PENDIENTE DE ESCRIBIR]** |
+| 098 | dub-card-tail-trim | Implemented | 11/11 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | **Una corrida de pipeline.** AC-1 a AC-10 piden encodear archivos reales (Neagley, Voltron, War Machine, Wrecking Crew, Chernobyl, Reacher, Foundation) con la instalación en marcha; la sesión no tenía stack accesible (puertos del host tomados por otra instalación) y las fuentes son archivos del mantenedor. Debajo está probado por unit tests: el clasificador contra los 7 `.freezes.txt` reales (cortes 173.822 / 273.862 / 140.905 / 168.909 y keep en los otros tres), `videoEndSeconds`, el caché por ruta, el silencio ante fallo, `-t` en `buildCommand` y la lectura del setting en `api`. AC-11 sigue abierto porque `bin/cli web npx --no tsc --noEmit` da 7 errores en `Calendar.tsx` (faltan submódulos de `@fullcalendar/react`), ajenos a esta feature; el resto del conjunto pasa. |
+| 097 | encode-stop | Implemented | 18/18 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 10, 11, 12, 13, 14, 16, 17, 18 | Código completo y cubierto por tests unitarios; falta la pasada manual contra un encode real (`plan.md` § Verification). Depende de una corrida completa del pipeline. |
+| 096 | date-format | Implemented | 10/12 | 1, 2, 3, 4, 5, 6, 7, 10, 11, 12 | Needs a signed-in browser pass (film 2026-09-07 digital date, season episode, Settings → General, /preferences, Scheduling stamp, console for hydration) and an admin `updateSettings` call for AC-7; the code, typecheck and comments gate are green. |
+| 095 | season-pack-per-file-encode | Implemented | 13/13 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | Código completo (api + worker + web), tests y chequeos verdes (api 1111, worker 379). Ningún AC observado: todos necesitan una sesión autenticada y un season pack real en el stack dev (sin credenciales en la corrida del agente) |
+| 094 | automatic-grain-detection | Approved | 14/16 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16 | Código completo (api + worker); AC-10 y AC-11 verificados. El resto necesita encodes reales con `ENCODE_DRIVER=ffmpeg`; el umbral 0.886 es provisional hasta re-medir el corpus a CRF 22 (T008, lo corre el mantenedor). |
+| 093 | movie-release-dates-display | Implemented | 9/10 | 1, 2, 3, 4, 5, 6, 7, 8, 9 | **Un token de usuario logueado.** Los nueve son de UI o de la respuesta de `calendar`/`movie`, que exigen una sesion de usuario; ni el browser ni la credencial del worker (`Not authenticated`) sirvieron. Ya probado debajo: `movie-release-days.spec.ts` (8 casos: fallback, mismo dia, fuera de rango, limites) y 6 casos nuevos de `calendar.service.spec.ts` cubren la mitad de `api` de AC-3, 5, 6, 7 y 9; el build de `web` pasa. Datos reales que sirven para la pasada: films 1, 2 y 3 (tres fechas distintas, AC-1/4/6) y 9 (teatral y fisico el mismo dia, AC-5); AC-2 y AC-3 piden fixture temporal (revertir). |
 | 091 | race-loser-cleanup | Approved | 8/9 | 1, 2, 3, 4, 5, 6, 7, 8 | **Una corrida de pipeline.** Las ocho son carreras reales: dos o tres torrents sobre un mismo titulo, uno gana, y hay que ver que los perdedores se barran. Necesita pipeline corrido mas limpiar el huerfano de Inception desde la UI (su propio Out of Scope prohibe hacerlo por SQL). |
 | 089 | status-materialization | Implemented | 5/24 | 18, 20, 21, 22, 24 | **Un reemplazo forzado (`force`) en una instalacion real.** Todo esta probado en unitario (`pipeline-status.spec.ts`, los specs de los guards y de la recuperacion de 054), pero no se vio en vivo: AC-20 el regreso a `COMPLETED` cuando termina el job 11 de `episodes.id = 195` (medido: `ENCODING` al 24%, la serie 6 tambien en `ENCODING`), AC-21 un reemplazo que falla, AC-22 un segundo intento sin `force` contra un titulo a mitad de reemplazo, AC-24 un pack de temporada sobre episodios con archivo. AC-18 sigue pendiente aparte: un especial de la temporada 0 forzado a `ERROR`/`DOWNLOADING` (medido: 5 especiales `MISSING`, serie 6 sin ellos en la cuenta). Sin spec propio para `uploads.resolver.ts`; comparte el guard `hasPossession` con `uploads.service.ts`, que si esta cubierto. |
 | 087 | force-replacement-arbitration | Implemented | 1/12 | 3 | **Una corrida de pipeline.** AC-3 pide que la carpeta de biblioteca del film quede con exactamente un archivo despues de que el reemplazo encodee. Es el paso 7 de la pasada viva de 091. |
@@ -75,14 +83,16 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 249 ACs pendientes no son 249 problemas distintos. Se reducen a 22 destrabes, y los dos primeros se llevan el 51%:
+Los 348 ACs pendientes no son 348 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 55%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
-| Una corrida de pipeline | 102 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091 |
+| Una corrida de pipeline | 113 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091, 098 |
+| Sin clasificar | 79 | 094, 095, 096, 097, 099, 100 |
 | Una instalacion fresca | 25 | 015, 049, 061, 066 |
 | Adquisiciones reales | 18 | 073, 076 |
 | Nada: no esta implementada | 17 | 081 |
+| Un token de usuario logueado | 12 | 037, 039, 093 |
 | Plex (descartado) | 12 | 072 |
 | Fuentes en vuelo, y un segundo usuario | 10 | 064 |
 | Un browser que registre service workers | 9 | 080 |
@@ -94,7 +104,6 @@ Los 249 ACs pendientes no son 249 problemas distintos. Se reducen a 22 destrabes
 | Tres cosas distintas, ninguna la sesion | 4 | 062 |
 | Un segundo usuario, y decisiones del duenio | 4 | 078 |
 | Sujetos que el indexer no devuelve | 3 | 036 |
-| Un token de usuario logueado | 3 | 037, 039 |
 | La UI de GitHub | 3 | 085 |
 | Un segundo usuario | 2 | 042, 071 |
 | Dos peliculas que esta biblioteca no tiene | 2 | 075 |

@@ -3,6 +3,7 @@ import { MoviesService } from '@/movies/movies.service';
 import { ShowsService } from '@/shows/shows.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { parseCalendarRange } from './calendar-range';
+import { movieReleaseDays } from './movie-release-days';
 import { groupEpisodes } from './group-episodes';
 import { CalendarEntry } from './entities/calendar-entry.entity';
 import { CalendarEntryKind } from './entities/calendar-entry-kind.enum';
@@ -27,15 +28,18 @@ export class CalendarService {
     if (capabilities.moviesEnabled) {
       const movies = await this.moviesService.findReleasedBetween(userId, range.from, range.toExclusive);
       for (const movie of movies) {
-        if (!movie.releaseDate) continue;
         if (movie.isShort && !capabilities.shortsEnabled) continue;
-        entries.push({
-          kind: movie.isShort ? CalendarEntryKind.SHORT : CalendarEntryKind.MOVIE,
-          mediaId: movie.id,
-          title: movie.title,
-          date: movie.releaseDate.toISOString().slice(0, 10),
-          status: movie.status,
-        });
+        // Spec 093, REQ-6
+        for (const item of movieReleaseDays(movie, range)) {
+          entries.push({
+            kind: movie.isShort ? CalendarEntryKind.SHORT : CalendarEntryKind.MOVIE,
+            mediaId: movie.id,
+            title: movie.title,
+            date: item.date,
+            status: movie.status,
+            releaseTypes: item.releaseTypes,
+          });
+        }
       }
     }
 

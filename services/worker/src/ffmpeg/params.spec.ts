@@ -12,7 +12,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { SubtitleFormat } from '../encode/subtitle-formats';
-import { getAudioParams, getSubtitleParams, getVideoParams } from './params';
+import { getAudioParams, getSubtitleParams, getVideoParams, selectAudioStreams } from './params';
 
 function audioStream(overrides: Record<string, any>) {
   return {
@@ -538,6 +538,24 @@ describe('getAudioParams', () => {
 
     expect(mapArgCount(params)).toBe(1);
     expect(params).toContain('0:1');
+  });
+
+  it('selectAudioStreams returns exactly the indices getAudioParams maps (Spec 099, REQ-7)', () => {
+    const streams = [
+      audioStream({ index: 1, tags: { language: 'jpn' } }),
+      audioStream({ index: 2, tags: { language: 'eng', title: "Director's Commentary" } }),
+      audioStream({ index: 3, tags: { language: 'eng' } }),
+      audioStream({ index: 4, tags: { language: 'fra' } }),
+    ];
+    const allowed = ['jpn', 'eng', 'spa'];
+
+    const selection = selectAudioStreams(streams, allowed, 'jpn', []);
+    const params = getAudioParams(streams, allowed, 'jpn', [], TRACK_TITLES);
+
+    const mapped = params.filter((arg) => /^0:\d+$/.test(arg));
+    expect(selection.streams.map((s) => `0:${s.index}`)).toEqual(mapped);
+    expect(mapped).toEqual(['0:1', '0:3']);
+    expect(selection.missingLanguages).toEqual(['spa']);
   });
 });
 

@@ -830,7 +830,7 @@ The full vocabulary, by owner:
 | `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
 | `api` — uploads (REST) | `error.upload.ticket_expired`, `error.upload.ticket_wrong_movie`, `error.upload.ticket_wrong_episode`, `error.upload.metadata_incomplete` |
 | `api` — DTO validation | `error.validation.setting_key_required`, `error.validation.setting_value_required`, `error.validation.user_id_required`, `error.validation.login_username_required`, `error.validation.login_password_required`, `error.validation.user_name_required`, `error.validation.username_min_length`, `error.validation.password_min_length` |
-| `worker` — encode pipeline | `error.encode.no_video_stream`, `error.encode.no_original_audio`, `error.encode.probe_failed`, `error.encode.ffmpeg_failed`, `error.encode.no_output`, `error.encode.mkvmerge_failed`, `error.encode.episode_numbers_missing`, `error.encode.unknown_driver`, `error.encode.move_failed` (`032-optional-compression`, the passthrough path used when compression is off), `error.encode.unexpected` (catch-all for a non-`KeyedError` throw — `encodeFailed`'s `errorKey` is required, so a failure never reports with no key) |
+| `worker` — encode pipeline | `error.encode.no_video_stream`, `error.encode.no_original_audio`, `error.encode.probe_failed`, `error.encode.ffmpeg_failed`, `error.encode.no_output`, `error.encode.mkvmerge_failed`, `error.encode.episode_numbers_missing`, `error.encode.unknown_driver`, `error.encode.move_failed` (`032-optional-compression`, the passthrough path used when compression is off), `error.encode.disc_remux_failed` (`{code}`, `{stderr}`; `mkvmerge` could not assemble a Blu-ray playlist into an MKV — `100-bluray-disc-remux`), `error.source.disc_playlist_ambiguous` (`{playlists}`; reported through `sourceScanFailed` when two playlists tie for the main film — `100-bluray-disc-remux`), `error.encode.unexpected` (catch-all for a non-`KeyedError` throw — `encodeFailed`'s `errorKey` is required, so a failure never reports with no key) |
 | `worker` — reused from `api` | `error.processJob.not_found`, `error.source.no_target`, `error.source.no_download_path` |
 
 **Locale resolution never crosses the GraphQL boundary as a header or argument.** `web` resolves
@@ -2289,6 +2289,170 @@ refusal rather than using the shorts `Switch`'s key-remount trick — the same c
 shape `057`'s `ContentKindSelect` already uses. `worker` adds `grainMode` to `encode.job.ts`'s
 hand-written `processJob` query and never calls either mutation.
 
+### The raw short flag, for the grain probe (`094-automatic-grain-detection`)
+
+```graphql
+type EncodeJobDetails {
+  isShort: Boolean!
+}
+```
+
+`092`'s stub is gone: `AUTO` now resolves in the worker's encode driver through a metadata gate and,
+only when it passes, an encode probe. `isShort` exists for one reason — a short film skips the probe
+and resolves on the gate alone (REQ-11), since minutes of probing on a ten-minute title cost more
+than the bitrate they could save.
+
+**Raw, not effective.** A film job carries `Movie.isShort` exactly as stored, **regardless of
+`shorts_enabled`**. Inside `getEncodeJobDetails` the tempting value is `movie.isShort &&
+isShortsEnabled()`, because `outputRoot` already computes it a few lines above — but that expression
+decides a destination folder, and the probe is skipped on runtime, not on folder. A short in an
+installation with shorts disabled still files under `path_movies` and still reports `isShort: true`.
+
+**Non-null, `false` for every episode job.** Not nullable, not omitted. The worker must not infer
+"episode" from `isShort` or read `kind` to decide REQ-11; `isShort: false` alone is what lets an
+episode probe.
+
+No error condition: the field is a column read on a row the query already loaded, and a job with
+neither a film nor an episode already throws before either arm returns.
+
+The worker trusts nothing it reads off the payload: an absent, `null` or non-boolean `isShort`
+normalizes to `false` with one warning (REQ-12), so the title probes and the encode never fails.
+That fallback covers a **response** missing the field — never a **query** asking for one the schema
+lacks. Selecting `isShort` against an `api` that predates this feature is a GraphQL validation error
+that fails the whole `processJob` query, which is why the worker's query change ships after `api`'s,
+never before.
+
+Consumer obligations: `worker` adds `isShort` to `encode.job.ts`'s hand-written `processJob` query
+and local `EncodeJobDetails` type in the same edit. `web` never selects it.
+
+### A film's typed release dates, and one calendar entry per release day (`093-movie-release-dates-display`)
+
+```graphql
+type Movie {
+  theatricalReleaseDate: DateTime
+  digitalReleaseDate: DateTime
+  physicalReleaseDate: DateTime
+}
+
+enum MovieReleaseType {
+  THEATRICAL
+  DIGITAL
+  PHYSICAL
+}
+
+type CalendarEntry {
+  releaseTypes: [MovieReleaseType!]
+}
+```
+
+The three `Movie` fields expose what `075` already stores: the earliest day across every country for
+each release type, `null` when TMDB lists none. `releaseDate` keeps its meaning (the earliest date of
+any type, often a premiere). No new argument, no new error.
+
+**`releaseTypes` is `null` for episodes and `[]` for the fallback.** A film or short with at least one
+typed date yields one entry per distinct typed day in range, each carrying the types whose date is that
+day, ordered `THEATRICAL`, `DIGITAL`, `PHYSICAL`. A film with all three typed dates `null` keeps the
+single entry on `releaseDate` with `releaseTypes: []`. A film with typed dates is never also listed on
+`releaseDate`. `web` renders `null` and `[]` identically (no prefix) and skips an enum value it does not
+know.
+
+**A film can now yield several entries in one response.** Same `kind`, `mediaId`, `title` and `status`,
+different `date`. `(mediaId, date)` is unique for `MOVIE`/`SHORT` entries; a consumer must not key by
+`mediaId` alone. `api` returns enum values only; the `(cine)`/`(digital)`/`(físico)` labels are `web`
+copy.
+
+Additive: an un-updated `web` keeps working against the new `api`.
+
+### A date order per user and per installation (`096-date-format`)
+
+```graphql
+type User {
+  """
+  Date order chosen by this user: true = MM/DD/YYYY, false = DD/MM/YYYY.
+  Null means unset — fall through to defaultDateMonthFirst, then the UI language.
+  """
+  dateMonthFirst: Boolean
+}
+
+type Query {
+  """
+  Installation-wide date order: true = MM/DD/YYYY, false = DD/MM/YYYY.
+  Null when the date_month_first setting is unset — fall through to the UI language.
+  Any authenticated user; not public.
+  """
+  defaultDateMonthFirst: Boolean
+}
+
+type Mutation {
+  """Sets the caller's own date order. Never another user's."""
+  setDateMonthFirst(monthFirst: Boolean!): User!
+}
+```
+
+The settings catalog gains `date_month_first` (kind `boolean`), seeded `""` (unset), written through
+the existing admin-only `updateSettings` and read through the existing admin-only `settings`. A write
+must be `"true"` or `"false"`; anything else, `""` included, is refused with the existing
+`error.setting.expected_boolean`. Like `ui_locale`, it cannot be returned to unset from the UI.
+
+**The boolean means "month first".** `true` is `MM/DD/YYYY`. `web` resolves the order in effect as
+`User.dateMonthFirst` → `defaultDateMonthFirst` → the active UI language (`en` month first, `es` day
+first); `api` never resolves it.
+
+**`defaultDateMonthFirst` is authenticated, not `@Public()`, and answers `null` for an unset or
+unrecognised value, never `false`.** Non-admins cannot read `settings`, which is why this query exists.
+A failed read falls through to the language order in `web`. No new error key.
+
+Additive: an un-updated `web` keeps working against the new `api`.
+
+### A multi-file source lists one job per file, and a file can be retried or discarded (`095-season-pack-per-file-encode`)
+
+```graphql
+type DownloadJob {
+  processJobId: Int!
+  label: String!
+  episodeId: Int
+  seasonNumber: Int
+  episodeNumber: Int
+  status: String!
+  progress: Float!
+  encodeSpeed: Float
+  lastError: DownloadError
+  retryable: Boolean!
+}
+
+type Download {
+  jobs: [DownloadJob!]!
+}
+
+type Mutation {
+  """Retries the encode of a single failed file"""
+  encodeJobStart(processJobId: Int!): Download!
+  """Discards one file of a source: cancels its encode and deletes its input"""
+  encodeJobDiscard(processJobId: Int!): Download!
+}
+```
+
+**`DownloadJob.status` is a projected `String`, not the `EncodeStatus` enum.** Its vocabulary is
+`QUEUED` / `ENCODING` / `COMPLETED` / `ERROR` / `DISCARDED`: the stored `WAITING` is folded into
+`QUEUED`. `097` will add `STOPPED` as `PAUSED` in the same projection; a consumer must tolerate an
+unknown value.
+
+**`DISCARDED` is a `Download.status` value only at the source altitude**, when every job of the source
+is discarded. It never surfaces on a `Movie`/`Episode`/`Show`: a discarded episode derives as if the
+source never brought it.
+
+**Both mutations return the parent `Download`**, freshly derived, never the job. Errors:
+`error.processJob.not_found`, `error.download.retry_replaced`, `error.download.retry_superseded`,
+`error.processJob.not_resumable` (start) and `error.processJob.not_discardable` (discard);
+`error.download.retry_enqueue_failed` when the retried job does not land in the queue.
+
+**`encodeStarted` now refuses a discarded job with `error.encode.discarded`.** That key travels
+`api` → `worker` only: the worker abandons the job silently, reports nothing and does not retry. It
+never reaches `web`.
+
+Additive: an un-updated `web` or `worker` keeps working against the new `api`, except that a `web`
+that does not know `DISCARDED` paints it with the default gray tone.
+
 ### What never crosses the boundary
 
 - **Absolute container paths.** Constitution, Article V — `web` sees host paths, `worker` receives
@@ -2296,6 +2460,43 @@ hand-written `processJob` query and never calls either mutation.
 - **Prisma types.** `grep -rn "@prisma/client" services/web/src services/worker/src` must return
   nothing. Enums crossing the boundary are re-declared as GraphQL enums or plain string unions
   (`services/web/src/types/media.ts`).
+
+### The dub-card trim switch, for the worker (`098-dub-card-tail-trim`)
+
+```graphql
+type EncodeJobDetails {
+  dubTrimEnabled: Boolean!
+}
+```
+
+One field added to an existing type. It is the raw `dub_trim_enabled` setting (a boolean catalog key,
+seeded `"false"`, editable from Settings → Compression): `ProcessJobsService.getEncodeJobDetails`
+sets it from the same `SettingsService.getMap()` result as `compressionEnabled`, and only the exact
+string `"true"` reads as `true` — a missing row or any other value is `false`. It is **not** combined
+with `compressionEnabled` by `api`; the worker gates it on compression (with compression off the file
+is moved untouched and detection never runs). `web` never selects it. Resolved at query time, not at
+enqueue time.
+
+No new error key and no new mutation: a non-boolean write goes through the existing
+`error.setting.expected_boolean`, and a failed detection never leaves the worker.
+
+### The stream-end trim switch, for the worker (`099-stream-end-trim`)
+
+```graphql
+type EncodeJobDetails {
+  streamEndTrimEnabled: Boolean!
+}
+```
+
+One field added to an existing type. It is the raw `stream_end_trim_enabled` setting (a boolean
+catalog key, seeded `"false"`, editable from Settings → Compression), resolved from the same
+`SettingsService.getMap()` result as `dubTrimEnabled`; only the exact string `"true"` reads as
+`true`. It is **not** combined with `compressionEnabled` or `dubTrimEnabled` by `api`: the worker
+gates it on compression, and the two switches are independent. `web` never selects it. Resolved at
+query time, not at enqueue time.
+
+No new error key and no new mutation: a non-boolean write goes through the existing
+`error.setting.expected_boolean`, and a failed analysis never leaves the worker.
 
 ## Known debt
 

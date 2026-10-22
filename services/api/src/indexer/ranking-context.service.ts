@@ -70,22 +70,26 @@ export class RankingContextService {
         languageRequirement: this.withFallback({ mandatory, languages }, preferences),
         preferredGroups: preferences.movieTorrentGroups.map((g) => g.name),
         allowCinemaReleases: preferences.allowCinemaReleases,
+        mediaTitle: movie.title,
       };
     }
 
     let showId: number;
+    let showTitle: string;
     if ('seasonId' in target) {
       const season = await this.seasonsService.findOneFromDb(target.seasonId, userId);
       if (season === null) {
         throw i18nError.notFound(ERROR_KEYS.SEASON_NOT_FOUND, { id: target.seasonId });
       }
       showId = season.show.id;
+      showTitle = season.show.title;
     } else {
       const episode = await this.episodesService.findOneFromDb(target.episodeId, userId);
       if (episode === null) {
         throw i18nError.notFound(ERROR_KEYS.EPISODE_NOT_FOUND, { id: target.episodeId });
       }
       showId = episode.season.show.id;
+      showTitle = episode.season.show.title;
     }
 
     const [mandatory, languages] = await Promise.all([
@@ -100,14 +104,18 @@ export class RankingContextService {
       languageRequirement: this.withFallback({ mandatory, languages }, preferences),
       preferredGroups: preferences.showTorrentGroups.map((g) => g.name),
       allowCinemaReleases: true,
+      mediaTitle: showTitle,
     };
   }
 
   async forShowOwners(showId: number): Promise<RankingContext> {
-    const owners = await this.prisma.userShow.findMany({
-      where: { showId },
-      orderBy: { createdAt: 'asc' },
-    });
+    const [owners, show] = await Promise.all([
+      this.prisma.userShow.findMany({
+        where: { showId },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.show.findUnique({ where: { id: showId }, select: { title: true } }),
+    ]);
 
     let mandatory = false;
     const languages = new Map<string, RankingLanguage>();
@@ -142,19 +150,23 @@ export class RankingContextService {
       languageRequirement: { mandatory, languages: Array.from(languages.values()) },
       preferredGroups: Array.from(groups),
       allowCinemaReleases: true,
+      mediaTitle: show?.title ?? null,
     };
   }
 
   async forMovieOwners(movieId: number): Promise<MovieOwnersContext> {
-    const rows = await this.prisma.userMovie.findMany({
-      where: { movieId },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        user: {
-          select: { acquireTheatrical: true, acquireDigital: true, acquirePhysical: true },
+    const [rows, movie] = await Promise.all([
+      this.prisma.userMovie.findMany({
+        where: { movieId },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          user: {
+            select: { acquireTheatrical: true, acquireDigital: true, acquirePhysical: true },
+          },
         },
-      },
-    });
+      }),
+      this.prisma.movie.findUnique({ where: { id: movieId }, select: { title: true } }),
+    ]);
 
     let mandatory = false;
     const languages = new Map<string, RankingLanguage>();
@@ -198,6 +210,7 @@ export class RankingContextService {
         languageRequirement: { mandatory, languages: Array.from(languages.values()) },
         preferredGroups: Array.from(groups),
         allowCinemaReleases: owners.every((o) => o.allowCinemaReleases),
+        mediaTitle: movie?.title ?? null,
       },
       owners,
     };

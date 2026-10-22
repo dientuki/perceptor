@@ -23,6 +23,169 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-21 — `100-bluray-disc-remux`
+
+`worker` and `web` (two catalog keys); no `api`, no migration, no GraphQL schema change (`graphql-contract.md` only gained the two key names in its worker error row).
+
+- `worker` typecheck (`tsc --noEmit`, throwaway `perceptor-worker:local-dev` container because the compose `worker` was not running): clean.
+- `worker` tests: 39 files, 506 passed (was 36 files / 477 before the first task of this feature; the baseline count of the run before 100 was not recorded). `bin/comments worker`: PASS, 296 locators.
+- `web`: `check-messages.mjs` parity OK (639 keys, run on the host's Node). `bin/npm web run lint` **not run** — the `web` container was not up.
+- Real disc (The Transformers: The Movie 1986, 2160p BDMV, run outside the pipeline with the real `scanDisc` + `assemblePlaylist`): selected `00002.mpls` (85 min, 13 marks, only `.mpls` flagged video; `00001.mpls`, a menu-loop shape, was discarded); `mkvmerge` produced a 59.3 GB MKV in 875 s, 5100.8 s long, HEVC 3840x2160, three audio and two PGS tracks with `eng`/`spa` tags. Fixtures: `services/worker/fixtures/bdmv/transformers-the-movie-1986/`.
+- Not measured: the full pipeline (api states, library file, folder cleanup, stop/delete mid-assembly, retry) — see `pending-acs.md`.
+
+## 2026-10-20 — `098-dub-card-tail-trim` rule correction (T011)
+
+`worker` only, plus a REQ-7 amendment in the spec. A library pass over 808 episodes, 145 films and 10
+shorts showed the original "80% of the whole run" rule rejected real dubbing tails that open with
+several non-card segments (Dragons: Race to the Edge S01, 75%) and could not tell Haven S01E01 (no
+cards, a false positive) apart. The rule now scores the trailing cards only: after setting aside a
+non-multiple last segment, at least 5 consecutive multiples of 2.002 s counted from the end, at least
+3 of them exactly 2.002 s; the cut stays the start of the whole run. Re-evaluated offline on 383 real
+freeze logs: all 244 earlier cuts unchanged to the same second, Haven S01E01 now kept, six Race to the
+Edge S01 episodes now cut, Arrival, Dawn of the Dragon Racers, Chernobyl and DreamWorks Dragons kept.
+Margins are thin: the smallest real tail has exactly 5 trailing cards and the largest rejected one 4.
+
+| Check | Result |
+| :-- | :-- |
+| `bin/npm worker test` | 33 files, 448 tests passed |
+| `bin/cli worker npx tsc --noEmit` | 0 `error TS` |
+| `bin/comments worker` | PASS (268 locators) |
+| live manual pass | still not run |
+
+## 2026-10-19 — `098-dub-card-tail-trim` (code complete; live pass pending)
+
+`api` + `worker` + `web`, no migration. `api` makes `dub_trim_enabled` an editable boolean setting
+(seeded `"false"`) and hands it to the worker as `EncodeJobDetails.dubTrimEnabled`, not combined with
+`compressionEnabled`. `worker` gains `src/encode/dub-trim.ts` (freezedetect over the last 300 s of the
+video stream, 2.002 s card-ratio rule, per-input-path verdict cache, silent on failure),
+`src/ffmpeg/capture.ts` (the grain probe's spawn helper, moved) and a `trimAt` parameter folded into
+`buildFfmpegCommand`'s single `-t`. `web` adds the Compression-tab switch.
+
+| Check | Result |
+| :-- | :-- |
+| `bin/npm api run test` | 70 suites, 1146 tests passed |
+| `bin/cli api npx tsc --noEmit` | 0 `error TS` |
+| `bin/npm worker test` | 32 files, 405 tests passed |
+| `bin/cli worker npx tsc --noEmit` | 0 `error TS` |
+| `bin/cli web npx tsc --noEmit` | 7 `error TS`, all in `src/components/calendar/Calendar.tsx` (missing `@fullcalendar/react` submodules in the image); no file of this feature is involved |
+| `check-messages.mjs` | OK, 636 keys |
+| `bin/comments api` / `web` / `worker` | PASS (891 / 100 / 246 locators) |
+| migrations | none; `git status --short services/api/prisma` shows only `seeds/settings.ts` |
+| `schema.gql` diff | exactly `+  dubTrimEnabled: Boolean!` on `EncodeJobDetails` |
+| live manual pass | not run: no stack was reachable for this session (host ports held by another install) and the AC-1 sources are the maintainer's own files |
+
+The worker and web checks ran through `docker compose run --rm --no-deps` because their containers
+were not up.
+
+## 2026-10-17 — `097-encode-stop` (code complete; live pass pending)
+
+`api` + `worker` + `web`, one migration (`20261017200942_encode_status_stopped`, widens
+`process_jobs.status` with `STOPPED`, no backfill). `api` adds `EncodeStatus.STOPPED` (exposed as
+`PAUSED`), `IN_FLIGHT_ENCODE_STATUSES` beside `ACTIVE_ENCODE_STATUSES`, `encodeJobStop`, the encode
+branch of `downloadStop`/`downloadStart`, `resumeEncodeStage` over `ERROR` and `STOPPED` (a queue entry
+`removeEncode` cannot remove is an enqueue failure), the `encodeStarted`/`encodeFailed` guards, and
+`isRaceWinner` false for a stopped source (REQ-15). `worker` abandons silently on
+`error.encode.stopped`. `web` shows Stop/Play on the encode and Pause/Play per file.
+
+| Check | Result |
+| :-- | :-- |
+| `bin/npm api run test` | 70 suites, 1135 tests passed |
+| `bin/cli api npx tsc --noEmit` | 0 `error TS` |
+| `bin/npm worker test` | 31 files, 380 tests passed |
+| `bin/cli worker npx tsc --noEmit` | 0 `error TS` |
+| `bin/cli web npx tsc --noEmit` | 0 `error TS` |
+| `bin/cli web node scripts/check-messages.mjs` | OK, 635 keys |
+| `bin/comments api` / `web` / `worker` | PASS (887 / 100 / 221 locators) |
+| `git status --short services/api/prisma` | `schema.prisma` + one new migration |
+| `schema.gql` diff | only `encodeJobStop` added |
+
+`web` has no test suite for this change (Article IX); `bin/npm web run lint` reports 1545 errors across
+176 files, none in the touched files (baseline not compared). The manual pass in `plan.md` §
+Verification (AC-1..AC-18 against a live encode) has not been run.
+
+## 2026-10-17 — `095-season-pack-per-file-encode` (code complete; live pass pending)
+
+`api` + `worker` + `web`, one migration (`20261017183533_encode_status_discarded`, widens
+`process_jobs.status` with `DISCARDED`, no backfill). `api` stops a finished torrent, exposes
+`Download.jobs`/`DownloadJob`, `encodeJobStart` and `encodeJobDiscard`, derives the per-file rules in
+`pipeline-status.ts` (`cleanupDecision` shared with `encodeCompleted`) and guards the worker's reports;
+`worker` abandons an `error.encode.discarded` refusal silently; `web` adds the chevron, child rows and
+the discard dialog. The `schema.gql` diff is exactly `DownloadJob`, `Download.jobs`, `encodeJobStart` and
+`encodeJobDiscard` (22 insertions, nothing else).
+
+- `api`: `bin/npm api test` 70 suites / 1111 tests passed (was 1068; 25 new in
+  `downloads.service.spec.ts`); `tsc --noEmit` 0 errors; `bin/comments api` PASS (854 locators);
+  `prisma migrate status` up to date, 41 migrations.
+- `worker`: `bin/npm worker test` 31 files / 379 tests passed; `tsc --noEmit` 0 errors; `bin/comments
+  worker` PASS (218 locators).
+- `web`: `tsc --noEmit` 0 errors; `check-messages.mjs` OK (631 keys); `bin/comments web` PASS (97
+  locators). `bin/npm web run build` not run (dev stack up). `web` has no test runner.
+- Fault injection: swapping the active and job-`ERROR` rules in `deriveSourceStatus` fails the
+  "reads ENCODING while a job is active even if another job is ERROR" case.
+- Not observed: AC-1 through AC-13 all need a signed-in session and a real season pack in the dev
+  stack; none was run, so none is ticked. Recorded in `pending-acs.md`.
+- Found while implementing: the plan assumed a `DISCARDED` parent already hid Play/Stop; it did not
+  (`isControllable` never read `status`), fixed under REQ-9.
+
+## 2026-10-17 — `096-date-format` (code complete; live pass pending)
+
+`api` + `web`, one migration (`20261017074958_add_user_date_month_first`, nullable `users.dateMonthFirst`).
+`api` exposes `User.dateMonthFirst`, `Query.defaultDateMonthFirst` (authenticated, `null` for unset) and
+`Mutation.setDateMonthFirst`, plus the `date_month_first` catalog key and `""` seed row; the
+`schema.gql` diff is exactly those three additions. `web` formats every date through
+`formatDate`/`formatDateTime` (zero-padded, Settings stamps 24-hour) with the order resolved once in
+`(dashboard)/layout.tsx`, and adds the Settings → General and `/preferences` pickers.
+
+- `api`: `bin/npm api run test` 70 suites / 1068 tests passed (six new cases in
+  `settings.resolver.spec.ts`); `tsc --noEmit` 0 errors; `bin/comments api` PASS (811 locators).
+- `web`: `tsc --noEmit` 0 errors; `check-messages.mjs` OK (616 keys); `bin/comments web` PASS (91
+  locators); `grep -rn "toLocaleDateString\|toLocaleString" services/web/src` prints nothing.
+  `bin/npm web run build` not run (dev stack up). `web` has no test runner.
+- Observed holding: AC-8 (unauthenticated `defaultDateMonthFirst` refused with
+  `error.auth.unauthenticated`, re-run by curl) and AC-9 (read `getDefaultDateMonthFirst`: every error
+  branch returns `null`).
+- Not observed: AC-1…AC-7, AC-10…AC-12 need a signed-in session (no credentials in the agent run);
+  recorded in `pending-acs.md`.
+
+## 2026-10-17 — `093-movie-release-dates-display` (code complete; live pass pending)
+
+`api` + `web`, no migration (`git status --short services/api/prisma` empty). `api` exposes
+`Movie.theatricalReleaseDate`/`digitalReleaseDate`/`physicalReleaseDate`, the `MovieReleaseType` enum
+and `CalendarEntry.releaseTypes`; the `schema.gql` diff is exactly those (26 insertions, nothing
+else). `calendar(from, to)` now expands a film into one entry per distinct in-range typed day
+(`calendar/movie-release-days.ts`), falling back to `releaseDate` with `[]` only when all three typed
+dates are `NULL`; `findReleasedBetween` is an `OR` over the four columns. `web` renders the typed
+dates under the year on the detail page and prefixes calendar entries with `(cine)`/`(digital)`/
+`(físico)`.
+
+- `api`: `bin/npm api test` 70 suites / 1062 tests passed; `tsc --noEmit` 0 errors; `bin/comments api`
+  PASS (803 locators). New `movie-release-days.spec.ts` (8 cases) and six new cases in
+  `calendar.service.spec.ts`.
+- `web`: `tsc --noEmit` 0 errors; `check-messages.mjs` OK (614 keys); `bin/comments web` PASS (77
+  locators); `next build` exit 0, run in a throwaway container with the dev stack stopped, then
+  `.next` removed and the stack restarted.
+- Not measured: no signed-in session was available, so the detail page and `/calendar` were not
+  opened and `calendar` was not queried live; `worker` untouched and not re-run.
+
+## 2026-10-17 — `094-automatic-grain-detection` (code complete; calibration pending)
+
+`api` + `worker`. `api` exposes `EncodeJobDetails.isShort: Boolean!` (raw `Movie.isShort`, `false` for
+an episode); the `schema.gql` diff is exactly that one line, `git status` on `services/api/prisma`
+is clean. `worker` moves grain resolution from `buildFfmpegCommand` into the async encode driver and
+replaces `092`'s stub with a metadata gate (`grain-gate.ts`) and an encode probe (`grain-probe.ts`),
+cached per `mediaSourceId`.
+
+`api` 69/69 suites, 1048/1048 tests (+3 `isShort` cases). `worker` 31 files, 378 tests, all passing.
+`bin/cli api npx --no tsc --noEmit` and `bin/cli worker npx --no tsc --noEmit`: 0 errors.
+`bin/comments api`: PASS, 797 locators; `bin/comments worker`: PASS, 215 locators. No JSON case under
+`services/worker/ffmpeg/` was edited.
+
+**Not verified.** `GRAIN_PROBE_SAVED_MBPS_THRESHOLD = 0.886` is the CRF 24 fit; T008 (re-measure the
+corpus at CRF 22, two runs per file, cross-check Lionheart through the worker) is deferred to the
+maintainer's own files, so REQ-7 stays provisional and the live acceptance criteria are unticked.
+The Lionheart unit test reproduces the arithmetic from a synthetic split of the published sum, not
+from real windows.
+
 ## 2026-10-15 — `089-status-materialization`, amendment 0.3.0 (a replacement in flight outranks possession)
 
 `api` only; no GraphQL, schema or migration change (`git status` on `services/api/prisma` and the

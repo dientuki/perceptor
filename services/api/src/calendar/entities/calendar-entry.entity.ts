@@ -1,5 +1,6 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
 import { CalendarEntryKind } from './calendar-entry-kind.enum';
+import { MovieReleaseType } from '@/movies/entities/movie-release-type.enum';
 
 @ObjectType()
 export class CalendarEntry {
@@ -55,4 +56,12 @@ export class CalendarEntry {
       'Null unless kind is EPISODES. Number of episodes in the group whose status is COMPLETED (REQ-7b).',
   })
   completedCount?: number | null;
+
+  // Spec 093, REQ-6
+  @Field(() => [MovieReleaseType], {
+    nullable: true,
+    description:
+      "Null unless kind is MOVIE or SHORT. The release types whose date is this entry's day, ordered THEATRICAL, DIGITAL, PHYSICAL. Empty when the film has no typed date and the entry sits on releaseDate (093 REQ-6).",
+  })
+  releaseTypes?: MovieReleaseType[] | null;
 }

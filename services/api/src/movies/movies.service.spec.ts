@@ -275,7 +275,12 @@ describe('MoviesService', () => {
       expect(prisma.movie.findMany).toHaveBeenCalledWith({
         where: {
           users: { some: { userId: 'user-1' } },
-          releaseDate: { gte: from, lt: toExclusive },
+          OR: [
+            { releaseDate: { gte: from, lt: toExclusive } },
+            { theatricalReleaseDate: { gte: from, lt: toExclusive } },
+            { digitalReleaseDate: { gte: from, lt: toExclusive } },
+            { physicalReleaseDate: { gte: from, lt: toExclusive } },
+          ],
         },
         include: { mediaSources: true, processJobs: true },
       });

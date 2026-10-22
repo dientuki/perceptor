@@ -49,6 +49,54 @@ describe('SettingsResolver guard wiring', () => {
     expect(isPublic('settings')).toBe(false);
     expect(isPublic('updateSettings')).toBe(false);
   });
+
+  // Spec 096, REQ-2 REQ-4
+  it('leaves defaultDateMonthFirst neither @Public() nor behind AdminGuard', () => {
+    expect(isPublic('defaultDateMonthFirst')).toBe(false);
+    expect(requiresAdmin('defaultDateMonthFirst')).toBe(false);
+  });
+});
+
+// This suite exists because otherwise an unset `date_month_first` row read as
+// `false` would force day-first dates on every English-language user, with no
+// error anywhere: only "true" and "false" may decide the order, and every
+// other stored value (the seeded "", a missing row, a hand-edited "yes") must
+// answer `null` so the UI falls through to the user's language.
+describe('SettingsResolver defaultDateMonthFirst value mapping', () => {
+  const read = (map: Record<string, string>) => {
+    const settingsService = {
+      getMap: jest.fn().mockResolvedValue(map),
+    } as unknown as SettingsService;
+    const resolver = new SettingsResolver(
+      settingsService,
+      {} as QbittorrentClient,
+      {} as MediaRootsService,
+      {} as MediaServerIndexService,
+      {} as ModuleRef,
+    );
+    return resolver.defaultDateMonthFirst();
+  };
+
+  // Spec 096, REQ-5
+  it('maps "true" to true', async () => {
+    await expect(read({ date_month_first: 'true' })).resolves.toBe(true);
+  });
+
+  it('maps "false" to false', async () => {
+    await expect(read({ date_month_first: 'false' })).resolves.toBe(false);
+  });
+
+  it('maps the empty string to null', async () => {
+    await expect(read({ date_month_first: '' })).resolves.toBeNull();
+  });
+
+  it('maps a missing key to null', async () => {
+    await expect(read({})).resolves.toBeNull();
+  });
+
+  it('maps an unrecognised value to null', async () => {
+    await expect(read({ date_month_first: 'yes' })).resolves.toBeNull();
+  });
 });
 
 // This suite exists because otherwise flipping `movies_enabled`/
