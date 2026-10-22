@@ -28,16 +28,14 @@ Perceptor is the whole path as a single product:
 
 ## Status
 
-**Perceptor is in closed alpha: the feature set is frozen.** The pipeline runs end to end for both
-films and series — search, register, find a release, download, scan, transcode, file, notify and
-browse — and from here the work is stabilising what exists, not adding to it. New feature requests
-are not being taken; bug reports are. It has no production deployment and no users besides its
-author.
+**Perceptor is in closed alpha.** The pipeline runs end to end for both films and series — search,
+register, find a release, download, scan, transcode, file, notify and browse. Bug reports are
+welcome. It has no production deployment and no users besides its author.
 
-The published images are release candidates (`v0.1.0-rc1` through `v0.5.0-rc1`); there is no stable
+The published images are release candidates (`v0.1.0-rc1` through `v0.5.0-rc3`); there is no stable
 release yet, so `latest` resolves to the newest release candidate rather than to a final version.
 
-Ninety-two feature specs (`001` through `092`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
+One hundred feature specs (`001` through `100`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
 stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -102,6 +100,12 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   the first one to finish wins. The losers are actually cleaned up — stopped and unwound whatever
   kind of source won, torrent or upload — and marked as having lost, so they can't be restarted by
   mistake.
+- 🧩 **A season pack is one row per episode, not one opaque blob.** Each file shows its own status,
+  progress and encode speed, and can be retried or discarded on its own. A finished torrent stops
+  seeding as soon as it completes.
+- ⏸️ **Encodes can be paused.** Stop on a source that is encoding stops the encode, not the torrent;
+  Play starts it again from the beginning. Nothing is thrown away meanwhile, and another release
+  of the same title that finishes first is free to win.
 - 🗑️ **Deleting a source deletes it everywhere.** A running encode is cancelled, its queue entries
   are withdrawn and the download is cleaned up. The finished library is never touched.
 - 🔁 **Adding the same torrent twice is harmless.** Re-adding a release already attached to the
@@ -155,9 +159,18 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   requeued from scratch when the worker boots again. A second crash on the same job marks it as
   failed instead of looping forever. Only one worker runs at a time: a second instance exits
   instead of resetting the first one's live encode.
-- 🌾 **Film grain, per title.** AV1 can strip a film's grain and resynthesize it on playback, which
-  saves a lot of bits on grainy sources. Each film or series has its own On / Off / Inherit choice on
-  its detail page; Inherit defers to the installation-wide setting in Settings → Compression.
+- 🌾 **Film grain, detected or per title.** AV1 can strip a film's grain and resynthesize it on
+  playback, which saves a lot of bits on grainy sources. Each film or series has its own On / Off /
+  Inherit choice on its detail page; Inherit defers to the installation-wide setting in Settings →
+  Compression, whose "on" path checks the source first — a metadata gate, then a short probe encode
+  — and applies grain only when both say it pays off.
+- ✂️ **Dubbing-credit tails cut off.** Optional, from Settings → Compression: a run of static
+  dubbing-credit cards at the end of a file is detected and left out of the encode.
+- 🎚️ **Tracks that don't end together are trimmed.** Also optional: when the video and the audio
+  you keep end more than two seconds apart, the output is cut at the earlier of the two.
+- 💿 **Blu-ray disc folders work.** A film downloaded as a `BDMV` structure has its playlists read,
+  menus and loops dropped, and the longest one assembled into an MKV with `mkvmerge` before it is
+  encoded — or just moved, with compression off.
 
 ### Enjoy
 - 🗂️ **Automatic filing** into your library layout.
@@ -181,7 +194,9 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   server, marking as complete what it holds and as missing what it no longer does. What changed is
   shown inline.
 - 📅 **A release calendar** at `/calendar`: a month grid of films, shorts and episodes, grouped per
-  series and season with a `completed/total` count and coloured by status.
+  series and season with a `completed/total` count and coloured by status. A film appears on each
+  of its known release days, labelled cinema, digital or physical; its detail page shows the same
+  three dates under the year.
 - 📥 **A global downloads queue** at `/downloads`: every source of every title, filterable, grouped
   by title and paginated, with a sidebar badge counting what is actively in flight. Titles you don't
   hold are visible read-only.
@@ -200,13 +215,14 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
 - ⏰ **Scheduled tasks** an admin can enable and pace from Settings, for the work that has to happen
   after registration rather than during it.
 - ⚙️ **Settings in the UI**, split into tabs: paths, TMDB key, indexer key, media server,
-  compression (resolution ceiling and subtitle formats), scheduling, and which media types are enabled. A read-only **Environment** tab
+  compression (resolution ceiling, subtitle formats, grain and the two trims), scheduling, and which media types are enabled. A read-only **Environment** tab
   shows how the installation is reachable and flags an upload URL that doesn't match your domain.
   **Disabling films or series actually
   disables them** — sidebar, billboard, search and routes all follow, while anything already in the
   pipeline is allowed to finish.
-- 🙋 **Per-user preferences** at `/preferences`: interface language, audio and subtitle languages,
-  and the torrent groups you care about.
+- 🙋 **Per-user preferences** at `/preferences`: interface language, date order (`DD/MM/YYYY` or
+  `MM/DD/YYYY`, falling back to the installation's choice and then the interface language), audio
+  and subtitle languages, and the torrent groups you care about.
 - 👥 **User management**: create, edit and disable users (disabling revokes live sessions
   immediately, not just the next login), with `bin/reset-password` (or, from an install directory,
   `docker compose exec api node dist/scripts/reset-password.js <user>`) as the recovery path when nobody
@@ -364,10 +380,12 @@ A one-shot `backup` service dumps the database before `api` starts, and, with HT
 6. **Completion.** The AutoRun hook calls `torrentCompleted`; `api` settles the race and enqueues a
    `process` job.
 7. **Scan.** The worker enumerates the files, keeps only what was actually downloaded, matches
-   episodes by `SxxEyy` and reports back; `api` enqueues one `encode` job per file.
+   episodes by `SxxEyy` — or, for a Blu-ray disc folder, picks the main playlist — and reports back;
+   `api` enqueues one `encode` job per file.
 8. **Transcode.** Driven by `ffprobe`, not the filename: every recognized codec to AV1, downscaled
    to the configured resolution ceiling with HDR preserved, tuned for live action, anime or CGI,
-   audio to Opus, tracks selected by language preference. With compression
+   audio to Opus, tracks selected by language preference, optionally trimmed at a dubbing-credit
+   tail or a mismatched track end. A disc playlist is assembled into an MKV first. With compression
    off, the file is only renamed and moved.
 9. **File and notify.** The output lands in the library, the worker reports `encodeCompleted`, and
    `api` notifies your media server with the host-side path.
@@ -585,9 +603,12 @@ Rough edges, stated plainly:
   answers "not available for this user" rather than rendering. There is no shared or household
   library. The one exception is the `/downloads` queue, which shows every title's sources to any
   signed-in user, read-only for the ones they don't hold.
-- **Automatic film grain is a placeholder.** The installation-wide grain setting exists, but its
-  "on" path doesn't analyse the source yet and still produces no grain; only a title explicitly set
-  to On gets it.
+- **Automatic film grain is still being tuned.** The detector's probe threshold is provisional, and
+  a short never gets the probe at all.
+- **A paused encode restarts from zero.** Play after Stop runs the whole encode again; there is no
+  resuming from the middle.
+- **The trims only look at the last five minutes.** A dubbing-credit tail or a track mismatch that
+  starts earlier than that is not detected.
 - **No quality profiles, no upgrade loop.** Perceptor normalizes what it gets rather than chasing a
   better release later — a deliberate omission, not a backlog item.
 - **The installer only knows how to repair a *finished* installation.** Re-running `install.sh`
