@@ -47,6 +47,8 @@ const KNOWN_PARAMS: Record<string, Record<string, string | number>> = {
   [errorKeys.ERROR_SOURCE_NO_DOWNLOAD_PATH]: {},
   [errorKeys.ERROR_SOURCE_NO_TARGET]: { id: 7 },
   [errorKeys.ERROR_SOURCE_SCAN_FAILED]: { detail: 'x' },
+  [errorKeys.ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS]: { playlists: '00800.mpls, 00801.mpls' },
+  [errorKeys.ERROR_ENCODE_DISC_REMUX_FAILED]: { code: 2, stderr: 'Error: no space left' },
 };
 
 describe('messagesEn — every {placeholder} is satisfiable by the params a throw site passes', () => {
@@ -71,5 +73,24 @@ describe('messagesEn — every {placeholder} is satisfiable by the params a thro
     expect(() => renderMessage('error.encode.not_a_real_key')).toThrow(
       /No English message registered/,
     );
+  });
+});
+
+// Spec 100, REQ-9 REQ-13
+describe('messagesEn — Blu-ray disc keys', () => {
+  it('renders the ambiguous playlist message with the tied file names', () => {
+    expect(
+      renderMessage(errorKeys.ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS, {
+        playlists: '00800.mpls, 00801.mpls',
+      }),
+    ).toBe(
+      "Could not determine the Blu-ray's main playlist (00800.mpls, 00801.mpls). Assemble the MKV manually and import it from the film's page",
+    );
+  });
+
+  it('renders the remux failure with the exit code and the stderr tail', () => {
+    expect(
+      renderMessage(errorKeys.ERROR_ENCODE_DISC_REMUX_FAILED, { code: 2, stderr: 'disk full' }),
+    ).toBe('Could not assemble the MKV from the Blu-ray (code 2): disk full');
   });
 });

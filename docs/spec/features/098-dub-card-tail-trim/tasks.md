@@ -121,6 +121,19 @@ it.
       → T007, T008, T009
       *Done when:* all commands are green and the four status lines read `Implemented`.
 
+### Group 4 — rule correction after the first library pass
+
+- [x] **T011** `[worker]` Replace the REQ-7 ratio rule in `src/encode/dub-trim.ts` with the trailing-card
+      rule in `spec.md` REQ-7 (set aside a non-multiple last segment; count consecutive multiples of
+      2.002 s ±0.06 s from the end, k ≥ 1; cut only when at least 5 and at least 3 with k = 1; cut point
+      still the start of the whole run). `TailClassification.multiples` becomes the trailing count and
+      gains an `exact` count; the `[dubtrim]` line keeps its shape. Copy
+      `docs/spec/features/098-dub-card-tail-trim/fixtures/{rtte-s01e01,diabolical-s01e01,haven-s01e01,arrival,dawn-of-the-dragon-racers}.freezes.txt`
+      to `services/worker/fixtures/dub-trim/` and extend `dub-trim.spec.ts`: every existing fixture keeps
+      its verdict and cut point, `rtte-s01e01` and `diabolical-s01e01` cut at their run start,
+      `haven-s01e01`, `arrival` and `dawn-of-the-dragon-racers` keep.
+      *Done when:* `bin/npm worker test`, the worker typecheck and `bin/comments worker` are green.
+
 ## Blocked
 
 | Task | Service | What blocked it | Needs |

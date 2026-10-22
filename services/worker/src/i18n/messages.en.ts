@@ -1,6 +1,8 @@
 // Spec 018, REQ-11
 
 import {
+  ERROR_ENCODE_DISC_REMUX_FAILED,
+  ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS,
   ERROR_ENCODE_DISCARDED,
   ERROR_ENCODE_STOPPED,
   ERROR_ENCODE_EPISODE_NUMBERS_MISSING,
@@ -39,6 +41,10 @@ export const messagesEn: Record<string, string> = {
     'Completed with no download path recorded — cannot enqueue',
   [ERROR_SOURCE_NO_TARGET]: 'Media source {id} points at no movie, episode or season',
   [ERROR_SOURCE_SCAN_FAILED]: 'The download could not be read: {detail}',
+  [ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS]:
+    "Could not determine the Blu-ray's main playlist ({playlists}). Assemble the MKV manually and import it from the film's page",
+  [ERROR_ENCODE_DISC_REMUX_FAILED]:
+    'Could not assemble the MKV from the Blu-ray (code {code}): {stderr}',
 };
 
 // Fills `{param}` placeholders in a message template with the corresponding

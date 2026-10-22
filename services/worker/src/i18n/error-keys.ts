@@ -42,3 +42,9 @@ export const ERROR_ENCODE_DISCARDED = 'error.encode.discarded';
 
 // Spec 097, REQ-6
 export const ERROR_ENCODE_STOPPED = 'error.encode.stopped';
+
+// Spec 100, REQ-13
+export const ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS = 'error.source.disc_playlist_ambiguous';
+
+// Spec 100, REQ-9
+export const ERROR_ENCODE_DISC_REMUX_FAILED = 'error.encode.disc_remux_failed';

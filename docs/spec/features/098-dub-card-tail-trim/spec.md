@@ -26,11 +26,11 @@ worker look at the end of each source before encoding it and, when it finds a du
 the output where that tail starts. The detector is the one validated by hand against 38 real files of
 this library before this spec was written (13 tails cut at the right place, 0 false positives, see
 AC-1/AC-2): it looks only at the last five minutes of the **video stream**, finds the contiguous run of
-frozen frames that runs all the way to the end, and accepts it only when it has at least five cards
-and at least 80% of them last a whole multiple of 2.002 seconds — the fixed card cadence the platforms'
+frozen frames that runs all the way to the end, and accepts it only when it ends in at least five
+consecutive cards that last a whole multiple of 2.002 seconds (three of them exactly 2.002 s) — the fixed card cadence the platforms'
 dubbing templates use, which is exactly what separates them from an original production's own
-card-style credits (Chernobyl's HBO credits are a run of 56 static cards, but only 5% of them last a
-2-second multiple, and they are kept).
+card-style credits (Chernobyl's HBO credits are a run of 56 static cards, but only 3 of them last a
+2-second multiple, none at its end, and they are kept).
 
 The decision is the worker's, like `094`'s grain verdict: `api` stores the switch and hands the worker
 one boolean on `EncodeJobDetails` (`services/api/src/process-jobs/`), `web` renders the switch on
@@ -65,9 +65,17 @@ changes, and nothing already in the library is touched (Article XII).
       candidate tail is the run of consecutive frozen segments, each starting at most 0.2 s after the
       previous one ends, whose last segment reaches the end of the window within 0.5 s. No run reaching
       the end means no candidate.
-- [ ] **REQ-7 (Classification)**: The candidate is a dubbing tail only when it has at least **5**
-      segments and at least **80%** of them last a whole multiple (≥ 1) of **2.002 s**, within
-      ±0.06 s. Otherwise the file is encoded whole.
+- [ ] **REQ-7 (Classification)**: The candidate is a dubbing tail only when its **trailing cards**
+      qualify. A card is a segment whose duration is a whole multiple (k ≥ 1) of **2.002 s**, within
+      ±0.06 s (two or three identical cards in a row merge into one longer segment, so k may be 2 or
+      more). Counting from the end of the run backwards, the last segment is set aside when it is not
+      a multiple (the end of the file can truncate it), then the consecutive multiples are counted
+      until the first segment that is not one. The run is a dubbing tail only when that count is at
+      least **5** and at least **3** of those cards have k = 1 (exactly 2.002 s). Segments before the
+      trailing cards — fades, black frames, a logo — do not count for or against. Otherwise the file
+      is encoded whole. (Amended after the first library pass: the original "at least 80% of every
+      segment in the run" rule rejected real tails that open with several non-card segments, e.g.
+      Dragons: Race to the Edge S01E01, 75%, and accepted nothing about how the tail ends.)
 - [ ] **REQ-8 (Cut point)**: A dubbing tail is cut at the start of the **whole** run, not at the first
       2-second card — a run may open with a fade or black frame of another length (Voltron), or with
       a card of another length (War Machine, The Wrecking Crew), and those belong to the tail. Every
@@ -139,9 +147,11 @@ identically.
       video ends within one second of the given cut point, and the worker logs a `[dubtrim]` cut:
       Neagley S01E01 → 55:16.2, Neagley S01E08 → 50:49.2, Reacher S03E01 → 51:30.6,
       Reacher S03E08 → 49:58.6, The Wrecking Crew (2026) → 2:02:05.3, War Machine (2026) → 1:46:40.6,
-      Voltron Legendary Defender S03E01 → 23:13.9.
+      Voltron Legendary Defender S03E01 → 23:13.9, Dragons: Race to the Edge S01E01 → 22:44.0,
+      The Boys Presents: Diabolical S01E01 → 12:50.0.
 - [ ] **AC-2** *(false-positive path)*: With `dub_trim_enabled` on, encoding Chernobyl S01E01,
-      Reacher S01E01, Foundation S01E01, Voltron Legendary Defender S01E01 and Alita: Battle Angel
+      Reacher S01E01, Foundation S01E01, Voltron Legendary Defender S01E01, Haven S01E01, Arrival (2016),
+      Dragons: Dawn of the Dragon Racers and Alita: Battle Angel
       produces outputs as long as their sources and logs `[dubtrim] … keep` for each.
 - [ ] **AC-3**: For an AC-1 output, `ffprobe` shows the audio and subtitle streams ending at the same
       point as the video (REQ-8), and the last seconds of the output are the frames immediately before

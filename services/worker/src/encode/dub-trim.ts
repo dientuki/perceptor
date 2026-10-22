@@ -10,8 +10,9 @@ export const DUB_TRIM_FILTER = 'scale=320:-2,freezedetect=n=0.003:d=1';
 // Spec 098, REQ-7
 export const DUB_TRIM_CARD_UNIT_SECONDS = 2.002;
 export const DUB_TRIM_UNIT_TOLERANCE_SECONDS = 0.06;
-export const DUB_TRIM_MIN_CARDS = 5;
-export const DUB_TRIM_MIN_RATIO = 0.8;
+export const DUB_TRIM_MIN_TRAILING_CARDS = 5;
+export const DUB_TRIM_MIN_EXACT_CARDS = 3;
+export const DUB_TRIM_MIN_TRUNCATED_SECONDS = 0.5;
 
 export interface Freeze {
   start: number;
@@ -22,6 +23,7 @@ export interface TailClassification {
   runStart: number | null;
   cards: number;
   multiples: number;
+  exact: number;
 }
 
 function parseClock(value: unknown): number {
@@ -71,15 +73,15 @@ export function parseFreezes(stderr: string, windowLength: number): Freeze[] {
   return freezes;
 }
 
-function isCardMultiple(duration: number): boolean {
+function cardMultiple(duration: number): number {
   const k = Math.round(duration / DUB_TRIM_CARD_UNIT_SECONDS);
-  if (k < 1) return false;
-  return Math.abs(duration - k * DUB_TRIM_CARD_UNIT_SECONDS) <= DUB_TRIM_UNIT_TOLERANCE_SECONDS + 1e-9;
+  if (k < 1) return 0;
+  return Math.abs(duration - k * DUB_TRIM_CARD_UNIT_SECONDS) <= DUB_TRIM_UNIT_TOLERANCE_SECONDS + 1e-9 ? k : 0;
 }
 
 // Spec 098, REQ-6 REQ-7
 export function classifyTail(freezes: Freeze[], windowLength: number): TailClassification {
-  const none: TailClassification = { runStart: null, cards: 0, multiples: 0 };
+  const none: TailClassification = { runStart: null, cards: 0, multiples: 0, exact: 0 };
   if (freezes.length === 0) return none;
 
   const last = freezes[freezes.length - 1];
@@ -91,16 +93,29 @@ export function classifyTail(freezes: Freeze[], windowLength: number): TailClass
   }
 
   const run = freezes.slice(first);
-  const multiples = run.filter((f) => isCardMultiple(f.end - f.start)).length;
-  return { runStart: run[0].start, cards: run.length, multiples };
+  const durations = run.map((f) => f.end - f.start);
+  const lastDuration = durations[durations.length - 1];
+  if (cardMultiple(lastDuration) === 0 && lastDuration >= DUB_TRIM_MIN_TRUNCATED_SECONDS) {
+    durations.pop();
+  }
+
+  let multiples = 0;
+  let exact = 0;
+  for (let i = durations.length - 1; i >= 0; i -= 1) {
+    const k = cardMultiple(durations[i]);
+    if (k === 0) break;
+    multiples += 1;
+    if (k === 1) exact += 1;
+  }
+  return { runStart: run[0].start, cards: run.length, multiples, exact };
 }
 
 // Spec 098, REQ-7
 export function isDubTail(result: TailClassification): boolean {
   return (
     result.runStart !== null &&
-    result.cards >= DUB_TRIM_MIN_CARDS &&
-    result.multiples / result.cards >= DUB_TRIM_MIN_RATIO
+    result.multiples >= DUB_TRIM_MIN_TRAILING_CARDS &&
+    result.exact >= DUB_TRIM_MIN_EXACT_CARDS
   );
 }
 

@@ -22,6 +22,11 @@ Expected outcome of spec REQ-6/REQ-7/REQ-8 on each file (window-relative cut poi
 | `chernobyl-s01e01` | Chernobyl S01E01 (HBO, card-style original credits) | 228.87 | 56 | 3 (5%) | keep — fails the 80% rule |
 | `reacher-s01e01` | Reacher S01E01 | 297.814 | 1 | 0 | keep — fewer than 5 cards |
 | `foundation-s01e01` | Foundation S01E01 | — | — | — | keep — no freeze reaches the end (last ends at 293.977) |
+| `rtte-s01e01` | Dragons: Race to the Edge S01E01 (Netflix) | 284.442 | 8 | 6 trailing (6 exact) | **cut** at 284.442 — failed the original 80% rule at 75% |
+| `diabolical-s01e01` | The Boys Presents: Diabolical S01E01 | 243.943 | 22 | trailing run with merged 4.00/8.01 s cards | **cut** at 243.943 |
+| `haven-s01e01` | Haven S01E01 (no dubbing cards) | 290.907 | 5 | 4 trailing | keep — fewer than 5 trailing cards |
+| `arrival` | Arrival (2016) (no dubbing cards) | 276.685 | 7 | 5 trailing, none exactly 2.002 s | keep — fewer than 3 exact cards |
+| `dawn-of-the-dragon-racers` | Dragons: Dawn of the Dragon Racers (no dubbing cards) | 268.427 | 13 | 2 trailing | keep — fewer than 5 trailing cards |
 
 Voltron's 84% is the closest any real tail came to the 80% threshold: its run opens with two or three
 1.0–1.5 s black/fade freezes before the 2.002 s cards, and REQ-8 says those are cut too.

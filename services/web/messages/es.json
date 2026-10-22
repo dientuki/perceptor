@@ -138,7 +138,8 @@
       "no_download_path": "Se completó sin ruta de descarga registrada: no se puede encolar",
       "replaced": "Reemplazado por una descarga nueva",
       "superseded": "Otra fuente de este título ya se estaba procesando",
-      "scan_failed": "No se pudo leer la descarga: {detail}"
+      "scan_failed": "No se pudo leer la descarga: {detail}",
+      "disc_playlist_ambiguous": "No se pudo determinar la playlist principal del Blu-ray ({playlists}). Armá el MKV a mano e importalo desde la película"
     },
     "processJob": {
       "not_found": "El trabajo {id} no existe",
@@ -157,7 +158,8 @@
       "move_failed": "No se pudo mover el archivo a su destino: {detail}",
       "episode_numbers_missing": "El episodio no tiene número de temporada/episodio: no se puede armar la ruta de salida",
       "unknown_driver": "ENCODE_DRIVER desconocido: {driver}",
-      "unexpected": "Falla inesperada de codificación: {detail}"
+      "unexpected": "Falla inesperada de codificación: {detail}",
+      "disc_remux_failed": "No se pudo armar el MKV a partir del Blu-ray (código {code}): {stderr}"
     },
     "show": {
       "not_available": "Recurso no disponible para este usuario"

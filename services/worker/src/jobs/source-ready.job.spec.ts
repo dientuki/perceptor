@@ -17,6 +17,31 @@ vi.mock('../api/graphql-client', async () => {
   );
   return { ...actual, fetchGraphQL: (...args: unknown[]) => fetchGraphQLMock(...args) };
 });
+const discReads = new Map<string, Buffer>();
+vi.mock('node:fs/promises', async () => {
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  return {
+    ...actual,
+    readFile: async (path: string, ...rest: unknown[]) =>
+      discReads.get(String(path)) ?? (actual.readFile as (...a: unknown[]) => unknown)(path, ...rest),
+  };
+});
+function mplsOf(outTicks: number, marks: number[]): Buffer {
+  const item = Buffer.alloc(24);
+  item.writeUInt16BE(22, 0);
+  item.write('00001', 2, 'ascii');
+  item.writeUInt32BE(outTicks, 20);
+  const playList = Buffer.alloc(10);
+  playList.writeUInt16BE(1, 6);
+  const markBuf = Buffer.alloc(6 + marks.length * 14);
+  markBuf.writeUInt16BE(marks.length, 4);
+  marks.forEach((type, i) => markBuf.writeUInt8(type, 6 + i * 14 + 1));
+  const header = Buffer.alloc(20);
+  header.write('MPLS0200', 0, 'ascii');
+  header.writeUInt32BE(20, 8);
+  header.writeUInt32BE(20 + playList.length + item.length, 12);
+  return Buffer.concat([header, playList, item, markBuf]);
+}
 vi.mock('../scan/scan-folder', () => ({
   scanFolder: (...args: unknown[]) => scanFolderMock(...args),
 }));
@@ -51,6 +76,7 @@ function reports() {
 beforeEach(() => {
   fetchGraphQLMock.mockReset();
   scanFolderMock.mockReset();
+  discReads.clear();
 });
 
 describe('handleSourceReady failure reporting', () => {
@@ -115,5 +141,66 @@ describe('handleSourceReady failure reporting', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(UnrecoverableError);
     expect(error.message).toBe('api rejected');
+  });
+
+  describe('disc routing', () => {
+    const discFiles = [
+      'BDMV/PLAYLIST/00800.mpls',
+      'BDMV/PLAYLIST/00801.mpls',
+      'BDMV/STREAM/00001.m2ts',
+    ].map((rel) => ({
+      filePath: `/downloads/x/${rel}`,
+      fileName: rel.split('/').pop()!,
+      size: 10,
+      isVideo: rel.endsWith('.m2ts'),
+    }));
+
+    function scanned() {
+      return fetchGraphQLMock.mock.calls.find(([query]) => String(query).includes('sourceScanned('));
+    }
+
+    it('keeps the ordinary path for an episode source that holds a BDMV tree', async () => {
+      fetchGraphQLMock
+        .mockResolvedValueOnce(source({ movieId: null, episodeId: 3 }))
+        .mockResolvedValue({ sourceScanned: {} });
+      scanFolderMock.mockResolvedValue({ files: discFiles });
+
+      await handleSourceReady(job);
+
+      const vars = scanned()![1];
+      expect(vars.matches).toEqual([
+        { filePath: '/downloads/x/BDMV/STREAM/00001.m2ts', seasonNumber: null, episodeNumber: null },
+      ]);
+      expect(vars.files.find((f: { fileName: string }) => f.fileName === '00001.m2ts').isVideo).toBe(true);
+    });
+
+    it('reports one mpls match through sourceScanned for a film disc', async () => {
+      fetchGraphQLMock.mockResolvedValueOnce(source()).mockResolvedValue({ sourceScanned: {} });
+      scanFolderMock.mockResolvedValue({ files: discFiles });
+      discReads.set('/downloads/x/BDMV/PLAYLIST/00800.mpls', mplsOf(9_000_000, [1]));
+      discReads.set('/downloads/x/BDMV/PLAYLIST/00801.mpls', mplsOf(90_000, []));
+
+      await handleSourceReady(job);
+
+      const vars = scanned()![1];
+      expect(vars.matches).toEqual([
+        { filePath: '/downloads/x/BDMV/PLAYLIST/00800.mpls', seasonNumber: null, episodeNumber: null },
+      ]);
+      expect(vars.files.filter((f: { isVideo: boolean }) => f.isVideo)).toHaveLength(1);
+      expect(reports()).toHaveLength(0);
+    });
+
+    it('reaches sourceScanFailed with the ambiguous key for a tied disc', async () => {
+      fetchGraphQLMock.mockResolvedValueOnce(source()).mockResolvedValue({ sourceScanFailed: true });
+      scanFolderMock.mockResolvedValue({ files: discFiles });
+      discReads.set('/downloads/x/BDMV/PLAYLIST/00800.mpls', mplsOf(9_000_000, [1]));
+      discReads.set('/downloads/x/BDMV/PLAYLIST/00801.mpls', mplsOf(9_000_000, [1]));
+
+      await expect(handleSourceReady(job)).rejects.toBeInstanceOf(UnrecoverableError);
+
+      expect(reports()).toHaveLength(1);
+      expect(reports()[0][1].key).toBe('error.source.disc_playlist_ambiguous');
+      expect(JSON.parse(reports()[0][1].params)).toEqual({ playlists: '00800.mpls, 00801.mpls' });
+    });
   });
 });

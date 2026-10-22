@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises';
 import { UnrecoverableError, type Job } from 'bullmq';
 import { fetchGraphQL } from '../api/graphql-client';
 import { deliverReport } from '../api/deliver-report';
@@ -7,6 +8,7 @@ import { passthrough } from '../encode/passthrough';
 import { withSourceExtension } from '../paths/with-source-extension';
 import { isInsideRoot } from '../paths/is-inside-root';
 import { cleanupSource } from './cleanup-source';
+import { assemblePlaylist } from '../disc/assemble-playlist';
 import { buildContainerTitle, buildSourceTag } from '../metadata/container-tags';
 import { fetchTrackTitles } from '../api/track-titles';
 import type { EncodeJob } from '../queue/types';
@@ -122,6 +124,9 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     let encodeCompleted: EncodeCompletedResult | undefined;
     let finalOutputPathForReport: string;
     let ffmpegCommandForReport: string;
+    // Spec 100, REQ-9 REQ-10
+    let assembledPath: string | null = null;
+    let assembledMoved = false;
 
     try {
       const outputPath = buildOutputPath({ ...details, layout: libraryLayout });
@@ -161,23 +166,30 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
         }
       };
 
+      // Spec 100, REQ-6
+      let encodeInput = details.inputFilePath;
+      if (details.inputFilePath.toLowerCase().endsWith('.mpls')) {
+        assembledPath = await assemblePlaylist(details.inputFilePath, signal);
+        encodeInput = assembledPath;
+      }
+
       // Spec 032, REQ-9 REQ-10 REQ-11 REQ-12 REQ-13 NFR-2
       let finalOutputPath = outputPath;
       let ffmpegCommand: string;
 
       if (details.compressionEnabled === false) {
         // Spec 032, REQ-12
-        if (!isInsideRoot(details.downloadsRoot, details.inputFilePath)) {
-          const detail = `input file ${details.inputFilePath} is not inside downloadsRoot ${details.downloadsRoot}`;
+        if (!isInsideRoot(details.downloadsRoot, encodeInput)) {
+          const detail = `input file ${encodeInput} is not inside downloadsRoot ${details.downloadsRoot}`;
           throw new KeyedError(ERROR_ENCODE_MOVE_FAILED, renderMessage(ERROR_ENCODE_MOVE_FAILED, { detail }), {
             detail,
           });
         }
 
-        finalOutputPath = withSourceExtension(outputPath, details.inputFilePath);
+        finalOutputPath = withSourceExtension(outputPath, encodeInput);
 
         const passthroughResult = await passthrough(
-          details.inputFilePath,
+          encodeInput,
           finalOutputPath,
           {
             originalLanguageIso3: details.originalLanguageIso3,
@@ -202,10 +214,12 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
           onProbe,
           signal,
         );
+        // Spec 100, REQ-9
+        assembledMoved = true;
         ffmpegCommand = passthroughResult.ffmpegCommand;
       } else {
         const encodeResult = await encode(
-          details.inputFilePath,
+          encodeInput,
           outputPath,
           {
             originalLanguageIso3: details.originalLanguageIso3,
@@ -279,6 +293,19 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
       }
 
       throw error;
+    } finally {
+      // Spec 100, REQ-9 REQ-10
+      if (assembledPath && !assembledMoved) {
+        if (isInsideRoot(details.downloadsRoot, assembledPath)) {
+          try {
+            await rm(assembledPath, { force: true });
+          } catch (err) {
+            console.error(`[encode] ${processJobId}: could not remove assembled file ${assembledPath}:`, err);
+          }
+        } else {
+          console.error(`[encode] ${processJobId}: refusing to remove ${assembledPath}, outside downloadsRoot`);
+        }
+      }
     }
 
     // Spec 038, REQ-1 REQ-2 REQ-4

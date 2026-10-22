@@ -4,6 +4,8 @@ import { fetchGraphQL } from '../api/graphql-client';
 import { scanFolder } from '../scan/scan-folder';
 import { markDownloaded } from '../scan/mark-downloaded';
 import { selectMatches, type Match, type SelectMatchesMode } from '../scan/select-matches';
+import { findDiscRoots } from '../disc/find-disc';
+import { scanDisc } from '../disc/scan-disc';
 import type { SourceReadyJob } from '../queue/types';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
@@ -112,8 +114,21 @@ async function scanSource(mediaSourceId: number): Promise<void> {
   const mode = selectMode(mediaSource);
 
   const { files: scannedFiles } = await scanFolder(mediaSource.downloadPath);
-  const files = markDownloaded(scannedFiles, mediaSource.downloadedFiles, mediaSource.downloadPath);
-  const matches: Match[] = selectMatches(files, mode);
+  let files = markDownloaded(scannedFiles, mediaSource.downloadedFiles, mediaSource.downloadPath);
+  let matches: Match[];
+
+  // Spec 100, REQ-1 REQ-4
+  const discRoots = mediaSource.movieId !== null ? findDiscRoots(files.map((file) => file.filePath)) : [];
+  if (discRoots.length === 1) {
+    const disc = await scanDisc(discRoots[0], files);
+    files = disc.files;
+    matches = disc.matches;
+    console.log(
+      `[source-ready] ${mediaSourceId}: disc ${discRoots[0].root}, ${disc.playlistCount} playlist(s), ${disc.outcome}`,
+    );
+  } else {
+    matches = selectMatches(files, mode);
+  }
 
   if (mediaSource.downloadedFiles === null) {
     console.log(

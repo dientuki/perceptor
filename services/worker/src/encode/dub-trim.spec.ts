@@ -1,11 +1,15 @@
 // Dub-card tail trim fails silently in both directions: a misclassified tail
 // either removes real content from the end of an episode or leaves minutes of
 // static dubbing cards in the library, and in neither case does any error
-// surface. The classifier is tested against real recorded freezedetect output
-// (fixtures/dub-trim/), including the three tails whose run opens with a
-// non-2-second segment and the three files that must be kept whole. The
-// resolver is tested with the FFmpeg spawn mocked: it must never throw on a
-// failed detection, never cache a failure, and never swallow a cancellation.
+// surface. The classifier counts the consecutive card-length segments at the
+// end of the freeze run (setting aside a final segment truncated by the end of
+// the file) and requires at least five of them, at least three exactly one
+// card long. It is tested against real recorded freezedetect output
+// (fixtures/dub-trim/): tails that open with a non-card segment, tails with a
+// truncated last card, merged-card tails, and the files that must be kept
+// whole, plus synthetic runs for each edge of the rule. The resolver is tested
+// with the FFmpeg spawn mocked: it must never throw on a failed detection,
+// never cache a failure, and never swallow a cancellation.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -36,22 +40,25 @@ function classify(name: string) {
 
 describe('classifyTail on recorded freezedetect output', () => {
   it.each([
-    ['neagley-s01e01', 173.822, 60, 60],
-    ['voltron-s03e01', 273.862, 13, 11],
-    ['war-machine', 140.905, 52, 51],
-    ['wrecking-crew', 168.909, 65, 64],
-  ])('cuts %s at the start of the whole run', (name, runStart, cards, multiples) => {
+    ['neagley-s01e01', 173.822, 60, 60, 58],
+    ['voltron-s03e01', 273.862, 13, 11, 11],
+    ['war-machine', 140.905, 52, 51, 35],
+    ['wrecking-crew', 168.909, 65, 64, 63],
+    ['rtte-s01e01', 284.442, 8, 6, 6],
+    ['diabolical-s01e01', 243.943, 22, 22, 18],
+  ])('cuts %s at the start of the whole run', (name, runStart, cards, multiples, exact) => {
     const result = classify(name);
     expect(result.runStart).toBeCloseTo(runStart, 3);
     expect(result.cards).toBe(cards);
     expect(result.multiples).toBe(multiples);
+    expect(result.exact).toBe(exact);
     expect(isDubTail(result)).toBe(true);
   });
 
-  it('keeps chernobyl-s01e01: a long run of card-style credits fails the 80% rule', () => {
+  it('keeps chernobyl-s01e01: card-style credits whose last segment is not a card multiple', () => {
     const result = classify('chernobyl-s01e01');
     expect(result.cards).toBe(56);
-    expect(result.multiples).toBe(3);
+    expect(result.multiples).toBe(0);
     expect(isDubTail(result)).toBe(false);
   });
 
@@ -65,6 +72,94 @@ describe('classifyTail on recorded freezedetect output', () => {
     const result = classify('foundation-s01e01');
     expect(result.runStart).toBeNull();
     expect(isDubTail(result)).toBe(false);
+  });
+
+  it('keeps haven-s01e01: only four trailing cards', () => {
+    const result = classify('haven-s01e01');
+    expect(result.multiples).toBe(4);
+    expect(isDubTail(result)).toBe(false);
+  });
+
+  it('keeps arrival: five trailing multiples but none exactly one card', () => {
+    const result = classify('arrival');
+    expect(result.multiples).toBe(5);
+    expect(result.exact).toBe(0);
+    expect(isDubTail(result)).toBe(false);
+  });
+
+  it('keeps dawn-of-the-dragon-racers: only two trailing cards in a longer run', () => {
+    const result = classify('dawn-of-the-dragon-racers');
+    expect(result.cards).toBe(13);
+    expect(result.multiples).toBe(2);
+    expect(isDubTail(result)).toBe(false);
+  });
+});
+
+describe('classifyTail rule edges on synthetic runs', () => {
+  const UNIT = 2.002;
+
+  function run(durations: number[]) {
+    let t = 10;
+    const freezes = durations.map((d) => {
+      const f = { start: t, end: t + d };
+      t = f.end + 0.05;
+      return f;
+    });
+    return classifyTail(freezes, freezes[freezes.length - 1].end);
+  }
+
+  it('sets aside a truncated last segment before counting', () => {
+    const result = run([UNIT, UNIT, UNIT, UNIT, UNIT, 1.3]);
+    expect(result.cards).toBe(6);
+    expect(result.multiples).toBe(5);
+    expect(isDubTail(result)).toBe(true);
+  });
+
+  it('does not set aside a last segment shorter than half a second', () => {
+    const result = run([UNIT, UNIT, UNIT, UNIT, UNIT, 0.3]);
+    expect(result.multiples).toBe(0);
+    expect(isDubTail(result)).toBe(false);
+  });
+
+  it('sets aside at most one segment', () => {
+    const result = run([UNIT, UNIT, UNIT, UNIT, UNIT, 1.3, 1.3]);
+    expect(result.multiples).toBe(0);
+    expect(isDubTail(result)).toBe(false);
+  });
+
+  it('keeps four trailing cards', () => {
+    expect(isDubTail(run([UNIT, UNIT, UNIT, UNIT]))).toBe(false);
+  });
+
+  it('cuts five trailing cards', () => {
+    expect(isDubTail(run([UNIT, UNIT, UNIT, UNIT, UNIT]))).toBe(true);
+  });
+
+  it('stops counting at the first non-multiple walking backwards', () => {
+    const result = run([UNIT, UNIT, UNIT, 3.1, UNIT, UNIT, UNIT, UNIT]);
+    expect(result.multiples).toBe(4);
+    expect(isDubTail(result)).toBe(false);
+  });
+
+  it('keeps five trailing cards of two units each with none exactly one', () => {
+    const result = run([2 * UNIT, 2 * UNIT, 2 * UNIT, 2 * UNIT, 2 * UNIT]);
+    expect(result.multiples).toBe(5);
+    expect(result.exact).toBe(0);
+    expect(isDubTail(result)).toBe(false);
+  });
+
+  it('counts merged cards among single cards', () => {
+    const result = run([UNIT, 2 * UNIT, UNIT, 2 * UNIT, UNIT, 2 * UNIT]);
+    expect(result.multiples).toBe(6);
+    expect(result.exact).toBe(3);
+    expect(isDubTail(result)).toBe(true);
+  });
+
+  it('cuts at the start of the whole run, not of the trailing cards', () => {
+    const result = run([5.5, UNIT, UNIT, UNIT, UNIT, UNIT]);
+    expect(result.runStart).toBe(10);
+    expect(result.multiples).toBe(5);
+    expect(isDubTail(result)).toBe(true);
   });
 });
 

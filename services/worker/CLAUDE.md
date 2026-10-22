@@ -39,6 +39,7 @@ src/scan/scan-folder.ts  enumerates a download's files, flags each isVideo — n
 src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly one pair
 src/scan/mark-downloaded.ts  flags each enumerated file isDownloaded against api's torrent-client answer (052)
 src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode, over InventoriedFile[] (052) — isDownloaded: false is excluded before either rule runs
+src/disc/                Blu-ray disc recognition, playlist choice and MKV assembly (see below, `100`)
 src/encode/              the driver seam (see below)
 src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639
 src/paths/build-output-path.ts   composes the final library path, one branch per `libraryLayout` (`072`)
@@ -301,15 +302,17 @@ when the boolean is true.
 stream** (`videoEndSeconds` reads the stream duration, then its Matroska `DURATION` tag, then the
 container) through `runFfmpegCapture` (`src/ffmpeg/capture.ts`, the AbortSignal-aware spawn moved out
 of `grain-probe.ts`). The filter logs at info level, so the call must not pass `-v error`. A tail is
-cut when the contiguous freeze run reaching the window end has at least 5 cards and at least 80% of
-them last a whole multiple of 2.002 s; the cut is the start of the whole run, returned as an absolute
+cut when the contiguous freeze run reaching the window end *ends* in at least 5 consecutive segments that
+last a whole multiple of 2.002 s (a non-multiple last segment, truncated by the end of the file, is set
+aside first; merged 4.004 s cards count) and at least 3 of them last exactly 2.002 s; whatever precedes
+those trailing cards (fades, a logo) is not scored; the cut is the start of the whole run, returned as an absolute
 second that `buildFfmpegCommand`'s `trimAt` folds into the single `-t` (the minimum with
 `ENCODE_SAMPLE_SECONDS`). Progress uses the trimmed duration. A cut at or below 0 means keep.
 
 Verdicts are cached in a module-level `Map` keyed by **input path** (not `mediaSourceId`, since a
 season pack has many files); a failure is never cached. It is a luxury, so a failed detection is
 completely silent (no warning, no log) and the whole file is encoded; only `EncodeCancelledError`
-propagates. A success prints one `[dubtrim]` line. The seven real-file freeze logs the rule was
+propagates. A success prints one `[dubtrim]` line. The twelve real-file freeze logs (cuts and keeps, including the false-positive guards Haven S01E01, Arrival and Dawn of the Dragon Racers) the rule was
 validated on live in `fixtures/dub-trim/` (excluded from the image by `.dockerignore`).
 
 ## Stream-end trim is resolved in the encode driver (`099-stream-end-trim`)
@@ -327,6 +330,29 @@ differ by more than 2 s; a kept track with no packet in the window means keep. `
 passes the minimum of this cut and `098`'s as `trimAt`, so `buildCommand.ts` and the progress
 denominator are unchanged. There is no cache; a failure is silent and encodes the whole file, only
 `EncodeCancelledError` propagates. A completed analysis prints one `[streamtrim]` line.
+
+## Blu-ray disc releases are assembled before the encode (`100-bluray-disc-remux`)
+
+A **film** source (`movieId !== null`) whose files hold exactly one disc root (`BDMV/PLAYLIST/*.mpls`
+and `BDMV/STREAM/*.m2ts`; `BDMV/BACKUP` never counts) is scanned by `src/disc/scan-disc.ts` instead of
+`selectMatches`. `src/disc/mpls.ts` parses every playlist (45 kHz ticks, entry marks);
+`select-playlist.ts` drops unplayable playlists (parse failure, clip missing or not downloaded) and
+menu loops (distinct clip duration under half the total), keeps those within 1 s of the longest, then
+prefers chapter marks, then the most marks; a remaining tie throws `error.source.disc_playlist_ambiguous`
+(`{playlists}`) through `sourceScanFailed`. Only the winning `.mpls` is reported `isVideo: true`, so
+the clips are never unmatched video and `cleanupDecision` removes the folder; with no playable
+playlist the `.m2ts` files are `isVideo: true` and `api` derives `scan_no_downloaded_video` /
+`scan_no_video` as before. `.m2ts` is deliberately not in `VIDEO_EXTENSIONS`. Episodes, seasons and
+multi-disc releases keep the ordinary path.
+
+`encode.job.ts` recognises a `.mpls` input and, after `encodeStarted` and before the compression
+branch, runs `assemblePlaylist` (`mkvmerge -o <disc root>/<playlist>.perceptor.mkv <playlist>` through
+`runFfmpegCapture`'s `binary: 'mkvmerge'`). Exit 0 and 1 (warnings) are success; anything else, or no
+output file, removes the partial and throws `error.encode.disc_remux_failed` (`{code, stderr}`, the
+tail of stdout + stderr — `mkvmerge` writes its errors to stdout). Both branches receive the assembled
+file; `buildSourceTag` and `cleanupSource` keep the playlist. The assembled file is removed in a
+guarded `finally` on every path except after the passthrough move, and before each assembly. Progress
+stays at 0 during assembly; the disc files are never deleted on failure.
 
 ## The rules in `src/ffmpeg/` have their own agent and their own corpus
 

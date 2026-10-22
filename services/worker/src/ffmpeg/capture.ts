@@ -11,7 +11,7 @@ export interface RunResult {
 }
 
 export interface CaptureOptions {
-  binary?: 'ffmpeg' | 'ffprobe';
+  binary?: 'ffmpeg' | 'ffprobe' | 'mkvmerge';
   keepStdout?: boolean;
 }
 

@@ -23,6 +23,35 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-21 — `100-bluray-disc-remux`
+
+`worker` and `web` (two catalog keys); no `api`, no migration, no GraphQL schema change (`graphql-contract.md` only gained the two key names in its worker error row).
+
+- `worker` typecheck (`tsc --noEmit`, throwaway `perceptor-worker:local-dev` container because the compose `worker` was not running): clean.
+- `worker` tests: 39 files, 506 passed (was 36 files / 477 before the first task of this feature; the baseline count of the run before 100 was not recorded). `bin/comments worker`: PASS, 296 locators.
+- `web`: `check-messages.mjs` parity OK (639 keys, run on the host's Node). `bin/npm web run lint` **not run** — the `web` container was not up.
+- Real disc (The Transformers: The Movie 1986, 2160p BDMV, run outside the pipeline with the real `scanDisc` + `assemblePlaylist`): selected `00002.mpls` (85 min, 13 marks, only `.mpls` flagged video; `00001.mpls`, a menu-loop shape, was discarded); `mkvmerge` produced a 59.3 GB MKV in 875 s, 5100.8 s long, HEVC 3840x2160, three audio and two PGS tracks with `eng`/`spa` tags. Fixtures: `services/worker/fixtures/bdmv/transformers-the-movie-1986/`.
+- Not measured: the full pipeline (api states, library file, folder cleanup, stop/delete mid-assembly, retry) — see `pending-acs.md`.
+
+## 2026-10-20 — `098-dub-card-tail-trim` rule correction (T011)
+
+`worker` only, plus a REQ-7 amendment in the spec. A library pass over 808 episodes, 145 films and 10
+shorts showed the original "80% of the whole run" rule rejected real dubbing tails that open with
+several non-card segments (Dragons: Race to the Edge S01, 75%) and could not tell Haven S01E01 (no
+cards, a false positive) apart. The rule now scores the trailing cards only: after setting aside a
+non-multiple last segment, at least 5 consecutive multiples of 2.002 s counted from the end, at least
+3 of them exactly 2.002 s; the cut stays the start of the whole run. Re-evaluated offline on 383 real
+freeze logs: all 244 earlier cuts unchanged to the same second, Haven S01E01 now kept, six Race to the
+Edge S01 episodes now cut, Arrival, Dawn of the Dragon Racers, Chernobyl and DreamWorks Dragons kept.
+Margins are thin: the smallest real tail has exactly 5 trailing cards and the largest rejected one 4.
+
+| Check | Result |
+| :-- | :-- |
+| `bin/npm worker test` | 33 files, 448 tests passed |
+| `bin/cli worker npx tsc --noEmit` | 0 `error TS` |
+| `bin/comments worker` | PASS (268 locators) |
+| live manual pass | still not run |
+
 ## 2026-10-19 — `098-dub-card-tail-trim` (code complete; live pass pending)
 
 `api` + `worker` + `web`, no migration. `api` makes `dub_trim_enabled` an editable boolean setting

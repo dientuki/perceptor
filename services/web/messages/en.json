@@ -138,7 +138,8 @@
       "no_download_path": "Completed with no download path recorded — cannot enqueue",
       "replaced": "Replaced by a new download",
       "superseded": "Another source of this title was already processing",
-      "scan_failed": "The download could not be read: {detail}"
+      "scan_failed": "The download could not be read: {detail}",
+      "disc_playlist_ambiguous": "Could not determine the Blu-ray's main playlist ({playlists}). Assemble the MKV manually and import it from the film's page"
     },
     "processJob": {
       "not_found": "Process job {id} does not exist",
@@ -157,7 +158,8 @@
       "move_failed": "Could not move the file to its destination: {detail}",
       "episode_numbers_missing": "Episode has no season/episode number: cannot build the output path",
       "unknown_driver": "Unknown ENCODE_DRIVER: {driver}",
-      "unexpected": "Unexpected encode failure: {detail}"
+      "unexpected": "Unexpected encode failure: {detail}",
+      "disc_remux_failed": "Could not assemble the MKV from the Blu-ray (code {code}): {stderr}"
     },
     "show": {
       "not_available": "Resource not available for this user"
