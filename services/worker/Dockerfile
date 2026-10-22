@@ -1,7 +1,7 @@
 # ==========================================
 # 1. BASE: Entorno común (Alpine + FFmpeg + libc6)
 # ==========================================
-FROM node:24.18.0-alpine AS base
+FROM node:26.10.0-alpine AS base
 # Instalamos FFmpeg y librerías de compatibilidad requeridas por el worker.
 # mkvtoolnix: mkvmerge para el remux final (ver src/ffmpeg/runner.ts).
 RUN apk add --no-cache ffmpeg mkvtoolnix libc6-compat
