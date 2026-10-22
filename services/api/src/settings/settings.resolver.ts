@@ -80,6 +80,21 @@ export class SettingsResolver {
     return value && isSupportedLocale(value) ? value : null;
   }
 
+  // Spec 096, REQ-2 REQ-4
+  @Query(() => Boolean, {
+    name: 'defaultDateMonthFirst',
+    nullable: true,
+    description:
+      'Installation-wide date order: true = MM/DD/YYYY, false = DD/MM/YYYY. Null when the date_month_first setting is unset — fall through to the UI language. Any authenticated user; not public.',
+  })
+  async defaultDateMonthFirst(): Promise<boolean | null> {
+    const map = await this.settingsService.getMap();
+    const value = map['date_month_first'];
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return null;
+  }
+
   @UseGuards(AdminGuard)
   @Query(() => [Setting], { name: 'settings' })
   async settings() {

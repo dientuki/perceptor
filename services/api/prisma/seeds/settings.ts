@@ -52,6 +52,10 @@ export async function seedSettings(prisma: PrismaClient) {
     // Spec 092, REQ-2: off by default — a heuristic nobody enabled must not
     // switch itself on at upgrade.
     { key: 'grain_auto_enabled', value: 'false' },
+    // Spec 098, REQ-2: off by default.
+    { key: 'dub_trim_enabled', value: 'false' },
+    // Spec 099, REQ-2: off by default.
+    { key: 'stream_end_trim_enabled', value: 'false' },
     { key: 'subtitles_enabled', value: 'true' },
     { key: 'subtitles_text_enabled', value: 'true' },
     { key: 'subtitles_text_formats', value: 'srt,ass,webvtt,mov_text', backfillEmpty: false },
@@ -59,6 +63,7 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'subtitles_image_formats', value: 'pgs,vobsub,dvb', backfillEmpty: false },
 
     { key: 'ui_locale', value: '' },
+    { key: 'date_month_first', value: '' },
     { key: 'default_languages', value: '' },
 
     // Cadence + enablement for the scheduler (src/scheduler/). Every task ships

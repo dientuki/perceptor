@@ -39,6 +39,8 @@ function statusLabel(status: string, t: (key: string) => string): string {
       return t("completed");
     case "ERROR":
       return t("error");
+    case "DISCARDED":
+      return t("discarded");
     default:
       return status;
   }

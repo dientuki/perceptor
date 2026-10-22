@@ -138,11 +138,15 @@
       "no_download_path": "Se completó sin ruta de descarga registrada: no se puede encolar",
       "replaced": "Reemplazado por una descarga nueva",
       "superseded": "Otra fuente de este título ya se estaba procesando",
-      "scan_failed": "No se pudo leer la descarga: {detail}"
+      "scan_failed": "No se pudo leer la descarga: {detail}",
+      "disc_playlist_ambiguous": "No se pudo determinar la playlist principal del Blu-ray ({playlists}). Armá el MKV a mano e importalo desde la película"
     },
     "processJob": {
       "not_found": "El trabajo {id} no existe",
-      "recovery_exhausted": "La recuperación automática de esta codificación ya se usó una vez y volvió a fallar"
+      "recovery_exhausted": "La recuperación automática de esta codificación ya se usó una vez y volvió a fallar",
+      "not_resumable": "Este archivo no se puede reintentar",
+      "not_discardable": "Este archivo ya no se puede descartar",
+      "not_running": "Este archivo no se está codificando"
     },
     "encode": {
       "no_video_stream": "El archivo de entrada no tiene pista de video",
@@ -154,7 +158,8 @@
       "move_failed": "No se pudo mover el archivo a su destino: {detail}",
       "episode_numbers_missing": "El episodio no tiene número de temporada/episodio: no se puede armar la ruta de salida",
       "unknown_driver": "ENCODE_DRIVER desconocido: {driver}",
-      "unexpected": "Falla inesperada de codificación: {detail}"
+      "unexpected": "Falla inesperada de codificación: {detail}",
+      "disc_remux_failed": "No se pudo armar el MKV a partir del Blu-ray (código {code}): {stderr}"
     },
     "show": {
       "not_available": "Recurso no disponible para este usuario"
@@ -457,6 +462,9 @@
     "detail": {
       "noPoster": "No hay póster disponible",
       "unknownYear": "Año desconocido",
+      "releaseTheatrical": "Cine",
+      "releaseDigital": "Digital",
+      "releasePhysical": "Físico",
       "fileButton": "Archivo",
       "magnetButton": "Magnet",
       "synopsisTitle": "Sinopsis",
@@ -521,7 +529,17 @@
         "SCAN": "Escaneo",
         "ENCODE": "Codificación",
         "REPLACED": "Reemplazado"
-      }
+      },
+      "expand": "Ver archivos",
+      "collapse": "Ocultar archivos",
+      "jobsProgress": "{done} de {total}",
+      "retryJobTitle": "Reintentar",
+      "discardJobTitle": "Descartar",
+      "pauseJobTitle": "Pausar",
+      "resumeJobTitle": "Reanudar",
+      "retryErrorDefault": "No se pudo reintentar el archivo.",
+      "pauseErrorDefault": "No se pudo pausar el archivo.",
+      "discardErrorDefault": "No se pudo descartar el archivo."
     },
     "deleteModal": {
       "title": "Eliminar descarga",
@@ -531,6 +549,13 @@
       "confirm": "Eliminar",
       "cancel": "Cancelar",
       "deleting": "Eliminando..."
+    },
+    "discardModal": {
+      "title": "Descartar archivo",
+      "message": "¿Descartar <b>{target}</b>? Se va a eliminar el archivo descargado, no se va a comprimir y el episodio va a volver a figurar como faltante. El resto de la fuente no se ve afectado.",
+      "confirm": "Descartar",
+      "cancel": "Cancelar",
+      "discarding": "Descartando..."
     }
   },
   "settings": {
@@ -580,7 +605,8 @@
       "installableUnavailable": "No disponible — requiere HTTPS"
     },
     "general": {
-      "uiLocaleLabel": "Idioma de la aplicación"
+      "uiLocaleLabel": "Idioma de la aplicación",
+      "dateFormatLabel": "Formato de fecha"
     },
     "scheduling": {
       "timezoneNote": "Los horarios se evalúan en la zona horaria del contenedor de la API (UTC salvo que el host configure TZ). \"03:00\" se refiere a esa zona, no a la tuya.",
@@ -636,6 +662,8 @@
         "360p": "360p"
       },
       "grainAutoLabel": "Optimización automática de grano",
+      "dubTrimLabel": "Recortar placas de doblaje al final",
+      "streamEndTrimLabel": "Recortar el final cuando las pistas no terminan juntas",
       "subtitles": {
         "label": "Subtítulos",
         "none": "Sin subtítulos",
@@ -704,6 +732,7 @@
     },
     "form": {
       "uiLocaleLabel": "Idioma de Perceptor",
+      "dateFormatLabel": "Formato de fecha",
       "audioLanguagesLabel": "Idiomas de audio",
       "audioMandatoryLabel": "Audio obligatorio",
       "subtitleLanguagesLabel": "Idiomas de subtítulos",
@@ -732,7 +761,8 @@
     "downloaded": "Descargado",
     "encoding": "Comprimiendo",
     "completed": "Completado",
-    "error": "Error"
+    "error": "Error",
+    "discarded": "Descartado"
   },
   "contentKind": {
     "LIVE_ACTION": "Live action",
@@ -793,7 +823,10 @@
     "loadError": "No se pudo cargar el calendario",
     "kindMovie": "Película",
     "kindShort": "Corto",
-    "kindEpisodes": "Episodios"
+    "kindEpisodes": "Episodios",
+    "releaseTheatrical": "(cine)",
+    "releaseDigital": "(digital)",
+    "releasePhysical": "(físico)"
   },
   "onboarding": {
     "tmdb": {

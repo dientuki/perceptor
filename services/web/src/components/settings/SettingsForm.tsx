@@ -148,7 +148,10 @@ export default function SettingsForm({
       >
         <div className="mt-6 space-y-6">
           <div className={panelClass("general")}>
-            <GeneralPanel uiLocale={getSettingValue("ui_locale")} />
+            <GeneralPanel
+              uiLocale={getSettingValue("ui_locale")}
+              dateMonthFirst={getSettingValue("date_month_first")}
+            />
           </div>
 
           <div className={panelClass("mediaManager")}>
@@ -192,6 +195,10 @@ export default function SettingsForm({
               compressionResolution={getSettingValue("compression_resolution")}
               grainAutoEnabled={
                 getSettingValue("grain_auto_enabled") === "true"
+              }
+              dubTrimEnabled={getSettingValue("dub_trim_enabled") === "true"}
+              streamEndTrimEnabled={
+                getSettingValue("stream_end_trim_enabled") === "true"
               }
               subtitlesEnabled={getSettingValue("subtitles_enabled") === "true"}
               subtitlesTextEnabled={

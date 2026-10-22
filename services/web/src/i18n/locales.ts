@@ -9,3 +9,9 @@ export const DEFAULT_LOCALE: SupportedLocale = "en";
 export function isSupportedLocale(locale: string): locale is SupportedLocale {
   return (SUPPORTED_LOCALES as readonly string[]).includes(locale);
 }
+
+// Spec 096, REQ-4
+export const MONTH_FIRST_BY_LOCALE: Record<SupportedLocale, boolean> = {
+  en: true,
+  es: false,
+};

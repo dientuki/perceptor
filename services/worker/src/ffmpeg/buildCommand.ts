@@ -1,6 +1,5 @@
 import { getVideoParams, getAudioParams, getSubtitleParams } from './params';
 import { isRemux } from './remux-detection';
-import { resolveFilmGrain } from '../encode/grain-mode';
 import type { EncodeInput } from '../encode/types';
 
 interface FfmpegMetadata {
@@ -24,6 +23,8 @@ export function buildFfmpegCommand(
   output: string,
   metadata: FfmpegMetadata,
   details: EncodeInput,
+  filmGrain: boolean,
+  trimAt: number | null,
 ): string[] {
   const vStream = metadata.streams.find((s) => s.codec_type === "video");
   const aStreams = metadata.streams.filter((s) => s.codec_type === "audio");
@@ -31,8 +32,6 @@ export function buildFfmpegCommand(
 
   // Spec 011, REQ-10
   const quality = isRemux(metadata, input) ? "remux" : "web";
-  // Spec 092, REQ-9
-  const filmGrain = resolveFilmGrain(details.grainMode, metadata);
 
   const args = [
     "-i",
@@ -67,9 +66,12 @@ export function buildFfmpegCommand(
     `PERCEPTOR_SOURCE=${details.sourceTag}`,
   ];
 
-  const sampleSeconds = process.env.ENCODE_SAMPLE_SECONDS;
-  if (sampleSeconds) {
-    args.push("-t", sampleSeconds);
+  // Spec 098, REQ-8
+  const sampleSeconds = Number.parseFloat(process.env.ENCODE_SAMPLE_SECONDS ?? "");
+  const limits = [trimAt, Number.isFinite(sampleSeconds) && sampleSeconds > 0 ? sampleSeconds : null]
+    .filter((n): n is number => n !== null);
+  if (limits.length > 0) {
+    args.push("-t", Math.min(...limits).toFixed(3));
   }
 
   args.push("-y", output);

@@ -2,6 +2,7 @@
 
 import type React from "react";
 import type { CurrentUser } from "@/actions/auth";
+import { DateFormatProvider } from "@/context/DateFormatContext";
 import { useSidebar } from "@/context/SidebarContext";
 import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
@@ -14,6 +15,7 @@ interface AdminShellProps {
   capabilities: MediaCapabilities;
   activeDownloadCount: number;
   indexerStatus: IndexerStatus | null;
+  monthFirst: boolean;
   children: React.ReactNode;
 }
 
@@ -22,6 +24,7 @@ export default function AdminShell({
   capabilities,
   activeDownloadCount,
   indexerStatus,
+  monthFirst,
   children,
 }: AdminShellProps) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
@@ -34,26 +37,28 @@ export default function AdminShell({
       : "lg:ml-[90px]";
 
   return (
-    <div className="min-h-screen xl:flex">
-      {/* Sidebar and Backdrop */}
-      <AppSidebar
-        isAdmin={user.isAdmin}
-        capabilities={capabilities}
-        activeDownloadCount={activeDownloadCount}
-        indexerStatus={indexerStatus}
-      />
-      <Backdrop />
-      {/* Main Content Area */}
-      <div
-        className={`flex-1 min-w-0 transition-all  duration-300 ease-in-out ${mainContentMargin}`}
-      >
-        {/* Header */}
-        <AppHeader user={user} capabilities={capabilities} />
-        {/* Page Content */}
-        <div className="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
-          {children}
+    <DateFormatProvider monthFirst={monthFirst}>
+      <div className="min-h-screen xl:flex">
+        {/* Sidebar and Backdrop */}
+        <AppSidebar
+          isAdmin={user.isAdmin}
+          capabilities={capabilities}
+          activeDownloadCount={activeDownloadCount}
+          indexerStatus={indexerStatus}
+        />
+        <Backdrop />
+        {/* Main Content Area */}
+        <div
+          className={`flex-1 min-w-0 transition-all  duration-300 ease-in-out ${mainContentMargin}`}
+        >
+          {/* Header */}
+          <AppHeader user={user} capabilities={capabilities} />
+          {/* Page Content */}
+          <div className="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
+            {children}
+          </div>
         </div>
       </div>
-    </div>
+    </DateFormatProvider>
   );
 }

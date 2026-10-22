@@ -259,7 +259,7 @@ describe('MediaServerReconcileService', () => {
       none: { status: { notIn: ['ERROR', 'SCANNED'] } },
     };
     const jobGuard = {
-      none: { status: { in: ['WAITING', 'QUEUED', 'ENCODING'] } },
+      none: { status: { in: ['WAITING', 'QUEUED', 'ENCODING', 'STOPPED'] } },
     };
 
     function expectGuarded(where: any) {

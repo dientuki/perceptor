@@ -29,6 +29,25 @@ export class Movie {
   @Field(() => ContentKind)
   contentKind: ContentKind;
 
+  // Spec 093, REQ-1
+  @Field(() => Date, {
+    nullable: true,
+    description: 'Earliest theatrical (TMDB types 2 and 3) day across every country, or null (075 REQ-1).',
+  })
+  theatricalReleaseDate: Date | null;
+
+  @Field(() => Date, {
+    nullable: true,
+    description: 'Earliest digital (TMDB type 4) day across every country, or null (075 REQ-1).',
+  })
+  digitalReleaseDate: Date | null;
+
+  @Field(() => Date, {
+    nullable: true,
+    description: 'Earliest physical (TMDB type 5) day across every country, or null (075 REQ-1).',
+  })
+  physicalReleaseDate: Date | null;
+
   // Spec 048, REQ-1
   @Field()
   isShort: boolean;

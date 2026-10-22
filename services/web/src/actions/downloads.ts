@@ -39,6 +39,23 @@ const DOWNLOAD_FIELDS = `
   lostRace
   readAt
   retiredAt
+  jobs {
+    processJobId
+    label
+    episodeId
+    seasonNumber
+    episodeNumber
+    status
+    progress
+    encodeSpeed
+    lastError {
+      stage
+      key
+      params
+      message
+    }
+    retryable
+  }
 `;
 
 const MOVIE_DOWNLOADS_QUERY = `
@@ -82,6 +99,31 @@ const DOWNLOAD_START_MUTATION = `
 const DOWNLOAD_STOP_MUTATION = `
   mutation DownloadStop($mediaSourceId: Int!) {
     downloadStop(mediaSourceId: $mediaSourceId) {
+      ${DOWNLOAD_FIELDS}
+    }
+  }
+`;
+
+const ENCODE_JOB_START_MUTATION = `
+  mutation EncodeJobStart($processJobId: Int!) {
+    encodeJobStart(processJobId: $processJobId) {
+      ${DOWNLOAD_FIELDS}
+    }
+  }
+`;
+
+// Spec 097, REQ-14
+const ENCODE_JOB_STOP_MUTATION = `
+  mutation EncodeJobStop($processJobId: Int!) {
+    encodeJobStop(processJobId: $processJobId) {
+      ${DOWNLOAD_FIELDS}
+    }
+  }
+`;
+
+const ENCODE_JOB_DISCARD_MUTATION = `
+  mutation EncodeJobDiscard($processJobId: Int!) {
+    encodeJobDiscard(processJobId: $processJobId) {
       ${DOWNLOAD_FIELDS}
     }
   }
@@ -206,6 +248,55 @@ export async function stopDownloadAction(
   }
 
   return { success: true, download: data!.downloadStop };
+}
+
+export async function startEncodeJobAction(
+  processJobId: number,
+): Promise<DownloadActionResult> {
+  const { data, errors } = await fetchGraphQL<{ encodeJobStart: Download }>(
+    ENCODE_JOB_START_MUTATION,
+    { processJobId },
+  );
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  return { success: true, download: data!.encodeJobStart };
+}
+
+// Spec 097, REQ-14
+export async function stopEncodeJobAction(
+  processJobId: number,
+): Promise<DownloadActionResult> {
+  const { data, errors } = await fetchGraphQL<{ encodeJobStop: Download }>(
+    ENCODE_JOB_STOP_MUTATION,
+    { processJobId },
+  );
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  return { success: true, download: data!.encodeJobStop };
+}
+
+export async function discardEncodeJobAction(
+  processJobId: number,
+): Promise<DownloadActionResult> {
+  const { data, errors } = await fetchGraphQL<{ encodeJobDiscard: Download }>(
+    ENCODE_JOB_DISCARD_MUTATION,
+    { processJobId },
+  );
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  return { success: true, download: data!.encodeJobDiscard };
 }
 
 export type DeleteDownloadActionResult =

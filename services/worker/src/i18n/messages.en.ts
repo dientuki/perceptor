@@ -1,6 +1,10 @@
 // Spec 018, REQ-11
 
 import {
+  ERROR_ENCODE_DISC_REMUX_FAILED,
+  ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS,
+  ERROR_ENCODE_DISCARDED,
+  ERROR_ENCODE_STOPPED,
   ERROR_ENCODE_EPISODE_NUMBERS_MISSING,
   ERROR_ENCODE_FFMPEG_FAILED,
   ERROR_ENCODE_MKVMERGE_FAILED,
@@ -29,12 +33,18 @@ export const messagesEn: Record<string, string> = {
   [ERROR_ENCODE_EPISODE_NUMBERS_MISSING]:
     'Episode has no season/episode number: cannot build the output path',
   [ERROR_ENCODE_UNKNOWN_DRIVER]: 'Unknown ENCODE_DRIVER: {driver}',
+  [ERROR_ENCODE_DISCARDED]: 'Encode was discarded by the user',
+  [ERROR_ENCODE_STOPPED]: 'Encode was stopped by the user',
   [ERROR_ENCODE_UNEXPECTED]: 'Unexpected encode failure: {detail}',
   [ERROR_PROCESS_JOB_NOT_FOUND]: 'Process job {id} does not exist',
   [ERROR_SOURCE_NO_DOWNLOAD_PATH]:
     'Completed with no download path recorded — cannot enqueue',
   [ERROR_SOURCE_NO_TARGET]: 'Media source {id} points at no movie, episode or season',
   [ERROR_SOURCE_SCAN_FAILED]: 'The download could not be read: {detail}',
+  [ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS]:
+    "Could not determine the Blu-ray's main playlist ({playlists}). Assemble the MKV manually and import it from the film's page",
+  [ERROR_ENCODE_DISC_REMUX_FAILED]:
+    'Could not assemble the MKV from the Blu-ray (code {code}): {stderr}',
 };
 
 // Fills `{param}` placeholders in a message template with the corresponding

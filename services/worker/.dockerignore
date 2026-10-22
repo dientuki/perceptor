@@ -17,3 +17,6 @@ dist/
 
 # Fixture corpus for src/ffmpeg/cases.spec.ts — test data, never runtime.
 ffmpeg/
+
+# Recorded freezedetect output for src/encode/dub-trim.spec.ts — test data, never runtime.
+fixtures/

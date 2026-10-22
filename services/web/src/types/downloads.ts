@@ -9,6 +9,21 @@ export interface DownloadError {
   message: string;
 }
 
+// Spec 095, REQ-4
+export interface DownloadJob {
+  processJobId: number;
+  label: string;
+  episodeId: number | null;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  // QUEUED | ENCODING | PAUSED | COMPLETED | ERROR | DISCARDED
+  status: string;
+  progress: number;
+  encodeSpeed: number | null;
+  lastError: DownloadError | null;
+  retryable: boolean;
+}
+
 export interface Download {
   mediaSourceId: number;
   // Spec 022, REQ-18
@@ -49,4 +64,6 @@ export interface Download {
   // Spec 090: non-null when the source delivered a file and was later
   // retired in favour of a replacement; an ISO string, never the Date itself.
   retiredAt: string | null;
+  // Spec 095, REQ-4
+  jobs: DownloadJob[];
 }

@@ -39,6 +39,7 @@ src/scan/scan-folder.ts  enumerates a download's files, flags each isVideo — n
 src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly one pair
 src/scan/mark-downloaded.ts  flags each enumerated file isDownloaded against api's torrent-client answer (052)
 src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode, over InventoriedFile[] (052) — isDownloaded: false is excluded before either rule runs
+src/disc/                Blu-ray disc recognition, playlist choice and MKV assembly (see below, `100`)
 src/encode/              the driver seam (see below)
 src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639
 src/paths/build-output-path.ts   composes the final library path, one branch per `libraryLayout` (`072`)
@@ -95,6 +96,8 @@ its existing `activeChild` (already pointed at whichever of FFmpeg/mkvmerge is r
 `cleanupTemps()` (already removing both `<input>.working.mkv` and `<final>.part.mkv`) — an `abort`
 listener kills `activeChild` with `SIGTERM`, then `SIGKILL` after a 10s grace, and the rejection that
 follows is `EncodeCancelledError` rather than the usual ffmpeg/mkvmerge `KeyedError`.
+
+Since `097-encode-stop`, the same arm also covers `error.encode.stopped` (the user stopped that file before it started), logging `stopped, reporting nothing`. Since `095-season-pack-per-file-encode`, `encode.job.ts`'s cancellation arm also covers `encodeStarted` being refused with `error.encode.discarded` (the user discarded that file before it started): it logs `discarded, reporting nothing`, reports no `encodeFailed` and rethrows `UnrecoverableError`, so BullMQ does not retry against an input `api` already deleted.
 
 `EncodeInput` in `encode/types.ts` is a deliberate *subset* of `EncodeJobDetails`
 (`jobs/encode.job.ts`), retyped locally rather than imported, so the driver isn't coupled to the
@@ -251,31 +254,105 @@ What that decision is — which box each tier names, when a source counts as exc
 codecs get re-encoded to AV1 versus copied — lives in `src/ffmpeg/params.ts`, owned by the `ffmpeg`
 agent; see the section below.
 
-## Film grain is a boolean the worker resolves from a tri-state, and never interprets `AUTO` yet (`092-film-grain-optimization`)
+## Film grain is a boolean the worker resolves in the encode driver (`092-film-grain-optimization`, `094-automatic-grain-detection`)
 
 `EncodeJobDetails.grainMode: EffectiveGrainMode!` (`'AUTO' | 'ON' | 'OFF'`, never `'INHERIT'` — `api`
 has already resolved a title's own override against the installation setting before this service
-ever sees it) reaches `src/encode/grain-mode.ts` via two functions, mirroring `content-kind.ts`'s
-shape: `normalizeGrainMode()` degrades an absent, `null` or unrecognised value — including the
-literal `'INHERIT'`, which this service must never try to interpret — to `'OFF'` and warns once,
-same defensive posture as `contentKind`/`compressionResolution`; `resolveFilmGrain(mode, metadata)`
-turns the normalized tri-state into the boolean `src/ffmpeg/params.ts` actually consumes — `'ON'`
-→ `true`, `'OFF'`/`'AUTO'` → `false`. **`AUTO` always resolving to `false` is this feature's entire
-scope**: the heuristic that gives `AUTO` real meaning is a future spec's whole subject, and
-`resolveFilmGrain` already takes the probed `metadata` as an unused parameter — the seam that spec
-replaces, not something to build out now.
+ever sees it) reaches `src/encode/grain-mode.ts`. `normalizeGrainMode()` degrades an absent, `null`
+or unrecognised value — including the literal `'INHERIT'` — to `'OFF'` and warns once;
+`normalizeIsShort()` does the same for `EncodeJobDetails.isShort` (`false` plus one warning, never a
+throw). Both follow the `contentKind`/`compressionResolution` posture.
 
-`src/jobs/encode.job.ts` resolves `grainMode` through `normalizeGrainMode()` **gated on the
-`compressing` boolean**, unlike `contentKind`/`compressionResolution` which normalize
-unconditionally: with compression off nothing about grain may run at all (REQ-10), and an
-unconditional call would print the degradation warning for a job that is never going to reach
-FFmpeg. `src/ffmpeg/buildCommand.ts` resolves the boolean via `resolveFilmGrain(details.grainMode,
-metadata)` next to the `quality` line — reached only on the compressing path, since `passthrough`
-never calls `buildFfmpegCommand` at all, which is what makes REQ-10 structural rather than a check
-someone has to remember. `src/ffmpeg/params.ts`'s three `svtav1KindParams` cases (see below) each
-substitute their trailing `film-grain=0` for `film-grain=8`/`film-grain-denoise=1` when the boolean
-is true — no `film-grain-denoise` term is ever present when it's false, since a leftover denoise
-term with no grain synthesis looks like nothing more than a slightly soft encode.
+**Resolution lives in the driver, not in `buildFfmpegCommand`.** `src/encode/encode.ffmpeg.ts` awaits
+`resolveFilmGrain(details, input, metadata, signal)` right after `getMetadata`/`onProbe` and passes the
+boolean into `buildFfmpegCommand(..., filmGrain)`, which stays synchronous and pure — so the
+`services/worker/ffmpeg/` case corpus never spawns anything (NFR-5). `passthrough` and the `mock`
+driver never enter `encode.ffmpeg.ts`, so with compression off nothing about grain runs (REQ-10 of
+`092`, NFR-4 of `094`); `src/jobs/encode.job.ts` still gates `normalizeGrainMode()` on `compressing`.
+
+`'ON'` → `true` and `'OFF'` → `false` short-circuit: neither stage runs. `'AUTO'` runs two stages, the
+second only if the first passes:
+
+- **Gate** (`src/encode/grain-gate.ts`, pure): `scoreGrainGate(metadata, inputPath, year)` sums
+  weighted signals from the already-parsed `ffprobe` output (grain tags, codec-normalized
+  bits-per-pixel-per-frame, lossless audio, disc/streaming markers read from the input path's parent
+  directory plus basename — never `sourceTag`, which collapses to the bare filename — and the catalog
+  year). Passes at score ≥ 2. A short film (`isShort`) stops here.
+- **Probe** (`src/encode/grain-probe.ts`): a fixed measurement — five `cropdetect` samples, then nine
+  six-second windows each encoded twice (grain synthesis off/on) at CRF 22, preset 8, at a
+  `min(source, 1080p)` box that never reads `compressionResolution`, with the job's content-kind
+  parameters built by the same `buildSvtav1Params` the real encode uses. Output goes to
+  `-f matroska pipe:1` and only stdout bytes are counted; no scratch file exists. Passes when the
+  saved bitrate is ≥ `GRAIN_PROBE_SAVED_MBPS_THRESHOLD` (0.886 Mbps, **provisional**: measured at
+  CRF 24, to be refitted at CRF 22).
+
+Definite verdicts are cached in a module-level `Map` by `mediaSourceId` (a season pack probes once;
+a worker restart re-probes). A failure is never cached and never fails the job: every non-cancellation
+throw becomes `false` with one warning; `EncodeCancelledError` is rethrown untouched. Each resolution
+prints one `[grain]` line naming the stage that decided and the figures. `src/ffmpeg/params.ts`'s
+three `svtav1KindParams` cases substitute `film-grain=8`/`film-grain-denoise=1` for `film-grain=0`
+when the boolean is true.
+
+## Dub-card tail trim is resolved in the encode driver (`098-dub-card-tail-trim`)
+
+`EncodeJobDetails.dubTrimEnabled` (the raw `dub_trim_enabled` setting; `api` does not combine it with
+`compressionEnabled`) is gated on `compressing` in `src/jobs/encode.job.ts` and carried on
+`EncodeInput.dubTrimEnabled`. When true, `resolveDubTrim` (`src/encode/dub-trim.ts`, called in
+`encode.ffmpeg.ts` after `resolveFilmGrain`) runs `freezedetect` over the last 300 s of the **video
+stream** (`videoEndSeconds` reads the stream duration, then its Matroska `DURATION` tag, then the
+container) through `runFfmpegCapture` (`src/ffmpeg/capture.ts`, the AbortSignal-aware spawn moved out
+of `grain-probe.ts`). The filter logs at info level, so the call must not pass `-v error`. A tail is
+cut when the contiguous freeze run reaching the window end *ends* in at least 5 consecutive segments that
+last a whole multiple of 2.002 s (a non-multiple last segment, truncated by the end of the file, is set
+aside first; merged 4.004 s cards count) and at least 3 of them last exactly 2.002 s; whatever precedes
+those trailing cards (fades, a logo) is not scored; the cut is the start of the whole run, returned as an absolute
+second that `buildFfmpegCommand`'s `trimAt` folds into the single `-t` (the minimum with
+`ENCODE_SAMPLE_SECONDS`). Progress uses the trimmed duration. A cut at or below 0 means keep.
+
+Verdicts are cached in a module-level `Map` keyed by **input path** (not `mediaSourceId`, since a
+season pack has many files); a failure is never cached. It is a luxury, so a failed detection is
+completely silent (no warning, no log) and the whole file is encoded; only `EncodeCancelledError`
+propagates. A success prints one `[dubtrim]` line. The twelve real-file freeze logs (cuts and keeps, including the false-positive guards Haven S01E01, Arrival and Dawn of the Dragon Racers) the rule was
+validated on live in `fixtures/dub-trim/` (excluded from the image by `.dockerignore`).
+
+## Stream-end trim is resolved in the encode driver (`099-stream-end-trim`)
+
+`EncodeJobDetails.streamEndTrimEnabled` (the raw `stream_end_trim_enabled` setting; `api` combines it
+with neither `compressionEnabled` nor `dubTrimEnabled`) is gated on `compressing` in
+`src/jobs/encode.job.ts` and carried on `EncodeInput.streamEndTrimEnabled`. When true,
+`resolveStreamEndTrim` (`src/encode/stream-end-trim.ts`, called in `encode.ffmpeg.ts` after
+`resolveDubTrim`) reads the last 300 s of **packet** timestamps with `ffprobe` (`-show_entries
+packet=stream_index,pts_time,duration_time -of compact`, decoding nothing) through `runFfmpegCapture`'s
+`{ binary: 'ffprobe', keepStdout: true }` option (stdout capped at 32 MB) and never from tags. Only the
+first video stream and the audio tracks `selectAudioStreams` (extracted from `getAudioParams` in
+`src/ffmpeg/params.ts`) keeps count. It cuts at `min(video end, longest kept audio end)` when the two
+differ by more than 2 s; a kept track with no packet in the window means keep. `encode.ffmpeg.ts`
+passes the minimum of this cut and `098`'s as `trimAt`, so `buildCommand.ts` and the progress
+denominator are unchanged. There is no cache; a failure is silent and encodes the whole file, only
+`EncodeCancelledError` propagates. A completed analysis prints one `[streamtrim]` line.
+
+## Blu-ray disc releases are assembled before the encode (`100-bluray-disc-remux`)
+
+A **film** source (`movieId !== null`) whose files hold exactly one disc root (`BDMV/PLAYLIST/*.mpls`
+and `BDMV/STREAM/*.m2ts`; `BDMV/BACKUP` never counts) is scanned by `src/disc/scan-disc.ts` instead of
+`selectMatches`. `src/disc/mpls.ts` parses every playlist (45 kHz ticks, entry marks);
+`select-playlist.ts` drops unplayable playlists (parse failure, clip missing or not downloaded) and
+menu loops (distinct clip duration under half the total), keeps those within 1 s of the longest, then
+prefers chapter marks, then the most marks; a remaining tie throws `error.source.disc_playlist_ambiguous`
+(`{playlists}`) through `sourceScanFailed`. Only the winning `.mpls` is reported `isVideo: true`, so
+the clips are never unmatched video and `cleanupDecision` removes the folder; with no playable
+playlist the `.m2ts` files are `isVideo: true` and `api` derives `scan_no_downloaded_video` /
+`scan_no_video` as before. `.m2ts` is deliberately not in `VIDEO_EXTENSIONS`. Episodes, seasons and
+multi-disc releases keep the ordinary path.
+
+`encode.job.ts` recognises a `.mpls` input and, after `encodeStarted` and before the compression
+branch, runs `assemblePlaylist` (`mkvmerge -o <disc root>/<playlist>.perceptor.mkv <playlist>` through
+`runFfmpegCapture`'s `binary: 'mkvmerge'`). Exit 0 and 1 (warnings) are success; anything else, or no
+output file, removes the partial and throws `error.encode.disc_remux_failed` (`{code, stderr}`, the
+tail of stdout + stderr — `mkvmerge` writes its errors to stdout). Both branches receive the assembled
+file; `buildSourceTag` and `cleanupSource` keep the playlist. The assembled file is removed in a
+guarded `finally` on every path except after the passthrough move, and before each assembly. Progress
+stays at 0 during assembly; the disc files are never deleted on failure.
 
 ## The rules in `src/ffmpeg/` have their own agent and their own corpus
 

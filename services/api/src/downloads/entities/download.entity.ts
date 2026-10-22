@@ -1,5 +1,6 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
 import { DownloadError } from './download-error.entity';
+import { DownloadJob } from './download-job.entity';
 
 // Spec 022, REQ-9 REQ-10 REQ-18 REQ-19
 @ObjectType()
@@ -75,4 +76,7 @@ export class Download {
 
   @Field(() => Date, { nullable: true })
   retiredAt: Date | null;
+
+  @Field(() => [DownloadJob])
+  jobs: DownloadJob[];
 }

@@ -55,7 +55,7 @@ jobs:
             target: prod
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -89,7 +89,7 @@ jobs:
           echo "${{ steps.build.outputs.digest }}" > /tmp/digest/digest.txt
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           # Name carries both the service and the platform — the one genuinely silent failure
           # risk in this workflow (plan.md § Risks): a collision across services would tag
@@ -140,7 +140,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: digest-${{ matrix.service }}-*
           path: /tmp/digests

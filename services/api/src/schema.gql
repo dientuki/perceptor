@@ -14,6 +14,11 @@ type User {
   isAdmin: Boolean!
   isEnabled: Boolean!
   uiLocale: String
+
+  """
+  Date order chosen by this user: true = MM/DD/YYYY, false = DD/MM/YYYY. Null means unset — fall through to defaultDateMonthFirst, then the UI language.
+  """
+  dateMonthFirst: Boolean
 }
 
 type LoginResponse {
@@ -70,6 +75,21 @@ type Movie {
   releaseDate: DateTime
   originalLanguage: String!
   contentKind: ContentKind!
+
+  """
+  Earliest theatrical (TMDB types 2 and 3) day across every country, or null (075 REQ-1).
+  """
+  theatricalReleaseDate: DateTime
+
+  """
+  Earliest digital (TMDB type 4) day across every country, or null (075 REQ-1).
+  """
+  digitalReleaseDate: DateTime
+
+  """
+  Earliest physical (TMDB type 5) day across every country, or null (075 REQ-1).
+  """
+  physicalReleaseDate: DateTime
   isShort: Boolean!
   grainMode: GrainMode!
   status: String!
@@ -185,6 +205,19 @@ type DownloadError {
   message: String!
 }
 
+type DownloadJob {
+  processJobId: Int!
+  label: String!
+  episodeId: Int
+  seasonNumber: Int
+  episodeNumber: Int
+  status: String!
+  progress: Float!
+  encodeSpeed: Float
+  lastError: DownloadError
+  retryable: Boolean!
+}
+
 type Download {
   mediaSourceId: Int!
   infoHash: String
@@ -210,6 +243,7 @@ type Download {
   lostRace: Boolean!
   readAt: DateTime!
   retiredAt: DateTime
+  jobs: [DownloadJob!]!
 }
 
 type TorrentLink {
@@ -395,6 +429,7 @@ type EncodeJobDetails {
   allowedSubtitleLanguageTags: [String!]!
   contentKind: ContentKind!
   grainMode: EffectiveGrainMode!
+  isShort: Boolean!
   seasonNumber: Int
   episodeNumber: Int
   episodeTitle: String
@@ -405,6 +440,7 @@ type EncodeJobDetails {
   outputRoot: String!
   downloadsRoot: String!
   compressionEnabled: Boolean!
+  dubTrimEnabled: Boolean!
   compressionResolution: String!
   allowedSubtitleFormats: [String!]!
   libraryLayout: String!
@@ -513,6 +549,11 @@ type CalendarEntry {
   Null unless kind is EPISODES. Number of episodes in the group whose status is COMPLETED (REQ-7b).
   """
   completedCount: Int
+
+  """
+  Null unless kind is MOVIE or SHORT. The release types whose date is this entry's day, ordered THEATRICAL, DIGITAL, PHYSICAL. Empty when the film has no typed date and the entry sits on releaseDate (093 REQ-6).
+  """
+  releaseTypes: [MovieReleaseType!]
 }
 
 """
@@ -522,6 +563,12 @@ enum CalendarEntryKind {
   MOVIE
   SHORT
   EPISODES
+}
+
+enum MovieReleaseType {
+  THEATRICAL
+  DIGITAL
+  PHYSICAL
 }
 
 type Query {
@@ -534,6 +581,11 @@ type Query {
   movies(isShort: Boolean): [Movie!]!
   movie(id: Int!): Movie
   defaultUiLocale: String
+
+  """
+  Installation-wide date order: true = MM/DD/YYYY, false = DD/MM/YYYY. Null when the date_month_first setting is unset — fall through to the UI language. Any authenticated user; not public.
+  """
+  defaultDateMonthFirst: Boolean
   settings: [Setting!]!
 
   """
@@ -604,6 +656,9 @@ type Query {
 type Mutation {
   setUiLocale(locale: String!): User!
 
+  """Sets the caller's own date order. Never another user's."""
+  setDateMonthFirst(monthFirst: Boolean!): User!
+
   """Inicia sesión y retorna un JWT"""
   login(loginInput: LoginInput!): LoginResponse!
   logout: Boolean!
@@ -668,6 +723,19 @@ type Mutation {
   Borra un torrent del cliente de torrents junto con sus archivos, y su fila
   """
   downloadDelete(mediaSourceId: Int!): Boolean!
+
+  """Reintenta la codificación de un solo archivo con error"""
+  encodeJobStart(processJobId: Int!): Download!
+
+  """
+  Pausa un archivo de una fuente: cancela su codificación y lo deja detenido
+  """
+  encodeJobStop(processJobId: Int!): Download!
+
+  """
+  Descarta un archivo de una fuente: cancela su codificación y borra su entrada
+  """
+  encodeJobDiscard(processJobId: Int!): Download!
 
   """
   Reemplaza la preferencia de idiomas del usuario para una serie puntual, para un tipo de pista

@@ -45,6 +45,10 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   compression_resolution: { kind: 'enum', options: [...COMPRESSION_RESOLUTIONS] },
   // Spec 092, REQ-1
   grain_auto_enabled: { kind: 'boolean' },
+  // Spec 098, REQ-1
+  dub_trim_enabled: { kind: 'boolean' },
+  // Spec 099, REQ-1
+  stream_end_trim_enabled: { kind: 'boolean' },
   subtitles_enabled: { kind: 'boolean' },
   subtitles_text_enabled: { kind: 'boolean' },
   subtitles_text_formats: { kind: 'enum_list', options: [...SUBTITLE_TEXT_FORMATS] },
@@ -55,6 +59,7 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   media_server_port: { kind: 'int' },
   media_server_api_key: { kind: 'secret' },
   ui_locale: { kind: 'enum', options: [...SUPPORTED_LOCALES] },
+  date_month_first: { kind: 'boolean' },
   default_languages: { kind: 'languages' },
   // Cadence and enablement for the scheduler (src/scheduler/) — keys are
   // derived from the registry's task ids, not written out twice.

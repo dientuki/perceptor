@@ -1,14 +1,15 @@
 import { Clapperboard, Film, Tv } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { releaseTypePrefix } from "@/lib/calendar-label";
 import type { StatusTone } from "@/lib/status-tone";
 import type { CalendarEntry, CalendarEntryKind } from "@/types/calendar";
 
 const TONE_CLASS: Record<StatusTone, string> = {
-  completed: "fc-bg-success",
-  progress: "fc-bg-primary",
-  error: "fc-bg-danger",
-  missing: "",
+  completed: "border-success-500 bg-success-50 dark:bg-success-500/15",
+  progress: "border-brand-500 bg-brand-50 dark:bg-brand-500/15",
+  error: "border-error-500 bg-error-50 dark:bg-error-500/15",
+  missing: "border-gray-300 dark:border-gray-700",
 };
 
 function pad(value: number): string {
@@ -57,19 +58,26 @@ export default function CalendarEventContent({
   return (
     <Link
       href={href}
-      className={`event-fc-color fc-event-main block min-w-0 ${TONE_CLASS[tone]}`}
+      className={`block w-full min-w-0 rounded-lg border px-1 py-0.5 text-gray-700 dark:text-white/90 ${TONE_CLASS[tone]}`}
       title={`${kindLabel}: ${label}`}
     >
       <span
-        className={`fc-event-title ${isEpisodes ? "fc-event-title-single" : ""}`}
+        className={`min-w-0 overflow-hidden text-base font-normal ${
+          isEpisodes ? "block truncate" : "line-clamp-2"
+        }`}
       >
         <Icon
-          className="fc-event-icon mr-1 inline-block size-3 align-[-1px] text-gray-700"
+          className="mr-1 inline-block size-3 align-[-1px] text-gray-700"
           aria-label={kindLabel}
         />
+        {releaseTypePrefix(entry.releaseTypes, t)}
         {entry.title}
       </span>
-      {code ? <span className="fc-event-count block">{code}</span> : null}
+      {code ? (
+        <span className="block truncate text-theme-sm text-gray-500 dark:text-gray-400">
+          {code}
+        </span>
+      ) : null}
     </Link>
   );
 }

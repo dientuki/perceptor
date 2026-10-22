@@ -21,3 +21,28 @@ export function formatEncodeSpeed(speed: number | null): string {
   if (speed === null) return "—";
   return `${speed.toFixed(2)}x`;
 }
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+// Spec 096, REQ-1 REQ-7a
+export function formatDate(iso: string, monthFirst: boolean): string {
+  const d = new Date(iso);
+  const day = pad2(d.getUTCDate());
+  const month = pad2(d.getUTCMonth() + 1);
+  const year = d.getUTCFullYear();
+  return monthFirst ? `${month}/${day}/${year}` : `${day}/${month}/${year}`;
+}
+
+// Spec 096, REQ-1 REQ-7a
+export function formatDateTime(iso: string, monthFirst: boolean): string {
+  const d = new Date(iso);
+  const day = pad2(d.getDate());
+  const month = pad2(d.getMonth() + 1);
+  const year = d.getFullYear();
+  const date = monthFirst
+    ? `${month}/${day}/${year}`
+    : `${day}/${month}/${year}`;
+  return `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}

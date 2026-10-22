@@ -52,7 +52,7 @@ function build(options: {
 
   const movies = {
     findOneFromDb: jest.fn(async (id: number, userId: string) =>
-      userId === 'u1' && id === 10 ? { id } : null,
+      userId === 'u1' && id === 10 ? { id, title: 'Grown Ups' } : null,
     ),
     findAudioMandatoryFor: jest.fn(async (userId: string) => titleMandatory[userId] ?? false),
   };
@@ -61,12 +61,12 @@ function build(options: {
   };
   const seasons = {
     findOneFromDb: jest.fn(async (id: number, userId: string) =>
-      userId === 'u1' && id === 20 ? { id, show: { id: 5 } } : null,
+      userId === 'u1' && id === 20 ? { id, show: { id: 5, title: 'Show' } } : null,
     ),
   };
   const episodes = {
     findOneFromDb: jest.fn(async (id: number, userId: string) =>
-      userId === 'u1' && id === 30 ? { id, season: { show: { id: 5 } } } : null,
+      userId === 'u1' && id === 30 ? { id, season: { show: { id: 5, title: 'Show' } } } : null,
     ),
   };
   const preferences = {
@@ -83,6 +83,8 @@ function build(options: {
   const prisma = {
     userShow: { findMany: jest.fn(async () => options.owners ?? []) },
     userMovie: { findMany: jest.fn(async () => options.movieOwners ?? []) },
+    show: { findUnique: jest.fn(async () => ({ title: 'Show' })) },
+    movie: { findUnique: jest.fn(async () => ({ title: 'Grown Ups' })) },
   };
 
   const service = new RankingContextService(
@@ -117,6 +119,16 @@ describe('RankingContextService.forCaller', () => {
     expect(movies.findOneFromDb).toHaveBeenCalledWith(10, 'u1');
     expect(seasons.findOneFromDb).toHaveBeenCalledWith(20, 'u1');
     expect(episodes.findOneFromDb).toHaveBeenCalledWith(30, 'u1');
+  });
+
+  it('carries the searched title so its own words never trip a veto', async () => {
+    const { service } = build({});
+
+    expect((await service.forCaller('u1', { movieId: 10 })).mediaTitle).toBe('Grown Ups');
+    expect((await service.forCaller('u1', { seasonId: 20 })).mediaTitle).toBe('Show');
+    expect((await service.forCaller('u1', { episodeId: 30 })).mediaTitle).toBe('Show');
+    expect((await service.forShowOwners(5)).mediaTitle).toBe('Show');
+    expect((await service.forMovieOwners(10)).context.mediaTitle).toBe('Grown Ups');
   });
 
   it('falls back to the global languages and flag when the title has none', async () => {

@@ -2,8 +2,15 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { fetchGraphQLMock, buildOutputPathMock, encodeMock, cleanupSourceMock, passthroughMock } =
-  vi.hoisted(() => ({
+const {
+  fetchGraphQLMock,
+  buildOutputPathMock,
+  encodeMock,
+  cleanupSourceMock,
+  passthroughMock,
+  assemblePlaylistMock,
+} = vi.hoisted(() => ({
+    assemblePlaylistMock: vi.fn(),
     fetchGraphQLMock: vi.fn(),
     buildOutputPathMock: vi.fn(),
     encodeMock: vi.fn(),
@@ -29,16 +36,25 @@ vi.mock('../encode', () => ({
 vi.mock('../encode/passthrough', () => ({
   passthrough: (...args: unknown[]) => passthroughMock(...args),
 }));
+vi.mock('../disc/assemble-playlist', () => ({
+  assemblePlaylist: (...args: unknown[]) => assemblePlaylistMock(...args),
+}));
 vi.mock('./cleanup-source', () => ({
   cleanupSource: (...args: unknown[]) => cleanupSourceMock(...args),
 }));
 
+import { mkdir, mkdtemp, writeFile, stat, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { UnrecoverableError } from 'bullmq';
 import { handleEncode } from './encode.job';
 import { KeyedError } from '../i18n/keyed-error';
 import { EncodeCancelledError } from '../encode/cancellation';
 import { ApiUnreachableError } from '../api/graphql-client';
 import {
+  ERROR_ENCODE_DISCARDED,
+  ERROR_ENCODE_DISC_REMUX_FAILED,
+  ERROR_ENCODE_STOPPED,
   ERROR_ENCODE_FFMPEG_FAILED,
   ERROR_ENCODE_PROBE_FAILED,
   ERROR_ENCODE_UNEXPECTED,
@@ -81,6 +97,7 @@ beforeEach(() => {
   encodeMock.mockReset();
   cleanupSourceMock.mockReset();
   passthroughMock.mockReset();
+  assemblePlaylistMock.mockReset();
 
   buildOutputPathMock.mockReturnValue('/library/movies/A Movie (2020)/A Movie (2020).mkv');
 
@@ -884,5 +901,206 @@ describe('handleEncode — non-retryable classification (Spec 054, REQ-7 REQ-8 R
       (query as string).includes('encodeFailed'),
     );
     expect(failedCall).toBeDefined();
+  });
+});
+
+// Defends Spec 095, REQ-13: a job the user discarded is dequeued anyway and
+// api refuses encodeStarted. Reporting that as a failed encode, or letting
+// BullMQ retry it against an input api already deleted, would resurrect a
+// discarded file as an error with no one having asked for it.
+describe('handleEncode — encodeStarted refused as discarded (Spec 095, REQ-13)', () => {
+  it('reports nothing, never runs the encode driver and is non-retryable', async () => {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob: PROCESS_JOB_DETAILS });
+      }
+      if (query.includes('encodeStarted')) {
+        return Promise.reject(new KeyedError(ERROR_ENCODE_DISCARDED, 'Encode was discarded by the user'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const rejection = await handleEncode(makeJob()).catch((err) => err);
+
+    expect(rejection).toBeInstanceOf(UnrecoverableError);
+    expect(encodeMock).not.toHaveBeenCalled();
+    expect(passthroughMock).not.toHaveBeenCalled();
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeFailed'))).toBe(false);
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeCompleted'))).toBe(false);
+    expect(cleanupSourceMock).not.toHaveBeenCalled();
+  });
+});
+
+// Defends Spec 097, REQ-6: a stopped job is dequeued anyway and api refuses
+// encodeStarted. Reporting that as a failure would flip it to ERROR if api's
+// guard regressed, and a BullMQ retry would restart what the user stopped.
+describe('handleEncode — encodeStarted refused as stopped (Spec 097, REQ-6)', () => {
+  it('reports nothing, never runs the encode driver and is non-retryable', async () => {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob: PROCESS_JOB_DETAILS });
+      }
+      if (query.includes('encodeStarted')) {
+        return Promise.reject(new KeyedError(ERROR_ENCODE_STOPPED, 'Encode was stopped by the user'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const rejection = await handleEncode(makeJob()).catch((err) => err);
+
+    expect(rejection).toBeInstanceOf(UnrecoverableError);
+    expect(encodeMock).not.toHaveBeenCalled();
+    expect(passthroughMock).not.toHaveBeenCalled();
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeFailed'))).toBe(false);
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeCompleted'))).toBe(false);
+    expect(cleanupSourceMock).not.toHaveBeenCalled();
+  });
+});
+
+// Spec 100, REQ-6 REQ-9 REQ-10
+describe('handleEncode — disc playlist assembly (Spec 100)', () => {
+  let root: string;
+  let playlist: string;
+  let assembled: string;
+
+  async function exists(path: string): Promise<boolean> {
+    return stat(path).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  function mockGraphQL(processJob: Record<string, unknown>) {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) return Promise.resolve({ processJob });
+      if (query.includes('encodeCompleted')) {
+        return Promise.resolve({
+          encodeCompleted: { message: 'ok', removeTorrent: false, deleteInputFile: false, deleteDownloadPath: false },
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'encode-job-disc-'));
+    playlist = join(root, 'Film', 'BDMV', 'PLAYLIST', '00800.mpls');
+    assembled = join(root, 'Film', '00800.perceptor.mkv');
+    await mkdir(join(root, 'Film'), { recursive: true });
+    await writeFile(assembled, 'assembled');
+    assemblePlaylistMock.mockResolvedValue(assembled);
+    buildOutputPathMock.mockReturnValue('/library/movies/A Movie (2020)/A Movie (2020).mkv');
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('assembles after encodeStarted and hands the assembled path to encode(), keeping the playlist in the source tag', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, downloadPath: join(root, 'Film'), compressionEnabled: true });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg' });
+
+    await handleEncode(makeJob());
+
+    expect(assemblePlaylistMock).toHaveBeenCalledTimes(1);
+    expect(assemblePlaylistMock.mock.calls[0][0]).toBe(playlist);
+    const startedIdx = fetchGraphQLMock.mock.calls.findIndex(([q]) => (q as string).includes('encodeStarted'));
+    expect(startedIdx).toBeGreaterThanOrEqual(0);
+    expect(assemblePlaylistMock.mock.invocationCallOrder[0]).toBeGreaterThan(
+      fetchGraphQLMock.mock.invocationCallOrder[startedIdx],
+    );
+
+    const [input, , details] = encodeMock.mock.calls[0] as [string, string, { sourceTag: string }];
+    expect(input).toBe(assembled);
+    expect(details.sourceTag).toContain('00800.mpls');
+    expect(details.sourceTag).not.toContain('perceptor.mkv');
+    expect(cleanupSourceMock.mock.calls[0][0]).toMatchObject({ inputFilePath: playlist });
+  });
+
+  it('removes the assembled file after a successful compression-on encode', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg' });
+
+    await handleEncode(makeJob());
+
+    expect(await exists(assembled)).toBe(false);
+  });
+
+  it('removes the assembled file when the encode fails', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
+    encodeMock.mockRejectedValue(new Error('boom'));
+
+    await expect(handleEncode(makeJob())).rejects.toThrow('boom');
+
+    expect(await exists(assembled)).toBe(false);
+  });
+
+  it('removes the assembled file when the encode is cancelled', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
+    encodeMock.mockRejectedValue(new EncodeCancelledError());
+
+    await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
+
+    expect(await exists(assembled)).toBe(false);
+  });
+
+  it('passes the assembled path to passthrough, keeps the .mkv extension and does not touch the file afterwards', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: false });
+    passthroughMock.mockResolvedValue({ ffmpegCommand: '' });
+
+    await handleEncode(makeJob());
+
+    expect(encodeMock).not.toHaveBeenCalled();
+    const [input, output] = passthroughMock.mock.calls[0] as [string, string];
+    expect(input).toBe(assembled);
+    expect(output).toBe('/library/movies/A Movie (2020)/A Movie (2020).mkv');
+    // The mocked passthrough moves nothing, so a surviving file proves no removal was attempted.
+    expect(await exists(assembled)).toBe(true);
+  });
+
+  it('removes the assembled file when passthrough itself fails', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: false });
+    passthroughMock.mockRejectedValue(new Error('disk full'));
+
+    await expect(handleEncode(makeJob())).rejects.toThrow('disk full');
+
+    expect(await exists(assembled)).toBe(false);
+  });
+
+  it('reports encodeFailed with disc_remux_failed and its params when assembly fails, and never runs a driver', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
+    assemblePlaylistMock.mockRejectedValue(
+      new KeyedError(ERROR_ENCODE_DISC_REMUX_FAILED, 'mkvmerge failed', { code: 2, stderr: 'Error: bad clip' }),
+    );
+
+    await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
+
+    const failed = fetchGraphQLMock.mock.calls.find(([q]) => (q as string).includes('encodeFailed'));
+    expect(failed).toBeDefined();
+    const variables = (failed as [string, Record<string, unknown>])[1];
+    expect(variables.key).toBe(ERROR_ENCODE_DISC_REMUX_FAILED);
+    expect(JSON.parse(variables.params as string)).toEqual({ code: 2, stderr: 'Error: bad clip' });
+    expect(encodeMock).not.toHaveBeenCalled();
+    expect(passthroughMock).not.toHaveBeenCalled();
+    expect(await exists(assembled)).toBe(true);
+  });
+
+  it('never calls the assembler for a non-playlist input', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, compressionEnabled: true });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg' });
+
+    await handleEncode(makeJob());
+
+    expect(assemblePlaylistMock).not.toHaveBeenCalled();
+    expect(encodeMock.mock.calls[0][0]).toBe('/downloads/movie.mkv');
+  });
+
+  it('refuses to remove an assembled path outside downloadsRoot', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: join(root, 'elsewhere'), compressionEnabled: true });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg' });
+
+    await handleEncode(makeJob());
+
+    expect(await exists(assembled)).toBe(true);
   });
 });
