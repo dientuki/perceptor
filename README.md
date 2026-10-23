@@ -634,6 +634,13 @@ Rough edges, stated plainly:
   treats "there is a `.env`" as "the previous run completed", so an install interrupted partway
   leaves a `.env` it will skip rather than finish. Delete the directory and start over.
 
+## License
+
+Perceptor is free software, licensed under the [GNU Affero General Public License v3.0](LICENSE)
+(`AGPL-3.0-only`). You can use, study, modify and share it; if you distribute a modified version, or
+run one as a service other people use over a network, you must offer them its source under the same
+license.
+
 ## Responsible use
 
 Perceptor is intended for managing media you have the rights to download, store and transcode.
