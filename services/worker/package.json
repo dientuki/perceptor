@@ -4,6 +4,7 @@
   "description": "Worker de procesamiento de video con FFmpeg, BullMQ y comunicación a API",
   "main": "src/index.ts",
   "type": "commonjs",
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.build.json",
