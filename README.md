@@ -26,6 +26,25 @@ Perceptor is the whole path as a single product:
   UI is relative to them, and container paths never leak into the interface.
 - **Files that play.** The transcode isn't an afterthought bolted onto a downloader — it's the point.
 
+## Privacy
+
+Your library is yours: what you own, what you search for and what you watch never reaches anyone
+who isn't on your own machine.
+
+- **It runs on your hardware.** The database, the queues, the files and every log live in your
+  Docker stack. There is no Perceptor cloud, no account to create and no server of the author's in
+  the middle.
+- **No telemetry.** Perceptor sends no usage data, crash reports or analytics anywhere, and Next.js's
+  own telemetry is disabled in the image (`NEXT_TELEMETRY_DISABLED=1`).
+- **Your own TMDB key.** Every installation talks to TMDB with the key you paste in Settings, so
+  catalog lookups are a matter between you and TMDB — nobody aggregates them. Posters are fetched
+  by your server, not by your browser.
+- **No third-party assets in the browser.** Fonts are bundled at build time and served by your own
+  instance, so opening a page loads nothing from anyone else.
+- **What does leave, and to whom.** Catalog requests go to TMDB with your key; searches go to the
+  indexers you configured in Prowlarr; downloads are BitTorrent, so your IP is visible to the
+  swarm like any other torrent client's. Perceptor adds nothing to that list.
+
 ## Status
 
 **Perceptor is in closed alpha.** The pipeline runs end to end for both films and series — search,
