@@ -95,6 +95,7 @@ export default async function MovieDetailsPage({ params }: PageProps) {
             movie={movie}
             languageOptions={languages}
             shortsEnabled={capabilities.shortsEnabled}
+            subtitleSearchAvailable={capabilities.subtitleSearchAvailable}
             preferences={preferences}
           />
           <DownloadsPanel downloads={downloads} />

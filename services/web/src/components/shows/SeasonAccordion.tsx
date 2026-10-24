@@ -4,9 +4,12 @@ import { ChevronDown, FileVideo, Magnet, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { Episode, Season } from "@/actions/shows";
+import { embedEpisodeSubtitlesAction } from "@/actions/shows";
 import ImportSeasonFilesModal from "@/components/import/ImportSeasonFilesModal";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
+import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
+import SubtitleSearchStatus from "@/components/media/SubtitleSearchStatus";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 import SeasonAcquisitionButtons from "@/components/shows/SeasonAcquisitionButtons";
 import StatusBadge from "@/components/status/StatusBadge";
@@ -45,6 +48,11 @@ function EpisodeRow({
             {episode.overview}
           </div>
         )}
+        {episode.latestSubtitleSearch && (
+          <div className="mt-2">
+            <SubtitleSearchStatus search={episode.latestSubtitleSearch} />
+          </div>
+        )}
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-gray-700 dark:text-gray-300">
         {episode.releaseDate
@@ -80,6 +88,12 @@ function EpisodeRow({
           >
             <Magnet size={16} className="text-red-500" />
           </Button>
+          <EmbedSubtitlesButton
+            compact
+            subtitles={episode.externalSubtitles}
+            embed={episode.subtitleEmbed}
+            onEmbed={embedEpisodeSubtitlesAction.bind(null, episode.id)}
+          />
         </div>
       </td>
     </tr>

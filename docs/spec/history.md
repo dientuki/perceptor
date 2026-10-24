@@ -23,6 +23,33 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-24 — `102-subtitle-content-pruning`
+
+`worker` only; no Prisma migration, GraphQL Contract Delta **None** (`schema.gql` untouched by this feature).
+
+- `worker` typecheck (`bin/cli worker npx --no tsc --noEmit`, dev stack running): 0 errors.
+- `worker` tests (`bin/npm worker test`): 46 files, **607 passed** (44 files / 551 before this feature: `subtitle-content.spec.ts` 41, `subtitle-prune.spec.ts` 8, the C0 and `contentDrops` cases in `params.spec.ts`, the Running Man corpus case `ffmpeg/3.json`).
+- Comments gate (`bin/comments worker`): PASS (355 locators resolved, spanish=0, malformed=0).
+- Fixtures: `grep -rc "Berk" services/worker/fixtures/subtitle-content/*/` prints only `0`s; every `manifest.json` verdict is asserted through `pruneLanguage`.
+- Library scan, read-only (`resolveSubtitlePruning` over every `.mkv` under `/mnt/perceptor/Movies` and `Shows`, 968 files, spoken languages unrestricted): 178 files have more than one text track in a language; the rules would drop at least one track in 38 (6 films, 32 episodes: 39 `sdh`, 2 `same`, 2 `contained`) and leave 140 alone (regional Spanish variants, files already reduced by the tag rules).
+- Not measured: T011 (the live pass on a stack running the new worker image: AC-1, AC-2, AC-3, AC-9, AC-10, AC-11).
+
+## 2026-10-23 — `101-jellyfin-subtitle-embed`
+
+All three services plus a constitution amendment (Article XII, v1.5.0, T001). One Prisma migration
+(`20261024021356_add_subtitle_embed`, applied to this checkout's `perceptor-db-1`; `migrate status`:
+43 migrations, up to date) and a GraphQL contract delta.
+
+- `api` typecheck (`tsc --noEmit`, throwaway `node:24.18.0-alpine` container as uid 1000, no dev stack): 0 errors.
+- `api` tests: 72 suites, **1250 passed**, run with a temporary `redis:7-alpine` on a scratch network (without Redis `session.service` and `upload-tickets.service` time out in their hooks, as before this feature).
+- `worker` typecheck: 0 errors. `worker` tests: 44 files, **551 passed** (540 before T017/T018; the subtitle-embed job spec is 11 of them).
+- `web` typecheck: 7 errors, all in `src/components/calendar/Calendar.tsx` (fullcalendar types, a file this feature does not touch; none in 101's files). `check-messages.mjs`: parity OK, 674 keys. Biome was run per touched file only (the container's `node_modules` carries biome 2.2.0, not the pinned version); the full-tree run was not trusted.
+- Comments gate (`node tools/comments/check.mjs`): api PASS (994 locators), worker PASS (326), web PASS (105).
+- GraphQL contract: `git diff services/api/src/schema.gql` is 96 added lines and matches the spec's Contract Delta, plus one line outside it, `EncodeJobDetails.streamEndTrimEnabled` — drift from `099`, whose section in `graphql-contract.md` already documents it; the committed schema was stale and regenerating it picked it up.
+- AC-14 grep: no removal in `services/api/src` from this feature (the only three `rm(` hits are `downloads.service.ts`, pre-existing, downloads root); in `services/worker/src` the new removals are `subtitle-embed.job.ts` only: the chown probe file and `<final>.part.mkv` (scratch), the temp dir, and the guarded sidecar `unlink`.
+- mkvmerge track ids against ffprobe stream indexes (`mkvmerge -J` vs `ffprobe` on a generated MKV inside `ptor-worker-1`, nothing under `/mnt/perceptor`): identical (0 video, 1 audio, 2 subtitles). A real `mkvmerge` run with the argv shape `embed-args.ts` produces appended a `spa`/`Español` track as default, cleared the existing track's default and kept the original streams in order.
+- Not measured: the pipeline end to end against a live Jellyfin and a real library file (Green Book, AC-1..AC-15 manual pass), the UI in a browser, and `Items/{id}` with `fields=MediaStreams,Path` (the series listing was probed read-only during planning; the single-item read was not). See `pending-acs.md`.
+
 ## 2026-10-21 — `100-bluray-disc-remux`
 
 `worker` and `web` (two catalog keys); no `api`, no migration, no GraphQL schema change (`graphql-contract.md` only gained the two key names in its worker error row).

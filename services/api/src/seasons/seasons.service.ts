@@ -21,6 +21,7 @@ import { UploadsService } from '@/uploads/uploads.service';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { AttachTarget } from '@/acquisition/attach-target';
 import { TitleStatusService } from '@/title-status/title-status.service';
+import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 
 // Spec 022, REQ-3; Spec 022, REQ-2
 function seasonTags(season: { seasonNumber: number; show: { id: number; title: string } }): string[] {
@@ -42,6 +43,7 @@ export class SeasonsService {
     private readonly uploads: UploadsService,
     private readonly attachSource: AttachSourceService,
     private readonly titleStatus: TitleStatusService,
+    private readonly activeEmbed: ActiveEmbedGuard,
   ) {}
 
   async findOneFromDb(id: number, userId: string) {
@@ -121,6 +123,9 @@ export class SeasonsService {
   async startSeasonUpload(seasonId: number, force: boolean, userId: string) {
     const season = await this.findOneFromDb(seasonId, userId);
     if (!season) throw i18nError.notFound(ERROR_KEYS.SEASON_NOT_FOUND, { id: seasonId });
+
+    // Spec 101, REQ-16
+    await this.activeEmbed.assertNoActiveEmbed({ seasonId });
 
     // Spec 087, REQ-2
     if (!force) {

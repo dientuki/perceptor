@@ -238,6 +238,28 @@ export class MoviesService implements MediaTypeService {
     return mandatory;
   }
 
+  // Spec 103, REQ-3
+  async findSubtitleSearchFor(userId: string, movieId: number): Promise<boolean> {
+    const row = await this.prisma.userMovie.findUnique({
+      where: { userId_movieId: { userId, movieId } },
+    });
+    return row?.subtitleSearch ?? false;
+  }
+
+  // Spec 103, REQ-1 REQ-3
+  async setSubtitleSearchFor(
+    userId: string,
+    movieId: number,
+    enabled: boolean,
+  ): Promise<boolean> {
+    await this.mediaCapabilities.assertSubtitleSearchAvailable();
+    await this.prisma.userMovie.update({
+      where: { userId_movieId: { userId, movieId } },
+      data: { subtitleSearch: enabled },
+    });
+    return enabled;
+  }
+
   // 067-title-removal: how many OTHER users hold this film. Advisory for the
   // confirmation dialog and the same count remove() branches on.
   async otherOwnersFor(userId: string, movieId: number): Promise<number> {

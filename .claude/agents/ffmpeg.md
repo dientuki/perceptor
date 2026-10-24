@@ -159,6 +159,10 @@ random and silently lose the right one.
   `tx3g` (text group); `pgs` = `hdmv_pgs_subtitle`; `vobsub` = `dvd_subtitle`; `dvb` =
   `dvb_subtitle` (image group). Any other codec (`eia_608`, …) is never emitted. An empty list
   emits no subtitle at all and logs it. Text is written `-c:s srt`, image is stream-copied.
+- **C0 (hard, `102`).** A track with `disposition.comment` set, or a title containing the word
+  `commentary` (word-boundary matcher, case-insensitive), is never a candidate. It widens the S1–S3
+  candidate filter, reads no text and applies whatever the number of tracks, so a language left with
+  only a commentary ends up with none.
 - **S2 (hard).** Only languages in `allowedLanguagesIso3`, normalized as in A1.
 - **S3 (hard).** A track with no real cue payload is dropped. Measured from `NUMBER_OF_BYTES` and
   `NUMBER_OF_FRAMES`, not from `BPS` alone — `BPS` is a rounded integer and a short real track can
@@ -176,7 +180,28 @@ random and silently lose the right one.
   matters — S4 runs **before** this, so an SDH track can never be the match that discards a plain
   one. Case `1.json` keeps the `Latino` track and drops the unmarked Spanish one, because `es-419`
   was requested.
-- **S6.** Whatever survives S1–S5 is emitted, all of it. No case currently exercises the
+- **C1 (content, `102`).** Runs after S5, compression path only, and C1–C3 each only while a language
+  still has more than one text track; image tracks are never read or removed. One pass reads the
+  first 900 s of every candidate text track, no video or audio decoded. A track whose annotation
+  share (cues with `[...]`, `(...)` or an uppercase speaker label such as `HICCUP:`, Unicode
+  uppercase, music notes not counted) is at least 10 % is hearing-impaired by content, and is dropped
+  only when another candidate of the language is not. All alike, or none, all stay.
+- **C2 (same translation, `102`).** After C1. Two tracks are the same translation when their sampled
+  cues align one-to-one, each pair starts within 0.25 s, at least 95 % of the pairs have identical
+  normalised text, and their whole-track `NUMBER_OF_FRAMES` are equal (a missing tag means not the
+  same). Each group keeps one track: more italic cues in the sample, then `default`, then the
+  earlier stream index. Tracks that match no other all stay.
+- **C3 (contained, `102`).** After C2. A track is dropped when it has at least 3 sampled cues, at
+  most 0.5 of the other track's size (sampled and, when both carry the tag, whole-track cues), and
+  every sampled cue's normalised, lower-cased text appears inside the cues of the other track that
+  overlap it in time. The larger track is never dropped; a track with no cue in the sample stays.
+  This recognises a forced track by content, not by the `forced` disposition.
+
+  The C rules are the keep-on-doubt asymmetry made explicit: any failure to read, align or measure
+  (extraction error, no cue in the sample, missing tag) keeps everything, and the thresholds are
+  set so a plain track wrongly read as redundant is the error that cannot happen, while a redundant
+  one wrongly kept merely stays.
+- **S6.** Whatever survives S1–S5 and C1–C3 is emitted, all of it. No case currently exercises the
   nothing-to-choose-on path where every candidate in a language survives — the one that did was
   retired (REQ-8 of `024`).
 

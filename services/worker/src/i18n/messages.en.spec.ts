@@ -49,6 +49,14 @@ const KNOWN_PARAMS: Record<string, Record<string, string | number>> = {
   [errorKeys.ERROR_SOURCE_SCAN_FAILED]: { detail: 'x' },
   [errorKeys.ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS]: { playlists: '00800.mpls, 00801.mpls' },
   [errorKeys.ERROR_ENCODE_DISC_REMUX_FAILED]: { code: 2, stderr: 'Error: no space left' },
+  [errorKeys.ERROR_SUBTITLE_EMBED_SUBTITLE_UNREADABLE]: { file: 'a.spa.srt', detail: 'EACCES' },
+  [errorKeys.ERROR_SUBTITLE_EMBED_CHARSET_UNDETECTED]: { file: 'a.spa.srt' },
+  [errorKeys.ERROR_SUBTITLE_EMBED_REMUX_FAILED]: { detail: 'mkvmerge exited 2' },
+  [errorKeys.ERROR_SUBTITLE_EMBED_VERIFY_FAILED]: { detail: 'duration drift' },
+  [errorKeys.ERROR_SUBTITLE_EMBED_NOT_WRITABLE]: { detail: 'EACCES' },
+  [errorKeys.ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED]: {},
+  [errorKeys.ERROR_SUBTITLE_SEARCH_SYNC_FAILED]: {},
+  [errorKeys.ERROR_SUBTITLE_SEARCH_INTERRUPTED]: {},
 };
 
 describe('messagesEn — every {placeholder} is satisfiable by the params a throw site passes', () => {
@@ -92,5 +100,27 @@ describe('messagesEn — Blu-ray disc keys', () => {
     expect(
       renderMessage(errorKeys.ERROR_ENCODE_DISC_REMUX_FAILED, { code: 2, stderr: 'disk full' }),
     ).toBe('Could not assemble the MKV from the Blu-ray (code 2): disk full');
+  });
+});
+
+// Spec 101, REQ-8 REQ-10 REQ-12 NFR-4
+describe('messagesEn — subtitle embed keys', () => {
+  it('renders every subtitle embed key with its params', () => {
+    const keys = ALL_KEYS.filter((key) => key.startsWith('error.subtitleEmbed.'));
+    expect(keys).toHaveLength(6);
+    for (const key of keys) {
+      const rendered = renderMessage(key, KNOWN_PARAMS[key]);
+      expect(rendered.length).toBeGreaterThan(0);
+      expect(rendered).not.toMatch(/\{\w+\}/);
+    }
+  });
+
+  it('keeps the exact wire spelling the api stores', () => {
+    expect(errorKeys.ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED).toBe(
+      'error.subtitleEmbed.sidecar_delete_failed',
+    );
+    expect(errorKeys.ERROR_SUBTITLE_EMBED_CHARSET_UNDETECTED).toBe(
+      'error.subtitleEmbed.charset_undetected',
+    );
   });
 });

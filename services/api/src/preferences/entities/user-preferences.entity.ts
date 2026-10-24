@@ -20,6 +20,12 @@ export class UserPreferences {
   })
   audioMandatory: boolean;
 
+  @Field({
+    description:
+      'Gate for automatic subtitle search (103 REQ-2). False for every user until they say otherwise.',
+  })
+  subtitleSearch: boolean;
+
   @Field(() => [Language])
   audioLanguages: Language[];
 

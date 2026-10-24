@@ -71,6 +71,10 @@ export class Show {
   @Field()
   audioMandatory: boolean;
 
+  // Spec 103, REQ-3
+  @Field({ description: "The caller's own flag (103 REQ-3)." })
+  subtitleSearch: boolean;
+
   // How many *other* users have this series in their library (067).
   // Populated by the resolver only when selected; never by listings.
   @Field(() => Int, { description: 'How many *other* users have this series in their library. 0 when the caller is the last owner.' })

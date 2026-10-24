@@ -1,0 +1,16 @@
+[19:23:45] INFO     extracting speech segments from reference   ffsubsync.py:734
+                    'media.mkv'...                                              
+           INFO     Checking video for subtitles      speech_transformers.py:623
+                    stream...                                                   
+           INFO     detected encoding: ASCII              subtitle_parser.py:110
+           INFO     ...success!                       speech_transformers.py:625
+           INFO     ...done                                     ffsubsync.py:736
+           INFO     extracting speech segments from subtitles   ffsubsync.py:192
+                    file(s) ['delayed.srt']...                                  
+           INFO     detected encoding: ASCII              subtitle_parser.py:110
+           INFO     computing alignments...                     ffsubsync.py:234
+           INFO     ...done                                     ffsubsync.py:250
+           INFO     score: 5702.000                             ffsubsync.py:255
+           INFO     offset seconds: -2.000                      ffsubsync.py:256
+           INFO     framerate scale factor: 1.000               ffsubsync.py:257
+           INFO     writing output to out1.srt                  ffsubsync.py:350

@@ -92,6 +92,19 @@ export class PreferencesResolver {
     return this.preferencesService.setAudioMandatory(principal.id, mandatory);
   }
 
+  // Spec 103, REQ-2
+  @UseGuards(JwtAuthGuard)
+  @Mutation(() => UserPreferences)
+  async setSubtitleSearch(
+    @CurrentUser() principal: AuthPrincipal,
+    @Args('enabled') enabled: boolean,
+  ): Promise<UserPreferences> {
+    if (principal.type !== 'user') {
+      throw i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED);
+    }
+    return this.preferencesService.setSubtitleSearch(principal.id, enabled);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Mutation(() => [Language])
   async setPreferredTrackLanguages(

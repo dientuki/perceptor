@@ -3,6 +3,7 @@ import { AttachSourceService, AttachInput } from './attach-source.service';
 import { AttachTarget } from './attach-target';
 import { ERROR_KEYS, ErrorKey } from '@/i18n/error-keys';
 import { SourceKind, SourceStatus } from '@prisma/client';
+import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 
 // This suite exists because two bugs in the pre-088 three-copy attach path
 // produced no error anywhere, in any log, and no failure in any existing
@@ -61,6 +62,7 @@ describe('AttachSourceService — cross-target collisions (Spec 088, REQ-2 REQ-3
       prisma as never,
       qbittorrent as never,
       downloads as never,
+      { assertNoActiveEmbed: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 
@@ -304,6 +306,7 @@ describe('AttachSourceService — reactivating a retired source (Spec 090, REQ-6
       prisma as never,
       qbittorrent as never,
       downloads as never,
+      { assertNoActiveEmbed: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 
@@ -395,5 +398,128 @@ describe('AttachSourceService — reactivating a retired source (Spec 090, REQ-6
 
     expect(outcome).not.toBe('UNCHANGED');
     expect(prisma.mediaSource.update).toHaveBeenCalled();
+  });
+});
+
+// This suite exists because a subtitle remux and a replacement encode both
+// write the same library file: if an acquisition is accepted while an embed of
+// its target is queued or running, whichever finishes last silently overwrites
+// the other (Spec 101, REQ-16), with a success response and nothing in any log.
+// It runs the real ActiveEmbedGuard over a faked Prisma so the where clause
+// each target kind builds is what is under test, and asserts that nothing
+// reaches qBittorrent or the database once the guard refuses.
+describe('AttachSourceService — refused while a subtitle embed is active (Spec 101, REQ-16)', () => {
+  let prisma: {
+    mediaSource: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
+    subtitleEmbed: { count: jest.Mock };
+  };
+  let qbittorrent: { add: jest.Mock; info: jest.Mock; start: jest.Mock };
+  let downloads: {
+    demoteDeliveredSources: jest.Mock;
+    handleTorrentCompleted: jest.Mock;
+  };
+  let service: AttachSourceService;
+
+  beforeEach(() => {
+    prisma = {
+      mediaSource: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      subtitleEmbed: { count: jest.fn().mockResolvedValue(1) },
+    };
+    qbittorrent = { add: jest.fn(), info: jest.fn(), start: jest.fn() };
+    downloads = {
+      demoteDeliveredSources: jest.fn(),
+      handleTorrentCompleted: jest.fn(),
+    };
+    service = new AttachSourceService(
+      prisma as never,
+      qbittorrent as never,
+      downloads as never,
+      new ActiveEmbedGuard(prisma as never),
+    );
+  });
+
+  const input: AttachInput = {
+    kind: SourceKind.TORRENT_SEARCH,
+    infoHash: '5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c',
+    urls: [],
+    releaseTitle: null,
+    force: true,
+  };
+
+  function buildTarget(column: 'movieId' | 'episodeId' | 'seasonId'): {
+    target: AttachTarget<{ id: number }>;
+    refuse: jest.Mock;
+  } {
+    const refuse = jest.fn().mockResolvedValue(undefined);
+    return {
+      refuse,
+      target: {
+        resolve: jest.fn().mockResolvedValue({ id: 5 }),
+        refuse: refuse as AttachTarget<{ id: number }>['refuse'],
+        labels: jest.fn().mockReturnValue({ tags: [], category: 'movie' }),
+        column,
+      },
+    };
+  }
+
+  async function busyKey(
+    target: AttachTarget<{ id: number }>,
+  ): Promise<string | undefined> {
+    try {
+      await service.attach(target, input, 'user-1');
+    } catch (error) {
+      return (
+        (error as HttpException).getResponse() as { i18n?: { key: string } }
+      ).i18n?.key;
+    }
+    return undefined;
+  }
+
+  it.each([
+    [
+      'a film',
+      'movieId',
+      { status: { in: ['QUEUED', 'RUNNING'] }, movieId: 5 },
+    ],
+    [
+      'an episode',
+      'episodeId',
+      { status: { in: ['QUEUED', 'RUNNING'] }, episodeId: 5 },
+    ],
+    [
+      'a season, through any of its episodes',
+      'seasonId',
+      { status: { in: ['QUEUED', 'RUNNING'] }, episode: { seasonId: 5 } },
+    ],
+  ] as const)(
+    'refuses %s with an active embed, before refuse() and before any write',
+    async (_name, column, where) => {
+      const { target, refuse } = buildTarget(column);
+
+      expect(await busyKey(target)).toBe(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
+
+      expect(prisma.subtitleEmbed.count).toHaveBeenCalledWith({ where });
+      expect(refuse).not.toHaveBeenCalled();
+      expect(qbittorrent.add).not.toHaveBeenCalled();
+      expect(prisma.mediaSource.create).not.toHaveBeenCalled();
+      expect(downloads.demoteDeliveredSources).not.toHaveBeenCalled();
+    },
+  );
+
+  it('proceeds when no embed is active', async () => {
+    prisma.subtitleEmbed.count.mockResolvedValue(0);
+    qbittorrent.add.mockResolvedValue('/downloads/x');
+    const { target, refuse } = buildTarget('movieId');
+
+    expect(await busyKey(target)).toBeUndefined();
+    expect(refuse).toHaveBeenCalled();
   });
 });

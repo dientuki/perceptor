@@ -43,7 +43,9 @@ who isn't on your own machine.
   instance, so opening a page loads nothing from anyone else.
 - **What does leave, and to whom.** Catalog requests go to TMDB with your key; searches go to the
   indexers you configured in Prowlarr; downloads are BitTorrent, so your IP is visible to the
-  swarm like any other torrent client's. Perceptor adds nothing to that list.
+  swarm like any other torrent client's. If you turn on subtitle search, Jellyfin's OpenSubtitles
+  plugin queries OpenSubtitles with the credentials you gave Jellyfin. Perceptor adds nothing to
+  that list.
 
 ## Status
 
@@ -51,10 +53,10 @@ who isn't on your own machine.
 register, find a release, download, scan, transcode, file, notify and browse. Bug reports are
 welcome. It has no production deployment and no users besides its author.
 
-The published images are release candidates (`v0.1.0-rc1` through `v0.5.0-rc3`); there is no stable
+The published images are release candidates (`v0.1.0-rc1` through `v0.5.0-rc4`); there is no stable
 release yet, so `latest` resolves to the newest release candidate rather than to a final version.
 
-One hundred feature specs (`001` through `100`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
+One hundred and three feature specs (`001` through `103`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
 stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -63,7 +65,7 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   tus-js-client, Biome
 - **API:** NestJS 11, Apollo Server 5 with code-first GraphQL, Prisma 7, `@tus/server`, JWT auth,
   Jest
-- **Worker:** Node.js 24, BullMQ, FFmpeg (SVT-AV1, Opus), MKVToolNix, Vitest
+- **Worker:** Node.js 24, BullMQ, FFmpeg (SVT-AV1, Opus), MKVToolNix, ffsubsync, Vitest
 - **Data:** MariaDB 12, Redis 7 (BullMQ queues, pub/sub, search cache)
 - **Infrastructure:** Docker Compose (runtime, build and dev overlays), multi-stage Dockerfiles,
   Traefik v3.7 (optional), GitHub Actions release workflow publishing to GHCR
@@ -165,6 +167,11 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
 - 💬 **You choose which subtitle formats survive.** Settings → Compression lists text formats (SRT,
   ASS, WebVTT, mov_text) and image formats (PGS, VobSub, DVB) separately. Per language, text wins
   over image; text tracks are written as SRT, image tracks are copied as-is — or keep none at all.
+- 🧽 **Redundant subtitles are dropped by what they say, not only by their tags.** Commentary
+  tracks go. When a language still has several text tracks, the worker reads the first fifteen
+  minutes of each: it drops a hearing-impaired track that was never marked as one when a plain
+  track exists, a second copy of the same translation, and a small track whose lines all appear in
+  a larger one. When in doubt, it keeps the track.
 - 🔤 **Track titles in their own script.** Audio and subtitle tracks are labelled `English`,
   `日本語`, `한국어` and so on, so any player shows a readable name.
 - 🔕 **Compression is optional.** Turn it off from Settings and the pipeline still renames, moves
@@ -208,6 +215,16 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   (monthly while it continues, every six months once ended, so a revived series' new season
   appears) and re-read films not yet complete, tracking their theatrical, digital and physical
   release dates. They refresh only; they never download anything.
+- 💬 **Fold Jellyfin's subtitles into the file.** When Jellyfin holds external `.srt` files for a
+  film or an episode, for example from its OpenSubtitles plugin, an administrator can embed them
+  into the `.mkv` from the detail page, with a default flag and a timing offset for each one. The
+  file is remuxed next to the original, verified and swapped in one atomic rename, and only then
+  are the `.srt` files deleted. Jellyfin rescans the item, so it lists each subtitle once.
+- 🔍 **Missing subtitle languages can be found for you.** With Jellyfin as the media server, each
+  user can opt in from `/preferences` and then per title. When a file is delivered without a
+  subtitle language you want, Perceptor searches for it through Jellyfin's OpenSubtitles plugin,
+  checks its timing against the file with `ffsubsync` and embeds the ones that pass. A candidate
+  that fails is deleted, and the title page shows the outcome of the last search.
 - 🔄 **Refresh a title from its detail page.** It re-reads the catalog from TMDB — for a series,
   every season and episode, adding what's new without deleting anything — and re-checks the media
   server, marking as complete what it holds and as missing what it no longer does. What changed is
@@ -408,6 +425,9 @@ A one-shot `backup` service dumps the database before `api` starts, and, with HT
    off, the file is only renamed and moved.
 9. **File and notify.** The output lands in the library, the worker reports `encodeCompleted`, and
    `api` notifies your media server with the host-side path.
+10. **Fill subtitle gaps (optional).** With Jellyfin and subtitle search turned on, `api` looks for
+    each wanted subtitle language the file lacks, the worker checks each candidate's timing, and
+    the ones that pass are embedded into the library file.
 
 The two decisions stay with a person on purpose:
 
@@ -617,7 +637,7 @@ Rough edges, stated plainly:
   automatically, but tagging the indexers that need it stays a step in Prowlarr's UI.
 - **Jellyfin and Plex are the only media server clients**, and both are expected to run outside
   this stack. Plex is index-backed and falls back to a full refresh when a path-scoped scan can't
-  be done.
+  be done. Embedding subtitles and searching for them work only with Jellyfin.
 - **Libraries don't overlap.** Each user sees only their own titles; a title someone else registered
   answers "not available for this user" rather than rendering. There is no shared or household
   library. The one exception is the `/downloads` queue, which shows every title's sources to any

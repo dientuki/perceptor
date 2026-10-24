@@ -783,6 +783,20 @@ one is its own task, not a side effect of touching it for something else):
 Re-run `grep -cE "^(export default )?function [A-Z]" <file>` before trusting this list — it
 decays as files change.
 
+## Embedding Jellyfin subtitles (`101-jellyfin-subtitle-embed`)
+
+`src/components/media/EmbedSubtitlesButton.tsx` and `EmbedSubtitlesModal.tsx`, rendered in
+`components/movies/Movie.tsx` full width under the languages panel (its `footer` slot; the panel's Change button sits beside the "Languages" heading) and, icon-only, in `SeasonAccordion.tsx`'s episode
+action cell. The button renders nothing unless `externalSubtitles` is non-empty or an embed is in
+flight; a `QUEUED`/`RUNNING` embed shows it disabled as "Incrustando…"; `FAILED`/`COMPLETED` with a
+`warningKey` show the translated key under it. `externalSubtitles` and `subtitleEmbed` ride on
+`GET_MOVIE_QUERY` and each episode of `GET_SHOW_QUERY` (the field is `[]` for a non-admin, so no admin
+check lives in `web`). The modal sends each `fileName` back exactly as listed (a base name, never a
+path), offers one language per `iso3` preferring the base tag, forces a choice for a `null` language,
+bounds the offset to ±600000 ms and keeps the default checkboxes mutually exclusive. Refusals render
+inline and keep the modal open; `stale_listing` closes it and `router.refresh()`es. Refresh is manual,
+never polled. Copy lives in `media.embedSubtitles.*` and `errors.subtitleEmbed.*`.
+
 ## Tests: there are none
 
 No test file, no runner, no `test` script. This is the largest maturity gap of the three services.

@@ -7,11 +7,16 @@ import {
   redirectToClearSession,
 } from "@/lib/auth-session";
 import { fetchGraphQL } from "@/lib/graphql-client";
-import { translateGraphQLError } from "@/lib/graphql-error";
+import { toActionError, translateGraphQLError } from "@/lib/graphql-error";
 import type { Language } from "@/types/languages";
 import type {
   ContentKind,
+  ExternalSubtitle,
   GrainMode,
+  SubtitleEmbed,
+  SubtitleEmbedInput,
+  SubtitleEmbedResult,
+  SubtitleSearch,
   TitleRefreshResult,
   TitleRemovalResult,
 } from "@/types/media";
@@ -36,6 +41,12 @@ export interface Movie {
   audioMandatory: boolean;
   // Only present when fetched via getMovieById — never selected by a listing
   otherOwners?: number;
+  // Only present when fetched via getMovieById
+  externalSubtitles?: ExternalSubtitle[];
+  subtitleEmbed?: SubtitleEmbed | null;
+  // Spec 103, REQ-3
+  subtitleSearch?: boolean;
+  latestSubtitleSearch?: SubtitleSearch | null;
 }
 
 export async function getMovies(isShort?: boolean): Promise<Movie[]> {
@@ -105,6 +116,33 @@ const GET_MOVIE_QUERY = `
       }
       audioMandatory
       otherOwners
+      externalSubtitles {
+        fileName
+        languageIso3
+        isForced
+        title
+      }
+      subtitleEmbed {
+        id
+        status
+        errorKey
+        warningKey
+        createdAt
+        finishedAt
+      }
+      subtitleSearch
+      latestSubtitleSearch {
+        id
+        status
+        errorKey
+        languages {
+          languageIso3
+          outcome
+          reasonKey
+        }
+        createdAt
+        finishedAt
+      }
     }
   }
 `;
@@ -328,4 +366,48 @@ export async function removeMovieAction(
     deleted: data.removeMovie.deleted,
     remainingOwners: data.removeMovie.remainingOwners,
   };
+}
+
+const EMBED_MOVIE_SUBTITLES_MUTATION = `
+  mutation EmbedMovieSubtitles($movieId: Int!, $subtitles: [SubtitleEmbedInput!]!) {
+    embedMovieSubtitles(movieId: $movieId, subtitles: $subtitles) {
+      id
+      status
+    }
+  }
+`;
+
+// Spec 101, REQ-4
+export async function embedMovieSubtitlesAction(
+  movieId: string,
+  subtitles: SubtitleEmbedInput[],
+): Promise<SubtitleEmbedResult> {
+  let result: Awaited<
+    ReturnType<
+      typeof fetchGraphQL<{ embedMovieSubtitles: { id: number } | null }>
+    >
+  >;
+  try {
+    result = await fetchGraphQL<{ embedMovieSubtitles: { id: number } | null }>(
+      EMBED_MOVIE_SUBTITLES_MUTATION,
+      { movieId: Number(movieId), subtitles },
+    );
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { data, errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  if (!data?.embedMovieSubtitles) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  return { success: true };
 }

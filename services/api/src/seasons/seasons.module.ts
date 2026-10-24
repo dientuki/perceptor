@@ -8,6 +8,7 @@ import { QueueModule } from '@/queue/queue.module';
 import { UploadsModule } from '@/uploads/uploads.module';
 import { AcquisitionModule } from '@/acquisition/acquisition.module';
 import { TitleStatusModule } from '@/title-status/title-status.module';
+import { ActiveEmbedGuardModule } from '@/subtitle-embed/active-embed-guard.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { TitleStatusModule } from '@/title-status/title-status.module';
     QueueModule,
     AcquisitionModule,
     TitleStatusModule,
+    ActiveEmbedGuardModule,
   ],
   providers: [SeasonsResolver, SeasonsService],
   exports: [SeasonsService],

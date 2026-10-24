@@ -11,6 +11,7 @@ import {
   setAudioMandatoryAction,
   setPreferredTorrentGroupsAction,
   setPreferredTrackLanguagesAction,
+  setSubtitleSearchAction,
 } from "@/actions/preferences";
 import Checkbox from "@/components/form/input/Checkbox";
 import Label from "@/components/form/Label";
@@ -81,6 +82,9 @@ export default function PreferencesForm({
   );
   const [audioMandatory, setAudioMandatory] = useState(
     preferences.audioMandatory,
+  );
+  const [subtitleSearch, setSubtitleSearch] = useState(
+    preferences.subtitleSearch,
   );
   const [acquireTheatrical, setAcquireTheatrical] = useState(
     preferences.acquireTheatrical,
@@ -174,6 +178,7 @@ export default function PreferencesForm({
         subtitleResult,
         cinemaResult,
         audioMandatoryResult,
+        subtitleSearchResult,
         movieResult,
         windowsResult,
         showResult,
@@ -184,6 +189,9 @@ export default function PreferencesForm({
         setPreferredTrackLanguagesAction("SUBTITLE", null, subtitleForm),
         setAllowCinemaReleasesAction(allowCinemaReleases),
         setAudioMandatoryAction(audioMandatory),
+        capabilities.subtitleSearchAvailable
+          ? setSubtitleSearchAction(subtitleSearch)
+          : Promise.resolve(null),
         showMoviesTab
           ? setPreferredTorrentGroupsAction("MOVIE", null, movieForm)
           : Promise.resolve(null),
@@ -234,6 +242,14 @@ export default function PreferencesForm({
       if ("error" in audioMandatoryResult && audioMandatoryResult.error) {
         newErrors.push(audioMandatoryResult.error);
         setAudioMandatory(preferences.audioMandatory);
+      }
+      if (
+        subtitleSearchResult &&
+        "error" in subtitleSearchResult &&
+        subtitleSearchResult.error
+      ) {
+        newErrors.push(subtitleSearchResult.error);
+        setSubtitleSearch(preferences.subtitleSearch);
       }
 
       if ("error" in dateFormatResult && dateFormatResult.error) {
@@ -300,12 +316,26 @@ export default function PreferencesForm({
                 label={t("audioMandatoryLabel")}
               />
             </div>
-            <LanguagePickerField
-              options={languages}
-              value={subtitleTags}
-              onChange={setSubtitleTags}
-              label={t("subtitleLanguagesLabel")}
-            />
+            <div className="space-y-4">
+              <LanguagePickerField
+                options={languages}
+                value={subtitleTags}
+                onChange={setSubtitleTags}
+                label={t("subtitleLanguagesLabel")}
+              />
+              <Checkbox
+                id="subtitle-search"
+                checked={capabilities.subtitleSearchAvailable && subtitleSearch}
+                onChange={setSubtitleSearch}
+                label={t("subtitleSearchLabel")}
+                disabled={!capabilities.subtitleSearchAvailable}
+              />
+              {!capabilities.subtitleSearchAvailable && (
+                <p className="text-gray-500 dark:text-gray-400">
+                  {t("subtitleSearchRequiresJellyfin")}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

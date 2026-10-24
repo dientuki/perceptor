@@ -18,6 +18,7 @@ import { resolveEffectiveGrainMode } from '@/settings/grain-mode';
 import { COMPRESSION_RESOLUTIONS, DEFAULT_COMPRESSION_RESOLUTION } from '@/settings/settings.catalog';
 import { TitleStatusService } from '@/title-status/title-status.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { SubtitleSearchRequestService } from '@/subtitle-search/subtitle-search-request.service';
 
 // Spec 054, REQ-4
 const RECOVERY_ALLOWANCE = 1;
@@ -37,6 +38,8 @@ export class ProcessJobsService {
     private readonly titleStatus: TitleStatusService,
     // Spec 091, REQ-3 NFR-4
     private readonly downloads: DownloadsService,
+    // Spec 103, REQ-4
+    private readonly subtitleSearchRequest: SubtitleSearchRequestService,
   ) {}
 
   async getEncodeJobDetails(id: number): Promise<EncodeJobDetails> {
@@ -365,6 +368,15 @@ export class ProcessJobsService {
     // Spec 038, REQ-5
     if (!alreadyDeliveredSame) {
       await this.mediaServer.notifyCreated(outputFilePath);
+
+      // Spec 103, REQ-4
+      if (!sourceDemoted) {
+        if (processJob.movieId) {
+          await this.subtitleSearchRequest.requestFor({ kind: 'movie', id: processJob.movieId });
+        } else if (processJob.episodeId) {
+          await this.subtitleSearchRequest.requestFor({ kind: 'episode', id: processJob.episodeId });
+        }
+      }
     }
 
     // The three cleanup instructions (013-season-pack-processing). Computed
@@ -452,6 +464,26 @@ export class ProcessJobsService {
 
   // Spec 054, REQ-1; Spec 054, NFR-2; Spec 054, T006; Spec 054, NFR-6
   async reconcileOrphanedEncodes(): Promise<number> {
+    // Spec 101, NFR-3
+    await this.prisma.subtitleEmbed.updateMany({
+      where: { status: 'RUNNING' },
+      data: {
+        status: 'FAILED',
+        errorKey: ERROR_KEYS.SUBTITLE_EMBED_INTERRUPTED,
+        finishedAt: new Date(),
+      },
+    });
+
+    // Spec 103, NFR-4
+    await this.prisma.subtitleSearchAttempt.updateMany({
+      where: { status: 'RUNNING' },
+      data: {
+        status: 'FAILED',
+        reasonKey: ERROR_KEYS.SUBTITLE_SEARCH_INTERRUPTED,
+        finishedAt: new Date(),
+      },
+    });
+
     const orphaned = await this.prisma.processJob.findMany({
       where: { status: 'ENCODING' },
       select: {

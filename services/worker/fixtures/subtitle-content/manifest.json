@@ -1,0 +1,47 @@
+{
+  "sampleSeconds": 900,
+  "films": {
+    "dragon": {
+      "title": "How to Train Your Dragon (2025)",
+      "tracks": [
+        { "index": 3, "language": "eng", "isDefault": true, "numberOfFrames": 1456, "sampledCues": 259, "annotationShare": 0.012, "italicCues": 58, "expect": "keep" },
+        { "index": 4, "language": "eng", "isDefault": false, "numberOfFrames": 1456, "sampledCues": 259, "annotationShare": 0.012, "italicCues": 0, "expect": "same as 3" },
+        { "index": 5, "language": "eng", "isDefault": false, "numberOfFrames": 2053, "sampledCues": 311, "annotationShare": 0.347, "italicCues": 0, "expect": "sdh" },
+        { "index": 6, "language": "eng", "isDefault": false, "numberOfFrames": 2053, "sampledCues": 311, "annotationShare": 0.347, "italicCues": 0, "expect": "sdh" },
+        { "index": 7, "language": "spa", "isDefault": false, "numberOfFrames": 1313, "sampledCues": 233, "annotationShare": 0, "italicCues": 0, "expect": "not read" }
+      ]
+    },
+    "help": {
+      "title": "The Help (2011)",
+      "tracks": [
+        { "index": 2, "language": "eng", "isDefault": true, "numberOfFrames": 1740, "sampledCues": 215, "annotationShare": 0, "italicCues": 0, "expect": "keep" },
+        { "index": 3, "language": "eng", "isDefault": false, "numberOfFrames": 1918, "sampledCues": 234, "annotationShare": 0.175, "italicCues": 0, "expect": "sdh" }
+      ]
+    },
+    "wake": {
+      "title": "Wake Up Dead Man: A Knives Out Mystery (2025)",
+      "tracks": [
+        { "index": 3, "language": "eng", "isDefault": true, "numberOfFrames": 2216, "sampledCues": 232, "annotationShare": 0, "italicCues": 48, "expect": "keep" },
+        { "index": 4, "language": "eng", "isDefault": false, "numberOfFrames": 2529, "sampledCues": 277, "annotationShare": 0.303, "italicCues": 48, "expect": "sdh" },
+        { "index": 5, "language": "spa", "isDefault": false, "numberOfFrames": 2161, "sampledCues": 234, "annotationShare": 0.004, "italicCues": 48, "expect": "keep" },
+        { "index": 6, "language": "spa", "isDefault": false, "numberOfFrames": 2107, "sampledCues": 230, "annotationShare": 0.004, "italicCues": 48, "expect": "keep" }
+      ]
+    },
+    "running": {
+      "title": "The Running Man (2025)",
+      "tracks": [
+        { "index": 3, "language": "eng", "isDefault": true, "numberOfFrames": 2353, "sampledCues": 308, "annotationShare": 0, "musicNoteCues": 32, "italicCues": 103, "expect": "keep" },
+        { "index": 4, "language": "eng", "isDefault": false, "numberOfFrames": 2642, "sampledCues": 315, "annotationShare": 0, "italicCues": 13, "expect": "commentary" },
+        { "index": 5, "language": "spa", "isDefault": false, "numberOfFrames": 2129, "sampledCues": 245, "annotationShare": 0, "italicCues": 61, "expect": "not read" }
+      ]
+    },
+    "blonde": {
+      "title": "Atomic Blonde (2017)",
+      "tracks": [
+        { "index": 2, "language": "eng", "isDefault": true, "numberOfFrames": null, "sampledCues": 3, "annotationShare": 0, "italicCues": 0, "expect": "contained in 3" },
+        { "index": 3, "language": "eng", "isDefault": false, "numberOfFrames": null, "sampledCues": 147, "annotationShare": 0, "italicCues": 7, "expect": "keep" },
+        { "index": 4, "language": "eng", "isDefault": false, "numberOfFrames": null, "sampledCues": 248, "annotationShare": 0, "italicCues": 212, "expect": "commentary" }
+      ]
+    }
+  }
+}

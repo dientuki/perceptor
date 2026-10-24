@@ -85,6 +85,13 @@ export class ShowsResolver {
     return this.showsService.findAudioMandatoryFor(userId, show.id);
   }
 
+  // Spec 103, REQ-3
+  @ResolveField(() => Boolean)
+  async subtitleSearch(@Parent() show: Show, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.showsService.findSubtitleSearchFor(userId, show.id);
+  }
+
   // Replaces the authenticated user's per-title preference for one series,
   // for one kind — refused, unchanged, on a series the caller does not own
   // (see ShowsService.findOneFromDb and 009-show-detail's frozen error
@@ -127,6 +134,22 @@ export class ShowsResolver {
     const show = await this.showsService.findOneFromDb(showId, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
     return this.showsService.setAudioMandatoryFor(userId, showId, mandatory);
+  }
+
+  // Spec 103, REQ-3
+  @Mutation(() => Boolean, {
+    name: 'setShowSubtitleSearch',
+    description: 'Sets whether subtitles are searched online for this series (103 REQ-3).',
+  })
+  async setShowSubtitleSearch(
+    @Args('showId', { type: () => Int }) showId: number,
+    @Args('enabled', { type: () => Boolean }) enabled: boolean,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    const show = await this.showsService.findOneFromDb(showId, userId);
+    if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
+    return this.showsService.setSubtitleSearchFor(userId, showId, enabled);
   }
 
   @Mutation(() => Show, {

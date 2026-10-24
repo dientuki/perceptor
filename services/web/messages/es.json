@@ -163,6 +163,41 @@
     },
     "show": {
       "not_available": "Recurso no disponible para este usuario"
+    },
+    "subtitleEmbed": {
+      "unsupported_media_server": "Incrustar subtítulos requiere Jellyfin como servidor de medios.",
+      "media_server_unavailable": "No se pudo contactar a Jellyfin. Probá de nuevo en un rato.",
+      "no_file": "Este título no tiene un archivo en la biblioteca.",
+      "not_mkv": "Solo se pueden incrustar subtítulos en archivos MKV.",
+      "outside_library": "El archivo no está dentro de la biblioteca de Perceptor.",
+      "empty_selection": "Elegí al menos un subtítulo.",
+      "multiple_defaults": "Solo un subtítulo puede ser el predeterminado.",
+      "duplicate_subtitle": "Elegiste el mismo subtítulo dos veces.",
+      "unknown_language": "Idioma desconocido: {language}.",
+      "offset_out_of_range": "El desfase tiene que estar entre -600000 y 600000 ms.",
+      "stale_listing": "La lista de subtítulos de Jellyfin cambió. Volvé a abrir el diálogo.",
+      "busy": "Este título tiene una descarga, codificación o incrustación en curso.",
+      "subtitle_unreadable": "No se pudo leer uno de los subtítulos. El archivo original no se tocó.",
+      "charset_undetected": "No se pudo detectar la codificación del subtítulo.",
+      "remux_failed": "mkvmerge falló al incrustar los subtítulos. El archivo original no se tocó.",
+      "verify_failed": "El archivo generado no pasó la verificación. El original no se tocó.",
+      "not_writable": "El worker no puede reemplazar este archivo (permisos de la carpeta o del dueño).",
+      "interrupted": "La incrustación se interrumpió por un reinicio del worker. Probá de nuevo.",
+      "sidecar_delete_failed": "Subtítulos incrustados, pero no se pudo borrar el .srt externo. Borralo a mano o desde Jellyfin.",
+      "jellyfin_refresh_failed": "Subtítulos incrustados, pero no se pudo avisar a Jellyfin. Aparecerán en su próximo escaneo."
+    },
+    "subtitleSearch": {
+      "unsupported_media_server": "La búsqueda de subtítulos requiere Jellyfin como servidor de medios.",
+      "sync_not_found": "No se encontró la búsqueda de subtítulos.",
+      "item_not_found": "Jellyfin no indexó el archivo a tiempo; no se buscaron subtítulos.",
+      "media_server_unavailable": "No se pudo contactar a Jellyfin para buscar subtítulos.",
+      "fetch_failed": "No se pudo descargar el subtítulo.",
+      "sync_failed": "No se pudo validar la sincronización del subtítulo.",
+      "framerate_mismatch": "El subtítulo es de una versión con otro framerate.",
+      "offset_too_large": "El subtítulo está demasiado desfasado.",
+      "low_score": "El subtítulo no coincide con este archivo.",
+      "interrupted": "La búsqueda se interrumpió.",
+      "superseded": "Una entrega más nueva reemplazó esta búsqueda."
     }
   },
   "landing": {
@@ -423,7 +458,8 @@
       "saving": "Guardando...",
       "audioLabel": "Idiomas de audio",
       "subtitleLabel": "Idiomas de subtítulos",
-      "audioMandatoryLabel": "Audio obligatorio"
+      "audioMandatoryLabel": "Audio obligatorio",
+      "subtitleSearchLabel": "¿Buscar subtítulos en internet?"
     },
     "languagesPanel": {
       "title": "Idiomas",
@@ -433,7 +469,9 @@
       "mandatoryNo": "El audio no es obligatorio",
       "inheritedNote": "(de tus preferencias)",
       "empty": "Ninguno definido",
-      "changeButton": "Cambiar"
+      "changeButton": "Cambiar",
+      "subtitleSearchYes": "Búsqueda de subtítulos activada",
+      "subtitleSearchNo": "Búsqueda de subtítulos desactivada"
     },
     "languagesModal": {
       "title": "Idiomas",
@@ -456,6 +494,46 @@
       "confirm": "Quitar",
       "cancel": "Cancelar",
       "removing": "Quitando..."
+    },
+    "embedSubtitles": {
+      "button": "Incrustar en archivo",
+      "embedding": "Incrustando…",
+      "title": "Incrustar subtítulos en el archivo",
+      "intro": "Elegí los subtítulos externos que lista Jellyfin para escribirlos en el archivo. Cada subtítulo externo incrustado se borra después.",
+      "include": "Incluir",
+      "language": "Idioma",
+      "languagePlaceholder": "Elegí un idioma",
+      "makeDefault": "Predeterminado",
+      "forced": "Forzado",
+      "offset": "Desfase (ms)",
+      "confirm": "Incrustar",
+      "cancel": "Cancelar",
+      "submitting": "Incrustando…",
+      "failed": "La última incrustación falló: {reason}",
+      "warning": "{reason}"
+    },
+    "subtitleSearch": {
+      "title": "Búsqueda de subtítulos",
+      "failed": "Falló: {reason}",
+      "status": {
+        "WAITING": "En espera",
+        "SEARCHING": "Buscando",
+        "VALIDATING": "Validando",
+        "EMBEDDING": "Incrustando",
+        "COMPLETED": "Completada",
+        "FAILED": "Fallida"
+      },
+      "outcome": {
+        "PENDING": "Pendiente",
+        "ALREADY_PRESENT": "Ya estaba",
+        "EMBEDDED": "Incrustado",
+        "NOT_FOUND": "No encontrado",
+        "REJECTED": "Rechazado",
+        "FAILED": "Falló"
+      },
+      "languageLine": "{language}: {outcome}",
+      "languageLineReason": "{language}: {outcome} ({reason})",
+      "finishedAt": "Terminó el {date}"
     }
   },
   "movies": {
@@ -745,7 +823,9 @@
       "noneLoaded": "Todavía no se cargó ningún grupo de torrents.",
       "saved": "Preferencias guardadas.",
       "save": "Guardar",
-      "saving": "Guardando..."
+      "saving": "Guardando...",
+      "subtitleSearchLabel": "¿Buscar subtítulos en internet?",
+      "subtitleSearchRequiresJellyfin": "La búsqueda de subtítulos requiere Jellyfin como servidor de medios."
     },
     "torrentGroups": {
       "chosenLabel": "Grupos elegidos",
