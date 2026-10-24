@@ -435,7 +435,7 @@ function subtitleFormatOf(stream: any): SubtitleFormat | null {
   return match ?? null;
 }
 
-function subtitleGroupOf(stream: any): SubtitleGroup | null {
+export function subtitleGroupOf(stream: any): SubtitleGroup | null {
   const format = subtitleFormatOf(stream);
   return format ? SUBTITLE_FORMATS[format].group : null;
 }

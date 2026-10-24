@@ -29,6 +29,22 @@ export type ItemSubtitles = {
   itemId: string;
   mediaHostPath: string | null;
   subtitles: ExternalSubtitleStream[];
+  // Spec 103, REQ-7
+  presentLanguagesIso3: string[];
+};
+
+// Spec 103, REQ-8
+export type RemoteSubtitleCandidate = {
+  id: string;
+  languageIso3: string;
+  name: string;
+  format: string;
+  isForced: boolean;
+  isHearingImpaired: boolean;
+  isMachineTranslated: boolean;
+  isAiTranslated: boolean;
+  isHashMatch: boolean;
+  downloadCount: number;
 };
 
 // Spec 034, REQ-8
@@ -61,6 +77,13 @@ export type MediaServerClient = {
   ) => Promise<Map<string, ItemSubtitles>>;
   // Spec 101, REQ-12
   modifiedMedia?: (hostPath: string) => Promise<void>;
+  // Spec 103, REQ-8
+  searchRemoteSubtitles?: (
+    itemId: string,
+    iso3: string,
+  ) => Promise<RemoteSubtitleCandidate[]>;
+  // Spec 103, REQ-9
+  fetchRemoteSubtitle?: (subtitleId: string) => Promise<Buffer>;
 };
 
 export type MediaServerConfig = {

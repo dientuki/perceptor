@@ -24,5 +24,6 @@ import {
     MovieSubtitleEmbedFieldsResolver,
     EpisodeSubtitleEmbedFieldsResolver,
   ],
+  exports: [SubtitleEmbedService],
 })
 export class SubtitleEmbedModule {}

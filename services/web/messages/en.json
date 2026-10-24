@@ -185,6 +185,19 @@
       "interrupted": "The embed was interrupted by a worker restart. Try again.",
       "sidecar_delete_failed": "Subtitles embedded, but the external .srt could not be deleted. Delete it by hand or from Jellyfin.",
       "jellyfin_refresh_failed": "Subtitles embedded, but Jellyfin could not be notified. They will appear on its next scan."
+    },
+    "subtitleSearch": {
+      "unsupported_media_server": "Subtitle search requires Jellyfin as the media server.",
+      "sync_not_found": "Subtitle search not found.",
+      "item_not_found": "Jellyfin did not index the file in time; no subtitles were searched.",
+      "media_server_unavailable": "Could not reach Jellyfin to search for subtitles.",
+      "fetch_failed": "The subtitle could not be downloaded.",
+      "sync_failed": "The subtitle's synchronization could not be validated.",
+      "framerate_mismatch": "The subtitle is from a version with a different framerate.",
+      "offset_too_large": "The subtitle is too far out of sync.",
+      "low_score": "The subtitle does not match this file.",
+      "interrupted": "The search was interrupted.",
+      "superseded": "A newer delivery replaced this search."
     }
   },
   "landing": {
@@ -445,7 +458,8 @@
       "saving": "Saving...",
       "audioLabel": "Audio languages",
       "subtitleLabel": "Subtitle languages",
-      "audioMandatoryLabel": "Mandatory audio"
+      "audioMandatoryLabel": "Mandatory audio",
+      "subtitleSearchLabel": "Search for subtitles on the internet?"
     },
     "languagesPanel": {
       "title": "Languages",
@@ -455,7 +469,9 @@
       "mandatoryNo": "Audio is not mandatory",
       "inheritedNote": "(from your preferences)",
       "empty": "None set",
-      "changeButton": "Change"
+      "changeButton": "Change",
+      "subtitleSearchYes": "Subtitle search is on",
+      "subtitleSearchNo": "Subtitle search is off"
     },
     "languagesModal": {
       "title": "Languages",
@@ -495,6 +511,29 @@
       "submitting": "Embedding…",
       "failed": "The last embed failed: {reason}",
       "warning": "{reason}"
+    },
+    "subtitleSearch": {
+      "title": "Subtitle search",
+      "failed": "Failed: {reason}",
+      "status": {
+        "WAITING": "Waiting",
+        "SEARCHING": "Searching",
+        "VALIDATING": "Validating",
+        "EMBEDDING": "Embedding",
+        "COMPLETED": "Completed",
+        "FAILED": "Failed"
+      },
+      "outcome": {
+        "PENDING": "Pending",
+        "ALREADY_PRESENT": "Already present",
+        "EMBEDDED": "Embedded",
+        "NOT_FOUND": "Not found",
+        "REJECTED": "Rejected",
+        "FAILED": "Failed"
+      },
+      "languageLine": "{language}: {outcome}",
+      "languageLineReason": "{language}: {outcome} ({reason})",
+      "finishedAt": "Finished {date}"
     }
   },
   "movies": {
@@ -784,7 +823,9 @@
       "noneLoaded": "No torrent groups have been loaded yet.",
       "saved": "Preferences saved.",
       "save": "Save",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "subtitleSearchLabel": "Search for subtitles on the internet",
+      "subtitleSearchRequiresJellyfin": "Subtitle search requires Jellyfin as the media server."
     },
     "torrentGroups": {
       "chosenLabel": "Chosen groups",

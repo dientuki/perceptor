@@ -5,6 +5,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { LanguagesService } from '@/languages/languages.service';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { UsersService } from '@/users/users.service';
 
 import { TorrentGroup } from './entities/torrent-group.entity';
@@ -28,6 +29,7 @@ export class PreferencesService {
     private readonly prisma: PrismaService,
     private readonly languagesService: LanguagesService,
     private readonly usersService: UsersService,
+    private readonly mediaCapabilities: MediaCapabilitiesService,
   ) {}
 
   async findForUser(userId: string): Promise<UserPreferences> {
@@ -43,6 +45,7 @@ export class PreferencesService {
     return {
       allowCinemaReleases: user.allowCinemaReleases,
       audioMandatory: user.audioMandatory,
+      subtitleSearch: user.subtitleSearch,
       audioLanguages,
       subtitleLanguages,
       movieTorrentGroups,
@@ -129,6 +132,13 @@ export class PreferencesService {
 
   async setAudioMandatory(userId: string, mandatory: boolean): Promise<UserPreferences> {
     await this.usersService.setAudioMandatory(userId, mandatory);
+    return this.findForUser(userId);
+  }
+
+  // Spec 103, REQ-2
+  async setSubtitleSearch(userId: string, enabled: boolean): Promise<UserPreferences> {
+    await this.mediaCapabilities.assertSubtitleSearchAvailable();
+    await this.usersService.setSubtitleSearch(userId, enabled);
     return this.findForUser(userId);
   }
 

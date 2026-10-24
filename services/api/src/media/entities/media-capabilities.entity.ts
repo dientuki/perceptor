@@ -17,4 +17,10 @@ export class MediaCapabilities {
 
   @Field()
   catalogKeyConfigured: boolean;
+
+  @Field({
+    description:
+      'True while media_server_client is jellyfin (103 REQ-1). Never exposes the server type.',
+  })
+  subtitleSearchAvailable: boolean;
 }

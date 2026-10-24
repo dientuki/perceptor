@@ -9,6 +9,7 @@ import ImportSeasonFilesModal from "@/components/import/ImportSeasonFilesModal";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
+import SubtitleSearchStatus from "@/components/media/SubtitleSearchStatus";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 import SeasonAcquisitionButtons from "@/components/shows/SeasonAcquisitionButtons";
 import StatusBadge from "@/components/status/StatusBadge";
@@ -45,6 +46,11 @@ function EpisodeRow({
         {episode.overview && (
           <div className="mt-1 line-clamp-2 text-base text-gray-500 dark:text-gray-400">
             {episode.overview}
+          </div>
+        )}
+        {episode.latestSubtitleSearch && (
+          <div className="mt-2">
+            <SubtitleSearchStatus search={episode.latestSubtitleSearch} />
           </div>
         )}
       </td>

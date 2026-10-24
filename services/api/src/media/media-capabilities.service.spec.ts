@@ -33,6 +33,7 @@ describe('MediaCapabilitiesService', () => {
       showsEnabled: true,
       shortsEnabled: false,
       catalogKeyConfigured: false,
+      subtitleSearchAvailable: false,
     });
   });
 
@@ -43,6 +44,7 @@ describe('MediaCapabilitiesService', () => {
       showsEnabled: true,
       shortsEnabled: false,
       catalogKeyConfigured: true,
+      subtitleSearchAvailable: false,
     });
   });
 
@@ -53,6 +55,7 @@ describe('MediaCapabilitiesService', () => {
       showsEnabled: true,
       shortsEnabled: false,
       catalogKeyConfigured: false,
+      subtitleSearchAvailable: false,
     });
   });
 
@@ -63,6 +66,7 @@ describe('MediaCapabilitiesService', () => {
       showsEnabled: true,
       shortsEnabled: false,
       catalogKeyConfigured: false,
+      subtitleSearchAvailable: false,
     });
   });
 
@@ -73,6 +77,7 @@ describe('MediaCapabilitiesService', () => {
       showsEnabled: true,
       shortsEnabled: true,
       catalogKeyConfigured: false,
+      subtitleSearchAvailable: false,
     });
   });
 
@@ -83,6 +88,7 @@ describe('MediaCapabilitiesService', () => {
       showsEnabled: true,
       shortsEnabled: false,
       catalogKeyConfigured: false,
+      subtitleSearchAvailable: false,
     });
   });
 

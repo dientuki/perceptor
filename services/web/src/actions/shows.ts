@@ -17,6 +17,7 @@ import type {
   SubtitleEmbed,
   SubtitleEmbedInput,
   SubtitleEmbedResult,
+  SubtitleSearch,
   TitleRefreshResult,
   TitleRemovalResult,
 } from "@/types/media";
@@ -30,6 +31,7 @@ export interface Episode {
   status: string;
   externalSubtitles: ExternalSubtitle[];
   subtitleEmbed: SubtitleEmbed | null;
+  latestSubtitleSearch: SubtitleSearch | null;
 }
 
 export interface Season {
@@ -58,6 +60,8 @@ export interface Show {
   audioLanguages?: Language[];
   subtitleLanguages?: Language[];
   audioMandatory?: boolean;
+  // Spec 103, REQ-3
+  subtitleSearch?: boolean;
   // Only present when fetched via getShowById — never selected by a listing
   otherOwners?: number;
 }
@@ -125,6 +129,7 @@ const GET_SHOW_QUERY = `
         name
       }
       audioMandatory
+      subtitleSearch
       otherOwners
       seasons {
         id
@@ -148,6 +153,18 @@ const GET_SHOW_QUERY = `
             status
             errorKey
             warningKey
+            createdAt
+            finishedAt
+          }
+          latestSubtitleSearch {
+            id
+            status
+            errorKey
+            languages {
+              languageIso3
+              outcome
+              reasonKey
+            }
             createdAt
             finishedAt
           }

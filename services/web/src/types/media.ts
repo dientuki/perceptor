@@ -38,6 +38,8 @@ export interface MediaCapabilities {
   shortsEnabled: boolean;
   // movie_db_api_key is non-empty (071-tmdb-key-onboarding); never the key itself.
   catalogKeyConfigured: boolean;
+  // Spec 103, REQ-1
+  subtitleSearchAvailable: boolean;
 }
 
 // Discriminated union so a target is either a movie or an episode, never
@@ -132,3 +134,36 @@ export interface SubtitleEmbedInput {
 export type SubtitleEmbedResult =
   | { success: true }
   | { error: string; errorKey?: string };
+
+// Spec 103, REQ-13
+export type SubtitleSearchStatus =
+  | "WAITING"
+  | "SEARCHING"
+  | "VALIDATING"
+  | "EMBEDDING"
+  | "COMPLETED"
+  | "FAILED";
+
+export type SubtitleSearchLanguageOutcome =
+  | "PENDING"
+  | "ALREADY_PRESENT"
+  | "EMBEDDED"
+  | "NOT_FOUND"
+  | "REJECTED"
+  | "FAILED";
+
+export interface SubtitleSearchLanguage {
+  languageIso3: string;
+  outcome: SubtitleSearchLanguageOutcome;
+  reasonKey: string | null;
+}
+
+/** The latest subtitle search of a film or episode. */
+export interface SubtitleSearch {
+  id: number;
+  status: SubtitleSearchStatus;
+  errorKey: string | null;
+  languages: SubtitleSearchLanguage[];
+  createdAt: string;
+  finishedAt: string | null;
+}

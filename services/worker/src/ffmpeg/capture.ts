@@ -13,7 +13,7 @@ export interface RunResult {
 }
 
 export interface CaptureOptions {
-  binary?: 'ffmpeg' | 'ffprobe' | 'mkvmerge';
+  binary?: 'ffmpeg' | 'ffprobe' | 'mkvmerge' | 'ffsubsync';
   keepStdout?: boolean;
   // Spec 102, REQ-4
   extraOutputs?: number;

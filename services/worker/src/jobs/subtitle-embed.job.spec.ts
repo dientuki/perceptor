@@ -264,4 +264,51 @@ describe('handleSubtitleEmbed', () => {
 
     expect(h.completed).toHaveBeenCalledWith(7, null);
   });
+
+  // Spec 103, REQ-11
+  it('never passes a staged track to deletion and completes with no warning', async () => {
+    const staged = join(dir, 'Film.staged.srt');
+    await writeFile(staged, SRT);
+    h.details.mockResolvedValue({
+      id: 7,
+      filePath: mkv,
+      tracks: [
+        { sourcePath: staged, languageIso3: 'spa', trackTitle: 'Español', isDefault: false, isForced: false, offsetMs: 0, isSidecar: false },
+      ],
+    });
+
+    await handleSubtitleEmbed(job);
+
+    expect(h.events.filter((e) => e.startsWith('unlink:'))).toEqual([]);
+    expect(await exists(staged)).toBe(true);
+    expect(h.completed).toHaveBeenCalledWith(7, null);
+    expect(h.failed).not.toHaveBeenCalled();
+  });
+
+  it('deletes only the sidecar when sidecar and staged tracks are mixed', async () => {
+    const staged = join(dir, 'Film.staged.srt');
+    await writeFile(staged, SRT);
+    h.details.mockResolvedValue({
+      id: 7,
+      filePath: mkv,
+      tracks: [
+        { sourcePath: sidecar, languageIso3: 'spa', trackTitle: 'Español', isDefault: false, isForced: false, offsetMs: 0, isSidecar: true },
+        { sourcePath: staged, languageIso3: 'eng', trackTitle: 'English', isDefault: false, isForced: false, offsetMs: 0, isSidecar: false },
+      ],
+    });
+
+    h.metadata.mockImplementation(async (path: string) => ({
+      metadata:
+        path === mkv
+          ? ORIGINAL
+          : { ...RESULT, streams: [...RESULT.streams, stream('subtitle', 'subrip', 'eng')] },
+      raw: '',
+    }));
+
+    await handleSubtitleEmbed(job);
+
+    expect(await exists(sidecar)).toBe(false);
+    expect(await exists(staged)).toBe(true);
+    expect(h.completed).toHaveBeenCalledWith(7, null);
+  });
 });

@@ -4,6 +4,7 @@ import { PreferencesService } from './preferences.service';
 import { TorrentGroupScope } from './entities/torrent-group-scope.enum';
 import { PrismaService } from '@/prisma/prisma.service';
 import { LanguagesService } from '@/languages/languages.service';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { UsersService } from '@/users/users.service';
 
 // setPreferredTorrentGroupsFor replaces a caller's selection for one scope by
@@ -102,6 +103,7 @@ describe('PreferencesService — setPreferredTorrentGroupsFor', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: LanguagesService, useValue: {} },
         { provide: UsersService, useValue: {} },
+        { provide: MediaCapabilitiesService, useValue: {} },
       ],
     }).compile();
 
@@ -232,6 +234,7 @@ describe('PreferencesService — createTorrentGroup name collision', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: LanguagesService, useValue: {} },
         { provide: UsersService, useValue: {} },
+        { provide: MediaCapabilitiesService, useValue: {} },
       ],
     }).compile();
 

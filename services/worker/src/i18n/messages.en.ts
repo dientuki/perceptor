@@ -25,6 +25,8 @@ import {
   ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED,
   ERROR_SUBTITLE_EMBED_SUBTITLE_UNREADABLE,
   ERROR_SUBTITLE_EMBED_VERIFY_FAILED,
+  ERROR_SUBTITLE_SEARCH_INTERRUPTED,
+  ERROR_SUBTITLE_SEARCH_SYNC_FAILED,
 } from './error-keys';
 
 export const messagesEn: Record<string, string> = {
@@ -60,6 +62,9 @@ export const messagesEn: Record<string, string> = {
     'The library folder is not writable or the file owner cannot be preserved: {detail}',
   [ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED]:
     'Subtitles embedded, but the external .srt file could not be deleted',
+  [ERROR_SUBTITLE_SEARCH_SYNC_FAILED]:
+    "The subtitle's synchronization could not be validated.",
+  [ERROR_SUBTITLE_SEARCH_INTERRUPTED]: 'The search was interrupted.',
 };
 
 // Fills `{param}` placeholders in a message template with the corresponding

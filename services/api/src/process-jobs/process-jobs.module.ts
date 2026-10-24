@@ -8,6 +8,7 @@ import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
 import { QueueModule } from '@/queue/queue.module';
 import { TitleStatusModule } from '@/title-status/title-status.module';
 import { DownloadsModule } from '@/downloads/downloads.module';
+import { SubtitleSearchRequestModule } from '@/subtitle-search/subtitle-search-request.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { DownloadsModule } from '@/downloads/downloads.module';
     QueueModule,
     TitleStatusModule,
     DownloadsModule,
+    SubtitleSearchRequestModule,
   ],
   providers: [ProcessJobsResolver, ProcessJobsService],
 })

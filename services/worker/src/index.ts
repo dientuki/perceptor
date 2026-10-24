@@ -8,16 +8,20 @@ import {
   ENCODE_CANCEL_CHANNEL,
   SUBTITLE_EMBED_QUEUE,
   SUBTITLE_EMBED_JOB,
+  SUBTITLE_SYNC_QUEUE,
+  SUBTITLE_SYNC_JOB,
 } from './queue/types';
 import type {
   SourceReadyJob,
   EncodeJob,
   EncodeCancelMessage,
   SubtitleEmbedJob,
+  SubtitleSyncJob,
 } from './queue/types';
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
 import { handleSubtitleEmbed } from './jobs/subtitle-embed.job';
+import { handleSubtitleSync } from './jobs/subtitle-sync.job';
 import { cancelEncode } from './encode/cancellation';
 import {
   LEASE_RENEW_INTERVAL_MS,
@@ -163,12 +167,33 @@ async function main() {
     console.log(`[worker] completed ${job.id}`);
   });
 
+  // Spec 103, REQ-10
+  const subtitleSyncWorker = new Worker<SubtitleSyncJob>(
+    SUBTITLE_SYNC_QUEUE,
+    async (job) => {
+      if (job.name !== SUBTITLE_SYNC_JOB) {
+        console.log(`[worker] unknown job ${job.name}, ignoring`);
+        return;
+      }
+
+      await handleSubtitleSync(job);
+    },
+    {
+      connection,
+      concurrency: 1,
+    },
+  );
+
   scanWorker.on('failed', (job, err) => {
     console.error(`[worker] failed ${job?.id}:`, err);
   });
 
   subtitleEmbedWorker.on('failed', (job, err) => {
     console.error(`[worker] subtitle embed failed ${job?.id}:`, err);
+  });
+
+  subtitleSyncWorker.on('failed', (job, err) => {
+    console.error(`[worker] subtitle sync failed ${job?.id}:`, err);
   });
 
   encodeWorker.on('completed', (job) => {
@@ -213,6 +238,7 @@ async function main() {
     void scanWorker.close();
     void encodeWorker.close();
     void subtitleEmbedWorker.close();
+    void subtitleSyncWorker.close();
     void cancelSubscriber.quit();
 
     // Releasing on the way out is what makes an orderly restart instant instead
@@ -226,6 +252,7 @@ async function main() {
   console.log('[worker] listening on queue', PROCESS_QUEUE);
   console.log('[worker] listening on queue', ENCODE_QUEUE);
   console.log('[worker] listening on queue', SUBTITLE_EMBED_QUEUE);
+  console.log('[worker] listening on queue', SUBTITLE_SYNC_QUEUE);
   console.log('[worker] listening on channel', ENCODE_CANCEL_CHANNEL);
 }
 

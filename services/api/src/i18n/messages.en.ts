@@ -194,6 +194,30 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED]:
     'Subtitles embedded, but Jellyfin could not be notified. They will appear on its next scan.',
 
+  // Spec 103
+  [ERROR_KEYS.SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER]:
+    'Subtitle search requires Jellyfin as the media server.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_SYNC_NOT_FOUND]:
+    'Subtitle sync check {id} does not exist',
+  [ERROR_KEYS.SUBTITLE_SEARCH_ITEM_NOT_FOUND]:
+    'Jellyfin did not index the file in time; no subtitles were searched.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE]:
+    'Could not reach Jellyfin to search for subtitles.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_FETCH_FAILED]:
+    'The subtitle could not be downloaded.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_SYNC_FAILED]:
+    "The subtitle's synchronization could not be validated.",
+  [ERROR_KEYS.SUBTITLE_SEARCH_FRAMERATE_MISMATCH]:
+    'The subtitle is for a version with a different framerate.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_OFFSET_TOO_LARGE]:
+    'The subtitle is too far out of sync.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_LOW_SCORE]:
+    'The subtitle does not match this file.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_INTERRUPTED]:
+    'The search was interrupted.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_SUPERSEDED]:
+    'A newer delivery replaced this search.',
+
   // scheduler
   [ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND]: 'Scheduled task not found',
   [ERROR_KEYS.SCHEDULE_TASK_ALREADY_RUNNING]:

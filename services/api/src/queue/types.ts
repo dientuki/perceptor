@@ -27,3 +27,11 @@ export const SUBTITLE_EMBED_JOB = 'subtitle-embed';
 export type SubtitleEmbedJob = {
   subtitleEmbedId: number;
 };
+
+// Spec 103, REQ-10
+export const SUBTITLE_SYNC_QUEUE = 'subtitle-sync';
+export const SUBTITLE_SYNC_JOB = 'subtitle-sync';
+
+export type SubtitleSyncJob = {
+  subtitleSyncId: number;
+};

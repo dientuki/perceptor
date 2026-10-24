@@ -23,6 +23,12 @@ export class SubtitleEmbedTrack {
 
   @Field(() => Int)
   offsetMs: number;
+
+  @Field({
+    description:
+      'True for a sidecar the worker deletes after the rename; false for a staged track api cleans up itself (Spec 103, REQ-11).',
+  })
+  isSidecar: boolean;
 }
 
 // Spec 101, REQ-13

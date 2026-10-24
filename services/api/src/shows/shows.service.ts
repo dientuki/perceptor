@@ -18,6 +18,7 @@ import { GrainMode } from '@/media/entities/grain-mode.enum';
 import { classifyContentKind } from '@/media/content-kind';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { CatalogSearchService } from '@/media/catalog-search.service';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import {
   CatalogDescriptor,
   RegisteredCatalogRow,
@@ -53,6 +54,7 @@ export class ShowsService implements MediaTypeService {
     private readonly mediaServerReconcile: MediaServerReconcileService,
     private readonly downloadsService: DownloadsService,
     private readonly catalogSearch: CatalogSearchService,
+    private readonly mediaCapabilities: MediaCapabilitiesService,
   ) {}
 
   // The library belongs to the user: only returns series this userId has
@@ -420,6 +422,28 @@ export class ShowsService implements MediaTypeService {
       data: { audioMandatory: mandatory },
     });
     return mandatory;
+  }
+
+  // Spec 103, REQ-3
+  async findSubtitleSearchFor(userId: string, showId: number): Promise<boolean> {
+    const row = await this.prisma.userShow.findUnique({
+      where: { userId_showId: { userId, showId } },
+    });
+    return row?.subtitleSearch ?? false;
+  }
+
+  // Spec 103, REQ-1 REQ-3
+  async setSubtitleSearchFor(
+    userId: string,
+    showId: number,
+    enabled: boolean,
+  ): Promise<boolean> {
+    await this.mediaCapabilities.assertSubtitleSearchAvailable();
+    await this.prisma.userShow.update({
+      where: { userId_showId: { userId, showId } },
+      data: { subtitleSearch: enabled },
+    });
+    return enabled;
   }
 
   // Spec 057, REQ-9

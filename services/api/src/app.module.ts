@@ -26,6 +26,7 @@ import { FfprobeLogsModule } from './ffprobe-logs/ffprobe-logs.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { SubtitleEmbedModule } from './subtitle-embed/subtitle-embed.module';
+import { SubtitleSearchModule } from './subtitle-search/subtitle-search.module';
 import { EnvironmentModule } from './environment/environment.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { AcquisitionModule } from './acquisition/acquisition.module';
@@ -67,6 +68,7 @@ import { formatGraphQLError } from './i18n/graphql-error.formatter';
     CalendarModule,
     AcquisitionModule,
     SubtitleEmbedModule,
+    SubtitleSearchModule,
   ],
   providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })

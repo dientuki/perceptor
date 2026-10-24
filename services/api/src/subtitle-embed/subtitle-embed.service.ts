@@ -46,8 +46,15 @@ export function newRequestMemo(): SubtitleEmbedRequestMemo {
   return { admin: new Map(), series: new Map() };
 }
 
-type TargetRef =
+export type TargetRef =
   { kind: 'movie'; id: number } | { kind: 'episode'; id: number };
+
+// Spec 103, REQ-11
+export type StagedTrackInput = {
+  languageIso3: string;
+  stagedPath: string;
+  offsetMs: number;
+};
 
 type TargetFacts = {
   filePath: string | null;
@@ -61,6 +68,8 @@ type StoredTrack = {
   isDefault: boolean;
   isForced: boolean;
   offsetMs: number;
+  // Spec 103, REQ-11
+  stagedPath?: string;
 };
 
 function toExternalSubtitle(
@@ -265,7 +274,7 @@ export class SubtitleEmbedService {
     subtitles: SubtitleEmbedInput[],
     userId: string,
   ): Promise<SubtitleEmbed> {
-    const target = await this.resolveVisibleTarget(ref, userId);
+    const target = await this.resolveTarget(ref, userId);
 
     const client = await this.listingClient();
     if (!client) {
@@ -281,24 +290,9 @@ export class SubtitleEmbedService {
     }
 
     // Spec 101, REQ-13
-    let listed: ItemSubtitles | null = null;
-    let mkvPath: string;
-    if (target.filePath) {
-      mkvPath = target.filePath;
-    } else {
-      listed = await this.readItemListing(client, ref, target);
-      if (!listed?.mediaHostPath) {
-        throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_NO_FILE);
-      }
-      const translated = this.mediaRoots.hostToContainerPath(
-        'library',
-        listed.mediaHostPath,
-      );
-      if (!translated) {
-        throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_OUTSIDE_LIBRARY);
-      }
-      mkvPath = translated;
-    }
+    const resolved = await this.resolveMkvPath(client, ref, target);
+    let listed = resolved.listed;
+    const mkvPath = resolved.mkvPath;
     await this.assertUsableMkv(mkvPath);
 
     await this.assertNotBusy(ref, target);
@@ -331,11 +325,72 @@ export class SubtitleEmbedService {
       offsetMs: subtitle.offsetMs,
     }));
 
+    return this.queueEmbed(ref, mkvPath, tracks);
+  }
+
+  // Spec 103, REQ-11
+  async embedStaged(
+    ref: TargetRef,
+    staged: StagedTrackInput[],
+  ): Promise<SubtitleEmbed> {
+    if (staged.length === 0) {
+      throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_EMPTY_SELECTION);
+    }
+
+    for (const track of staged) {
+      if (
+        !(await this.mediaRoots.isInsideRoot('downloads', track.stagedPath))
+      ) {
+        throw i18nError.badRequest(
+          ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE,
+        );
+      }
+      this.assertOffsetInRange(track.offsetMs);
+    }
+
+    const target = await this.resolveTarget(ref, null);
+    if (!hasPossession(target)) {
+      throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_NO_FILE);
+    }
+
+    const baseTitles = await this.lookupBaseTitles(
+      staged.map((track) => track.languageIso3),
+    );
+
+    const client = target.filePath ? null : await this.listingClient();
+    if (!target.filePath && !client) {
+      throw i18nError.badRequest(
+        ERROR_KEYS.SUBTITLE_EMBED_UNSUPPORTED_MEDIA_SERVER,
+      );
+    }
+    const { mkvPath } = await this.resolveMkvPath(client, ref, target);
+    await this.assertUsableMkv(mkvPath);
+
+    await this.assertNotBusy(ref, target);
+
+    const tracks: StoredTrack[] = staged.map((track) => ({
+      fileName: basename(track.stagedPath),
+      stagedPath: track.stagedPath,
+      languageIso3: track.languageIso3,
+      trackTitle: baseTitles.get(track.languageIso3) ?? track.languageIso3,
+      isDefault: false,
+      isForced: false,
+      offsetMs: track.offsetMs,
+    }));
+
+    return this.queueEmbed(ref, mkvPath, tracks);
+  }
+
+  // Spec 101, REQ-10
+  private async queueEmbed(
+    ref: TargetRef,
+    mkvPath: string,
+    tracks: StoredTrack[],
+  ): Promise<SubtitleEmbed> {
     const targetColumn =
       ref.kind === 'movie' ? { movieId: ref.id } : { episodeId: ref.id };
     const row = await this.createGuarded(targetColumn, mkvPath, tracks);
 
-    // Spec 101, REQ-10
     try {
       await this.queue.addEmbed({ subtitleEmbedId: row.id });
     } catch (error) {
@@ -346,10 +401,36 @@ export class SubtitleEmbedService {
     return toEntity(row);
   }
 
-  // Spec 101, REQ-3
-  private async resolveVisibleTarget(
+  // Spec 101, REQ-13
+  private async resolveMkvPath(
+    client: MediaServerClient | null,
     ref: TargetRef,
-    userId: string,
+    target: TargetFacts & {
+      tmdbId?: number;
+      seasonNumber?: number;
+      episodeNumber?: number;
+    },
+  ): Promise<{ mkvPath: string; listed: ItemSubtitles | null }> {
+    if (target.filePath) return { mkvPath: target.filePath, listed: null };
+
+    const listed = await this.readItemListing(client!, ref, target);
+    if (!listed?.mediaHostPath) {
+      throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_NO_FILE);
+    }
+    const translated = this.mediaRoots.hostToContainerPath(
+      'library',
+      listed.mediaHostPath,
+    );
+    if (!translated) {
+      throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_OUTSIDE_LIBRARY);
+    }
+    return { mkvPath: translated, listed };
+  }
+
+  // Spec 101, REQ-3
+  private async resolveTarget(
+    ref: TargetRef,
+    userId: string | null,
   ): Promise<
     TargetFacts & {
       tmdbId?: number;
@@ -361,7 +442,10 @@ export class SubtitleEmbedService {
   > {
     if (ref.kind === 'movie') {
       const movie = await this.prisma.movie.findFirst({
-        where: { id: ref.id, users: { some: { userId } } },
+        where: {
+          id: ref.id,
+          ...(userId === null ? {} : { users: { some: { userId } } }),
+        },
         select: { tmdbId: true, filePath: true, mediaServerPresentAt: true },
       });
       if (!movie)
@@ -370,7 +454,12 @@ export class SubtitleEmbedService {
     }
 
     const episode = await this.prisma.episode.findFirst({
-      where: { id: ref.id, season: { show: { users: { some: { userId } } } } },
+      where: {
+        id: ref.id,
+        ...(userId === null
+          ? {}
+          : { season: { show: { users: { some: { userId } } } } }),
+      },
       select: {
         filePath: true,
         mediaServerPresentAt: true,
@@ -468,20 +557,38 @@ export class SubtitleEmbedService {
     }
 
     for (const subtitle of subtitles) {
-      if (
-        !Number.isInteger(subtitle.offsetMs) ||
-        subtitle.offsetMs < -MAX_OFFSET_MS ||
-        subtitle.offsetMs > MAX_OFFSET_MS
-      ) {
-        throw i18nError.badRequest(
-          ERROR_KEYS.SUBTITLE_EMBED_OFFSET_OUT_OF_RANGE,
-        );
+      this.assertOffsetInRange(subtitle.offsetMs);
+    }
+
+    const baseTitles = await this.lookupBaseTitles(
+      subtitles.map((subtitle) => subtitle.languageIso3),
+    );
+
+    for (const subtitle of subtitles) {
+      if (!isBareFileName(subtitle.fileName)) {
+        throw i18nError.conflict(ERROR_KEYS.SUBTITLE_EMBED_STALE_LISTING);
       }
     }
 
-    const requested = [
-      ...new Set(subtitles.map((subtitle) => subtitle.languageIso3)),
-    ];
+    return baseTitles;
+  }
+
+  // Spec 101, REQ-4
+  private assertOffsetInRange(offsetMs: number): void {
+    if (
+      !Number.isInteger(offsetMs) ||
+      offsetMs < -MAX_OFFSET_MS ||
+      offsetMs > MAX_OFFSET_MS
+    ) {
+      throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_OFFSET_OUT_OF_RANGE);
+    }
+  }
+
+  // Spec 101, REQ-4 REQ-5
+  private async lookupBaseTitles(
+    languages: string[],
+  ): Promise<Map<string, string>> {
+    const requested = [...new Set(languages)];
     const rows = await this.prisma.language.findMany({
       where: { iso3: { in: requested } },
       select: { tag: true, iso2: true, iso3: true, trackTitle: true },
@@ -497,12 +604,6 @@ export class SubtitleEmbedService {
       // Spec 101, REQ-5
       const base = known.find((row) => row.tag === row.iso2);
       baseTitles.set(iso3, base?.trackTitle ?? iso3);
-    }
-
-    for (const subtitle of subtitles) {
-      if (!isBareFileName(subtitle.fileName)) {
-        throw i18nError.conflict(ERROR_KEYS.SUBTITLE_EMBED_STALE_LISTING);
-      }
     }
 
     return baseTitles;
@@ -709,7 +810,8 @@ export class SubtitleEmbedService {
 
     const dir = dirname(row.filePath);
     const tracks = (row.tracks as unknown as StoredTrack[]).map((track) => ({
-      sourcePath: join(dir, track.fileName),
+      sourcePath: track.stagedPath ?? join(dir, track.fileName),
+      isSidecar: track.stagedPath == null,
       languageIso3: track.languageIso3,
       trackTitle: track.trackTitle,
       isDefault: track.isDefault,

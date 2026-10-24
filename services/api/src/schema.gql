@@ -100,6 +100,9 @@ type Movie {
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
 
+  """The caller's own flag (103 REQ-3)."""
+  subtitleSearch: Boolean!
+
   """
   How many *other* users have this film in their library. 0 when the caller is the last owner.
   """
@@ -112,6 +115,9 @@ type Movie {
 
   """The film's most recent embed, null if it never had one."""
   subtitleEmbed: SubtitleEmbed
+
+  """The film's most recent search, null if it never had one."""
+  latestSubtitleSearch: SubtitleSearch
 }
 
 """
@@ -318,6 +324,7 @@ type Episode {
   status: String!
   externalSubtitles: [ExternalSubtitle!]!
   subtitleEmbed: SubtitleEmbed
+  latestSubtitleSearch: SubtitleSearch
 }
 
 type Season {
@@ -345,6 +352,9 @@ type Show {
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
+
+  """The caller's own flag (103 REQ-3)."""
+  subtitleSearch: Boolean!
 
   """
   How many *other* users have this series in their library. 0 when the caller is the last owner.
@@ -383,6 +393,11 @@ type UserPreferences {
   Whether the audio track in a preferred language is mandatory. Inert this cycle — nothing reads it yet.
   """
   audioMandatory: Boolean!
+
+  """
+  Gate for automatic subtitle search (103 REQ-2). False for every user until they say otherwise.
+  """
+  subtitleSearch: Boolean!
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
 
@@ -495,6 +510,11 @@ type MediaCapabilities {
   showsEnabled: Boolean!
   shortsEnabled: Boolean!
   catalogKeyConfigured: Boolean!
+
+  """
+  True while media_server_client is jellyfin (103 REQ-1). Never exposes the server type.
+  """
+  subtitleSearchAvailable: Boolean!
 }
 
 type FfprobeLog {
@@ -552,6 +572,11 @@ type SubtitleEmbedTrack {
   isDefault: Boolean!
   isForced: Boolean!
   offsetMs: Int!
+
+  """
+  True for a sidecar the worker deletes after the rename; false for a staged track api cleans up itself (Spec 103, REQ-11).
+  """
+  isSidecar: Boolean!
 }
 
 type SubtitleEmbedDetails {
@@ -560,6 +585,55 @@ type SubtitleEmbedDetails {
   """Absolute container path of the library .mkv to replace."""
   filePath: String!
   tracks: [SubtitleEmbedTrack!]!
+}
+
+type SubtitleSearchLanguage {
+  languageIso3: String!
+  outcome: SubtitleSearchLanguageOutcome!
+
+  """i18n key when outcome is FAILED or REJECTED, else null."""
+  reasonKey: String
+}
+
+enum SubtitleSearchLanguageOutcome {
+  PENDING
+  ALREADY_PRESENT
+  EMBEDDED
+  NOT_FOUND
+  REJECTED
+  FAILED
+}
+
+type SubtitleSearch {
+  id: Int!
+  status: SubtitleSearchStatus!
+
+  """i18n key when status is FAILED, else null."""
+  errorKey: String
+  languages: [SubtitleSearchLanguage!]!
+  createdAt: DateTime!
+  finishedAt: DateTime
+}
+
+enum SubtitleSearchStatus {
+  WAITING
+  SEARCHING
+  VALIDATING
+  EMBEDDING
+  COMPLETED
+  FAILED
+}
+
+type SubtitleSyncDetails {
+  id: Int!
+
+  """Absolute container path of the library .mkv used as the reference."""
+  filePath: String!
+
+  """
+  Absolute container path of the staged candidate, under the downloads root.
+  """
+  candidatePath: String!
 }
 
 type EnvironmentEndpoint {
@@ -725,6 +799,11 @@ type Query {
   Service-only (worker). Container paths, same standing as EncodeJobDetails' outputRoot. Answers for any status.
   """
   subtitleEmbedDetails(id: Int!): SubtitleEmbedDetails!
+
+  """
+  Service-only (worker). Container paths, same standing as SubtitleEmbedDetails.
+  """
+  subtitleSyncDetails(id: Int!): SubtitleSyncDetails!
 }
 
 type Mutation {
@@ -758,6 +837,9 @@ type Mutation {
   Marca si el audio en el idioma preferido es obligatorio para esta película
   """
   setMovieAudioMandatory(movieId: Int!, mandatory: Boolean!): Boolean!
+
+  """Sets whether subtitles are searched online for this film (103 REQ-3)."""
+  setMovieSubtitleSearch(movieId: Int!, enabled: Boolean!): Boolean!
 
   """Marca o desmarca una película como corto (048-shorts-category)"""
   setMovieShort(movieId: Int!, isShort: Boolean!): Movie!
@@ -821,6 +903,9 @@ type Mutation {
   """
   setShowAudioMandatory(showId: Int!, mandatory: Boolean!): Boolean!
 
+  """Sets whether subtitles are searched online for this series (103 REQ-3)."""
+  setShowSubtitleSearch(showId: Int!, enabled: Boolean!): Boolean!
+
   """
   Reclasifica el estilo de animación de una serie (057-content-kind-classification)
   """
@@ -871,6 +956,7 @@ type Mutation {
   """
   setAcquisitionWindows(theatrical: Boolean!, digital: Boolean!, physical: Boolean!): UserPreferences!
   setAudioMandatory(mandatory: Boolean!): UserPreferences!
+  setSubtitleSearch(enabled: Boolean!): UserPreferences!
   setPreferredTrackLanguages(kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
   createTorrentGroup(name: String!): TorrentGroup!
   deleteTorrentGroup(id: Int!): Boolean!
@@ -930,6 +1016,19 @@ type Mutation {
 
   """Service-only (worker). Safe to receive more than once."""
   subtitleEmbedFailed(id: Int!, errorKey: String!): Boolean!
+
+  """
+  Service-only (worker). Moves a queued validation to running; false if it is no longer queued.
+  """
+  subtitleSyncStarted(id: Int!): Boolean!
+
+  """
+  Service-only (worker). Safe to receive more than once (038's posture). api applies REQ-10's acceptance rule.
+  """
+  subtitleSyncCompleted(id: Int!, offsetMs: Int!, framerateRatio: Float!, reference: SubtitleSyncReference!, score: Float!): Boolean!
+
+  """Service-only (worker). Safe to receive more than once."""
+  subtitleSyncFailed(id: Int!, errorKey: String!): Boolean!
 }
 
 input LoginInput {
@@ -993,4 +1092,9 @@ input SubtitleEmbedInput {
   languageIso3: String!
   isDefault: Boolean!
   offsetMs: Int!
+}
+
+enum SubtitleSyncReference {
+  SUBTITLE
+  AUDIO
 }

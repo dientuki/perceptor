@@ -1,46 +1,46 @@
 # ==========================================
-# 1. BASE: Entorno común (Alpine + libc6)
+# 1. BASE: shared environment (Alpine + libc6)
 # ==========================================
 FROM node:26.10.0-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # ==========================================
-# 2. DEV: Etapa para Desarrollo Local
+# 2. DEV: local development stage
 # ==========================================
 FROM base AS dev
 ENV NODE_ENV=development
 EXPOSE 3000
-# El container corre como PUID:PGID (docker-compose.yaml), no como root. Sin el
-# bind mount de docker-compose.dev.yaml, /app queda con el dueño que le dio
-# WORKDIR (root) y "npm install" falla con EACCES al escribir package-lock.json.
-# node:alpine trae un usuario "node" en 1000:1000 (el default de PUID/PGID en
-# .env.example) — chown acá es sólo la red de seguridad para ese caso; con el
-# bind mount normal, el dueño real del host manda.
+# The container runs as PUID:PGID (docker-compose.yaml), not as root. Without the
+# docker-compose.dev.yaml bind mount, /app keeps the owner WORKDIR gave it (root)
+# and "npm install" fails with EACCES writing package-lock.json. node:alpine ships
+# a "node" user at 1000:1000 (the PUID/PGID default in .env.example); this chown
+# is only the safety net for that case. With the normal bind mount, the host's
+# real owner wins.
 RUN chown node:node /app
-# Verifica el binario real (no sólo si la carpeta existe: un node_modules a
-# medias pasaría el chequeo y "npx prisma generate" quedaría pidiendo
-# confirmación interactiva en medio del arranque del container). --no en npx
-# hace que falle en vez de ofrecer bajar el paquete del registry.
+# Checks the real binary, not just the folder: a half-installed node_modules
+# would pass a folder check, and "npx prisma generate" would then wait for an
+# interactive confirmation in the middle of the container's start. --no makes
+# npx fail instead of offering to download the package from the registry.
 CMD ["sh", "-c", "if [ ! -x node_modules/.bin/nest ]; then npm install; fi && npx --no prisma generate && npm run start:dev"]
 
 # ==========================================
-# 3. BUILDER: Compilación para Producción
+# 3. BUILDER: production build
 # ==========================================
 FROM base AS builder
-# Copiamos manifiestos e instalamos TODAS las dependencias (incluyendo devDependencies para compilar)
+# Copy the manifests and install ALL dependencies (devDependencies included, to compile)
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-# Copiamos el schema de Prisma y generamos el cliente
+# Copy the Prisma schema and generate the client
 COPY prisma ./prisma/
 RUN npx prisma generate
 
-# Copiamos el código fuente y compilamos NestJS
+# Copy the source and build NestJS
 COPY . .
 RUN npm run build
 
-# Limpiamos las devDependencies para dejar solo las dependencias necesarias en producción
+# Prune devDependencies, keeping only what production needs
 RUN npm prune --omit=dev
 
 # Smoke test: if the prune above also stripped node_modules/.prisma/client,
@@ -48,16 +48,16 @@ RUN npm prune --omit=dev
 RUN node -e "require('@prisma/client')"
 
 # ==========================================
-# 4. PROD: Imagen Final de Producción
+# 4. PROD: final production image
 # ==========================================
 FROM base AS prod
 ENV NODE_ENV=production
 
-# Usuario no-root por seguridad
+# Non-root user, for security
 RUN addgroup --system --gid 1001 nestjs && \
     adduser --system --uid 1001 nestjs
 
-# Copiamos las dependencias de producción ya podadas y el código compilado
+# Copy the pruned production dependencies and the compiled code
 COPY --from=builder --chown=nestjs:nestjs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nestjs /app/prisma ./prisma
 COPY --from=builder --chown=nestjs:nestjs /app/dist ./dist
@@ -68,7 +68,7 @@ USER nestjs
 EXPOSE 3000
 ENV PORT=3000
 
-# Punto de entrada de la aplicación NestJS compilada. nest-cli.json declara
-# sourceRoot=src, así que "nest build" preserva ese prefijo dentro de dist/ —
-# el binario real queda en dist/src/main.js, no en dist/main.js.
+# Entry point of the compiled NestJS app. nest-cli.json declares sourceRoot=src,
+# so "nest build" keeps that prefix inside dist/: the real entry point is
+# dist/src/main.js, not dist/main.js.
 CMD ["node", "dist/src/main.js"]

@@ -7,6 +7,8 @@ export interface SubtitleEmbedTrackDetails {
   isDefault: boolean;
   isForced: boolean;
   offsetMs: number;
+  // Spec 103, REQ-11
+  isSidecar?: boolean;
 }
 
 export interface SubtitleEmbedDetails {
@@ -22,12 +24,18 @@ export async function subtitleEmbedDetails(id: number): Promise<SubtitleEmbedDet
       subtitleEmbedDetails(id: $id) {
         id
         filePath
-        tracks { sourcePath languageIso3 trackTitle isDefault isForced offsetMs }
+        tracks { sourcePath languageIso3 trackTitle isDefault isForced offsetMs isSidecar }
       }
     }`,
     { id },
   );
-  return data.subtitleEmbedDetails;
+  return {
+    ...data.subtitleEmbedDetails,
+    tracks: data.subtitleEmbedDetails.tracks.map((track) => ({
+      ...track,
+      isSidecar: track.isSidecar ?? true,
+    })),
+  };
 }
 
 // Spec 101, REQ-10

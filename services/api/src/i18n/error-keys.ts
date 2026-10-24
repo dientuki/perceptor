@@ -151,6 +151,19 @@ export const ERROR_KEYS = {
   SUBTITLE_EMBED_SIDECAR_DELETE_FAILED: 'error.subtitleEmbed.sidecar_delete_failed',
   SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED: 'error.subtitleEmbed.jellyfin_refresh_failed',
 
+  // Spec 103
+  SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER: 'error.subtitleSearch.unsupported_media_server',
+  SUBTITLE_SEARCH_SYNC_NOT_FOUND: 'error.subtitleSearch.sync_not_found',
+  SUBTITLE_SEARCH_ITEM_NOT_FOUND: 'error.subtitleSearch.item_not_found',
+  SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE: 'error.subtitleSearch.media_server_unavailable',
+  SUBTITLE_SEARCH_FETCH_FAILED: 'error.subtitleSearch.fetch_failed',
+  SUBTITLE_SEARCH_SYNC_FAILED: 'error.subtitleSearch.sync_failed',
+  SUBTITLE_SEARCH_FRAMERATE_MISMATCH: 'error.subtitleSearch.framerate_mismatch',
+  SUBTITLE_SEARCH_OFFSET_TOO_LARGE: 'error.subtitleSearch.offset_too_large',
+  SUBTITLE_SEARCH_LOW_SCORE: 'error.subtitleSearch.low_score',
+  SUBTITLE_SEARCH_INTERRUPTED: 'error.subtitleSearch.interrupted',
+  SUBTITLE_SEARCH_SUPERSEDED: 'error.subtitleSearch.superseded',
+
   CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
   CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',
 

@@ -55,6 +55,8 @@ const KNOWN_PARAMS: Record<string, Record<string, string | number>> = {
   [errorKeys.ERROR_SUBTITLE_EMBED_VERIFY_FAILED]: { detail: 'duration drift' },
   [errorKeys.ERROR_SUBTITLE_EMBED_NOT_WRITABLE]: { detail: 'EACCES' },
   [errorKeys.ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED]: {},
+  [errorKeys.ERROR_SUBTITLE_SEARCH_SYNC_FAILED]: {},
+  [errorKeys.ERROR_SUBTITLE_SEARCH_INTERRUPTED]: {},
 };
 
 describe('messagesEn — every {placeholder} is satisfiable by the params a throw site passes', () => {

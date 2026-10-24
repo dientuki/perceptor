@@ -950,8 +950,36 @@ describe('SubtitleEmbedService', () => {
               isDefault: true,
               isForced: false,
               offsetMs: 1200,
+              isSidecar: true,
             },
           ],
+        });
+      });
+
+      // Spec 103, REQ-11
+      it('marks a staged track as not a sidecar and reads it from its staged path', async () => {
+        const staged = join(baseDir, 'downloads', '.perceptor', '7', '1.srt');
+        prisma.subtitleEmbed.findUnique.mockResolvedValue(
+          row({
+            tracks: [
+              {
+                fileName: '1.srt',
+                stagedPath: staged,
+                languageIso3: 'spa',
+                trackTitle: 'Español',
+                isDefault: false,
+                isForced: false,
+                offsetMs: -2000,
+              },
+            ],
+          }),
+        );
+
+        const details = await service.details(5);
+
+        expect(details.tracks[0]).toMatchObject({
+          sourcePath: staged,
+          isSidecar: false,
         });
       });
 
@@ -959,6 +987,93 @@ describe('SubtitleEmbedService', () => {
         prisma.subtitleEmbed.findUnique.mockResolvedValue(null);
         await expect(service.details(404)).rejects.toThrow('404');
       });
+    });
+  });
+
+  // Spec 103, REQ-9 REQ-11 REQ-12: a staged path outside the downloads root
+  // would make the worker read (and api later delete) an arbitrary file, and a
+  // staged embed that skips the busy guard races a replacement for the same
+  // library file; neither raises an error anywhere.
+  describe('embedStaged (Spec 103)', () => {
+    let staged: string;
+
+    beforeAll(async () => {
+      const dir = join(
+        baseDir,
+        'downloads',
+        '.perceptor',
+        'subtitle-search',
+        '7',
+      );
+      await mkdir(dir, { recursive: true });
+      staged = join(dir, '1.srt');
+      await writeFile(staged, '1');
+    });
+
+    const track = (over: Record<string, unknown> = {}) => ({
+      languageIso3: 'spa',
+      stagedPath: staged,
+      offsetMs: -2000,
+      ...over,
+    });
+
+    it('stores a staged track with its path, default off and forced off, and enqueues once', async () => {
+      await service.embedStaged({ kind: 'movie', id: 1 }, [track()]);
+
+      const { data } = firstArg<{
+        data: { filePath: string; tracks: unknown };
+      }>(prisma.subtitleEmbed.create);
+      expect(data.filePath).toBe(mkv);
+      expect(data.tracks).toEqual([
+        {
+          fileName: '1.srt',
+          stagedPath: staged,
+          languageIso3: 'spa',
+          trackTitle: 'Español',
+          isDefault: false,
+          isForced: false,
+          offsetMs: -2000,
+        },
+      ]);
+      expect(queue.addEmbed).toHaveBeenCalledWith({ subtitleEmbedId: 5 });
+      expect(prisma.movie.findFirst).toHaveBeenCalledWith(
+        containing({ where: { id: 1 } }),
+      );
+    });
+
+    it('refuses a staged path outside the downloads root', async () => {
+      const outside = join(libDir, 'Movie (2020).spa.srt');
+
+      expect(
+        await key(
+          service.embedStaged({ kind: 'movie', id: 1 }, [
+            track({ stagedPath: outside }),
+          ]),
+        ),
+      ).toBe(ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE);
+
+      expect(prisma.subtitleEmbed.create).not.toHaveBeenCalled();
+      expect(queue.addEmbed).not.toHaveBeenCalled();
+    });
+
+    it('is refused busy like an administrator embed when the title has work in flight', async () => {
+      prisma.mediaSource.count.mockResolvedValue(1);
+
+      expect(
+        await key(service.embedStaged({ kind: 'movie', id: 1 }, [track()])),
+      ).toBe(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
+
+      expect(prisma.subtitleEmbed.create).not.toHaveBeenCalled();
+      expect(queue.addEmbed).not.toHaveBeenCalled();
+    });
+
+    it('is refused busy while another embed of the title is running', async () => {
+      prisma.subtitleEmbed.count.mockResolvedValue(1);
+
+      expect(
+        await key(service.embedStaged({ kind: 'movie', id: 1 }, [track()])),
+      ).toBe(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
+      expect(queue.addEmbed).not.toHaveBeenCalled();
     });
   });
 });

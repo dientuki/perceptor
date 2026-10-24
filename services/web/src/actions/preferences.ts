@@ -22,6 +22,7 @@ const PREFERENCES_QUERY = `
       acquireDigital
       acquirePhysical
       audioMandatory
+      subtitleSearch
       audioLanguages {
         id
         tag
@@ -67,6 +68,7 @@ export async function getPreferences(): Promise<UserPreferences> {
       acquireDigital: false,
       acquirePhysical: false,
       audioMandatory: false,
+      subtitleSearch: false,
       audioLanguages: [],
       subtitleLanguages: [],
       movieTorrentGroups: [],
@@ -173,6 +175,7 @@ const SET_AUDIO_MANDATORY_MUTATION = `
       acquireDigital
       acquirePhysical
       audioMandatory
+      subtitleSearch
       audioLanguages {
         id
         tag
@@ -228,6 +231,36 @@ export async function setAudioMandatoryAction(
     preferences: (result.data as { setAudioMandatory: UserPreferences })
       .setAudioMandatory,
   };
+}
+
+const SET_SUBTITLE_SEARCH_MUTATION = `
+  mutation SetSubtitleSearch($enabled: Boolean!) {
+    setSubtitleSearch(enabled: $enabled) {
+      subtitleSearch
+    }
+  }
+`;
+
+// Spec 103, REQ-3
+export async function setSubtitleSearchAction(
+  enabled: boolean,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_SUBTITLE_SEARCH_MUTATION, { enabled });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
 }
 
 const SET_PREFERRED_TRACK_LANGUAGES_MUTATION = `
@@ -399,6 +432,7 @@ const SET_ACQUISITION_WINDOWS_MUTATION = `
       acquireDigital
       acquirePhysical
       audioMandatory
+      subtitleSearch
       audioLanguages {
         id
         tag

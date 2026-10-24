@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import {
   setShowAudioMandatoryAction,
   setShowPreferredTrackLanguagesAction,
+  setShowSubtitleSearchAction,
 } from "@/actions/languages";
 import type { Show as ShowRecord } from "@/actions/shows";
 import {
@@ -24,10 +25,12 @@ import type { UserPreferences } from "@/types/preferences";
 export default async function Show({
   show,
   languageOptions,
+  subtitleSearchAvailable,
   preferences,
 }: {
   show: ShowRecord;
   languageOptions: Language[];
+  subtitleSearchAvailable: boolean;
   preferences: UserPreferences | null;
 }) {
   const t = await getTranslations("shows.detail");
@@ -42,6 +45,9 @@ export default async function Show({
     "SUBTITLE",
   );
   const setShowAudioMandatory = setShowAudioMandatoryAction.bind(null, show.id);
+  const subtitleSearchOffered =
+    subtitleSearchAvailable && (preferences?.subtitleSearch ?? false);
+  const setShowSubtitleSearch = setShowSubtitleSearchAction.bind(null, show.id);
   const setShowContentKind = setShowContentKindAction.bind(
     null,
     Number(show.id),
@@ -136,6 +142,12 @@ export default async function Show({
           setAudioAction={setShowAudioLanguages}
           setSubtitleAction={setShowSubtitleLanguages}
           setAudioMandatoryAction={setShowAudioMandatory}
+          subtitleSearch={
+            subtitleSearchOffered ? (show.subtitleSearch ?? false) : undefined
+          }
+          setSubtitleSearchAction={
+            subtitleSearchOffered ? setShowSubtitleSearch : undefined
+          }
         />
       </div>
     </div>

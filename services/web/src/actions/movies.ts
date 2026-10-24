@@ -16,6 +16,7 @@ import type {
   SubtitleEmbed,
   SubtitleEmbedInput,
   SubtitleEmbedResult,
+  SubtitleSearch,
   TitleRefreshResult,
   TitleRemovalResult,
 } from "@/types/media";
@@ -43,6 +44,9 @@ export interface Movie {
   // Only present when fetched via getMovieById
   externalSubtitles?: ExternalSubtitle[];
   subtitleEmbed?: SubtitleEmbed | null;
+  // Spec 103, REQ-3
+  subtitleSearch?: boolean;
+  latestSubtitleSearch?: SubtitleSearch | null;
 }
 
 export async function getMovies(isShort?: boolean): Promise<Movie[]> {
@@ -123,6 +127,19 @@ const GET_MOVIE_QUERY = `
         status
         errorKey
         warningKey
+        createdAt
+        finishedAt
+      }
+      subtitleSearch
+      latestSubtitleSearch {
+        id
+        status
+        errorKey
+        languages {
+          languageIso3
+          outcome
+          reasonKey
+        }
         createdAt
         finishedAt
       }

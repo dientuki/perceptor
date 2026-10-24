@@ -3,42 +3,42 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # ==========================================
-# 2. DEV: Etapa para Desarrollo Local
+# 2. DEV: local development stage
 # ==========================================
 FROM base AS dev
 ENV NODE_ENV=development
 EXPOSE 3000
-# Ver el comentario equivalente en services/api/Dockerfile: red de seguridad
-# para cuando /app no tiene el bind mount de docker-compose.dev.yaml encima.
-# También necesario ahora que el container corre como PUID:PGID, no como root.
+# See the matching comment in services/api/Dockerfile: a safety net for when
+# /app has no docker-compose.dev.yaml bind mount over it. Also needed now that
+# the container runs as PUID:PGID, not as root.
 RUN chown node:node /app
 CMD ["sh", "-c", "if [ ! -d node_modules ]; then npm install; fi && npm run dev"]
 
 # ==========================================
-# 3. BUILDER: Compilación para Producción
+# 3. BUILDER: production build
 # ==========================================
 FROM base AS builder
-# Copiamos manifiestos e instalamos dependencias completas
+# Copy the manifests and install every dependency
 COPY package*.json ./
 RUN npm ci
 
-# Copiamos el resto del código y compilamos Next.js
+# Copy the rest of the code and build Next.js
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ==========================================
-# 4. PROD: Imagen Final de Producción (Ultra liviana)
+# 4. PROD: final production image (minimal)
 # ==========================================
 FROM base AS prod
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Creamos un usuario no-root por seguridad
+# Create a non-root user, for security
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copiamos solo los artefactos estáticos y el servidor standalone compilado
+# Copy only the static assets and the compiled standalone server
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static

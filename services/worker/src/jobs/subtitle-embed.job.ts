@@ -127,7 +127,7 @@ async function deleteSidecars(sourcePaths: string[], filePath: string): Promise<
   return warningKey;
 }
 
-// Spec 101, REQ-9 REQ-10 REQ-11 REQ-12
+// Spec 101, REQ-9 REQ-10 REQ-11 REQ-12; Spec 103, REQ-11
 export async function handleSubtitleEmbed(job: Job<SubtitleEmbedJob>): Promise<void> {
   const id = job.data.subtitleEmbedId;
   const details = await subtitleEmbedDetails(id);
@@ -220,7 +220,7 @@ export async function handleSubtitleEmbed(job: Job<SubtitleEmbedJob>): Promise<v
   try {
     if (renamed) {
       warningKey = await deleteSidecars(
-        details.tracks.map((track) => track.sourcePath),
+        details.tracks.filter((track) => track.isSidecar !== false).map((track) => track.sourcePath),
         filePath,
       );
     }

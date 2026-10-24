@@ -17,6 +17,8 @@ import {
   JellyfinSubtitleItem,
   toExternalSubtitles,
   toEpisodeSubtitleMap,
+  toPresentLanguages,
+  toRemoteCandidates,
 } from './jellyfin';
 import { MEDIA_TYPE } from '@/types/media';
 
@@ -268,10 +270,132 @@ describe('Jellyfin subtitle requests', () => {
     const one = await client().listItemSubtitles!('m');
     await client().listSeriesEpisodeSubtitles!('s');
 
-    expect(one).toEqual({ itemId: 'm', mediaHostPath: '/a/b.mkv', subtitles: [] });
+    expect(one).toEqual({
+      itemId: 'm',
+      mediaHostPath: '/a/b.mkv',
+      subtitles: [],
+      presentLanguagesIso3: [],
+    });
     expect((fetchMock.mock.calls[0][0] as URL).searchParams.get('fields')).toBe('MediaStreams,Path');
     expect((fetchMock.mock.calls[0][0] as URL).pathname).toBe('/Items');
     expect((fetchMock.mock.calls[0][0] as URL).searchParams.get('ids')).toBe('m');
     expect((fetchMock.mock.calls[1][0] as URL).searchParams.get('fields')).toBe('MediaStreams,Path');
+  });
+});
+
+// Spec 103, REQ-7: a language is "missing" when this list lacks it. A forced
+// stream wrongly counted would make a forced-only language read as present, and
+// the full subtitles would never be searched, with no error anywhere.
+describe('toPresentLanguages', () => {
+  it('excludes forced streams', () => {
+    expect(
+      toPresentLanguages([
+        { Type: 'Subtitle', Language: 'spa', IsForced: true },
+        { Type: 'Subtitle', Language: 'eng' },
+      ]),
+    ).toEqual(['eng']);
+  });
+
+  it('counts embedded and external streams of any codec, once per language', () => {
+    expect(
+      toPresentLanguages([
+        { Type: 'Subtitle', Language: 'eng', IsExternal: false, Codec: 'hdmv_pgs_subtitle' },
+        { Type: 'Subtitle', Language: 'ENG', IsExternal: true, Codec: 'subrip' },
+        { Type: 'Subtitle', Language: 'spa', IsExternal: true, Codec: 'ass' },
+      ]),
+    ).toEqual(['eng', 'spa']);
+  });
+
+  it('ignores audio streams and streams with no language', () => {
+    expect(
+      toPresentLanguages([
+        { Type: 'Audio', Language: 'eng' },
+        { Type: 'Subtitle', Language: null },
+        { Type: 'Subtitle' },
+      ]),
+    ).toEqual([]);
+  });
+});
+
+// Spec 103, REQ-8: an absent Forced/MachineTranslated/AiTranslated flag
+// reading as true would drop every candidate, and as undefined would let a
+// machine translation through the filter.
+describe('toRemoteCandidates', () => {
+  it('reads absent remote booleans as false', () => {
+    const [candidate] = toRemoteCandidates(
+      [{ Id: 'a', ThreeLetterISOLanguageName: 'spa', Name: 'Movie.2020', Format: 'srt' }],
+      'spa',
+    );
+
+    expect(candidate).toEqual({
+      id: 'a',
+      languageIso3: 'spa',
+      name: 'Movie.2020',
+      format: 'srt',
+      isForced: false,
+      isHearingImpaired: false,
+      isMachineTranslated: false,
+      isAiTranslated: false,
+      isHashMatch: false,
+      downloadCount: 0,
+    });
+  });
+
+  it('maps the true flags and drops an entry with no id', () => {
+    const result = toRemoteCandidates(
+      [
+        { Id: 'b', Forced: true, HearingImpaired: true, MachineTranslated: true, AiTranslated: true, IsHashMatch: true, DownloadCount: 9 },
+        { Name: 'no id' },
+      ],
+      'eng',
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      languageIso3: 'eng',
+      isForced: true,
+      isHearingImpaired: true,
+      isMachineTranslated: true,
+      isAiTranslated: true,
+      isHashMatch: true,
+      downloadCount: 9,
+    });
+  });
+});
+
+describe('Jellyfin remote subtitle requests', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const client = () =>
+    createJellyfinClient(
+      { host: 'h', port: '8096', apiKey: 'k' },
+      { lookup: async () => null },
+    );
+
+  it('searches by item and language, and fetches the body as bytes', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ Id: 'x/y', Format: 'srt' }] })
+      .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new Uint8Array([104, 105]).buffer });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const found = await client().searchRemoteSubtitles!('item1', 'spa');
+    const bytes = await client().fetchRemoteSubtitle!('x/y');
+
+    expect(found.map((c) => c.id)).toEqual(['x/y']);
+    expect((fetchMock.mock.calls[0][0] as URL).pathname).toBe('/Items/item1/RemoteSearch/Subtitles/spa');
+    expect((fetchMock.mock.calls[1][0] as URL).pathname).toBe('/Providers/Subtitles/Subtitles/x%2Fy');
+    expect(bytes.toString()).toBe('hi');
+  });
+
+  it('throws on a non-ok response so the driver can record the failure', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: false, status: 500, text: async () => 'boom' }) as unknown as typeof fetch;
+
+    await expect(client().searchRemoteSubtitles!('i', 'spa')).rejects.toThrow('500');
+    await expect(client().fetchRemoteSubtitle!('i')).rejects.toThrow('500');
   });
 });
