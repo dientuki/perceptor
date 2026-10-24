@@ -903,7 +903,9 @@ type Mutation {
   """
   setShowAudioMandatory(showId: Int!, mandatory: Boolean!): Boolean!
 
-  """Sets whether subtitles are searched online for this series (103 REQ-3)."""
+  """
+  Sets whether subtitles are searched online for this series (103 REQ-3).
+  """
   setShowSubtitleSearch(showId: Int!, enabled: Boolean!): Boolean!
 
   """

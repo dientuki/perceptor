@@ -423,7 +423,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></div>
         <h3>One outside service, and it's yours to point at</h3>
-        <p>Perceptor asks TMDB for titles, posters and air dates with a key you create yourself — that's the whole outbound list. Your indexers, your downloader and your media server are all things you already run.</p>
+        <p>Perceptor asks TMDB for titles, posters and air dates with a key you create yourself — that's the whole outbound list, plus OpenSubtitles through your Jellyfin if you opt into subtitle search. Your indexers, your downloader and your media server are all things you already run.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"/><path d="M9 7V4h6v3M9 13h6"/></svg></div>
@@ -511,7 +511,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3a4 4 0 0 0-4 4v4a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
         <h3>Your languages, not the release's</h3>
-        <p>Set them once for the whole install, tweak them for your account, add one more for a single title. Audio and subtitles are chosen separately — original audio with your subtitles is a normal thing to ask for. Every title's page tells you which ones will actually be used, and which it inherited from you.</p>
+        <p>Set them once for the whole install, tweak them for your account, add one more for a single title. Audio and subtitles are chosen separately — original audio with your subtitles is a normal thing to ask for. Every title's page tells you which ones will actually be used, and which it inherited from you. Release missing a subtitle language? With Jellyfin, Perceptor can find it, check it's in sync and fold it into the file.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
@@ -607,7 +607,7 @@
       </details>
       <details>
         <summary>What does it send out about me?</summary>
-        <p>Titles you search for go to TMDB, because that's where the catalogue is — with an API key you created, not one shared by everyone. Release searches go to the indexers you configured. That's the complete list: there's no Perceptor server, no account, no telemetry and no analytics script on any screen. Your library, your history and your files stay on your hardware.</p>
+        <p>Titles you search for go to TMDB, because that's where the catalogue is — with an API key you created, not one shared by everyone. Release searches go to the indexers you configured. If you turn on subtitle search, Jellyfin's OpenSubtitles plugin asks OpenSubtitles, with your own credentials. That's the complete list: there's no Perceptor server, no account, no telemetry and no analytics script on any screen. Your library, your history and your files stay on your hardware.</p>
       </details>
       <details>
         <summary>Can several people use it?</summary>
