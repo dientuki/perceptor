@@ -39,7 +39,7 @@
   "features.title": "Set it up once. Stop thinking about it.",
   "final.cta": "Install Perceptor",
   "final.lede": "One folder, one command, and the next thing you want to watch just shows up.",
-  "final.note": "Free · self-hosted · no account, no tracking · <a href=\"https://github.com/dientuki/perceptor\" style=\"color:var(--cyan)\">source on GitHub</a>",
+  "final.note": "Free and open source (<a href=\"https://github.com/dientuki/perceptor/blob/master/LICENSE\" style=\"color:var(--cyan)\">AGPL-3.0</a>) · self-hosted · no account, no tracking · <a href=\"https://github.com/dientuki/perceptor\" style=\"color:var(--cyan)\">source on GitHub</a>",
   "final.title": "Stop babysitting downloads.",
   "footer.builtBy": "Built by <a href=\"https://github.com/dientuki\" style=\"color:var(--cyan)\">dientuki</a>",
   "footer.docs": "Docs",

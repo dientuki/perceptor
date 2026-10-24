@@ -39,7 +39,7 @@
   "features.title": "Configuralo una vez. Dejá de pensarlo.",
   "final.cta": "Instalar Perceptor",
   "final.lede": "Una carpeta, un comando, y lo próximo que querés ver aparece solo.",
-  "final.note": "Gratis · autohospedado · sin cuenta, sin tracking · <a href=\"https://github.com/dientuki/perceptor\" style=\"color:var(--cyan)\">código en GitHub</a>",
+  "final.note": "Libre y gratis (<a href=\"https://github.com/dientuki/perceptor/blob/master/LICENSE\" style=\"color:var(--cyan)\">AGPL-3.0</a>) · autohospedado · sin cuenta, sin tracking · <a href=\"https://github.com/dientuki/perceptor\" style=\"color:var(--cyan)\">código en GitHub</a>",
   "final.title": "Dejá de estar pendiente de las descargas.",
   "footer.builtBy": "Hecho por <a href=\"https://github.com/dientuki\" style=\"color:var(--cyan)\">dientuki</a>",
   "footer.docs": "Docs",
