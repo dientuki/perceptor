@@ -222,4 +222,12 @@ export class UsersService {
       data: { audioMandatory: mandatory },
     });
   }
+
+  // Spec 103, REQ-2
+  async setSubtitleSearch(userId: string, enabled: boolean): Promise<User> {
+    return await this.prisma.user.update({
+      where: { id: userId },
+      data: { subtitleSearch: enabled },
+    });
+  }
 }

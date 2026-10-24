@@ -1,5 +1,5 @@
 import { normalizeIso3 } from './iso639';
-import { detectVariant, narrowToVariants, preferring, requestedVariants, titleWords, variantTitle } from './variants';
+import { detectVariant, narrowToVariants, preferring, requestedVariants, titleMarks, titleWords, variantTitle } from './variants';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import type { ContentKind } from '../encode/content-kind';
@@ -435,12 +435,12 @@ function subtitleFormatOf(stream: any): SubtitleFormat | null {
   return match ?? null;
 }
 
-function subtitleGroupOf(stream: any): SubtitleGroup | null {
+export function subtitleGroupOf(stream: any): SubtitleGroup | null {
   const format = subtitleFormatOf(stream);
   return format ? SUBTITLE_FORMATS[format].group : null;
 }
 
-function isImageSubtitle(stream: any): boolean {
+export function isImageSubtitle(stream: any): boolean {
   return subtitleGroupOf(stream) === 'image';
 }
 
@@ -467,6 +467,10 @@ function isHearingImpaired(stream: any): boolean {
   );
 }
 
+function isCommentary(stream: any): boolean {
+  return stream.disposition?.comment === 1 || titleMarks(stream, ['commentary']);
+}
+
 function trackLanguageTitle(stream: any, trackTitles: Record<string, string>): string {
   const lang = normalizeIso3(stream.tags?.language || 'und');
   const variant = detectVariant(stream);
@@ -477,28 +481,24 @@ function trackLanguageTitle(stream: any, trackTitles: Record<string, string>): s
   return trackTitles[lang] ?? lang;
 }
 
-export function getSubtitleParams(
+export function selectSubtitleStreams(
   subtitleStreams: any[],
   allowedFormats: SubtitleFormat[],
   allowedLanguagesIso3: string[],
   allowedLanguageTags: string[],
-  trackTitles: Record<string, string>,
-) {
-  if (allowedFormats.length === 0) {
-    console.log('[ffmpeg] subtitles disabled by settings (allowedSubtitleFormats empty).');
-    return [];
-  }
-
+): { selected: any[]; commentary: any[] } {
   const allowedLangs = Array.from(
     new Set(allowedLanguagesIso3.map((lang) => normalizeIso3(lang))),
   );
 
-  const candidates = subtitleStreams.filter(
+  const eligible = subtitleStreams.filter(
     (s) =>
       allowedLangs.includes(normalizeIso3(s.tags?.language || '')) &&
-      allowedFormats.includes(subtitleFormatOf(s) as SubtitleFormat) &&
-      hasCuePayload(s),
+      allowedFormats.includes(subtitleFormatOf(s) as SubtitleFormat),
   );
+  // Spec 102, REQ-2
+  const commentary = eligible.filter(isCommentary);
+  const candidates = eligible.filter((s) => !isCommentary(s) && hasCuePayload(s));
 
   const selected: any[] = [];
   allowedLangs.forEach((langCode) => {
@@ -520,6 +520,33 @@ export function getSubtitleParams(
 
     selected.push(...langStreams);
   });
+
+  return { selected, commentary };
+}
+
+export function getSubtitleParams(
+  subtitleStreams: any[],
+  allowedFormats: SubtitleFormat[],
+  allowedLanguagesIso3: string[],
+  allowedLanguageTags: string[],
+  trackTitles: Record<string, string>,
+  contentDrops: ReadonlySet<number>,
+) {
+  if (allowedFormats.length === 0) {
+    console.log('[ffmpeg] subtitles disabled by settings (allowedSubtitleFormats empty).');
+    return [];
+  }
+
+  const { selected: candidates, commentary } = selectSubtitleStreams(
+    subtitleStreams,
+    allowedFormats,
+    allowedLanguagesIso3,
+    allowedLanguageTags,
+  );
+
+  commentary.forEach((s) => console.log(`[subs] ${s.index} drop (commentary)`));
+
+  const selected = candidates.filter((s) => !contentDrops.has(s.index));
 
   if (selected.length === 0) {
     console.log('[ffmpeg] no subtitle in an allowed language and format survived the rules.');

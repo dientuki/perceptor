@@ -6,9 +6,11 @@ import { useState, useTransition } from "react";
 import {
   setMovieAudioMandatoryAction,
   setMoviePreferredTrackLanguagesAction,
+  setMovieSubtitleSearchAction,
 } from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
 import {
+  embedMovieSubtitlesAction,
   refreshMovieAction,
   removeMovieAction,
   setMovieContentKindAction,
@@ -19,6 +21,7 @@ import Switch from "@/components/form/switch/Switch";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
+import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
 import GrainModeSelect from "@/components/media/GrainModeSelect";
 import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
@@ -37,11 +40,13 @@ export default function Movie({
   movie,
   languageOptions,
   shortsEnabled,
+  subtitleSearchAvailable,
   preferences,
 }: {
   movie: MovieRecord;
   languageOptions: Language[];
   shortsEnabled: boolean;
+  subtitleSearchAvailable: boolean;
   preferences: UserPreferences | null;
 }) {
   const t = useTranslations("movies.detail");
@@ -76,6 +81,12 @@ export default function Movie({
     "SUBTITLE",
   );
   const setMovieAudioMandatory = setMovieAudioMandatoryAction.bind(
+    null,
+    movie.id,
+  );
+  const subtitleSearchOffered =
+    subtitleSearchAvailable && (preferences?.subtitleSearch ?? false);
+  const setMovieSubtitleSearch = setMovieSubtitleSearchAction.bind(
     null,
     movie.id,
   );
@@ -219,6 +230,21 @@ export default function Movie({
           setAudioAction={setMovieAudioLanguages}
           setSubtitleAction={setMovieSubtitleLanguages}
           setAudioMandatoryAction={setMovieAudioMandatory}
+          subtitleSearch={
+            subtitleSearchOffered ? (movie.subtitleSearch ?? false) : undefined
+          }
+          setSubtitleSearchAction={
+            subtitleSearchOffered ? setMovieSubtitleSearch : undefined
+          }
+          latestSubtitleSearch={movie.latestSubtitleSearch}
+          footer={
+            <EmbedSubtitlesButton
+              subtitles={movie.externalSubtitles ?? []}
+              embed={movie.subtitleEmbed}
+              onEmbed={embedMovieSubtitlesAction.bind(null, movie.id)}
+              fullWidth
+            />
+          }
         />
       </div>
 

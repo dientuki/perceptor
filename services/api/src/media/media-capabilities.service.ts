@@ -19,7 +19,23 @@ export class MediaCapabilitiesService {
       showsEnabled: this.isEnabledInMap(map, MEDIA_TYPE.SHOW),
       shortsEnabled: moviesEnabled && map['shorts_enabled'] === 'true',
       catalogKeyConfigured: (map['movie_db_api_key'] ?? '').trim() !== '',
+      subtitleSearchAvailable: map['media_server_client'] === 'jellyfin',
     };
+  }
+
+  // Spec 103, REQ-1
+  async isSubtitleSearchAvailable(): Promise<boolean> {
+    const capabilities = await this.read();
+    return capabilities.subtitleSearchAvailable;
+  }
+
+  // Spec 103, REQ-1
+  async assertSubtitleSearchAvailable(): Promise<void> {
+    if (!(await this.isSubtitleSearchAvailable())) {
+      throw i18nError.badRequest(
+        ERROR_KEYS.SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER,
+      );
+    }
   }
 
   async isEnabled(type: MediaType): Promise<boolean> {

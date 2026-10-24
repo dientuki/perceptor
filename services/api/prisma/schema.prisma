@@ -115,6 +115,9 @@ model User {
   acquirePhysical     Boolean @default(false)
   audioMandatory      Boolean @default(false)
 
+  // Spec 103, REQ-2
+  subtitleSearch Boolean @default(false)
+
   movies UserMovie[]
   shows  UserShow[]
 
@@ -137,6 +140,9 @@ model UserMovie {
 
   audioMandatory Boolean @default(false)
 
+  // Spec 103, REQ-3
+  subtitleSearch Boolean @default(false)
+
   languages UserMovieLanguage[]
 
   @@id([userId, movieId])
@@ -156,6 +162,9 @@ model UserShow {
   createdAt DateTime @default(now())
 
   audioMandatory Boolean @default(false)
+
+  // Spec 103, REQ-3
+  subtitleSearch Boolean @default(false)
 
   languages UserShowLanguage[]
 
@@ -401,6 +410,12 @@ model Movie {
   processJobs ProcessJob[]
   users       UserMovie[]
 
+  // Spec 101, REQ-17
+  subtitleEmbeds SubtitleEmbed[]
+
+  // Spec 103, REQ-13
+  subtitleSearches SubtitleSearch[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -467,11 +482,133 @@ model Episode {
   mediaSources MediaSource[] // Pedidos de capítulo suelto (S1)
   processJobs  ProcessJob[]
 
+  // Spec 101, REQ-17
+  subtitleEmbeds SubtitleEmbed[]
+
+  // Spec 103, REQ-13
+  subtitleSearches SubtitleSearch[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([seasonId, episodeNumber])
   @@map("episodes")
+}
+
+enum SubtitleEmbedStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// Spec 101, REQ-17: one request to fold external .srt sidecars into a library .mkv.
+// Exactly one of movieId/episodeId is set (enforced in the service, like MediaSource).
+model SubtitleEmbed {
+  id Int @id @default(autoincrement())
+
+  movieId   Int?
+  movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  episodeId Int?
+  episode   Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  status     SubtitleEmbedStatus @default(QUEUED)
+  filePath   String              @db.VarChar(500)
+  tracks     Json
+  errorKey   String?             @db.VarChar(100)
+  warningKey String?             @db.VarChar(100)
+
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  // Spec 103, REQ-11
+  subtitleSearches SubtitleSearch[]
+
+  @@index([movieId, createdAt])
+  @@index([episodeId, createdAt])
+  @@map("subtitle_embeds")
+}
+
+enum SubtitleSearchStatus {
+  WAITING
+  SEARCHING
+  VALIDATING
+  EMBEDDING
+  COMPLETED
+  FAILED
+}
+
+enum SubtitleSearchAttemptStatus {
+  QUEUED
+  RUNNING
+  ACCEPTED
+  REJECTED
+  FAILED
+}
+
+enum SubtitleSyncReference {
+  SUBTITLE
+  AUDIO
+}
+
+// Spec 103: one automatic subtitle search for a delivered film or episode.
+// Exactly one of movieId/episodeId is set (enforced in the service, like SubtitleEmbed).
+model SubtitleSearch {
+  id Int @id @default(autoincrement())
+
+  movieId   Int?
+  movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  episodeId Int?
+  episode   Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  status           SubtitleSearchStatus @default(WAITING)
+  errorKey         String?              @db.VarChar(100)
+  wantedLanguages  Json
+  presentLanguages Json?
+  itemId           String?              @db.VarChar(100)
+
+  subtitleEmbedId Int?
+  subtitleEmbed   SubtitleEmbed? @relation(fields: [subtitleEmbedId], references: [id], onDelete: SetNull)
+
+  checkCount Int @default(0)
+
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  attempts SubtitleSearchAttempt[]
+
+  @@index([status])
+  @@index([movieId, createdAt])
+  @@index([episodeId, createdAt])
+  @@index([subtitleEmbedId])
+  @@map("subtitle_searches")
+}
+
+// Spec 103, REQ-8: one candidate subtitle tried (or queued to be tried) for one language.
+model SubtitleSearchAttempt {
+  id Int @id @default(autoincrement())
+
+  searchId Int
+  search   SubtitleSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+
+  languageIso3       String  @db.VarChar(3)
+  providerSubtitleId String  @db.VarChar(255)
+  releaseName        String  @db.VarChar(500)
+  rank               Int
+  stagedPath         String? @db.VarChar(500)
+
+  status         SubtitleSearchAttemptStatus @default(QUEUED)
+  offsetMs       Int?
+  framerateRatio Float?
+  reference      SubtitleSyncReference?
+  score          Float?
+  reasonKey      String?                     @db.VarChar(100)
+
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([searchId, languageIso3])
+  @@map("subtitle_search_attempts")
 }
 
 // Append-only diagnostic log of every ffprobe run in the worker, kept independent

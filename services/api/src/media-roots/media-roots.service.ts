@@ -41,6 +41,29 @@ export class MediaRootsService {
     return join(root.hostPath, relative(root.containerPath, containerAbsolutePath));
   }
 
+  // Spec 101, REQ-13
+  hostToContainerPath(rootId: string, hostAbsolutePath: string): string | null {
+    const root = this.getRootConfig(rootId);
+
+    if (!isAbsolute(root.hostPath) || !isAbsolute(hostAbsolutePath)) {
+      return null;
+    }
+
+    if (
+      hostAbsolutePath !== root.hostPath &&
+      !hostAbsolutePath.startsWith(root.hostPath + sep)
+    ) {
+      return null;
+    }
+
+    const rel = relative(root.hostPath, hostAbsolutePath);
+    if (rel === '..' || rel.startsWith(`..${sep}`)) {
+      return null;
+    }
+
+    return join(root.containerPath, rel);
+  }
+
   // Containment check for a path the api itself already computed and stored (a
   // MediaSource.downloadPath), not one typed by a user — hence returning false
   // rather than throwing for every failure mode (Spec 047, REQ-10): the

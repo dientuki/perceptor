@@ -4,7 +4,7 @@
   "description": "",
   "author": "",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-only",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -56,7 +56,8 @@
     "rxjs": "^7.8.1"
   },
   "overrides": {
-    "@graphql-tools/utils": "12.1.0"
+    "@graphql-tools/utils": "12.1.0",
+    "multer": "2.5.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",

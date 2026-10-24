@@ -1,12 +1,12 @@
-FROM lscr.io/linuxserver/prowlarr:2.5.2
+FROM lscr.io/linuxserver/prowlarr:2.6.5
 
-# jq para editar el JSON de /api/v1/config/host; curl ya viene en la imagen base
-# (lo usa el healthcheck de docker-compose.yaml).
+# jq edits the JSON of /api/v1/config/host; curl already ships in the base image
+# (docker-compose.yaml's healthcheck uses it).
 RUN apk add --no-cache jq
 
-# Corre en paralelo al proceso de Prowlarr, no antes: ver el comentario en
-# custom-services.d/10-prowlarr-credentials sobre por qué no puede ser
-# custom-cont-init.d como en services/torrent.
+# Runs alongside the Prowlarr process, not before it: see the comment in
+# custom-services.d/10-prowlarr-credentials on why it cannot be
+# custom-cont-init.d as in services/torrent.
 COPY --chmod=755 custom-services.d/ /custom-services.d/
 
 # Runs before Prowlarr starts, writing INDEXER_API_KEY into config.xml — see the comment in

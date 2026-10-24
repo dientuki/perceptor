@@ -13,6 +13,7 @@ import { EpisodesModule } from '@/episodes/episodes.module';
 import { DownloadsModule } from '@/downloads/downloads.module';
 import { TitleStatusModule } from '@/title-status/title-status.module';
 import { SessionService } from './session.service';
+import { ActiveEmbedGuardModule } from '@/subtitle-embed/active-embed-guard.module';
 
 @Module({
   imports: [
@@ -27,6 +28,8 @@ import { SessionService } from './session.service';
     DownloadsModule,
     // Spec 089, REQ-13
     TitleStatusModule,
+    // Spec 101, REQ-16
+    ActiveEmbedGuardModule,
   ],
   controllers: [UploadsController],
   providers: [UploadsService, UploadsResolver, UploadTicketsService, SessionService],

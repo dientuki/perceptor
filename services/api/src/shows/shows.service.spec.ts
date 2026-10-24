@@ -7,6 +7,7 @@ import { MediaServerReconcileService } from '@/media-server/media-server-reconci
 import { MEDIA_TYPE } from '@/types/media';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { CatalogSearchService } from '@/media/catalog-search.service';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
 // This suite exists because ShowsService's riskiest paths all fail with a
@@ -121,6 +122,7 @@ describe('ShowsService', () => {
           useValue: mediaServerReconcile,
         },
         { provide: DownloadsService, useValue: downloads },
+        { provide: MediaCapabilitiesService, useValue: {} },
         {
           // 088-acquisition-path-unification: the real CatalogSearchService,
           // wired to this suite's own prisma/redis/tmdb mocks, so the cache

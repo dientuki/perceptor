@@ -8,6 +8,7 @@ import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { TitleStatusService } from '@/title-status/title-status.service';
+import { SubtitleSearchRequestService } from '@/subtitle-search/subtitle-search-request.service';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { ContentKind } from '@/media/entities/content-kind.enum';
@@ -29,6 +30,8 @@ describe('ProcessJobsService', () => {
     movie: { update: jest.Mock };
     episode: { update: jest.Mock };
     mediaSource: { findUnique: jest.Mock; findMany: jest.Mock; delete: jest.Mock };
+    subtitleEmbed: { updateMany: jest.Mock };
+    subtitleSearchAttempt: { updateMany: jest.Mock };
   };
   let settings: { getMap: jest.Mock };
   let mediaRoots: { resolveFromRoot: jest.Mock };
@@ -38,6 +41,7 @@ describe('ProcessJobsService', () => {
   let encodeQueue: { addEncode: jest.Mock; removeEncode: jest.Mock };
   let titleStatus: { recomputeMovie: jest.Mock; recomputeEpisode: jest.Mock };
   let downloads: { unwindLosingSiblings: jest.Mock };
+  let subtitleSearchRequest: { requestFor: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -53,6 +57,8 @@ describe('ProcessJobsService', () => {
       movie: { update: jest.fn() },
       episode: { update: jest.fn() },
       mediaSource: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]), delete: jest.fn() },
+      subtitleEmbed: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      subtitleSearchAttempt: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
     settings = { getMap: jest.fn().mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' }) };
     mediaRoots = { resolveFromRoot: jest.fn().mockResolvedValue('/library/Movies') };
@@ -67,6 +73,7 @@ describe('ProcessJobsService', () => {
     encodeQueue = { addEncode: jest.fn().mockResolvedValue(undefined), removeEncode: jest.fn().mockResolvedValue(undefined) };
     titleStatus = { recomputeMovie: jest.fn().mockResolvedValue(undefined), recomputeEpisode: jest.fn().mockResolvedValue(undefined) };
     downloads = { unwindLosingSiblings: jest.fn().mockResolvedValue(undefined) };
+    subtitleSearchRequest = { requestFor: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -80,6 +87,7 @@ describe('ProcessJobsService', () => {
         { provide: EncodeQueueService, useValue: encodeQueue },
         { provide: TitleStatusService, useValue: titleStatus },
         { provide: DownloadsService, useValue: downloads },
+        { provide: SubtitleSearchRequestService, useValue: subtitleSearchRequest },
       ],
     }).compile();
 
@@ -1271,6 +1279,62 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // A delivered file that never asks for its subtitle search leaves an opted-in title with no
+  // subtitles and no error anywhere; one that asks twice (a repeat report) or for a demoted source
+  // starts a search against a file the title no longer holds (Article IX, Spec 103, REQ-4).
+  describe('encodeCompleted — subtitle search request (Spec 103, REQ-4)', () => {
+    beforeEach(() => {
+      prisma.movie.update.mockResolvedValue({});
+      prisma.episode.update.mockResolvedValue({});
+      prisma.processJob.findMany.mockResolvedValue([{ id: 1, status: 'COMPLETED' }]);
+      prisma.mediaSource.findUnique.mockResolvedValue({ hasUnmatchedFiles: false });
+    });
+
+    const deliver = async (
+      existing: { status: string; outputFilePath: string | null; sourceStatus: string },
+      updated: { movieId: number | null; episodeId: number | null },
+    ) => {
+      prisma.processJob.findUnique.mockResolvedValue({
+        status: existing.status,
+        outputFilePath: existing.outputFilePath,
+        sourceFile: { mediaSourceId: 10, mediaSource: { status: existing.sourceStatus } },
+      });
+      prisma.processJob.update.mockResolvedValue({ id: 1, ...updated, sourceFile: { mediaSourceId: 10 } });
+      return service.encodeCompleted(1, '/library/out.mkv', 'ffmpeg');
+    };
+
+    it('requests a search once for a real film delivery, after the media server was notified', async () => {
+      await deliver({ status: 'ENCODING', outputFilePath: null, sourceStatus: 'READY' }, { movieId: 42, episodeId: null });
+
+      expect(subtitleSearchRequest.requestFor).toHaveBeenCalledTimes(1);
+      expect(subtitleSearchRequest.requestFor).toHaveBeenCalledWith({ kind: 'movie', id: 42 });
+      expect(mediaServer.notifyCreated.mock.invocationCallOrder[0]).toBeLessThan(
+        subtitleSearchRequest.requestFor.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('requests an episode search for an episode delivery', async () => {
+      await deliver({ status: 'ENCODING', outputFilePath: null, sourceStatus: 'READY' }, { movieId: null, episodeId: 7 });
+
+      expect(subtitleSearchRequest.requestFor).toHaveBeenCalledWith({ kind: 'episode', id: 7 });
+    });
+
+    it('does not request a search on a repeated report of the same delivery', async () => {
+      await deliver(
+        { status: 'COMPLETED', outputFilePath: '/library/out.mkv', sourceStatus: 'READY' },
+        { movieId: 42, episodeId: null },
+      );
+
+      expect(subtitleSearchRequest.requestFor).not.toHaveBeenCalled();
+    });
+
+    it('does not request a search for a demoted source', async () => {
+      await deliver({ status: 'ENCODING', outputFilePath: null, sourceStatus: 'ERROR' }, { movieId: 42, episodeId: null });
+
+      expect(subtitleSearchRequest.requestFor).not.toHaveBeenCalled();
+    });
+  });
+
   // Spec 095, REQ-13 REQ-14 REQ-15. The silent failures: a discarded file being encoded anyway
   // because the worker dequeued it before the cancel landed, a stale progress or failure report
   // resurrecting a discarded row, and a late completion being thrown away (the output exists on
@@ -1627,6 +1691,56 @@ describe('ProcessJobsService', () => {
 
       expect(result).toBe(1);
       expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    // Spec 101, NFR-3: a worker that died mid-remux leaves its embed RUNNING and
+    // nothing else ever looks at it, so the row reads "embedding…" forever with
+    // no error anywhere. Only RUNNING may be failed: a QUEUED embed is still in
+    // Redis and a COMPLETED one is history.
+    describe('subtitle embeds (Spec 101, NFR-3)', () => {
+      it('fails only RUNNING embeds, with the interrupted key and a finishedAt', async () => {
+        prisma.processJob.findMany.mockResolvedValue([]);
+
+        await service.reconcileOrphanedEncodes();
+
+        expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledTimes(1);
+        expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledWith({
+          where: { status: 'RUNNING' },
+          data: {
+            status: 'FAILED',
+            errorKey: ERROR_KEYS.SUBTITLE_EMBED_INTERRUPTED,
+            finishedAt: expect.any(Date) as Date,
+          },
+        });
+      });
+
+      it('still returns the encode count, not the embed count', async () => {
+        prisma.subtitleEmbed.updateMany.mockResolvedValue({ count: 5 });
+        prisma.processJob.findMany.mockResolvedValue([
+          orphan({ id: 2, sourceFile: { mediaSource: { status: 'ERROR' } } }),
+        ]);
+
+        await expect(service.reconcileOrphanedEncodes()).resolves.toBe(1);
+      });
+    });
+
+    // A subtitle-sync attempt left RUNNING by a worker that died is never reported on again: the
+    // search would wait six hours for a backstop on every crash (Article IX, Spec 103, NFR-4).
+    describe('subtitle sync attempts (Spec 103, NFR-4)', () => {
+      it('fails only RUNNING attempts, with the interrupted key and a finishedAt', async () => {
+        prisma.processJob.findMany.mockResolvedValue([]);
+
+        await service.reconcileOrphanedEncodes();
+
+        expect(prisma.subtitleSearchAttempt.updateMany).toHaveBeenCalledWith({
+          where: { status: 'RUNNING' },
+          data: {
+            status: 'FAILED',
+            reasonKey: ERROR_KEYS.SUBTITLE_SEARCH_INTERRUPTED,
+            finishedAt: expect.any(Date) as Date,
+          },
+        });
+      });
     });
   });
 });

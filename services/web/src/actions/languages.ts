@@ -198,3 +198,67 @@ export async function setShowAudioMandatoryAction(
 
   return { success: true };
 }
+
+const SET_MOVIE_SUBTITLE_SEARCH_MUTATION = `
+  mutation SetMovieSubtitleSearch($movieId: Int!, $enabled: Boolean!) {
+    setMovieSubtitleSearch(movieId: $movieId, enabled: $enabled)
+  }
+`;
+
+// Spec 103, REQ-3
+export async function setMovieSubtitleSearchAction(
+  movieId: string,
+  enabled: boolean,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_MOVIE_SUBTITLE_SEARCH_MUTATION, {
+      movieId: Number(movieId),
+      enabled,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
+}
+
+const SET_SHOW_SUBTITLE_SEARCH_MUTATION = `
+  mutation SetShowSubtitleSearch($showId: Int!, $enabled: Boolean!) {
+    setShowSubtitleSearch(showId: $showId, enabled: $enabled)
+  }
+`;
+
+// Spec 103, REQ-3
+export async function setShowSubtitleSearchAction(
+  showId: string,
+  enabled: boolean,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_SHOW_SUBTITLE_SEARCH_MUTATION, {
+      showId: Number(showId),
+      enabled,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
+}

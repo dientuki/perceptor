@@ -4,6 +4,7 @@ import { getMetadata } from '../ffmpeg/metadata';
 import { resolveFilmGrain } from './grain-mode';
 import { resolveDubTrim } from './dub-trim';
 import { resolveStreamEndTrim } from './stream-end-trim';
+import { resolveSubtitlePruning } from './subtitle-prune';
 import { buildFfmpegCommand } from '../ffmpeg/buildCommand';
 import { runFfmpeg } from '../ffmpeg/runner';
 
@@ -34,9 +35,11 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress,
   // Spec 098, REQ-3; Spec 099, REQ-10
   const dubCut = await resolveDubTrim(details, input, metadata, signal);
   const endCut = await resolveStreamEndTrim(details, input, metadata, signal);
+  // Spec 102, REQ-1
+  const prunedSubtitles = await resolveSubtitlePruning(details, input, metadata, signal);
   const cuts = [dubCut, endCut].filter((c): c is number => c !== null);
   const trimAt = cuts.length > 0 ? Math.min(...cuts) : null;
-  const args = buildFfmpegCommand(input, workingPath, metadata, details, filmGrain, trimAt);
+  const args = buildFfmpegCommand(input, workingPath, metadata, details, filmGrain, trimAt, prunedSubtitles);
   // Spec 098, REQ-10
   const candidates = [sourceDuration];
   if (Number.isFinite(sample) && sample > 0) candidates.push(sample);

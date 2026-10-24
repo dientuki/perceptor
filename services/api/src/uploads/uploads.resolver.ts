@@ -10,6 +10,7 @@ import { SessionService } from './session.service';
 import { MoviesService } from '@/movies/movies.service';
 import { EpisodesService } from '@/episodes/episodes.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
@@ -21,6 +22,7 @@ export class UploadsResolver {
     private readonly episodes: EpisodesService,
     private readonly downloads: DownloadsService,
     private readonly sessions: SessionService,
+    private readonly activeEmbed: ActiveEmbedGuard,
   ) {}
 
   // Spec 002, REQ-11
@@ -49,6 +51,9 @@ export class UploadsResolver {
         throw new NotFoundException(`La película ${movieId} no existe`);
       }
 
+      // Spec 101, REQ-16
+      await this.activeEmbed.assertNoActiveEmbed({ movieId });
+
       // Spec 022, REQ-7 REQ-6 REQ-19; Spec 087, REQ-2
       if (
         (hasPossession(movie) || (await this.downloads.hasDeliveredSource({ movieId: movieId as number }))) &&
@@ -64,6 +69,9 @@ export class UploadsResolver {
     if (!episode) {
       throw new NotFoundException(`El episodio ${episodeId} no existe`);
     }
+
+    // Spec 101, REQ-16
+    await this.activeEmbed.assertNoActiveEmbed({ episodeId: episodeId as number });
 
     // Spec 022, REQ-7; Spec 087, REQ-2
     if (

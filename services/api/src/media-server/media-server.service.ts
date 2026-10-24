@@ -10,6 +10,7 @@ import {
   DEFAULT_LIBRARY_LAYOUT,
   LibraryLayout,
   MEDIA_SERVER_NONE,
+  MediaServerClient,
   MediaServerRegistryEntry,
 } from '@/clients/media-server/types';
 
@@ -31,34 +32,36 @@ export class MediaServerService {
     return entry.layout;
   }
 
+  // Spec 101, REQ-1
+  async createClient(): Promise<MediaServerClient | null> {
+    const config = await this.settings.getMap();
+    const clientId = config.media_server_client;
+
+    if (
+      clientId &&
+      clientId !== MEDIA_SERVER_NONE &&
+      !config.media_server_host
+    ) {
+      console.warn(
+        `[media-server] "${clientId}" configured with no host — set media_server_host in Settings`,
+      );
+      return null;
+    }
+
+    return createMediaServerClient(
+      clientId,
+      {
+        host: config.media_server_host,
+        port: config.media_server_port,
+        apiKey: config.media_server_api_key,
+      },
+      { lookup: (mediaType, tmdbId) => this.index.lookup(mediaType, tmdbId) },
+    );
+  }
+
   async notifyCreated(containerFilePath: string): Promise<void> {
     try {
-      const config = await this.settings.getMap();
-      const clientId = config.media_server_client;
-
-      if (
-        clientId &&
-        clientId !== MEDIA_SERVER_NONE &&
-        !config.media_server_host
-      ) {
-        console.warn(
-          `[media-server] "${clientId}" configured with no host — set media_server_host in Settings`,
-        );
-        return;
-      }
-
-      const client = createMediaServerClient(
-        clientId,
-        {
-          host: config.media_server_host,
-          port: config.media_server_port,
-          apiKey: config.media_server_api_key,
-        },
-        // notifyCreated itself never resolves a TMDB id, but the client it
-        // builds may (e.g. Jellyfin's findByTmdbId, reused elsewhere) — the
-        // shared index is the one real implementation of this port.
-        { lookup: (mediaType, tmdbId) => this.index.lookup(mediaType, tmdbId) },
-      );
+      const client = await this.createClient();
 
       if (!client) {
         return;

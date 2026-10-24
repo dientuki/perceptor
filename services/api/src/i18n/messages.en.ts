@@ -152,6 +152,72 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.FFPROBE_LOG_EMPTY_PAYLOAD]:
     'recordFfprobe requires a non-empty file and ffprobe payload',
 
+  // Spec 101
+  [ERROR_KEYS.SUBTITLE_EMBED_UNSUPPORTED_MEDIA_SERVER]:
+    'Embedding subtitles requires Jellyfin as the media server.',
+  [ERROR_KEYS.SUBTITLE_EMBED_MEDIA_SERVER_UNAVAILABLE]:
+    'Could not reach Jellyfin. Try again in a while.',
+  [ERROR_KEYS.SUBTITLE_EMBED_NO_FILE]:
+    'This title has no file in the library.',
+  [ERROR_KEYS.SUBTITLE_EMBED_NOT_MKV]:
+    'Subtitles can only be embedded in MKV files.',
+  [ERROR_KEYS.SUBTITLE_EMBED_OUTSIDE_LIBRARY]:
+    "The file is not inside Perceptor's library.",
+  [ERROR_KEYS.SUBTITLE_EMBED_EMPTY_SELECTION]:
+    'Choose at least one subtitle.',
+  [ERROR_KEYS.SUBTITLE_EMBED_MULTIPLE_DEFAULTS]:
+    'Only one subtitle can be the default.',
+  [ERROR_KEYS.SUBTITLE_EMBED_DUPLICATE_SUBTITLE]:
+    'The same subtitle was chosen twice.',
+  [ERROR_KEYS.SUBTITLE_EMBED_UNKNOWN_LANGUAGE]:
+    'Unknown language: {language}.',
+  [ERROR_KEYS.SUBTITLE_EMBED_OFFSET_OUT_OF_RANGE]:
+    'The offset must be between -600000 and 600000 ms.',
+  [ERROR_KEYS.SUBTITLE_EMBED_STALE_LISTING]:
+    "Jellyfin's subtitle list changed. Reopen the dialog.",
+  [ERROR_KEYS.SUBTITLE_EMBED_BUSY]:
+    'This title has a download, encode or subtitle embed in progress.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE]:
+    'One of the subtitles could not be read. The original file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_CHARSET_UNDETECTED]:
+    "The subtitle's character encoding could not be detected.",
+  [ERROR_KEYS.SUBTITLE_EMBED_REMUX_FAILED]:
+    'mkvmerge failed to embed the subtitles. The original file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_VERIFY_FAILED]:
+    'The generated file failed verification. The original was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_NOT_WRITABLE]:
+    'The worker cannot replace this file (folder or owner permissions).',
+  [ERROR_KEYS.SUBTITLE_EMBED_INTERRUPTED]:
+    'The embed was interrupted by a worker restart. Check the file before trying again.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SIDECAR_DELETE_FAILED]:
+    'Subtitles embedded, but the external .srt could not be deleted. Delete it by hand or from Jellyfin.',
+  [ERROR_KEYS.SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED]:
+    'Subtitles embedded, but Jellyfin could not be notified. They will appear on its next scan.',
+
+  // Spec 103
+  [ERROR_KEYS.SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER]:
+    'Subtitle search requires Jellyfin as the media server.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_SYNC_NOT_FOUND]:
+    'Subtitle sync check {id} does not exist',
+  [ERROR_KEYS.SUBTITLE_SEARCH_ITEM_NOT_FOUND]:
+    'Jellyfin did not index the file in time; no subtitles were searched.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE]:
+    'Could not reach Jellyfin to search for subtitles.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_FETCH_FAILED]:
+    'The subtitle could not be downloaded.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_SYNC_FAILED]:
+    "The subtitle's synchronization could not be validated.",
+  [ERROR_KEYS.SUBTITLE_SEARCH_FRAMERATE_MISMATCH]:
+    'The subtitle is for a version with a different framerate.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_OFFSET_TOO_LARGE]:
+    'The subtitle is too far out of sync.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_LOW_SCORE]:
+    'The subtitle does not match this file.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_INTERRUPTED]:
+    'The search was interrupted.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_SUPERSEDED]:
+    'A newer delivery replaced this search.',
+
   // scheduler
   [ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND]: 'Scheduled task not found',
   [ERROR_KEYS.SCHEDULE_TASK_ALREADY_RUNNING]:

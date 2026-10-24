@@ -1,7 +1,7 @@
 # Specs con Acceptance Criteria pendientes
 
 <!-- pending-acs:begin intro -->
-Medido el **2026-10-21**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
+Medido el **2026-10-24**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
 `## Acceptance Criteria`; las 50 specs que no aparecen estan en 100%.
 <!-- pending-acs:end intro -->
 
@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **50** de 100 |
-| ACs pendientes | **348** |
-| ACs totales del proyecto | 1213 |
-| ACs verificados | 865 (71%) |
+| Specs con ACs pendientes | **51** de 101 |
+| ACs pendientes | **362** |
+| ACs totales del proyecto | 1228 |
+| ACs verificados | 866 (71%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,6 +28,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 101 | jellyfin-subtitle-embed | Implemented | 14/15 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15 | **Una corrida de pipeline.** Falta una pasada manual contra un Jellyfin real y una pelicula de la biblioteca (Green Book, que no esta registrada en el Perceptor de desarrollo; levantar un stack `perceptor` junto a `ptor` choca por puertos). Ya probado debajo: los 1250 tests de `api` y los 551 de `worker` (el job con mkvmerge simulado), y un `mkvmerge` real sobre un MKV generado, con los mismos argumentos que arma `embed-args.ts`, que agrego la pista `spa`/`Español` como default y dejo los ids de pista iguales a los indices de ffprobe. Sin ver: el modal en un browser (AC-1, 5, 8, 10), la lectura `Items/{id}` contra Jellyfin vivo, un `.srt` cp1252 real (AC-4), matar el worker en pleno mkvmerge (AC-7), y owner/permisos y `Movie.status` sobre un archivo real (AC-13, 15). AC-14 (el grep de borrados) esta tildada. |
 | 100 | bluray-disc-remux | Implemented | 11/16 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14 | Falta una corrida del pipeline vivo con un BDMV real (el stack dev no estaba levantado al implementar). Cubierto fuera del pipeline: selección y armado sobre The Transformers 1986 (85 min, MKV de 59 GB, idiomas eng/spa); AC-11/12/13/15 cubiertos por tests sintéticos, sin disco con señuelos/loop/sample a mano. `bin/npm web run lint` tampoco corrió |
 | 099 | stream-end-trim | Approved | 13/13 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | **[OBS PENDIENTE DE ESCRIBIR]** |
 | 098 | dub-card-tail-trim | Implemented | 11/11 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | **Una corrida de pipeline.** AC-1 a AC-10 piden encodear archivos reales (Neagley, Voltron, War Machine, Wrecking Crew, Chernobyl, Reacher, Foundation) con la instalación en marcha; la sesión no tenía stack accesible (puertos del host tomados por otra instalación) y las fuentes son archivos del mantenedor. Debajo está probado por unit tests: el clasificador contra los 7 `.freezes.txt` reales (cortes 173.822 / 273.862 / 140.905 / 168.909 y keep en los otros tres), `videoEndSeconds`, el caché por ruta, el silencio ante fallo, `-t` en `buildCommand` y la lectura del setting en `api`. AC-11 sigue abierto porque `bin/cli web npx --no tsc --noEmit` da 7 errores en `Calendar.tsx` (faltan submódulos de `@fullcalendar/react`), ajenos a esta feature; el resto del conjunto pasa. |
@@ -83,11 +84,11 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 348 ACs pendientes no son 348 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 55%:
+Los 362 ACs pendientes no son 362 problemas distintos. Se reducen a 23 destrabes, y los dos primeros se llevan el 57%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
-| Una corrida de pipeline | 113 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091, 098 |
+| Una corrida de pipeline | 127 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091, 098, 101 |
 | Sin clasificar | 79 | 094, 095, 096, 097, 099, 100 |
 | Una instalacion fresca | 25 | 015, 049, 061, 066 |
 | Adquisiciones reales | 18 | 073, 076 |

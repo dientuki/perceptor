@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { cache } from "react";
 import { getShowDownloads } from "@/actions/downloads";
 import { getLanguages } from "@/actions/languages";
+import { getMediaCapabilities } from "@/actions/media";
 import { getPreferences } from "@/actions/preferences";
 import { getShowById } from "@/actions/shows";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
@@ -66,15 +67,17 @@ export default async function ShowDetailsPage({ params }: PageProps) {
     notFound();
   }
 
-  const [show, languageOptions, downloads, preferences] = await Promise.all([
-    getShow(showId),
-    getLanguages(),
-    getShowDownloads(showId),
-    getPreferences().catch((error) => {
-      unstable_rethrow(error);
-      return null;
-    }),
-  ]);
+  const [show, languageOptions, downloads, capabilities, preferences] =
+    await Promise.all([
+      getShow(showId),
+      getLanguages(),
+      getShowDownloads(showId),
+      getMediaCapabilities(),
+      getPreferences().catch((error) => {
+        unstable_rethrow(error);
+        return null;
+      }),
+    ]);
 
   if (!show) {
     notFound();
@@ -94,6 +97,7 @@ export default async function ShowDetailsPage({ params }: PageProps) {
           <Show
             show={show}
             languageOptions={languageOptions}
+            subtitleSearchAvailable={capabilities.subtitleSearchAvailable}
             preferences={preferences}
           />
           <DownloadsPanel downloads={downloads} />

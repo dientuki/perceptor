@@ -7,6 +7,7 @@ import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { TitleStatusService } from '@/title-status/title-status.service';
+import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { CatalogSearchService } from '@/media/catalog-search.service';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
@@ -183,6 +184,7 @@ describe('MoviesService', () => {
               prisma as unknown as PrismaService,
               qbittorrent as unknown as QbittorrentClient,
               downloads as unknown as DownloadsService,
+              { assertNoActiveEmbed: jest.fn().mockResolvedValue(undefined) } as unknown as ActiveEmbedGuard,
             ),
         },
         {

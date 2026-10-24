@@ -264,6 +264,7 @@ describe('ffmpeg cases', () => {
         details,
         false,
         null,
+        new Set(),
       );
 
     if (parsed.throws !== undefined) {

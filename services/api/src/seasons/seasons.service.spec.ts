@@ -8,6 +8,7 @@ import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
 import { SessionService } from '@/uploads/session.service';
 import { UploadsService } from '@/uploads/uploads.service';
+import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { TitleStatusService } from '@/title-status/title-status.service';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
@@ -123,6 +124,7 @@ describe('SeasonsService', () => {
         { provide: ProcessQueueService, useValue: queue },
         { provide: SessionService, useValue: sessions },
         { provide: UploadsService, useValue: uploads },
+        { provide: ActiveEmbedGuard, useValue: { assertNoActiveEmbed: jest.fn().mockResolvedValue(undefined) } },
         { provide: TitleStatusService, useValue: titleStatus },
       ],
     }).compile();
@@ -826,6 +828,7 @@ describe('SeasonsService', () => {
           { provide: ProcessQueueService, useValue: queue },
           { provide: SessionService, useValue: sessions },
           { provide: UploadsService, useValue: uploads },
+          { provide: ActiveEmbedGuard, useValue: { assertNoActiveEmbed: jest.fn().mockResolvedValue(undefined) } },
           { provide: TitleStatusService, useValue: realTitleStatus },
         ],
       }).compile();

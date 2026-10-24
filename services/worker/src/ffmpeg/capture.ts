@@ -1,5 +1,6 @@
 // Spec 098, REQ-5
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import type { Readable } from 'node:stream';
 import { EncodeCancelledError } from '../encode/cancellation';
 import { ABORT_KILL_GRACE_MS } from './runner';
 
@@ -8,11 +9,14 @@ export interface RunResult {
   stdoutBytes: number;
   stderr: string;
   stdout?: string;
+  outputs?: string[];
 }
 
 export interface CaptureOptions {
-  binary?: 'ffmpeg' | 'ffprobe' | 'mkvmerge';
+  binary?: 'ffmpeg' | 'ffprobe' | 'mkvmerge' | 'ffsubsync';
   keepStdout?: boolean;
+  // Spec 102, REQ-4
+  extraOutputs?: number;
 }
 
 // Spec 099, REQ-5
@@ -28,7 +32,9 @@ export function runFfmpegCapture(
       reject(new EncodeCancelledError());
       return;
     }
-    const child = spawn(options.binary ?? 'ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const extraOutputs = options.extraOutputs ?? 0;
+    const stdio: Array<'ignore' | 'pipe'> = ['ignore', 'pipe', 'pipe', ...Array<'pipe'>(extraOutputs).fill('pipe')];
+    const child = spawn(options.binary ?? 'ffmpeg', args, { stdio }) as ChildProcessByStdio<null, Readable, Readable>;
     let stdoutBytes = 0;
     let stderr = '';
     const stdoutChunks: Buffer[] = [];
@@ -63,6 +69,21 @@ export function runFfmpegCapture(
         }
       }
     });
+    const outputChunks: Buffer[][] = Array.from({ length: extraOutputs }, () => []);
+    outputChunks.forEach((chunks, k) => {
+      let bytes = 0;
+      child.stdio[3 + k]?.on('data', (data: Buffer) => {
+        if (overflow) return;
+        bytes += data.length;
+        if (bytes > CAPTURE_STDOUT_CAP_BYTES) {
+          overflow = true;
+          chunks.length = 0;
+          if (!child.killed) child.kill('SIGTERM');
+        } else {
+          chunks.push(data);
+        }
+      });
+    });
     child.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
       if (stderr.length > 200_000) stderr = stderr.slice(-100_000);
@@ -75,7 +96,16 @@ export function runFfmpegCapture(
       cleanup();
       if (cancelled) reject(new EncodeCancelledError());
       else if (overflow) reject(new Error('captured stdout exceeded the size cap'));
-      else resolve({ code, stdoutBytes, stderr, stdout: Buffer.concat(stdoutChunks).toString('utf8') });
+      else {
+        const result: RunResult = {
+          code,
+          stdoutBytes,
+          stderr,
+          stdout: Buffer.concat(stdoutChunks).toString('utf8'),
+        };
+        if (extraOutputs > 0) result.outputs = outputChunks.map((c) => Buffer.concat(c).toString('utf8'));
+        resolve(result);
+      }
     });
   });
 }

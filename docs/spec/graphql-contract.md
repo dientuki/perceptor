@@ -2498,6 +2498,101 @@ query time, not at enqueue time.
 No new error key and no new mutation: a non-boolean write goes through the existing
 `error.setting.expected_boolean`, and a failed analysis never leaves the worker.
 
+### Embedding sidecar subtitles into a library MKV (`101-jellyfin-subtitle-embed`)
+
+The authority is `docs/spec/features/101-jellyfin-subtitle-embed/spec.md` § GraphQL Contract Delta
+(v0.2.0). This section records what a consumer must know; the types are in `schema.gql`.
+
+```graphql
+enum SubtitleEmbedStatus { QUEUED RUNNING COMPLETED FAILED }
+
+type ExternalSubtitle { fileName: String!  languageIso3: String  isForced: Boolean!  title: String! }
+type SubtitleEmbed { id: Int!  status: SubtitleEmbedStatus!  errorKey: String  warningKey: String  createdAt: DateTime!  finishedAt: DateTime }
+input SubtitleEmbedInput { fileName: String!  languageIso3: String!  isDefault: Boolean!  offsetMs: Int! }
+
+extend type Movie   { externalSubtitles: [ExternalSubtitle!]!  subtitleEmbed: SubtitleEmbed }
+extend type Episode { externalSubtitles: [ExternalSubtitle!]!  subtitleEmbed: SubtitleEmbed }
+
+type Mutation {
+  embedMovieSubtitles(movieId: Int!, subtitles: [SubtitleEmbedInput!]!): SubtitleEmbed!    # admin
+  embedEpisodeSubtitles(episodeId: Int!, subtitles: [SubtitleEmbedInput!]!): SubtitleEmbed! # admin
+  subtitleEmbedStarted(id: Int!): Boolean!                              # service only
+  subtitleEmbedCompleted(id: Int!, warningKey: String): Boolean!        # service only
+  subtitleEmbedFailed(id: Int!, errorKey: String!): Boolean!            # service only
+}
+type Query { subtitleEmbedDetails(id: Int!): SubtitleEmbedDetails! }    # service only
+```
+
+- **`fileName` is a base name, never a path** (Article V). It is the sidecar's identity: `web` copies
+  it from the listed entry and sends it back unchanged. `api` refuses a value carrying a separator
+  or `..` as `error.subtitleEmbed.stale_listing`. Container paths appear only in
+  `subtitleEmbedDetails`, which the worker alone reads.
+- **There is no Jellyfin stream index anywhere in the contract.** Jellyfin is a directory of
+  sidecars; the new tracks are appended after whatever the MKV already holds.
+- `externalSubtitles` is `[]` for a non-administrator, an unreachable Jellyfin, or a media server
+  that is not Jellyfin; it never errors. An episode's list comes from one series-wide read.
+- `languageIso3` for a track is resolved to the base `Language` row (`Español`, never a regional
+  variant's title).
+- The worker reports through `subtitleEmbedStarted` (`false` means abandon silently),
+  `subtitleEmbedCompleted` (`warningKey` is `null` or `error.subtitleEmbed.sidecar_delete_failed`)
+  and `subtitleEmbedFailed`. Both outcome reports are safe to repeat, as `038`'s are.
+  `error.subtitleEmbed.jellyfin_refresh_failed` is written by `api` only.
+- Every refusal and failure key is `error.subtitleEmbed.*`; the full tables are in the spec and the
+  catalogs are `api` `messages.en.ts`, `worker` `messages.en.ts` and `web` `messages/{en,es}.json`.
+
+**Second queue contract** (parallel to the one above). Queue `subtitle-embed`, job `subtitle-embed`,
+payload `{ subtitleEmbedId: number }`, declared in `services/api/src/queue/types.ts` and copied by
+hand into `services/worker/src/queue/types.ts`. Producer options: `jobId: embed-<id>`, `attempts: 1`.
+Cancelling a queued or running embed is out of scope, so there is no cancel channel.
+
+### Searching subtitles online and embedding them (`103-subtitle-search`)
+
+```graphql
+type MediaCapabilities { subtitleSearchAvailable: Boolean! }        # media_server_client === jellyfin
+type UserPreferences { subtitleSearch: Boolean! }
+type Movie { subtitleSearch: Boolean!, latestSubtitleSearch: SubtitleSearch }
+type Show { subtitleSearch: Boolean! }
+type Episode { latestSubtitleSearch: SubtitleSearch }
+type SubtitleSearch { id: Int!, status: SubtitleSearchStatus!, errorKey: String,
+                      languages: [SubtitleSearchLanguage!]!, createdAt: DateTime!, finishedAt: DateTime }
+type SubtitleSearchLanguage { languageIso3: String!, outcome: SubtitleSearchLanguageOutcome!, reasonKey: String }
+enum SubtitleSearchStatus { WAITING SEARCHING VALIDATING EMBEDDING COMPLETED FAILED }
+enum SubtitleSearchLanguageOutcome { PENDING ALREADY_PRESENT EMBEDDED NOT_FOUND REJECTED FAILED }
+enum SubtitleSyncReference { SUBTITLE AUDIO }
+type SubtitleSyncDetails { id: Int!, filePath: String!, candidatePath: String! }
+type SubtitleEmbedTrack { isSidecar: Boolean! }                      # 101 delta
+type Mutation {
+  setSubtitleSearch(enabled: Boolean!): UserPreferences!
+  setMovieSubtitleSearch(movieId: Int!, enabled: Boolean!): Boolean!
+  setShowSubtitleSearch(showId: Int!, enabled: Boolean!): Boolean!
+  subtitleSyncStarted(id: Int!): Boolean!                              # service only
+  subtitleSyncCompleted(id: Int!, offsetMs: Int!, framerateRatio: Float!,
+                        reference: SubtitleSyncReference!, score: Float!): Boolean!   # service only
+  subtitleSyncFailed(id: Int!, errorKey: String!): Boolean!            # service only
+}
+type Query { subtitleSyncDetails(id: Int!): SubtitleSyncDetails! }     # service only
+```
+
+- **The worker reports measurements, never a verdict.** `api` applies the acceptance rule
+  (framerate ratio within 1 ± 0.001, `|offsetMs|` ≤ 600000, score at or above the per-reference
+  threshold) and stores the reason key. `offsetMs` follows `101`'s convention: the correction that
+  undoes the delay, so a subtitle delayed by 2 s measures about -2000.
+- The three setters refuse only on the capability (`error.subtitleSearch.unsupported_media_server`),
+  even for `false`. `subtitleSearch` on `Movie`/`Show` is the caller's own row, `false` if none.
+- `latestSubtitleSearch.languages` is derived from the attempt rows, never stored: `NOT_FOUND` has no
+  row of its own.
+- Candidate subtitles are staged under `<downloads root>/.perceptor/subtitle-search/` and `filePath`
+  and `candidatePath` are container paths readable by the worker alone (Article V).
+- Every failure key is `error.subtitleSearch.*` (plus the reused `error.subtitleEmbed.busy`); the
+  catalogs are `api` and `worker` `messages.en.ts` and `web` `messages/{en,es}.json`.
+- `SubtitleEmbedTrack.isSidecar` is `true` for a `101` track and `false` for a staged one; the worker
+  deletes only sidecars after the rename, and treats an absent value as `true`.
+
+**Third queue contract.** Queue `subtitle-sync`, job `subtitle-sync`, payload
+`{ subtitleSyncId: number }`, declared in `services/api/src/queue/types.ts` and copied by hand into
+`services/worker/src/queue/types.ts`. A second queue, `subtitle-search`, is `api`-internal (produced and
+consumed by `api`, idempotent wake-ups `{ searchId }`) and is not part of the boundary.
+
 ## Known debt
 
 - **No codegen.** The whole "gap" section above exists because of this. Fixing it means adding

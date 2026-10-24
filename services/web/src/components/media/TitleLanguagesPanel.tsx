@@ -2,12 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { useMemo } from "react";
+import SubtitleSearchStatus from "@/components/media/SubtitleSearchStatus";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import type { EffectiveLanguages } from "@/lib/effective-languages";
 import type { Language } from "@/types/languages";
+import type { SubtitleSearch } from "@/types/media";
 import TitleLanguagesModal from "./TitleLanguagesModal";
 
 type ModalProps = ComponentProps<typeof TitleLanguagesModal>;
@@ -15,10 +17,14 @@ type ModalProps = ComponentProps<typeof TitleLanguagesModal>;
 interface TitleLanguagesPanelProps
   extends Omit<ModalProps, "isOpen" | "onClose" | "onSaved"> {
   effective: EffectiveLanguages;
+  footer?: ReactNode;
+  latestSubtitleSearch?: SubtitleSearch | null;
 }
 
 export default function TitleLanguagesPanel({
   effective,
+  footer,
+  latestSubtitleSearch,
   ...formProps
 }: TitleLanguagesPanelProps) {
   const t = useTranslations("media.languagesPanel");
@@ -37,9 +43,14 @@ export default function TitleLanguagesPanel({
 
   return (
     <div className="space-y-3">
-      <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-        {t("title")}
-      </h4>
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90">
+          {t("title")}
+        </h4>
+        <Button size="sm" variant="outline" onClick={openModal}>
+          {t("changeButton")}
+        </Button>
+      </div>
       <dl className="space-y-2 text-gray-700 dark:text-gray-300">
         <div>
           <dt className="font-medium">
@@ -73,11 +84,19 @@ export default function TitleLanguagesPanel({
               ? names(effective.subtitleLanguages)
               : t("empty")}
           </dd>
+          {formProps.subtitleSearch !== undefined && (
+            <dd className="text-gray-500 dark:text-gray-400">
+              {formProps.subtitleSearch
+                ? t("subtitleSearchYes")
+                : t("subtitleSearchNo")}
+            </dd>
+          )}
         </div>
       </dl>
-      <Button size="sm" variant="outline" onClick={openModal}>
-        {t("changeButton")}
-      </Button>
+      {latestSubtitleSearch && (
+        <SubtitleSearchStatus search={latestSubtitleSearch} />
+      )}
+      {footer}
       <TitleLanguagesModal
         {...formProps}
         isOpen={isOpen}

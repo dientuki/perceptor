@@ -19,6 +19,14 @@ import {
   ERROR_SOURCE_NO_DOWNLOAD_PATH,
   ERROR_SOURCE_NO_TARGET,
   ERROR_SOURCE_SCAN_FAILED,
+  ERROR_SUBTITLE_EMBED_CHARSET_UNDETECTED,
+  ERROR_SUBTITLE_EMBED_NOT_WRITABLE,
+  ERROR_SUBTITLE_EMBED_REMUX_FAILED,
+  ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED,
+  ERROR_SUBTITLE_EMBED_SUBTITLE_UNREADABLE,
+  ERROR_SUBTITLE_EMBED_VERIFY_FAILED,
+  ERROR_SUBTITLE_SEARCH_INTERRUPTED,
+  ERROR_SUBTITLE_SEARCH_SYNC_FAILED,
 } from './error-keys';
 
 export const messagesEn: Record<string, string> = {
@@ -45,6 +53,18 @@ export const messagesEn: Record<string, string> = {
     "Could not determine the Blu-ray's main playlist ({playlists}). Assemble the MKV manually and import it from the film's page",
   [ERROR_ENCODE_DISC_REMUX_FAILED]:
     'Could not assemble the MKV from the Blu-ray (code {code}): {stderr}',
+  [ERROR_SUBTITLE_EMBED_SUBTITLE_UNREADABLE]: 'Could not read subtitle file {file}: {detail}',
+  [ERROR_SUBTITLE_EMBED_CHARSET_UNDETECTED]:
+    'Could not detect the character encoding of subtitle file {file}',
+  [ERROR_SUBTITLE_EMBED_REMUX_FAILED]: 'Subtitle embed failed: {detail}',
+  [ERROR_SUBTITLE_EMBED_VERIFY_FAILED]: 'The remuxed file failed verification: {detail}',
+  [ERROR_SUBTITLE_EMBED_NOT_WRITABLE]:
+    'The library folder is not writable or the file owner cannot be preserved: {detail}',
+  [ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED]:
+    'Subtitles embedded, but the external .srt file could not be deleted',
+  [ERROR_SUBTITLE_SEARCH_SYNC_FAILED]:
+    "The subtitle's synchronization could not be validated.",
+  [ERROR_SUBTITLE_SEARCH_INTERRUPTED]: 'The search was interrupted.',
 };
 
 // Fills `{param}` placeholders in a message template with the corresponding

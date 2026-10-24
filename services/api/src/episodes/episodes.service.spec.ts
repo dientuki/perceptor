@@ -3,6 +3,7 @@ import { EpisodesService } from './episodes.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { TitleStatusService } from '@/title-status/title-status.service';
 
@@ -100,6 +101,7 @@ describe('EpisodesService', () => {
         { provide: QbittorrentClient, useValue: qbittorrent },
         { provide: DownloadsService, useValue: downloads },
         { provide: TitleStatusService, useValue: titleStatus },
+        { provide: ActiveEmbedGuard, useValue: { assertNoActiveEmbed: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
 
