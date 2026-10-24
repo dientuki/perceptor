@@ -48,3 +48,11 @@ export const ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS = 'error.source.disc_playlist_
 
 // Spec 100, REQ-9
 export const ERROR_ENCODE_DISC_REMUX_FAILED = 'error.encode.disc_remux_failed';
+
+// Spec 101, REQ-5 REQ-8 REQ-10 REQ-12 NFR-4
+export const ERROR_SUBTITLE_EMBED_SUBTITLE_UNREADABLE = 'error.subtitleEmbed.subtitle_unreadable';
+export const ERROR_SUBTITLE_EMBED_CHARSET_UNDETECTED = 'error.subtitleEmbed.charset_undetected';
+export const ERROR_SUBTITLE_EMBED_REMUX_FAILED = 'error.subtitleEmbed.remux_failed';
+export const ERROR_SUBTITLE_EMBED_VERIFY_FAILED = 'error.subtitleEmbed.verify_failed';
+export const ERROR_SUBTITLE_EMBED_NOT_WRITABLE = 'error.subtitleEmbed.not_writable';
+export const ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED = 'error.subtitleEmbed.sidecar_delete_failed';

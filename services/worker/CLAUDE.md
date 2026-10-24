@@ -6,16 +6,17 @@ BullMQ consumer, TypeScript on Node, `strict: true`. No HTTP ingress, no Prisma,
 reaches `api` over GraphQL and Redis and nothing else. Run everything through `bin/npm worker …`
 per the root Docker-first workflow.
 
-## Two queues, two workers, on purpose
+## Three queues, three workers, on purpose
 
-`src/index.ts` opens two separate BullMQ `Worker`s, both `concurrency: 1`:
+`src/index.ts` opens three separate BullMQ `Worker`s, all `concurrency: 1`:
 
 | Queue | Job | Handler |
 | :-- | :-- | :-- |
 | `process` | `source-ready` | `src/jobs/source-ready.job.ts` — scans the finished download, inventories its files |
 | `encode` | `encode` | `src/jobs/encode.job.ts` — transcodes and files the result |
+| `subtitle-embed` | `subtitle-embed` | `src/jobs/subtitle-embed.job.ts` — remuxes one library `.mkv` with sidecar `.srt` tracks appended (`101`); constructed after `encodeWorkerStarted` like the others |
 
-They are not two job names on one queue. An encode can run for hours; sharing a queue at
+They are not job names on one queue. An encode can run for hours; sharing a queue at
 `concurrency: 1` would either block every scan behind FFmpeg or risk N simultaneous FFmpegs. Each
 `Worker` opens its own blocking connection, so the encode side can be busy for hours without
 stalling the scan side.
@@ -30,18 +31,19 @@ worker creates. It is inherited by the FFmpeg/mkvmerge children, so `runner.ts` 
 Flat capability folders, not Nest-style modules. No path aliases — relative imports only.
 
 ```
-src/index.ts             the two Workers, the umask, the signal handling
+src/index.ts             the three Workers, the umask, the signal handling
 src/queue/types.ts       queue/job names and payload shapes
 src/api/graphql-client.ts  fetchGraphQL — throws on json.errors, deliberately
 src/i18n/                error-keys.ts · messages.en.ts · keyed-error.ts (see below)
 src/jobs/                the two handlers, plus cleanup-source.ts (post-encode source deletion)
+src/subtitles/          normalize-srt.ts (charset → UTF-8, offset applied) · embed-args.ts (mkvmerge argv) · verify-embed.ts (accept/reject the remux) · sidecar-guard.ts (may this .srt be deleted) — all pure (101)
 src/scan/scan-folder.ts  enumerates a download's files, flags each isVideo — no longer selects a winner
 src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly one pair
 src/scan/mark-downloaded.ts  flags each enumerated file isDownloaded against api's torrent-client answer (052)
 src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode, over InventoriedFile[] (052) — isDownloaded: false is excluded before either rule runs
 src/disc/                Blu-ray disc recognition, playlist choice and MKV assembly (see below, `100`)
-src/encode/              the driver seam (see below)
-src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639
+src/encode/              the driver seam (see below) · subtitle-prune (the content-pruning resolver, `102`)
+src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639 · subtitle-content (pure C1–C3 rules, `102`)
 src/paths/build-output-path.ts   composes the final library path, one branch per `libraryLayout` (`072`)
 src/paths/library-layout.ts      `normalizeLibraryLayout`: unknown value warns, defaults to `jellyfin`
 src/paths/is-inside-root.ts      pure containment check, used before any delete
@@ -330,6 +332,30 @@ differ by more than 2 s; a kept track with no packet in the window means keep. `
 passes the minimum of this cut and `098`'s as `trimAt`, so `buildCommand.ts` and the progress
 denominator are unchanged. There is no cache; a failure is silent and encodes the whole file, only
 `EncodeCancelledError` propagates. A completed analysis prints one `[streamtrim]` line.
+
+## Subtitle content pruning is resolved in the encode driver (`102-subtitle-content-pruning`)
+
+Which subtitle tracks survive is decided from their text as well as their tags. **C0** lives in
+`selectSubtitleStreams` (`src/ffmpeg/params.ts`, extracted from `getSubtitleParams` like
+`selectAudioStreams`): a stream with `disposition.comment === 1` or `commentary` as a whole word in its
+title is returned in `commentary` instead of the candidates, before any rule counts tracks, and
+`getSubtitleParams` logs `[subs] <index> drop (commentary)`. `resolveSubtitlePruning`
+(`src/encode/subtitle-prune.ts`, called in `encode.ffmpeg.ts` after `resolveStreamEndTrim`, no
+setting, compression path only) runs `selectSubtitleStreams`, groups the surviving **text** streams by
+`normalizeIso3(tags.language)` and, only for a language with more than one, reads the first 900 s of
+every such track in **one** `runFfmpegCapture` call (`extraOutputs`: one extra pipe per track, `-t 900`
+as an output option after each `-map`, `-c:s srt -f srt`; no video or audio decoded). The pure rules in
+`src/ffmpeg/subtitle-content.ts` (`pruneLanguage`) then apply: **C1** drops a track whose annotation
+share (`[…]`, `(…)`, Unicode-uppercase `NAME:` labels; `♪` excluded) is at least 10 % only when another
+track of the language is below it; **C2** collapses tracks with equal `NUMBER_OF_FRAMES`, starts within
+0.25 s and at least 95 % identical normalised text, keeping the one with most italic cues, then
+`default`, then the lower index; **C3** drops a track of at least 3 sampled cues and at most half the
+other's size whose every cue's text is inside the overlapping cues of the other. The dropped indices
+reach `buildFfmpegCommand` as a required `subtitleDrops` set, so the command stays pure. The verdict is
+cached per input path on success only; a failure logs `[subs] read failed: …` and keeps every track,
+and only `EncodeCancelledError` propagates. One `[subs] <lang> <index>:<cues>:<share>%=<outcome>` line
+per group. Fixtures: `fixtures/subtitle-content/` (real 900 s samples with every word scrambled, plus
+`manifest.json`; the film text is never committed).
 
 ## Blu-ray disc releases are assembled before the encode (`100-bluray-disc-remux`)
 

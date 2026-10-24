@@ -9,6 +9,7 @@ import {
 } from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
 import {
+  embedMovieSubtitlesAction,
   refreshMovieAction,
   removeMovieAction,
   setMovieContentKindAction,
@@ -19,6 +20,7 @@ import Switch from "@/components/form/switch/Switch";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
+import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
 import GrainModeSelect from "@/components/media/GrainModeSelect";
 import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
@@ -219,6 +221,14 @@ export default function Movie({
           setAudioAction={setMovieAudioLanguages}
           setSubtitleAction={setMovieSubtitleLanguages}
           setAudioMandatoryAction={setMovieAudioMandatory}
+          footer={
+            <EmbedSubtitlesButton
+              subtitles={movie.externalSubtitles ?? []}
+              embed={movie.subtitleEmbed}
+              onEmbed={embedMovieSubtitlesAction.bind(null, movie.id)}
+              fullWidth
+            />
+          }
         />
       </div>
 

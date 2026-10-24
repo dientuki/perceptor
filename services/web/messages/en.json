@@ -163,6 +163,28 @@
     },
     "show": {
       "not_available": "Resource not available for this user"
+    },
+    "subtitleEmbed": {
+      "unsupported_media_server": "Embedding subtitles requires Jellyfin as the media server.",
+      "media_server_unavailable": "Could not reach Jellyfin. Try again in a while.",
+      "no_file": "This title has no file in the library.",
+      "not_mkv": "Subtitles can only be embedded in MKV files.",
+      "outside_library": "The file is not inside the Perceptor library.",
+      "empty_selection": "Choose at least one subtitle.",
+      "multiple_defaults": "Only one subtitle can be the default.",
+      "duplicate_subtitle": "You chose the same subtitle twice.",
+      "unknown_language": "Unknown language: {language}.",
+      "offset_out_of_range": "The offset must be between -600000 and 600000 ms.",
+      "stale_listing": "Jellyfin's subtitle list changed. Reopen the dialog.",
+      "busy": "This title has a download, encode or embed in progress.",
+      "subtitle_unreadable": "One of the subtitles could not be read. The original file was not touched.",
+      "charset_undetected": "The subtitle's character encoding could not be detected.",
+      "remux_failed": "mkvmerge failed to embed the subtitles. The original file was not touched.",
+      "verify_failed": "The generated file failed verification. The original was not touched.",
+      "not_writable": "The worker cannot replace this file (folder or owner permissions).",
+      "interrupted": "The embed was interrupted by a worker restart. Try again.",
+      "sidecar_delete_failed": "Subtitles embedded, but the external .srt could not be deleted. Delete it by hand or from Jellyfin.",
+      "jellyfin_refresh_failed": "Subtitles embedded, but Jellyfin could not be notified. They will appear on its next scan."
     }
   },
   "landing": {
@@ -456,6 +478,23 @@
       "confirm": "Remove",
       "cancel": "Cancel",
       "removing": "Removing..."
+    },
+    "embedSubtitles": {
+      "button": "Embed in file",
+      "embedding": "Embedding…",
+      "title": "Embed subtitles in the file",
+      "intro": "Choose the external subtitles Jellyfin lists to write into the file. Each embedded sidecar is deleted afterwards.",
+      "include": "Include",
+      "language": "Language",
+      "languagePlaceholder": "Choose a language",
+      "makeDefault": "Default",
+      "forced": "Forced",
+      "offset": "Offset (ms)",
+      "confirm": "Embed",
+      "cancel": "Cancel",
+      "submitting": "Embedding…",
+      "failed": "The last embed failed: {reason}",
+      "warning": "{reason}"
     }
   },
   "movies": {

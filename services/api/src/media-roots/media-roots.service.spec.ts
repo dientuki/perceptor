@@ -209,6 +209,49 @@ describe('MediaRootsService', () => {
     });
   });
 
+  // Spec 101, REQ-13: a path Jellyfin reports is translated back into the
+  // container before the api stats it. Wrong in the accepting direction lets a
+  // path outside the library be treated as a library file; a `..` segment
+  // that startsWith lets through is the case that does it with no error.
+  describe('hostToContainerPath', () => {
+    it('translates a nested path inside the root', () => {
+      expect(
+        service.hostToContainerPath('library', '/host/library/Movies/x (2020)/x.mkv'),
+      ).toBe(join(libraryRoot, 'Movies', 'x (2020)', 'x.mkv'));
+    });
+
+    it('translates the root itself', () => {
+      expect(service.hostToContainerPath('library', '/host/library')).toBe(libraryRoot);
+    });
+
+    it('returns null for a path outside the root', () => {
+      expect(service.hostToContainerPath('library', '/elsewhere/x.mkv')).toBeNull();
+    });
+
+    it('returns null for a sibling sharing the root prefix', () => {
+      expect(service.hostToContainerPath('library', '/host/library-evil/x.mkv')).toBeNull();
+    });
+
+    it('returns null for a traversal that leaves the root', () => {
+      expect(service.hostToContainerPath('library', '/host/library/../secret/x.mkv')).toBeNull();
+    });
+
+    it('returns null for a relative media-server path', () => {
+      expect(service.hostToContainerPath('library', 'Movies/x.mkv')).toBeNull();
+    });
+
+    it('returns null when the configured hostPath is relative', async () => {
+      const relativeRoots: MediaRootConfig[] = [
+        { id: 'library', label: 'Biblioteca', hostPath: './data/library', containerPath: libraryRoot },
+      ];
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [MediaRootsService, { provide: MEDIA_ROOTS, useValue: relativeRoots }],
+      }).compile();
+      const s = module.get<MediaRootsService>(MediaRootsService);
+      expect(s.hostToContainerPath('library', './data/library/x.mkv')).toBeNull();
+    });
+  });
+
   // Sanity check that `sep` is the separator expected in this environment
   // (all of the analysis above assumes POSIX because `api` runs on Linux
   // inside the container).

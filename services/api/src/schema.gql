@@ -104,6 +104,14 @@ type Movie {
   How many *other* users have this film in their library. 0 when the caller is the last owner.
   """
   otherOwners: Int!
+
+  """
+  Empty unless the caller is an administrator and Jellyfin answers (REQ-2).
+  """
+  externalSubtitles: [ExternalSubtitle!]!
+
+  """The film's most recent embed, null if it never had one."""
+  subtitleEmbed: SubtitleEmbed
 }
 
 """
@@ -308,6 +316,8 @@ type Episode {
   overview: String
   releaseDate: DateTime
   status: String!
+  externalSubtitles: [ExternalSubtitle!]!
+  subtitleEmbed: SubtitleEmbed
 }
 
 type Season {
@@ -441,6 +451,7 @@ type EncodeJobDetails {
   downloadsRoot: String!
   compressionEnabled: Boolean!
   dubTrimEnabled: Boolean!
+  streamEndTrimEnabled: Boolean!
   compressionResolution: String!
   allowedSubtitleFormats: [String!]!
   libraryLayout: String!
@@ -491,6 +502,64 @@ type FfprobeLog {
   file: String!
   ffprobe: String!
   createdAt: DateTime!
+}
+
+type ExternalSubtitle {
+  """
+  The sidecar's base name (e.g. "Green Book (2018).spa.srt"); its identity, sent back unchanged in SubtitleEmbedInput.fileName.
+  """
+  fileName: String!
+
+  """ISO 639-2 code as Jellyfin reports it, null when it reports none."""
+  languageIso3: String
+  isForced: Boolean!
+
+  """
+  Jellyfin's DisplayTitle for the stream (e.g. "Spanish - SUBRIP - External"), for the modal only.
+  """
+  title: String!
+}
+
+type SubtitleEmbed {
+  id: Int!
+  status: SubtitleEmbedStatus!
+
+  """i18n key of the failure when status is FAILED, else null."""
+  errorKey: String
+
+  """
+  i18n key of a non-fatal problem when status is COMPLETED (REQ-12), else null.
+  """
+  warningKey: String
+  createdAt: DateTime!
+  finishedAt: DateTime
+}
+
+enum SubtitleEmbedStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+type SubtitleEmbedTrack {
+  """
+  Absolute container path of the sidecar, in filePath's directory (REQ-14); read, then deleted after the rename (REQ-12).
+  """
+  sourcePath: String!
+  languageIso3: String!
+  trackTitle: String!
+  isDefault: Boolean!
+  isForced: Boolean!
+  offsetMs: Int!
+}
+
+type SubtitleEmbedDetails {
+  id: Int!
+
+  """Absolute container path of the library .mkv to replace."""
+  filePath: String!
+  tracks: [SubtitleEmbedTrack!]!
 }
 
 type EnvironmentEndpoint {
@@ -651,6 +720,11 @@ type Query {
   Titles in the caller's library released between from and to, inclusive (YYYY-MM-DD).
   """
   calendar(from: String!, to: String!): [CalendarEntry!]!
+
+  """
+  Service-only (worker). Container paths, same standing as EncodeJobDetails' outputRoot. Answers for any status.
+  """
+  subtitleEmbedDetails(id: Int!): SubtitleEmbedDetails!
 }
 
 type Mutation {
@@ -841,6 +915,21 @@ type Mutation {
   Trigger a registered scheduled task immediately, regardless of its cadence
   """
   runScheduledTask(id: String!): ScheduledTask!
+  embedMovieSubtitles(movieId: Int!, subtitles: [SubtitleEmbedInput!]!): SubtitleEmbed!
+  embedEpisodeSubtitles(episodeId: Int!, subtitles: [SubtitleEmbedInput!]!): SubtitleEmbed!
+
+  """
+  Service-only (worker). Moves a QUEUED embed to RUNNING; false if it is no longer QUEUED.
+  """
+  subtitleEmbedStarted(id: Int!): Boolean!
+
+  """
+  Service-only (worker). Safe to receive more than once (038's posture). warningKey is null or error.subtitleEmbed.sidecar_delete_failed.
+  """
+  subtitleEmbedCompleted(id: Int!, warningKey: String): Boolean!
+
+  """Service-only (worker). Safe to receive more than once."""
+  subtitleEmbedFailed(id: Int!, errorKey: String!): Boolean!
 }
 
 input LoginInput {
@@ -897,4 +986,11 @@ input ScannedMatchInput {
   filePath: String!
   seasonNumber: Int
   episodeNumber: Int
+}
+
+input SubtitleEmbedInput {
+  fileName: String!
+  languageIso3: String!
+  isDefault: Boolean!
+  offsetMs: Int!
 }

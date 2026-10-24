@@ -25,6 +25,7 @@ export function buildFfmpegCommand(
   details: EncodeInput,
   filmGrain: boolean,
   trimAt: number | null,
+  subtitleDrops: ReadonlySet<number>,
 ): string[] {
   const vStream = metadata.streams.find((s) => s.codec_type === "video");
   const aStreams = metadata.streams.filter((s) => s.codec_type === "audio");
@@ -57,6 +58,7 @@ export function buildFfmpegCommand(
       details.allowedSubtitleLanguagesIso3,
       details.allowedSubtitleLanguageTags,
       details.trackTitles,
+      subtitleDrops,
     ),
     "-map_metadata:g",
     "-1",

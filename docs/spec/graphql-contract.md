@@ -2498,6 +2498,53 @@ query time, not at enqueue time.
 No new error key and no new mutation: a non-boolean write goes through the existing
 `error.setting.expected_boolean`, and a failed analysis never leaves the worker.
 
+### Embedding sidecar subtitles into a library MKV (`101-jellyfin-subtitle-embed`)
+
+The authority is `docs/spec/features/101-jellyfin-subtitle-embed/spec.md` § GraphQL Contract Delta
+(v0.2.0). This section records what a consumer must know; the types are in `schema.gql`.
+
+```graphql
+enum SubtitleEmbedStatus { QUEUED RUNNING COMPLETED FAILED }
+
+type ExternalSubtitle { fileName: String!  languageIso3: String  isForced: Boolean!  title: String! }
+type SubtitleEmbed { id: Int!  status: SubtitleEmbedStatus!  errorKey: String  warningKey: String  createdAt: DateTime!  finishedAt: DateTime }
+input SubtitleEmbedInput { fileName: String!  languageIso3: String!  isDefault: Boolean!  offsetMs: Int! }
+
+extend type Movie   { externalSubtitles: [ExternalSubtitle!]!  subtitleEmbed: SubtitleEmbed }
+extend type Episode { externalSubtitles: [ExternalSubtitle!]!  subtitleEmbed: SubtitleEmbed }
+
+type Mutation {
+  embedMovieSubtitles(movieId: Int!, subtitles: [SubtitleEmbedInput!]!): SubtitleEmbed!    # admin
+  embedEpisodeSubtitles(episodeId: Int!, subtitles: [SubtitleEmbedInput!]!): SubtitleEmbed! # admin
+  subtitleEmbedStarted(id: Int!): Boolean!                              # service only
+  subtitleEmbedCompleted(id: Int!, warningKey: String): Boolean!        # service only
+  subtitleEmbedFailed(id: Int!, errorKey: String!): Boolean!            # service only
+}
+type Query { subtitleEmbedDetails(id: Int!): SubtitleEmbedDetails! }    # service only
+```
+
+- **`fileName` is a base name, never a path** (Article V). It is the sidecar's identity: `web` copies
+  it from the listed entry and sends it back unchanged. `api` refuses a value carrying a separator
+  or `..` as `error.subtitleEmbed.stale_listing`. Container paths appear only in
+  `subtitleEmbedDetails`, which the worker alone reads.
+- **There is no Jellyfin stream index anywhere in the contract.** Jellyfin is a directory of
+  sidecars; the new tracks are appended after whatever the MKV already holds.
+- `externalSubtitles` is `[]` for a non-administrator, an unreachable Jellyfin, or a media server
+  that is not Jellyfin; it never errors. An episode's list comes from one series-wide read.
+- `languageIso3` for a track is resolved to the base `Language` row (`Español`, never a regional
+  variant's title).
+- The worker reports through `subtitleEmbedStarted` (`false` means abandon silently),
+  `subtitleEmbedCompleted` (`warningKey` is `null` or `error.subtitleEmbed.sidecar_delete_failed`)
+  and `subtitleEmbedFailed`. Both outcome reports are safe to repeat, as `038`'s are.
+  `error.subtitleEmbed.jellyfin_refresh_failed` is written by `api` only.
+- Every refusal and failure key is `error.subtitleEmbed.*`; the full tables are in the spec and the
+  catalogs are `api` `messages.en.ts`, `worker` `messages.en.ts` and `web` `messages/{en,es}.json`.
+
+**Second queue contract** (parallel to the one above). Queue `subtitle-embed`, job `subtitle-embed`,
+payload `{ subtitleEmbedId: number }`, declared in `services/api/src/queue/types.ts` and copied by
+hand into `services/worker/src/queue/types.ts`. Producer options: `jobId: embed-<id>`, `attempts: 1`.
+Cancelling a queued or running embed is out of scope, so there is no cancel channel.
+
 ## Known debt
 
 - **No codegen.** The whole "gap" section above exists because of this. Fixing it means adding

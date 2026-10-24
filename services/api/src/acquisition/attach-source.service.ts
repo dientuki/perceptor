@@ -8,6 +8,7 @@ import { DownloadsService } from '@/downloads/downloads.service';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { episodeDisplayTitle } from '@/episodes/episode-title';
 import { AttachTarget } from './attach-target';
+import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 
 export type AttachInput = {
   kind: SourceKind;
@@ -43,6 +44,7 @@ export class AttachSourceService {
     private readonly prisma: PrismaService,
     private readonly qbittorrent: QbittorrentClient,
     private readonly downloads: DownloadsService,
+    private readonly activeEmbed: ActiveEmbedGuard,
   ) {}
 
   async attach<T extends { id: number }>(
@@ -97,6 +99,9 @@ export class AttachSourceService {
     ) {
       return 'UNCHANGED';
     }
+
+    // Spec 101, REQ-16
+    await this.activeEmbed.assertNoActiveEmbed(deliveryTargetFor(targetDef, target));
 
     // Spec 087, REQ-2
     await targetDef.refuse(target, input.force);

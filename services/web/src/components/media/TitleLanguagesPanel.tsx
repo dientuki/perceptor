@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { useMemo } from "react";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
@@ -15,10 +15,12 @@ type ModalProps = ComponentProps<typeof TitleLanguagesModal>;
 interface TitleLanguagesPanelProps
   extends Omit<ModalProps, "isOpen" | "onClose" | "onSaved"> {
   effective: EffectiveLanguages;
+  footer?: ReactNode;
 }
 
 export default function TitleLanguagesPanel({
   effective,
+  footer,
   ...formProps
 }: TitleLanguagesPanelProps) {
   const t = useTranslations("media.languagesPanel");
@@ -37,9 +39,14 @@ export default function TitleLanguagesPanel({
 
   return (
     <div className="space-y-3">
-      <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-        {t("title")}
-      </h4>
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90">
+          {t("title")}
+        </h4>
+        <Button size="sm" variant="outline" onClick={openModal}>
+          {t("changeButton")}
+        </Button>
+      </div>
       <dl className="space-y-2 text-gray-700 dark:text-gray-300">
         <div>
           <dt className="font-medium">
@@ -75,9 +82,7 @@ export default function TitleLanguagesPanel({
           </dd>
         </div>
       </dl>
-      <Button size="sm" variant="outline" onClick={openModal}>
-        {t("changeButton")}
-      </Button>
+      {footer}
       <TitleLanguagesModal
         {...formProps}
         isOpen={isOpen}

@@ -6,10 +6,18 @@ import {
   ENCODE_QUEUE,
   ENCODE_JOB,
   ENCODE_CANCEL_CHANNEL,
+  SUBTITLE_EMBED_QUEUE,
+  SUBTITLE_EMBED_JOB,
 } from './queue/types';
-import type { SourceReadyJob, EncodeJob, EncodeCancelMessage } from './queue/types';
+import type {
+  SourceReadyJob,
+  EncodeJob,
+  EncodeCancelMessage,
+  SubtitleEmbedJob,
+} from './queue/types';
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
+import { handleSubtitleEmbed } from './jobs/subtitle-embed.job';
 import { cancelEncode } from './encode/cancellation';
 import {
   LEASE_RENEW_INTERVAL_MS,
@@ -110,6 +118,23 @@ async function main() {
     },
   );
 
+  // Spec 101, REQ-10
+  const subtitleEmbedWorker = new Worker<SubtitleEmbedJob>(
+    SUBTITLE_EMBED_QUEUE,
+    async (job) => {
+      if (job.name !== SUBTITLE_EMBED_JOB) {
+        console.log(`[worker] unknown job ${job.name}, ignoring`);
+        return;
+      }
+
+      await handleSubtitleEmbed(job);
+    },
+    {
+      connection,
+      concurrency: 1,
+    },
+  );
+
   // Spec 047, REQ-4
   const cancelSubscriber = new Redis(connection);
   await cancelSubscriber.subscribe(ENCODE_CANCEL_CHANNEL);
@@ -140,6 +165,10 @@ async function main() {
 
   scanWorker.on('failed', (job, err) => {
     console.error(`[worker] failed ${job?.id}:`, err);
+  });
+
+  subtitleEmbedWorker.on('failed', (job, err) => {
+    console.error(`[worker] subtitle embed failed ${job?.id}:`, err);
   });
 
   encodeWorker.on('completed', (job) => {
@@ -183,6 +212,7 @@ async function main() {
   process.on('SIGTERM', () => {
     void scanWorker.close();
     void encodeWorker.close();
+    void subtitleEmbedWorker.close();
     void cancelSubscriber.quit();
 
     // Releasing on the way out is what makes an orderly restart instant instead
@@ -195,6 +225,7 @@ async function main() {
 
   console.log('[worker] listening on queue', PROCESS_QUEUE);
   console.log('[worker] listening on queue', ENCODE_QUEUE);
+  console.log('[worker] listening on queue', SUBTITLE_EMBED_QUEUE);
   console.log('[worker] listening on channel', ENCODE_CANCEL_CHANNEL);
 }
 

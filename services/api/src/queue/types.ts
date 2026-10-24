@@ -19,3 +19,11 @@ export const ENCODE_CANCEL_CHANNEL = 'encode:cancel';
 export type EncodeCancelMessage = {
   processJobId: number;
 };
+
+// Spec 101, REQ-10
+export const SUBTITLE_EMBED_QUEUE = 'subtitle-embed';
+export const SUBTITLE_EMBED_JOB = 'subtitle-embed';
+
+export type SubtitleEmbedJob = {
+  subtitleEmbedId: number;
+};

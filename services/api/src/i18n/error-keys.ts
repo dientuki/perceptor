@@ -129,6 +129,28 @@ export const ERROR_KEYS = {
   DOWNLOAD_RETRY_UNAVAILABLE: 'error.download.retry_unavailable',
   DOWNLOAD_RETRY_ENQUEUE_FAILED: 'error.download.retry_enqueue_failed',
 
+  // Spec 101
+  SUBTITLE_EMBED_UNSUPPORTED_MEDIA_SERVER: 'error.subtitleEmbed.unsupported_media_server',
+  SUBTITLE_EMBED_MEDIA_SERVER_UNAVAILABLE: 'error.subtitleEmbed.media_server_unavailable',
+  SUBTITLE_EMBED_NO_FILE: 'error.subtitleEmbed.no_file',
+  SUBTITLE_EMBED_NOT_MKV: 'error.subtitleEmbed.not_mkv',
+  SUBTITLE_EMBED_OUTSIDE_LIBRARY: 'error.subtitleEmbed.outside_library',
+  SUBTITLE_EMBED_EMPTY_SELECTION: 'error.subtitleEmbed.empty_selection',
+  SUBTITLE_EMBED_MULTIPLE_DEFAULTS: 'error.subtitleEmbed.multiple_defaults',
+  SUBTITLE_EMBED_DUPLICATE_SUBTITLE: 'error.subtitleEmbed.duplicate_subtitle',
+  SUBTITLE_EMBED_UNKNOWN_LANGUAGE: 'error.subtitleEmbed.unknown_language',
+  SUBTITLE_EMBED_OFFSET_OUT_OF_RANGE: 'error.subtitleEmbed.offset_out_of_range',
+  SUBTITLE_EMBED_STALE_LISTING: 'error.subtitleEmbed.stale_listing',
+  SUBTITLE_EMBED_BUSY: 'error.subtitleEmbed.busy',
+  SUBTITLE_EMBED_SUBTITLE_UNREADABLE: 'error.subtitleEmbed.subtitle_unreadable',
+  SUBTITLE_EMBED_CHARSET_UNDETECTED: 'error.subtitleEmbed.charset_undetected',
+  SUBTITLE_EMBED_REMUX_FAILED: 'error.subtitleEmbed.remux_failed',
+  SUBTITLE_EMBED_VERIFY_FAILED: 'error.subtitleEmbed.verify_failed',
+  SUBTITLE_EMBED_NOT_WRITABLE: 'error.subtitleEmbed.not_writable',
+  SUBTITLE_EMBED_INTERRUPTED: 'error.subtitleEmbed.interrupted',
+  SUBTITLE_EMBED_SIDECAR_DELETE_FAILED: 'error.subtitleEmbed.sidecar_delete_failed',
+  SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED: 'error.subtitleEmbed.jellyfin_refresh_failed',
+
   CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
   CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',
 

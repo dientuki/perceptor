@@ -4,9 +4,11 @@ import { ChevronDown, FileVideo, Magnet, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { Episode, Season } from "@/actions/shows";
+import { embedEpisodeSubtitlesAction } from "@/actions/shows";
 import ImportSeasonFilesModal from "@/components/import/ImportSeasonFilesModal";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
+import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 import SeasonAcquisitionButtons from "@/components/shows/SeasonAcquisitionButtons";
 import StatusBadge from "@/components/status/StatusBadge";
@@ -80,6 +82,12 @@ function EpisodeRow({
           >
             <Magnet size={16} className="text-red-500" />
           </Button>
+          <EmbedSubtitlesButton
+            compact
+            subtitles={episode.externalSubtitles}
+            embed={episode.subtitleEmbed}
+            onEmbed={embedEpisodeSubtitlesAction.bind(null, episode.id)}
+          />
         </div>
       </td>
     </tr>

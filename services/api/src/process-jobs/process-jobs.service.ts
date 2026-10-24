@@ -452,6 +452,16 @@ export class ProcessJobsService {
 
   // Spec 054, REQ-1; Spec 054, NFR-2; Spec 054, T006; Spec 054, NFR-6
   async reconcileOrphanedEncodes(): Promise<number> {
+    // Spec 101, NFR-3
+    await this.prisma.subtitleEmbed.updateMany({
+      where: { status: 'RUNNING' },
+      data: {
+        status: 'FAILED',
+        errorKey: ERROR_KEYS.SUBTITLE_EMBED_INTERRUPTED,
+        finishedAt: new Date(),
+      },
+    });
+
     const orphaned = await this.prisma.processJob.findMany({
       where: { status: 'ENCODING' },
       select: {

@@ -401,6 +401,9 @@ model Movie {
   processJobs ProcessJob[]
   users       UserMovie[]
 
+  // Spec 101, REQ-17
+  subtitleEmbeds SubtitleEmbed[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -467,11 +470,45 @@ model Episode {
   mediaSources MediaSource[] // Pedidos de capítulo suelto (S1)
   processJobs  ProcessJob[]
 
+  // Spec 101, REQ-17
+  subtitleEmbeds SubtitleEmbed[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([seasonId, episodeNumber])
   @@map("episodes")
+}
+
+enum SubtitleEmbedStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// Spec 101, REQ-17: one request to fold external .srt sidecars into a library .mkv.
+// Exactly one of movieId/episodeId is set (enforced in the service, like MediaSource).
+model SubtitleEmbed {
+  id Int @id @default(autoincrement())
+
+  movieId   Int?
+  movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  episodeId Int?
+  episode   Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  status     SubtitleEmbedStatus @default(QUEUED)
+  filePath   String              @db.VarChar(500)
+  tracks     Json
+  errorKey   String?             @db.VarChar(100)
+  warningKey String?             @db.VarChar(100)
+
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([movieId, createdAt])
+  @@index([episodeId, createdAt])
+  @@map("subtitle_embeds")
 }
 
 // Append-only diagnostic log of every ffprobe run in the worker, kept independent

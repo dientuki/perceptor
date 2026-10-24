@@ -1,8 +1,8 @@
 ---
 title: Perceptor Constitution
-version: 1.4.0
+version: 1.5.0
 ratified_at: 2026-08-09
-last_amended: 2026-10-06
+last_amended: 2026-10-23
 ---
 
 # Perceptor Constitution
@@ -211,13 +211,34 @@ written next to the destination during a remux and removed by `services/worker/s
 when the encode fails, is cancelled or completes. A temporary this codebase created and still owns
 is not the library.
 
+Two more, both narrow and both only at an administrator's explicit request for one title
+(`101-jellyfin-subtitle-embed`):
+
+1. **A library `.mkv` may be replaced by its verified remux.** The worker writes the remux, which
+   only appends subtitle tracks, to the same `<final>.part.mkv` scratch name. It checks the remux
+   against the original, then replaces the original with one atomic `rename`. The scratch file is
+   removed on every other outcome. Nothing is ever deleted to make room: the original path exists
+   at every instant.
+2. **The sidecar subtitles that remux embedded may be deleted, after the rename and never before.**
+   Only the exact `.srt` paths the embed request named are deleted. Each must be a regular file in
+   the same directory as the replaced `.mkv`. A failed embed deletes nothing.
+
+Everything else in the library stays write-only: no other file, folder or sidecar is ever removed.
+
 This is why every deletion path resolves its target against a media root before touching disk
 (Article V): the guard that keeps a delete inside `downloads` is the same guard that keeps it out
 of `destinations`.
 
-**Check** — every filesystem removal in `services/*/src` (`rm`, `rmdir`, `unlink`) either resolves
-inside the downloads root or is the `.part.mkv` cleanup in `runner.ts`. Any other path under the
-destinations root is a violation.
+**Check** — every filesystem removal in `services/*/src` (`rm`, `rmdir`, `unlink`) falls in one of
+these cases:
+
+- it resolves inside the downloads root;
+- it is the `.part.mkv` cleanup in `runner.ts` or in `services/worker/src/jobs/subtitle-embed.job.ts`;
+- it is that job's sidecar `unlink`, gated by `services/worker/src/subtitles/sidecar-guard.ts` and
+  reachable only after its `rename`.
+
+Any other path under the destinations root is a violation, and `services/api/src` contains no
+removal under it at all (the destinations root is mounted read-only in `api`).
 
 
 ---
@@ -231,3 +252,4 @@ destinations root is a violation.
 | 1.2.0 | 2026-09-05 | Article XII (the library is never deleted) added, ratified alongside `047-source-deletion`, which needed the boundary written down: a delete unwinds the downloads side of the pipeline and stops there. Frontmatter `version` also corrected — it had stayed at 1.0.0 through the 1.1.0 amendment. |
 | 1.3.0 | 2026-10-03 | Article XI gains a fourth exception, the spec locator (`// Spec NNN, <ref>`), ratified alongside `086-comment-locator-convention`. Its "leave them until you are editing that code for another reason" sentence is retired — Spanish comments were the last bloc of legacy drift the exemption covered, and the fourth exception is what they become instead of staying ungoverned. Article VI's matching Spanish-comment carve-out is retired for the same reason. |
 | 1.4.0 | 2026-10-06 | Article X's named example is corrected: `006-media-search`'s deliberate duplication of `movies`/`shows`'s catalog search/cache/enrich and the three twins of `attachTorrentSource` no longer exists, closed by `088-acquisition-path-unification`. The article no longer names a specific case as outranking it by default — it states that such a case requires a spec-level decision, and only `006`'s narrower remaining carve-out (`register`/`hydrate`/`refresh` staying two independent services) survives as an example. |
+| 1.5.0 | 2026-10-23 | Article XII gains two narrow exceptions, ratified alongside `101-jellyfin-subtitle-embed`, both only at an administrator's explicit request. First, a library `.mkv` may be replaced, by one atomic rename, with its verified remux that appends subtitle tracks. Second, after that rename, the worker deletes exactly the sidecar `.srt` files the remux embedded: guarded paths in the same directory, never on failure. The Check line now names both sites and states that `api` holds no removal under the destinations root. The article's core — no feature, cleanup path or user action deletes a finished file, a title's folder or anything else in the library — is unchanged. |

@@ -29,6 +29,7 @@ describe('ProcessJobsService', () => {
     movie: { update: jest.Mock };
     episode: { update: jest.Mock };
     mediaSource: { findUnique: jest.Mock; findMany: jest.Mock; delete: jest.Mock };
+    subtitleEmbed: { updateMany: jest.Mock };
   };
   let settings: { getMap: jest.Mock };
   let mediaRoots: { resolveFromRoot: jest.Mock };
@@ -53,6 +54,7 @@ describe('ProcessJobsService', () => {
       movie: { update: jest.fn() },
       episode: { update: jest.fn() },
       mediaSource: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]), delete: jest.fn() },
+      subtitleEmbed: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
     settings = { getMap: jest.fn().mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' }) };
     mediaRoots = { resolveFromRoot: jest.fn().mockResolvedValue('/library/Movies') };
@@ -1627,6 +1629,37 @@ describe('ProcessJobsService', () => {
 
       expect(result).toBe(1);
       expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    // Spec 101, NFR-3: a worker that died mid-remux leaves its embed RUNNING and
+    // nothing else ever looks at it, so the row reads "embedding…" forever with
+    // no error anywhere. Only RUNNING may be failed: a QUEUED embed is still in
+    // Redis and a COMPLETED one is history.
+    describe('subtitle embeds (Spec 101, NFR-3)', () => {
+      it('fails only RUNNING embeds, with the interrupted key and a finishedAt', async () => {
+        prisma.processJob.findMany.mockResolvedValue([]);
+
+        await service.reconcileOrphanedEncodes();
+
+        expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledTimes(1);
+        expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledWith({
+          where: { status: 'RUNNING' },
+          data: {
+            status: 'FAILED',
+            errorKey: ERROR_KEYS.SUBTITLE_EMBED_INTERRUPTED,
+            finishedAt: expect.any(Date) as Date,
+          },
+        });
+      });
+
+      it('still returns the encode count, not the embed count', async () => {
+        prisma.subtitleEmbed.updateMany.mockResolvedValue({ count: 5 });
+        prisma.processJob.findMany.mockResolvedValue([
+          orphan({ id: 2, sourceFile: { mediaSource: { status: 'ERROR' } } }),
+        ]);
+
+        await expect(service.reconcileOrphanedEncodes()).resolves.toBe(1);
+      });
     });
   });
 });

@@ -1,4 +1,7 @@
+import { basename, dirname } from 'node:path';
 import {
+  ExternalSubtitleStream,
+  ItemSubtitles,
   MediaServerClient,
   MediaServerConfig,
   MediaServerEpisodeRef,
@@ -38,6 +41,72 @@ export type JellyfinEpisode = {
 type JellyfinEpisodesResponse = {
   Items: JellyfinEpisode[];
 };
+
+// Spec 101, REQ-1
+export type JellyfinMediaStream = {
+  Type?: string;
+  IsExternal?: boolean;
+  Codec?: string;
+  Path?: string | null;
+  Language?: string | null;
+  IsForced?: boolean;
+  DisplayTitle?: string | null;
+};
+
+// Spec 101, REQ-1
+export type JellyfinSubtitleItem = {
+  Id: string;
+  Path?: string | null;
+  LocationType?: string;
+  ParentIndexNumber?: number | null;
+  IndexNumber?: number | null;
+  MediaStreams?: JellyfinMediaStream[];
+};
+
+type JellyfinSubtitleEpisodesResponse = {
+  Items: JellyfinSubtitleItem[];
+};
+
+// Spec 101, REQ-1
+export function toExternalSubtitles(
+  mediaPath: string | null | undefined,
+  streams: JellyfinMediaStream[] | undefined,
+): ExternalSubtitleStream[] {
+  if (!mediaPath || !streams) return [];
+
+  const mediaDir = dirname(mediaPath);
+  const result: ExternalSubtitleStream[] = [];
+
+  for (const stream of streams) {
+    if (stream.Type !== 'Subtitle') continue;
+    if (!stream.IsExternal) continue;
+    if (stream.Codec !== 'subrip') continue;
+    if (!stream.Path) continue;
+    if (!stream.Path.toLowerCase().endsWith('.srt')) continue;
+    if (dirname(stream.Path) !== mediaDir) continue;
+
+    result.push({
+      hostPath: stream.Path,
+      languageIso3: stream.Language ? stream.Language : null,
+      isForced: stream.IsForced === true,
+      displayTitle: stream.DisplayTitle ?? basename(stream.Path),
+    });
+  }
+
+  return result;
+}
+
+// Spec 101, NFR-2
+export const episodeKey = (season: number, episode: number): string =>
+  `${season}:${episode}`;
+
+// Spec 101, REQ-12
+export function updatedMediaBody(
+  path: string,
+  updateType: 'created' | 'Modified',
+): string {
+  return JSON.stringify({ Updates: [{ Path: path, UpdateType: updateType }] });
+}
 
 // Keeps only entries with a positive-integer Tmdb provider id. A missing,
 // non-numeric or zero value means Jellyfin never linked this item to TMDB —
@@ -87,6 +156,35 @@ export function toPresentEpisodes(
   return episodes;
 }
 
+// Spec 101, REQ-1
+export function toItemSubtitles(item: JellyfinSubtitleItem): ItemSubtitles {
+  return {
+    itemId: item.Id,
+    mediaHostPath: item.Path ? item.Path : null,
+    subtitles: toExternalSubtitles(item.Path, item.MediaStreams),
+  };
+}
+
+// Spec 101, NFR-2
+export function toEpisodeSubtitleMap(
+  items: JellyfinSubtitleItem[],
+): Map<string, ItemSubtitles> {
+  const map = new Map<string, ItemSubtitles>();
+
+  for (const item of items) {
+    if (item.LocationType === 'Virtual') continue;
+    if (!item.Path) continue;
+    if (item.ParentIndexNumber == null || item.IndexNumber == null) continue;
+
+    map.set(
+      episodeKey(item.ParentIndexNumber, item.IndexNumber),
+      toItemSubtitles(item),
+    );
+  }
+
+  return map;
+}
+
 export const createJellyfinClient = (
   config: MediaServerConfig,
   index: MediaServerIndexPort,
@@ -99,6 +197,29 @@ export const createJellyfinClient = (
   // answers 401 with an empty body, key valid or not. The scheme below is
   // the only one 12 accepts, and 10.x has accepted it all along.
   const authHeader = `MediaBrowser Token="${apiKey}"`;
+
+  // Spec 101, REQ-12
+  async function postUpdatedMedia(
+    path: string,
+    updateType: 'created' | 'Modified',
+  ): Promise<void> {
+    const endpoint = new URL(`Library/Media/Updated`, baseUrl);
+
+    const response = await fetch(endpoint, {
+      method: HTTP_METHOD.POST,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader,
+      },
+      body: updatedMediaBody(path, updateType),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Jellyfin responded ${response.status} while notifying about ${path}: ${await response.text()}`,
+      );
+    }
+  }
 
   async function fetchItemsPage(
     includeItemTypes: 'Movie' | 'Series',
@@ -182,29 +303,61 @@ export const createJellyfinClient = (
      * @returns {Promise<void>} A promise that resolves when the request has been sent
      */
     async createdMedia(media: string) {
-      const endpoint = new URL(`Library/Media/Updated`, baseUrl);
+      await postUpdatedMedia(media, 'created');
+    },
+
+    // Spec 101, REQ-12
+    async modifiedMedia(hostPath: string) {
+      await postUpdatedMedia(hostPath, 'Modified');
+    },
+
+    // Spec 101, REQ-1
+    async listItemSubtitles(itemId: string): Promise<ItemSubtitles> {
+      const endpoint = new URL('Items', baseUrl);
+      endpoint.searchParams.set('ids', itemId);
+      endpoint.searchParams.set('fields', 'MediaStreams,Path');
 
       const response = await fetch(endpoint, {
-        method: HTTP_METHOD.POST,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: authHeader,
-        },
-        body: JSON.stringify({
-          Updates: [
-            {
-              Path: media,
-              UpdateType: 'created',
-            },
-          ],
-        }),
+        headers: { Authorization: authHeader },
+        signal: AbortSignal.timeout(READ_TIMEOUT_MS),
       });
 
       if (!response.ok) {
         throw new Error(
-          `Jellyfin responded ${response.status} while notifying about ${media}: ${await response.text()}`,
+          `Jellyfin responded ${response.status} while reading item ${itemId}: ${await response.text()}`,
         );
       }
+
+      const body = (await response.json()) as JellyfinSubtitleEpisodesResponse;
+      const item = body.Items.find((candidate) => candidate.Id === itemId);
+      if (!item) {
+        throw new Error(`Jellyfin returned no item ${itemId}`);
+      }
+      return toItemSubtitles(item);
+    },
+
+    // Spec 101, NFR-2
+    async listSeriesEpisodeSubtitles(seriesId: string) {
+      const endpoint = new URL(
+        `Shows/${encodeURIComponent(seriesId)}/Episodes`,
+        baseUrl,
+      );
+      endpoint.searchParams.set('isMissing', 'false');
+      endpoint.searchParams.set('fields', 'MediaStreams,Path');
+
+      const response = await fetch(endpoint, {
+        headers: { Authorization: authHeader },
+        signal: AbortSignal.timeout(READ_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Jellyfin responded ${response.status} while listing episode subtitles of ${seriesId}: ${await response.text()}`,
+        );
+      }
+
+      const body = (await response.json()) as JellyfinSubtitleEpisodesResponse;
+      return toEpisodeSubtitleMap(body.Items);
     },
 
     // Jellyfin has no provider-id filter on /Items (anyProviderIdEquals is

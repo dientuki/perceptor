@@ -16,6 +16,21 @@ export type MediaServerEpisodeRef = {
   episodeNumber: number;
 };
 
+// Spec 101, REQ-1
+export type ExternalSubtitleStream = {
+  hostPath: string;
+  languageIso3: string | null;
+  isForced: boolean;
+  displayTitle: string;
+};
+
+// Spec 101, REQ-1
+export type ItemSubtitles = {
+  itemId: string;
+  mediaHostPath: string | null;
+  subtitles: ExternalSubtitleStream[];
+};
+
 // Spec 034, REQ-8
 export type MediaServerIndexPort = {
   lookup: (mediaType: MediaType, tmdbId: number) => Promise<string | null>;
@@ -38,6 +53,14 @@ export type MediaServerClient = {
   ) => Promise<MediaServerEpisodeRef[]>;
   // Spec 034, REQ-8
   listLibrary?: () => Promise<MediaServerLibraryEntry[]>;
+  // Spec 101, REQ-1
+  listItemSubtitles?: (itemId: string) => Promise<ItemSubtitles>;
+  // Spec 101, NFR-2
+  listSeriesEpisodeSubtitles?: (
+    seriesId: string,
+  ) => Promise<Map<string, ItemSubtitles>>;
+  // Spec 101, REQ-12
+  modifiedMedia?: (hostPath: string) => Promise<void>;
 };
 
 export type MediaServerConfig = {

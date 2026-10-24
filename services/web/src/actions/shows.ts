@@ -12,7 +12,11 @@ import type { Language } from "@/types/languages";
 import type {
   AcquisitionResult,
   ContentKind,
+  ExternalSubtitle,
   GrainMode,
+  SubtitleEmbed,
+  SubtitleEmbedInput,
+  SubtitleEmbedResult,
   TitleRefreshResult,
   TitleRemovalResult,
 } from "@/types/media";
@@ -24,6 +28,8 @@ export interface Episode {
   overview?: string;
   releaseDate?: string;
   status: string;
+  externalSubtitles: ExternalSubtitle[];
+  subtitleEmbed: SubtitleEmbed | null;
 }
 
 export interface Season {
@@ -131,6 +137,20 @@ const GET_SHOW_QUERY = `
           overview
           releaseDate
           status
+          externalSubtitles {
+            fileName
+            languageIso3
+            isForced
+            title
+          }
+          subtitleEmbed {
+            id
+            status
+            errorKey
+            warningKey
+            createdAt
+            finishedAt
+          }
         }
       }
     }
@@ -433,4 +453,45 @@ export async function removeShowAction(
     deleted: data.removeShow.deleted,
     remainingOwners: data.removeShow.remainingOwners,
   };
+}
+
+const EMBED_EPISODE_SUBTITLES_MUTATION = `
+  mutation EmbedEpisodeSubtitles($episodeId: Int!, $subtitles: [SubtitleEmbedInput!]!) {
+    embedEpisodeSubtitles(episodeId: $episodeId, subtitles: $subtitles) {
+      id
+      status
+    }
+  }
+`;
+
+// Spec 101, REQ-4
+export async function embedEpisodeSubtitlesAction(
+  episodeId: string,
+  subtitles: SubtitleEmbedInput[],
+): Promise<SubtitleEmbedResult> {
+  type Payload = { embedEpisodeSubtitles: { id: number } | null };
+  let result: Awaited<ReturnType<typeof fetchGraphQL<Payload>>>;
+  try {
+    result = await fetchGraphQL<Payload>(EMBED_EPISODE_SUBTITLES_MUTATION, {
+      episodeId: Number(episodeId),
+      subtitles,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { data, errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  if (!data?.embedEpisodeSubtitles) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  return { success: true };
 }
