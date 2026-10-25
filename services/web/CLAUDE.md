@@ -797,6 +797,18 @@ bounds the offset to ±600000 ms and keeps the default checkboxes mutually exclu
 inline and keep the modal open; `stale_listing` closes it and `router.refresh()`es. Refresh is manual,
 never polled. Copy lives in `media.embedSubtitles.*` and `errors.subtitleEmbed.*`.
 
+## Automatic subtitle search (`103-subtitle-search`)
+
+Three opt-in surfaces, all hidden or disabled unless `mediaCapabilities.subtitleSearchAvailable` is
+true (Jellyfin is the media server): a `subtitleSearch` checkbox in `/preferences`
+(`PreferencesForm.tsx`, disabled with a hint when unavailable), a per-title checkbox in
+`TitleLanguagesForm.tsx` (shown only while the user preference is on; it never inherits from it) and
+`components/media/SubtitleSearchStatus.tsx`, rendered in `TitleLanguagesPanel.tsx` for a film and in
+`SeasonAccordion.tsx` for an episode. The status shows the latest search's per-language outcome from `latestSubtitleSearch`; a
+failed language renders its `reasonKey` through `translateErrorKey` (the `error.subtitleSearch.*`
+keys, including `incomplete`), so a new outcome key needs only its two catalog entries. Refresh is
+manual, never polled.
+
 ## Tests: there are none
 
 No test file, no runner, no `test` script. This is the largest maturity gap of the three services.

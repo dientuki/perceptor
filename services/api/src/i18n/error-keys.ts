@@ -160,6 +160,7 @@ export const ERROR_KEYS = {
   SUBTITLE_SEARCH_SYNC_FAILED: 'error.subtitleSearch.sync_failed',
   SUBTITLE_SEARCH_FRAMERATE_MISMATCH: 'error.subtitleSearch.framerate_mismatch',
   SUBTITLE_SEARCH_OFFSET_TOO_LARGE: 'error.subtitleSearch.offset_too_large',
+  SUBTITLE_SEARCH_INCOMPLETE: 'error.subtitleSearch.incomplete',
   SUBTITLE_SEARCH_LOW_SCORE: 'error.subtitleSearch.low_score',
   SUBTITLE_SEARCH_INTERRUPTED: 'error.subtitleSearch.interrupted',
   SUBTITLE_SEARCH_SUPERSEDED: 'error.subtitleSearch.superseded',

@@ -1,7 +1,7 @@
 ---
 title: Subtitle Search — web slice
 service: web
-last_updated: 2026-10-24
+last_updated: 2026-10-25
 status: Approved
 ---
 
@@ -98,3 +98,9 @@ bin/comments web
 
 Typecheck and lint are clean. Every new key exists in both `en.json` and `es.json`. Never run
 `bin/npm web run build` while the dev stack is up (memory: web-build-clobbers-dev-next).
+
+## Amendment 0.4.0 (2026-10-25)
+
+See `../spec.md` § Amendments (2026-10-25, `spec_version` 0.4.0) and `../tasks.md` Group 5.
+
+- One new outcome key, `error.subtitleSearch.incomplete`, in both catalogs. Nothing else changes.

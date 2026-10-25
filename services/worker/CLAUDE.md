@@ -6,15 +6,16 @@ BullMQ consumer, TypeScript on Node, `strict: true`. No HTTP ingress, no Prisma,
 reaches `api` over GraphQL and Redis and nothing else. Run everything through `bin/npm worker …`
 per the root Docker-first workflow.
 
-## Three queues, three workers, on purpose
+## One queue per job kind, on purpose
 
-`src/index.ts` opens three separate BullMQ `Worker`s, all `concurrency: 1`:
+`src/index.ts` opens separate BullMQ `Worker`s, all `concurrency: 1`:
 
 | Queue | Job | Handler |
 | :-- | :-- | :-- |
 | `process` | `source-ready` | `src/jobs/source-ready.job.ts` — scans the finished download, inventories its files |
 | `encode` | `encode` | `src/jobs/encode.job.ts` — transcodes and files the result |
 | `subtitle-embed` | `subtitle-embed` | `src/jobs/subtitle-embed.job.ts` — remuxes one library `.mkv` with sidecar `.srt` tracks appended (`101`); constructed after `encodeWorkerStarted` like the others |
+| `subtitle-sync` | `subtitle-sync` | `src/jobs/subtitle-sync.job.ts` — runs `ffsubsync` on a staged `.srt` against the file's audio or a subtitle track (`src/subtitles/sync-reference.ts` picks it) and reports offset, framerate ratio, score, `mediaDurationMs` and `lastChapterStartMs` (`src/subtitles/chapters.ts`, a second `ffprobe -show_chapters`; `null` with fewer than 2 chapters); it never writes the library file, and a missing duration is `sync_failed` (`103`) |
 
 They are not job names on one queue. An encode can run for hours; sharing a queue at
 `concurrency: 1` would either block every scan behind FFmpeg or risk N simultaneous FFmpegs. Each
@@ -36,7 +37,7 @@ src/queue/types.ts       queue/job names and payload shapes
 src/api/graphql-client.ts  fetchGraphQL — throws on json.errors, deliberately
 src/i18n/                error-keys.ts · messages.en.ts · keyed-error.ts (see below)
 src/jobs/                the two handlers, plus cleanup-source.ts (post-encode source deletion)
-src/subtitles/          normalize-srt.ts (charset → UTF-8, offset applied) · embed-args.ts (mkvmerge argv) · verify-embed.ts (accept/reject the remux) · sidecar-guard.ts (may this .srt be deleted) — all pure (101)
+src/subtitles/          normalize-srt.ts (charset → UTF-8, offset applied) · embed-args.ts (mkvmerge argv) · verify-embed.ts (accept/reject the remux) · sidecar-guard.ts (may this .srt be deleted) — all pure (101); `103` adds sync-reference.ts · ffsubsync-output.ts (parses ffsubsync's report) · chapters.ts (the last chapter's start). `ffsubsync==0.5.1` is installed in the `base` image stage (python3/py3-numpy from apk, build deps removed in the same `RUN`)
 src/scan/scan-folder.ts  enumerates a download's files, flags each isVideo — no longer selects a winner
 src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly one pair
 src/scan/mark-downloaded.ts  flags each enumerated file isDownloaded against api's torrent-client answer (052)

@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { SubtitleSearchService } from './subtitle-search.service';
 import { SubtitleSearchResolver } from './subtitle-search.resolver';
 import type { AuthPrincipal } from '@/auth/auth.types';
@@ -37,6 +40,9 @@ describe('SubtitleSearchService worker reports', () => {
   };
 
   beforeEach(() => {
+    const dir = mkdtempSync(join(tmpdir(), 'sub-'));
+    const staged = join(dir, '1.srt');
+    writeFileSync(staged, '1\n00:00:01,000 --> 01:40:00,000\nx\n');
     rows = new Map([
       [
         1,
@@ -47,7 +53,7 @@ describe('SubtitleSearchService worker reports', () => {
           reasonKey: null,
           offsetMs: null,
           score: null,
-          stagedPath: '/downloads/s/1.srt',
+          stagedPath: staged,
         },
       ],
     ]);
@@ -76,6 +82,8 @@ describe('SubtitleSearchService worker reports', () => {
     framerateRatio: 1,
     reference: SubtitleSyncReference.SUBTITLE,
     score: 100,
+    mediaDurationMs: 6_000_000,
+    lastChapterStartMs: null,
     ...over,
   });
 
@@ -179,6 +187,8 @@ describe('SubtitleSearchResolver service-only surface', () => {
         1,
         SubtitleSyncReference.AUDIO,
         5,
+        6000,
+        null,
         user,
       ),
     ).toThrow();

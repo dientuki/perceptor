@@ -93,10 +93,15 @@ export class SubtitleSearchResolver {
     @Args('reference', { type: () => SubtitleSyncReference })
     reference: SubtitleSyncReference,
     @Args('score', { type: () => Float }) score: number,
+    @Args('mediaDurationMs', { type: () => Int }) mediaDurationMs: number,
+    @Args('lastChapterStartMs', { type: () => Int, nullable: true })
+    lastChapterStartMs: number | null | undefined,
     @CurrentUser() principal: AuthPrincipal,
   ) {
     assertService(principal);
     return this.service.completed(id, {
+      mediaDurationMs,
+      lastChapterStartMs: lastChapterStartMs ?? null,
       offsetMs,
       framerateRatio,
       reference,

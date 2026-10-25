@@ -2,7 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
+import { readFile } from 'node:fs/promises';
 import { accept, SyncMeasurement } from './acceptance';
+import { lastCueEndMs } from './last-cue';
 import { deriveLanguages } from './derive-languages';
 import {
   SubtitleSearch,
@@ -89,13 +91,20 @@ export class SubtitleSearchService {
   }
 
   // Spec 103, REQ-10
-  async completed(id: number, measurement: SyncMeasurement): Promise<boolean> {
+  async completed(
+    id: number,
+    report: Omit<SyncMeasurement, 'lastCueEndMs'>,
+  ): Promise<boolean> {
     const row = await this.prisma.subtitleSearchAttempt.findUnique({
       where: { id },
     });
     if (!row) return false;
     if (row.status !== 'RUNNING') return true;
 
+    const measurement: SyncMeasurement = {
+      ...report,
+      lastCueEndMs: await this.readLastCueEnd(row.stagedPath),
+    };
     const reasonKey = accept(measurement);
     const claimed = await this.prisma.subtitleSearchAttempt.updateMany({
       where: { id, status: 'RUNNING' },
@@ -111,6 +120,16 @@ export class SubtitleSearchService {
     });
     if (claimed.count === 1) await this.wake(row.searchId);
     return true;
+  }
+
+  // Spec 103, REQ-10
+  private async readLastCueEnd(stagedPath: string | null): Promise<number | null> {
+    if (!stagedPath) return null;
+    try {
+      return lastCueEndMs(await readFile(stagedPath, 'utf8'));
+    } catch {
+      return null;
+    }
   }
 
   // Spec 103, REQ-14

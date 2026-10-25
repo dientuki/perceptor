@@ -39,12 +39,14 @@ export async function subtitleSyncCompleted(
   framerateRatio: number,
   reference: SubtitleSyncReference,
   score: number,
+  mediaDurationMs: number,
+  lastChapterStartMs: number | null,
 ): Promise<boolean> {
   const data = await fetchGraphQL<{ subtitleSyncCompleted: boolean }>(
-    `mutation ($id: Int!, $offsetMs: Int!, $framerateRatio: Float!, $reference: SubtitleSyncReference!, $score: Float!) {
-      subtitleSyncCompleted(id: $id, offsetMs: $offsetMs, framerateRatio: $framerateRatio, reference: $reference, score: $score)
+    `mutation ($id: Int!, $offsetMs: Int!, $framerateRatio: Float!, $reference: SubtitleSyncReference!, $score: Float!, $mediaDurationMs: Int!, $lastChapterStartMs: Int) {
+      subtitleSyncCompleted(id: $id, offsetMs: $offsetMs, framerateRatio: $framerateRatio, reference: $reference, score: $score, mediaDurationMs: $mediaDurationMs, lastChapterStartMs: $lastChapterStartMs)
     }`,
-    { id, offsetMs, framerateRatio, reference, score },
+    { id, offsetMs, framerateRatio, reference, score, mediaDurationMs, lastChapterStartMs },
   );
   return data.subtitleSyncCompleted;
 }

@@ -1,6 +1,6 @@
 ---
 title: Subtitle Search — Tasks
-last_updated: 2026-10-24
+last_updated: 2026-10-25
 status: In Progress
 ---
 
@@ -222,9 +222,15 @@ All of it waits for the contract (T012). T020, T021 and T022 run in parallel onc
       → T013
       *Done when:* the four scores are written into this task's report and into `history.md`'s
       `103` entry.
-- [ ] **T024** `[api]` Set `SUBTITLE_REFERENCE_MIN_SCORE` and `AUDIO_REFERENCE_MIN_SCORE` from
+      *Measured 2026-10-25* on six films (spec § Amendments 0.4.0 holds the table): lowest good
+      score 364 547 (subtitle) and 202 612 (audio); bad 28 446 and -1 051. The table is in
+      `history.md`'s `103` entry (T026).
+- [x] **T024** `[api]` Set `SUBTITLE_REFERENCE_MIN_SCORE` and `AUDIO_REFERENCE_MIN_SCORE` from
       T023's measurements.
       → T005, T023
+      Proposed: `SUBTITLE_REFERENCE_MIN_SCORE = 100_000`, `AUDIO_REFERENCE_MIN_SCORE = 50_000`.
+      → also T030 (the coverage and framerate checks run before the score, so the measured
+      incomplete and PAL candidates are rejected by those, not by the score)
       *Done when:* `acceptance.spec.ts` asserts each measured good score accepted and each measured
       bad score rejected, and passes.
 - [x] **T025** `[docs]` Add a `103` section to `docs/spec/graphql-contract.md`:
@@ -235,7 +241,7 @@ All of it waits for the contract (T012). T020, T021 and T022 run in parallel onc
 
       → T012
       *Done when:* the section names every type in `spec.md`'s delta.
-- [ ] **T026** `[docs]` Update the docs that describe the code:
+- [x] **T026** `[docs]` Update the docs that describe the code:
       - root `CLAUDE.md`: the Notify media server, Transcode and Browse library rows, with `103` in
         each spec list;
       - `services/api/CLAUDE.md`: the `subtitle-search/` module and the first BullMQ consumer in
@@ -256,8 +262,39 @@ All of it waits for the contract (T012). T020, T021 and T022 run in parallel onc
       → T026, T027
       *Done when:* every AC is ticked or has its blocker in `docs/spec/pending-acs.md`.
 
+### Group 5 — amendment 0.4.0 (coverage and framerate, REQ-10)
+
+- [x] **T029** `[worker]` `subtitle-sync.job.ts` reports `mediaDurationMs` on
+      `subtitleSyncCompleted`, from the `format.duration` of the `getMetadata` call it already
+      makes, and `lastChapterStartMs` from the file's chapters (`null` with fewer than 2); a
+      missing or unparseable duration reports `sync_failed`, never a guess.
+      → T030 (the contract fields must exist first)
+      *Done when:* `subtitle-sync.job.spec.ts` asserts the reported duration from a fixture's
+      `format.duration`, the last chapter start from a fixture with chapters (`null` with one
+      chapter), and that the missing-duration case reports `sync_failed`; tests green.
+- [x] **T030** `[api]` Contract and rule:
+      - `subtitleSyncCompleted` takes `mediaDurationMs: Int!` and `lastChapterStartMs: Int`;
+      - `accept()` uses a framerate tolerance of 0.0005 (1.001 rejected) and, after the offset
+        check, rejects with `error.subtitleSearch.incomplete` when the staged file's last cue end,
+        shifted by `offsetMs`, is at most 85 % of `lastChapterStartMs` (when it is non-null and
+        above 80 % of the duration), or else at most 60 % of `mediaDurationMs`;
+      - the last cue is read from the staged `.srt` by a pure parser (an unparseable file is
+        rejected as `incomplete`, not accepted);
+      - the new key in `error-keys.ts` and `messages.en.ts`.
+      → T005
+      *Done when:* `acceptance.spec.ts` asserts ratio 1.001 rejected; without chapters coverage
+      0.48 and 0.60 rejected and 0.61 accepted; 0.85 of a qualifying last chapter rejected and 0.86
+      accepted; a last chapter at 70 % of the duration ignored (scores above threshold); and the
+      parser reads the last cue of a fixture. The `schema.gql` diff is exactly the two new
+      arguments; tsc 0 errors, tests green.
+- [x] **T031** `[web]` `error.subtitleSearch.incomplete` in `messages/en.json` and
+      `messages/es.json` (`El subtítulo está incompleto (solo cubre parte de la película).`), shown
+      by `SubtitleSearchStatus` like the other outcome keys.
+      → T030
+      *Done when:* both catalogs carry the key and `bin/comments web` passes.
+
 ## Blocked
 
 | Task | Service | What blocked it | Needs |
 | :-- | :-- | :-- | :-- |
-| T023 | docs | The threshold measurement needs four real pairs (a good and a bad subtitle for each of the two references) run through the built image; the synthetic tone fixtures from T015 only fix the offset sign. Until measured, both thresholds stay `+Infinity`, so `accept()` rejects every candidate and no search can embed. | Real media plus a matching and a mismatching `.srt` for it, from the maintainer |
+| T023 | docs | ~~Needed four real pairs.~~ Unblocked 2026-10-25: measured on six films (spec § Amendments 0.4.0). The thresholds stay `+Infinity` until T024 lands. | — |

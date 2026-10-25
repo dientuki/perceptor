@@ -196,6 +196,7 @@
       "framerate_mismatch": "El subtítulo es de una versión con otro framerate.",
       "offset_too_large": "El subtítulo está demasiado desfasado.",
       "low_score": "El subtítulo no coincide con este archivo.",
+      "incomplete": "El subtítulo está incompleto (solo cubre parte de la película).",
       "interrupted": "La búsqueda se interrumpió.",
       "superseded": "Una entrega más nueva reemplazó esta búsqueda."
     }
