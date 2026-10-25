@@ -1,7 +1,7 @@
 ---
 title: Subtitle Search — Implementation Plan
 spec_version: 0.3.0
-last_updated: 2026-10-24
+last_updated: 2026-10-25
 status: Approved
 ---
 
@@ -270,3 +270,22 @@ Set each threshold between that reference's good and bad scores, and record all 
 7. AC-9/AC-9b: a two-episode season pack, then a replacement during `WAITING`.
 8. AC-10: a language with no candidates, then one with only rejects.
 9. AC-11: `docker compose kill worker` during a validation, then start it again.
+
+## Amendment 0.4.0 (2026-10-25)
+
+`../spec.md` § Amendments 0.4.0 adds REQ-10's coverage check and tightens the framerate tolerance.
+Tasks: `tasks.md` Group 5.
+
+- **Order of work**: `api` first (T030: the two new `subtitleSyncCompleted` arguments and the rule),
+  then `worker` (T029) and `web` (T031) in parallel, then T024 (thresholds). A worker that sends
+  the new arguments before `api` accepts them fails every report, and `deliverReport` retries it
+  forever.
+- **Contract freeze**: `mediaDurationMs: Int!` and `lastChapterStartMs: Int` are the only contract
+  change. The worker reports the raw last chapter start; whether it qualifies (2+ chapters, after
+  80 % of the duration) is `api`'s decision, like every other part of the verdict.
+- **Risk (silent)**: with the score thresholds still `+Infinity`, the new checks change nothing
+  observable. Their tests are the only evidence until T024 lands.
+- **Risk (silent)**: a staged file `api` cannot parse must be rejected as `incomplete`. Treating
+  "no last cue found" as coverage 100 % would accept a broken file.
+- **No migration**: coverage is computed at report time and not stored; the rejection key is the
+  record.

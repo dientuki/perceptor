@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   failed: vi.fn(),
   capture: vi.fn(),
   metadata: vi.fn(),
+  chapters: vi.fn(),
   tempDirs: [] as string[],
 }));
 
@@ -27,6 +28,10 @@ vi.mock('../ffmpeg/capture', () => ({
 vi.mock('../ffmpeg/metadata', () => ({
   getMetadata: (...a: unknown[]) => h.metadata(...a),
 }));
+vi.mock('../subtitles/chapters', async () => {
+  const actual = await vi.importActual<typeof import('../subtitles/chapters')>('../subtitles/chapters');
+  return { ...actual, probeChapters: (...a: unknown[]) => h.chapters(...a) };
+});
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
   return {
@@ -78,7 +83,8 @@ beforeEach(async () => {
   h.started.mockReset().mockResolvedValue(true);
   h.completed.mockReset().mockResolvedValue(true);
   h.failed.mockReset().mockResolvedValue(true);
-  h.metadata.mockReset().mockResolvedValue({ metadata: { streams: [SUB] }, raw: '' });
+  h.metadata.mockReset().mockResolvedValue({ metadata: { streams: [SUB], format: { duration: '7265.4321' } }, raw: '' });
+  h.chapters.mockReset().mockResolvedValue([]);
   h.capture.mockReset().mockResolvedValue({ code: 0, stdoutBytes: 0, stderr: LOG });
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -93,20 +99,20 @@ describe('handleSubtitleSync', () => {
   it('reports the measurements and removes the temp directory on success', async () => {
     await handleSubtitleSync(job);
 
-    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5);
+    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null);
     expect(h.failed).not.toHaveBeenCalled();
     expect(await Promise.all(h.tempDirs.map(exists))).toEqual([false]);
     expect(await exists(candidate)).toBe(true);
   });
 
   it('passes the vad flag only for an audio reference', async () => {
-    h.metadata.mockResolvedValue({ metadata: { streams: [{ codec_type: 'audio', disposition: {} }] }, raw: '' });
+    h.metadata.mockResolvedValue({ metadata: { streams: [{ codec_type: 'audio', disposition: {} }], format: { duration: '7265.4321' } }, raw: '' });
     await handleSubtitleSync(job);
 
     const [args] = h.capture.mock.calls[0];
     expect(args).toContain('--vad');
     expect(args).toContain('a:0');
-    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'AUDIO', 1234.5);
+    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'AUDIO', 1234.5, 7265432, null);
   });
 
   it('reports sync_failed on ffsubsync exit 1 and removes the temp directory', async () => {
@@ -141,6 +147,32 @@ describe('handleSubtitleSync', () => {
     await handleSubtitleSync(job);
 
     expect(h.capture).not.toHaveBeenCalled();
+    expect(h.failed).toHaveBeenCalledWith(5, 'error.subtitleSearch.sync_failed');
+  });
+
+  it('reports the last chapter start in milliseconds from a fixture with chapters', async () => {
+    h.chapters.mockResolvedValue([{ start_time: '0.000000' }, { start_time: '3600.000000' }, { start_time: '7100.5' }]);
+    await handleSubtitleSync(job);
+
+    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, 7100500);
+  });
+
+  it('reports a null last chapter with a single chapter', async () => {
+    h.chapters.mockResolvedValue([{ start_time: '0.000000' }]);
+    await handleSubtitleSync(job);
+
+    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null);
+  });
+
+  it.each([
+    ['missing', { streams: [SUB] }],
+    ['unparseable', { streams: [SUB], format: { duration: 'N/A' } }],
+  ])('reports sync_failed when the duration is %s', async (_n, metadata) => {
+    h.metadata.mockResolvedValue({ metadata, raw: '' });
+    await handleSubtitleSync(job);
+
+    expect(h.capture).not.toHaveBeenCalled();
+    expect(h.completed).not.toHaveBeenCalled();
     expect(h.failed).toHaveBeenCalledWith(5, 'error.subtitleSearch.sync_failed');
   });
 

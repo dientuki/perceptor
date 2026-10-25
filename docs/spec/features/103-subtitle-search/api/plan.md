@@ -1,7 +1,7 @@
 ---
 title: Subtitle Search — api slice
 service: api
-last_updated: 2026-10-24
+last_updated: 2026-10-25
 status: Approved
 ---
 
@@ -322,3 +322,14 @@ git diff services/api/src/schema.gql
 
 Typecheck is 0 errors. Tests are green, with the counts reported. `migrate status` is up to date. The
 `schema.gql` diff equals the spec's delta plus `SubtitleEmbedTrack.isSidecar`, and nothing else.
+
+## Amendment 0.4.0 (2026-10-25)
+
+See `../spec.md` § Amendments (2026-10-25, `spec_version` 0.4.0) and `../tasks.md` Group 5.
+
+- `acceptance.ts`: `FRAMERATE_TOLERANCE` becomes `0.0005`; coverage constants beside the two score
+  constants (`CHAPTER_COVERAGE = 0.85`, `DURATION_COVERAGE = 0.6`, `CHAPTER_GATE = 0.8`); the check
+  order is framerate → offset → coverage → score.
+- `SubtitleSearchService.completed()` reads the attempt's `stagedPath` (still on disk while the
+  attempt is `RUNNING`) to find the last cue; a new pure `last-cue.ts` (+ spec) parses it.
+- `subtitleSyncCompleted` gains `mediaDurationMs: Int!` and `lastChapterStartMs: Int`; no Prisma change.

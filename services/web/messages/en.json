@@ -196,6 +196,7 @@
       "framerate_mismatch": "The subtitle is from a version with a different framerate.",
       "offset_too_large": "The subtitle is too far out of sync.",
       "low_score": "The subtitle does not match this file.",
+      "incomplete": "The subtitle is incomplete (it only covers part of the film).",
       "interrupted": "The search was interrupted.",
       "superseded": "A newer delivery replaced this search."
     }

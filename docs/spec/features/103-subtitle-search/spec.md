@@ -1,9 +1,9 @@
 ---
 title: Subtitle Search
-spec_version: 0.3.0
+spec_version: 0.4.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-24
-last_updated: 2026-10-24
+last_updated: 2026-10-25
 status: Approved
 services: [api, worker, web]
 ---
@@ -128,10 +128,28 @@ No title `status` ever changes because of a search.
       - its first text subtitle track that is not forced, when it has one;
       - otherwise its default audio track (its first audio track when none is default).
 
-      The worker reports the offset found, the framerate ratio, which reference was used, and the
-      alignment score. A candidate is accepted only when all of these hold:
-      - the framerate ratio is 1, so a candidate needing a framerate correction is rejected;
+      The worker reports the offset found, the framerate ratio, which reference was used, the
+      alignment score, the library file's duration as `ffprobe` reads it, and the start of its last
+      chapter when it has chapters. A candidate is
+      accepted only when all of these hold, checked in this order:
+      - the framerate ratio is 1: its distance from 1 is under 0.0005. `ffsubsync` picks the ratio
+        from a discrete set, and its nearest neighbour is 24/23.976 ≈ 1.001 (a subtitle timed for
+        24 fps on a 23.976 fps file), which drifts about 7 s over two hours and must be rejected.
+        A tolerance of 0.001 let it through by rounding;
       - the absolute offset is at most 600 000 ms, `101`'s REQ-4 bound;
+      - **the candidate covers the film**: the end time of its last cue, shifted by the offset
+        found, is more than a share of a reference point:
+        - when the file has at least 2 chapters and its last chapter starts after 80 % of the
+          duration, the reference is that chapter's start (on a disc-sourced file the last chapter
+          is the end credits) and the share is 85 %;
+        - otherwise the reference is the file's duration and the share is 60 %.
+
+        It is a floor only: cues inside the credits, past the reference, are never a reason to
+        reject. A candidate at or below the share is rejected with
+        `error.subtitleSearch.incomplete`. This is what stops a subtitle uploaded
+        in two parts ("2CD"): Jellyfin's plugin fetches only the first file, which syncs cleanly
+        and scores close to a complete subtitle, so neither the framerate, the offset nor the score
+        catch it. `api` reads the last cue from the staged file it wrote (REQ-9);
       - the score meets the acceptance threshold for the reference used.
 
       The thresholds (one for a subtitle reference, one for an audio reference) are
@@ -139,7 +157,8 @@ No title `status` ever changes because of a search.
       implementation on at least one known-good and one known-bad pair per reference, and recorded
       with those measurements in `docs/spec/history.md`'s entry for this spec. Each is a single
       constant in `api`, which applies the rule, so re-measuring later changes one value and no
-      contract.
+      contract. The coverage shares (85 % of the last chapter, 60 % of the duration) and the 80 %
+      chapter gate are constants beside them, with the same standing.
 - [ ] **REQ-11 (Embed through `101`)**: Once every missing language of a search is resolved, the
       accepted candidates (if any) are embedded by one `101` embed of that film or episode, in one
       remux. Each track carries:
@@ -205,7 +224,10 @@ No title `status` ever changes because of a search.
       is removed:
       - a language with only a forced track counts as missing;
       - machine-translated, AI-translated, forced and non-SRT candidates never reach validation;
-      - a framerate ratio other than 1 is rejected;
+      - a framerate ratio other than 1 is rejected, including 1.001;
+      - a candidate whose last cue ends at or before 60 % of the file's duration is rejected;
+      - with a qualifying last chapter, a candidate at or below 85 % of its start is rejected, and
+        a file whose last chapter starts before 80 % of the duration falls back to the duration;
       - an offset over the bound is rejected;
       - a staged file is deleted on rejection and after a terminal embed;
       - a staged track is never deleted by the worker's sidecar rule;
@@ -294,6 +316,10 @@ type Mutation {
     framerateRatio: Float!
     reference: SubtitleSyncReference!
     score: Float!
+    """Duration of the library file, in milliseconds, as ffprobe reads it. Feeds REQ-10's coverage check."""
+    mediaDurationMs: Int!
+    """Start of the library file's last chapter, in milliseconds; null when it has fewer than 2 chapters. api decides whether it qualifies (REQ-10)."""
+    lastChapterStartMs: Int
   ): Boolean!
   """Service-only (worker). Safe to receive more than once."""
   subtitleSyncFailed(id: Int!, errorKey: String!): Boolean!
@@ -342,6 +368,7 @@ Outcome keys, shown in the panel and never thrown (REQ-13/REQ-14):
 | `error.subtitleSearch.sync_failed` | `No se pudo validar la sincronización del subtítulo.` |
 | `error.subtitleSearch.framerate_mismatch` | `El subtítulo es de una versión con otro framerate.` |
 | `error.subtitleSearch.offset_too_large` | `El subtítulo está demasiado desfasado.` |
+| `error.subtitleSearch.incomplete` | `El subtítulo está incompleto (solo cubre parte de la película).` |
 | `error.subtitleSearch.low_score` | `El subtítulo no coincide con este archivo.` |
 | `error.subtitleSearch.interrupted` | `La búsqueda se interrumpió.` |
 | `error.subtitleSearch.superseded` | `Una entrega más nueva reemplazó esta búsqueda.` |
@@ -408,6 +435,9 @@ stored twice.
       attempt reads `FAILED` with `error.subtitleSearch.interrupted`, its staged file is gone, and the
       search proceeds to the next candidate or finishes.
 - [ ] **AC-12**: `bin/npm api run test` and `bin/npm worker run test` pass, including NFR-6's cases.
+- [ ] **AC-13 (failure)**: A candidate covering half the film (the first file of a "2CD" upload, or
+      an `.srt` cut at the midpoint) is staged as the only candidate. Its attempt reads `REJECTED`
+      with `error.subtitleSearch.incomplete`, and its staged file is gone.
 
 ## Out of Scope
 
@@ -434,3 +464,74 @@ stored twice.
   `101`'s manual action.
 - **Image subtitles (PGS/VobSub) as a reference.** `ffsubsync`'s `--pgs-ref-stream` exists, but v1
   references a text track or the audio only.
+
+## Amendments (2026-10-25, `spec_version` 0.4.0)
+
+Measured during implementation, before T024 set any threshold, on six films of the maintainer's
+library with real OpenSubtitles candidates fetched through Jellyfin and run through the worker's
+`ffsubsync` exactly as the `subtitle-sync` job runs it. The video files were never written.
+
+**What changed and why:**
+
+1. **REQ-10 coverage check (new rejection, `error.subtitleSearch.incomplete`).** Two of the three
+   Spanish candidates for *The Lost World: Jurassic Park* (1997) were the first half of a "2CD"
+   upload (confirmed on opensubtitles.org's CD column). They ended at 1:01:59 and 1:04:36 of a
+   2:08:39 film, synced cleanly (offsets -0.08 s and -3.38 s, ratio 1.000), and scored 307 289 and
+   320 324, close to the complete candidates of *Up in the Air* (364 547–382 513). No score
+   threshold separates them. Coverage does: 48 % and 50 % against 89–100 % for every complete
+   candidate measured. Jellyfin's plugin does not expose the number of files per upload, so this
+   cannot be filtered before the fetch.
+2. **REQ-10 framerate tolerance tightened from 0.001 to 0.0005.** The third Spanish candidate for
+   *Shutter Island* reported a ratio of 1.001 and is the upload OpenSubtitles tags as 24 fps; the
+   old bound accepted it by rounding.
+3. **Coverage against the last chapter when there is one.** All five library files measured carry
+   chapters, and the last one starts at 94–96 % of the file, at the end credits. Measured against
+   that start, every good candidate covers 99 % or more and the "2CD" halves 51–53 %, so the share
+   can rise to 85 % and also catch a subtitle missing its last quarter, which 60 % of the duration
+   lets through. A file with no chapters, or with automatic ones whose last start is not near the
+   end, falls back to the duration and 60 %.
+4. **Contract**: `subtitleSyncCompleted` gains `mediaDurationMs: Int!` and `lastChapterStartMs: Int`,
+   read by the worker from the `ffprobe` it already runs on the library file to pick the reference
+   (with chapters requested).
+
+**Measurements** (`score`, `offset`, `framerate`, coverage). Subtitle reference = the file's English
+text track; audio reference = its default audio track with `--vad webrtc`.
+
+Coverage below is against the duration. Last chapter start: Shutter Island 2:10:31 (95 %),
+Resident Evil 1:34:08 (94 %), Up in the Air 1:44:07 (95 %), Split 1:52:27 (96 %), The Lost World
+2:01:56 (95 %).
+
+| Film | Reference | Candidate | Score | Offset | Ratio | Coverage | Verdict |
+| :-- | :-- | :-- | --: | --: | --: | --: | :-- |
+| The Guyver (1991) | subtitle | matching sidecar | 438 001 | -17.99 s | 1.000 | — | good |
+| The Guyver (1991) | subtitle | another film's `.srt` | 28 446 | +9.87 s | 1.001 | — | bad |
+| The Guyver (1991) | audio | matching sidecar | 211 884 | -18.05 s | 1.000 | — | good |
+| The Guyver (1991) | audio | another film's `.srt` | -1 051 | +558.8 s | 1.042 | — | bad |
+| Split (2016) | subtitle | spa #1 / #2 / #3 | 630 129 / 633 427 / 629 973 | 0 / -1.0 / 0 s | 1.000 | 100 % | good |
+| Up in the Air (2009) | subtitle | spa #1 / #2 / #3 | 373 920 / 364 547 / 382 513 | -6.3 / -1.2 / -7.2 s | 1.000 | 95–100 % | good |
+| The Lost World (1997) | subtitle | spa #1 | 604 068 | -4.16 s | 1.000 | 94 % | good (maintainer checked) |
+| The Lost World (1997) | subtitle | spa #2, #3 (2CD, first file) | 307 289 / 320 324 | -0.08 / -3.38 s | 1.000 | 48 % / 50 % | bad: incomplete |
+| Resident Evil (2002) | audio | spa #1, #2 (PAL) | -274 713 / -249 509 | +586.9 / -558.2 s | 1.043 / 1.042 | — | bad: framerate |
+| Resident Evil (2002) | audio | spa #3 | 247 976 | -0.13 s | 1.000 | 93 % | good (maintainer checked) |
+| Shutter Island (2010) | audio | spa #1 (PAL) | 191 485 | +55.5 s | 1.043 | 89 % | bad: framerate |
+| Shutter Island (2010) | audio | spa #2 | 217 484 | +1.03 s | 1.000 | 94 % | good (maintainer checked) |
+| Shutter Island (2010) | audio | spa #3 (24 fps) | 197 537 | +0.58 s | 1.001 | 94 % | bad: framerate (this amendment) |
+| Shutter Island (2010) | audio | eng #1 (PAL) | 179 955 | +1.91 s | 1.043 | 90 % | bad: framerate |
+| Shutter Island (2010) | audio | eng #2 | 202 612 | +0.82 s | 1.000 | 94 % | good (maintainer checked) |
+
+Once the framerate and coverage checks run first, the score threshold only has to reject a subtitle
+of another film: the lowest good score is 364 547 (subtitle) and 202 612 (audio); the bad ones are
+28 446 and -1 051. The scores grow with the number of cues, so a short film will score lower than
+any of these; a threshold that rejects one only means no subtitle is embedded, never a wrong one.
+
+**Observed, not acted on here** (candidates for a later amendment):
+
+- REQ-8's Jaccard similarity favours a candidate named with the bare title over one naming the same
+  release markers (`2160p`, `remux`, `hevc`), since every unshared token counts against it.
+- Jellyfin exposes each candidate's `FrameRate` (`0` when unknown). Filtering a known mismatch before
+  the fetch would have saved two of the downloads above.
+- When the OpenSubtitles daily download quota is exhausted, Jellyfin answers a fetch with a bare
+  `500 Error processing request.` (its log says `RateLimitExceededException`), so `api` cannot tell
+  it apart from any other failure: every remaining candidate of the search is spent as
+  `fetch_failed`.
+

@@ -2567,14 +2567,16 @@ type Mutation {
   setShowSubtitleSearch(showId: Int!, enabled: Boolean!): Boolean!
   subtitleSyncStarted(id: Int!): Boolean!                              # service only
   subtitleSyncCompleted(id: Int!, offsetMs: Int!, framerateRatio: Float!,
-                        reference: SubtitleSyncReference!, score: Float!): Boolean!   # service only
+                        reference: SubtitleSyncReference!, score: Float!,
+                        mediaDurationMs: Int!, lastChapterStartMs: Int): Boolean!   # service only
   subtitleSyncFailed(id: Int!, errorKey: String!): Boolean!            # service only
 }
 type Query { subtitleSyncDetails(id: Int!): SubtitleSyncDetails! }     # service only
 ```
 
 - **The worker reports measurements, never a verdict.** `api` applies the acceptance rule
-  (framerate ratio within 1 ± 0.001, `|offsetMs|` ≤ 600000, score at or above the per-reference
+  (framerate ratio within 1 ± 0.0005, `|offsetMs|` ≤ 600000, coverage of the last cue over 85 % of
+  a qualifying last chapter or else 60 % of the duration (`0.4.0`), score at or above the per-reference
   threshold) and stores the reason key. `offsetMs` follows `101`'s convention: the correction that
   undoes the delay, so a subtitle delayed by 2 s measures about -2000.
 - The three setters refuse only on the capability (`error.subtitleSearch.unsupported_media_server`),

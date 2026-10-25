@@ -1027,7 +1027,7 @@ type Mutation {
   """
   Service-only (worker). Safe to receive more than once (038's posture). api applies REQ-10's acceptance rule.
   """
-  subtitleSyncCompleted(id: Int!, offsetMs: Int!, framerateRatio: Float!, reference: SubtitleSyncReference!, score: Float!): Boolean!
+  subtitleSyncCompleted(id: Int!, offsetMs: Int!, framerateRatio: Float!, reference: SubtitleSyncReference!, score: Float!, mediaDurationMs: Int!, lastChapterStartMs: Int): Boolean!
 
   """Service-only (worker). Safe to receive more than once."""
   subtitleSyncFailed(id: Int!, errorKey: String!): Boolean!

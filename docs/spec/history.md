@@ -23,6 +23,32 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-25 — `103-subtitle-search` (amendment 0.4.0 implemented; feature not closed)
+
+`api`, `worker`, `web`, `infra`; one Prisma migration (`20261024192157_add_subtitle_search`, `migrate status`: "Database schema is up to date!"). Contract delta: `subtitleSyncCompleted` gained `mediaDurationMs: Int!` and `lastChapterStartMs: Int` in 0.4.0; the `schema.gql` diff is exactly those two arguments.
+
+- `api` typecheck (`bin/cli api npx tsc --noEmit`): 0 errors. Tests (`bin/npm api test`): 81 suites, **1382 passed**. `bin/comments api`: PASS (1127 locators).
+- `worker` typecheck: 0 errors. Tests (`bin/npm worker test`): 49 files, **635 passed**. `bin/comments worker`: PASS (370 locators).
+- `web` typecheck: 7 errors, all in `Calendar.tsx` (`@fullcalendar/react`), predating this feature. `bin/cli web node scripts/check-messages.mjs`: "en.json and es.json match exactly (708 keys)". `bin/comments web`: PASS (115 locators). No web test runner exists.
+- Thresholds, measured 2026-10-25 on the dev stack with real Jellyfin/OpenSubtitles candidates (user verdicts in brackets):
+
+| Candidate | Reference | Score | Offset (s) | Ratio | Note |
+| :-- | :-- | --: | --: | --: | :-- |
+| Split #1 / #2 / #3 | subtitle | 630 129 / 633 427 / 629 973 | 0 / -1 / 0 | 1.000 | |
+| Up in the Air #1 / #2 / #3 | subtitle | 373 920 / 364 547 / 382 513 | -6.28 / -1.15 / -7.21 | 1.000 | |
+| Lost World #1 | subtitle | 604 068 | -4.16 | 1.000 | 94 % of duration [good] |
+| Lost World #2 / #3 | subtitle | 307 289 / 320 324 | -0.08 / -3.38 | 1.000 | 2-CD halves, 48 % / 50 % |
+| Resident Evil #1 / #2 | audio | -274 713 / -249 509 | 586.89 / -558.20 | 1.043 / 1.042 | PAL |
+| Resident Evil #3 | audio | 247 976 | -0.13 | 1.000 | [good] |
+| Shutter Island es #1 / #2 / #3 | audio | 191 485 / 217 484 / 197 537 | 55.51 / 1.03 / 0.58 | 1.043 / 1.000 / 1.001 | #2 [good] |
+| Shutter Island en #1 / #2 | audio | 179 955 / 202 612 | — | 1.043 / 1.000 | #2 [good] |
+| Guyver good / bad | subtitle | 438 001 / 28 446 | — | — | earlier pass |
+| Guyver good / bad | audio | 211 884 / -1 051 | — | — | earlier pass |
+
+  Set: `SUBTITLE_REFERENCE_MIN_SCORE` = 100 000, `AUDIO_REFERENCE_MIN_SCORE` = 50 000. Last-chapter starts at 94–96 % of the duration on all five films; good candidates cover at least 99 % of that start, the 2-CD halves 51–53 %. The audio reference took about 2 min per run, the subtitle reference 6–15 s. The coverage shares (85 % / 60 %) and the 80 % chapter gate are provisional.
+- Not measured: the live pass (T027), the arm64 proof of `ffsubsync` (T013, waits for an RC tag run), the browser checks (T020–T022), and four English downloads (Resident Evil en #1–#3, Shutter Island en #3) that failed when the provider's daily download quota ran out (Jellyfin's log: `OpenSubtitles download limit reached`; the API answers a bare 500).
+- Process note: `bin/npm api run lint` auto-fixes and rewrote about 170 unrelated `api` files during T030; they were restored with `git checkout -- services/api`. Do not run it as a check.
+
 ## 2026-10-24 — `102-subtitle-content-pruning`
 
 `worker` only; no Prisma migration, GraphQL Contract Delta **None** (`schema.gql` untouched by this feature).

@@ -1,7 +1,7 @@
 ---
 title: Subtitle Search — worker slice
 service: worker
-last_updated: 2026-10-24
+last_updated: 2026-10-25
 status: Approved
 ---
 
@@ -163,3 +163,13 @@ bin/cli worker ffsubsync --version
 
 Typecheck is 0 errors. Tests are green, with the counts reported. `ffsubsync --version` prints the
 pinned version. The arm64 build is reported with its evidence, along with the image size delta.
+
+## Amendment 0.4.0 (2026-10-25)
+
+See `../spec.md` § Amendments (2026-10-25, `spec_version` 0.4.0) and `../tasks.md` Group 5.
+
+- `subtitle-sync.job.ts` adds `mediaDurationMs` (`Math.round(format.duration * 1000)`) to the
+  completed report, from the `getMetadata` it already calls; `subtitle-sync-reports.ts` carries it.
+- `lastChapterStartMs`: the last chapter's `start_time` in ms from the same probe (request
+  chapters), `null` with fewer than 2 chapters. The worker reports it; `api` decides if it qualifies.
+- A missing duration is `sync_failed`.

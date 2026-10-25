@@ -211,6 +211,8 @@ export const MESSAGES_EN: Record<string, string> = {
     'The subtitle is for a version with a different framerate.',
   [ERROR_KEYS.SUBTITLE_SEARCH_OFFSET_TOO_LARGE]:
     'The subtitle is too far out of sync.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_INCOMPLETE]:
+    'The subtitle does not cover the whole file.',
   [ERROR_KEYS.SUBTITLE_SEARCH_LOW_SCORE]:
     'The subtitle does not match this file.',
   [ERROR_KEYS.SUBTITLE_SEARCH_INTERRUPTED]:
