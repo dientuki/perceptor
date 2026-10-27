@@ -377,7 +377,7 @@ latest.
 
 ## Acceptance Criteria
 
-- [ ] **AC-1**: Given a COMPLETED film whose Jellyfin item has a `Pelicula.spa.srt` downloaded by the
+- [x] **AC-1**: Given a COMPLETED film whose Jellyfin item has a `Pelicula.spa.srt` downloaded by the
       OpenSubtitles plugin, when an administrator who owns it opens its detail page, then an
       "Embed in MKV" action is shown, and its modal lists one row for `Pelicula.spa.srt` with
       language `spa`, the default box unchecked and offset `0`.

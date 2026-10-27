@@ -1102,7 +1102,7 @@ describe('MoviesService', () => {
 
       await expect(
         service.addMagnetToMovie(7, { magnet: MAGNET, force: false }, 'user-1'),
-      ).rejects.toBe(failure);
+      ).rejects.toMatchObject({ response: { i18n: { key: ERROR_KEYS.TORRENT_CLIENT_REJECTED } } });
 
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expectNoWrites();
@@ -1243,7 +1243,7 @@ describe('MoviesService', () => {
 
       await expect(
         service.addMagnetToMovie(7, { magnet: MAGNET, force: true }, 'user-1'),
-      ).rejects.toBe(failure);
+      ).rejects.toMatchObject({ response: { i18n: { key: ERROR_KEYS.TORRENT_CLIENT_REJECTED } } });
 
       expect(downloads.demoteDeliveredSources).not.toHaveBeenCalled();
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();

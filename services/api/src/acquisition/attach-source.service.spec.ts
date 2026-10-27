@@ -1,4 +1,5 @@
 import { HttpException } from '@nestjs/common';
+import { TorrentClientError } from '@/clients/torrent/client';
 import { AttachSourceService, AttachInput } from './attach-source.service';
 import { AttachTarget } from './attach-target';
 import { ERROR_KEYS, ErrorKey } from '@/i18n/error-keys';
@@ -521,5 +522,55 @@ describe('AttachSourceService — refused while a subtitle embed is active (Spec
 
     expect(await busyKey(target)).toBeUndefined();
     expect(refuse).toHaveBeenCalled();
+  });
+});
+
+// Spec 104, REQ-5 AC-8: a qBittorrent credential rejection on add() must reach
+// the caller as the keyed unauthorized error and must happen before any row is
+// written; otherwise the failure is either a raw 500 or a MediaSource with no
+// torrent behind it, with no error pointing at TORRENT_API_KEY.
+describe('AttachSourceService — torrent client credential rejection (Spec 104)', () => {
+  const prisma = {
+    mediaSource: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+  };
+  const qbittorrent = { add: jest.fn(), info: jest.fn(), start: jest.fn() };
+  const service = new AttachSourceService(
+    prisma as never,
+    qbittorrent as never,
+    { demoteDeliveredSources: jest.fn(), handleTorrentCompleted: jest.fn() } as never,
+    { assertNoActiveEmbed: jest.fn().mockResolvedValue(undefined) } as never,
+  );
+  const target: AttachTarget<{ id: number }> = {
+    resolve: jest.fn().mockResolvedValue({ id: 1 }),
+    refuse: jest.fn().mockResolvedValue(undefined),
+    labels: jest.fn().mockReturnValue({ tags: [], category: 'movie' }),
+    column: 'movieId',
+  };
+  const input: AttachInput = {
+    kind: SourceKind.TORRENT_SEARCH,
+    infoHash: '5d4a2f1c8e3b9a7d6c5e4f3a2b1c0d9e8f7a6b5c',
+    urls: [],
+    releaseTitle: null,
+    force: false,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.mediaSource.findUnique.mockResolvedValue(null);
+  });
+
+  it('rejects a 403 from add() with the unauthorized key and creates no row', async () => {
+    qbittorrent.add.mockRejectedValue(new TorrentClientError('Forbidden', 403));
+
+    let thrown: unknown;
+    try {
+      await service.attach(target, input, 'user-1');
+    } catch (error) {
+      thrown = error;
+    }
+
+    const response = (thrown as HttpException).getResponse() as { i18n?: { key: string } };
+    expect(response.i18n?.key).toBe(ERROR_KEYS.TORRENT_CLIENT_UNAUTHORIZED);
+    expect(prisma.mediaSource.create).not.toHaveBeenCalled();
   });
 });

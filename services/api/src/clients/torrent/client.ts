@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { join } from 'node:path';
 import crypto from "node:crypto";
 import { TorrentClient } from "./types";
+import { torrentAuthHeaders } from "./auth";
 import { HTTP_METHOD } from "@/types/http";
 import { SourceStatus } from "@prisma/client";
 import { SettingsService } from '@/settings/settings.service';
@@ -123,6 +124,7 @@ export class QbittorrentClient implements TorrentClient {
 
     const response = await fetch(endpoint, {
       method: HTTP_METHOD.GET,
+      headers: torrentAuthHeaders(),
     });
 
     // Same reasoning as add(): a silent failure here would be read by the
@@ -159,6 +161,7 @@ export class QbittorrentClient implements TorrentClient {
 
     const response = await fetch(endpoint, {
       method: HTTP_METHOD.GET,
+      headers: torrentAuthHeaders(),
     });
 
     // Same reasoning as info(): the caller must never mistake "qBittorrent
@@ -204,6 +207,7 @@ export class QbittorrentClient implements TorrentClient {
 
     const response = await fetch(endpoint, {
       method: HTTP_METHOD.POST,
+      headers: torrentAuthHeaders(),
       body: new URLSearchParams(body),
     });
 
@@ -225,6 +229,7 @@ export class QbittorrentClient implements TorrentClient {
 
     const response = await fetch(endpoint, {
       method: HTTP_METHOD.POST,
+      headers: torrentAuthHeaders(),
       body: new URLSearchParams({
         hashes: this.normalizeHashes(hashes),
       }),
@@ -245,6 +250,7 @@ export class QbittorrentClient implements TorrentClient {
 
     const response = await fetch(endpoint, {
       method: HTTP_METHOD.POST,
+      headers: torrentAuthHeaders(),
       body: new URLSearchParams({
         hashes: this.normalizeHashes(hashes),
       }),
@@ -267,6 +273,7 @@ export class QbittorrentClient implements TorrentClient {
 
     const response = await fetch(endpoint, {
       method: HTTP_METHOD.POST,
+      headers: torrentAuthHeaders(),
       body: new URLSearchParams({
         hashes: this.normalizeHashes(hashes),
         deleteFiles: deleteFiles.toString(),
@@ -289,6 +296,7 @@ export class QbittorrentClient implements TorrentClient {
 
     await fetch(endpoint, {
       method: HTTP_METHOD.POST,
+      headers: torrentAuthHeaders(),
       body: new URLSearchParams({
         json: JSON.stringify({ save_path: path, temp_path: `${path}/incomplete` }),
       }),

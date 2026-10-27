@@ -24,6 +24,8 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { MediaServerReconcileService } from './media-server-reconcile.service';
+import { Prisma } from '@prisma/client';
+import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaServerIndexService } from '@/media-server-index/media-server-index.service';
@@ -38,6 +40,7 @@ describe('MediaServerReconcileService', () => {
   let seasonFindMany: jest.Mock;
   let indexLookup: jest.Mock;
   let refreshAndWait: jest.Mock;
+  let probeRequest: jest.Mock;
 
   beforeEach(async () => {
     getMap = jest.fn().mockResolvedValue({
@@ -51,6 +54,7 @@ describe('MediaServerReconcileService', () => {
     seasonFindMany = jest.fn().mockResolvedValue([]);
     indexLookup = jest.fn().mockResolvedValue(null);
     refreshAndWait = jest.fn().mockResolvedValue('ready');
+    probeRequest = jest.fn().mockResolvedValue(undefined);
 
     const prisma = {
       movie: { updateMany: movieUpdateMany },
@@ -63,6 +67,7 @@ describe('MediaServerReconcileService', () => {
         MediaServerReconcileService,
         { provide: PrismaService, useValue: prisma },
         { provide: SettingsService, useValue: { getMap } },
+        { provide: LibraryProbeQueueService, useValue: { request: probeRequest } },
         {
           provide: MediaServerIndexService,
           useValue: { lookup: indexLookup, refreshAndWait },
@@ -91,6 +96,61 @@ describe('MediaServerReconcileService', () => {
       ...overrides,
     });
   }
+
+  // Spec 108, REQ-3 REQ-4. A promotion that never requests a read leaves a library title with no
+  // languages and no error anywhere; a demotion that keeps the old columns shows the languages of
+  // a file the title no longer holds.
+  describe('library track reads (Spec 108)', () => {
+    it('requests a read for a film the reconcile promoted, and none when nothing was promoted', async () => {
+      mockClient({ findByTmdbId: jest.fn().mockResolvedValue('ext-1') });
+      await service.reconcileMovie(42, 539);
+      expect(probeRequest).toHaveBeenCalledWith({ movieId: 42 });
+
+      probeRequest.mockClear();
+      movieUpdateMany.mockResolvedValue({ count: 0 });
+      await service.reconcileMovie(42, 539);
+      expect(probeRequest).not.toHaveBeenCalled();
+    });
+
+    it('requests a read for each promoted episode of a reconciled show', async () => {
+      mockClient({
+        findByTmdbId: jest.fn().mockResolvedValue('ext-show'),
+        listPresentEpisodes: jest.fn().mockResolvedValue([{ seasonNumber: 1, episodeNumber: 2 }]),
+      });
+      seasonFindMany.mockResolvedValue([
+        { seasonNumber: 1, episodes: [{ id: 100, episodeNumber: 1 }, { id: 101, episodeNumber: 2 }] },
+      ]);
+      await service.reconcileShow(7, 1405);
+      expect(probeRequest.mock.calls).toEqual([[{ episodeId: 101 }]]);
+    });
+
+    it('syncMovie requests a read for a held film even when it was already COMPLETED, and not for a demoted one', async () => {
+      mockClient({ findByTmdbId: jest.fn().mockResolvedValue('ext') });
+      movieUpdateMany.mockResolvedValue({ count: 0 });
+      await service.syncMovie(1, 5);
+      expect(probeRequest).toHaveBeenCalledWith({ movieId: 1 });
+
+      probeRequest.mockClear();
+      mockClient({ findByTmdbId: jest.fn().mockResolvedValue(null) });
+      await service.syncMovie(1, 5);
+      expect(probeRequest).not.toHaveBeenCalled();
+    });
+
+    it('syncShow requests a read for every episode the server holds, and only those', async () => {
+      mockClient({
+        findByTmdbId: jest.fn().mockResolvedValue('ext'),
+        listPresentEpisodes: jest.fn().mockResolvedValue([{ seasonNumber: 1, episodeNumber: 1 }]),
+      });
+      seasonFindMany.mockResolvedValue([
+        { seasonNumber: 1, episodes: [
+          { id: 1, episodeNumber: 1, releaseDate: new Date('2020-01-01') },
+          { id: 2, episodeNumber: 2, releaseDate: new Date('2020-01-01') },
+        ] },
+      ]);
+      await service.syncShow(7, 9);
+      expect(probeRequest.mock.calls).toEqual([[{ episodeId: 1 }]]);
+    });
+  });
 
   describe('reconcileMovie', () => {
     it('promotes a MISSING film to COMPLETED, setting mediaServerPresentAt, without writing filePath', async () => {
@@ -288,6 +348,9 @@ describe('MediaServerReconcileService', () => {
         status: 'MISSING',
         filePath: null,
         mediaServerPresentAt: null,
+        fileAudioLanguages: Prisma.DbNull,
+        fileSubtitleLanguages: Prisma.DbNull,
+        tracksReadAt: null,
       });
       expectGuarded(arg.where);
     });
@@ -367,6 +430,9 @@ describe('MediaServerReconcileService', () => {
           status: 'MISSING',
           filePath: null,
           mediaServerPresentAt: null,
+          fileAudioLanguages: Prisma.DbNull,
+          fileSubtitleLanguages: Prisma.DbNull,
+          tracksReadAt: null,
         });
         expectGuarded(arg.where);
       }

@@ -64,6 +64,7 @@
     "download": {
       "not_a_torrent": "This download has no associated torrent",
       "torrent_client_rejected": "The torrent client rejected the request ({status})",
+      "torrent_client_unauthorized": "The torrent client rejected Perceptor's credential: an administrator needs to check TORRENT_API_KEY",
       "torrent_client_error": "The torrent client stopped the download ({state}): check disk space and permissions",
       "retry_replaced": "This item was replaced by another one and cannot be resumed",
       "retry_superseded": "Another source of this title is already being processed",
@@ -184,20 +185,30 @@
       "not_writable": "The worker cannot replace this file (folder or owner permissions).",
       "interrupted": "The embed was interrupted by a worker restart. Try again.",
       "sidecar_delete_failed": "Subtitles embedded, but the external .srt could not be deleted. Delete it by hand or from Jellyfin.",
-      "jellyfin_refresh_failed": "Subtitles embedded, but Jellyfin could not be notified. They will appear on its next scan."
+      "jellyfin_refresh_failed": "Subtitles embedded, but the media server could not be notified. They will appear on its next scan."
     },
     "subtitleSearch": {
       "unsupported_media_server": "Subtitle search requires Jellyfin as the media server.",
       "sync_not_found": "Subtitle search not found.",
       "item_not_found": "Jellyfin did not index the file in time; no subtitles were searched.",
-      "media_server_unavailable": "Could not reach Jellyfin to search for subtitles.",
+      "media_server_unavailable": "Could not reach the media server to locate the file.",
       "fetch_failed": "The subtitle could not be downloaded.",
       "sync_failed": "The subtitle's synchronization could not be validated.",
       "framerate_mismatch": "The subtitle is from a version with a different framerate.",
       "offset_too_large": "The subtitle is too far out of sync.",
       "low_score": "The subtitle does not match this file.",
+      "incomplete": "The subtitle is incomplete (it only covers part of the film).",
       "interrupted": "The search was interrupted.",
-      "superseded": "A newer delivery replaced this search."
+      "superseded": "A newer delivery replaced this search.",
+      "in_progress": "A subtitle search is already in progress for this title.",
+      "no_languages": "There are no subtitle languages chosen for this title.",
+      "provider_not_configured": "Subtitle search requires an OpenSubtitles account in Settings → General.",
+      "no_library_path": "Perceptor does not know where this title's file is.",
+      "provider_unauthorized": "OpenSubtitles rejected the username or password.",
+      "provider_unavailable": "Could not reach OpenSubtitles.",
+      "quota_exhausted": "The daily OpenSubtitles download limit has been reached.",
+      "probe_failed": "Could not read the file to see which subtitles it has.",
+      "probe_not_found": "Subtitle search not found."
     }
   },
   "landing": {
@@ -458,8 +469,7 @@
       "saving": "Saving...",
       "audioLabel": "Audio languages",
       "subtitleLabel": "Subtitle languages",
-      "audioMandatoryLabel": "Mandatory audio",
-      "subtitleSearchLabel": "Search for subtitles on the internet?"
+      "audioMandatoryLabel": "Mandatory audio"
     },
     "languagesPanel": {
       "title": "Languages",
@@ -469,9 +479,7 @@
       "mandatoryNo": "Audio is not mandatory",
       "inheritedNote": "(from your preferences)",
       "empty": "None set",
-      "changeButton": "Change",
-      "subtitleSearchYes": "Subtitle search is on",
-      "subtitleSearchNo": "Subtitle search is off"
+      "changeButton": "Change"
     },
     "languagesModal": {
       "title": "Languages",
@@ -494,6 +502,15 @@
       "confirm": "Remove",
       "cancel": "Cancel",
       "removing": "Removing..."
+    },
+    "searchSubtitles": {
+      "button": "Search subtitles",
+      "searching": "Searching…",
+      "title": "Search subtitles",
+      "body": "Perceptor will look for the missing subtitles of this title with the subtitle provider. Each download counts against the provider's daily download quota. Continue?",
+      "confirm": "Search",
+      "cancel": "Cancel",
+      "inProgress": "A search is already in progress"
     },
     "embedSubtitles": {
       "button": "Embed in file",
@@ -536,6 +553,10 @@
       "finishedAt": "Finished {date}"
     }
   },
+  "fileTrackLanguages": {
+    "audio": "Audio",
+    "subtitles": "Subtitles"
+  },
   "movies": {
     "detail": {
       "noPoster": "No poster available",
@@ -569,6 +590,7 @@
       "releaseDateHeader": "Release date",
       "statusHeader": "Status",
       "actionsHeader": "Actions",
+      "tracksHeader": "Tracks",
       "searchButtonTitle": "Search",
       "importFileButtonTitle": "Import file",
       "addTorrentButtonTitle": "Add torrent"
@@ -724,7 +746,12 @@
     },
     "general": {
       "uiLocaleLabel": "App language",
-      "dateFormatLabel": "Date format"
+      "dateFormatLabel": "Date format",
+      "openSubtitlesHeading": "OpenSubtitles",
+      "openSubtitlesUsernameLabel": "OpenSubtitles username",
+      "openSubtitlesPasswordLabel": "OpenSubtitles password",
+      "openSubtitlesHelp": "This is an opensubtitles.com account (an opensubtitles.org account does not work). Both fields are required. The account's daily download limit is what limits subtitle search.",
+      "openSubtitlesSignUp": "Create an account on opensubtitles.com"
     },
     "download": {
       "defaultLanguagesLabel": "Default download languages"
@@ -824,8 +851,8 @@
       "saved": "Preferences saved.",
       "save": "Save",
       "saving": "Saving...",
-      "subtitleSearchLabel": "Search for subtitles on the internet",
-      "subtitleSearchRequiresJellyfin": "Subtitle search requires Jellyfin as the media server."
+      "subtitleSearchLabel": "Search for subtitles on the internet for every title delivered from now on",
+      "subtitleSearchRequiresProvider": "An administrator has to enter an OpenSubtitles account in Settings → General."
     },
     "torrentGroups": {
       "chosenLabel": "Chosen groups",

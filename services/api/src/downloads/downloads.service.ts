@@ -5,7 +5,8 @@ import { EncodeStatus, SourceStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ProcessQueueService } from '@/queue/process-queue.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
-import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
+import { QbittorrentClient } from '@/clients/torrent/client';
+import { describeTorrentClientFailure, torrentClientFailure } from '@/downloads/torrent-client-failure';
 import { sanitizeTag } from '@/clients/torrent/tags';
 import { TorrentClientInfo } from '@/clients/torrent/types';
 import { SettingsService } from '@/settings/settings.service';
@@ -213,7 +214,9 @@ export class DownloadsService {
       await this.writeBackLiveStates(rows);
       return new Map(rows.map((row) => [row.hash.toLowerCase(), row]));
     } catch (err) {
-      console.error(`[DownloadsService] could not read torrent client state (tag "${tag ?? ''}"):`, err);
+      console.error(
+        `[DownloadsService] could not read torrent client state (tag "${tag ?? ''}"): ${describeTorrentClientFailure(err)}`,
+      );
       return new Map();
     }
   }
@@ -617,8 +620,7 @@ export class DownloadsService {
     try {
       return await action();
     } catch (err) {
-      const status = err instanceof TorrentClientError ? err.status : 0;
-      throw i18nError.serviceUnavailable(ERROR_KEYS.TORRENT_CLIENT_REJECTED, { status });
+      throw torrentClientFailure(err);
     }
   }
 
@@ -1239,7 +1241,9 @@ export class DownloadsService {
       const wanted = infoHash.toLowerCase();
       return rows.find((row) => row.hash.toLowerCase() === wanted);
     } catch (err) {
-      console.error(`[DownloadsService] could not reread mediaSource state after the mutation:`, err);
+      console.error(
+        `[DownloadsService] could not reread mediaSource state after the mutation: ${describeTorrentClientFailure(err)}`,
+      );
       return undefined;
     }
   }

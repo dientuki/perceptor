@@ -84,13 +84,6 @@ export default function TitleLanguagesPanel({
               ? names(effective.subtitleLanguages)
               : t("empty")}
           </dd>
-          {formProps.subtitleSearch !== undefined && (
-            <dd className="text-gray-500 dark:text-gray-400">
-              {formProps.subtitleSearch
-                ? t("subtitleSearchYes")
-                : t("subtitleSearchNo")}
-            </dd>
-          )}
         </div>
       </dl>
       {latestSubtitleSearch && (

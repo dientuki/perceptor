@@ -2,12 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
+import { readFile } from 'node:fs/promises';
 import { accept, SyncMeasurement } from './acceptance';
+import { lastCueEndMs } from './last-cue';
 import { deriveLanguages } from './derive-languages';
 import {
   SubtitleSearch,
   SubtitleSearchStatus,
 } from './entities/subtitle-search.entity';
+import { SubtitleProbeDetails } from './entities/subtitle-probe-details.entity';
+import { resolveSidecarLanguages } from './sidecar-languages';
 import { SubtitleSyncDetails } from './entities/subtitle-sync-details.entity';
 import { SubtitleSearchQueueService } from './subtitle-search-queue.service';
 
@@ -69,8 +73,11 @@ export class SubtitleSearchService {
         },
       },
     });
+    // Spec 106, REQ-7
     const filePath =
-      attempt?.search.movie?.filePath ?? attempt?.search.episode?.filePath;
+      attempt?.search.movie?.filePath ??
+      attempt?.search.episode?.filePath ??
+      attempt?.search.libraryPath;
     if (!attempt || !attempt.stagedPath || !filePath) {
       throw i18nError.notFound(ERROR_KEYS.SUBTITLE_SEARCH_SYNC_NOT_FOUND, {
         id,
@@ -89,13 +96,20 @@ export class SubtitleSearchService {
   }
 
   // Spec 103, REQ-10
-  async completed(id: number, measurement: SyncMeasurement): Promise<boolean> {
+  async completed(
+    id: number,
+    report: Omit<SyncMeasurement, 'lastCueEndMs'>,
+  ): Promise<boolean> {
     const row = await this.prisma.subtitleSearchAttempt.findUnique({
       where: { id },
     });
     if (!row) return false;
     if (row.status !== 'RUNNING') return true;
 
+    const measurement: SyncMeasurement = {
+      ...report,
+      lastCueEndMs: await this.readLastCueEnd(row.stagedPath),
+    };
     const reasonKey = accept(measurement);
     const claimed = await this.prisma.subtitleSearchAttempt.updateMany({
       where: { id, status: 'RUNNING' },
@@ -111,6 +125,16 @@ export class SubtitleSearchService {
     });
     if (claimed.count === 1) await this.wake(row.searchId);
     return true;
+  }
+
+  // Spec 103, REQ-10
+  private async readLastCueEnd(stagedPath: string | null): Promise<number | null> {
+    if (!stagedPath) return null;
+    try {
+      return lastCueEndMs(await readFile(stagedPath, 'utf8'));
+    } catch {
+      return null;
+    }
   }
 
   // Spec 103, REQ-14
@@ -134,6 +158,97 @@ export class SubtitleSearchService {
       data: { status: 'FAILED', reasonKey: key, finishedAt: new Date() },
     });
     if (claimed.count === 1) await this.wake(row.searchId);
+    return true;
+  }
+
+  // Spec 107, T005
+  async probeDetails(id: number): Promise<SubtitleProbeDetails> {
+    const search = await this.prisma.subtitleSearch.findUnique({
+      where: { id },
+      include: {
+        movie: { select: { filePath: true } },
+        episode: { select: { filePath: true } },
+      },
+    });
+    const filePath =
+      search?.movie?.filePath ??
+      search?.episode?.filePath ??
+      search?.libraryPath;
+    if (!search || search.status !== 'WAITING' || !filePath) {
+      throw i18nError.notFound(ERROR_KEYS.SUBTITLE_SEARCH_PROBE_NOT_FOUND, {
+        id,
+      });
+    }
+    return { id, filePath };
+  }
+
+  // Spec 107, NFR-2
+  async probeStarted(id: number): Promise<boolean> {
+    const result = await this.prisma.subtitleSearch.updateMany({
+      where: { id, status: 'WAITING', probeCount: { lt: 2 } },
+      data: { probeCount: { increment: 1 } },
+    });
+    return result.count === 1;
+  }
+
+  // Spec 107, REQ-3
+  async probeCompleted(
+    id: number,
+    report: {
+      embeddedLanguagesIso3: string[];
+      sidecarLanguageTags: string[];
+      fileSizeBytes: number;
+      movieHash: string;
+    },
+  ): Promise<boolean> {
+    const row = await this.prisma.subtitleSearch.findUnique({ where: { id } });
+    if (!row) return false;
+    if (row.status !== 'WAITING') return row.movieHash !== null;
+
+    const languages =
+      report.sidecarLanguageTags.length > 0
+        ? await this.prisma.language.findMany({
+            select: { tag: true, iso2: true, iso3: true },
+          })
+        : [];
+    const present = [
+      ...new Set([
+        ...report.embeddedLanguagesIso3.map((code) => code.toLowerCase()),
+        ...resolveSidecarLanguages(report.sidecarLanguageTags, languages),
+      ]),
+    ];
+
+    const claimed = await this.prisma.subtitleSearch.updateMany({
+      where: { id, status: 'WAITING' },
+      data: {
+        status: 'SEARCHING',
+        presentLanguages: present,
+        fileSizeBytes: BigInt(Math.trunc(report.fileSizeBytes)),
+        movieHash: report.movieHash,
+      },
+    });
+    if (claimed.count === 1) await this.wake(id);
+    return claimed.count === 1;
+  }
+
+  // Spec 107, T005
+  async probeFailed(id: number, errorKey: string): Promise<boolean> {
+    const row = await this.prisma.subtitleSearch.findUnique({ where: { id } });
+    if (!row) return false;
+    if (row.status !== 'WAITING') return true;
+
+    let key = errorKey;
+    if (errorKey !== ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED) {
+      this.logger.warn(
+        `Unknown subtitle probe error key "${errorKey}" for search ${id}; storing probe_failed`,
+      );
+      key = ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED;
+    }
+
+    await this.prisma.subtitleSearch.updateMany({
+      where: { id, status: 'WAITING' },
+      data: { status: 'FAILED', errorKey: key, finishedAt: new Date() },
+    });
     return true;
   }
 

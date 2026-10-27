@@ -22,6 +22,8 @@ services:
     build:
       context: ./services/api
       target: ${BUILD_TARGET:-dev}
+      secrets:
+        - opensubtitles_api_key
     image: perceptor-api:local-${BUILD_TARGET:-dev}
 
   worker:
@@ -47,3 +49,8 @@ services:
   redis:
     ports:
       - "${REDIS_PORT}:${REDIS_PORT}"
+
+# Spec 107: Perceptor's OpenSubtitles key, written into the prod api image by a BuildKit secret mount.
+secrets:
+  opensubtitles_api_key:
+    environment: OPENSUBTITLES_API_KEY

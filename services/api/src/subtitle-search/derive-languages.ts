@@ -21,12 +21,25 @@ export type SearchRow = {
   errorKey: string | null;
   wantedLanguages: unknown;
   presentLanguages: unknown;
+  languageErrors?: unknown;
 };
 
 function asStrings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
+}
+
+// Spec 107, T005
+function errorKeys(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
 }
 
 const PAST_SEARCHING = ['VALIDATING', 'EMBEDDING', 'COMPLETED'];
@@ -37,6 +50,7 @@ export function deriveLanguages(
   attempts: AttemptRow[],
 ): SubtitleSearchLanguage[] {
   const present = new Set(asStrings(search.presentLanguages));
+  const languageErrors = errorKeys(search.languageErrors);
 
   return asStrings(search.wantedLanguages).map((languageIso3) => {
     const result = (outcome: Outcome, reasonKey: string | null = null) => ({
@@ -50,6 +64,15 @@ export function deriveLanguages(
     const own = attempts
       .filter((attempt) => attempt.languageIso3 === languageIso3)
       .sort((a, b) => a.rank - b.rank);
+
+    // Spec 107, REQ-5 REQ-8 REQ-9
+    const failedKey = languageErrors[languageIso3];
+    if (
+      failedKey !== undefined &&
+      !own.some((attempt) => attempt.status === 'ACCEPTED')
+    ) {
+      return result(Outcome.FAILED, failedKey);
+    }
 
     const derived = deriveOne(search, own, result);
 

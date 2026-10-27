@@ -4,37 +4,39 @@
 // decides which of the quota-limited fetches are spent, so a lost ordering
 // rule silently burns the daily quota on the worst candidates.
 
-import { RemoteSubtitleCandidate } from '@/clients/media-server/types';
-import { filterAndRank, releaseSimilarity } from './candidates';
+import {
+  SubtitleCandidate,
+  filterAndRank,
+  releaseSimilarity,
+} from './candidates';
 
 const cand = (
   id: string,
-  over: Partial<RemoteSubtitleCandidate> = {},
-): RemoteSubtitleCandidate => ({
+  over: Partial<SubtitleCandidate> = {},
+): SubtitleCandidate => ({
   id,
-  languageIso3: 'spa',
-  name: 'Movie.2020.1080p.WEB-DL',
-  format: 'srt',
-  isForced: false,
-  isHearingImpaired: false,
-  isMachineTranslated: false,
-  isAiTranslated: false,
-  isHashMatch: false,
+  release: 'Movie.2020.1080p.WEB-DL',
+  fileCount: 1,
+  hearingImpaired: false,
+  foreignPartsOnly: false,
+  machineTranslated: false,
+  aiTranslated: false,
+  hashMatch: false,
   downloadCount: 0,
   ...over,
 });
 
-const ids = (list: RemoteSubtitleCandidate[]) => list.map((c) => c.id);
+const ids = (list: SubtitleCandidate[]) => list.map((c) => c.id);
 const RELEASE = 'Movie.2020.1080p.WEB-DL.x264-GRP';
 
 describe('filterAndRank filtering', () => {
-  it('drops forced, machine-translated, AI-translated and non-SRT candidates', () => {
+  it('drops foreign-parts-only, machine-translated, AI-translated and multi-file candidates', () => {
     const result = filterAndRank(
       [
-        cand('forced', { isForced: true }),
-        cand('machine', { isMachineTranslated: true }),
-        cand('ai', { isAiTranslated: true }),
-        cand('ass', { format: 'ass' }),
+        cand('forced', { foreignPartsOnly: true }),
+        cand('machine', { machineTranslated: true }),
+        cand('ai', { aiTranslated: true }),
+        cand('two', { fileCount: 2 }),
         cand('ok'),
       ],
       RELEASE,
@@ -42,20 +44,25 @@ describe('filterAndRank filtering', () => {
 
     expect(ids(result)).toEqual(['ok']);
   });
-
-  it('matches the SRT format case-insensitively', () => {
-    expect(ids(filterAndRank([cand('a', { format: 'SRT' })], RELEASE))).toEqual(
-      ['a'],
-    );
-  });
 });
 
 describe('filterAndRank ordering', () => {
+  it('drops a two-file result even when it would rank first', () => {
+    const result = filterAndRank(
+      [
+        cand('pack', { fileCount: 2, release: RELEASE, hashMatch: true }),
+        cand('single', { release: 'Other' }),
+      ],
+      RELEASE,
+    );
+    expect(ids(result)).toEqual(['single']);
+  });
+
   it('puts a hash match before a closer release name', () => {
     const result = filterAndRank(
       [
-        cand('close', { name: RELEASE }),
-        cand('hash', { name: 'Other', isHashMatch: true }),
+        cand('close', { release: RELEASE }),
+        cand('hash', { release: 'Other', hashMatch: true }),
       ],
       RELEASE,
     );
@@ -65,8 +72,8 @@ describe('filterAndRank ordering', () => {
   it('puts the closer release name first', () => {
     const result = filterAndRank(
       [
-        cand('far', { name: 'Movie.2020.BluRay.REMUX', downloadCount: 999 }),
-        cand('near', { name: 'Movie.2020.1080p.WEB-DL.x264-GRP' }),
+        cand('far', { release: 'Movie.2020.BluRay.REMUX', downloadCount: 999 }),
+        cand('near', { release: 'Movie.2020.1080p.WEB-DL.x264-GRP' }),
       ],
       RELEASE,
     );
@@ -76,7 +83,7 @@ describe('filterAndRank ordering', () => {
   it('puts a non hearing-impaired candidate before a hearing-impaired one of equal similarity', () => {
     const result = filterAndRank(
       [
-        cand('hi', { isHearingImpaired: true, downloadCount: 500 }),
+        cand('hi', { hearingImpaired: true, downloadCount: 500 }),
         cand('plain'),
       ],
       RELEASE,

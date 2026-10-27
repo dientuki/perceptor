@@ -135,6 +135,11 @@ export type SubtitleEmbedResult =
   | { success: true }
   | { error: string; errorKey?: string };
 
+// Spec 106, REQ-9
+export type SubtitleSearchResult =
+  | { search: SubtitleSearch }
+  | { error: string; errorKey?: string };
+
 // Spec 103, REQ-13
 export type SubtitleSearchStatus =
   | "WAITING"

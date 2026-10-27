@@ -7,6 +7,7 @@ import { EncodeQueueService } from '@/queue/encode-queue.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { MESSAGES_EN } from '@/i18n/messages.en';
+import { describeTorrentClientFailure } from '@/downloads/torrent-client-failure';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { TitleStatusService } from '@/title-status/title-status.service';
 
@@ -30,8 +31,7 @@ export class MediaSourcesService {
         .map((file) => file.name);
     } catch (error) {
       console.error(
-        `[MediaSourcesService] no se pudo resolver downloadedFiles para infoHash ${source.infoHash}:`,
-        error,
+        `[MediaSourcesService] no se pudo resolver downloadedFiles para infoHash ${source.infoHash}: ${describeTorrentClientFailure(error)}`,
       );
       return null;
     }

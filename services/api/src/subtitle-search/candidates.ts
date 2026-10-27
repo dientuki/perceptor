@@ -1,4 +1,17 @@
-import { RemoteSubtitleCandidate } from '@/clients/media-server/types';
+// Spec 107, T004
+export type SubtitleCandidate = {
+  id: string;
+  release: string;
+  fileCount: number;
+  hearingImpaired: boolean;
+  foreignPartsOnly: boolean;
+  machineTranslated: boolean;
+  aiTranslated: boolean;
+  hashMatch: boolean;
+  downloadCount: number;
+  // Spec 107, REQ-14
+  fileName?: string;
+};
 
 // Spec 103, REQ-8
 export const MAX_CANDIDATES_PER_LANGUAGE = 3;
@@ -25,28 +38,28 @@ export function releaseSimilarity(a: string, b: string): number {
 
 // Spec 103, REQ-8
 export function filterAndRank(
-  candidates: RemoteSubtitleCandidate[],
+  candidates: SubtitleCandidate[],
   releaseName: string,
-): RemoteSubtitleCandidate[] {
+): SubtitleCandidate[] {
   return candidates
     .filter(
       (candidate) =>
-        candidate.format.toLowerCase() === 'srt' &&
-        !candidate.isForced &&
-        !candidate.isMachineTranslated &&
-        !candidate.isAiTranslated,
+        candidate.fileCount === 1 &&
+        !candidate.foreignPartsOnly &&
+        !candidate.machineTranslated &&
+        !candidate.aiTranslated,
     )
     .map((candidate, index) => ({
       candidate,
       index,
-      similarity: releaseSimilarity(candidate.name, releaseName),
+      similarity: releaseSimilarity(candidate.release, releaseName),
     }))
     .sort(
       (a, b) =>
-        Number(b.candidate.isHashMatch) - Number(a.candidate.isHashMatch) ||
+        Number(b.candidate.hashMatch) - Number(a.candidate.hashMatch) ||
         b.similarity - a.similarity ||
-        Number(a.candidate.isHearingImpaired) -
-          Number(b.candidate.isHearingImpaired) ||
+        Number(a.candidate.hearingImpaired) -
+          Number(b.candidate.hearingImpaired) ||
         b.candidate.downloadCount - a.candidate.downloadCount ||
         a.index - b.index,
     )

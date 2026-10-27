@@ -55,13 +55,6 @@ export class MoviesResolver {
     return this.moviesService.findAudioMandatoryFor(userId, movie.id);
   }
 
-  // Spec 103, REQ-3
-  @ResolveField(() => Boolean)
-  async subtitleSearch(@Parent() movie: Movie, @CurrentUser() principal: AuthPrincipal) {
-    const userId = principal.type === 'user' ? principal.id : '';
-    return this.moviesService.findSubtitleSearchFor(userId, movie.id);
-  }
-
   // 067-title-removal: other users holding this film, only when selected —
   // a per-row count, so it must never be part of a listing.
   @ResolveField(() => Int)
@@ -170,22 +163,6 @@ export class MoviesResolver {
     const movie = await this.moviesService.findOneFromDb(movieId, userId);
     if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
     return this.moviesService.setAudioMandatoryFor(userId, movieId, mandatory);
-  }
-
-  // Spec 103, REQ-3
-  @Mutation(() => Boolean, {
-    name: 'setMovieSubtitleSearch',
-    description: 'Sets whether subtitles are searched online for this film (103 REQ-3).',
-  })
-  async setMovieSubtitleSearch(
-    @Args('movieId', { type: () => Int }) movieId: number,
-    @Args('enabled', { type: () => Boolean }) enabled: boolean,
-    @CurrentUser() principal: AuthPrincipal,
-  ) {
-    const userId = principal.type === 'user' ? principal.id : '';
-    const movie = await this.moviesService.findOneFromDb(movieId, userId);
-    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
-    return this.moviesService.setSubtitleSearchFor(userId, movieId, enabled);
   }
 
   @Mutation(() => Movie, {

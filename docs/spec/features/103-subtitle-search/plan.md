@@ -1,7 +1,7 @@
 ---
 title: Subtitle Search — Implementation Plan
-spec_version: 0.3.0
-last_updated: 2026-10-24
+spec_version: 0.5.0
+last_updated: 2026-10-26
 status: Approved
 ---
 
@@ -142,7 +142,7 @@ placeholders that reject everything until step 3 lands, never as values that acc
 
 ## Contract Freeze
 
-The `## GraphQL Contract Delta` in `spec.md` (v0.3.0) is frozen as of `status: Approved`. Things an
+The `## GraphQL Contract Delta` in `spec.md` (v0.5.0) is frozen as of `status: Approved`. Things an
 implementer will be tempted to change:
 
 - **The worker reports measurements, never a verdict.** `subtitleSyncCompleted` carries offset,
@@ -270,3 +270,45 @@ Set each threshold between that reference's good and bad scores, and record all 
 7. AC-9/AC-9b: a two-episode season pack, then a replacement during `WAITING`.
 8. AC-10: a language with no candidates, then one with only rejects.
 9. AC-11: `docker compose kill worker` during a validation, then start it again.
+
+## Amendment 0.4.0 (2026-10-25)
+
+`../spec.md` § Amendments 0.4.0 adds REQ-10's coverage check and tightens the framerate tolerance.
+Tasks: `tasks.md` Group 5.
+
+- **Order of work**: `api` first (T030: the two new `subtitleSyncCompleted` arguments and the rule),
+  then `worker` (T029) and `web` (T031) in parallel, then T024 (thresholds). A worker that sends
+  the new arguments before `api` accepts them fails every report, and `deliverReport` retries it
+  forever.
+- **Contract freeze**: `mediaDurationMs: Int!` and `lastChapterStartMs: Int` are the only contract
+  change. The worker reports the raw last chapter start; whether it qualifies (2+ chapters, after
+  80 % of the duration) is `api`'s decision, like every other part of the verdict.
+- **Risk (silent)**: with the score thresholds still `+Infinity`, the new checks change nothing
+  observable. Their tests are the only evidence until T024 lands.
+- **Risk (silent)**: a staged file `api` cannot parse must be rejected as `incomplete`. Treating
+  "no last cue found" as coverage 100 % would accept a broken file.
+- **No migration**: coverage is computed at report time and not stored; the rejection key is the
+  record.
+
+## Amendment 0.5.0 (2026-10-26)
+
+`../spec.md` § Amendments 0.5.0 removes the per-title flag. Everything above that mentions the
+per-title flag, the three flag mutations or the "effective flag" (the Approach's `requestFor` step, the
+2b row, the `set*SubtitleSearch` contract note, the migration list and AC-1b/AC-8 in Verification) is
+superseded by this section.
+
+- **Approach**: `requestFor` opts an owner in when REQ-1 holds and `User.subtitleSearch` is on. The
+  owners are read when the encode ends, so a preference changed before then is honoured.
+- **Order of Work**: `api` first (migration, contract, request service), then `web`; both ship under
+  one `PERCEPTOR_TAG`, since a stale `web` would still query the removed fields.
+- **Contract Freeze**: the four removed members are in `../spec.md` § GraphQL Contract Delta (v0.5.0).
+  `setSubtitleSearch` stays and refuses only on the capability.
+- **Migration**: drop `user_movies.subtitleSearch` and `user_shows.subtitleSearch`. No backfill; the
+  stored values are discarded. `users.subtitleSearch` and every `SubtitleSearch` row stay.
+- **Risk (silent)**: behaviour widens on upgrade. A user with the preference on and no title ticked
+  starts getting searches, and each one spends provider quota (NFR-2). Intended; stated in the
+  `/preferences` help text and the `history.md` entry.
+- **Risk (silent)**: a leftover per-title query in `web` fails the whole detail page with a GraphQL
+  validation error, no compile error anywhere. The `grep` in T033's *Done when* is the guard.
+- **Verification**: AC-1b is now "preference on, no per-title action, delivery creates a search"
+  (the *Stand by Me* case); AC-8 is "preference off, no row". Run both against a real delivery.

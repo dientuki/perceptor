@@ -14,6 +14,7 @@ import { runFfmpegCapture } from '../ffmpeg/capture';
 import { getMetadata } from '../ffmpeg/metadata';
 import { ERROR_SUBTITLE_SEARCH_SYNC_FAILED } from '../i18n/error-keys';
 import { KeyedError } from '../i18n/keyed-error';
+import { lastChapterStartMs, probeChapters } from '../subtitles/chapters';
 import { pickSyncReference } from '../subtitles/sync-reference';
 import { parseFfsubsyncOutput } from '../subtitles/ffsubsync-output';
 
@@ -50,6 +51,17 @@ export async function handleSubtitleSync(job: Job<SubtitleSyncJob>): Promise<voi
     const reference = pickSyncReference(metadata.streams ?? []);
     if (!reference) throw new Error('the library file has no usable reference stream');
 
+    const durationSeconds = Number(metadata.format?.duration);
+    if (
+      metadata.format?.duration === undefined ||
+      !Number.isFinite(durationSeconds) ||
+      durationSeconds <= 0
+    ) {
+      throw new Error('the library file duration is missing or unparseable');
+    }
+    const mediaDurationMs = Math.round(durationSeconds * 1000);
+    const lastChapterMs = lastChapterStartMs(await probeChapters(details.filePath));
+
     tempDir = await mkdtemp(join(tmpdir(), 'perceptor-subtitle-sync-'));
     const args = [
       details.filePath,
@@ -79,6 +91,8 @@ export async function handleSubtitleSync(job: Job<SubtitleSyncJob>): Promise<voi
         parsed.framerateRatio,
         reference.kind,
         parsed.score,
+        mediaDurationMs,
+        lastChapterMs,
       ),
     );
   } catch (err) {

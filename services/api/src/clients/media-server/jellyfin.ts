@@ -7,7 +7,6 @@ import {
   MediaServerEpisodeRef,
   MediaServerIndexPort,
   MediaServerLibraryEntry,
-  RemoteSubtitleCandidate,
 } from './types';
 import { MediaType, MEDIA_TYPE } from '@/types/media';
 import { HTTP_METHOD } from '@/types/http';
@@ -19,7 +18,6 @@ const READ_TIMEOUT_MS = 5_000;
 const LIST_LIBRARY_TIMEOUT_MS = 5 * 60 * 1000;
 
 // Spec 103, REQ-8
-const REMOTE_SUBTITLE_TIMEOUT_MS = 30_000;
 
 const LIBRARY_PAGE_SIZE = 500;
 
@@ -65,20 +63,6 @@ export type JellyfinSubtitleItem = {
   ParentIndexNumber?: number | null;
   IndexNumber?: number | null;
   MediaStreams?: JellyfinMediaStream[];
-};
-
-// Spec 103, REQ-8
-export type JellyfinRemoteSubtitle = {
-  Id?: string;
-  ThreeLetterISOLanguageName?: string | null;
-  Name?: string | null;
-  Format?: string | null;
-  Forced?: boolean | null;
-  HearingImpaired?: boolean | null;
-  MachineTranslated?: boolean | null;
-  AiTranslated?: boolean | null;
-  IsHashMatch?: boolean | null;
-  DownloadCount?: number | null;
 };
 
 type JellyfinSubtitleEpisodesResponse = {
@@ -128,35 +112,6 @@ export function toPresentLanguages(
   }
 
   return [...languages];
-}
-
-// Spec 103, REQ-8
-export function toRemoteCandidates(
-  items: JellyfinRemoteSubtitle[],
-  fallbackIso3: string,
-): RemoteSubtitleCandidate[] {
-  const candidates: RemoteSubtitleCandidate[] = [];
-
-  for (const item of items) {
-    if (!item.Id) continue;
-
-    candidates.push({
-      id: item.Id,
-      languageIso3: (
-        item.ThreeLetterISOLanguageName || fallbackIso3
-      ).toLowerCase(),
-      name: item.Name ?? '',
-      format: item.Format ?? '',
-      isForced: item.Forced === true,
-      isHearingImpaired: item.HearingImpaired === true,
-      isMachineTranslated: item.MachineTranslated === true,
-      isAiTranslated: item.AiTranslated === true,
-      isHashMatch: item.IsHashMatch === true,
-      downloadCount: item.DownloadCount ?? 0,
-    });
-  }
-
-  return candidates;
 }
 
 // Spec 101, NFR-2
@@ -375,49 +330,19 @@ export const createJellyfinClient = (
       await postUpdatedMedia(hostPath, 'Modified');
     },
 
-    // Spec 103, REQ-8
-    async searchRemoteSubtitles(itemId: string, iso3: string) {
-      const endpoint = new URL(
-        `Items/${encodeURIComponent(itemId)}/RemoteSearch/Subtitles/${encodeURIComponent(iso3)}`,
-        baseUrl,
-      );
-
-      const response = await fetch(endpoint, {
-        headers: { Authorization: authHeader },
-        signal: AbortSignal.timeout(REMOTE_SUBTITLE_TIMEOUT_MS),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Jellyfin responded ${response.status} while searching ${iso3} subtitles of ${itemId}: ${await response.text()}`,
-        );
+    // Spec 107, REQ-4
+    async mediaHostPath(
+      externalId: string,
+      seasonNumber?: number,
+      episodeNumber?: number,
+    ) {
+      if (seasonNumber === undefined || episodeNumber === undefined) {
+        return (await this.listItemSubtitles!(externalId)).mediaHostPath;
       }
-
-      return toRemoteCandidates(
-        (await response.json()) as JellyfinRemoteSubtitle[],
-        iso3,
+      const map = await this.listSeriesEpisodeSubtitles!(externalId);
+      return (
+        map.get(episodeKey(seasonNumber, episodeNumber))?.mediaHostPath ?? null
       );
-    },
-
-    // Spec 103, REQ-9
-    async fetchRemoteSubtitle(subtitleId: string) {
-      const endpoint = new URL(
-        `Providers/Subtitles/Subtitles/${encodeURIComponent(subtitleId)}`,
-        baseUrl,
-      );
-
-      const response = await fetch(endpoint, {
-        headers: { Authorization: authHeader },
-        signal: AbortSignal.timeout(REMOTE_SUBTITLE_TIMEOUT_MS),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Jellyfin responded ${response.status} while fetching subtitle ${subtitleId}: ${await response.text()}`,
-        );
-      }
-
-      return Buffer.from(await response.arrayBuffer());
     },
 
     // Spec 101, REQ-1

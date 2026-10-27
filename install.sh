@@ -302,6 +302,15 @@ if env_var_is_empty INDEXER_API_KEY; then
   fi
 fi
 
+if env_var_is_empty TORRENT_API_KEY; then
+  echo "Generating TORRENT_API_KEY..."
+  torrent_api_key=""
+  while [ "${#torrent_api_key}" -ne 32 ]; do
+    torrent_api_key="qbt_$(openssl rand -base64 64 | tr -dc 'A-Za-z0-9' | head -c 28)"
+  done
+  ensure_env_var TORRENT_API_KEY "$torrent_api_key"
+fi
+
 # Usuario dedicado de base de datos (REQ-7), sólo en una instalación nueva. NFR-4: MariaDB sólo
 # crea MARIADB_USER cuando el volumen está vacío — si ya existe un volumen de este proyecto,
 # las credenciales que tenga son las que valen, y no se tocan acá.

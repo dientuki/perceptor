@@ -135,6 +135,16 @@ if [ -z "$current_indexer_api_key" ]; then
   echo "it now lives inside the stack. You can stop it."
 fi
 
+current_torrent_api_key=$(grep '^TORRENT_API_KEY=' .env 2>/dev/null | cut -d= -f2-)
+if [ -z "$current_torrent_api_key" ]; then
+  echo "Generating TORRENT_API_KEY..."
+  torrent_api_key=""
+  while [ "${#torrent_api_key}" -ne 32 ]; do
+    torrent_api_key="qbt_$(openssl rand -base64 64 | tr -dc 'A-Za-z0-9' | head -c 28)"
+  done
+  ensure_env_var TORRENT_API_KEY "$torrent_api_key"
+fi
+
 set -a; . ./.env; set +a
 
 while true; do

@@ -69,11 +69,47 @@ describe('setQbittorrentLogin', () => {
     expect(result.reason).toMatch(/inalcanzable/);
   });
 
-  it('is not ok and carries the status when setPreferences answers 403', async () => {
+  it('names TORRENT_API_KEY when setPreferences answers 403', async () => {
     const { fn } = fakeFetch(() => ({ status: 403 }));
     const result = await setQbittorrentLogin(config, 'admin', PASSWORD, fn);
     expect(result.ok).toBe(false);
-    expect(result.reason).toContain('403');
+    expect(result.reason).toBe('credencial rechazada (TORRENT_API_KEY)');
+  });
+
+  it('names TORRENT_API_KEY when the preferences read answers 401', async () => {
+    const { fn } = fakeFetch(({ url }) =>
+      url.endsWith('/preferences') ? { status: 401 } : { status: 200 },
+    );
+    const result = await setQbittorrentLogin(config, 'admin', PASSWORD, fn);
+    expect(result.reason).toBe('credencial rechazada (TORRENT_API_KEY)');
+  });
+
+  it('keeps the plain status for any other failure', async () => {
+    const { fn } = fakeFetch(() => ({ status: 500 }));
+    const result = await setQbittorrentLogin(config, 'admin', PASSWORD, fn);
+    expect(result.reason).toBe('HTTP 500');
+  });
+
+  it('sends the bearer key on both requests', async () => {
+    const original = process.env.TORRENT_API_KEY;
+    process.env.TORRENT_API_KEY = 'sentinel-key';
+    try {
+      const { fn, calls } = fakeFetch(({ url }) =>
+        url.endsWith('/preferences')
+          ? { status: 200, json: { web_ui_username: 'admin' } }
+          : { status: 200 },
+      );
+      await setQbittorrentLogin(config, 'admin', PASSWORD, fn);
+      expect(calls).toHaveLength(2);
+      for (const c of calls) {
+        expect(
+          (c.init?.headers as Record<string, string>)['Authorization'],
+        ).toBe('Bearer sentinel-key');
+      }
+    } finally {
+      if (original === undefined) delete process.env.TORRENT_API_KEY;
+      else process.env.TORRENT_API_KEY = original;
+    }
   });
 
   it('never puts the password in a requested URL', async () => {

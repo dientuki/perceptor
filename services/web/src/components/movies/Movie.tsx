@@ -6,13 +6,13 @@ import { useState, useTransition } from "react";
 import {
   setMovieAudioMandatoryAction,
   setMoviePreferredTrackLanguagesAction,
-  setMovieSubtitleSearchAction,
 } from "@/actions/languages";
 import type { Movie as MovieRecord } from "@/actions/movies";
 import {
   embedMovieSubtitlesAction,
   refreshMovieAction,
   removeMovieAction,
+  searchMovieSubtitlesAction,
   setMovieContentKindAction,
   setMovieGrainModeAction,
   setMovieShortAction,
@@ -22,10 +22,12 @@ import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
 import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
+import FileTrackLanguages from "@/components/media/FileTrackLanguages";
 import GrainModeSelect from "@/components/media/GrainModeSelect";
 import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
 import RemoveTitleButton from "@/components/media/RemoveTitleButton";
+import SearchSubtitlesButton from "@/components/media/SearchSubtitlesButton";
 import TitleLanguagesPanel from "@/components/media/TitleLanguagesPanel";
 import MovieReleaseDates from "@/components/movies/MovieReleaseDates";
 import StatusBadge from "@/components/status/StatusBadge";
@@ -84,12 +86,6 @@ export default function Movie({
     null,
     movie.id,
   );
-  const subtitleSearchOffered =
-    subtitleSearchAvailable && (preferences?.subtitleSearch ?? false);
-  const setMovieSubtitleSearch = setMovieSubtitleSearchAction.bind(
-    null,
-    movie.id,
-  );
   const handleContentKindSave = (kind: ContentKind) =>
     setMovieContentKindAction(Number(movie.id), kind);
   const handleGrainModeSave = (mode: GrainMode) =>
@@ -130,6 +126,11 @@ export default function Movie({
             <span className="text-gray-400 italic">{t("noPoster")}</span>
           </div>
         )}
+        <FileTrackLanguages
+          audio={movie.fileAudioLanguages ?? null}
+          subtitles={movie.fileSubtitleLanguages ?? null}
+          variant="boxes"
+        />
       </div>
 
       <div className="min-w-0 space-y-6">
@@ -230,20 +231,23 @@ export default function Movie({
           setAudioAction={setMovieAudioLanguages}
           setSubtitleAction={setMovieSubtitleLanguages}
           setAudioMandatoryAction={setMovieAudioMandatory}
-          subtitleSearch={
-            subtitleSearchOffered ? (movie.subtitleSearch ?? false) : undefined
-          }
-          setSubtitleSearchAction={
-            subtitleSearchOffered ? setMovieSubtitleSearch : undefined
-          }
           latestSubtitleSearch={movie.latestSubtitleSearch}
           footer={
-            <EmbedSubtitlesButton
-              subtitles={movie.externalSubtitles ?? []}
-              embed={movie.subtitleEmbed}
-              onEmbed={embedMovieSubtitlesAction.bind(null, movie.id)}
-              fullWidth
-            />
+            <>
+              {subtitleSearchAvailable && movie.status === "COMPLETED" && (
+                <SearchSubtitlesButton
+                  search={movie.latestSubtitleSearch}
+                  onSearch={searchMovieSubtitlesAction.bind(null, movie.id)}
+                  fullWidth
+                />
+              )}
+              <EmbedSubtitlesButton
+                subtitles={movie.externalSubtitles ?? []}
+                embed={movie.subtitleEmbed}
+                onEmbed={embedMovieSubtitlesAction.bind(null, movie.id)}
+                fullWidth
+              />
+            </>
           }
         />
       </div>

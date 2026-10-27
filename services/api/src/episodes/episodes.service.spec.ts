@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EpisodesService } from './episodes.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
@@ -339,11 +340,9 @@ describe('EpisodesService', () => {
       prisma.episode.findFirst.mockResolvedValue(episode);
       prisma.mediaSource.findFirst.mockResolvedValue(null);
       prisma.mediaSource.findUnique.mockResolvedValue(null);
-      qbittorrent.add.mockRejectedValue(new Error('qBittorrent rechazó el torrent (500)'));
+      qbittorrent.add.mockRejectedValue(new TorrentClientError('qBittorrent rechazó el torrent (500)', 500));
 
-      await expect(service.addTorrentToEpisode(42, validInput, 'user-1')).rejects.toThrow(
-        'qBittorrent rechazó el torrent (500)',
-      );
+      await expect(service.addTorrentToEpisode(42, validInput, 'user-1')).rejects.toMatchObject({ response: { i18n: { key: ERROR_KEYS.TORRENT_CLIENT_REJECTED } } });
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
       expect(prisma.mediaSource.update).not.toHaveBeenCalled();
       expect(prisma.episode.update).not.toHaveBeenCalled();
@@ -481,7 +480,7 @@ describe('EpisodesService', () => {
       const failure = new TorrentClientError('down', 503);
       qbittorrent.info.mockRejectedValue(failure);
 
-      await expect(service.addTorrentToEpisode(42, input(true), 'user-1')).rejects.toBe(failure);
+      await expect(service.addTorrentToEpisode(42, input(true), 'user-1')).rejects.toMatchObject({ response: { i18n: { key: ERROR_KEYS.TORRENT_CLIENT_REJECTED } } });
 
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expectNoWrites();

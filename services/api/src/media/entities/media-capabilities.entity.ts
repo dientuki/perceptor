@@ -20,7 +20,7 @@ export class MediaCapabilities {
 
   @Field({
     description:
-      'True while media_server_client is jellyfin (103 REQ-1). Never exposes the server type.',
+      "True while Perceptor's OpenSubtitles application key is present and the OpenSubtitles username and password Settings are set (107 REQ-2). Never exposes any of them.",
   })
   subtitleSearchAvailable: boolean;
 }

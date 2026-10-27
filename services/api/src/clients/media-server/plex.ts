@@ -30,6 +30,25 @@ export type PlexEpisode = {
   Media?: { Part?: { file?: string }[] }[];
 };
 
+// Spec 107, REQ-4
+export function firstMediaFile(item: PlexEpisode): string | null {
+  const file = item.Media?.[0]?.Part?.[0]?.file;
+  return file ? file : null;
+}
+
+// Spec 107, REQ-4
+export function pickEpisodeFile(
+  items: PlexEpisode[],
+  seasonNumber: number,
+  episodeNumber: number,
+): string | null {
+  const match = items.find(
+    (item) =>
+      item.parentIndex === seasonNumber && item.index === episodeNumber,
+  );
+  return match ? firstMediaFile(match) : null;
+}
+
 export type PlexSection = {
   key: string;
   type: string;
@@ -217,35 +236,70 @@ export const createPlexClient = (
     return entries;
   }
 
+  async function scanContaining(media: string): Promise<void> {
+    const sections = await listSections();
+    const section = chooseSectionForPath(sections, media);
+
+    if (!section) {
+      console.warn(
+        `[media-server] no Plex section contains "${media}" — refreshing all of them`,
+      );
+      await refreshAll();
+      return;
+    }
+
+    const endpoint = new URL(
+      `library/sections/${section.key}/refresh`,
+      baseUrl,
+    );
+    endpoint.searchParams.set('path', posix.dirname(media));
+    await request(endpoint, `notify about ${media}`, READ_TIMEOUT_MS);
+    console.log(
+      `[media-server] Plex section scanned: ${section.key} (${posix.dirname(media)})`,
+    );
+  }
+
   return {
     async refreshLibrary() {
       await refreshAll();
     },
 
     async createdMedia(media: string) {
-      const sections = await listSections();
-      const section = chooseSectionForPath(sections, media);
+      await scanContaining(media);
+    },
 
-      if (!section) {
-        console.warn(
-          `[media-server] no Plex section contains "${media}" — refreshing all of them`,
+    // Spec 107, REQ-4
+    async modifiedMedia(hostPath: string) {
+      await scanContaining(hostPath);
+    },
+
+    // Spec 107, REQ-4
+    async mediaHostPath(
+      externalId: string,
+      seasonNumber?: number,
+      episodeNumber?: number,
+    ) {
+      if (seasonNumber === undefined || episodeNumber === undefined) {
+        const response = await request(
+          new URL(`library/metadata/${externalId}`, baseUrl),
+          `read item ${externalId}`,
+          READ_TIMEOUT_MS,
         );
-        await refreshAll();
-        return;
+        const body = (await response.json()) as PlexContainer<PlexEpisode>;
+        const item = body.MediaContainer.Metadata?.[0];
+        return item ? firstMediaFile(item) : null;
       }
 
-      const endpoint = new URL(
-        `library/sections/${section.key}/refresh`,
-        baseUrl,
-      );
-      endpoint.searchParams.set('path', posix.dirname(media));
-      await request(
-        endpoint,
-        `notify about ${media}`,
+      const response = await request(
+        new URL(`library/metadata/${externalId}/allLeaves`, baseUrl),
+        `list episodes of ${externalId}`,
         READ_TIMEOUT_MS,
       );
-      console.log(
-        `[media-server] Plex section scanned: ${section.key} (${posix.dirname(media)})`,
+      const body = (await response.json()) as PlexContainer<PlexEpisode>;
+      return pickEpisodeFile(
+        body.MediaContainer.Metadata ?? [],
+        seasonNumber,
+        episodeNumber,
       );
     },
 

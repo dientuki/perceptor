@@ -38,6 +38,8 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   path_shorts: { kind: 'path', rootId: 'library' },
   tracker_api_key: { kind: 'secret' },
   movie_db_api_key: { kind: 'secret' },
+  opensubtitles_username: { kind: 'string' },
+  opensubtitles_password: { kind: 'secret' },
   movies_enabled: { kind: 'boolean' },
   shows_enabled: { kind: 'boolean' },
   shorts_enabled: { kind: 'boolean' },

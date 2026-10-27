@@ -1,0 +1,113 @@
+#!/usr/bin/with-contenv bash
+# with-contenv makes TORRENT_API_KEY visible here, same as 10-prowlarr-apikey.
+#
+# Turns the subnet whitelist off unconditionally (first, so a bad key can never leave a bypass
+# behind), then validates TORRENT_API_KEY and writes it as WebUI\APIKey. A bad key halts the
+# container through s6, because init-custom-files ignores this script's exit code.
+# See docs/spec/features/104-torrent-api-key-auth/infra/plan.md.
+
+set -euo pipefail
+
+CONF_PATH="/config/qBittorrent/qBittorrent.conf"
+
+if [ ! -f "${CONF_PATH}" ]; then
+  echo "[30-qbittorrent-apikey] ERROR: ${CONF_PATH} does not exist (did init-qbittorrent-config run?)." >&2
+  exit 1
+fi
+
+CONF_PATH="${CONF_PATH}" python3 <<'PYEOF'
+import os
+
+conf_path = os.environ["CONF_PATH"]
+
+with open(conf_path, "r") as f:
+    lines = f.readlines()
+
+
+def find_line_index(key: str):
+    prefix = key + "="
+    for i, line in enumerate(lines):
+        if line.startswith(prefix):
+            return i
+    return None
+
+
+def upsert(key: str, value: str) -> None:
+    line = f"{key}={value}\n"
+    idx = find_line_index(key)
+    if idx is not None:
+        lines[idx] = line
+        return
+    for i, existing_line in enumerate(lines):
+        if existing_line.rstrip("\n") == "[Preferences]":
+            lines.insert(i + 1, line)
+            return
+    lines.append("[Preferences]\n")
+    lines.append(line)
+
+
+upsert("WebUI\\AuthSubnetWhitelistEnabled", "false")
+lines = [l for l in lines if not l.startswith("WebUI\\AuthSubnetWhitelist=")]
+
+with open(conf_path, "w") as f:
+    f.writelines(lines)
+
+print("[30-qbittorrent-apikey] subnet whitelist disabled")
+PYEOF
+
+if [ -z "${TORRENT_API_KEY:-}" ]; then
+  reason="empty"
+elif ! [[ "${TORRENT_API_KEY}" =~ ^qbt_[A-Za-z0-9]{28}$ ]]; then
+  reason="malformed"
+else
+  reason=""
+fi
+
+if [ -n "${reason}" ]; then
+  echo "[30-qbittorrent-apikey] ERROR: TORRENT_API_KEY is ${reason}: expected qbt_ followed by 28 letters or digits. Re-run install.sh to generate it." >&2
+  echo 1 > /run/s6-linux-init-container-results/exitcode
+  /run/s6/basedir/bin/halt
+  exit 1
+fi
+
+CONF_PATH="${CONF_PATH}" python3 <<'PYEOF'
+import os
+
+conf_path = os.environ["CONF_PATH"]
+key = os.environ["TORRENT_API_KEY"]
+KEY_NAME = "WebUI\\APIKey"
+
+with open(conf_path, "r") as f:
+    lines = f.readlines()
+
+idx = None
+for i, line in enumerate(lines):
+    if line.startswith(KEY_NAME + "="):
+        idx = i
+        break
+
+current = None
+if idx is not None:
+    current = lines[idx].rstrip("\n")[len(KEY_NAME) + 1:]
+    # qBittorrent re-serializes some values wrapped in double quotes on clean shutdown
+    if len(current) >= 2 and current.startswith('"') and current.endswith('"'):
+        current = current[1:-1]
+
+if current == key:
+    print("[30-qbittorrent-apikey] conf already has the declared key")
+else:
+    print("[30-qbittorrent-apikey] writing the declared key")
+    line = f"{KEY_NAME}={key}\n"
+    if idx is not None:
+        lines[idx] = line
+    else:
+        for i, existing_line in enumerate(lines):
+            if existing_line.rstrip("\n") == "[Preferences]":
+                lines.insert(i + 1, line)
+                break
+        else:
+            lines.append("[Preferences]\n")
+            lines.append(line)
+    with open(conf_path, "w") as f:
+        f.writelines(lines)
+PYEOF

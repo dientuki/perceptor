@@ -18,7 +18,6 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'torrent_client', value: 'qbittorrent' },
     { key: 'torrent_host', value: 'torrent' },
     { key: 'torrent_port', value: '8080' },
-    { key: 'torrent_api_key', value: '' },
 
     { key: 'tracker_client', value: 'prowlarr' },
     { key: 'tracker_host', value: 'indexer' },
@@ -35,6 +34,9 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'media_server_host', value: '' },
     { key: 'media_server_port', value: '8096' },
     { key: 'media_server_api_key', value: '' },
+
+    { key: 'opensubtitles_username', value: '' },
+    { key: 'opensubtitles_password', value: '' },
 
     { key: 'ia_model', value: 'gemini-3-flash-preview' },
     { key: 'ia_key', value: '' },

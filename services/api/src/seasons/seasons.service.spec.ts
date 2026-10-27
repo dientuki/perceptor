@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SeasonsService } from './seasons.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ERROR_KEYS } from '@/i18n/error-keys';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { SettingsService } from '@/settings/settings.service';
@@ -438,11 +439,9 @@ describe('SeasonsService', () => {
       prisma.season.findFirst.mockResolvedValue(season);
       prisma.mediaSource.findFirst.mockResolvedValue(null);
       prisma.mediaSource.findUnique.mockResolvedValue(null);
-      qbittorrent.add.mockRejectedValue(new Error('qBittorrent rechazó el torrent (500)'));
+      qbittorrent.add.mockRejectedValue(new TorrentClientError('qBittorrent rechazó el torrent (500)', 500));
 
-      await expect(service.addMagnetToSeason(42, { magnet, force: false }, 'user-1')).rejects.toThrow(
-        'qBittorrent rechazó el torrent (500)',
-      );
+      await expect(service.addMagnetToSeason(42, { magnet, force: false }, 'user-1')).rejects.toMatchObject({ response: { i18n: { key: ERROR_KEYS.TORRENT_CLIENT_REJECTED } } });
       expect(prisma.mediaSource.create).not.toHaveBeenCalled();
       expect(prisma.mediaSource.update).not.toHaveBeenCalled();
     });
@@ -586,7 +585,7 @@ describe('SeasonsService', () => {
 
       await expect(
         service.addMagnetToSeason(42, { magnet, force: true }, 'user-1'),
-      ).rejects.toBe(failure);
+      ).rejects.toMatchObject({ response: { i18n: { key: ERROR_KEYS.TORRENT_CLIENT_REJECTED } } });
 
       expect(qbittorrent.add).not.toHaveBeenCalled();
       expectNoWrites();

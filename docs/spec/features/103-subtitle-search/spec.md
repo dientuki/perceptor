@@ -1,9 +1,9 @@
 ---
 title: Subtitle Search
-spec_version: 0.3.0
+spec_version: 0.5.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-24
-last_updated: 2026-10-24
+last_updated: 2026-10-26
 status: Approved
 services: [api, worker, web]
 ---
@@ -36,10 +36,10 @@ Jellyfin is used to search and to fetch, never as a place to store the candidate
 into the downloads root that fails validation is deleted there, so nothing a rejected candidate leaves
 behind ever reaches the library folder (Article XII).
 
-The feature is gated twice. A per-user preference on `/preferences` and a per-title checkbox on the
-title's language form ("¿Buscar subtítulos en internet?", under the subtitle picker,
-`services/web/src/components/media/TitleLanguagesForm.tsx`). Both are only available while the
-configured media server is Jellyfin.
+The feature is controlled by one per-user preference on `/preferences`, available only while the
+configured media server is Jellyfin. There is no per-title control (amendment 0.5.0: a per-title
+checkbox, default off, left a user with the preference on and no search for a title they never
+ticked).
 
 Pipeline stages touched:
 
@@ -61,32 +61,24 @@ No title `status` ever changes because of a search.
       `MediaCapabilities.subtitleSearchAvailable`. It carries only that boolean, never the server
       type, host or key. While it is false:
       - `web` shows the `/preferences` checkbox disabled, with a hint that it requires Jellyfin;
-      - `web` hides the per-title checkbox;
       - no search ever starts.
 
       Stored flags are kept as they are, and take effect again if Jellyfin is configured again.
 - [ ] **REQ-2 (User preference)**: Each user has a `subtitleSearch` preference (default off),
       editable on `/preferences` in the download-languages tab under the subtitle language picker,
       saved by that page's existing Save button.
-- [ ] **REQ-3 (Per-title flag)**: Each owner of a film or series has their own `subtitleSearch`
-      flag on that title (default off). It is edited by a checkbox labelled
-      "¿Buscar subtítulos en internet?" under the subtitle picker of the title's language form,
-      saved by that form's existing Save button. An episode reads its series' owners' flags; there
-      is no per-episode flag.
-
-      The user preference (REQ-2) is a gate, not a default. The per-title checkbox is shown only
-      while both REQ-1 and the owner's preference are on. Every title starts off, and nothing
-      copies or falls back to the preference. An owner's **effective** flag is on only when REQ-1
-      holds, their preference is on and their per-title flag is on. Turning the preference off
-      keeps every per-title flag as stored but makes them all ineffective until it is turned on
-      again.
+- [ ] **REQ-3 (No per-title flag)**: *(amended 0.5.0; originally a per-title flag)* There is no
+      per-title `subtitleSearch` flag, field, mutation or checkbox. An owner is opted in exactly when
+      REQ-1 holds and that owner's `User.subtitleSearch` preference (REQ-2) is on. The preference
+      cannot be overridden for a single title. Turning the preference off makes the owner not opted in
+      for every title until it is turned on again.
 - [ ] **REQ-4 (Trigger)**: A search starts for a film or an episode when a file is delivered to it:
       `encodeCompleted` for its job, with or without compression, after the media-server
       notification. It starts only when REQ-1 holds and at least one owner of the title (the
-      series, for an episode) has an effective flag on (REQ-3). A season pack starts one search per
+      series, for an episode) is opted in (REQ-3). The owners are read from the database at that moment, so a preference changed before the encode ends is honoured. A season pack starts one search per
       delivered episode. There is no other trigger (see Out of Scope).
-- [ ] **REQ-5 (Wanted languages)**: The wanted languages are the union, over the owners whose flag
-      is on, of each owner's effective subtitle languages: the per-title subtitle list (`039`) when
+- [ ] **REQ-5 (Wanted languages)**: The wanted languages are the union, over the opted-in
+      owners (REQ-3), of each owner's effective subtitle languages: the per-title subtitle list (`039`) when
       it is non-empty, otherwise that owner's `subtitleLanguages` preference (`021`). Languages are
       compared by ISO 639-2 code. A regional variant (`es-419`, `es-ES`) is searched and matched as
       its base language (`spa`).
@@ -128,10 +120,28 @@ No title `status` ever changes because of a search.
       - its first text subtitle track that is not forced, when it has one;
       - otherwise its default audio track (its first audio track when none is default).
 
-      The worker reports the offset found, the framerate ratio, which reference was used, and the
-      alignment score. A candidate is accepted only when all of these hold:
-      - the framerate ratio is 1, so a candidate needing a framerate correction is rejected;
+      The worker reports the offset found, the framerate ratio, which reference was used, the
+      alignment score, the library file's duration as `ffprobe` reads it, and the start of its last
+      chapter when it has chapters. A candidate is
+      accepted only when all of these hold, checked in this order:
+      - the framerate ratio is 1: its distance from 1 is under 0.0005. `ffsubsync` picks the ratio
+        from a discrete set, and its nearest neighbour is 24/23.976 ≈ 1.001 (a subtitle timed for
+        24 fps on a 23.976 fps file), which drifts about 7 s over two hours and must be rejected.
+        A tolerance of 0.001 let it through by rounding;
       - the absolute offset is at most 600 000 ms, `101`'s REQ-4 bound;
+      - **the candidate covers the film**: the end time of its last cue, shifted by the offset
+        found, is more than a share of a reference point:
+        - when the file has at least 2 chapters and its last chapter starts after 80 % of the
+          duration, the reference is that chapter's start (on a disc-sourced file the last chapter
+          is the end credits) and the share is 85 %;
+        - otherwise the reference is the file's duration and the share is 60 %.
+
+        It is a floor only: cues inside the credits, past the reference, are never a reason to
+        reject. A candidate at or below the share is rejected with
+        `error.subtitleSearch.incomplete`. This is what stops a subtitle uploaded
+        in two parts ("2CD"): Jellyfin's plugin fetches only the first file, which syncs cleanly
+        and scores close to a complete subtitle, so neither the framerate, the offset nor the score
+        catch it. `api` reads the last cue from the staged file it wrote (REQ-9);
       - the score meets the acceptance threshold for the reference used.
 
       The thresholds (one for a subtitle reference, one for an audio reference) are
@@ -139,7 +149,8 @@ No title `status` ever changes because of a search.
       implementation on at least one known-good and one known-bad pair per reference, and recorded
       with those measurements in `docs/spec/history.md`'s entry for this spec. Each is a single
       constant in `api`, which applies the rule, so re-measuring later changes one value and no
-      contract.
+      contract. The coverage shares (85 % of the last chapter, 60 % of the duration) and the 80 %
+      chapter gate are constants beside them, with the same standing.
 - [ ] **REQ-11 (Embed through `101`)**: Once every missing language of a search is resolved, the
       accepted candidates (if any) are embedded by one `101` embed of that film or episode, in one
       remux. Each track carries:
@@ -183,7 +194,7 @@ No title `status` ever changes because of a search.
 
 - [x] **NFR-1 (Constitution amendment)**: Article XII's first `101` exception (replacing a library
       `.mkv` with its verified remux) only applied at an administrator's explicit request. It is
-      widened to also cover an embed started by this spec for a title an owner opted into (REQ-3).
+      widened to also cover an embed started by this spec for a title with an opted-in owner (REQ-3).
       The second exception, sidecar deletion, is not widened: this spec never deletes anything under
       the destinations root. *Ratified as constitution v1.6.0 on 2026-10-24.*
 - [ ] **NFR-2 (External quota)**: Each candidate tried costs one download from the plugin's account,
@@ -205,11 +216,14 @@ No title `status` ever changes because of a search.
       is removed:
       - a language with only a forced track counts as missing;
       - machine-translated, AI-translated, forced and non-SRT candidates never reach validation;
-      - a framerate ratio other than 1 is rejected;
+      - a framerate ratio other than 1 is rejected, including 1.001;
+      - a candidate whose last cue ends at or before 60 % of the file's duration is rejected;
+      - with a qualifying last chapter, a candidate at or below 85 % of its start is rejected, and
+        a file whose last chapter starts before 80 % of the duration falls back to the duration;
       - an offset over the bound is rejected;
       - a staged file is deleted on rejection and after a terminal embed;
       - a staged track is never deleted by the worker's sidecar rule;
-      - no search starts when the media server is not Jellyfin, or when no owner opted in;
+      - no search starts when the media server is not Jellyfin, or when no owner is opted in;
       - the 3-candidate cap holds;
       - an item whose path is not the delivered file is not used.
 
@@ -226,14 +240,8 @@ extend type UserPreferences {
 }
 
 extend type Movie {
-  """The caller's own flag (REQ-3)."""
-  subtitleSearch: Boolean!
   """The film's most recent search, null if it never had one."""
   latestSubtitleSearch: SubtitleSearch
-}
-
-extend type Show {
-  subtitleSearch: Boolean!
 }
 
 extend type Episode {
@@ -282,8 +290,6 @@ enum SubtitleSyncReference {
 
 type Mutation {
   setSubtitleSearch(enabled: Boolean!): UserPreferences!
-  setMovieSubtitleSearch(movieId: Int!, enabled: Boolean!): Boolean!
-  setShowSubtitleSearch(showId: Int!, enabled: Boolean!): Boolean!
 
   """Service-only (worker). Moves a queued validation to running; false if it is no longer queued."""
   subtitleSyncStarted(id: Int!): Boolean!
@@ -294,6 +300,10 @@ type Mutation {
     framerateRatio: Float!
     reference: SubtitleSyncReference!
     score: Float!
+    """Duration of the library file, in milliseconds, as ffprobe reads it. Feeds REQ-10's coverage check."""
+    mediaDurationMs: Int!
+    """Start of the library file's last chapter, in milliseconds; null when it has fewer than 2 chapters. api decides whether it qualifies (REQ-10)."""
+    lastChapterStartMs: Int
   ): Boolean!
   """Service-only (worker). Safe to receive more than once."""
   subtitleSyncFailed(id: Int!, errorKey: String!): Boolean!
@@ -323,12 +333,10 @@ The queue payload gains one queue and one job: `subtitle-sync` / `subtitle-sync`
 `{ subtitleSyncId: number }`. The worker reads everything else through `subtitleSyncDetails`.
 
 `Episode.latestSubtitleSearch` resolves for any owner of the series, like the episode itself.
-`Movie.subtitleSearch`/`Show.subtitleSearch` are the caller's own row, like `audioMandatory`.
 
 | Condition | HTTP / GraphQL error | Message the user sees |
 | :-- | :-- | :-- |
-| `set*SubtitleSearch` while `subtitleSearchAvailable` is false | `BadRequestException` `error.subtitleSearch.unsupported_media_server` | `La búsqueda de subtítulos requiere Jellyfin como servidor de medios.` |
-| Film/series missing or not owned by the caller | `NotFoundException`, the existing `movie`/`show` not-found keys | the existing messages |
+| `setSubtitleSearch` while `subtitleSearchAvailable` is false | `BadRequestException` `error.subtitleSearch.unsupported_media_server` | `La búsqueda de subtítulos requiere Jellyfin como servidor de medios.` |
 | Service-only mutation/query called with a user token | the existing service-guard key | the existing message |
 | `subtitleSyncDetails` for an unknown id | `NotFoundException` `error.subtitleSearch.sync_not_found` | not user-facing (worker logs and abandons) |
 
@@ -342,21 +350,21 @@ Outcome keys, shown in the panel and never thrown (REQ-13/REQ-14):
 | `error.subtitleSearch.sync_failed` | `No se pudo validar la sincronización del subtítulo.` |
 | `error.subtitleSearch.framerate_mismatch` | `El subtítulo es de una versión con otro framerate.` |
 | `error.subtitleSearch.offset_too_large` | `El subtítulo está demasiado desfasado.` |
+| `error.subtitleSearch.incomplete` | `El subtítulo está incompleto (solo cubre parte de la película).` |
 | `error.subtitleSearch.low_score` | `El subtítulo no coincide con este archivo.` |
 | `error.subtitleSearch.interrupted` | `La búsqueda se interrumpió.` |
 | `error.subtitleSearch.superseded` | `Una entrega más nueva reemplazó esta búsqueda.` |
 | `error.subtitleEmbed.busy` (reused from `101`) | `101`'s existing message |
 
-`web` must handle `unsupported_media_server` on save: show it in the form's existing error list and
-revert the checkbox, the same as the form's other errors. The `/preferences` form does the same.
+`web` must handle `unsupported_media_server` on save: show it in the `/preferences` form's existing error list
+and revert the checkbox.
 
 ## Data Model Changes
 
 | Model | Change | Nullable / default | Backfill needed? |
 | :-- | :-- | :-- | :-- |
 | `User` | `subtitleSearch Boolean` | `false` | No |
-| `UserMovie` | `subtitleSearch Boolean` | `false` | No |
-| `UserShow` | `subtitleSearch Boolean` | `false` | No |
+| `UserMovie`, `UserShow` | drop `subtitleSearch` (0.5.0) | — | No |
 | `SubtitleSearch` (new) | `movieId?`/`episodeId?` (exactly one, cascade), `status`, `errorKey?`, `subtitleEmbedId?` (the `101` embed it triggered), `checkCount` (REQ-6's bounded wait), `createdAt`, `finishedAt?` | — | No |
 | `SubtitleSearchAttempt` (new) | `searchId` (cascade), `languageIso3`, `providerSubtitleId`, `releaseName`, `rank`, `stagedPath?`, `status` (`QUEUED`/`RUNNING`/`ACCEPTED`/`REJECTED`/`FAILED`), `offsetMs?`, `framerateRatio?`, `reference?`, `score?`, `reasonKey?` | — | No |
 | `SubtitleEmbed.tracks` (JSON, `101`) | each track gains `isSidecar` | absent reads as `true` | No (absent = `101`'s behaviour) |
@@ -367,16 +375,16 @@ stored twice.
 ## Acceptance Criteria
 
 - [ ] **AC-1**: With the media server set to Plex or none, `/preferences` shows the "search subtitles
-      online" checkbox disabled with its hint, and a title's language form shows no
-      "¿Buscar subtítulos en internet?" checkbox. With Jellyfin configured and the user's preference
-      off, the per-title checkbox is still hidden. Turning the preference on shows it, unchecked.
-- [ ] **AC-1b**: With an opted-in title, turning the owner's preference off and delivering the title
-      creates no `subtitle_searches` row. Turning the preference back on shows the title's checkbox
-      still checked.
-- [ ] **AC-2**: With Jellyfin configured, calling `setMovieSubtitleSearch` and then switching the media
-      server to none and calling it again returns `La búsqueda de subtítulos requiere Jellyfin como
-      servidor de medios.`, and the stored flag is unchanged.
-- [ ] **AC-3**: A film whose owner wants `eng` and `spa` subtitles and opted in is delivered from a
+      online" checkbox disabled with its hint, and a title's language form shows no subtitle-search
+      checkbox. With Jellyfin configured the language forms still show none: the preference is the
+      only control.
+- [ ] **AC-1b**: With the owner's preference off, delivering a title creates no `subtitle_searches`
+      row. With it on, delivering a title creates one with no per-title action taken.
+- [ ] **AC-2**: With Jellyfin configured, `setSubtitleSearch(true)` succeeds; after switching the media
+      server to none it returns `La búsqueda de subtítulos requiere Jellyfin como servidor de medios.`
+      and the stored preference is unchanged. `schema.gql` has no `setMovieSubtitleSearch`,
+      `setShowSubtitleSearch`, `Movie.subtitleSearch` or `Show.subtitleSearch`.
+- [ ] **AC-3**: A film whose owner wants `eng` and `spa` subtitles and has the preference on is delivered from a
       release carrying only English. Within the REQ-6 window, `subtitle_search_attempts` holds `spa`
       rows only, and the film's panel shows English `ALREADY_PRESENT` and Spanish `EMBEDDED`.
       `mkvmerge -J` on the library file lists a new `spa` subtitle track titled `Español` after the
@@ -393,9 +401,9 @@ stored twice.
 - [ ] **AC-7 (failure)**: With Jellyfin stopped when the delivery completes, the search stays
       `WAITING` and then ends `FAILED` with `error.subtitleSearch.item_not_found` no later than two
       hours after the delivery. The title's status reads `COMPLETED` throughout.
-- [ ] **AC-8**: A delivery for a title where no owner opted in creates no `subtitle_searches` row and
+- [ ] **AC-8**: A delivery for a title where no owner is opted in creates no `subtitle_searches` row and
       makes no Jellyfin remote search call (Jellyfin's log shows none).
-- [ ] **AC-9**: A delivered episode of an opted-in series gets its own search. Delivering a two-episode
+- [ ] **AC-9**: A delivered episode of a series with an opted-in owner gets its own search. Delivering a two-episode
       season pack creates two searches. The first episode's search reaches `COMPLETED`, with its
       language `EMBEDDED`, while the second episode is still encoding, and the second follows when
       its own job finishes.
@@ -408,11 +416,14 @@ stored twice.
       attempt reads `FAILED` with `error.subtitleSearch.interrupted`, its staged file is gone, and the
       search proceeds to the next candidate or finishes.
 - [ ] **AC-12**: `bin/npm api run test` and `bin/npm worker run test` pass, including NFR-6's cases.
+- [ ] **AC-13 (failure)**: A candidate covering half the film (the first file of a "2CD" upload, or
+      an `.srt` cut at the midpoint) is staged as the only candidate. Its attempt reads `REJECTED`
+      with `error.subtitleSearch.incomplete`, and its staged file is gone.
 
 ## Out of Scope
 
 - **Searching on demand, or for titles already in the library.** The only trigger is a delivery
-  (REQ-4). Turning a flag on for a film already delivered does nothing until its next delivery.
+  (REQ-4). Turning the preference on for a film already delivered does nothing until its next delivery.
   Turning it on for a whole series would mean one search per episode at once, which a free
   OpenSubtitles quota cannot absorb. A manual "search now" button is a later feature.
 - **Re-searching later.** A language `NOT_FOUND` today may have a subtitle next week. There is no
@@ -434,3 +445,92 @@ stored twice.
   `101`'s manual action.
 - **Image subtitles (PGS/VobSub) as a reference.** `ffsubsync`'s `--pgs-ref-stream` exists, but v1
   references a text track or the audio only.
+
+## Amendments (2026-10-25, `spec_version` 0.4.0)
+
+Measured during implementation, before T024 set any threshold, on six films of the maintainer's
+library with real OpenSubtitles candidates fetched through Jellyfin and run through the worker's
+`ffsubsync` exactly as the `subtitle-sync` job runs it. The video files were never written.
+
+**What changed and why:**
+
+1. **REQ-10 coverage check (new rejection, `error.subtitleSearch.incomplete`).** Two of the three
+   Spanish candidates for *The Lost World: Jurassic Park* (1997) were the first half of a "2CD"
+   upload (confirmed on opensubtitles.org's CD column). They ended at 1:01:59 and 1:04:36 of a
+   2:08:39 film, synced cleanly (offsets -0.08 s and -3.38 s, ratio 1.000), and scored 307 289 and
+   320 324, close to the complete candidates of *Up in the Air* (364 547–382 513). No score
+   threshold separates them. Coverage does: 48 % and 50 % against 89–100 % for every complete
+   candidate measured. Jellyfin's plugin does not expose the number of files per upload, so this
+   cannot be filtered before the fetch.
+2. **REQ-10 framerate tolerance tightened from 0.001 to 0.0005.** The third Spanish candidate for
+   *Shutter Island* reported a ratio of 1.001 and is the upload OpenSubtitles tags as 24 fps; the
+   old bound accepted it by rounding.
+3. **Coverage against the last chapter when there is one.** All five library files measured carry
+   chapters, and the last one starts at 94–96 % of the file, at the end credits. Measured against
+   that start, every good candidate covers 99 % or more and the "2CD" halves 51–53 %, so the share
+   can rise to 85 % and also catch a subtitle missing its last quarter, which 60 % of the duration
+   lets through. A file with no chapters, or with automatic ones whose last start is not near the
+   end, falls back to the duration and 60 %.
+4. **Contract**: `subtitleSyncCompleted` gains `mediaDurationMs: Int!` and `lastChapterStartMs: Int`,
+   read by the worker from the `ffprobe` it already runs on the library file to pick the reference
+   (with chapters requested).
+
+**Measurements** (`score`, `offset`, `framerate`, coverage). Subtitle reference = the file's English
+text track; audio reference = its default audio track with `--vad webrtc`.
+
+Coverage below is against the duration. Last chapter start: Shutter Island 2:10:31 (95 %),
+Resident Evil 1:34:08 (94 %), Up in the Air 1:44:07 (95 %), Split 1:52:27 (96 %), The Lost World
+2:01:56 (95 %).
+
+| Film | Reference | Candidate | Score | Offset | Ratio | Coverage | Verdict |
+| :-- | :-- | :-- | --: | --: | --: | --: | :-- |
+| The Guyver (1991) | subtitle | matching sidecar | 438 001 | -17.99 s | 1.000 | — | good |
+| The Guyver (1991) | subtitle | another film's `.srt` | 28 446 | +9.87 s | 1.001 | — | bad |
+| The Guyver (1991) | audio | matching sidecar | 211 884 | -18.05 s | 1.000 | — | good |
+| The Guyver (1991) | audio | another film's `.srt` | -1 051 | +558.8 s | 1.042 | — | bad |
+| Split (2016) | subtitle | spa #1 / #2 / #3 | 630 129 / 633 427 / 629 973 | 0 / -1.0 / 0 s | 1.000 | 100 % | good |
+| Up in the Air (2009) | subtitle | spa #1 / #2 / #3 | 373 920 / 364 547 / 382 513 | -6.3 / -1.2 / -7.2 s | 1.000 | 95–100 % | good |
+| The Lost World (1997) | subtitle | spa #1 | 604 068 | -4.16 s | 1.000 | 94 % | good (maintainer checked) |
+| The Lost World (1997) | subtitle | spa #2, #3 (2CD, first file) | 307 289 / 320 324 | -0.08 / -3.38 s | 1.000 | 48 % / 50 % | bad: incomplete |
+| Resident Evil (2002) | audio | spa #1, #2 (PAL) | -274 713 / -249 509 | +586.9 / -558.2 s | 1.043 / 1.042 | — | bad: framerate |
+| Resident Evil (2002) | audio | spa #3 | 247 976 | -0.13 s | 1.000 | 93 % | good (maintainer checked) |
+| Shutter Island (2010) | audio | spa #1 (PAL) | 191 485 | +55.5 s | 1.043 | 89 % | bad: framerate |
+| Shutter Island (2010) | audio | spa #2 | 217 484 | +1.03 s | 1.000 | 94 % | good (maintainer checked) |
+| Shutter Island (2010) | audio | spa #3 (24 fps) | 197 537 | +0.58 s | 1.001 | 94 % | bad: framerate (this amendment) |
+| Shutter Island (2010) | audio | eng #1 (PAL) | 179 955 | +1.91 s | 1.043 | 90 % | bad: framerate |
+| Shutter Island (2010) | audio | eng #2 | 202 612 | +0.82 s | 1.000 | 94 % | good (maintainer checked) |
+
+Once the framerate and coverage checks run first, the score threshold only has to reject a subtitle
+of another film: the lowest good score is 364 547 (subtitle) and 202 612 (audio); the bad ones are
+28 446 and -1 051. The scores grow with the number of cues, so a short film will score lower than
+any of these; a threshold that rejects one only means no subtitle is embedded, never a wrong one.
+
+**Observed, not acted on here** (candidates for a later amendment):
+
+- REQ-8's Jaccard similarity favours a candidate named with the bare title over one naming the same
+  release markers (`2160p`, `remux`, `hevc`), since every unshared token counts against it.
+- Jellyfin exposes each candidate's `FrameRate` (`0` when unknown). Filtering a known mismatch before
+  the fetch would have saved two of the downloads above.
+- When the OpenSubtitles daily download quota is exhausted, Jellyfin answers a fetch with a bare
+  `500 Error processing request.` (its log says `RateLimitExceededException`), so `api` cannot tell
+  it apart from any other failure: every remaining candidate of the search is spent as
+  `fetch_failed`.
+
+## Amendments (2026-10-26, `spec_version` 0.5.0)
+
+Found while testing the published `:latest` images: *Stand by Me* was delivered with the owner's
+preference on and no search was created, because the per-title flag (REQ-3, default off, never
+inherited) was never ticked. Nothing failed, so nothing was logged.
+
+**What changed:**
+
+1. **REQ-3 replaced.** The per-title flag, its checkbox, `Movie.subtitleSearch`, `Show.subtitleSearch`,
+   `setMovieSubtitleSearch`, `setShowSubtitleSearch` and the `UserMovie`/`UserShow.subtitleSearch`
+   columns are removed. The user preference is the only switch and cannot be overridden per title.
+2. **REQ-4** reads the opted-in owners from `User.subtitleSearch` at the end of the encode.
+3. **Behaviour change, intended:** a user with the preference on now gets a search on every
+   subsequent delivery. `/preferences` help text says so.
+4. **Migration:** drop the two columns. No backfill; the stored values are discarded.
+5. **Contract:** the four removed members above; no new error keys.
+6. **Unchanged:** the wanted languages (REQ-5), ranking, acceptance, embedding, and the absence of a
+   retroactive or on-demand search (Out of Scope).
