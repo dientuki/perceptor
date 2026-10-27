@@ -22,6 +22,7 @@ import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
 import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
+import FileTrackLanguages from "@/components/media/FileTrackLanguages";
 import GrainModeSelect from "@/components/media/GrainModeSelect";
 import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
@@ -125,6 +126,11 @@ export default function Movie({
             <span className="text-gray-400 italic">{t("noPoster")}</span>
           </div>
         )}
+        <FileTrackLanguages
+          audio={movie.fileAudioLanguages ?? null}
+          subtitles={movie.fileSubtitleLanguages ?? null}
+          variant="boxes"
+        />
       </div>
 
       <div className="min-w-0 space-y-6">

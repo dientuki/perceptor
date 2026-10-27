@@ -67,11 +67,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Require the OpenSubtitles key
+        if: matrix.service == 'api' && github.repository == 'dientuki/perceptor'
+        env:
+          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+        run: |
+          if [ -z "$OPENSUBTITLES_API_KEY" ]; then
+            echo "::error::OPENSUBTITLES_API_KEY secret is empty; refusing to publish an api image without it"
+            exit 1
+          fi
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v7
         with:
           context: services/${{ matrix.service }}
+          # Spec 107: only the api leg receives the key, as a BuildKit secret mount — never a
+          # build-arg, so it is not recorded in the image history.
+          secrets: ${{ matrix.service == 'api' && format('opensubtitles_api_key={0}', secrets.OPENSUBTITLES_API_KEY) || '' }}
           target: ${{ matrix.target }}
           platforms: ${{ matrix.platform }}
           # No tag is set here on purpose — applying one is `merge`'s job, once both

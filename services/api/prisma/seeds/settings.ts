@@ -35,6 +35,9 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'media_server_port', value: '8096' },
     { key: 'media_server_api_key', value: '' },
 
+    { key: 'opensubtitles_username', value: '' },
+    { key: 'opensubtitles_password', value: '' },
+
     { key: 'ia_model', value: 'gemini-3-flash-preview' },
     { key: 'ia_key', value: '' },
 

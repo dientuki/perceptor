@@ -36,6 +36,7 @@ import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import { buildEmbedArgs } from '../subtitles/embed-args';
 import type { EmbedTrack } from '../subtitles/embed-args';
+import { buildTrackTagsXml } from '../subtitles/embed-tags';
 import { normalizeSrt } from '../subtitles/normalize-srt';
 import { mayDeleteSidecar } from '../subtitles/sidecar-guard';
 import { verifyEmbed } from '../subtitles/verify-embed';
@@ -167,8 +168,15 @@ export async function handleSubtitleEmbed(job: Job<SubtitleEmbedJob>): Promise<v
       }
       const normalizedPath = join(tempDir, `${n}.srt`);
       await writeFile(normalizedPath, normalizeSrt(bytes, track.offsetMs, basename(track.sourcePath)));
+      // Spec 107, REQ-14
+      let tagsPath: string | undefined;
+      if (track.provenance && track.provenance.trim() !== '') {
+        tagsPath = join(tempDir, `${n}.tags.xml`);
+        await writeFile(tagsPath, buildTrackTagsXml(track.provenance, track.offsetMs));
+      }
       embedTracks.push({
         normalizedPath,
+        tagsPath,
         languageIso3: track.languageIso3,
         trackTitle: track.trackTitle,
         isDefault: track.isDefault,

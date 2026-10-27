@@ -2573,6 +2573,10 @@ Cancelling a queued or running embed is out of scope, so there is no cancel chan
 
 ### Searching subtitles online and embedding them (`103-subtitle-search`)
 
+> **Superseded by `107`:** the Jellyfin wait, `media_server_client === jellyfin` availability and
+> Jellyfin's remote provider search described below no longer exist; `subtitleSearchAvailable` and the
+> `unsupported_media_server` refusal changed meaning. See the `107-opensubtitles-direct` section.
+
 ```graphql
 type MediaCapabilities { subtitleSearchAvailable: Boolean! }        # media_server_client === jellyfin
 type UserPreferences { subtitleSearch: Boolean! }
@@ -2640,6 +2644,154 @@ type Mutation {
 - A search's `errorKey` may now be `error.subtitleEmbed.not_mkv` or `error.subtitleEmbed.outside_library`
   (a title with no `filePath` is checked when the search leaves `WAITING`).
 - `SubtitleSearch.libraryPath` is `api`-internal and is not exposed.
+
+### Searching subtitles on OpenSubtitles directly (`107-opensubtitles-direct`)
+
+Supersedes `103`'s Jellyfin-based search: `api` talks to OpenSubtitles.com itself and the worker probes
+the library file. The delta, as frozen in `spec.md`:
+
+```graphql
+extend type MediaCapabilities {
+  """True while Perceptor's OpenSubtitles application key is present and the OpenSubtitles username and password Settings are set (107 REQ-2). Never exposes any of them."""
+  subtitleSearchAvailable: Boolean!
+}
+
+type SubtitleProbeDetails {
+  id: Int!
+  """Absolute container path of the library file to probe."""
+  filePath: String!
+}
+
+type Query {
+  """Service-only (worker). Same standing as SubtitleSyncDetails."""
+  subtitleProbeDetails(id: Int!): SubtitleProbeDetails!
+}
+
+type Mutation {
+  """Service-only (worker). Records that the probe started (107 NFR-2); false if the search is no longer WAITING, and the worker then abandons silently."""
+  subtitleProbeStarted(id: Int!): Boolean!
+  """Service-only (worker). Safe to receive more than once; false if the search is no longer WAITING."""
+  subtitleProbeCompleted(
+    id: Int!
+    """ISO 639-2 codes of the non-forced embedded subtitle tracks (107 REQ-3)."""
+    embeddedLanguagesIso3: [String!]!
+    """Language tags of the non-forced sidecars, as written in their names (`es`, `es-419`, `spa`, `Spanish`); api resolves them (107 REQ-3)."""
+    sidecarLanguageTags: [String!]!
+    """File size in bytes. Float: a library file exceeds Int's 2^31."""
+    fileSizeBytes: Float!
+    """OpenSubtitles hash of the file, 16 lowercase hex digits."""
+    movieHash: String!
+  ): Boolean!
+  """Service-only (worker). Safe to receive more than once."""
+  subtitleProbeFailed(id: Int!, errorKey: String!): Boolean!
+}
+```
+
+- `subtitleSearchAvailable` keeps its name and type; its meaning is now "key resolves AND both
+  Settings are non-empty". `web` changes only its hint copy. The two Settings
+  (`opensubtitles_username`, `opensubtitles_password`) travel through the existing `settings` /
+  `updateSettings`. The application key crosses no service boundary: only `api` reads it, and no
+  Setting holds it.
+- **Fourth queue contract.** Queue `subtitle-probe`, job `subtitle-probe`, payload
+  `{ subtitleSearchId: number }`, concurrency 1, declared in `services/api/src/queue/types.ts` and
+  copied by hand into `services/worker/src/queue/types.ts`. `id` in the query and mutations above is
+  the `SubtitleSearch` id.
+- **Provenance tags (amendment 0.4.0, REQ-14).** `101`'s `SubtitleEmbedTrack` gains one field, read
+  by the worker through the existing `subtitleEmbedDetails` query:
+
+  ```graphql
+  extend type SubtitleEmbedTrack {
+    """Value of the PERCEPTOR_SOURCE track tag (107 REQ-14): the OpenSubtitles file name for a searched track, `user` for a sidecar embedded by hand. Written verbatim after sanitizing; never empty."""
+    provenance: String!
+  }
+  ```
+
+  The worker writes `PERCEPTOR_SOURCE` (the sanitized `provenance`) and `PERCEPTOR_OFFSET` (the signed
+  `offsetMs`) on the new subtitle track through `mkvmerge --tags 0:<xml>`; a track with no
+  `provenance` (an older `api`) gets no tags, and existing tracks are never rewritten. `api` serves
+  `user` for a stored sidecar track and `opensubtitles` for a stored staged track that predates the field.
+- **Errors.**
+  - Thrown: `error.subtitleSearch.provider_not_configured` (replaces `unsupported_media_server`),
+    `no_library_path`, `media_server_unavailable` (kept, now thrown only when a title with no
+    `filePath` cannot be located), `probe_not_found` (`subtitleProbeDetails` for an unknown id).
+  - Outcome keys shown in the panel, never thrown: `provider_unauthorized`, `provider_unavailable`,
+    `quota_exhausted`, `probe_failed`.
+  - Retired but kept in the catalog for old rows: `unsupported_media_server`, `item_not_found`.
+- **The worker abandons silently** on `subtitleProbeDetails` → `probe_not_found` or
+  `subtitleProbeStarted` → `false`; a probe that throws reports `subtitleProbeFailed` with
+  `error.subtitleSearch.probe_failed`, and `api` ends the search `FAILED` with that key. A second
+  worker crash on the same search ends it `FAILED` with `error.subtitleSearch.interrupted`.
+- `Jellyfin`'s `searchRemoteSubtitles` / `fetchRemoteSubtitle` are removed from the client; `101`'s
+  sidecar listing stays.
+
+### Which languages a library file carries (`108-library-track-languages`)
+
+```graphql
+extend type Movie {
+  """ISO 639-2 audio languages of the library file (108 REQ-1); null while the file has never been read."""
+  fileAudioLanguages: [String!]
+  """ISO 639-2 subtitle languages of the library file, embedded and sidecar (108 REQ-1); null while the file has never been read."""
+  fileSubtitleLanguages: [String!]
+}
+
+extend type Episode {
+  """ISO 639-2 audio languages of the library file (108 REQ-1); null while the file has never been read."""
+  fileAudioLanguages: [String!]
+  """ISO 639-2 subtitle languages of the library file, embedded and sidecar (108 REQ-1); null while the file has never been read."""
+  fileSubtitleLanguages: [String!]
+}
+
+input LibraryProbeTarget {
+  movieId: Int
+  episodeId: Int
+}
+
+type LibraryProbeDetails {
+  """Absolute container path of the library file to read."""
+  filePath: String!
+}
+
+type Query {
+  """Service-only (worker). Exactly one of movieId/episodeId is set."""
+  libraryProbeDetails(target: LibraryProbeTarget!): LibraryProbeDetails!
+}
+
+type Mutation {
+  """Service-only (worker). Safe to receive more than once; false when filePath is no longer the title's file and the report was discarded (108 REQ-5)."""
+  libraryProbeCompleted(
+    target: LibraryProbeTarget!
+    """The path that was read, as libraryProbeDetails returned it."""
+    filePath: String!
+    """ISO 639-2 codes of the audio tracks, und and untagged left out."""
+    audioLanguagesIso3: [String!]!
+    """ISO 639-2 codes of the embedded subtitle tracks (108 REQ-1)."""
+    embeddedSubtitleLanguagesIso3: [String!]!
+    """Language tags of the sidecars, as written in their names; api resolves them."""
+    sidecarLanguageTags: [String!]!
+  ): Boolean!
+}
+```
+
+`fileAudioLanguages`/`fileSubtitleLanguages` are `null` for "never read" and `[]` for "read, nothing found";
+`web` hides the boxes for the first and shows `—` for the second (REQ-6). There is no failure
+mutation: a failed read changes nothing (NFR-3), so the worker only logs it.
+
+Queue: `library-probe` / `library-probe`, payload `{ movieId?: number; episodeId?: number }` with
+exactly one set, concurrency 1, declared in `services/api/src/queue/types.ts` and copied by hand
+into `services/worker/src/queue/types.ts`. `api` produces it with a job id per title
+(`library-probe-movie-<id>` / `library-probe-episode-<id>`) so a second request while one is queued
+is a no-op (REQ-3), and `attempts: 1`.
+
+| Condition | HTTP / GraphQL error | Message the user sees |
+| :-- | :-- | :-- |
+| `libraryProbeDetails` for a target with neither or both ids | `BadRequestException` `error.libraryProbe.invalid_target` | not user-facing (worker logs and abandons) |
+| `libraryProbeDetails` for a title that no longer exists, or has no file it can locate (REQ-2) | `NotFoundException` `error.libraryProbe.not_found` | not user-facing (worker logs and abandons, reports nothing) |
+| `libraryProbeDetails` for a title the media server holds while the media server is unreachable | `ServiceUnavailableException` `error.libraryProbe.media_server_unavailable` | not user-facing (worker logs and abandons) |
+| Either service-only operation with a user token | the existing service-guard key | the existing message |
+| `libraryProbeCompleted` for a target that no longer exists | none: resolves `false` | — |
+
+`web` reads two new nullable fields per type. They are prefixed `file` because `Movie.audioLanguages`/`subtitleLanguages` already exist (`039`: the caller's per-title preferred languages, `[Language!]!`) and mean something else; `Show` is not extended. `web` handles no new error. The worker abandons silently on every
+`libraryProbeDetails` error above.
 
 ## Known debt
 

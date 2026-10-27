@@ -9,6 +9,10 @@ import {
   SUBTITLE_EMBED_QUEUE,
   SUBTITLE_EMBED_JOB,
   SUBTITLE_SYNC_QUEUE,
+  SUBTITLE_PROBE_QUEUE,
+  SUBTITLE_PROBE_JOB,
+  LIBRARY_PROBE_QUEUE,
+  LIBRARY_PROBE_JOB,
   SUBTITLE_SYNC_JOB,
 } from './queue/types';
 import type {
@@ -17,11 +21,15 @@ import type {
   EncodeCancelMessage,
   SubtitleEmbedJob,
   SubtitleSyncJob,
+  SubtitleProbeJob,
+  LibraryProbeJob,
 } from './queue/types';
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
 import { handleSubtitleEmbed } from './jobs/subtitle-embed.job';
 import { handleSubtitleSync } from './jobs/subtitle-sync.job';
+import { handleSubtitleProbe } from './jobs/subtitle-probe.job';
+import { handleLibraryProbe } from './jobs/library-probe.job';
 import { cancelEncode } from './encode/cancellation';
 import {
   LEASE_RENEW_INTERVAL_MS,
@@ -184,6 +192,40 @@ async function main() {
     },
   );
 
+  // Spec 107, T012
+  const subtitleProbeWorker = new Worker<SubtitleProbeJob>(
+    SUBTITLE_PROBE_QUEUE,
+    async (job) => {
+      if (job.name !== SUBTITLE_PROBE_JOB) {
+        console.log(`[worker] unknown job ${job.name}, ignoring`);
+        return;
+      }
+
+      await handleSubtitleProbe(job);
+    },
+    {
+      connection,
+      concurrency: 1,
+    },
+  );
+
+  // Spec 108, T008
+  const libraryProbeWorker = new Worker<LibraryProbeJob>(
+    LIBRARY_PROBE_QUEUE,
+    async (job) => {
+      if (job.name !== LIBRARY_PROBE_JOB) {
+        console.log(`[worker] unknown job ${job.name}, ignoring`);
+        return;
+      }
+
+      await handleLibraryProbe(job);
+    },
+    {
+      connection,
+      concurrency: 1,
+    },
+  );
+
   scanWorker.on('failed', (job, err) => {
     console.error(`[worker] failed ${job?.id}:`, err);
   });
@@ -194,6 +236,14 @@ async function main() {
 
   subtitleSyncWorker.on('failed', (job, err) => {
     console.error(`[worker] subtitle sync failed ${job?.id}:`, err);
+  });
+
+  subtitleProbeWorker.on('failed', (job, err) => {
+    console.error(`[worker] subtitle probe failed ${job?.id}:`, err);
+  });
+
+  libraryProbeWorker.on('failed', (job, err) => {
+    console.error(`[worker] library probe failed ${job?.id}:`, err);
   });
 
   encodeWorker.on('completed', (job) => {
@@ -239,6 +289,8 @@ async function main() {
     void encodeWorker.close();
     void subtitleEmbedWorker.close();
     void subtitleSyncWorker.close();
+    void subtitleProbeWorker.close();
+    void libraryProbeWorker.close();
     void cancelSubscriber.quit();
 
     // Releasing on the way out is what makes an orderly restart instant instead
@@ -253,6 +305,8 @@ async function main() {
   console.log('[worker] listening on queue', ENCODE_QUEUE);
   console.log('[worker] listening on queue', SUBTITLE_EMBED_QUEUE);
   console.log('[worker] listening on queue', SUBTITLE_SYNC_QUEUE);
+  console.log('[worker] listening on queue', SUBTITLE_PROBE_QUEUE);
+  console.log('[worker] listening on queue', LIBRARY_PROBE_QUEUE);
   console.log('[worker] listening on channel', ENCODE_CANCEL_CHANNEL);
 }
 

@@ -40,6 +40,9 @@ export interface Movie {
   audioLanguages: Language[];
   subtitleLanguages: Language[];
   audioMandatory: boolean;
+  // Spec 108, REQ-6
+  fileAudioLanguages?: string[] | null;
+  fileSubtitleLanguages?: string[] | null;
   // Only present when fetched via getMovieById — never selected by a listing
   otherOwners?: number;
   // Only present when fetched via getMovieById
@@ -115,6 +118,8 @@ const GET_MOVIE_QUERY = `
         name
       }
       audioMandatory
+      fileAudioLanguages
+      fileSubtitleLanguages
       otherOwners
       externalSubtitles {
         fileName

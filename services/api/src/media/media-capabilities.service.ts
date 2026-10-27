@@ -4,6 +4,7 @@ import { MediaCapabilities } from './entities/media-capabilities.entity';
 import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
+import { openSubtitlesApiKey } from '@/clients/opensubtitles/key';
 
 // Spec 045, REQ-11; Spec 045, REQ-10
 @Injectable()
@@ -19,21 +20,25 @@ export class MediaCapabilitiesService {
       showsEnabled: this.isEnabledInMap(map, MEDIA_TYPE.SHOW),
       shortsEnabled: moviesEnabled && map['shorts_enabled'] === 'true',
       catalogKeyConfigured: (map['movie_db_api_key'] ?? '').trim() !== '',
-      subtitleSearchAvailable: map['media_server_client'] === 'jellyfin',
+      // Spec 107, REQ-2
+      subtitleSearchAvailable:
+        openSubtitlesApiKey() !== null &&
+        (map['opensubtitles_username'] ?? '').trim() !== '' &&
+        (map['opensubtitles_password'] ?? '').trim() !== '',
     };
   }
 
-  // Spec 103, REQ-1
+  // Spec 107, REQ-2
   async isSubtitleSearchAvailable(): Promise<boolean> {
     const capabilities = await this.read();
     return capabilities.subtitleSearchAvailable;
   }
 
-  // Spec 103, REQ-1
+  // Spec 107, REQ-2
   async assertSubtitleSearchAvailable(): Promise<void> {
     if (!(await this.isSubtitleSearchAvailable())) {
       throw i18nError.badRequest(
-        ERROR_KEYS.SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER,
+        ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_NOT_CONFIGURED,
       );
     }
   }

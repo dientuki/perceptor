@@ -5,6 +5,7 @@ import { basename, dirname, join } from 'node:path';
 import { PrismaService } from '@/prisma/prisma.service';
 import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
 import { SubtitleEmbedQueueService } from '@/queue/subtitle-embed-queue.service';
 import { ItemSubtitles, MediaServerClient } from '@/clients/media-server/types';
 import { episodeKey } from '@/clients/media-server/jellyfin';
@@ -54,7 +55,13 @@ export type StagedTrackInput = {
   languageIso3: string;
   stagedPath: string;
   offsetMs: number;
+  // Spec 107, REQ-14
+  provenance: string;
 };
+
+// Spec 107, REQ-14
+const USER_PROVENANCE = 'user';
+const STAGED_PROVENANCE = 'opensubtitles';
 
 type TargetFacts = {
   filePath: string | null;
@@ -70,6 +77,8 @@ type StoredTrack = {
   offsetMs: number;
   // Spec 103, REQ-11
   stagedPath?: string;
+  // Spec 107, REQ-14
+  provenance?: string;
 };
 
 function toExternalSubtitle(
@@ -116,6 +125,8 @@ export class SubtitleEmbedService {
     private readonly mediaRoots: MediaRootsService,
     private readonly queue: SubtitleEmbedQueueService,
     private readonly activeEmbed: ActiveEmbedGuard,
+    // Spec 108, T005
+    private readonly libraryProbeQueue: LibraryProbeQueueService,
   ) {}
 
   // Spec 101, REQ-2 REQ-3
@@ -323,6 +334,7 @@ export class SubtitleEmbedService {
       isDefault: subtitle.isDefault,
       isForced: listedByName.get(subtitle.fileName)!.isForced,
       offsetMs: subtitle.offsetMs,
+      provenance: USER_PROVENANCE,
     }));
 
     return this.queueEmbed(ref, mkvPath, tracks);
@@ -332,6 +344,7 @@ export class SubtitleEmbedService {
   async embedStaged(
     ref: TargetRef,
     staged: StagedTrackInput[],
+    mkvPath: string,
   ): Promise<SubtitleEmbed> {
     if (staged.length === 0) {
       throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_EMPTY_SELECTION);
@@ -357,13 +370,6 @@ export class SubtitleEmbedService {
       staged.map((track) => track.languageIso3),
     );
 
-    const client = target.filePath ? null : await this.listingClient();
-    if (!target.filePath && !client) {
-      throw i18nError.badRequest(
-        ERROR_KEYS.SUBTITLE_EMBED_UNSUPPORTED_MEDIA_SERVER,
-      );
-    }
-    const { mkvPath } = await this.resolveMkvPath(client, ref, target);
     await this.assertUsableMkv(mkvPath);
 
     await this.assertNotBusy(ref, target);
@@ -376,6 +382,7 @@ export class SubtitleEmbedService {
       isDefault: false,
       isForced: false,
       offsetMs: track.offsetMs,
+      provenance: track.provenance,
     }));
 
     return this.queueEmbed(ref, mkvPath, tracks);
@@ -779,7 +786,11 @@ export class SubtitleEmbedService {
     });
     if (claimed.count !== 1) return true;
 
-    if (!(await this.notifyJellyfin(row.filePath)) && warningKey === null) {
+    // Spec 108, REQ-3
+    if (row.movieId) void this.libraryProbeQueue.request({ movieId: row.movieId });
+    else if (row.episodeId) void this.libraryProbeQueue.request({ episodeId: row.episodeId });
+
+    if (!(await this.notifyMediaServer(row.filePath)) && warningKey === null) {
       await this.prisma.subtitleEmbed.update({
         where: { id },
         data: { warningKey: ERROR_KEYS.SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED },
@@ -788,15 +799,16 @@ export class SubtitleEmbedService {
     return true;
   }
 
-  // Spec 101, REQ-12
-  private async notifyJellyfin(containerFilePath: string): Promise<boolean> {
+  // Spec 101, REQ-12; Spec 107, REQ-4
+  private async notifyMediaServer(containerFilePath: string): Promise<boolean> {
     try {
       const client = await this.mediaServer.createClient();
-      if (!client?.modifiedMedia) {
+      if (!client) return true;
+      if (!client.modifiedMedia) {
         this.logger.warn(
-          'Jellyfin refresh skipped: no media server client that can be notified',
+          'Media server refresh skipped: the client cannot be notified',
         );
-        return false;
+        return true;
       }
       const hostPath = this.mediaRoots.containerToHostPath(
         'library',
@@ -804,14 +816,14 @@ export class SubtitleEmbedService {
       );
       if (!hostPath) {
         this.logger.warn(
-          `Jellyfin refresh skipped: ${containerFilePath} has no host path`,
+          `Media server refresh skipped: ${containerFilePath} has no host path`,
         );
         return false;
       }
       await client.modifiedMedia(hostPath);
       return true;
     } catch (error) {
-      this.logger.warn(`Jellyfin refresh failed: ${String(error)}`);
+      this.logger.warn(`Media server refresh failed: ${String(error)}`);
       return false;
     }
   }
@@ -830,6 +842,9 @@ export class SubtitleEmbedService {
       isDefault: track.isDefault,
       isForced: track.isForced,
       offsetMs: track.offsetMs,
+      provenance:
+        track.provenance ??
+        (track.stagedPath == null ? USER_PROVENANCE : STAGED_PROVENANCE),
     }));
 
     return { id: row.id, filePath: row.filePath, tracks };

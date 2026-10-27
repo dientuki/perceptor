@@ -332,7 +332,7 @@ export default function PreferencesForm({
               />
               {!capabilities.subtitleSearchAvailable && (
                 <p className="text-gray-500 dark:text-gray-400">
-                  {t("subtitleSearchRequiresJellyfin")}
+                  {t("subtitleSearchRequiresProvider")}
                 </p>
               )}
             </div>

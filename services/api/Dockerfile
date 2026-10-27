@@ -63,6 +63,15 @@ COPY --from=builder --chown=nestjs:nestjs /app/prisma ./prisma
 COPY --from=builder --chown=nestjs:nestjs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nestjs /app/package*.json ./
 
+# Spec 107, REQ-13 NFR-6: the OpenSubtitles application key arrives as a BuildKit secret and is
+# written as a file only when present; no ARG/ENV, so it never reaches image metadata.
+RUN --mount=type=secret,id=opensubtitles_api_key \
+    mkdir -p /app/secrets && \
+    if [ -s /run/secrets/opensubtitles_api_key ]; then \
+      cp /run/secrets/opensubtitles_api_key /app/secrets/opensubtitles_api_key && \
+      chmod 0444 /app/secrets/opensubtitles_api_key; \
+    fi
+
 USER nestjs
 
 EXPOSE 3000

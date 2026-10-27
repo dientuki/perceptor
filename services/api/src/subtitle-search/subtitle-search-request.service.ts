@@ -1,16 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
+import { MediaServerService } from '@/media-server/media-server.service';
+import { MediaRootsService } from '@/media-roots/media-roots.service';
+import { LibraryLocationService } from '@/library-location/library-location.service';
 import { SubtitleEmbedService } from '@/subtitle-embed/subtitle-embed.service';
 import { SubtitleSearchQueueService } from './subtitle-search-queue.service';
 
 export type SubtitleSearchTarget =
   { kind: 'movie'; id: number } | { kind: 'episode'; id: number };
-
-const FIRST_WAKE_DELAY_MS = 5 * 60 * 1000;
 
 const NON_TERMINAL = [
   'WAITING',
@@ -23,13 +24,20 @@ const NON_TERMINAL = [
 @Injectable()
 export class SubtitleSearchRequestService {
   private readonly logger = new Logger(SubtitleSearchRequestService.name);
+  private readonly location: LibraryLocationService;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly capabilities: MediaCapabilitiesService,
     private readonly queue: SubtitleSearchQueueService,
     private readonly embed: SubtitleEmbedService,
-  ) {}
+    private readonly mediaServer: MediaServerService,
+    private readonly mediaRoots: MediaRootsService,
+    @Optional() location?: LibraryLocationService,
+  ) {
+    this.location =
+      location ?? new LibraryLocationService(mediaServer, mediaRoots);
+  }
 
   async requestFor(target: SubtitleSearchTarget): Promise<void> {
     try {
@@ -63,13 +71,12 @@ export class SubtitleSearchRequestService {
           ...column,
           status: 'WAITING',
           wantedLanguages: wanted,
-          checkCount: 0,
         },
       });
     });
 
     try {
-      await this.queue.wake(created.id, FIRST_WAKE_DELAY_MS);
+      await this.queue.wake(created.id, 0);
     } catch (error) {
       this.logger.warn(
         `Could not schedule subtitle search ${created.id}; the boot re-wake recovers it: ${String(error)}`,
@@ -82,14 +89,19 @@ export class SubtitleSearchRequestService {
     target: SubtitleSearchTarget,
     userId: string,
   ): Promise<number> {
-    await this.embed.assertManualSearchPreflight(target, userId);
+    const facts = await this.embed.assertManualSearchPreflight(target, userId);
 
     const wanted = await this.wantedLanguages(target, userId);
     if (wanted.length === 0) {
       throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_SEARCH_NO_LANGUAGES);
     }
 
-    const created = await this.createGuarded(target, wanted);
+    // Spec 107, REQ-4
+    const libraryPath = facts.filePath
+      ? null
+      : await this.resolveLibraryPath(target, facts);
+
+    const created = await this.createGuarded(target, wanted, libraryPath);
 
     try {
       await this.queue.wake(created.id, 0);
@@ -101,8 +113,42 @@ export class SubtitleSearchRequestService {
     return created.id;
   }
 
+  // Spec 107, REQ-4; Spec 108, REQ-3
+  private async resolveLibraryPath(
+    target: SubtitleSearchTarget,
+    facts: {
+      tmdbId?: number;
+      seasonNumber?: number;
+      episodeNumber?: number;
+    },
+  ): Promise<string> {
+    const located = await this.location.locate({
+      kind: target.kind,
+      tmdbId: facts.tmdbId!,
+      seasonNumber: facts.seasonNumber,
+      episodeNumber: facts.episodeNumber,
+    });
+    if ('path' in located) {
+      await this.embed.assertUsableMkv(located.path);
+      return located.path;
+    }
+    if (located.reason === 'unavailable') {
+      throw i18nError.badRequest(
+        ERROR_KEYS.SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE,
+      );
+    }
+    if (located.reason === 'outside_library') {
+      throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_OUTSIDE_LIBRARY);
+    }
+    throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_SEARCH_NO_LIBRARY_PATH);
+  }
+
   // Spec 106, REQ-3 REQ-8
-  private async createGuarded(target: SubtitleSearchTarget, wanted: string[]) {
+  private async createGuarded(
+    target: SubtitleSearchTarget,
+    wanted: string[],
+    libraryPath: string | null = null,
+  ) {
     const column = this.column(target);
     try {
       return await this.prisma.$transaction(
@@ -118,7 +164,7 @@ export class SubtitleSearchRequestService {
               ...column,
               status: 'WAITING',
               wantedLanguages: wanted,
-              checkCount: 0,
+              ...(libraryPath === null ? {} : { libraryPath }),
             },
           });
         },

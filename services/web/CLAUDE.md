@@ -358,6 +358,10 @@ Enforcement itself is `api`-only and system-wide (no admin bypass); this slice i
 routing only, with the three `errors.media.*`/`errors.schedule.*` catalog keys as its backstop for
 the race where an administrator flips a switch between render and submit.
 
+## Library file languages (`108-library-track-languages`)
+
+`components/media/FileTrackLanguages.tsx` renders `Movie`/`Episode.fileAudioLanguages` and `fileSubtitleLanguages` (nullable `[String!]`; the `file` prefix keeps them apart from `Movie.audioLanguages`, the caller's `039` preference). `null` hides a line and both `null` hides the block (the file was never read); `[]` shows `—`; codes are upper-cased 3-letter chips. `variant="boxes"` sits under a film's poster in `Movie.tsx`; `variant="compact"` fills the "Pistas" column of `SeasonAccordion.tsx`, which also holds `106`'s `SearchSubtitlesButton`. `web` triggers no read and shows no failure.
+
 ## Detail pages are scoped, with a route-segment 404
 
 `/movies/[id]` and `/shows/[id]` are structural twins. `api` returns `null` both for a nonexistent id

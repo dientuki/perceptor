@@ -14,7 +14,8 @@ import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 import { SubtitleEmbedService } from '@/subtitle-embed/subtitle-embed.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
-import { RemoteSubtitleCandidate } from '@/clients/media-server/types';
+import { OpenSubtitlesHttpError } from '@/clients/opensubtitles/errors';
+import { SubtitleCandidate } from './candidates';
 import { SubtitleSearchDriver } from './subtitle-search.driver';
 import { SubtitleSearchStaging } from './staging';
 
@@ -37,33 +38,34 @@ function matches(row: Row, where: Row = {}): boolean {
 
 const candidate = (
   id: string,
-  over: Partial<RemoteSubtitleCandidate> = {},
-): RemoteSubtitleCandidate => ({
+  over: Partial<SubtitleCandidate> = {},
+): SubtitleCandidate => ({
   id,
-  languageIso3: 'spa',
-  name: `Movie ${id}`,
-  format: 'srt',
-  isForced: false,
-  isHearingImpaired: false,
-  isMachineTranslated: false,
-  isAiTranslated: false,
-  isHashMatch: false,
+  release: `Movie ${id}`,
+  fileCount: 1,
+  hearingImpaired: false,
+  foreignPartsOnly: false,
+  machineTranslated: false,
+  aiTranslated: false,
+  hashMatch: false,
   downloadCount: 10,
   ...over,
 });
 
 // This suite exists because every failure of the driver is silent: it runs minutes to hours after
-// the delivery that started it, in a background queue nobody watches. An item whose path is not the
-// delivered file used as the target embeds subtitles into a different release's timing; a language
-// already present searched again spends the shared OpenSubtitles quota for nothing; a second set of
-// attempts after a crash doubles the candidates fetched and syncs the same file twice; a duplicate
-// wake-up that rewrites a state it already left re-runs a step against a newer one; a staged
-// candidate left in the downloads root after a rejection, a refusal or a terminal state is a file
-// nobody will ever clean; and an embed refused as busy that is retried rewrites a library file the
-// replacement is still encoding. It runs the real state machine over a stateful fake of the two
-// tables, the real staging in a temp downloads root and the real MediaRootsService, with only
-// Jellyfin, the queues and the embed (except for the season pack case, which uses the real one)
-// faked (Article IX, Spec 103, REQ-6 REQ-7 REQ-8 REQ-9 REQ-12 NFR-4).
+// the delivery that started it, in a background queue nobody watches. A WAITING step that reaches
+// OpenSubtitles before the probe reported spends the shared download quota on a search with no
+// file hash; a quota or authorization answer swallowed as an empty result completes the search as
+// "nothing found" when the real cause is an exhausted day; a download that reports no quota left
+// and is followed by one more download burns the account's next day; a language already present
+// searched again spends that quota for nothing; a second set of attempts after a crash doubles the
+// candidates fetched; a duplicate wake-up that rewrites a state it already left re-runs a step
+// against a newer one; a staged candidate left in the downloads root is a file nobody will ever
+// clean; and an embed pointed at the wrong path rewrites a different library file. It runs the real
+// state machine over a stateful fake of the two tables, the real staging in a temp downloads root
+// and the real MediaRootsService, with only the OpenSubtitles client, the queues and the embed
+// (except for the season pack case, which uses the real one) faked (Article IX, Spec 103, REQ-7
+// REQ-8 REQ-9 REQ-12 NFR-4; Spec 107, REQ-3 REQ-6 REQ-9).
 describe('SubtitleSearchDriver', () => {
   let baseDir: string;
   let libDir: string;
@@ -78,9 +80,10 @@ describe('SubtitleSearchDriver', () => {
   let wake: jest.Mock;
   let addSync: jest.Mock;
   let embedStaged: jest.Mock;
-  let refreshAndWait: jest.Mock;
+  let addProbe: jest.Mock;
+  let removeProbe: jest.Mock;
   let client: Record<string, jest.Mock>;
-  let remote: Record<string, RemoteSubtitleCandidate[]>;
+  let remote: Record<string, SubtitleCandidate[]>;
   let available: boolean;
   let driver: SubtitleSearchDriver;
   let prisma: Record<string, unknown>;
@@ -103,13 +106,15 @@ describe('SubtitleSearchDriver', () => {
       id: 1,
       movieId: 10,
       episodeId: null,
-      status: 'WAITING',
+      status: 'SEARCHING',
       errorKey: null,
       wantedLanguages: ['eng', 'spa'],
-      presentLanguages: null,
-      itemId: null,
+      presentLanguages: ['eng'],
+      libraryPath: null,
+      movieHash: 'abcdef0123456789',
+      languageErrors: null,
       subtitleEmbedId: null,
-      checkCount: 0,
+      createdAt: new Date(),
       finishedAt: null,
       ...over,
     };
@@ -134,13 +139,6 @@ describe('SubtitleSearchDriver', () => {
       });
     }
   };
-
-  const listing = (hostFile = '/host/library/Movie.mkv') => ({
-    itemId: 'item-1',
-    mediaHostPath: hostFile,
-    subtitles: [],
-    presentLanguagesIso3: ['eng'],
-  });
 
   beforeAll(async () => {
     baseDir = await mkdtemp(join(tmpdir(), 'subtitle-search-driver-'));
@@ -177,17 +175,8 @@ describe('SubtitleSearchDriver', () => {
       { setHandler: jest.fn(), wake } as never,
       { addSync } as never,
       (embedService ?? { embedStaged }) as never,
-      { createClient: jest.fn(() => Promise.resolve(client)) } as never,
-      { refreshAndWait } as never,
-      {
-        getMap: jest.fn().mockResolvedValue({
-          media_server_client: 'jellyfin',
-          media_server_host: 'jf',
-          media_server_port: '8096',
-          media_server_api_key: 'k',
-        }),
-      } as never,
-      mediaRoots,
+      { addProbe, removeProbe } as never,
+      client as never,
       {
         isSubtitleSearchAvailable: jest.fn(() => Promise.resolve(available)),
       } as never,
@@ -206,21 +195,22 @@ describe('SubtitleSearchDriver', () => {
     nextAttemptId = 100;
     available = true;
     remote = {
-      spa: [candidate('a'), candidate('b'), candidate('c'), candidate('d')],
+      es: [candidate('a'), candidate('b'), candidate('c'), candidate('d')],
     };
     wake = jest.fn().mockResolvedValue(undefined);
     addSync = jest.fn().mockResolvedValue(undefined);
     embedStaged = jest.fn().mockResolvedValue({ id: 500 });
-    refreshAndWait = jest.fn().mockResolvedValue('ready');
+    addProbe = jest.fn().mockResolvedValue(undefined);
+    removeProbe = jest.fn().mockResolvedValue(undefined);
     client = {
-      findByTmdbId: jest.fn().mockResolvedValue('item-1'),
-      listItemSubtitles: jest.fn(() => Promise.resolve(listing())),
-      listSeriesEpisodeSubtitles: jest.fn(),
-      searchRemoteSubtitles: jest.fn((_item: string, iso3: string) =>
-        Promise.resolve(remote[iso3] ?? []),
+      search: jest.fn((params: { languages: string }) =>
+        Promise.resolve(remote[params.languages] ?? []),
       ),
-      fetchRemoteSubtitle: jest.fn(() =>
-        Promise.resolve(Buffer.from('1\n00:00:01,000 --> 00:00:02,000\nHi\n')),
+      download: jest.fn(() =>
+        Promise.resolve({
+          bytes: Buffer.from('1\n00:00:01,000 --> 00:00:02,000\nHi\n'),
+          remaining: 10,
+        }),
       ),
     };
 
@@ -367,210 +357,92 @@ describe('SubtitleSearchDriver', () => {
     driver = build();
   });
 
-  describe('waiting for the Jellyfin item (REQ-6)', () => {
-    it('does not use an item whose path is not the delivered file', async () => {
-      seedSearch();
-      client.listItemSubtitles.mockResolvedValue(
-        listing('/host/library/Another Release.mkv'),
-      );
+  describe('waiting for the probe (Spec 107 REQ-3)', () => {
+    it('queues the probe and a 60-minute backstop and calls no OpenSubtitles method', async () => {
+      seedSearch({
+        status: 'WAITING',
+        presentLanguages: null,
+        movieHash: null,
+      });
 
       await driver.advance(1);
 
-      expect(search()).toMatchObject({
+      expect(removeProbe).toHaveBeenCalledWith(1);
+      expect(addProbe).toHaveBeenCalledWith({ subtitleSearchId: 1 });
+      expect(wake).toHaveBeenCalledWith(1, 60 * MINUTE_MS);
+      expect(client.search).not.toHaveBeenCalled();
+      expect(client.download).not.toHaveBeenCalled();
+      expect(search().status).toBe('WAITING');
+    });
+
+    it('fails with probe_failed when the backstop wakes a search still waiting', async () => {
+      seedSearch({
         status: 'WAITING',
-        checkCount: 1,
-        itemId: null,
-      });
-      expect(client.searchRemoteSubtitles).not.toHaveBeenCalled();
-      expect(wake).toHaveBeenCalledWith(1, 10 * MINUTE_MS);
-    });
-
-    describe('a title with no filePath (Spec 106, REQ-7)', () => {
-      const realEmbed = () =>
-        new SubtitleEmbedService(
-          prisma as never,
-          {} as never,
-          mediaRoots,
-          { addEmbed: jest.fn() } as never,
-          new ActiveEmbedGuard(prisma as never),
-        );
-      const serverOnlyMovie = () =>
-        (
-          prisma.movie as Record<string, jest.Mock>
-        ).findUnique.mockResolvedValue({
-          filePath: null,
-          mediaServerPresentAt: new Date(),
-          tmdbId: 603,
-        });
-
-      it('accepts the item without a path comparison and records the translated library path', async () => {
-        serverOnlyMovie();
-        driver = build(realEmbed());
-        seedSearch();
-        client.listItemSubtitles.mockResolvedValue(
-          listing('/host/library/Movie.mkv'),
-        );
-
-        await driver.advance(1);
-
-        expect(search()).toMatchObject({
-          status: 'SEARCHING',
-          itemId: 'item-1',
-          libraryPath: movieFile,
-        });
-        expect(wake).toHaveBeenCalledWith(1, 0);
+        createdAt: new Date(Date.now() - 61 * MINUTE_MS),
       });
 
-      it('fails with not_mkv and spends no remote search on an .mp4 item', async () => {
-        await writeFile(join(libDir, 'Clip.mp4'), 'mp4');
-        serverOnlyMovie();
-        driver = build(realEmbed());
-        seedSearch();
-        client.listItemSubtitles.mockResolvedValue(
-          listing('/host/library/Clip.mp4'),
-        );
+      await driver.advance(1);
 
-        await driver.advance(1);
-
-        expect(search()).toMatchObject({
-          status: 'FAILED',
-          errorKey: ERROR_KEYS.SUBTITLE_EMBED_NOT_MKV,
-        });
-        expect(search().libraryPath).toBeUndefined();
-        expect(client.searchRemoteSubtitles).not.toHaveBeenCalled();
-      });
-
-      it('fails with outside_library and spends no remote search on an item outside the library root', async () => {
-        serverOnlyMovie();
-        driver = build(realEmbed());
-        seedSearch();
-        client.listItemSubtitles.mockResolvedValue(
-          listing('/host/elsewhere/Movie.mkv'),
-        );
-
-        await driver.advance(1);
-
-        expect(search()).toMatchObject({
-          status: 'FAILED',
-          errorKey: ERROR_KEYS.SUBTITLE_EMBED_OUTSIDE_LIBRARY,
-        });
-        expect(client.searchRemoteSubtitles).not.toHaveBeenCalled();
-      });
-
-      it('still counts a lookup miss toward the miss budget', async () => {
-        serverOnlyMovie();
-        driver = build(realEmbed());
-        seedSearch();
-        client.findByTmdbId.mockResolvedValue(null);
-
-        await driver.advance(1);
-
-        expect(search()).toMatchObject({ status: 'WAITING', checkCount: 1 });
-        expect(wake).toHaveBeenCalledWith(1, 10 * MINUTE_MS);
-      });
-
-      it('keeps the path comparison for a title that has a filePath', async () => {
-        driver = build(realEmbed());
-        seedSearch();
-        client.listItemSubtitles.mockResolvedValue(
-          listing('/host/library/Another Release.mkv'),
-        );
-
-        await driver.advance(1);
-
-        expect(search()).toMatchObject({ status: 'WAITING', checkCount: 1 });
-        expect(search().libraryPath).toBeUndefined();
-      });
-    });
-
-    it('re-checks after 10, 20, 40 and 45 minutes and fails with item_not_found on the fifth miss', async () => {
-      seedSearch();
-      client.findByTmdbId.mockResolvedValue(null);
-
-      for (let miss = 0; miss < 5; miss += 1) await driver.advance(1);
-
-      expect(
-        (wake.mock.calls as Array<[number, number]>).map((call) => call[1]),
-      ).toEqual([
-        10 * MINUTE_MS,
-        20 * MINUTE_MS,
-        40 * MINUTE_MS,
-        45 * MINUTE_MS,
-      ]);
       expect(search()).toMatchObject({
         status: 'FAILED',
-        errorKey: ERROR_KEYS.SUBTITLE_SEARCH_ITEM_NOT_FOUND,
+        errorKey: ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED,
       });
+      expect(addProbe).not.toHaveBeenCalled();
     });
 
-    it('rebuilds the index once on a lookup miss and looks up again', async () => {
-      seedSearch();
-      client.findByTmdbId
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce('item-1');
-
-      await driver.advance(1);
-
-      expect(refreshAndWait).toHaveBeenCalledTimes(1);
-      expect(search().status).toBe('SEARCHING');
-    });
-
-    it('fails when the media server stopped being Jellyfin under the search', async () => {
-      seedSearch();
+    it('fails with provider_not_configured when the key or the credentials vanished', async () => {
+      seedSearch({ status: 'WAITING' });
       available = false;
 
       await driver.advance(1);
 
       expect(search()).toMatchObject({
         status: 'FAILED',
-        errorKey: ERROR_KEYS.SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE,
+        errorKey: ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_NOT_CONFIGURED,
       });
+      expect(addProbe).not.toHaveBeenCalled();
     });
 
-    it('fails with media_server_unavailable when Jellyfin throws', async () => {
-      seedSearch();
-      client.findByTmdbId.mockRejectedValue(new Error('ECONNREFUSED'));
+    it('fails with probe_failed when the probe cannot be queued', async () => {
+      seedSearch({ status: 'WAITING' });
+      addProbe.mockRejectedValue(new Error('redis down'));
 
       await driver.advance(1);
 
-      expect(search().errorKey).toBe(
-        ERROR_KEYS.SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE,
-      );
+      expect(search().errorKey).toBe(ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED);
     });
   });
 
-  describe('searching (REQ-7 REQ-8 REQ-9)', () => {
-    it('searches the language Jellyfin lists no usable stream for (a forced-only one) and never a present one', async () => {
+  describe('searching (REQ-7 REQ-8 REQ-9, Spec 107 REQ-6)', () => {
+    it('searches the missing language with its provider code, the stored hash and the tmdb id, never a present one', async () => {
       seedSearch();
 
       await driver.advance(1);
-      await driver.advance(1);
 
-      expect(client.searchRemoteSubtitles).toHaveBeenCalledTimes(1);
-      expect(client.searchRemoteSubtitles).toHaveBeenCalledWith(
-        'item-1',
-        'spa',
-      );
+      expect(client.search).toHaveBeenCalledTimes(1);
+      expect(client.search).toHaveBeenCalledWith({
+        tmdbId: 603,
+        languages: 'es',
+        moviehash: 'abcdef0123456789',
+      });
       expect(attempts.filter((row) => row.languageIso3 === 'eng')).toHaveLength(
         0,
       );
     });
 
-    it('completes with no external call beyond the lookup when no language is missing', async () => {
+    it('completes with no provider call when no language is missing', async () => {
       seedSearch({ wantedLanguages: ['eng'] });
 
       await driver.advance(1);
-      await driver.advance(1);
 
-      expect(client.searchRemoteSubtitles).not.toHaveBeenCalled();
-      expect(client.fetchRemoteSubtitle).not.toHaveBeenCalled();
+      expect(client.search).not.toHaveBeenCalled();
+      expect(client.download).not.toHaveBeenCalled();
       expect(search().status).toBe('COMPLETED');
     });
 
     it('records no attempts for a language with no candidate and moves on', async () => {
       seedSearch({ wantedLanguages: ['eng', 'fra'] });
 
-      await driver.advance(1);
       await driver.advance(1);
 
       expect(attempts).toHaveLength(0);
@@ -581,11 +453,10 @@ describe('SubtitleSearchDriver', () => {
       seedSearch();
 
       await driver.advance(1);
-      await driver.advance(1);
 
       const rows = attempts.filter((row) => row.searchId === 1);
       expect(rows.map((row) => row.rank)).toEqual([1, 2, 3]);
-      expect(client.fetchRemoteSubtitle).toHaveBeenCalledTimes(1);
+      expect(client.download).toHaveBeenCalledTimes(1);
       const first = rows[0];
       expect(first.stagedPath).toBe(
         join(stagingDir(1), `${first.id as number}.srt`),
@@ -597,11 +468,12 @@ describe('SubtitleSearchDriver', () => {
       expect(wakesWithDelay(6 * HOUR_MS)).toBe(1);
     });
 
-    it('marks a candidate whose fetch fails and stages the next rank in the same step', async () => {
+    it('marks a candidate whose download fails and stages the next rank in the same step', async () => {
       seedSearch();
-      client.fetchRemoteSubtitle.mockRejectedValueOnce(new Error('404'));
+      client.download.mockRejectedValueOnce(
+        new OpenSubtitlesHttpError('unavailable', 'POST', '/download', 500),
+      );
 
-      await driver.advance(1);
       await driver.advance(1);
 
       const rows = attempts.filter((row) => row.searchId === 1);
@@ -613,26 +485,20 @@ describe('SubtitleSearchDriver', () => {
       expect(addSync).toHaveBeenCalledWith({ subtitleSyncId: rows[1].id });
     });
 
-    it('does not insert a second set of attempts when re-run after a crash between insert and fetch', async () => {
-      seedSearch({
-        status: 'SEARCHING',
-        itemId: 'item-1',
-        presentLanguages: ['eng'],
-      });
+    it('does not insert a second set of attempts when re-run after a crash between insert and download', async () => {
+      seedSearch();
       seedAttempts(1, 'spa', 3);
 
       await driver.advance(1);
 
       expect(attempts).toHaveLength(3);
-      expect(client.searchRemoteSubtitles).not.toHaveBeenCalled();
+      expect(client.search).not.toHaveBeenCalled();
       expect(attempts[0].stagedPath).not.toBeNull();
       expect(search().status).toBe('VALIDATING');
     });
 
     it('does not search again a language that came back empty before a later one with attempts', async () => {
       seedSearch({
-        status: 'SEARCHING',
-        itemId: 'item-1',
         presentLanguages: [],
         wantedLanguages: ['fra', 'spa'],
       });
@@ -643,14 +509,123 @@ describe('SubtitleSearchDriver', () => {
 
       await driver.advance(1);
 
-      expect(client.searchRemoteSubtitles).not.toHaveBeenCalled();
+      expect(client.search).not.toHaveBeenCalled();
+    });
+
+    describe('provider outcomes (Spec 107 REQ-9)', () => {
+      const http = (
+        kind: 'unauthorized' | 'quota' | 'rate_limited' | 'unavailable',
+      ) => new OpenSubtitlesHttpError(kind, 'GET', '/x', 0);
+
+      it('fails the search with provider_unauthorized and spends no download when the search is refused', async () => {
+        seedSearch();
+        client.search.mockRejectedValue(http('unauthorized'));
+
+        await driver.advance(1);
+
+        expect(search()).toMatchObject({
+          status: 'FAILED',
+          errorKey: ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED,
+          languageErrors: {
+            spa: ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED,
+          },
+        });
+        expect(client.download).not.toHaveBeenCalled();
+      });
+
+      it('fails the search with provider_unauthorized when the download is refused', async () => {
+        seedSearch();
+        client.download.mockRejectedValue(http('unauthorized'));
+
+        await driver.advance(1);
+
+        expect(search()).toMatchObject({
+          status: 'FAILED',
+          errorKey: ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED,
+        });
+        expect(client.download).toHaveBeenCalledTimes(1);
+      });
+
+      it('records provider_unavailable for the language that was rate limited and continues with the next', async () => {
+        seedSearch({ presentLanguages: [], wantedLanguages: ['fra', 'spa'] });
+        remote.fr = [];
+        client.search.mockImplementation((params: { languages: string }) =>
+          params.languages === 'fr'
+            ? Promise.reject(http('rate_limited'))
+            : Promise.resolve(remote[params.languages] ?? []),
+        );
+        (
+          prisma.language as Record<string, jest.Mock>
+        ).findMany.mockResolvedValue([
+          { tag: 'es', iso2: 'es', iso3: 'spa' },
+          { tag: 'fr', iso2: 'fr', iso3: 'fra' },
+        ]);
+
+        await driver.advance(1);
+
+        expect(search().languageErrors).toEqual({
+          fra: ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAVAILABLE,
+        });
+        expect(
+          attempts.filter((row) => row.languageIso3 === 'spa'),
+        ).toHaveLength(3);
+        expect(search().status).toBe('VALIDATING');
+      });
+
+      it('stops the next download on remaining 0 and keeps the accepted language', async () => {
+        seedSearch({
+          presentLanguages: [],
+          wantedLanguages: ['eng', 'spa'],
+        });
+        remote.en = [candidate('e1'), candidate('e2')];
+        (
+          prisma.language as Record<string, jest.Mock>
+        ).findMany.mockResolvedValue([
+          { tag: 'es', iso2: 'es', iso3: 'spa' },
+          { tag: 'en', iso2: 'en', iso3: 'eng' },
+        ]);
+        client.download.mockResolvedValue({
+          bytes: Buffer.from('x'),
+          remaining: 0,
+        });
+
+        await driver.advance(1);
+        const first = attempts.find((row) => row.languageIso3 === 'eng')!;
+        expect(first.stagedPath).not.toBeNull();
+        expect(search().languageErrors).toEqual({
+          spa: ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED,
+        });
+
+        Object.assign(first, { status: 'ACCEPTED', offsetMs: 0 });
+        await driver.advance(1);
+        await driver.advance(1);
+
+        expect(client.download).toHaveBeenCalledTimes(1);
+        expect(search()).toMatchObject({ status: 'EMBEDDING' });
+        expect(
+          (search().languageErrors as Record<string, string>).eng,
+        ).toBeUndefined();
+      });
+
+      it('ends FAILED with quota_exhausted when the quota ran out and nothing was accepted', async () => {
+        seedSearch();
+        client.download.mockRejectedValue(http('quota'));
+
+        await driver.advance(1);
+
+        expect(search()).toMatchObject({
+          status: 'FAILED',
+          errorKey: ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED,
+          languageErrors: { spa: ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED },
+        });
+        expect(attempts.every((row) => row.status === 'FAILED')).toBe(true);
+      });
     });
   });
 
   describe('validating (REQ-9 REQ-10)', () => {
     const stageFirst = async () => {
       seedSearch();
-      await driver.advance(1);
       await driver.advance(1);
       return attempts.filter((row) => row.searchId === 1);
     };
@@ -702,7 +677,7 @@ describe('SubtitleSearchDriver', () => {
 
       expect(rows[1].status).toBe('REJECTED');
       expect(rows[2].status).toBe('REJECTED');
-      expect(client.fetchRemoteSubtitle).toHaveBeenCalledTimes(1);
+      expect(client.download).toHaveBeenCalledTimes(1);
       expect(await exists(rows[0].stagedPath as string)).toBe(true);
       expect(search().status).toBe('SEARCHING');
     });
@@ -711,7 +686,6 @@ describe('SubtitleSearchDriver', () => {
   describe('embedding (REQ-11 REQ-12)', () => {
     const toEmbedding = async () => {
       seedSearch();
-      await driver.advance(1);
       await driver.advance(1);
       const rows = attempts.filter((row) => row.searchId === 1);
       Object.assign(rows[0], { status: 'ACCEPTED', offsetMs: 250 });
@@ -726,9 +700,18 @@ describe('SubtitleSearchDriver', () => {
 
       await driver.advance(1);
 
-      expect(embedStaged).toHaveBeenCalledWith({ kind: 'movie', id: 10 }, [
-        { languageIso3: 'spa', stagedPath: accepted.stagedPath, offsetMs: 250 },
-      ]);
+      expect(embedStaged).toHaveBeenCalledWith(
+        { kind: 'movie', id: 10 },
+        [
+          {
+            languageIso3: 'spa',
+            stagedPath: accepted.stagedPath,
+            offsetMs: 250,
+            provenance: 'opensubtitles:a',
+          },
+        ],
+        movieFile,
+      );
       expect(search().subtitleEmbedId).toBe(500);
       expect(await exists(accepted.stagedPath as string)).toBe(true);
 
@@ -741,6 +724,41 @@ describe('SubtitleSearchDriver', () => {
       await driver.advance(1);
       expect(search().status).toBe('COMPLETED');
       expect(await exists(stagingDir(1))).toBe(false);
+    });
+
+    // Spec 107, AC-18
+    it('stores the provider file name on the attempt and hands it on as provenance', async () => {
+      remote.es = [candidate('a', { fileName: 'Movie.2020.es.srt' })];
+      seedSearch();
+      await driver.advance(1);
+      const rows = attempts.filter((row) => row.searchId === 1);
+      expect(rows[0].providerFileName).toBe('Movie.2020.es.srt');
+      Object.assign(rows[0], { status: 'ACCEPTED', offsetMs: 250 });
+      await driver.advance(1);
+      await driver.advance(1);
+      await driver.advance(1);
+
+      expect(embedStaged).toHaveBeenCalledWith(
+        expect.anything(),
+        [expect.objectContaining({ provenance: 'Movie.2020.es.srt' })],
+        movieFile,
+      );
+    });
+
+    it('embeds into the stored libraryPath when the title has no filePath of its own', async () => {
+      (prisma.movie as Record<string, jest.Mock>).findUnique.mockResolvedValue({
+        filePath: null,
+        tmdbId: 603,
+      });
+      seedSearch({ libraryPath: '/lib/Server Only.mkv' });
+      await driver.advance(1);
+      const rows = attempts.filter((row) => row.searchId === 1);
+      Object.assign(rows[0], { status: 'ACCEPTED', offsetMs: 0 });
+      await driver.advance(1);
+      await driver.advance(1);
+      await driver.advance(1);
+
+      expect(embedStaged.mock.calls[0][2]).toBe('/lib/Server Only.mkv');
     });
 
     it('fails with the embed key and deletes the staging when the embed fails', async () => {
@@ -824,6 +842,7 @@ describe('SubtitleSearchDriver', () => {
         mediaRoots,
         { addEmbed } as never,
         new ActiveEmbedGuard(prisma as never),
+        { request: jest.fn() } as never,
       );
       driver = build(real);
 
@@ -873,13 +892,14 @@ describe('SubtitleSearchDriver', () => {
       expect(attemptTable.createMany).not.toHaveBeenCalled();
     });
 
-    it('moves a waiting search forward only once when two wake-ups race', async () => {
+    it('moves a searching search forward only once when two wake-ups race', async () => {
       seedSearch();
 
       await Promise.all([driver.advance(1), driver.advance(1)]);
 
-      expect(search().status).toBe('SEARCHING');
-      expect(wakesWithDelay(0)).toBe(1);
+      expect(search().status).toBe('VALIDATING');
+      expect(wakesWithDelay(6 * HOUR_MS)).toBeGreaterThanOrEqual(1);
+      expect(attempts.filter((row) => row.stagedPath !== null)).toHaveLength(1);
     });
 
     it('deletes the staging directory of a search that no longer exists', async () => {

@@ -29,6 +29,13 @@ export class SubtitleEmbedTrack {
       'True for a sidecar the worker deletes after the rename; false for a staged track api cleans up itself (Spec 103, REQ-11).',
   })
   isSidecar: boolean;
+
+  // Spec 107, REQ-14
+  @Field({
+    description:
+      'Value of the PERCEPTOR_SOURCE track tag (107 REQ-14): the OpenSubtitles file name for a searched track, `user` for a sidecar embedded by hand. Written verbatim after sanitizing; never empty.',
+  })
+  provenance: string;
 }
 
 // Spec 101, REQ-13

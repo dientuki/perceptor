@@ -12,6 +12,7 @@ import {
   toPresentEpisodes,
   chooseSectionForPath,
   createPlexClient,
+  pickEpisodeFile,
   PlexItem,
   PlexEpisode,
   PlexSection,
@@ -184,6 +185,98 @@ describe('createPlexClient requests', () => {
     }
     expect(calls.map((c) => c.url)).toContain(
       'http://plex:32400/library/sections/all/refresh',
+    );
+  });
+});
+
+// Spec 107, REQ-4: the press-time path comes from Plex's allLeaves listing,
+// where an episode is only identifiable by parentIndex/index. Matching the
+// wrong episode embeds subtitles into another episode's file with no error.
+describe('pickEpisodeFile', () => {
+  const leaf = (parentIndex: number, index: number, file: string | null) => ({
+    parentIndex,
+    index,
+    Media: file ? [{ Part: [{ file }] }] : [],
+  });
+
+  it('picks the episode by parentIndex and index', () => {
+    const items = [
+      leaf(1, 1, '/tv/S01E01.mkv'),
+      leaf(1, 2, '/tv/S01E02.mkv'),
+      leaf(2, 1, '/tv/S02E01.mkv'),
+    ];
+
+    expect(pickEpisodeFile(items, 2, 1)).toBe('/tv/S02E01.mkv');
+    expect(pickEpisodeFile(items, 1, 2)).toBe('/tv/S01E02.mkv');
+  });
+
+  it('answers null when the episode is absent or has no file', () => {
+    expect(pickEpisodeFile([leaf(1, 1, '/tv/a.mkv')], 1, 2)).toBeNull();
+    expect(pickEpisodeFile([leaf(1, 1, null)], 1, 1)).toBeNull();
+  });
+});
+
+describe('createPlexClient mediaHostPath and modifiedMedia', () => {
+  const realFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+  const client = () =>
+    createPlexClient(
+      { host: 'plex', port: '32400', apiKey: 't' },
+      { lookup: jest.fn() },
+    );
+  const answer = (routes: Record<string, unknown>, calls: string[] = []) => {
+    global.fetch = jest.fn((url: URL) => {
+      calls.push(String(url));
+      const body = routes[url.pathname];
+      return Promise.resolve(new Response(JSON.stringify(body ?? {})));
+    }) as unknown as typeof fetch;
+  };
+
+  it('reads a film file from its own metadata', async () => {
+    answer({
+      '/library/metadata/9': {
+        MediaContainer: {
+          Metadata: [{ Media: [{ Part: [{ file: '/m/Film.mkv' }] }] }],
+        },
+      },
+    });
+    await expect(client().mediaHostPath!('9')).resolves.toBe('/m/Film.mkv');
+  });
+
+  it('reads an episode file from allLeaves by season and episode', async () => {
+    answer({
+      '/library/metadata/5/allLeaves': {
+        MediaContainer: {
+          Metadata: [
+            { parentIndex: 1, index: 1, Media: [{ Part: [{ file: '/a.mkv' }] }] },
+            { parentIndex: 1, index: 2, Media: [{ Part: [{ file: '/b.mkv' }] }] },
+          ],
+        },
+      },
+    });
+    await expect(client().mediaHostPath!('5', 1, 2)).resolves.toBe('/b.mkv');
+    await expect(client().mediaHostPath!('5', 3, 1)).resolves.toBeNull();
+  });
+
+  it('modifiedMedia runs the section-scoped scan of the file directory', async () => {
+    const calls: string[] = [];
+    answer(
+      {
+        '/library/sections': {
+          MediaContainer: {
+            Directory: [
+              { key: '2', type: 'movie', Location: [{ path: '/m' }] },
+            ],
+          },
+        },
+      },
+      calls,
+    );
+    await client().modifiedMedia!('/m/Film.mkv');
+    expect(calls).toContain(
+      'http://plex:32400/library/sections/2/refresh?path=%2Fm',
     );
   });
 });

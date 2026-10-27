@@ -143,4 +143,31 @@ describe('deriveLanguages', () => {
     });
     expect(only(rows, 'eng')?.outcome).toBe(Outcome.FAILED);
   });
+
+  // Spec 107, T005
+  it('reads a languageErrors entry as FAILED with its key where it would have read NOT_FOUND', () => {
+    const rows = deriveLanguages(
+      search({ languageErrors: { spa: 'error.subtitleSearch.quota_exhausted' } }),
+      [],
+    );
+    expect(only(rows, 'spa')).toEqual({
+      languageIso3: 'spa',
+      outcome: Outcome.FAILED,
+      reasonKey: 'error.subtitleSearch.quota_exhausted',
+    });
+    expect(only(rows, 'eng')?.outcome).toBe(Outcome.NOT_FOUND);
+  });
+
+  it('lets an accepted attempt win over a stored language error', () => {
+    const rows = deriveLanguages(
+      search({ languageErrors: { spa: 'error.subtitleSearch.quota_exhausted' } }),
+      [attempt({ status: 'ACCEPTED' })],
+    );
+    expect(only(rows, 'spa')?.outcome).toBe(Outcome.EMBEDDED);
+  });
+
+  it('ignores a malformed languageErrors value', () => {
+    const rows = deriveLanguages(search({ languageErrors: ['spa'] }), []);
+    expect(only(rows, 'spa')?.outcome).toBe(Outcome.NOT_FOUND);
+  });
 });

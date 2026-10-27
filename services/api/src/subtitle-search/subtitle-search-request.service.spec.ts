@@ -10,6 +10,7 @@ type SearchRow = {
   status: string;
   errorKey: string | null;
   wantedLanguages: string[];
+  libraryPath?: string;
 };
 
 type Fixture = {
@@ -31,6 +32,9 @@ describe('SubtitleSearchRequestService', () => {
   let searches: SearchRow[];
   let wake: jest.Mock;
   let preflight: jest.Mock;
+  let mediaServer: { createClient: jest.Mock };
+  let usable: jest.Mock;
+  let mediaRoots: { hostToContainerPath: jest.Mock };
   let transaction: jest.Mock;
   let fixture: Fixture;
   let service: SubtitleSearchRequestService;
@@ -42,7 +46,7 @@ describe('SubtitleSearchRequestService', () => {
     searches = [];
     nextId = 1;
     wake = jest.fn().mockResolvedValue(undefined);
-    preflight = jest.fn().mockResolvedValue({});
+    preflight = jest.fn().mockResolvedValue({ filePath: '/lib/a.mkv' });
     fixture = {
       available: true,
       userMovies: [{ userId: 'u1', preference: true }],
@@ -167,11 +171,24 @@ describe('SubtitleSearchRequestService', () => {
       ),
     };
 
+    mediaServer = { createClient: jest.fn().mockResolvedValue(null) };
+    usable = jest.fn().mockResolvedValue(undefined);
+    mediaRoots = {
+      hostToContainerPath: jest.fn((_root: string, p: string) =>
+        p.startsWith('/host/lib/') ? p.replace('/host/lib', '/lib') : null,
+      ),
+    };
+
     service = new SubtitleSearchRequestService(
       prisma as never,
       capabilities as never,
       { wake } as never,
-      { assertManualSearchPreflight: preflight } as never,
+      {
+        assertManualSearchPreflight: preflight,
+        assertUsableMkv: usable,
+      } as never,
+      mediaServer as never,
+      mediaRoots as never,
     );
   });
 
@@ -185,7 +202,7 @@ describe('SubtitleSearchRequestService', () => {
         wantedLanguages: ['spa'],
       }),
     ]);
-    expect(wake).toHaveBeenCalledWith(1, expect.any(Number));
+    expect(wake).toHaveBeenCalledWith(1, 0);
   });
 
   it('writes no row when the media server is not Jellyfin', async () => {
@@ -301,6 +318,8 @@ describe('SubtitleSearchRequestService', () => {
       { isSubtitleSearchAvailable: jest.fn().mockResolvedValue(true) } as never,
       { wake } as never,
       { assertManualSearchPreflight: preflight } as never,
+      mediaServer as never,
+      mediaRoots as never,
     );
 
     await expect(
@@ -413,15 +432,110 @@ describe('SubtitleSearchRequestService', () => {
       );
     });
 
-    it('wakes with no delay for a press and keeps the 5 minute wake and supersede for requestFor', async () => {
+    it('wakes with no delay for a press and wakes a delivery at 0 too and supersedes', async () => {
       await service.requestForCaller(movie, 'u1');
       expect(wake).toHaveBeenLastCalledWith(1, 0);
 
       await service.requestFor({ kind: 'movie', id: 10 });
-      expect(wake).toHaveBeenLastCalledWith(2, 5 * 60 * 1000);
+      expect(wake).toHaveBeenLastCalledWith(2, 0);
       expect(searches.find((row) => row.id === 1)).toMatchObject({
         status: 'FAILED',
         errorKey: ERROR_KEYS.SUBTITLE_SEARCH_SUPERSEDED,
+      });
+    });
+
+    // Spec 107, REQ-4: a title Jellyfin or Plex holds but Perceptor never
+    // delivered has no filePath; a row created without a resolvable path would
+    // sit WAITING until the probe finds nothing to read, with no error shown.
+    describe('press-time path for a title with no filePath', () => {
+      const plexClient = (hostPath: string | null) => ({
+        findByTmdbId: jest.fn().mockResolvedValue('77'),
+        mediaHostPath: jest.fn().mockResolvedValue(hostPath),
+      });
+      beforeEach(() => {
+        preflight.mockResolvedValue({ filePath: null, tmdbId: 603 });
+      });
+
+      it('no client -> no_library_path and no row', async () => {
+        mediaServer.createClient.mockResolvedValue(null);
+
+        await expect(
+          keyOf(service.requestForCaller(movie, 'c1')),
+        ).resolves.toBe(ERROR_KEYS.SUBTITLE_SEARCH_NO_LIBRARY_PATH);
+
+        expect(searches).toHaveLength(0);
+        expect(wake).not.toHaveBeenCalled();
+      });
+
+      it('title not found by the server -> no_library_path and no row', async () => {
+        const client = plexClient('/host/lib/a.mkv');
+        client.findByTmdbId.mockResolvedValue(null);
+        mediaServer.createClient.mockResolvedValue(client);
+
+        await expect(
+          keyOf(service.requestForCaller(movie, 'c1')),
+        ).resolves.toBe(ERROR_KEYS.SUBTITLE_SEARCH_NO_LIBRARY_PATH);
+        expect(searches).toHaveLength(0);
+      });
+
+      it('Plex path -> the row carries libraryPath', async () => {
+        const client = plexClient('/host/lib/Movie (2020).mkv');
+        mediaServer.createClient.mockResolvedValue(client);
+
+        await service.requestForCaller(movie, 'c1');
+
+        expect(client.mediaHostPath).toHaveBeenCalledWith(
+          '77',
+          undefined,
+          undefined,
+        );
+        expect(usable).toHaveBeenCalledWith('/lib/Movie (2020).mkv');
+        expect(searches[0].libraryPath).toBe('/lib/Movie (2020).mkv');
+      });
+
+      it('passes season and episode numbers for an episode', async () => {
+        preflight.mockResolvedValue({
+          filePath: null,
+          tmdbId: 5,
+          seasonNumber: 2,
+          episodeNumber: 3,
+        });
+        fixture.userLanguages = { c1: ['eng'] };
+        const client = plexClient('/host/lib/E.mkv');
+        mediaServer.createClient.mockResolvedValue(client);
+
+        await service.requestForCaller({ kind: 'episode', id: 4 }, 'c1');
+
+        expect(client.mediaHostPath).toHaveBeenCalledWith('77', 2, 3);
+      });
+
+      it('an unreachable server -> media_server_unavailable and no row', async () => {
+        const client = plexClient(null);
+        client.mediaHostPath.mockRejectedValue(new Error('ECONNREFUSED'));
+        mediaServer.createClient.mockResolvedValue(client);
+
+        await expect(
+          keyOf(service.requestForCaller(movie, 'c1')),
+        ).resolves.toBe(ERROR_KEYS.SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE);
+        expect(searches).toHaveLength(0);
+      });
+
+      it('a path outside the library -> outside_library and no row', async () => {
+        mediaServer.createClient.mockResolvedValue(plexClient('/elsewhere/a.mkv'));
+
+        await expect(
+          keyOf(service.requestForCaller(movie, 'c1')),
+        ).resolves.toBe(ERROR_KEYS.SUBTITLE_EMBED_OUTSIDE_LIBRARY);
+        expect(searches).toHaveLength(0);
+      });
+
+      it('a title with a filePath never consults the media server', async () => {
+        preflight.mockResolvedValue({ filePath: '/lib/a.mkv' });
+
+        await service.requestForCaller(movie, 'c1');
+
+        expect(mediaServer.createClient).not.toHaveBeenCalled();
+        expect(searches[0].libraryPath).toBeUndefined();
       });
     });
 

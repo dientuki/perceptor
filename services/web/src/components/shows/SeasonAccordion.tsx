@@ -12,6 +12,7 @@ import ImportSeasonFilesModal from "@/components/import/ImportSeasonFilesModal";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
+import FileTrackLanguages from "@/components/media/FileTrackLanguages";
 import SearchSubtitlesButton from "@/components/media/SearchSubtitlesButton";
 import SubtitleSearchStatus from "@/components/media/SubtitleSearchStatus";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
@@ -68,6 +69,30 @@ function EpisodeRow({
       <td className="px-4 py-3">
         <StatusBadge status={episode.status} />
       </td>
+      {/* Spec 108, REQ-6 */}
+      <td className="px-4 py-3">
+        <div className="space-y-1">
+          <FileTrackLanguages
+            variant="compact"
+            audio={episode.fileAudioLanguages}
+            subtitles={null}
+          />
+          <FileTrackLanguages
+            variant="compact"
+            audio={null}
+            subtitles={episode.fileSubtitleLanguages}
+          />
+          {/* Spec 106, REQ-9 */}
+          {subtitleSearchAvailable && episode.status === "COMPLETED" && (
+            <SearchSubtitlesButton
+              compact
+              fullWidth
+              search={episode.latestSubtitleSearch}
+              onSearch={searchEpisodeSubtitlesAction.bind(null, episode.id)}
+            />
+          )}
+        </div>
+      </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           <Button
@@ -100,14 +125,6 @@ function EpisodeRow({
             embed={episode.subtitleEmbed}
             onEmbed={embedEpisodeSubtitlesAction.bind(null, episode.id)}
           />
-          {/* Spec 106, REQ-9 */}
-          {subtitleSearchAvailable && episode.status === "COMPLETED" && (
-            <SearchSubtitlesButton
-              compact
-              search={episode.latestSubtitleSearch}
-              onSearch={searchEpisodeSubtitlesAction.bind(null, episode.id)}
-            />
-          )}
         </div>
       </td>
     </tr>
@@ -273,11 +290,14 @@ export default function SeasonAccordion({
                 <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("titleHeader")}
                 </th>
-                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("releaseDateHeader")}
                 </th>
                 <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("statusHeader")}
+                </th>
+                <th className="whitespace-nowrap px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  {t("tracksHeader")}
                 </th>
                 <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("actionsHeader")}

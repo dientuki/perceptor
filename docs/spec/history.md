@@ -23,6 +23,34 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-27 — `108-library-track-languages`
+
+`api`, `worker`, `web`; one Prisma migration (`20261027130000_108_library_track_languages`: `fileAudioLanguages`, `fileSubtitleLanguages`, `tracksReadAt` on `movies` and `episodes`), applied; `prisma migrate status` up to date (49 migrations). GraphQL contract: `schema.gql` carries exactly the spec delta (four `file*Languages` fields, `LibraryProbeTarget`, `LibraryProbeDetails`, `libraryProbeDetails`, `libraryProbeCompleted`).
+
+- `api` typecheck: 0 errors. Tests (`bin/npm api test`): 90 suites, **1508 passed** (1475 after `107`). Comments gate: PASS (1230 locators).
+- `worker` typecheck: 0 errors. Tests: 56 files, **680 passed** (657). Comments gate: PASS (392 locators).
+- `web` typecheck: 7 errors, all pre-existing in `Calendar.tsx`. `check-messages`: 730 keys match. Comments gate: PASS (118 locators). No web test runner.
+- `107`'s `subtitle-search-request` spec is byte-identical after the `LibraryLocationService` extraction (the service keeps `mediaServer`/`mediaRoots` and takes the locator as an optional seventh constructor argument).
+- Not measured: the manual pass (AC-1 to AC-12) needs the other Perceptor install on this host stopped (`bin/stop -y`) and, for AC-3, a Plex server. AC-13 (no write to the library) is covered by the worker spec's before/after directory listing.
+
+## 2026-10-27 — `107-opensubtitles-direct`
+
+**Addendum — amendment 0.4.0 (provenance tags, T023–T025).** One more migration
+(`20261027120000_107_subtitle_provenance`: `providerFileName VARCHAR(500) NULL`), applied; `prisma migrate status` up to date (48 migrations).
+
+- `api`: typecheck 0 errors; 87 suites, **1477 passed**; comments PASS (1195 locators). `schema.gql` gains only `SubtitleEmbedTrack.provenance: String!`.
+- `worker`: typecheck 0 errors; 54 files, **663 passed**; comments PASS (386 locators).
+- `mkvmerge --tags 0:<xml>` with empty `Targets` verified in the worker image's tooling: `mkvmerge -J` shows `tag_perceptor_source` / `tag_perceptor_offset` on the new subtitle track only, none on video or audio (AC-18 mechanism; the full manual pass is still open).
+
+
+`api`, `worker`, `web`, `infra`; one Prisma migration (`20261027021722_107_opensubtitles_direct`: four `ADD COLUMN`s on `subtitle_searches`, two `UPDATE`s retiring searches still waiting on Jellyfin, then `DROP COLUMN itemId, checkCount`; `migrate status`: "Database schema is up to date!"). Contract delta: `SubtitleProbeDetails`, `subtitleProbeDetails`, `subtitleProbeStarted`/`Completed`/`Failed`, the new `subtitleSearchAvailable` description, and a `subtitle-probe` queue; `schema.gql` diff is exactly that (42 insertions, 1 deletion), edited by hand because the `api` container could not boot (cross-checked against `GraphQLSchemaFactory` output). Jellyfin's `searchRemoteSubtitles`/`fetchRemoteSubtitle` removed.
+
+- `api` typecheck: 0 errors. Tests (throwaway container on the compose network): 87 suites, **1475 passed** (1414 after `106`). `bin/comments api`: PASS (1188 locators). Full-service ESLint is not a usable gate (3061 problems, almost all on untouched files); not run as a gate.
+- `worker` typecheck: 0 errors. Tests: 53 files, **657 passed**. Comments gate: PASS (380 locators).
+- `web` typecheck: 7 errors, all in `src/components/calendar/Calendar.tsx` (`@fullcalendar/react` not installed in this checkout; present before 107). `check-messages`: OK (727 keys). Comments gate: PASS (116 locators). No test script.
+- `infra`: `bin/build prod api` with the key in `.env` produces `/app/secrets/opensubtitles_api_key` with mode `444`; the key value appears in neither `docker history --no-trunc` nor `docker inspect` (0 matches each). Without the key the build exits 0 and the file is absent. `release.yml` passes `actionlint` 1.7.7. `docker-compose.yaml` untouched.
+- Not measured: the live stack (another Perceptor install holds ports 4000/9696 on this host), so the manual pass and AC-16 (needs the first RC) are open.
+
 ## 2026-10-26 — `106-manual-subtitle-search`
 
 `api`, `web`; one Prisma migration (`20261026130000_106_subtitle_search_library_path`, one nullable `ADD COLUMN`; `migrate status`: "Database schema is up to date!"). `worker` untouched. Contract delta: `searchMovieSubtitles(movieId)` and `searchEpisodeSubtitles(episodeId)` added to `Mutation`, plus two error keys (`error.subtitleSearch.in_progress`, `no_languages`); `schema.gql` also reordered some existing blocks on regeneration (Nest module ordering, no content change). Constitution Article XII amended to v1.7.0 first.

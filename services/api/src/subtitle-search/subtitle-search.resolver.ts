@@ -19,6 +19,7 @@ import {
   SubtitleSearch,
   SubtitleSyncReference,
 } from './entities/subtitle-search.entity';
+import { SubtitleProbeDetails } from './entities/subtitle-probe-details.entity';
 import { SubtitleSyncDetails } from './entities/subtitle-sync-details.entity';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { SubtitleSearchRequestService } from './subtitle-search-request.service';
@@ -166,6 +167,88 @@ export class SubtitleSearchResolver {
   ) {
     assertService(principal);
     return this.service.failed(id, errorKey);
+  }
+
+  // Spec 107, T005
+  @AllowService()
+  @Query(() => SubtitleProbeDetails, {
+    name: 'subtitleProbeDetails',
+    description: 'Service-only (worker). Same standing as SubtitleSyncDetails.',
+  })
+  subtitleProbeDetails(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    assertService(principal);
+    return this.service.probeDetails(id);
+  }
+
+  @AllowService()
+  @Mutation(() => Boolean, {
+    name: 'subtitleProbeStarted',
+    description:
+      'Service-only (worker). Records that the probe started (107 NFR-2); false if the search is no longer WAITING, and the worker then abandons silently.',
+  })
+  subtitleProbeStarted(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    assertService(principal);
+    return this.service.probeStarted(id);
+  }
+
+  @AllowService()
+  @Mutation(() => Boolean, {
+    name: 'subtitleProbeCompleted',
+    description:
+      'Service-only (worker). Safe to receive more than once; false if the search is no longer WAITING.',
+  })
+  subtitleProbeCompleted(
+    @Args('id', { type: () => Int }) id: number,
+    @Args('embeddedLanguagesIso3', {
+      type: () => [String],
+      description:
+        'ISO 639-2 codes of the non-forced embedded subtitle tracks (107 REQ-3).',
+    })
+    embeddedLanguagesIso3: string[],
+    @Args('sidecarLanguageTags', {
+      type: () => [String],
+      description:
+        'Language tags of the non-forced sidecars, as written in their names (`es`, `es-419`, `spa`, `Spanish`); api resolves them (107 REQ-3).',
+    })
+    sidecarLanguageTags: string[],
+    @Args('fileSizeBytes', {
+      type: () => Float,
+      description: "File size in bytes. Float: a library file exceeds Int's 2^31.",
+    })
+    fileSizeBytes: number,
+    @Args('movieHash', {
+      description: 'OpenSubtitles hash of the file, 16 lowercase hex digits.',
+    })
+    movieHash: string,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    assertService(principal);
+    return this.service.probeCompleted(id, {
+      embeddedLanguagesIso3,
+      sidecarLanguageTags,
+      fileSizeBytes,
+      movieHash,
+    });
+  }
+
+  @AllowService()
+  @Mutation(() => Boolean, {
+    name: 'subtitleProbeFailed',
+    description: 'Service-only (worker). Safe to receive more than once.',
+  })
+  subtitleProbeFailed(
+    @Args('id', { type: () => Int }) id: number,
+    @Args('errorKey') errorKey: string,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    assertService(principal);
+    return this.service.probeFailed(id, errorKey);
   }
 }
 

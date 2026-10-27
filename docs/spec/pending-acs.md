@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **57** de 107 |
-| ACs pendientes | **434** |
-| ACs totales del proyecto | 1304 |
-| ACs verificados | 870 (67%) |
+| Specs con ACs pendientes | **58** de 108 |
+| ACs pendientes | **450** |
+| ACs totales del proyecto | 1320 |
+| ACs verificados | 870 (66%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,7 +28,8 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
-| 107 | opensubtitles-direct | Draft | 15/15 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 | **[OBS PENDIENTE DE ESCRIBIR]** |
+| 108 | library-track-languages | Approved | 13/13 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | **Stack vivo con servidor de medios.** Ningun AC se observo: la pasada manual (T013) necesita parar la otra instalacion de Perceptor del host (`bin/stop -y`) y Jellyfin con peliculas reales; AC-3 ademas un servidor Plex. Ya probado por debajo: el trabajo del worker, la escritura protegida por `filePath`, los disparadores y la limpieza por demotion (unit, cada regla verificada rompiendola), `tsc`/comentarios/`check-messages` en verde y el contrato (`schema.gql`) igual al spec. AC-13 (nada se escribe en la biblioteca) tiene el spec del worker con listado de directorio antes/despues, falta verlo en vivo. |
+| 107 | opensubtitles-direct | Approved | 18/18 | 1, 2, 3, 4, 5, 6, 7, 8, 16, 17, 9, 10, 11, 12, 13, 14, 15, 18 | **Stack vivo con servidor de medios.** Se probo en vivo parte de la busqueda (pelicula 15: login corregido, la segunda busqueda llego a `EMBEDDING` y el usuario confirmo que anda), pero ningun AC esta tildado: faltan la pasada manual completa (T020), AC-16 que solo se puede ver en la primera RC publicada (T021) y las etiquetas de proveniencia (AC-18) sin implementar. Debajo: unit verde en `api`, `worker` y `web`. |
 | 106 | manual-subtitle-search | Implemented | 10/11 | 1, 2, 3, 4, 5, 6, 7, 8, 8b, 10 | **Jellyfin con el plugin de OpenSubtitles logueado y cupo.** AC-1 a AC-8b son el recorrido en vivo (botón, diálogo, la búsqueda que baja y embebe, el rechazo de `.mp4`, el segundo usuario, el título sin `filePath`) y no se corrieron: al cerrar no había stack de dev levantado ni un Jellyfin con cupo. Por debajo hay unit tests verdes (82 suites, 1414 tests): las siete negativas de REQ-3 sin fila ni wake, la unión de idiomas con la preferencia apagada, `in_progress` sin tocar la fila, delay 0 contra 5 min, la rama REQ-7 del driver y el fallback de `details`. AC-9 se tildó (grep del Article XII y `schema.gql` con solo las dos mutations). **AC-10 no se puede cumplir tal como está escrito:** pide `bin/npm web run test` y `web` no tiene runner (`services/web/CLAUDE.md`); la parte de `api` pasa, la de `web` es un error de redacción del spec y su puerta real es typecheck, Biome y la pasada manual. |
 | 105 | subtitle-translation | Draft | 13/13 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | **[OBS PENDIENTE DE ESCRIBIR]** |
 | 104 | torrent-api-key-auth | Implemented | 8/10 | 1, 2, 3, 4, 5, 6, 8, 9 | **Una instalacion fresca.** AC-1, 2, 5 y 6 piden una carpeta de `install.sh` (nueva y otra anterior a 104 con un torrent): `ptor`, que es esa instalacion, no se toco. Medido en el stack dev el 2026-10-25: `403` sin credencial por `torrent.<DOMAIN>` y por `localhost:8080`, `200` con el bearer, login de qBittorrent servido, `AuthSubnetWhitelistEnabled=false`, la key de `api` aceptada por `torrent` y 0 apariciones de la key en los logs de `torrent`/`api`/`indexer` (AC-1, 2 y la mitad de logs de AC-9, sin ticar porque el Given pide `install.sh`). AC-3, 4, 8 y la mitad de queries de AC-9 necesitan ademas una sesion logueada (la clave del admin no esta en `.env` y `reset-password` pisaria los logins del stack dev) y, para AC-3, una descarga completa. Verificados: AC-7 (contenedores descartables) y AC-10 (bajo compose). Debajo: 1401 tests de `api` en verde, incluida la inyeccion de fallas del mapeo 401/403. |
@@ -90,13 +91,14 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 434 ACs pendientes no son 434 problemas distintos. Se reducen a 24 destrabes, y los dos primeros se llevan el 60%:
+Los 450 ACs pendientes no son 450 problemas distintos. Se reducen a 25 destrabes, y los dos primeros se llevan el 54%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
-| Sin clasificar | 134 | 094, 095, 096, 097, 099, 100, 102, 103, 105, 107 |
 | Una corrida de pipeline | 126 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091, 098, 101 |
+| Sin clasificar | 119 | 094, 095, 096, 097, 099, 100, 102, 103, 105 |
 | Una instalacion fresca | 33 | 015, 049, 061, 066, 104 |
+| Stack vivo con servidor de medios | 31 | 107, 108 |
 | Adquisiciones reales | 18 | 073, 076 |
 | Nada: no esta implementada | 17 | 081 |
 | Un token de usuario logueado | 12 | 037, 039, 093 |

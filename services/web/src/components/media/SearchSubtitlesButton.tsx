@@ -3,7 +3,7 @@
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
 import { useModal } from "@/hooks/useModal";
@@ -18,6 +18,8 @@ interface SearchSubtitlesButtonProps {
 }
 
 const IN_FLIGHT_STATUSES = ["WAITING", "SEARCHING", "VALIDATING", "EMBEDDING"];
+
+const POLL_MS = 4000;
 
 const ERROR_CLASS =
   "text-base text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
@@ -37,6 +39,13 @@ export default function SearchSubtitlesButton({
   const [isPending, setIsPending] = useState(false);
 
   const inFlight = search ? IN_FLIGHT_STATUSES.includes(search.status) : false;
+
+  // Spec 106, REQ-9
+  useEffect(() => {
+    if (!inFlight) return;
+    const timer = setInterval(() => router.refresh(), POLL_MS);
+    return () => clearInterval(timer);
+  }, [inFlight, router]);
 
   const handleOpen = () => {
     setError(null);

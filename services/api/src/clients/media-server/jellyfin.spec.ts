@@ -18,7 +18,6 @@ import {
   toExternalSubtitles,
   toEpisodeSubtitleMap,
   toPresentLanguages,
-  toRemoteCandidates,
 } from './jellyfin';
 import { MEDIA_TYPE } from '@/types/media';
 
@@ -128,7 +127,9 @@ describe('listPresentEpisodes request', () => {
 // dropped case below fails if its filter is removed.
 describe('toExternalSubtitles', () => {
   const media = '/lib/Movies/Green Book (2018)/Green Book (2018).mkv';
-  const srt = (over: Partial<JellyfinMediaStream> = {}): JellyfinMediaStream => ({
+  const srt = (
+    over: Partial<JellyfinMediaStream> = {},
+  ): JellyfinMediaStream => ({
     Type: 'Subtitle',
     IsExternal: true,
     Codec: 'subrip',
@@ -151,7 +152,9 @@ describe('toExternalSubtitles', () => {
   });
 
   it('drops an embedded stream', () => {
-    expect(toExternalSubtitles(media, [srt({ IsExternal: false })])).toEqual([]);
+    expect(toExternalSubtitles(media, [srt({ IsExternal: false })])).toEqual(
+      [],
+    );
   });
 
   it('drops a non-subrip codec', () => {
@@ -175,7 +178,9 @@ describe('toExternalSubtitles', () => {
   it('drops a file that is not .srt', () => {
     expect(
       toExternalSubtitles(media, [
-        srt({ Path: '/lib/Movies/Green Book (2018)/Green Book (2018).spa.sub' }),
+        srt({
+          Path: '/lib/Movies/Green Book (2018)/Green Book (2018).spa.sub',
+        }),
       ]),
     ).toEqual([]);
   });
@@ -183,7 +188,9 @@ describe('toExternalSubtitles', () => {
   it('accepts an upper-case .SRT extension', () => {
     expect(
       toExternalSubtitles(media, [
-        srt({ Path: '/lib/Movies/Green Book (2018)/Green Book (2018).spa.SRT' }),
+        srt({
+          Path: '/lib/Movies/Green Book (2018)/Green Book (2018).spa.SRT',
+        }),
       ]),
     ).toHaveLength(1);
   });
@@ -217,14 +224,19 @@ describe('toEpisodeSubtitleMap', () => {
   });
 
   it('keys each episode by season and episode number', () => {
-    const map = toEpisodeSubtitleMap([item({}), item({ Id: 'ep2', IndexNumber: 3 })]);
+    const map = toEpisodeSubtitleMap([
+      item({}),
+      item({ Id: 'ep2', IndexNumber: 3 }),
+    ]);
     expect(map.get('1:2')?.itemId).toBe('ep');
     expect(map.get('1:3')?.itemId).toBe('ep2');
     expect(map.get('1:2')?.subtitles).toHaveLength(1);
   });
 
   it('excludes a Virtual episode', () => {
-    expect(toEpisodeSubtitleMap([item({ LocationType: 'Virtual' })]).size).toBe(0);
+    expect(toEpisodeSubtitleMap([item({ LocationType: 'Virtual' })]).size).toBe(
+      0,
+    );
   });
 
   it('excludes an episode with no number', () => {
@@ -252,10 +264,18 @@ describe('Jellyfin subtitle requests', () => {
     await client().modifiedMedia!('/lib/x.mkv');
     await client().createdMedia('/lib/x.mkv');
 
-    const bodies = fetchMock.mock.calls.map((c) => JSON.parse(c[1].body as string));
-    expect(bodies[0]).toEqual({ Updates: [{ Path: '/lib/x.mkv', UpdateType: 'Modified' }] });
-    expect(bodies[1]).toEqual({ Updates: [{ Path: '/lib/x.mkv', UpdateType: 'created' }] });
-    expect((fetchMock.mock.calls[0][0] as URL).pathname).toBe('/Library/Media/Updated');
+    const bodies = fetchMock.mock.calls.map((c) =>
+      JSON.parse(c[1].body as string),
+    );
+    expect(bodies[0]).toEqual({
+      Updates: [{ Path: '/lib/x.mkv', UpdateType: 'Modified' }],
+    });
+    expect(bodies[1]).toEqual({
+      Updates: [{ Path: '/lib/x.mkv', UpdateType: 'created' }],
+    });
+    expect((fetchMock.mock.calls[0][0] as URL).pathname).toBe(
+      '/Library/Media/Updated',
+    );
   });
 
   // Without fields=MediaStreams,Path the default field set carries neither,
@@ -263,7 +283,10 @@ describe('Jellyfin subtitle requests', () => {
   it('asks for MediaStreams and Path on both listings', async () => {
     const fetchMock = jest
       .fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ Items: [{ Id: 'm', Path: '/a/b.mkv' }] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ Items: [{ Id: 'm', Path: '/a/b.mkv' }] }),
+      })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ Items: [] }) });
     global.fetch = fetchMock as unknown as typeof fetch;
 
@@ -276,10 +299,16 @@ describe('Jellyfin subtitle requests', () => {
       subtitles: [],
       presentLanguagesIso3: [],
     });
-    expect((fetchMock.mock.calls[0][0] as URL).searchParams.get('fields')).toBe('MediaStreams,Path');
+    expect((fetchMock.mock.calls[0][0] as URL).searchParams.get('fields')).toBe(
+      'MediaStreams,Path',
+    );
     expect((fetchMock.mock.calls[0][0] as URL).pathname).toBe('/Items');
-    expect((fetchMock.mock.calls[0][0] as URL).searchParams.get('ids')).toBe('m');
-    expect((fetchMock.mock.calls[1][0] as URL).searchParams.get('fields')).toBe('MediaStreams,Path');
+    expect((fetchMock.mock.calls[0][0] as URL).searchParams.get('ids')).toBe(
+      'm',
+    );
+    expect((fetchMock.mock.calls[1][0] as URL).searchParams.get('fields')).toBe(
+      'MediaStreams,Path',
+    );
   });
 });
 
@@ -299,8 +328,18 @@ describe('toPresentLanguages', () => {
   it('counts embedded and external streams of any codec, once per language', () => {
     expect(
       toPresentLanguages([
-        { Type: 'Subtitle', Language: 'eng', IsExternal: false, Codec: 'hdmv_pgs_subtitle' },
-        { Type: 'Subtitle', Language: 'ENG', IsExternal: true, Codec: 'subrip' },
+        {
+          Type: 'Subtitle',
+          Language: 'eng',
+          IsExternal: false,
+          Codec: 'hdmv_pgs_subtitle',
+        },
+        {
+          Type: 'Subtitle',
+          Language: 'ENG',
+          IsExternal: true,
+          Codec: 'subrip',
+        },
         { Type: 'Subtitle', Language: 'spa', IsExternal: true, Codec: 'ass' },
       ]),
     ).toEqual(['eng', 'spa']);
@@ -314,88 +353,5 @@ describe('toPresentLanguages', () => {
         { Type: 'Subtitle' },
       ]),
     ).toEqual([]);
-  });
-});
-
-// Spec 103, REQ-8: an absent Forced/MachineTranslated/AiTranslated flag
-// reading as true would drop every candidate, and as undefined would let a
-// machine translation through the filter.
-describe('toRemoteCandidates', () => {
-  it('reads absent remote booleans as false', () => {
-    const [candidate] = toRemoteCandidates(
-      [{ Id: 'a', ThreeLetterISOLanguageName: 'spa', Name: 'Movie.2020', Format: 'srt' }],
-      'spa',
-    );
-
-    expect(candidate).toEqual({
-      id: 'a',
-      languageIso3: 'spa',
-      name: 'Movie.2020',
-      format: 'srt',
-      isForced: false,
-      isHearingImpaired: false,
-      isMachineTranslated: false,
-      isAiTranslated: false,
-      isHashMatch: false,
-      downloadCount: 0,
-    });
-  });
-
-  it('maps the true flags and drops an entry with no id', () => {
-    const result = toRemoteCandidates(
-      [
-        { Id: 'b', Forced: true, HearingImpaired: true, MachineTranslated: true, AiTranslated: true, IsHashMatch: true, DownloadCount: 9 },
-        { Name: 'no id' },
-      ],
-      'eng',
-    );
-
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      languageIso3: 'eng',
-      isForced: true,
-      isHearingImpaired: true,
-      isMachineTranslated: true,
-      isAiTranslated: true,
-      isHashMatch: true,
-      downloadCount: 9,
-    });
-  });
-});
-
-describe('Jellyfin remote subtitle requests', () => {
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  const client = () =>
-    createJellyfinClient(
-      { host: 'h', port: '8096', apiKey: 'k' },
-      { lookup: async () => null },
-    );
-
-  it('searches by item and language, and fetches the body as bytes', async () => {
-    const fetchMock = jest
-      .fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => [{ Id: 'x/y', Format: 'srt' }] })
-      .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new Uint8Array([104, 105]).buffer });
-    global.fetch = fetchMock as unknown as typeof fetch;
-
-    const found = await client().searchRemoteSubtitles!('item1', 'spa');
-    const bytes = await client().fetchRemoteSubtitle!('x/y');
-
-    expect(found.map((c) => c.id)).toEqual(['x/y']);
-    expect((fetchMock.mock.calls[0][0] as URL).pathname).toBe('/Items/item1/RemoteSearch/Subtitles/spa');
-    expect((fetchMock.mock.calls[1][0] as URL).pathname).toBe('/Providers/Subtitles/Subtitles/x%2Fy');
-    expect(bytes.toString()).toBe('hi');
-  });
-
-  it('throws on a non-ok response so the driver can record the failure', async () => {
-    global.fetch = jest
-      .fn()
-      .mockResolvedValue({ ok: false, status: 500, text: async () => 'boom' }) as unknown as typeof fetch;
-
-    await expect(client().searchRemoteSubtitles!('i', 'spa')).rejects.toThrow('500');
-    await expect(client().fetchRemoteSubtitle!('i')).rejects.toThrow('500');
   });
 });

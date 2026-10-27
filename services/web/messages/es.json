@@ -185,13 +185,13 @@
       "not_writable": "El worker no puede reemplazar este archivo (permisos de la carpeta o del dueño).",
       "interrupted": "La incrustación se interrumpió por un reinicio del worker. Probá de nuevo.",
       "sidecar_delete_failed": "Subtítulos incrustados, pero no se pudo borrar el .srt externo. Borralo a mano o desde Jellyfin.",
-      "jellyfin_refresh_failed": "Subtítulos incrustados, pero no se pudo avisar a Jellyfin. Aparecerán en su próximo escaneo."
+      "jellyfin_refresh_failed": "Subtítulos incrustados, pero no se pudo avisar al servidor de medios. Aparecerán en su próximo escaneo."
     },
     "subtitleSearch": {
       "unsupported_media_server": "La búsqueda de subtítulos requiere Jellyfin como servidor de medios.",
       "sync_not_found": "No se encontró la búsqueda de subtítulos.",
       "item_not_found": "Jellyfin no indexó el archivo a tiempo; no se buscaron subtítulos.",
-      "media_server_unavailable": "No se pudo contactar a Jellyfin para buscar subtítulos.",
+      "media_server_unavailable": "No se pudo contactar al servidor de medios para ubicar el archivo.",
       "fetch_failed": "No se pudo descargar el subtítulo.",
       "sync_failed": "No se pudo validar la sincronización del subtítulo.",
       "framerate_mismatch": "El subtítulo es de una versión con otro framerate.",
@@ -201,7 +201,14 @@
       "interrupted": "La búsqueda se interrumpió.",
       "superseded": "Una entrega más nueva reemplazó esta búsqueda.",
       "in_progress": "Ya hay una búsqueda de subtítulos en curso para este título.",
-      "no_languages": "No hay idiomas de subtítulos elegidos para este título."
+      "no_languages": "No hay idiomas de subtítulos elegidos para este título.",
+      "provider_not_configured": "La búsqueda de subtítulos requiere una cuenta de OpenSubtitles en Ajustes → General.",
+      "no_library_path": "Perceptor no sabe dónde está el archivo de este título.",
+      "provider_unauthorized": "OpenSubtitles rechazó el usuario o la contraseña.",
+      "provider_unavailable": "No se pudo contactar a OpenSubtitles.",
+      "quota_exhausted": "Se agotaron las descargas diarias de OpenSubtitles.",
+      "probe_failed": "No se pudo leer el archivo para ver qué subtítulos tiene.",
+      "probe_not_found": "No se encontró la búsqueda de subtítulos."
     }
   },
   "landing": {
@@ -546,6 +553,10 @@
       "finishedAt": "Terminó el {date}"
     }
   },
+  "fileTrackLanguages": {
+    "audio": "Audio",
+    "subtitles": "Subtítulos"
+  },
   "movies": {
     "detail": {
       "noPoster": "No hay póster disponible",
@@ -579,6 +590,7 @@
       "releaseDateHeader": "Fecha de estreno",
       "statusHeader": "Estado",
       "actionsHeader": "Acciones",
+      "tracksHeader": "Pistas",
       "searchButtonTitle": "Buscar",
       "importFileButtonTitle": "Importar archivo",
       "addTorrentButtonTitle": "Añadir torrent"
@@ -694,7 +706,12 @@
     },
     "general": {
       "uiLocaleLabel": "Idioma de la aplicación",
-      "dateFormatLabel": "Formato de fecha"
+      "dateFormatLabel": "Formato de fecha",
+      "openSubtitlesHeading": "OpenSubtitles",
+      "openSubtitlesUsernameLabel": "Usuario de OpenSubtitles",
+      "openSubtitlesPasswordLabel": "Contraseña de OpenSubtitles",
+      "openSubtitlesHelp": "Es una cuenta de opensubtitles.com (una cuenta de opensubtitles.org no sirve). Hacen falta los dos campos. El límite diario de descargas de esa cuenta es el que limita la búsqueda de subtítulos.",
+      "openSubtitlesSignUp": "Crear una cuenta en opensubtitles.com"
     },
     "scheduling": {
       "timezoneNote": "Los horarios se evalúan en la zona horaria del contenedor de la API (UTC salvo que el host configure TZ). \"03:00\" se refiere a esa zona, no a la tuya.",
@@ -835,7 +852,7 @@
       "save": "Guardar",
       "saving": "Guardando...",
       "subtitleSearchLabel": "Buscar subtítulos en internet en cada título que se entregue de ahora en adelante",
-      "subtitleSearchRequiresJellyfin": "La búsqueda de subtítulos requiere Jellyfin como servidor de medios."
+      "subtitleSearchRequiresProvider": "Un administrador tiene que cargar una cuenta de OpenSubtitles en Ajustes → General."
     },
     "torrentGroups": {
       "chosenLabel": "Grupos elegidos",

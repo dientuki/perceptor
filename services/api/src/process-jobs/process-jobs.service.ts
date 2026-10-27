@@ -8,6 +8,8 @@ import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
+import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
+import { SubtitleProbeQueueService } from '@/queue/subtitle-probe-queue.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
 import { MESSAGES_EN } from '@/i18n/messages.en';
@@ -40,6 +42,10 @@ export class ProcessJobsService {
     private readonly downloads: DownloadsService,
     // Spec 103, REQ-4
     private readonly subtitleSearchRequest: SubtitleSearchRequestService,
+    // Spec 107, T009
+    private readonly subtitleProbeQueue: SubtitleProbeQueueService,
+    // Spec 108, T005
+    private readonly libraryProbeQueue: LibraryProbeQueueService,
   ) {}
 
   async getEncodeJobDetails(id: number): Promise<EncodeJobDetails> {
@@ -371,6 +377,12 @@ export class ProcessJobsService {
 
       // Spec 103, REQ-4
       if (!sourceDemoted) {
+        // Spec 108, REQ-3
+        if (processJob.movieId) {
+          void this.libraryProbeQueue.request({ movieId: processJob.movieId });
+        } else if (processJob.episodeId) {
+          void this.libraryProbeQueue.request({ episodeId: processJob.episodeId });
+        }
         if (processJob.movieId) {
           await this.subtitleSearchRequest.requestFor({ kind: 'movie', id: processJob.movieId });
         } else if (processJob.episodeId) {
@@ -484,6 +496,9 @@ export class ProcessJobsService {
       },
     });
 
+    // Spec 107, NFR-2
+    await this.recoverInterruptedProbes();
+
     const orphaned = await this.prisma.processJob.findMany({
       where: { status: 'ENCODING' },
       select: {
@@ -530,6 +545,33 @@ export class ProcessJobsService {
     }
 
     return skipped + failed.length + requeued.length;
+  }
+
+  // Spec 107, NFR-2
+  private async recoverInterruptedProbes(): Promise<void> {
+    await this.prisma.subtitleSearch.updateMany({
+      where: { status: 'WAITING', probeCount: { gte: 2 } },
+      data: {
+        status: 'FAILED',
+        errorKey: ERROR_KEYS.SUBTITLE_SEARCH_INTERRUPTED,
+        finishedAt: new Date(),
+      },
+    });
+
+    const retryable = await this.prisma.subtitleSearch.findMany({
+      where: { status: 'WAITING', probeCount: 1 },
+      select: { id: true },
+    });
+
+    for (const { id } of retryable) {
+      try {
+        // BullMQ ignores an add whose jobId still exists, so remove first.
+        await this.subtitleProbeQueue.removeProbe(id);
+        await this.subtitleProbeQueue.addProbe({ subtitleSearchId: id });
+      } catch (err) {
+        console.error(`[reconcileOrphanedEncodes] failed to re-enqueue probe for subtitleSearch ${id}:`, err);
+      }
+    }
   }
 
   // Spec 054, REQ-4

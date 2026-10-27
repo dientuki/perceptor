@@ -30,6 +30,8 @@ export interface Episode {
   overview?: string;
   releaseDate?: string;
   status: string;
+  fileAudioLanguages: string[] | null;
+  fileSubtitleLanguages: string[] | null;
   externalSubtitles: ExternalSubtitle[];
   subtitleEmbed: SubtitleEmbed | null;
   latestSubtitleSearch: SubtitleSearch | null;
@@ -140,6 +142,8 @@ const GET_SHOW_QUERY = `
           overview
           releaseDate
           status
+          fileAudioLanguages
+          fileSubtitleLanguages
           externalSubtitles {
             fileName
             languageIso3

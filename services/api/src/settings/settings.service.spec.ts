@@ -265,3 +265,43 @@ describe('SettingsService — enum_list kind', () => {
     );
   });
 });
+
+// This suite exists because the OpenSubtitles application key must never be
+// writable through Settings: Perceptor ships one key per application, and an
+// administrator pasting one into the database would be stored in plain text
+// and returned by the settings query with no error anywhere. The key has no
+// catalog entry, so the not-editable refusal is the only guard; the case
+// fails if an `opensubtitles_api_key` entry is ever added to the catalog.
+describe('SettingsService — OpenSubtitles application key', () => {
+  it('refuses an opensubtitles_api_key entry as not editable and writes nothing', async () => {
+    const upsert = jest.fn().mockResolvedValue({});
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SettingsService,
+        { provide: PrismaService, useValue: { setting: { upsert, findMany: jest.fn().mockResolvedValue([]) } } },
+        { provide: MediaRootsService, useValue: { resolveFromRoot: jest.fn() } },
+        { provide: LanguagesService, useValue: { validateAndResolveLanguageIds: jest.fn() } },
+      ],
+    }).compile();
+    const service = module.get<SettingsService>(SettingsService);
+
+    let caught: unknown;
+    try {
+      await service.updateMany([
+        { key: 'opensubtitles_username', value: 'fake-user' },
+        { key: 'opensubtitles_api_key', value: 'fake-key' },
+      ]);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BadRequestException);
+    expect((caught as BadRequestException).getResponse()).toMatchObject({
+      i18n: {
+        key: 'error.setting.not_editable',
+        params: { key: 'opensubtitles_api_key' },
+      },
+    });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+});
