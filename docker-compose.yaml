@@ -34,6 +34,7 @@ services:
       - "--entrypoints.websecure.address=:443"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--ping=true"
       # - "--api.insecure=true" # Descomentar si querés habilitar el Dashboard en el puerto 8080
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
