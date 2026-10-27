@@ -140,9 +140,6 @@ model UserMovie {
 
   audioMandatory Boolean @default(false)
 
-  // Spec 103, REQ-3
-  subtitleSearch Boolean @default(false)
-
   languages UserMovieLanguage[]
 
   @@id([userId, movieId])
@@ -162,9 +159,6 @@ model UserShow {
   createdAt DateTime @default(now())
 
   audioMandatory Boolean @default(false)
-
-  // Spec 103, REQ-3
-  subtitleSearch Boolean @default(false)
 
   languages UserShowLanguage[]
 
@@ -416,6 +410,11 @@ model Movie {
   // Spec 103, REQ-13
   subtitleSearches SubtitleSearch[]
 
+  // Spec 108, REQ-1
+  fileAudioLanguages    Json?
+  fileSubtitleLanguages Json?
+  tracksReadAt          DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -487,6 +486,11 @@ model Episode {
 
   // Spec 103, REQ-13
   subtitleSearches SubtitleSearch[]
+
+  // Spec 108, REQ-1
+  fileAudioLanguages    Json?
+  fileSubtitleLanguages Json?
+  tracksReadAt          DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -565,12 +569,16 @@ model SubtitleSearch {
   errorKey         String?              @db.VarChar(100)
   wantedLanguages  Json
   presentLanguages Json?
-  itemId           String?              @db.VarChar(100)
+  libraryPath      String?              @db.VarChar(500)
+
+  // Spec 107
+  movieHash      String? @db.VarChar(16)
+  fileSizeBytes  BigInt?
+  probeCount     Int     @default(0)
+  languageErrors Json?
 
   subtitleEmbedId Int?
   subtitleEmbed   SubtitleEmbed? @relation(fields: [subtitleEmbedId], references: [id], onDelete: SetNull)
-
-  checkCount Int @default(0)
 
   createdAt  DateTime  @default(now())
   finishedAt DateTime?
@@ -596,6 +604,7 @@ model SubtitleSearchAttempt {
   releaseName        String  @db.VarChar(500)
   rank               Int
   stagedPath         String? @db.VarChar(500)
+  providerFileName   String? @db.VarChar(500)
 
   status         SubtitleSearchAttemptStatus @default(QUEUED)
   offsetMs       Int?

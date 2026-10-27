@@ -122,6 +122,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       # Prowlarr's API key, read by the settings seed as tracker_api_key (014-dev-stack-flaresolverr).
       - INDEXER_API_KEY=${INDEXER_API_KEY}
+      - TORRENT_API_KEY=${TORRENT_API_KEY}
       # Backfills the movie_db_api_key Setting on boot when it is still empty (049, Contract
       # Freeze) — never a Settings write path beyond that, and never queried by install.sh itself.
       - TMDB_API_KEY=${TMDB_API_KEY}
@@ -449,6 +450,7 @@ services:
       # Read by services/torrent/commands/on-torrent-completed.sh (AutoRun hook) to authenticate
       # the torrentCompleted call — same machine credential as the worker (REQ-5).
       - SERVICE_TOKEN=${SERVICE_TOKEN}
+      - TORRENT_API_KEY=${TORRENT_API_KEY}
     volumes:
       # Configuración persistente del cliente (resume de descargas, torrents activos, etc.)
       - qbittorrent_config:/config

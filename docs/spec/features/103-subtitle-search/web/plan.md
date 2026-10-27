@@ -104,3 +104,19 @@ Typecheck and lint are clean. Every new key exists in both `en.json` and `es.jso
 See `../spec.md` § Amendments (2026-10-25, `spec_version` 0.4.0) and `../tasks.md` Group 5.
 
 - One new outcome key, `error.subtitleSearch.incomplete`, in both catalogs. Nothing else changes.
+
+## Amendment 0.5.0 (2026-10-26)
+
+See `../spec.md` § Amendments 0.5.0 and `../tasks.md` Group 6 (T033). Supersedes the per-title parts
+above (the checkbox under the subtitle picker, step 3, the `languages.ts` setters and the
+"caller's own flags" note).
+
+- Delete `setMovieSubtitleSearchAction` and `setShowSubtitleSearchAction` from `src/actions/languages.ts`.
+- `TitleLanguagesForm`: remove the optional `subtitleSearch` and `setSubtitleSearchAction` props and the
+  checkbox; `Movie.tsx`/`Show.tsx` stop passing them.
+- `src/actions/movies.ts`, `shows.ts` and the movie and show detail pages: stop selecting
+  `subtitleSearch`; keep `latestSubtitleSearch`. Remove the field from `src/types/media.ts`.
+- `/preferences` keeps its checkbox; change its help text in `en.json`/`es.json` to say it applies to
+  every title delivered from then on, and drop the per-title checkbox labels from the catalogs.
+- Verify with `grep` that no per-title `subtitleSearch` remains in `services/web/src`, then
+  `check-messages`.

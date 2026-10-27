@@ -9,6 +9,8 @@ export interface EmbedTrack {
   trackTitle: string;
   isDefault: boolean;
   isForced: boolean;
+  // Spec 107, REQ-14
+  tagsPath?: string;
 }
 
 export interface EmbedArgsInput {
@@ -41,8 +43,10 @@ export function buildEmbedArgs(input: EmbedArgsInput): string[] {
       '--default-track-flag', `0:${flag(track.isDefault)}`,
       '--forced-display-flag', `0:${flag(track.isForced)}`,
       '--sub-charset', '0:UTF-8',
-      track.normalizedPath,
     );
+    // Spec 107, REQ-14
+    if (track.tagsPath) args.push('--tags', `0:${track.tagsPath}`);
+    args.push(track.normalizedPath);
   }
 
   return args;

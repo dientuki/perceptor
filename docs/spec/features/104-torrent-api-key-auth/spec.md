@@ -4,7 +4,7 @@ spec_version: 0.3.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-24
 last_updated: 2026-10-25
-status: Approved
+status: Implemented
 services: [infra, api, web]
 ---
 
@@ -192,7 +192,7 @@ of the row would not satisfy that on its own.
       kept), then `docker compose ps torrent` shows it restarting (each attempt exits non-zero),
       `docker compose logs torrent` names
       `TORRENT_API_KEY`, and `torrent.<DOMAIN>` does not serve an unauthenticated qBittorrent.
-- [ ] **AC-7 (failure)**: Given `TORRENT_API_KEY` set to a value of the wrong shape (for example
+- [x] **AC-7 (failure)**: Given `TORRENT_API_KEY` set to a value of the wrong shape (for example
       `qbt_` plus 32 hex characters), when `torrent` starts, then it exits non-zero with a log line
       naming `TORRENT_API_KEY` and its expected shape.
 - [ ] **AC-8 (failure)**: Given a working installation, when `api` alone is restarted with a
@@ -208,7 +208,7 @@ of the row would not satisfy that on its own.
 - [ ] **AC-9**: Given a working installation, `docker compose logs torrent api` contains no
       occurrence of the `TORRENT_API_KEY` value, and neither the Settings screen nor the `settings`
       and `environmentInfo` queries return it.
-- [ ] **AC-10 (failure)**: Given a working installation, when `indexer` is recreated with an empty
+- [x] **AC-10 (failure)**: Given a working installation, when `indexer` is recreated with an empty
       `INDEXER_API_KEY` (`INDEXER_API_KEY= docker compose up -d --no-deps --force-recreate indexer`),
       then:
       - `docker compose ps indexer` shows it restarting (each attempt exits non-zero);

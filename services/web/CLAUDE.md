@@ -358,6 +358,10 @@ Enforcement itself is `api`-only and system-wide (no admin bypass); this slice i
 routing only, with the three `errors.media.*`/`errors.schedule.*` catalog keys as its backstop for
 the race where an administrator flips a switch between render and submit.
 
+## Library file languages (`108-library-track-languages`)
+
+`components/media/FileTrackLanguages.tsx` renders `Movie`/`Episode.fileAudioLanguages` and `fileSubtitleLanguages` (nullable `[String!]`; the `file` prefix keeps them apart from `Movie.audioLanguages`, the caller's `039` preference). `null` hides a line and both `null` hides the block (the file was never read); `[]` shows `—`; codes are upper-cased 3-letter chips. `variant="boxes"` sits under a film's poster in `Movie.tsx`; `variant="compact"` fills the "Pistas" column of `SeasonAccordion.tsx`, which also holds `106`'s `SearchSubtitlesButton`. `web` triggers no read and shows no failure.
+
 ## Detail pages are scoped, with a route-segment 404
 
 `/movies/[id]` and `/shows/[id]` are structural twins. `api` returns `null` both for a nonexistent id
@@ -799,15 +803,24 @@ never polled. Copy lives in `media.embedSubtitles.*` and `errors.subtitleEmbed.*
 
 ## Automatic subtitle search (`103-subtitle-search`)
 
-Three opt-in surfaces, all hidden or disabled unless `mediaCapabilities.subtitleSearchAvailable` is
-true (Jellyfin is the media server): a `subtitleSearch` checkbox in `/preferences`
-(`PreferencesForm.tsx`, disabled with a hint when unavailable), a per-title checkbox in
-`TitleLanguagesForm.tsx` (shown only while the user preference is on; it never inherits from it) and
+One opt-in switch, disabled unless `mediaCapabilities.subtitleSearchAvailable` is true (Jellyfin is
+the media server): the `subtitleSearch` checkbox in `/preferences` (`PreferencesForm.tsx`, disabled
+with a hint when unavailable). It applies to every title delivered from then on; since 0.5.0 there is
+no per-title checkbox and no per-title field in the queries. The read-only
 `components/media/SubtitleSearchStatus.tsx`, rendered in `TitleLanguagesPanel.tsx` for a film and in
 `SeasonAccordion.tsx` for an episode. The status shows the latest search's per-language outcome from `latestSubtitleSearch`; a
 failed language renders its `reasonKey` through `translateErrorKey` (the `error.subtitleSearch.*`
 keys, including `incomplete`), so a new outcome key needs only its two catalog entries. Refresh is
 manual, never polled.
+
+`components/media/SearchSubtitlesButton.tsx` (`106-manual-subtitle-search`) is the manual trigger: a
+"Buscar subtítulos" button with a confirmation dialog naming the provider's daily quota, rendered beside
+`SubtitleSearchStatus` for a film (`Movie.tsx`'s panel footer) and, `compact`, on each episode row of
+`SeasonAccordion.tsx`, only when `mediaCapabilities.subtitleSearchAvailable && status === 'COMPLETED'`
+(`web` has no possession field, so `COMPLETED` stands in for "holds a file"). It is disabled while the
+latest search is non-terminal. The actions `searchMovieSubtitlesAction`/`searchEpisodeSubtitlesAction`
+return `{ search } | { error, errorKey? }`; `in_progress` also refreshes the page. There is no season or
+series button: the provider's free quota is about 20 downloads a day.
 
 ## Tests: there are none
 

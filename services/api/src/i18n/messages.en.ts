@@ -126,6 +126,8 @@ export const MESSAGES_EN: Record<string, string> = {
     'This download has no associated torrent',
   [ERROR_KEYS.TORRENT_CLIENT_REJECTED]:
     'The torrent client rejected the request ({status})',
+  [ERROR_KEYS.TORRENT_CLIENT_UNAUTHORIZED]:
+    "The torrent client rejected Perceptor's credential: an administrator needs to check TORRENT_API_KEY",
 
   // uploads — GraphQL
   [ERROR_KEYS.UPLOAD_TARGET_AMBIGUOUS]:
@@ -175,6 +177,11 @@ export const MESSAGES_EN: Record<string, string> = {
     'The offset must be between -600000 and 600000 ms.',
   [ERROR_KEYS.SUBTITLE_EMBED_STALE_LISTING]:
     "Jellyfin's subtitle list changed. Reopen the dialog.",
+  [ERROR_KEYS.LIBRARY_PROBE_INVALID_TARGET]:
+    'The library probe target is invalid.',
+  [ERROR_KEYS.LIBRARY_PROBE_NOT_FOUND]: 'The title was not found.',
+  [ERROR_KEYS.LIBRARY_PROBE_MEDIA_SERVER_UNAVAILABLE]:
+    'The media server is unavailable.',
   [ERROR_KEYS.SUBTITLE_EMBED_BUSY]:
     'This title has a download, encode or subtitle embed in progress.',
   [ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE]:
@@ -202,7 +209,7 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SUBTITLE_SEARCH_ITEM_NOT_FOUND]:
     'Jellyfin did not index the file in time; no subtitles were searched.',
   [ERROR_KEYS.SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE]:
-    'Could not reach Jellyfin to search for subtitles.',
+    'Could not reach the media server to locate the file.',
   [ERROR_KEYS.SUBTITLE_SEARCH_FETCH_FAILED]:
     'The subtitle could not be downloaded.',
   [ERROR_KEYS.SUBTITLE_SEARCH_SYNC_FAILED]:
@@ -219,6 +226,26 @@ export const MESSAGES_EN: Record<string, string> = {
     'The search was interrupted.',
   [ERROR_KEYS.SUBTITLE_SEARCH_SUPERSEDED]:
     'A newer delivery replaced this search.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_IN_PROGRESS]:
+    'A subtitle search is already in progress for this title.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_NO_LANGUAGES]:
+    'No subtitle languages are chosen for this title.',
+
+  // Spec 107
+  [ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_NOT_CONFIGURED]:
+    'Subtitle search requires an OpenSubtitles account in Settings → General.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_NO_LIBRARY_PATH]:
+    "Perceptor doesn't know where this title's file is.",
+  [ERROR_KEYS.SUBTITLE_SEARCH_PROBE_NOT_FOUND]:
+    'Subtitle probe {id} does not exist or is not waiting',
+  [ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED]:
+    'OpenSubtitles rejected the username or password.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAVAILABLE]:
+    'Could not reach OpenSubtitles.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED]:
+    'The OpenSubtitles daily downloads are exhausted.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED]:
+    'The file could not be read to see which subtitles it has.',
 
   // scheduler
   [ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND]: 'Scheduled task not found',

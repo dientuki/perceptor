@@ -29,6 +29,7 @@ const firstArg = <T>(mock: jest.Mock): T => (mock.mock.calls[0] as [T])[0];
 // production ones, with only Prisma, Jellyfin and the queue faked (Article IX,
 // Spec 101, REQ-1 REQ-2 REQ-4 REQ-5 REQ-12 REQ-13 REQ-15 REQ-16).
 describe('SubtitleEmbedService', () => {
+  let libraryProbeQueue: { request: jest.Mock };
   let baseDir: string;
   let libDir: string;
   let mkv: string;
@@ -212,12 +213,15 @@ describe('SubtitleEmbedService', () => {
     mediaServer = { createClient: jest.fn().mockResolvedValue(client) };
     queue = { addEmbed: jest.fn().mockResolvedValue(undefined) };
 
+    libraryProbeQueue = { request: jest.fn().mockResolvedValue(undefined) };
+
     service = new SubtitleEmbedService(
       prisma as never,
       mediaServer as never,
       mediaRoots,
       queue as never,
       new ActiveEmbedGuard(prisma as never),
+      libraryProbeQueue as never,
     );
   });
 
@@ -679,6 +683,7 @@ describe('SubtitleEmbedService', () => {
           isDefault: true,
           isForced: true,
           offsetMs: 1200,
+          provenance: 'user',
         },
         {
           fileName: 'Movie (2020).eng.srt',
@@ -687,6 +692,7 @@ describe('SubtitleEmbedService', () => {
           isDefault: false,
           isForced: false,
           offsetMs: 0,
+          provenance: 'user',
         },
       ]);
       expect(queue.addEmbed).toHaveBeenCalledWith({ subtitleEmbedId: 5 });
@@ -786,6 +792,23 @@ describe('SubtitleEmbedService', () => {
         expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledTimes(1);
       });
 
+      // Spec 108, REQ-3
+      it('requests a library track read for the embed title only when it won the claim', async () => {
+        prisma.subtitleEmbed.findUnique.mockResolvedValue(row({ movieId: 42, episodeId: null }));
+        await service.completed(5, null);
+        expect(libraryProbeQueue.request).toHaveBeenCalledWith({ movieId: 42 });
+
+        libraryProbeQueue.request.mockClear();
+        prisma.subtitleEmbed.findUnique.mockResolvedValue(row({ movieId: null, episodeId: 9 }));
+        await service.completed(5, null);
+        expect(libraryProbeQueue.request).toHaveBeenCalledWith({ episodeId: 9 });
+
+        libraryProbeQueue.request.mockClear();
+        prisma.subtitleEmbed.updateMany.mockResolvedValue({ count: 0 });
+        await service.completed(5, null);
+        expect(libraryProbeQueue.request).not.toHaveBeenCalled();
+      });
+
       it('answers false for an embed that does not exist', async () => {
         prisma.subtitleEmbed.findUnique.mockResolvedValue(null);
         expect(await service.completed(5, null)).toBe(false);
@@ -814,17 +837,12 @@ describe('SubtitleEmbedService', () => {
           'a client that cannot be notified',
           () => mediaServer.createClient.mockResolvedValue({}),
         ],
-      ])('records jellyfin_refresh_failed for %s', async (_name, arrange) => {
+      ])('no client -> completed stores no warning (%s)', async (_name, arrange) => {
         prisma.subtitleEmbed.findUnique.mockResolvedValue(row());
         arrange();
 
         expect(await service.completed(5, null)).toBe(true);
-        expect(prisma.subtitleEmbed.update).toHaveBeenCalledWith({
-          where: { id: 5 },
-          data: {
-            warningKey: ERROR_KEYS.SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED,
-          },
-        });
+        expect(prisma.subtitleEmbed.update).not.toHaveBeenCalled();
       });
 
       it('records jellyfin_refresh_failed when the path has no host translation', async () => {
@@ -951,6 +969,7 @@ describe('SubtitleEmbedService', () => {
               isForced: false,
               offsetMs: 1200,
               isSidecar: true,
+              provenance: 'user',
             },
           ],
         });
@@ -980,7 +999,32 @@ describe('SubtitleEmbedService', () => {
         expect(details.tracks[0]).toMatchObject({
           sourcePath: staged,
           isSidecar: false,
+          provenance: 'opensubtitles',
         });
+      });
+
+      // Spec 107, AC-18
+      it('serves a stored provenance verbatim', async () => {
+        prisma.subtitleEmbed.findUnique.mockResolvedValue(
+          row({
+            tracks: [
+              {
+                fileName: '1.srt',
+                stagedPath: '/x/1.srt',
+                languageIso3: 'spa',
+                trackTitle: 'Español',
+                isDefault: false,
+                isForced: false,
+                offsetMs: 0,
+                provenance: 'Film.es.srt',
+              },
+            ],
+          }),
+        );
+
+        expect((await service.details(5)).tracks[0].provenance).toBe(
+          'Film.es.srt',
+        );
       });
 
       it('refuses an unknown id', async () => {
@@ -1014,11 +1058,12 @@ describe('SubtitleEmbedService', () => {
       languageIso3: 'spa',
       stagedPath: staged,
       offsetMs: -2000,
+      provenance: 'Film.2020.es.srt',
       ...over,
     });
 
     it('stores a staged track with its path, default off and forced off, and enqueues once', async () => {
-      await service.embedStaged({ kind: 'movie', id: 1 }, [track()]);
+      await service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv);
 
       const { data } = firstArg<{
         data: { filePath: string; tracks: unknown };
@@ -1033,6 +1078,7 @@ describe('SubtitleEmbedService', () => {
           isDefault: false,
           isForced: false,
           offsetMs: -2000,
+          provenance: 'Film.2020.es.srt',
         },
       ]);
       expect(queue.addEmbed).toHaveBeenCalledWith({ subtitleEmbedId: 5 });
@@ -1041,14 +1087,44 @@ describe('SubtitleEmbedService', () => {
       );
     });
 
+    it('embeds into the given path and never consults a media server', async () => {
+      prisma.movie.findFirst.mockResolvedValue({
+        tmdbId: 603,
+        filePath: null,
+        mediaServerPresentAt: new Date(),
+      });
+
+      await service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv);
+
+      expect(firstArg<{ data: { filePath: string } }>(
+        prisma.subtitleEmbed.create,
+      ).data.filePath).toBe(mkv);
+      expect(mediaServer.createClient).not.toHaveBeenCalled();
+    });
+
+    it('refuses a given path that is not a usable mkv', async () => {
+      expect(
+        await key(
+          service.embedStaged(
+            { kind: 'movie', id: 1 },
+            [track()],
+            join(libDir, 'Movie (2020).mp4'),
+          ),
+        ),
+      ).toBe(ERROR_KEYS.SUBTITLE_EMBED_NOT_MKV);
+      expect(queue.addEmbed).not.toHaveBeenCalled();
+    });
+
     it('refuses a staged path outside the downloads root', async () => {
       const outside = join(libDir, 'Movie (2020).spa.srt');
 
       expect(
         await key(
-          service.embedStaged({ kind: 'movie', id: 1 }, [
-            track({ stagedPath: outside }),
-          ]),
+          service.embedStaged(
+            { kind: 'movie', id: 1 },
+            [track({ stagedPath: outside })],
+            mkv,
+          ),
         ),
       ).toBe(ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE);
 
@@ -1060,7 +1136,7 @@ describe('SubtitleEmbedService', () => {
       prisma.mediaSource.count.mockResolvedValue(1);
 
       expect(
-        await key(service.embedStaged({ kind: 'movie', id: 1 }, [track()])),
+        await key(service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv)),
       ).toBe(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
 
       expect(prisma.subtitleEmbed.create).not.toHaveBeenCalled();
@@ -1071,7 +1147,7 @@ describe('SubtitleEmbedService', () => {
       prisma.subtitleEmbed.count.mockResolvedValue(1);
 
       expect(
-        await key(service.embedStaged({ kind: 'movie', id: 1 }, [track()])),
+        await key(service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv)),
       ).toBe(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
       expect(queue.addEmbed).not.toHaveBeenCalled();
     });

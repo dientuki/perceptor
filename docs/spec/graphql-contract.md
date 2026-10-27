@@ -826,6 +826,7 @@ The full vocabulary, by owner:
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
 | `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash` |
 | `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.source.superseded` (`087-force-replacement-arbitration`), `error.processJob.not_found` |
+| `api` — downloads (torrent client) | `error.download.torrent_client_rejected` (`{status}`, `0` when unreachable), `error.download.torrent_client_unauthorized` (no params; `401`/`403` from qBittorrent — `104-torrent-api-key-auth`) |
 | `api` — ffprobe-logs | `error.ffprobeLog.not_found`, `error.ffprobeLog.empty_payload` |
 | `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
 | `api` — uploads (REST) | `error.upload.ticket_expired`, `error.upload.ticket_wrong_movie`, `error.upload.ticket_wrong_episode`, `error.upload.metadata_incomplete` |
@@ -1881,12 +1882,37 @@ No new error key — every refusal from `addTorrentToSeason` (and, now that it h
 `addMagnetToSeason`) surfaces through keys that already existed: `error.season.not_found` (`{ id }`,
 newly translated in `web`), `error.season.already_completed`, `error.magnet.already_attached`
 (`{ title }`), `error.magnet.not_a_magnet` / `invalid_infohash` / `v2_unsupported`,
-`error.download.torrent_client_rejected`, and `addTorrentToSeason`-only `error.indexer.no_infohash`.
+`error.download.torrent_client_rejected` (true only since `104`: before it, the client's error escaped
+these mutations unkeyed), and `addTorrentToSeason`-only `error.indexer.no_infohash`.
 
 Consumer obligations: `web` sends `infoHash` as `string | null` with no `?? ''` coercion, exactly
 like the episode twin; on `error.season.already_completed` it switches to the replace flow and
 resends with `force: true`, the same pattern `error.episode.already_completed` already has. `worker`
 has no obligation — it calls neither mutation and reads no episode status.
+
+### qBittorrent is called with an API key, and a rejected one has its own error (`104-torrent-api-key-auth`)
+
+No type, field, argument or operation changes. `api` now sends `Authorization: Bearer
+<TORRENT_API_KEY>` on every qBittorrent request instead of relying on a subnet whitelist, and one
+error key is new:
+
+| Condition | Error | `extensions.i18n` |
+| :-- | :-- | :-- |
+| qBittorrent answered `401`/`403` to `api`'s credential | `ServiceUnavailableException` | `error.download.torrent_client_unauthorized`, no params |
+| Any other qBittorrent failure, or unreachable | `ServiceUnavailableException` | `error.download.torrent_client_rejected` `{ status }` (`0` when unreachable) |
+
+Both apply to `downloadStart`, `downloadStop`, `downloadDelete` and the per-job controls that reach
+the torrent client, **and** to `addTorrentToMovie`, `addTorrentToEpisode`, `addTorrentToSeason`,
+`addMagnetToMovie`, `addMagnetToEpisode` and `addMagnetToSeason`. Those six used to let the client's
+error escape with no key; they now raise the keyed pair above, and a rejected `add()` creates no
+`MediaSource`. Live-status reads (`downloads`, `movieDownloads`, `showDownloads`,
+`MediaSource.downloadedFiles`) still degrade silently to empty/`null`, but `api`'s log names the
+rejected credential. The message names `TORRENT_API_KEY`, never its value; the key is read from
+`api`'s environment, never exposed by `settings` or `environmentInfo`.
+
+Consumer obligations: `web` adds `errors.download.torrent_client_unauthorized` to both catalogs and
+renders it wherever it renders `torrent_client_rejected`; no retry, since the condition clears only
+when an administrator fixes `.env`. `worker` has no obligation — it never talks to qBittorrent.
 
 ### The release calendar is one read-only query over calendar days (`062-release-calendar`)
 
@@ -2547,11 +2573,14 @@ Cancelling a queued or running embed is out of scope, so there is no cancel chan
 
 ### Searching subtitles online and embedding them (`103-subtitle-search`)
 
+> **Superseded by `107`:** the Jellyfin wait, `media_server_client === jellyfin` availability and
+> Jellyfin's remote provider search described below no longer exist; `subtitleSearchAvailable` and the
+> `unsupported_media_server` refusal changed meaning. See the `107-opensubtitles-direct` section.
+
 ```graphql
 type MediaCapabilities { subtitleSearchAvailable: Boolean! }        # media_server_client === jellyfin
 type UserPreferences { subtitleSearch: Boolean! }
-type Movie { subtitleSearch: Boolean!, latestSubtitleSearch: SubtitleSearch }
-type Show { subtitleSearch: Boolean! }
+type Movie { latestSubtitleSearch: SubtitleSearch }
 type Episode { latestSubtitleSearch: SubtitleSearch }
 type SubtitleSearch { id: Int!, status: SubtitleSearchStatus!, errorKey: String,
                       languages: [SubtitleSearchLanguage!]!, createdAt: DateTime!, finishedAt: DateTime }
@@ -2563,8 +2592,6 @@ type SubtitleSyncDetails { id: Int!, filePath: String!, candidatePath: String! }
 type SubtitleEmbedTrack { isSidecar: Boolean! }                      # 101 delta
 type Mutation {
   setSubtitleSearch(enabled: Boolean!): UserPreferences!
-  setMovieSubtitleSearch(movieId: Int!, enabled: Boolean!): Boolean!
-  setShowSubtitleSearch(showId: Int!, enabled: Boolean!): Boolean!
   subtitleSyncStarted(id: Int!): Boolean!                              # service only
   subtitleSyncCompleted(id: Int!, offsetMs: Int!, framerateRatio: Float!,
                         reference: SubtitleSyncReference!, score: Float!,
@@ -2579,8 +2606,8 @@ type Query { subtitleSyncDetails(id: Int!): SubtitleSyncDetails! }     # service
   a qualifying last chapter or else 60 % of the duration (`0.4.0`), score at or above the per-reference
   threshold) and stores the reason key. `offsetMs` follows `101`'s convention: the correction that
   undoes the delay, so a subtitle delayed by 2 s measures about -2000.
-- The three setters refuse only on the capability (`error.subtitleSearch.unsupported_media_server`),
-  even for `false`. `subtitleSearch` on `Movie`/`Show` is the caller's own row, `false` if none.
+- `setSubtitleSearch` refuses only on the capability (`error.subtitleSearch.unsupported_media_server`),
+  even for `false`. There is no per-title flag (`0.5.0`): the preference is the only switch.
 - `latestSubtitleSearch.languages` is derived from the attempt rows, never stored: `NOT_FOUND` has no
   row of its own.
 - Candidate subtitles are staged under `<downloads root>/.perceptor/subtitle-search/` and `filePath`
@@ -2594,6 +2621,177 @@ type Query { subtitleSyncDetails(id: Int!): SubtitleSyncDetails! }     # service
 `{ subtitleSyncId: number }`, declared in `services/api/src/queue/types.ts` and copied by hand into
 `services/worker/src/queue/types.ts`. A second queue, `subtitle-search`, is `api`-internal (produced and
 consumed by `api`, idempotent wake-ups `{ searchId }`) and is not part of the boundary.
+
+### Searching subtitles by hand (`106-manual-subtitle-search`)
+
+```graphql
+type Mutation {
+  searchMovieSubtitles(movieId: Int!): SubtitleSearch!
+  searchEpisodeSubtitles(episodeId: Int!): SubtitleSearch!
+}
+```
+
+- Both are user-authenticated, never `@AllowService`, and return the new `WAITING` search. There is
+  no season, series or library trigger.
+- Refusals, in this order: `error.subtitleSearch.unsupported_media_server`, `error.movie.not_found` /
+  `error.episode.not_found` (the caller must own the title), `error.subtitleEmbed.no_file`,
+  `error.subtitleEmbed.not_mkv` or `outside_library`, `error.subtitleEmbed.busy`,
+  `error.subtitleSearch.in_progress`, `error.subtitleSearch.no_languages`. The first five reuse `101`'s
+  keys and checks; `in_progress` (Conflict) and `no_languages` (BadRequest) are new.
+- A press never supersedes a running search: it refuses with `in_progress`. A delivery still supersedes.
+- A press wants the caller's own subtitle languages whatever their `subtitleSearch` preference, plus the
+  opted-in owners'. The press is the consent.
+- A search's `errorKey` may now be `error.subtitleEmbed.not_mkv` or `error.subtitleEmbed.outside_library`
+  (a title with no `filePath` is checked when the search leaves `WAITING`).
+- `SubtitleSearch.libraryPath` is `api`-internal and is not exposed.
+
+### Searching subtitles on OpenSubtitles directly (`107-opensubtitles-direct`)
+
+Supersedes `103`'s Jellyfin-based search: `api` talks to OpenSubtitles.com itself and the worker probes
+the library file. The delta, as frozen in `spec.md`:
+
+```graphql
+extend type MediaCapabilities {
+  """True while Perceptor's OpenSubtitles application key is present and the OpenSubtitles username and password Settings are set (107 REQ-2). Never exposes any of them."""
+  subtitleSearchAvailable: Boolean!
+}
+
+type SubtitleProbeDetails {
+  id: Int!
+  """Absolute container path of the library file to probe."""
+  filePath: String!
+}
+
+type Query {
+  """Service-only (worker). Same standing as SubtitleSyncDetails."""
+  subtitleProbeDetails(id: Int!): SubtitleProbeDetails!
+}
+
+type Mutation {
+  """Service-only (worker). Records that the probe started (107 NFR-2); false if the search is no longer WAITING, and the worker then abandons silently."""
+  subtitleProbeStarted(id: Int!): Boolean!
+  """Service-only (worker). Safe to receive more than once; false if the search is no longer WAITING."""
+  subtitleProbeCompleted(
+    id: Int!
+    """ISO 639-2 codes of the non-forced embedded subtitle tracks (107 REQ-3)."""
+    embeddedLanguagesIso3: [String!]!
+    """Language tags of the non-forced sidecars, as written in their names (`es`, `es-419`, `spa`, `Spanish`); api resolves them (107 REQ-3)."""
+    sidecarLanguageTags: [String!]!
+    """File size in bytes. Float: a library file exceeds Int's 2^31."""
+    fileSizeBytes: Float!
+    """OpenSubtitles hash of the file, 16 lowercase hex digits."""
+    movieHash: String!
+  ): Boolean!
+  """Service-only (worker). Safe to receive more than once."""
+  subtitleProbeFailed(id: Int!, errorKey: String!): Boolean!
+}
+```
+
+- `subtitleSearchAvailable` keeps its name and type; its meaning is now "key resolves AND both
+  Settings are non-empty". `web` changes only its hint copy. The two Settings
+  (`opensubtitles_username`, `opensubtitles_password`) travel through the existing `settings` /
+  `updateSettings`. The application key crosses no service boundary: only `api` reads it, and no
+  Setting holds it.
+- **Fourth queue contract.** Queue `subtitle-probe`, job `subtitle-probe`, payload
+  `{ subtitleSearchId: number }`, concurrency 1, declared in `services/api/src/queue/types.ts` and
+  copied by hand into `services/worker/src/queue/types.ts`. `id` in the query and mutations above is
+  the `SubtitleSearch` id.
+- **Provenance tags (amendment 0.4.0, REQ-14).** `101`'s `SubtitleEmbedTrack` gains one field, read
+  by the worker through the existing `subtitleEmbedDetails` query:
+
+  ```graphql
+  extend type SubtitleEmbedTrack {
+    """Value of the PERCEPTOR_SOURCE track tag (107 REQ-14): the OpenSubtitles file name for a searched track, `user` for a sidecar embedded by hand. Written verbatim after sanitizing; never empty."""
+    provenance: String!
+  }
+  ```
+
+  The worker writes `PERCEPTOR_SOURCE` (the sanitized `provenance`) and `PERCEPTOR_OFFSET` (the signed
+  `offsetMs`) on the new subtitle track through `mkvmerge --tags 0:<xml>`; a track with no
+  `provenance` (an older `api`) gets no tags, and existing tracks are never rewritten. `api` serves
+  `user` for a stored sidecar track and `opensubtitles` for a stored staged track that predates the field.
+- **Errors.**
+  - Thrown: `error.subtitleSearch.provider_not_configured` (replaces `unsupported_media_server`),
+    `no_library_path`, `media_server_unavailable` (kept, now thrown only when a title with no
+    `filePath` cannot be located), `probe_not_found` (`subtitleProbeDetails` for an unknown id).
+  - Outcome keys shown in the panel, never thrown: `provider_unauthorized`, `provider_unavailable`,
+    `quota_exhausted`, `probe_failed`.
+  - Retired but kept in the catalog for old rows: `unsupported_media_server`, `item_not_found`.
+- **The worker abandons silently** on `subtitleProbeDetails` → `probe_not_found` or
+  `subtitleProbeStarted` → `false`; a probe that throws reports `subtitleProbeFailed` with
+  `error.subtitleSearch.probe_failed`, and `api` ends the search `FAILED` with that key. A second
+  worker crash on the same search ends it `FAILED` with `error.subtitleSearch.interrupted`.
+- `Jellyfin`'s `searchRemoteSubtitles` / `fetchRemoteSubtitle` are removed from the client; `101`'s
+  sidecar listing stays.
+
+### Which languages a library file carries (`108-library-track-languages`)
+
+```graphql
+extend type Movie {
+  """ISO 639-2 audio languages of the library file (108 REQ-1); null while the file has never been read."""
+  fileAudioLanguages: [String!]
+  """ISO 639-2 subtitle languages of the library file, embedded and sidecar (108 REQ-1); null while the file has never been read."""
+  fileSubtitleLanguages: [String!]
+}
+
+extend type Episode {
+  """ISO 639-2 audio languages of the library file (108 REQ-1); null while the file has never been read."""
+  fileAudioLanguages: [String!]
+  """ISO 639-2 subtitle languages of the library file, embedded and sidecar (108 REQ-1); null while the file has never been read."""
+  fileSubtitleLanguages: [String!]
+}
+
+input LibraryProbeTarget {
+  movieId: Int
+  episodeId: Int
+}
+
+type LibraryProbeDetails {
+  """Absolute container path of the library file to read."""
+  filePath: String!
+}
+
+type Query {
+  """Service-only (worker). Exactly one of movieId/episodeId is set."""
+  libraryProbeDetails(target: LibraryProbeTarget!): LibraryProbeDetails!
+}
+
+type Mutation {
+  """Service-only (worker). Safe to receive more than once; false when filePath is no longer the title's file and the report was discarded (108 REQ-5)."""
+  libraryProbeCompleted(
+    target: LibraryProbeTarget!
+    """The path that was read, as libraryProbeDetails returned it."""
+    filePath: String!
+    """ISO 639-2 codes of the audio tracks, und and untagged left out."""
+    audioLanguagesIso3: [String!]!
+    """ISO 639-2 codes of the embedded subtitle tracks (108 REQ-1)."""
+    embeddedSubtitleLanguagesIso3: [String!]!
+    """Language tags of the sidecars, as written in their names; api resolves them."""
+    sidecarLanguageTags: [String!]!
+  ): Boolean!
+}
+```
+
+`fileAudioLanguages`/`fileSubtitleLanguages` are `null` for "never read" and `[]` for "read, nothing found";
+`web` hides the boxes for the first and shows `—` for the second (REQ-6). There is no failure
+mutation: a failed read changes nothing (NFR-3), so the worker only logs it.
+
+Queue: `library-probe` / `library-probe`, payload `{ movieId?: number; episodeId?: number }` with
+exactly one set, concurrency 1, declared in `services/api/src/queue/types.ts` and copied by hand
+into `services/worker/src/queue/types.ts`. `api` produces it with a job id per title
+(`library-probe-movie-<id>` / `library-probe-episode-<id>`) so a second request while one is queued
+is a no-op (REQ-3), and `attempts: 1`.
+
+| Condition | HTTP / GraphQL error | Message the user sees |
+| :-- | :-- | :-- |
+| `libraryProbeDetails` for a target with neither or both ids | `BadRequestException` `error.libraryProbe.invalid_target` | not user-facing (worker logs and abandons) |
+| `libraryProbeDetails` for a title that no longer exists, or has no file it can locate (REQ-2) | `NotFoundException` `error.libraryProbe.not_found` | not user-facing (worker logs and abandons, reports nothing) |
+| `libraryProbeDetails` for a title the media server holds while the media server is unreachable | `ServiceUnavailableException` `error.libraryProbe.media_server_unavailable` | not user-facing (worker logs and abandons) |
+| Either service-only operation with a user token | the existing service-guard key | the existing message |
+| `libraryProbeCompleted` for a target that no longer exists | none: resolves `false` | — |
+
+`web` reads two new nullable fields per type. They are prefixed `file` because `Movie.audioLanguages`/`subtitleLanguages` already exist (`039`: the caller's per-title preferred languages, `[Language!]!`) and mean something else; `Show` is not extended. `web` handles no new error. The worker abandons silently on every
+`libraryProbeDetails` error above.
 
 ## Known debt
 

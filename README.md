@@ -321,7 +321,12 @@ docker compose pull && docker compose up -d
 ```
 
 Migrations and the backup run on the way up, as above. Rolling back is naming the previous tag and
-repeating the same two commands.  
+repeating the same two commands.
+
+**Upgrading to the version that ships `104-torrent-api-key-auth`:** re-run `install.sh` in your
+install directory first. It refreshes `docker-compose.yaml` and generates `TORRENT_API_KEY` in
+`.env`; pulling the images alone leaves `torrent` restarting, because it now refuses to start
+without that key (its log says so). Your torrents and the WebUI login are kept.
 
 ## Working method
 

@@ -4,11 +4,16 @@ import { ChevronDown, FileVideo, Magnet, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { Episode, Season } from "@/actions/shows";
-import { embedEpisodeSubtitlesAction } from "@/actions/shows";
+import {
+  embedEpisodeSubtitlesAction,
+  searchEpisodeSubtitlesAction,
+} from "@/actions/shows";
 import ImportSeasonFilesModal from "@/components/import/ImportSeasonFilesModal";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
 import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
+import FileTrackLanguages from "@/components/media/FileTrackLanguages";
+import SearchSubtitlesButton from "@/components/media/SearchSubtitlesButton";
 import SubtitleSearchStatus from "@/components/media/SubtitleSearchStatus";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 import SeasonAcquisitionButtons from "@/components/shows/SeasonAcquisitionButtons";
@@ -22,11 +27,13 @@ import type { AcquisitionTarget } from "@/types/media";
 
 function EpisodeRow({
   episode,
+  subtitleSearchAvailable,
   onOpenSearchModal,
   onOpenFileModal,
   onOpenMagnetModal,
 }: {
   episode: Episode;
+  subtitleSearchAvailable: boolean;
   onOpenSearchModal: (episode: Episode) => void;
   onOpenFileModal: (episode: Episode) => void;
   onOpenMagnetModal: (episode: Episode) => void;
@@ -61,6 +68,30 @@ function EpisodeRow({
       </td>
       <td className="px-4 py-3">
         <StatusBadge status={episode.status} />
+      </td>
+      {/* Spec 108, REQ-6 */}
+      <td className="px-4 py-3">
+        <div className="space-y-1">
+          <FileTrackLanguages
+            variant="compact"
+            audio={episode.fileAudioLanguages}
+            subtitles={null}
+          />
+          <FileTrackLanguages
+            variant="compact"
+            audio={null}
+            subtitles={episode.fileSubtitleLanguages}
+          />
+          {/* Spec 106, REQ-9 */}
+          {subtitleSearchAvailable && episode.status === "COMPLETED" && (
+            <SearchSubtitlesButton
+              compact
+              fullWidth
+              search={episode.latestSubtitleSearch}
+              onSearch={searchEpisodeSubtitlesAction.bind(null, episode.id)}
+            />
+          )}
+        </div>
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
@@ -106,12 +137,14 @@ export default function SeasonAccordion({
   showTitle,
   audioMandatory,
   audioLanguages,
+  subtitleSearchAvailable,
 }: {
   season: Season;
   defaultOpen: boolean;
   showTitle: string;
   audioMandatory: boolean;
   audioLanguages: Language[];
+  subtitleSearchAvailable: boolean;
 }) {
   const t = useTranslations("shows.seasonAccordion");
   const hasEpisodes = season.episodes.length > 0;
@@ -257,11 +290,14 @@ export default function SeasonAccordion({
                 <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("titleHeader")}
                 </th>
-                <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="whitespace-nowrap px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("releaseDateHeader")}
                 </th>
                 <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("statusHeader")}
+                </th>
+                <th className="whitespace-nowrap px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  {t("tracksHeader")}
                 </th>
                 <th className="px-4 py-3 text-left text-theme-sm font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t("actionsHeader")}
@@ -274,6 +310,7 @@ export default function SeasonAccordion({
                 <EpisodeRow
                   key={episode.id}
                   episode={episode}
+                  subtitleSearchAvailable={subtitleSearchAvailable}
                   onOpenSearchModal={handleOpenSearchModal}
                   onOpenFileModal={handleOpenFileModal}
                   onOpenMagnetModal={handleOpenMagnetModal}

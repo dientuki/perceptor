@@ -35,3 +35,20 @@ export const SUBTITLE_SYNC_JOB = 'subtitle-sync';
 export type SubtitleSyncJob = {
   subtitleSyncId: number;
 };
+
+// Spec 107, T012
+export const SUBTITLE_PROBE_QUEUE = 'subtitle-probe';
+export const SUBTITLE_PROBE_JOB = 'subtitle-probe';
+
+export type SubtitleProbeJob = {
+  subtitleSearchId: number;
+};
+
+// Spec 108, T008
+export const LIBRARY_PROBE_QUEUE = 'library-probe';
+export const LIBRARY_PROBE_JOB = 'library-probe';
+
+export type LibraryProbeJob = {
+  movieId?: number;
+  episodeId?: number;
+};

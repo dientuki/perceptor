@@ -26,6 +26,7 @@ import {
   ERROR_SUBTITLE_EMBED_SUBTITLE_UNREADABLE,
   ERROR_SUBTITLE_EMBED_VERIFY_FAILED,
   ERROR_SUBTITLE_SEARCH_INTERRUPTED,
+  ERROR_SUBTITLE_SEARCH_PROBE_FAILED,
   ERROR_SUBTITLE_SEARCH_SYNC_FAILED,
 } from './error-keys';
 
@@ -65,6 +66,7 @@ export const messagesEn: Record<string, string> = {
   [ERROR_SUBTITLE_SEARCH_SYNC_FAILED]:
     "The subtitle's synchronization could not be validated.",
   [ERROR_SUBTITLE_SEARCH_INTERRUPTED]: 'The search was interrupted.',
+  [ERROR_SUBTITLE_SEARCH_PROBE_FAILED]: 'The library file could not be inspected.',
 };
 
 // Fills `{param}` placeholders in a message template with the corresponding

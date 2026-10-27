@@ -424,28 +424,6 @@ export class ShowsService implements MediaTypeService {
     return mandatory;
   }
 
-  // Spec 103, REQ-3
-  async findSubtitleSearchFor(userId: string, showId: number): Promise<boolean> {
-    const row = await this.prisma.userShow.findUnique({
-      where: { userId_showId: { userId, showId } },
-    });
-    return row?.subtitleSearch ?? false;
-  }
-
-  // Spec 103, REQ-1 REQ-3
-  async setSubtitleSearchFor(
-    userId: string,
-    showId: number,
-    enabled: boolean,
-  ): Promise<boolean> {
-    await this.mediaCapabilities.assertSubtitleSearchAvailable();
-    await this.prisma.userShow.update({
-      where: { userId_showId: { userId, showId } },
-      data: { subtitleSearch: enabled },
-    });
-    return enabled;
-  }
-
   // Spec 057, REQ-9
   async setContentKind(id: number, contentKind: ContentKind) {
     const show = await this.prisma.show.update({

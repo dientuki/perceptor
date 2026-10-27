@@ -16,10 +16,6 @@ type AudioMandatoryAction = (
   mandatory: boolean,
 ) => Promise<{ error: string } | { success: true }>;
 
-type SubtitleSearchAction = (
-  enabled: boolean,
-) => Promise<{ error: string } | { success: true }>;
-
 function tagsFrom(languages: Language[]): string[] {
   return languages.map((language) => language.tag);
 }
@@ -32,9 +28,6 @@ interface TitleLanguagesFormProps {
   setAudioAction: LanguageAction;
   setSubtitleAction: LanguageAction;
   setAudioMandatoryAction: AudioMandatoryAction;
-  // Spec 103, REQ-3
-  subtitleSearch?: boolean;
-  setSubtitleSearchAction?: SubtitleSearchAction;
   onSaved?: () => void;
 }
 
@@ -47,8 +40,6 @@ export default function TitleLanguagesForm({
   setAudioAction,
   setSubtitleAction,
   setAudioMandatoryAction,
-  subtitleSearch,
-  setSubtitleSearchAction,
   onSaved,
 }: TitleLanguagesFormProps) {
   const t = useTranslations("media.languagePicker");
@@ -62,11 +53,6 @@ export default function TitleLanguagesForm({
     tagsFrom(subtitleSelected),
   );
   const [mandatory, setMandatory] = useState(audioMandatory);
-  const [searchSubtitles, setSearchSubtitles] = useState(
-    subtitleSearch ?? false,
-  );
-  const subtitleSearchShown =
-    subtitleSearch !== undefined && setSubtitleSearchAction !== undefined;
 
   const handleSubmit = () => {
     setErrors([]);
@@ -77,19 +63,12 @@ export default function TitleLanguagesForm({
       const subtitleForm = new FormData();
       subtitleForm.set("tags", subtitleTags.join(","));
 
-      const [
-        audioResult,
-        subtitleResult,
-        audioMandatoryResult,
-        subtitleSearchResult,
-      ] = await Promise.all([
-        setAudioAction(null, audioForm),
-        setSubtitleAction(null, subtitleForm),
-        setAudioMandatoryAction(mandatory),
-        subtitleSearchShown
-          ? setSubtitleSearchAction(searchSubtitles)
-          : Promise.resolve(null),
-      ]);
+      const [audioResult, subtitleResult, audioMandatoryResult] =
+        await Promise.all([
+          setAudioAction(null, audioForm),
+          setSubtitleAction(null, subtitleForm),
+          setAudioMandatoryAction(mandatory),
+        ]);
 
       const newErrors: string[] = [];
       if (audioResult && "error" in audioResult && audioResult.error) {
@@ -107,14 +86,6 @@ export default function TitleLanguagesForm({
       ) {
         newErrors.push(audioMandatoryResult.error);
         setMandatory(audioMandatory);
-      }
-      if (
-        subtitleSearchResult &&
-        "error" in subtitleSearchResult &&
-        subtitleSearchResult.error
-      ) {
-        newErrors.push(subtitleSearchResult.error);
-        setSearchSubtitles(subtitleSearch ?? false);
       }
 
       setErrors(newErrors);
@@ -148,14 +119,6 @@ export default function TitleLanguagesForm({
             onChange={setSubtitleTags}
             label={t("subtitleLabel")}
           />
-          {subtitleSearchShown && (
-            <Checkbox
-              id="title-subtitle-search"
-              checked={searchSubtitles}
-              onChange={setSearchSubtitles}
-              label={t("subtitleSearchLabel")}
-            />
-          )}
         </div>
       </div>
 

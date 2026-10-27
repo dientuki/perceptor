@@ -154,6 +154,47 @@ describe('SubtitleSearchService worker reports', () => {
   });
 });
 
+// This suite exists because the worker validates against the path `details`
+// answers, and a title Perceptor never delivered has no filePath: without the
+// libraryPath fallback the search is reported "not found" to the worker with no
+// error anywhere, and the subtitle is never measured (Article IX, Spec 106, REQ-7).
+describe('SubtitleSearchService details', () => {
+  const detailsFor = (search: Record<string, unknown>) => {
+    const prisma = {
+      subtitleSearchAttempt: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          stagedPath: '/downloads/.perceptor/1.srt',
+          search: { movie: null, episode: null, libraryPath: null, ...search },
+        }),
+      },
+    };
+    return new SubtitleSearchService(prisma as never, {} as never).details(1);
+  };
+
+  it('prefers the delivered filePath', async () => {
+    await expect(
+      detailsFor({
+        movie: { filePath: '/lib/A.mkv' },
+        libraryPath: '/lib/B.mkv',
+      }),
+    ).resolves.toMatchObject({ filePath: '/lib/A.mkv' });
+  });
+
+  it('falls back to the libraryPath of a title with no filePath', async () => {
+    await expect(
+      detailsFor({
+        movie: { filePath: null },
+        libraryPath: '/lib/B.mkv',
+      }),
+    ).resolves.toMatchObject({ filePath: '/lib/B.mkv' });
+  });
+
+  it('is not found when neither path exists', async () => {
+    await expect(detailsFor({ movie: { filePath: null } })).rejects.toThrow();
+  });
+});
+
 // This suite exists because a user token reaching these reports would let any
 // signed-in user rewrite a search, with nothing in the logs (Article IX,
 // Spec 103, REQ-10).
@@ -173,8 +214,12 @@ describe('SubtitleSearchResolver service-only surface', () => {
       started: jest.fn(),
       completed: jest.fn(),
       failed: jest.fn(),
+      probeDetails: jest.fn(),
+      probeStarted: jest.fn(),
+      probeCompleted: jest.fn(),
+      probeFailed: jest.fn(),
     };
-    resolver = new SubtitleSearchResolver(service as never);
+    resolver = new SubtitleSearchResolver(service as never, {} as never, {} as never);
   });
 
   it('refuses a user principal on all four before touching the service', () => {
@@ -197,9 +242,167 @@ describe('SubtitleSearchResolver service-only surface', () => {
       expect(mock).not.toHaveBeenCalled();
   });
 
+  // Spec 107, T005
+  it('refuses a user principal on the four probe operations before touching the service', () => {
+    expect(() => resolver.subtitleProbeDetails(1, user)).toThrow();
+    expect(() => resolver.subtitleProbeStarted(1, user)).toThrow();
+    expect(() =>
+      resolver.subtitleProbeCompleted(1, [], [], 10, 'a'.repeat(16), user),
+    ).toThrow();
+    expect(() => resolver.subtitleProbeFailed(1, 'k', user)).toThrow();
+    for (const mock of Object.values(service))
+      expect(mock).not.toHaveBeenCalled();
+  });
+
   it('lets the service principal through', () => {
     const svc: AuthPrincipal = { type: 'service', name: 'worker' };
     void resolver.subtitleSyncStarted(1, svc);
     expect(service.started).toHaveBeenCalledWith(1);
+  });
+});
+
+// This suite exists because the probe report decides which languages a search
+// goes looking for: a sidecar tag left unresolved, a repeat report that moves a
+// search that already advanced, or a third probe start that never refuses each
+// fail with no error anywhere (Article IX, Spec 107, REQ-3 NFR-2).
+describe('SubtitleSearchService probe', () => {
+  type SearchRowFake = {
+    id: number;
+    status: string;
+    probeCount: number;
+    presentLanguages: unknown;
+    fileSizeBytes: bigint | null;
+    movieHash: string | null;
+    errorKey: string | null;
+  };
+  let row: SearchRowFake;
+  let wake: jest.Mock;
+  let service: SubtitleSearchService;
+
+  beforeEach(() => {
+    row = {
+      id: 5,
+      status: 'WAITING',
+      probeCount: 0,
+      presentLanguages: null,
+      fileSizeBytes: null,
+      movieHash: null,
+      errorKey: null,
+    };
+    wake = jest.fn().mockResolvedValue(undefined);
+    const prisma = {
+      language: {
+        findMany: jest.fn().mockResolvedValue([
+          { tag: 'es', iso2: 'es', iso3: 'spa' },
+          { tag: 'en', iso2: 'en', iso3: 'eng' },
+        ]),
+      },
+      subtitleSearch: {
+        findUnique: jest.fn(() => Promise.resolve(row)),
+        updateMany: jest.fn(
+          ({
+            where,
+            data,
+          }: {
+            where: { status: string; probeCount?: { lt: number } };
+            data: Record<string, unknown>;
+          }) => {
+            if (row.status !== where.status) return Promise.resolve({ count: 0 });
+            if (where.probeCount && row.probeCount >= where.probeCount.lt)
+              return Promise.resolve({ count: 0 });
+            for (const [key, value] of Object.entries(data)) {
+              if (
+                typeof value === 'object' &&
+                value !== null &&
+                'increment' in value
+              ) {
+                (row as Record<string, unknown>)[key] =
+                  (row as unknown as Record<string, number>)[key] + 1;
+              } else (row as Record<string, unknown>)[key] = value;
+            }
+            return Promise.resolve({ count: 1 });
+          },
+        ),
+      },
+    };
+    service = new SubtitleSearchService(prisma as never, { wake } as never);
+  });
+
+  const report = () => ({
+    embeddedLanguagesIso3: ['eng'],
+    sidecarLanguageTags: ['es-419', 'xx'],
+    fileSizeBytes: 3_000_000_000,
+    movieHash: 'abcdef0123456789',
+  });
+
+  it('refuses a third probe start', async () => {
+    expect(await service.probeStarted(5)).toBe(true);
+    expect(await service.probeStarted(5)).toBe(true);
+    expect(await service.probeStarted(5)).toBe(false);
+    expect(row.probeCount).toBe(2);
+  });
+
+  it('stores the union of embedded and resolved sidecar languages and wakes once', async () => {
+    expect(await service.probeCompleted(5, report())).toBe(true);
+    expect(row).toMatchObject({
+      status: 'SEARCHING',
+      presentLanguages: ['eng', 'spa'],
+      fileSizeBytes: 3_000_000_000n,
+      movieHash: 'abcdef0123456789',
+    });
+    expect(wake).toHaveBeenCalledTimes(1);
+    expect(wake).toHaveBeenCalledWith(5);
+  });
+
+  it('is idempotent: a repeat report writes nothing and does not wake again', async () => {
+    await service.probeCompleted(5, report());
+    wake.mockClear();
+    row.presentLanguages = ['eng', 'spa'];
+    expect(
+      await service.probeCompleted(5, { ...report(), embeddedLanguagesIso3: [] }),
+    ).toBe(true);
+    expect(row.presentLanguages).toEqual(['eng', 'spa']);
+    expect(wake).not.toHaveBeenCalled();
+  });
+
+  it('answers false for a search that left WAITING without a probe report', async () => {
+    row.status = 'FAILED';
+    expect(await service.probeCompleted(5, report())).toBe(false);
+    expect(row.movieHash).toBeNull();
+  });
+
+  it('stores an unknown probe failure key as probe_failed', async () => {
+    await service.probeFailed(5, 'error.something.invented');
+    expect(row).toMatchObject({
+      status: 'FAILED',
+      errorKey: ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED,
+    });
+  });
+
+  it('ignores a repeat failure', async () => {
+    row.status = 'SEARCHING';
+    expect(await service.probeFailed(5, 'x')).toBe(true);
+    expect(row.status).toBe('SEARCHING');
+  });
+
+  it('reports probe_not_found for a search that is no longer WAITING', async () => {
+    const withPath = {
+      ...row,
+      movie: { filePath: '/a.mkv' },
+      episode: null,
+      libraryPath: null,
+    };
+    const prisma = {
+      subtitleSearch: {
+        findUnique: jest.fn(() => Promise.resolve(withPath)),
+      },
+    };
+    const svc = new SubtitleSearchService(prisma as never, { wake } as never);
+    await expect(svc.probeDetails(5)).resolves.toEqual({
+      id: 5,
+      filePath: '/a.mkv',
+    });
+    withPath.status = 'SEARCHING';
+    await expect(svc.probeDetails(5)).rejects.toThrow();
   });
 });

@@ -60,3 +60,6 @@ export const ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED = 'error.subtitleEmbed.s
 // Spec 103, REQ-10
 export const ERROR_SUBTITLE_SEARCH_SYNC_FAILED = 'error.subtitleSearch.sync_failed';
 export const ERROR_SUBTITLE_SEARCH_INTERRUPTED = 'error.subtitleSearch.interrupted';
+
+// Spec 107, T012
+export const ERROR_SUBTITLE_SEARCH_PROBE_FAILED = 'error.subtitleSearch.probe_failed';

@@ -97,6 +97,7 @@ export const ERROR_KEYS = {
   ENCODE_STOPPED: 'error.encode.stopped',
   DOWNLOAD_NOT_A_TORRENT: 'error.download.not_a_torrent',
   TORRENT_CLIENT_REJECTED: 'error.download.torrent_client_rejected',
+  TORRENT_CLIENT_UNAUTHORIZED: 'error.download.torrent_client_unauthorized',
 
   // uploads — GraphQL
   UPLOAD_TARGET_AMBIGUOUS: 'error.upload.target_ambiguous',
@@ -141,6 +142,9 @@ export const ERROR_KEYS = {
   SUBTITLE_EMBED_UNKNOWN_LANGUAGE: 'error.subtitleEmbed.unknown_language',
   SUBTITLE_EMBED_OFFSET_OUT_OF_RANGE: 'error.subtitleEmbed.offset_out_of_range',
   SUBTITLE_EMBED_STALE_LISTING: 'error.subtitleEmbed.stale_listing',
+  LIBRARY_PROBE_INVALID_TARGET: 'error.libraryProbe.invalid_target',
+  LIBRARY_PROBE_NOT_FOUND: 'error.libraryProbe.not_found',
+  LIBRARY_PROBE_MEDIA_SERVER_UNAVAILABLE: 'error.libraryProbe.media_server_unavailable',
   SUBTITLE_EMBED_BUSY: 'error.subtitleEmbed.busy',
   SUBTITLE_EMBED_SUBTITLE_UNREADABLE: 'error.subtitleEmbed.subtitle_unreadable',
   SUBTITLE_EMBED_CHARSET_UNDETECTED: 'error.subtitleEmbed.charset_undetected',
@@ -164,6 +168,17 @@ export const ERROR_KEYS = {
   SUBTITLE_SEARCH_LOW_SCORE: 'error.subtitleSearch.low_score',
   SUBTITLE_SEARCH_INTERRUPTED: 'error.subtitleSearch.interrupted',
   SUBTITLE_SEARCH_SUPERSEDED: 'error.subtitleSearch.superseded',
+  SUBTITLE_SEARCH_IN_PROGRESS: 'error.subtitleSearch.in_progress',
+  SUBTITLE_SEARCH_NO_LANGUAGES: 'error.subtitleSearch.no_languages',
+
+  // Spec 107
+  SUBTITLE_SEARCH_PROVIDER_NOT_CONFIGURED: 'error.subtitleSearch.provider_not_configured',
+  SUBTITLE_SEARCH_NO_LIBRARY_PATH: 'error.subtitleSearch.no_library_path',
+  SUBTITLE_SEARCH_PROBE_NOT_FOUND: 'error.subtitleSearch.probe_not_found',
+  SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED: 'error.subtitleSearch.provider_unauthorized',
+  SUBTITLE_SEARCH_PROVIDER_UNAVAILABLE: 'error.subtitleSearch.provider_unavailable',
+  SUBTITLE_SEARCH_QUOTA_EXHAUSTED: 'error.subtitleSearch.quota_exhausted',
+  SUBTITLE_SEARCH_PROBE_FAILED: 'error.subtitleSearch.probe_failed',
 
   CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
   CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaServerIndexService } from '@/media-server-index/media-server-index.service';
 import { createMediaServerClient } from '@/clients/media-server/registry';
@@ -33,6 +34,13 @@ const IN_FLIGHT_GUARD: {
   processJobs: { none: { status: { in: IN_FLIGHT_ENCODE_STATUSES } } },
 };
 
+// Spec 108, REQ-4
+const CLEARED_TRACKS = {
+  fileAudioLanguages: Prisma.DbNull,
+  fileSubtitleLanguages: Prisma.DbNull,
+  tracksReadAt: null,
+};
+
 const failed = (): SyncResult => ({
   outcome: RefreshMediaServerOutcome.FAILED,
   promoted: 0,
@@ -46,6 +54,8 @@ export class MediaServerReconcileService {
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
     private readonly index: MediaServerIndexService,
+    // Spec 108, T005
+    private readonly libraryProbeQueue: LibraryProbeQueueService,
   ) {}
 
   async reconcileMovie(movieId: number, tmdbId: number): Promise<void> {
@@ -57,10 +67,12 @@ export class MediaServerReconcileService {
       if (!externalId) return;
 
       // Spec 034, REQ-15; Spec 089, REQ-4
-      await this.prisma.movie.updateMany({
+      const { count } = await this.prisma.movie.updateMany({
         where: { id: movieId, status: 'MISSING' },
         data: { status: 'COMPLETED', mediaServerPresentAt: new Date() },
       });
+      // Spec 108, REQ-3
+      if (count > 0) void this.libraryProbeQueue.request({ movieId });
     } catch (err) {
       console.error(
         `[media-server-reconcile] failed reconciling movie ${movieId}:`,
@@ -99,10 +111,12 @@ export class MediaServerReconcileService {
         if (!episode) continue; // same, at episode granularity
 
         // Spec 089, REQ-4
-        await this.prisma.episode.updateMany({
+        const { count } = await this.prisma.episode.updateMany({
           where: { id: episode.id, status: 'MISSING' },
           data: { status: 'COMPLETED', mediaServerPresentAt: new Date() },
         });
+        // Spec 108, REQ-3
+        if (count > 0) void this.libraryProbeQueue.request({ episodeId: episode.id });
       }
     } catch (err) {
       console.error(
@@ -133,8 +147,10 @@ export class MediaServerReconcileService {
           })
         : await this.prisma.movie.updateMany({
             where: { id: movieId, status: 'COMPLETED', ...IN_FLIGHT_GUARD },
-            data: { status: 'MISSING', filePath: null, mediaServerPresentAt: null },
+            data: { status: 'MISSING', filePath: null, mediaServerPresentAt: null, ...CLEARED_TRACKS },
           });
+      // Spec 108, REQ-3
+      if (present) void this.libraryProbeQueue.request({ movieId });
       return {
         outcome: RefreshMediaServerOutcome.DONE,
         promoted: present ? count : 0,
@@ -209,7 +225,7 @@ export class MediaServerReconcileService {
           data:
             from === 'MISSING'
               ? { status: 'COMPLETED', mediaServerPresentAt: new Date() }
-              : { status: 'MISSING', filePath: null, mediaServerPresentAt: null },
+              : { status: 'MISSING', filePath: null, mediaServerPresentAt: null, ...CLEARED_TRACKS },
         });
         return count;
       };
@@ -224,6 +240,10 @@ export class MediaServerReconcileService {
           aired,
           'COMPLETED',
         );
+      }
+      // Spec 108, REQ-3
+      for (const id of [...buckets.present.aired, ...buckets.present.unaired]) {
+        void this.libraryProbeQueue.request({ episodeId: id });
       }
       return { outcome: RefreshMediaServerOutcome.DONE, promoted, demoted };
     } catch (err) {

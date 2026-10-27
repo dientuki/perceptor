@@ -151,6 +151,8 @@ export default function SettingsForm({
             <GeneralPanel
               uiLocale={getSettingValue("ui_locale")}
               dateMonthFirst={getSettingValue("date_month_first")}
+              openSubtitlesUsername={getSettingValue("opensubtitles_username")}
+              openSubtitlesPassword={getSettingValue("opensubtitles_password")}
             />
           </div>
 

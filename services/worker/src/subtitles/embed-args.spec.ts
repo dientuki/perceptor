@@ -79,4 +79,14 @@ describe('buildEmbedArgs', () => {
   it('never passes --sync', () => {
     expect(build([track({ isDefault: true, isForced: true })])).not.toContain('--sync');
   });
+
+  it('puts --tags right before the track file when tagsPath is set, and nowhere else', () => {
+    const args = build([
+      track({ normalizedPath: '/tmp/x/0.srt', tagsPath: '/tmp/x/0.tags.xml' }),
+      track({ normalizedPath: '/tmp/x/1.srt' }),
+    ]);
+    const i = args.indexOf('--tags');
+    expect(args.slice(i, i + 3)).toEqual(['--tags', '0:/tmp/x/0.tags.xml', '/tmp/x/0.srt']);
+    expect(args.filter((a) => a === '--tags')).toHaveLength(1);
+  });
 });

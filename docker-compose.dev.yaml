@@ -27,6 +27,9 @@ services:
       - ./services/api:/app
     environment:
       - NODE_ENV=${NODE_ENV}
+      # Spec 107: dev only. Published images carry the key as a file baked in at release, so the
+      # base docker-compose.yaml deliberately does not pass it.
+      - OPENSUBTITLES_API_KEY=${OPENSUBTITLES_API_KEY:-}
 
   worker:
     volumes:

@@ -293,6 +293,35 @@ All of it waits for the contract (T012). T020, T021 and T022 run in parallel onc
       → T030
       *Done when:* both catalogs carry the key and `bin/comments web` passes.
 
+### Group 6 — amendment 0.5.0 (the preference is the only switch, REQ-3)
+
+- [x] **T032** `[api]` Remove the per-title flag: drop `UserMovie.subtitleSearch` and
+      `UserShow.subtitleSearch` with a migration; remove `Movie.subtitleSearch`,
+      `Show.subtitleSearch`, `setMovieSubtitleSearch` and `setShowSubtitleSearch` and their service
+      methods; `SubtitleSearchRequestService` selects the opted-in owners by `User.subtitleSearch`
+      only; regenerate `schema.gql`.
+      → none (contract frozen in `spec.md` 0.5.0)
+      *Done when:* `schema.gql` has none of the four members, `prisma migrate status` is clean,
+      the request-service and flags specs assert that an owner with the preference on is opted in with
+      no per-title row, that one with it off is not, and that a title with a mix starts one search
+      whose languages come only from the opted-in owner; tsc 0 and the api suite green.
+- [x] **T033** `[web]` Remove the checkbox and its plumbing: `TitleLanguagesForm` props and
+      `setMovie/ShowSubtitleSearchAction`, the `subtitleSearch` field in the movie and show queries
+      and types; change the `/preferences` help text (es and en) to say it applies to every title
+      delivered from then on.
+      → T032
+      *Done when:* no `subtitleSearch` per-title reference remains in `services/web/src`
+      (`grep`), `check-messages` passes and the language forms show no checkbox.
+- [x] **T034** `[docs]` Update the docs written for 0.4.0 that describe the per-title flag: root
+      `CLAUDE.md` (Notify media server, Browse library rows), `services/api/CLAUDE.md`,
+      `services/web/CLAUDE.md`, a `docs/spec/history.md` entry.
+      → T032, T033
+      *Done when:* none of them mentions a per-title subtitle-search flag.
+- [ ] **T035** `[docs]` Re-run the manual pass for AC-1, AC-1b, AC-2, AC-8 (Stand by Me case:
+      preference on, no per-title action, delivery creates a search).
+      → T034
+      *Done when:* each has an observed result or a named blocker.
+
 ## Blocked
 
 | Task | Service | What blocked it | Needs |

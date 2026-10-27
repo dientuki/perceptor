@@ -1,7 +1,7 @@
 ---
 title: Subtitle Search — Implementation Plan
-spec_version: 0.3.0
-last_updated: 2026-10-25
+spec_version: 0.5.0
+last_updated: 2026-10-26
 status: Approved
 ---
 
@@ -142,7 +142,7 @@ placeholders that reject everything until step 3 lands, never as values that acc
 
 ## Contract Freeze
 
-The `## GraphQL Contract Delta` in `spec.md` (v0.3.0) is frozen as of `status: Approved`. Things an
+The `## GraphQL Contract Delta` in `spec.md` (v0.5.0) is frozen as of `status: Approved`. Things an
 implementer will be tempted to change:
 
 - **The worker reports measurements, never a verdict.** `subtitleSyncCompleted` carries offset,
@@ -289,3 +289,26 @@ Tasks: `tasks.md` Group 5.
   "no last cue found" as coverage 100 % would accept a broken file.
 - **No migration**: coverage is computed at report time and not stored; the rejection key is the
   record.
+
+## Amendment 0.5.0 (2026-10-26)
+
+`../spec.md` § Amendments 0.5.0 removes the per-title flag. Everything above that mentions the
+per-title flag, the three flag mutations or the "effective flag" (the Approach's `requestFor` step, the
+2b row, the `set*SubtitleSearch` contract note, the migration list and AC-1b/AC-8 in Verification) is
+superseded by this section.
+
+- **Approach**: `requestFor` opts an owner in when REQ-1 holds and `User.subtitleSearch` is on. The
+  owners are read when the encode ends, so a preference changed before then is honoured.
+- **Order of Work**: `api` first (migration, contract, request service), then `web`; both ship under
+  one `PERCEPTOR_TAG`, since a stale `web` would still query the removed fields.
+- **Contract Freeze**: the four removed members are in `../spec.md` § GraphQL Contract Delta (v0.5.0).
+  `setSubtitleSearch` stays and refuses only on the capability.
+- **Migration**: drop `user_movies.subtitleSearch` and `user_shows.subtitleSearch`. No backfill; the
+  stored values are discarded. `users.subtitleSearch` and every `SubtitleSearch` row stay.
+- **Risk (silent)**: behaviour widens on upgrade. A user with the preference on and no title ticked
+  starts getting searches, and each one spends provider quota (NFR-2). Intended; stated in the
+  `/preferences` help text and the `history.md` entry.
+- **Risk (silent)**: a leftover per-title query in `web` fails the whole detail page with a GraphQL
+  validation error, no compile error anywhere. The `grep` in T033's *Done when* is the guard.
+- **Verification**: AC-1b is now "preference on, no per-title action, delivery creates a search"
+  (the *Stand by Me* case); AC-8 is "preference off, no row". Run both against a real delivery.

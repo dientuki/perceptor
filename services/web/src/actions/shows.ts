@@ -18,6 +18,7 @@ import type {
   SubtitleEmbedInput,
   SubtitleEmbedResult,
   SubtitleSearch,
+  SubtitleSearchResult,
   TitleRefreshResult,
   TitleRemovalResult,
 } from "@/types/media";
@@ -29,6 +30,8 @@ export interface Episode {
   overview?: string;
   releaseDate?: string;
   status: string;
+  fileAudioLanguages: string[] | null;
+  fileSubtitleLanguages: string[] | null;
   externalSubtitles: ExternalSubtitle[];
   subtitleEmbed: SubtitleEmbed | null;
   latestSubtitleSearch: SubtitleSearch | null;
@@ -60,8 +63,6 @@ export interface Show {
   audioLanguages?: Language[];
   subtitleLanguages?: Language[];
   audioMandatory?: boolean;
-  // Spec 103, REQ-3
-  subtitleSearch?: boolean;
   // Only present when fetched via getShowById — never selected by a listing
   otherOwners?: number;
 }
@@ -129,7 +130,6 @@ const GET_SHOW_QUERY = `
         name
       }
       audioMandatory
-      subtitleSearch
       otherOwners
       seasons {
         id
@@ -142,6 +142,8 @@ const GET_SHOW_QUERY = `
           overview
           releaseDate
           status
+          fileAudioLanguages
+          fileSubtitleLanguages
           externalSubtitles {
             fileName
             languageIso3
@@ -511,4 +513,51 @@ export async function embedEpisodeSubtitlesAction(
   }
 
   return { success: true };
+}
+
+const SEARCH_EPISODE_SUBTITLES_MUTATION = `
+  mutation SearchEpisodeSubtitles($episodeId: Int!) {
+    searchEpisodeSubtitles(episodeId: $episodeId) {
+      id
+      status
+      errorKey
+      languages {
+        languageIso3
+        outcome
+        reasonKey
+      }
+      createdAt
+      finishedAt
+    }
+  }
+`;
+
+// Spec 106, REQ-9
+export async function searchEpisodeSubtitlesAction(
+  episodeId: string,
+): Promise<SubtitleSearchResult> {
+  type Payload = { searchEpisodeSubtitles: SubtitleSearch | null };
+  let result: Awaited<ReturnType<typeof fetchGraphQL<Payload>>>;
+  try {
+    result = await fetchGraphQL<Payload>(SEARCH_EPISODE_SUBTITLES_MUTATION, {
+      episodeId: Number(episodeId),
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { data, errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  if (!data?.searchEpisodeSubtitles) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  return { search: data.searchEpisodeSubtitles };
 }

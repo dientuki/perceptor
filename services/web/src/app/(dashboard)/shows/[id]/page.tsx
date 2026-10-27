@@ -97,7 +97,6 @@ export default async function ShowDetailsPage({ params }: PageProps) {
           <Show
             show={show}
             languageOptions={languageOptions}
-            subtitleSearchAvailable={capabilities.subtitleSearchAvailable}
             preferences={preferences}
           />
           <DownloadsPanel downloads={downloads} />
@@ -112,6 +111,7 @@ export default async function ShowDetailsPage({ params }: PageProps) {
             showTitle={show.title}
             audioMandatory={show.audioMandatory ?? false}
             audioLanguages={show.audioLanguages ?? []}
+            subtitleSearchAvailable={capabilities.subtitleSearchAvailable}
           />
         ))}
       </div>

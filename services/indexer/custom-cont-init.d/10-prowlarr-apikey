@@ -15,6 +15,8 @@ CONFIG_XML="/config/config.xml"
 
 if [ -z "${INDEXER_API_KEY:-}" ]; then
   echo "[10-prowlarr-apikey] ERROR: INDEXER_API_KEY is empty. Refusing to let Prowlarr generate its own random key — the api would never be able to authenticate against it. Aborting." >&2
+  echo 1 > /run/s6-linux-init-container-results/exitcode
+  /run/s6/basedir/bin/halt
   exit 1
 fi
 
@@ -27,6 +29,8 @@ if [ -f "${CONFIG_XML}" ]; then
     sed -i "s:<ApiKey>.*</ApiKey>:<ApiKey>${INDEXER_API_KEY}</ApiKey>:" "${CONFIG_XML}"
   else
     echo "[10-prowlarr-apikey] ERROR: ${CONFIG_XML} exists but has no <ApiKey> element to rewrite." >&2
+    echo 1 > /run/s6-linux-init-container-results/exitcode
+    /run/s6/basedir/bin/halt
     exit 1
   fi
 else

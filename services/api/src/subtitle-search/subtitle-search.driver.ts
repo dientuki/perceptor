@@ -7,21 +7,21 @@ import {
 import { Prisma, SubtitleSearchAttempt } from '@prisma/client';
 import { basename, extname } from 'node:path';
 import { PrismaService } from '@/prisma/prisma.service';
-import { SettingsService } from '@/settings/settings.service';
-import { MediaRootsService } from '@/media-roots/media-roots.service';
-import { MediaServerService } from '@/media-server/media-server.service';
-import { MediaServerIndexService } from '@/media-server-index/media-server-index.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import {
   SubtitleEmbedService,
   TargetRef,
 } from '@/subtitle-embed/subtitle-embed.service';
 import { SubtitleSyncQueueService } from '@/queue/subtitle-sync-queue.service';
-import { episodeKey } from '@/clients/media-server/jellyfin';
-import { ItemSubtitles, MediaServerClient } from '@/clients/media-server/types';
-import { MEDIA_TYPE } from '@/types/media';
 import { ERROR_KEYS } from '@/i18n/error-keys';
+import { SubtitleProbeQueueService } from '@/queue/subtitle-probe-queue.service';
+import { openSubtitlesApiKey } from '@/clients/opensubtitles/key';
+import { OpenSubtitlesClient } from '@/clients/opensubtitles/client';
+import { OpenSubtitlesHttpError } from '@/clients/opensubtitles/errors';
+import { OsSearchParams } from '@/clients/opensubtitles/types';
 import { filterAndRank } from './candidates';
+import { providerLanguageCodes } from './provider-languages';
+import { LanguageRow } from './sidecar-languages';
 import { SubtitleSearchQueueService } from './subtitle-search-queue.service';
 import { SubtitleSearchStaging } from './staging';
 
@@ -34,13 +34,20 @@ type Target = {
   episodeNumber?: number;
 };
 
-type StepContext = { client?: Promise<MediaServerClient> };
+type StepContext = {
+  errors: Record<string, string>;
+  languages?: Promise<LanguageRow[]>;
+};
 
 const MINUTE_MS = 60_000;
 
-// Spec 103, REQ-6
-const MISS_DELAYS_MS = [10, 20, 40, 45].map((minutes) => minutes * MINUTE_MS);
-const MAX_MISSES = 5;
+// Spec 107, REQ-3
+const PROBE_BACKSTOP_MS = 60 * MINUTE_MS;
+
+const PROVIDER_WIDE_KEYS: string[] = [
+  ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED,
+  ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED,
+];
 
 // Spec 103, NFR-4
 const SYNC_BACKSTOP_MS = 6 * 60 * MINUTE_MS;
@@ -58,6 +65,16 @@ const strings = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
+
+const errorMap = (value: unknown): Record<string, string> => {
+  const out: Record<string, string> = {};
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    for (const [language, key] of Object.entries(value)) {
+      if (typeof key === 'string') out[language] = key;
+    }
+  }
+  return out;
+};
 
 const isTerminal = (status: string): boolean =>
   status === 'COMPLETED' || status === 'FAILED';
@@ -84,10 +101,8 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
     private readonly queue: SubtitleSearchQueueService,
     private readonly syncQueue: SubtitleSyncQueueService,
     private readonly subtitleEmbed: SubtitleEmbedService,
-    private readonly mediaServer: MediaServerService,
-    private readonly index: MediaServerIndexService,
-    private readonly settings: SettingsService,
-    private readonly mediaRoots: MediaRootsService,
+    private readonly probeQueue: SubtitleProbeQueueService,
+    private readonly openSubtitles: OpenSubtitlesClient,
     private readonly capabilities: MediaCapabilitiesService,
     private readonly staging: SubtitleSearchStaging,
   ) {
@@ -96,6 +111,12 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
 
   // Spec 103, NFR-4
   async onApplicationBootstrap(): Promise<void> {
+    // Spec 107, REQ-13
+    if (openSubtitlesApiKey() === null) {
+      this.logger.warn(
+        "OpenSubtitles API key not found (OPENSUBTITLES_API_KEY or the image's key file); subtitle search is unavailable",
+      );
+    }
     try {
       await this.recover();
     } catch (error) {
@@ -127,12 +148,12 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
       return;
     }
 
-    const ctx: StepContext = {};
+    const ctx: StepContext = { errors: errorMap(search.languageErrors) };
     try {
       await this.purgeRejected(search);
       switch (search.status) {
         case 'WAITING':
-          await this.waiting(search, ctx);
+          await this.waiting(search);
           break;
         case 'SEARCHING':
           await this.searching(search, ctx);
@@ -153,7 +174,9 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
         keyOf(error) ??
           (search.status === 'EMBEDDING'
             ? ERROR_KEYS.SUBTITLE_EMBED_REMUX_FAILED
-            : ERROR_KEYS.SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE),
+            : search.status === 'WAITING'
+              ? ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED
+              : ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAVAILABLE),
       );
     }
   }
@@ -167,85 +190,27 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
     });
   }
 
-  // Spec 103, REQ-6
-  private async waiting(search: Search, ctx: StepContext): Promise<void> {
+  // Spec 107, REQ-3
+  private async waiting(search: Search): Promise<void> {
     if (!(await this.capabilities.isSubtitleSearchAvailable())) {
       await this.fail(
         search.id,
-        ERROR_KEYS.SUBTITLE_SEARCH_MEDIA_SERVER_UNAVAILABLE,
+        ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_NOT_CONFIGURED,
       );
       return;
     }
 
-    const target = await this.loadTarget(search);
-    const listing = target?.filePath
-      ? await this.resolveItem(await this.clientOnce(ctx), search, target)
-      : null;
-    const expectedHostPath = target?.filePath
-      ? this.mediaRoots.containerToHostPath('library', target.filePath)
-      : null;
-
-    if (
-      listing &&
-      expectedHostPath !== null &&
-      listing.mediaHostPath === expectedHostPath
-    ) {
-      const moved = await this.transition(search.id, 'WAITING', 'SEARCHING', {
-        itemId: listing.itemId,
-        presentLanguages: listing.presentLanguagesIso3,
-      });
-      if (moved) await this.wake(search.id, 0);
+    if (Date.now() - search.createdAt.getTime() >= PROBE_BACKSTOP_MS) {
+      await this.fail(search.id, ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED);
       return;
     }
 
-    const misses = search.checkCount + 1;
-    if (misses >= MAX_MISSES) {
-      await this.fail(search.id, ERROR_KEYS.SUBTITLE_SEARCH_ITEM_NOT_FOUND);
-      return;
-    }
-    const claimed = await this.prisma.subtitleSearch.updateMany({
-      where: {
-        id: search.id,
-        status: 'WAITING',
-        checkCount: search.checkCount,
-      },
-      data: { checkCount: misses },
-    });
-    if (claimed.count === 1)
-      await this.wake(search.id, MISS_DELAYS_MS[misses - 1]);
+    await this.probeQueue.removeProbe(search.id);
+    await this.probeQueue.addProbe({ subtitleSearchId: search.id });
+    await this.wake(search.id, PROBE_BACKSTOP_MS);
   }
 
-  // Spec 103, REQ-6
-  private async resolveItem(
-    client: MediaServerClient,
-    search: Search,
-    target: Target,
-  ): Promise<ItemSubtitles | null> {
-    const lookup = async (): Promise<ItemSubtitles | null> => {
-      const mediaType =
-        search.movieId !== null ? MEDIA_TYPE.MOVIE : MEDIA_TYPE.SHOW;
-      const externalId = await client.findByTmdbId(mediaType, target.tmdbId);
-      if (!externalId) return null;
-      if (search.movieId !== null) return client.listItemSubtitles!(externalId);
-      const map = await client.listSeriesEpisodeSubtitles!(externalId);
-      return (
-        map.get(episodeKey(target.seasonNumber!, target.episodeNumber!)) ?? null
-      );
-    };
-
-    const first = await lookup();
-    if (first) return first;
-
-    const map = await this.settings.getMap();
-    await this.index.refreshAndWait(map.media_server_client, {
-      host: map.media_server_host,
-      port: map.media_server_port,
-      apiKey: map.media_server_api_key,
-    });
-    return lookup();
-  }
-
-  // Spec 103, REQ-7 REQ-8 REQ-9
+  // Spec 107, REQ-6 REQ-8 REQ-9
   private async searching(search: Search, ctx: StepContext): Promise<void> {
     const missing = this.missingLanguages(search);
     const withAttempts = missing
@@ -260,12 +225,34 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
       let own = this.attemptsOf(search, language);
 
       if (own.length === 0) {
-        const client = await this.clientOnce(ctx);
-        const releaseName = await this.releaseName(search);
-        const candidates = filterAndRank(
-          await client.searchRemoteSubtitles!(search.itemId!, language),
-          releaseName,
-        );
+        if (ctx.errors[language]) continue;
+
+        let found;
+        try {
+          found = await this.searchProvider(search, language, ctx);
+        } catch (error) {
+          if (!(error instanceof OpenSubtitlesHttpError)) throw error;
+          if (error.kind === 'unauthorized') {
+            await this.flagLanguages(
+              search,
+              ctx,
+              this.unresolved(search),
+              ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED,
+            );
+            break;
+          }
+          this.logger.warn(
+            `Searching ${language} for subtitle search ${search.id} failed: ${error.message}`,
+          );
+          await this.flagLanguages(
+            search,
+            ctx,
+            [language],
+            ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAVAILABLE,
+          );
+          continue;
+        }
+        const candidates = found;
         if (candidates.length === 0) continue;
 
         await this.prisma.subtitleSearchAttempt.createMany({
@@ -273,8 +260,9 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
             searchId: search.id,
             languageIso3: language,
             providerSubtitleId: candidate.id,
-            releaseName: candidate.name.slice(0, MAX_RELEASE_NAME_LENGTH),
+            releaseName: candidate.release.slice(0, MAX_RELEASE_NAME_LENGTH),
             rank: position + 1,
+            providerFileName: candidate.fileName?.slice(0, 500) ?? null,
           })),
         });
         own = await this.prisma.subtitleSearchAttempt.findMany({
@@ -303,7 +291,82 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
       }
       return;
     }
+
+    // Spec 107, REQ-9
+    const unresolved = this.unresolved(search);
+    const keys = new Set(unresolved.map((language) => ctx.errors[language]));
+    if (keys.size === 1) {
+      const [only] = [...keys];
+      if (only && PROVIDER_WIDE_KEYS.includes(only)) {
+        await this.fail(search.id, only);
+        return;
+      }
+    }
     await this.complete(search.id, 'SEARCHING');
+  }
+
+  // Spec 107, REQ-6
+  private async searchProvider(
+    search: Search,
+    language: string,
+    ctx: StepContext,
+  ) {
+    const target = await this.loadTarget(search);
+    if (!target) throw new Error('The subtitle search target no longer exists');
+    ctx.languages ??= this.prisma.language.findMany({
+      select: { tag: true, iso2: true, iso3: true },
+    });
+    const codes = providerLanguageCodes(language, await ctx.languages);
+    if (codes.length === 0) return [];
+
+    const params: OsSearchParams =
+      search.movieId !== null
+        ? {
+            tmdbId: target.tmdbId,
+            languages: codes.join(','),
+            moviehash: search.movieHash,
+          }
+        : {
+            parentTmdbId: target.tmdbId,
+            season: target.seasonNumber!,
+            episode: target.episodeNumber!,
+            languages: codes.join(','),
+            moviehash: search.movieHash,
+          };
+    const releaseName = await this.releaseName(search);
+    return filterAndRank(await this.openSubtitles.search(params), releaseName);
+  }
+
+  private unresolved(search: Search): string[] {
+    return this.missingLanguages(search).filter(
+      (language) =>
+        !this.attemptsOf(search, language).some(
+          (attempt) => attempt.status === 'ACCEPTED',
+        ),
+    );
+  }
+
+  // Spec 107, REQ-9
+  private async flagLanguages(
+    search: Search,
+    ctx: StepContext,
+    languages: string[],
+    key: string,
+  ): Promise<void> {
+    for (const language of languages) ctx.errors[language] ??= key;
+    await this.prisma.subtitleSearch.updateMany({
+      where: { id: search.id },
+      data: { languageErrors: ctx.errors },
+    });
+    await this.prisma.subtitleSearchAttempt.updateMany({
+      where: {
+        searchId: search.id,
+        languageIso3: { in: languages },
+        status: 'QUEUED',
+        stagedPath: null,
+      },
+      data: { status: 'FAILED', reasonKey: key, finishedAt: new Date() },
+    });
   }
 
   // Spec 103, REQ-10 NFR-4
@@ -369,6 +432,9 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
           languageIso3: attempt.languageIso3,
           stagedPath: attempt.stagedPath!,
           offsetMs: attempt.offsetMs!,
+          provenance:
+            attempt.providerFileName ??
+            `opensubtitles:${attempt.providerSubtitleId}`,
         }));
 
       if (tracks.length === 0) {
@@ -376,9 +442,17 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
         return;
       }
 
+      // Spec 107, REQ-4
+      const mkvPath =
+        search.libraryPath ?? (await this.loadTarget(search))?.filePath;
+      if (!mkvPath) {
+        await this.fail(search.id, ERROR_KEYS.SUBTITLE_SEARCH_NO_LIBRARY_PATH);
+        return;
+      }
       const embed = await this.subtitleEmbed.embedStaged(
         this.refOf(search),
         tracks,
+        mkvPath,
       );
       const stored = await this.prisma.subtitleSearch.updateMany({
         where: { id: search.id, status: 'EMBEDDING', subtitleEmbedId: null },
@@ -418,14 +492,46 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
       .sort((a, b) => a.rank - b.rank);
 
     for (const attempt of pending) {
+      // Spec 107, REQ-9
+      if (
+        Object.values(ctx.errors).includes(
+          ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED,
+        )
+      ) {
+        await this.flagLanguages(
+          search,
+          ctx,
+          [attempt.languageIso3],
+          ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED,
+        );
+        return false;
+      }
+
       let stagedPath: string;
+      let remaining: number | null = null;
       try {
-        const client = await this.clientOnce(ctx);
-        const bytes = await client.fetchRemoteSubtitle!(
+        const downloaded = await this.openSubtitles.download(
           attempt.providerSubtitleId,
         );
-        stagedPath = await this.staging.write(search.id, attempt.id, bytes);
+        remaining = downloaded.remaining;
+        stagedPath = await this.staging.write(
+          search.id,
+          attempt.id,
+          downloaded.bytes,
+        );
       } catch (error) {
+        if (
+          error instanceof OpenSubtitlesHttpError &&
+          (error.kind === 'quota' || error.kind === 'unauthorized')
+        ) {
+          const key =
+            error.kind === 'quota'
+              ? ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED
+              : ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED;
+          await this.failAttempt(attempt, key, ['QUEUED']);
+          await this.flagLanguages(search, ctx, this.unresolved(search), key);
+          return false;
+        }
         this.logger.warn(
           `Fetching candidate ${attempt.id} of search ${search.id} failed: ${String(error)}`,
         );
@@ -455,6 +561,18 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
           ['QUEUED'],
         );
         continue;
+      }
+
+      if (remaining === 0) {
+        // Spec 107, REQ-9
+        await this.flagLanguages(
+          search,
+          ctx,
+          this.unresolved(search).filter(
+            (language) => language !== attempt.languageIso3,
+          ),
+          ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED,
+        );
       }
 
       await this.moveToValidating(search.id);
@@ -602,21 +720,6 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
     return search.movieId !== null
       ? { kind: 'movie', id: search.movieId }
       : { kind: 'episode', id: search.episodeId! };
-  }
-
-  private clientOnce(ctx: StepContext): Promise<MediaServerClient> {
-    ctx.client ??= this.mediaServer.createClient().then((client) => {
-      if (
-        !client?.listItemSubtitles ||
-        !client.listSeriesEpisodeSubtitles ||
-        !client.searchRemoteSubtitles ||
-        !client.fetchRemoteSubtitle
-      ) {
-        throw new Error('The media server client cannot search subtitles');
-      }
-      return client;
-    });
-    return ctx.client;
   }
 
   private async loadTarget(search: Search): Promise<Target | null> {

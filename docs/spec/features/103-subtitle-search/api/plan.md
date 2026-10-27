@@ -256,7 +256,7 @@ Writes are confined to `services/api/` and this directory.
 
 ## Contract obligations
 
-Expose exactly `../spec.md` § GraphQL Contract Delta (v0.3.0), plus `SubtitleEmbedTrack.isSidecar`.
+Expose exactly `../spec.md` § GraphQL Contract Delta (v0.5.0), plus `SubtitleEmbedTrack.isSidecar`.
 Every key in both of the spec's tables exists in `error-keys.ts` and `messages.en.ts`. `queue/types.ts`
 is the source of truth that the worker copies by hand. `Movie.subtitleSearch`/`Show.subtitleSearch` are
 the caller's own row, and `false` when the caller has none.
@@ -333,3 +333,22 @@ See `../spec.md` § Amendments (2026-10-25, `spec_version` 0.4.0) and `../tasks.
 - `SubtitleSearchService.completed()` reads the attempt's `stagedPath` (still on disk while the
   attempt is `RUNNING`) to find the last cue; a new pure `last-cue.ts` (+ spec) parses it.
 - `subtitleSyncCompleted` gains `mediaDurationMs: Int!` and `lastChapterStartMs: Int`; no Prisma change.
+
+## Amendment 0.5.0 (2026-10-26)
+
+See `../spec.md` § Amendments 0.5.0 and `../tasks.md` Group 6 (T032). Supersedes the per-title parts above
+(the "three flags", the `Movie`/`Show` `subtitleSearch` fields and setters, and the Request step's
+"preference and per-title flag are both on").
+
+- Prisma: new migration dropping `UserMovie.subtitleSearch` and `UserShow.subtitleSearch`; remove them
+  from `schema.prisma`. `User.subtitleSearch` stays.
+- Remove `subtitleSearch` from the `Movie` and `Show` entities and resolvers, remove
+  `setMovieSubtitleSearch`/`setShowSubtitleSearch` and the `findSubtitleSearchFor`-style service
+  methods behind them. `setSubtitleSearch` and `UserPreferences.subtitleSearch` stay unchanged.
+- `SubtitleSearchRequestService.optedInOwners`: the film's owners are the `UserMovie` rows whose
+  `user.subtitleSearch` is true; an episode's are the series' `UserShow` rows likewise. The per-title
+  languages lookup is unchanged.
+- Tests that must fail when the rule is removed: an owner with the preference on and no per-title
+  state is opted in; with it off, not; a mixed series starts one search whose languages come only from
+  the opted-in owner; the flags spec drops its per-title cases; regenerate `schema.gql` and check it has
+  none of the four removed members.

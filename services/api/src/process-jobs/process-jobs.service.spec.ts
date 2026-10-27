@@ -7,6 +7,8 @@ import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
+import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
+import { SubtitleProbeQueueService } from '@/queue/subtitle-probe-queue.service';
 import { TitleStatusService } from '@/title-status/title-status.service';
 import { SubtitleSearchRequestService } from '@/subtitle-search/subtitle-search-request.service';
 import { DownloadsService } from '@/downloads/downloads.service';
@@ -32,6 +34,7 @@ describe('ProcessJobsService', () => {
     mediaSource: { findUnique: jest.Mock; findMany: jest.Mock; delete: jest.Mock };
     subtitleEmbed: { updateMany: jest.Mock };
     subtitleSearchAttempt: { updateMany: jest.Mock };
+    subtitleSearch: { updateMany: jest.Mock; findMany: jest.Mock };
   };
   let settings: { getMap: jest.Mock };
   let mediaRoots: { resolveFromRoot: jest.Mock };
@@ -42,6 +45,8 @@ describe('ProcessJobsService', () => {
   let titleStatus: { recomputeMovie: jest.Mock; recomputeEpisode: jest.Mock };
   let downloads: { unwindLosingSiblings: jest.Mock };
   let subtitleSearchRequest: { requestFor: jest.Mock };
+  let libraryProbeQueue: { request: jest.Mock };
+  let probeQueue: { addProbe: jest.Mock; removeProbe: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -59,6 +64,10 @@ describe('ProcessJobsService', () => {
       mediaSource: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]), delete: jest.fn() },
       subtitleEmbed: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       subtitleSearchAttempt: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      subtitleSearch: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
     };
     settings = { getMap: jest.fn().mockResolvedValue({ path_movies: 'Movies', path_shows: 'Shows' }) };
     mediaRoots = { resolveFromRoot: jest.fn().mockResolvedValue('/library/Movies') };
@@ -74,6 +83,8 @@ describe('ProcessJobsService', () => {
     titleStatus = { recomputeMovie: jest.fn().mockResolvedValue(undefined), recomputeEpisode: jest.fn().mockResolvedValue(undefined) };
     downloads = { unwindLosingSiblings: jest.fn().mockResolvedValue(undefined) };
     subtitleSearchRequest = { requestFor: jest.fn().mockResolvedValue(undefined) };
+    libraryProbeQueue = { request: jest.fn().mockResolvedValue(undefined) };
+    probeQueue = { addProbe: jest.fn().mockResolvedValue(undefined), removeProbe: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -88,6 +99,8 @@ describe('ProcessJobsService', () => {
         { provide: TitleStatusService, useValue: titleStatus },
         { provide: DownloadsService, useValue: downloads },
         { provide: SubtitleSearchRequestService, useValue: subtitleSearchRequest },
+        { provide: SubtitleProbeQueueService, useValue: probeQueue },
+        { provide: LibraryProbeQueueService, useValue: libraryProbeQueue },
       ],
     }).compile();
 
@@ -1328,6 +1341,21 @@ describe('ProcessJobsService', () => {
       expect(subtitleSearchRequest.requestFor).not.toHaveBeenCalled();
     });
 
+    // Spec 108, REQ-3
+    it('requests a library track read for a real delivery, and not for a repeat or a demoted source', async () => {
+      await deliver({ status: 'ENCODING', outputFilePath: null, sourceStatus: 'READY' }, { movieId: 42, episodeId: null });
+      expect(libraryProbeQueue.request).toHaveBeenCalledWith({ movieId: 42 });
+
+      libraryProbeQueue.request.mockClear();
+      await deliver({ status: 'ENCODING', outputFilePath: null, sourceStatus: 'READY' }, { movieId: null, episodeId: 7 });
+      expect(libraryProbeQueue.request).toHaveBeenCalledWith({ episodeId: 7 });
+
+      libraryProbeQueue.request.mockClear();
+      await deliver({ status: 'COMPLETED', outputFilePath: '/library/out.mkv', sourceStatus: 'READY' }, { movieId: 42, episodeId: null });
+      await deliver({ status: 'ENCODING', outputFilePath: null, sourceStatus: 'ERROR' }, { movieId: 42, episodeId: null });
+      expect(libraryProbeQueue.request).not.toHaveBeenCalled();
+    });
+
     it('does not request a search for a demoted source', async () => {
       await deliver({ status: 'ENCODING', outputFilePath: null, sourceStatus: 'ERROR' }, { movieId: 42, episodeId: null });
 
@@ -1548,6 +1576,51 @@ describe('ProcessJobsService', () => {
       episode: null,
       sourceFile: { mediaSource: { status: 'DOWNLOADING' } },
       ...overrides,
+    });
+
+    // Spec 107, NFR-2: BullMQ ignores an add whose jobId still exists, so a probe
+    // re-queued with add before remove is silently dropped and the search sits
+    // WAITING forever with no error anywhere.
+    describe('interrupted subtitle probes', () => {
+      beforeEach(() => {
+        prisma.processJob.findMany.mockResolvedValue([]);
+      });
+
+      it('removes the stale probe before adding it again for a search with probeCount 1', async () => {
+        prisma.subtitleSearch.findMany.mockResolvedValue([{ id: 7 }]);
+        const order: string[] = [];
+        probeQueue.removeProbe.mockImplementation(async () => { order.push('remove'); });
+        probeQueue.addProbe.mockImplementation(async () => { order.push('add'); });
+
+        await service.reconcileOrphanedEncodes();
+
+        expect(prisma.subtitleSearch.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { status: 'WAITING', probeCount: 1 } }),
+        );
+        expect(probeQueue.removeProbe).toHaveBeenCalledWith(7);
+        expect(probeQueue.addProbe).toHaveBeenCalledWith({ subtitleSearchId: 7 });
+        expect(order).toEqual(['remove', 'add']);
+      });
+
+      it('fails a WAITING search with probeCount >= 2 as interrupted', async () => {
+        await service.reconcileOrphanedEncodes();
+
+        expect(prisma.subtitleSearch.updateMany).toHaveBeenCalledWith({
+          where: { status: 'WAITING', probeCount: { gte: 2 } },
+          data: {
+            status: 'FAILED',
+            errorKey: ERROR_KEYS.SUBTITLE_SEARCH_INTERRUPTED,
+            finishedAt: expect.any(Date),
+          },
+        });
+      });
+
+      it('leaves a search with probeCount 0 alone', async () => {
+        await service.reconcileOrphanedEncodes();
+
+        expect(probeQueue.removeProbe).not.toHaveBeenCalled();
+        expect(probeQueue.addProbe).not.toHaveBeenCalled();
+      });
     });
 
     it('writes nothing and returns 0 when there is no orphaned job (NFR-6)', async () => {

@@ -4,10 +4,11 @@ import { MediaServerService } from './media-server.service';
 import { MediaServerReconcileService } from './media-server-reconcile.service';
 import { SettingsModule } from '@/settings/settings.module';
 import { MediaRootsModule } from '@/media-roots/media-roots.module';
+import { QueueModule } from '@/queue/queue.module';
 import { MediaServerIndexModule } from '@/media-server-index/media-server-index.module';
 
 @Module({
-  imports: [SettingsModule, MediaRootsModule, MediaServerIndexModule],
+  imports: [SettingsModule, MediaRootsModule, MediaServerIndexModule, QueueModule],
   providers: [
     MediaServerResolver,
     MediaServerService,

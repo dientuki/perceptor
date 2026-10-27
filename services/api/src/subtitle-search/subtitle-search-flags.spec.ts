@@ -1,112 +1,97 @@
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
-import { MoviesService } from '@/movies/movies.service';
-import { ShowsService } from '@/shows/shows.service';
 import { PreferencesService } from '@/preferences/preferences.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 
-// This suite exists because the three subtitle-search setters are the only
-// gate on the Jellyfin requirement: without the media-server check a Plex or no-server install
-// stores a flag that can never take effect and the UI reads as enabled, with
-// no error anywhere. It runs the real MediaCapabilitiesService over a settings
-// map and asserts that nothing is written when the call is refused (Article IX,
-// Spec 103, REQ-1 REQ-2 REQ-3).
+// This suite exists because the subtitle-search setter is the only gate on
+// the OpenSubtitles requirement: without the key and account check an install
+// that cannot reach OpenSubtitles stores a flag that can never take effect and
+// the UI reads as enabled, with no error anywhere. It runs the real
+// MediaCapabilitiesService over a settings map and asserts that nothing is
+// written when the call is refused, that each of the three inputs (key,
+// username, password) is required on its own, and that the media server is
+// irrelevant (Article IX, Spec 107, REQ-2 REQ-13).
 describe('subtitle search setters', () => {
-  describe.each(['none', 'plex', 'jellyfin'])(
-    'subtitle search setters with media_server_client=%s',
-    (client) => {
-      const available = client === 'jellyfin';
-      let userUpdate: jest.Mock;
-      let userMovieUpdate: jest.Mock;
-      let userShowUpdate: jest.Mock;
-      let movies: MoviesService;
-      let shows: ShowsService;
-      let preferences: PreferencesService;
+  const saved = process.env.OPENSUBTITLES_API_KEY;
+  let userUpdate: jest.Mock;
+  let preferences: PreferencesService;
+  let capabilities: MediaCapabilitiesService;
 
-      beforeEach(() => {
-        const capabilities = new MediaCapabilitiesService({
-          getMap: () => Promise.resolve({ media_server_client: client }),
-        } as never);
-        userUpdate = jest.fn().mockResolvedValue({});
-        userMovieUpdate = jest.fn().mockResolvedValue({});
-        userShowUpdate = jest.fn().mockResolvedValue({});
-        const prisma = {
-          user: { update: userUpdate },
-          userMovie: { update: userMovieUpdate },
-          userShow: { update: userShowUpdate },
-        };
-        const stub = {} as never;
-        movies = new MoviesService(
-          prisma as never,
-          stub,
-          stub,
-          stub,
-          stub,
-          capabilities,
-          stub,
-          stub,
-          stub,
-          stub,
-        );
-        shows = new ShowsService(
-          prisma as never,
-          stub,
-          stub,
-          stub,
-          stub,
-          stub,
-          capabilities,
-        );
-        preferences = new PreferencesService(
-          prisma as never,
-          stub,
-          {
-            setSubtitleSearch: (id: string, enabled: boolean) =>
-              prisma.user.update({
-                where: { id },
-                data: { subtitleSearch: enabled },
-              }) as Promise<unknown>,
-          } as never,
-          capabilities,
-        );
-        jest.spyOn(preferences, 'findForUser').mockResolvedValue({} as never);
-      });
+  const build = (settings: Record<string, string>) => {
+    capabilities = new MediaCapabilitiesService({
+      getMap: () => Promise.resolve(settings),
+    } as never);
+    userUpdate = jest.fn().mockResolvedValue({});
+    const prisma = { user: { update: userUpdate } };
+    preferences = new PreferencesService(
+      prisma as never,
+      {} as never,
+      {
+        setSubtitleSearch: (id: string, enabled: boolean) =>
+          prisma.user.update({
+            where: { id },
+            data: { subtitleSearch: enabled },
+          }) as Promise<unknown>,
+      } as never,
+      capabilities,
+    );
+    jest.spyOn(preferences, 'findForUser').mockResolvedValue({} as never);
+  };
 
-      const outcome = async (call: () => Promise<unknown>) => {
-        try {
-          await call();
-          return 'accepted';
-        } catch (error) {
-          const body = (
-            error as { getResponse?: () => { i18n?: { key?: string } } }
-          ).getResponse?.();
-          return body?.i18n?.key ?? String(error);
-        }
-      };
+  afterEach(() => {
+    if (saved === undefined) delete process.env.OPENSUBTITLES_API_KEY;
+    else process.env.OPENSUBTITLES_API_KEY = saved;
+  });
 
-      const expected = available
-        ? 'accepted'
-        : ERROR_KEYS.SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER;
+  const outcome = async (call: () => Promise<unknown>) => {
+    try {
+      await call();
+      return 'accepted';
+    } catch (error) {
+      const body = (
+        error as { getResponse?: () => { i18n?: { key?: string } } }
+      ).getResponse?.();
+      return body?.i18n?.key ?? String(error);
+    }
+  };
 
-      it('setSubtitleSearch', async () => {
-        expect(
-          await outcome(() => preferences.setSubtitleSearch('u1', true)),
-        ).toBe(expected);
-        expect(userUpdate).toHaveBeenCalledTimes(available ? 1 : 0);
-      });
+  const account = {
+    opensubtitles_username: 'fake-user',
+    opensubtitles_password: 'fake-pass',
+  };
 
-      it('setMovieSubtitleSearch', async () => {
-        expect(
-          await outcome(() => movies.setSubtitleSearchFor('u1', 1, true)),
-        ).toBe(expected);
-        expect(userMovieUpdate).toHaveBeenCalledTimes(available ? 1 : 0);
-      });
+  const cases: Array<[string, string | undefined, Record<string, string>, boolean]> = [
+    ['key and account present', 'fake-key', account, true],
+    ['key missing', undefined, account, false],
+    ['username empty', 'fake-key', { ...account, opensubtitles_username: '' }, false],
+    ['password empty', 'fake-key', { ...account, opensubtitles_password: '' }, false],
+    ['password whitespace only', 'fake-key', { ...account, opensubtitles_password: '  ' }, false],
+    ['username row absent', 'fake-key', { opensubtitles_password: 'fake-pass' }, false],
+  ];
 
-      it('setShowSubtitleSearch', async () => {
-        expect(
-          await outcome(() => shows.setSubtitleSearchFor('u1', 1, true)),
-        ).toBe(expected);
-        expect(userShowUpdate).toHaveBeenCalledTimes(available ? 1 : 0);
-      });
+  it.each(cases)(
+    'setSubtitleSearch with %s',
+    async (_label, key, settings, available) => {
+      if (key === undefined) delete process.env.OPENSUBTITLES_API_KEY;
+      else process.env.OPENSUBTITLES_API_KEY = key;
+      build(settings);
+      expect(
+        await outcome(() => preferences.setSubtitleSearch('u1', true)),
+      ).toBe(
+        available
+          ? 'accepted'
+          : ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_NOT_CONFIGURED,
+      );
+      expect(userUpdate).toHaveBeenCalledTimes(available ? 1 : 0);
+      expect(await capabilities.isSubtitleSearchAvailable()).toBe(available);
+    },
+  );
+
+  it.each(['none', 'plex', 'jellyfin'])(
+    'ignores media_server_client=%s',
+    async (client) => {
+      process.env.OPENSUBTITLES_API_KEY = 'fake-key';
+      build({ ...account, media_server_client: client });
+      expect(await capabilities.isSubtitleSearchAvailable()).toBe(true);
     },
   );
 });
