@@ -43,9 +43,10 @@ who isn't on your own machine.
   instance, so opening a page loads nothing from anyone else.
 - **What does leave, and to whom.** Catalog requests go to TMDB with your key; searches go to the
   indexers you configured in Prowlarr; downloads are BitTorrent, so your IP is visible to the
-  swarm like any other torrent client's. If you turn on subtitle search, Jellyfin's OpenSubtitles
-  plugin queries OpenSubtitles with the credentials you gave Jellyfin. Perceptor adds nothing to
-  that list.
+  swarm like any other torrent client's. If an administrator sets up subtitle search, `api` asks
+  OpenSubtitles.com for the languages a file is missing, signed in with the OpenSubtitles account
+  entered in Settings; it sends the title's TMDB id (plus season and episode), the languages and
+  the file's OpenSubtitles hash, nothing about which user asked. Perceptor adds nothing else to that list.
 
 ## Status
 
@@ -53,10 +54,10 @@ who isn't on your own machine.
 register, find a release, download, scan, transcode, file, notify and browse. Bug reports are
 welcome. It has no production deployment and no users besides its author.
 
-The published images are release candidates (`v0.1.0-rc1` through `v0.5.0-rc4`); there is no stable
+The published images are release candidates (`v0.1.0-rc1` through `v0.6.0-rc1`); there is no stable
 release yet, so `latest` resolves to the newest release candidate rather than to a final version.
 
-One hundred and three feature specs (`001` through `103`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
+One hundred and eight feature specs (`001` through `108`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
 stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -70,8 +71,8 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
 - **Infrastructure:** Docker Compose (runtime, build and dev overlays), multi-stage Dockerfiles,
   Traefik v3.7 (optional), GitHub Actions release workflow publishing to GHCR
 - **Integrations:** qBittorrent (download client), Prowlarr (indexer aggregation), FlareSolverr
-  (Cloudflare challenge proxy for Prowlarr), TMDB API v3 (catalog), Jellyfin or Plex (media
-  server, runs outside the stack)
+  (Cloudflare challenge proxy for Prowlarr), TMDB API v3 (catalog), OpenSubtitles.com
+  (optional subtitle search), Jellyfin or Plex (media server, runs outside the stack)
 
 ## What it does today
 
@@ -139,8 +140,11 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   holds a file, and the automatic sweeps never replace anything. The source being replaced is
   retired, not marked as an error: it keeps its history, offers only Delete, and re-adding the same
   release brings it back.
-- 🔑 **No API-key copy-paste on a fresh checkout.** The installer generates Prowlarr's key and the
-  container adopts it before boot.
+- 🔑 **No API-key copy-paste on a fresh checkout.** The installer generates Prowlarr's and
+  qBittorrent's keys and each container adopts its own before boot.
+- 🔒 **qBittorrent is never left open.** `api` authenticates to it with an API key, and the image no
+  longer trusts Docker's whole network range — which used to open `torrent.<your domain>` with no
+  login through Traefik.
 
 ### Process
 - 🎞️ **Everything to AV1** via `libsvtav1` — H.264, HEVC, VC-1 and oversized AV1 alike — audio to
@@ -220,11 +224,19 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   into the `.mkv` from the detail page, with a default flag and a timing offset for each one. The
   file is remuxed next to the original, verified and swapped in one atomic rename, and only then
   are the `.srt` files deleted. Jellyfin rescans the item, so it lists each subtitle once.
-- 🔍 **Missing subtitle languages can be found for you.** With Jellyfin as the media server, each
-  user can opt in from `/preferences` and then per title. When a file is delivered without a
-  subtitle language you want, Perceptor searches for it through Jellyfin's OpenSubtitles plugin,
-  checks its timing against the file with `ffsubsync` and embeds the ones that pass. A candidate
-  that fails is deleted, and the title page shows the outcome of the last search.
+- 🔍 **Missing subtitle languages can be found for you.** Once an administrator enters an
+  OpenSubtitles.com account in Settings → General, each user can opt in from `/preferences`: when a
+  file is delivered without a subtitle language they want, Perceptor searches OpenSubtitles
+  directly — whatever the media server, or with none. Any owner can also press **Buscar
+  subtítulos** on a film or an episode that already holds a file. At most three candidates are
+  downloaded per language, multi-CD uploads are discarded before spending a download, and each
+  candidate's timing is checked against the file with `ffsubsync` — framerate, offset, how much of
+  the film it covers and the alignment score — before the first one that passes is embedded. A
+  candidate that fails is deleted, and the title page shows the outcome of the last search.
+- 🎧 **See what a file actually carries.** A film's page shows its audio and subtitle languages
+  under the poster, and a season's episode table has a column with the same for each episode. They
+  are read from the library file itself whenever it changes, including titles your media server
+  already had before Perceptor saw them.
 - 🔄 **Refresh a title from its detail page.** It re-reads the catalog from TMDB — for a series,
   every season and episode, adding what's new without deleting anything — and re-checks the media
   server, marking as complete what it holds and as missing what it no longer does. What changed is
@@ -282,7 +294,8 @@ curl -fsSL https://raw.githubusercontent.com/dientuki/perceptor/master/install.s
 It downloads `docker-compose.yaml` and `.env`, asks five questions — download folder, library
 folder, admin user, admin password, Traefik yes/no (plus the domain and whether to serve HTTPS if
 yes) and optionally your TMDB key — and derives everything else itself: `PUID`/`PGID`, the group that owns your library, your
-timezone, free host ports, and the secrets (`JWT_SECRET`, `SERVICE_TOKEN`, `INDEXER_API_KEY`, the
+timezone, free host ports, and the secrets (`JWT_SECRET`, `SERVICE_TOKEN`, `INDEXER_API_KEY`,
+`TORRENT_API_KEY`, the
 database password). Then it pulls the published images from GHCR and starts the stack.
 
 When it finishes, the directory holds `docker-compose.yaml`, `.env` and — once the stack has run
@@ -430,9 +443,9 @@ A one-shot `backup` service dumps the database before `api` starts, and, with HT
    off, the file is only renamed and moved.
 9. **File and notify.** The output lands in the library, the worker reports `encodeCompleted`, and
    `api` notifies your media server with the host-side path.
-10. **Fill subtitle gaps (optional).** With Jellyfin and subtitle search turned on, `api` looks for
-    each wanted subtitle language the file lacks, the worker checks each candidate's timing, and
-    the ones that pass are embedded into the library file.
+10. **Fill subtitle gaps (optional).** With subtitle search set up, `api` works out which wanted
+    subtitle languages the file lacks, fetches candidates from OpenSubtitles, the worker checks
+    each one's timing, and the first that passes is embedded into the library file.
 
 The two decisions stay with a person on purpose:
 
@@ -459,7 +472,7 @@ your working copy, so edits hot-reload.
    bin/install
    ```
    Creates `.env` from `.env.example`, asks whether to route through Traefik, generates the secrets
-   that matter (`JWT_SECRET`, `SERVICE_TOKEN`, `INDEXER_API_KEY`) and grants Prisma the privileges
+   that matter (`JWT_SECRET`, `SERVICE_TOKEN`, `INDEXER_API_KEY`, `TORRENT_API_KEY`) and grants Prisma the privileges
    its shadow database needs. Say no to Traefik unless you want domain-based routing — it needs a
    resolvable hostname for `web`/`api`/`torrent`/`indexer`. Then fill in the rest: ports, DB
    credentials, admin user, download and library paths.
@@ -642,7 +655,12 @@ Rough edges, stated plainly:
   automatically, but tagging the indexers that need it stays a step in Prowlarr's UI.
 - **Jellyfin and Plex are the only media server clients**, and both are expected to run outside
   this stack. Plex is index-backed and falls back to a full refresh when a path-scoped scan can't
-  be done. Embedding subtitles and searching for them work only with Jellyfin.
+  be done. Embedding the `.srt` files a media server saved next to a film works only with Jellyfin;
+  subtitle search works with any of them.
+- **Subtitle search runs on a small quota.** A free OpenSubtitles account allows about 20 downloads
+  a day, and a search can spend up to three per missing language. That is why there is no
+  scheduled sweep and no button for a whole season or series. A source checkout also needs the
+  maintainer's OpenSubtitles application key in `.env`; without it the feature is simply off.
 - **Libraries don't overlap.** Each user sees only their own titles; a title someone else registered
   answers "not available for this user" rather than rendering. There is no shared or household
   library. The one exception is the `/downloads` queue, which shows every title's sources to any
