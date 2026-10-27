@@ -20,6 +20,8 @@ import {
   SubtitleSyncReference,
 } from './entities/subtitle-search.entity';
 import { SubtitleSyncDetails } from './entities/subtitle-sync-details.entity';
+import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
+import { SubtitleSearchRequestService } from './subtitle-search-request.service';
 import { SubtitleSearchService } from './subtitle-search.service';
 
 // Spec 103, REQ-13
@@ -50,7 +52,50 @@ export class EpisodeSubtitleSearchFieldsResolver {
 // Spec 103, REQ-10
 @Resolver()
 export class SubtitleSearchResolver {
-  constructor(private readonly service: SubtitleSearchService) {}
+  constructor(
+    private readonly service: SubtitleSearchService,
+    private readonly capabilities: MediaCapabilitiesService,
+    private readonly requests: SubtitleSearchRequestService,
+  ) {}
+
+  // Spec 106, REQ-1 REQ-2
+  @Mutation(() => SubtitleSearch, {
+    name: 'searchMovieSubtitles',
+    description:
+      'Starts a 103 subtitle search for a film the caller owns that already holds a file (106).',
+  })
+  async searchMovieSubtitles(
+    @Args('movieId', { type: () => Int }) movieId: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = assertUser(principal);
+    await this.capabilities.assertSubtitleSearchAvailable();
+    await this.requests.requestForCaller({ kind: 'movie', id: movieId }, userId);
+    return this.latestOrFail(await this.service.latestForMovie(movieId));
+  }
+
+  // Spec 106, REQ-1 REQ-2
+  @Mutation(() => SubtitleSearch, {
+    name: 'searchEpisodeSubtitles',
+    description: 'Same, for an episode of a series the caller owns.',
+  })
+  async searchEpisodeSubtitles(
+    @Args('episodeId', { type: () => Int }) episodeId: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = assertUser(principal);
+    await this.capabilities.assertSubtitleSearchAvailable();
+    await this.requests.requestForCaller(
+      { kind: 'episode', id: episodeId },
+      userId,
+    );
+    return this.latestOrFail(await this.service.latestForEpisode(episodeId));
+  }
+
+  private latestOrFail<T>(row: T | null): T {
+    if (!row) throw i18nError.notFound(ERROR_KEYS.SOURCE_NOT_FOUND);
+    return row;
+  }
 
   @AllowService()
   @Query(() => SubtitleSyncDetails, {
@@ -128,4 +173,11 @@ function assertService(principal: AuthPrincipal): void {
   if (principal.type !== 'service') {
     throw i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED);
   }
+}
+
+function assertUser(principal: AuthPrincipal): string {
+  if (principal.type !== 'user') {
+    throw i18nError.unauthorized(ERROR_KEYS.AUTH_UNAUTHENTICATED);
+  }
+  return principal.id;
 }

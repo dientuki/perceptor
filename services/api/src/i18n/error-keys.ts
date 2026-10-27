@@ -97,6 +97,7 @@ export const ERROR_KEYS = {
   ENCODE_STOPPED: 'error.encode.stopped',
   DOWNLOAD_NOT_A_TORRENT: 'error.download.not_a_torrent',
   TORRENT_CLIENT_REJECTED: 'error.download.torrent_client_rejected',
+  TORRENT_CLIENT_UNAUTHORIZED: 'error.download.torrent_client_unauthorized',
 
   // uploads — GraphQL
   UPLOAD_TARGET_AMBIGUOUS: 'error.upload.target_ambiguous',
@@ -164,6 +165,8 @@ export const ERROR_KEYS = {
   SUBTITLE_SEARCH_LOW_SCORE: 'error.subtitleSearch.low_score',
   SUBTITLE_SEARCH_INTERRUPTED: 'error.subtitleSearch.interrupted',
   SUBTITLE_SEARCH_SUPERSEDED: 'error.subtitleSearch.superseded',
+  SUBTITLE_SEARCH_IN_PROGRESS: 'error.subtitleSearch.in_progress',
+  SUBTITLE_SEARCH_NO_LANGUAGES: 'error.subtitleSearch.no_languages',
 
   CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
   CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',

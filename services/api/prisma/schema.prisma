@@ -140,9 +140,6 @@ model UserMovie {
 
   audioMandatory Boolean @default(false)
 
-  // Spec 103, REQ-3
-  subtitleSearch Boolean @default(false)
-
   languages UserMovieLanguage[]
 
   @@id([userId, movieId])
@@ -162,9 +159,6 @@ model UserShow {
   createdAt DateTime @default(now())
 
   audioMandatory Boolean @default(false)
-
-  // Spec 103, REQ-3
-  subtitleSearch Boolean @default(false)
 
   languages UserShowLanguage[]
 
@@ -566,6 +560,7 @@ model SubtitleSearch {
   wantedLanguages  Json
   presentLanguages Json?
   itemId           String?              @db.VarChar(100)
+  libraryPath      String?              @db.VarChar(500)
 
   subtitleEmbedId Int?
   subtitleEmbed   SubtitleEmbed? @relation(fields: [subtitleEmbedId], references: [id], onDelete: SetNull)

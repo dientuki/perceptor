@@ -7,6 +7,7 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { episodeDisplayTitle } from '@/episodes/episode-title';
+import { torrentClientFailure } from '@/downloads/torrent-client-failure';
 import { AttachTarget } from './attach-target';
 import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 
@@ -17,6 +18,14 @@ export type AttachInput = {
   releaseTitle: string | null;
   force: boolean;
 };
+
+async function viaTorrentClient<R>(action: () => Promise<R>): Promise<R> {
+  try {
+    return await action();
+  } catch (err) {
+    throw torrentClientFailure(err);
+  }
+}
 
 // Spec 088, REQ-1
 export type AttachOutcome = 'UNCHANGED' | 'ATTACHED';
@@ -108,13 +117,14 @@ export class AttachSourceService {
 
     if (existingSource && sameTarget) {
       const hash = infoHash.toLowerCase();
-      const held = (await this.qbittorrent.info()).find(
+      // Spec 104, REQ-5
+      const held = (await viaTorrentClient(() => this.qbittorrent.info())).find(
         (torrent) => torrent.hash.toLowerCase() === hash,
       );
 
       if (held) {
         const finished = held.state === 'READY';
-        if (!finished) await this.qbittorrent.start(hash);
+        if (!finished) await viaTorrentClient(() => this.qbittorrent.start(hash));
 
         // Spec 087, REQ-3 REQ-4
         if (input.force) {
@@ -143,7 +153,10 @@ export class AttachSourceService {
     }
 
     const { tags, category } = targetDef.labels(target);
-    const downloadPath = await this.qbittorrent.add(input.urls, tags, category);
+    // Spec 104, REQ-5
+    const downloadPath = await viaTorrentClient(() =>
+      this.qbittorrent.add(input.urls, tags, category),
+    );
 
     // Spec 087, REQ-3 REQ-4
     if (input.force) {

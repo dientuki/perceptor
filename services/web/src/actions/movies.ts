@@ -17,6 +17,7 @@ import type {
   SubtitleEmbedInput,
   SubtitleEmbedResult,
   SubtitleSearch,
+  SubtitleSearchResult,
   TitleRefreshResult,
   TitleRemovalResult,
 } from "@/types/media";
@@ -45,7 +46,6 @@ export interface Movie {
   externalSubtitles?: ExternalSubtitle[];
   subtitleEmbed?: SubtitleEmbed | null;
   // Spec 103, REQ-3
-  subtitleSearch?: boolean;
   latestSubtitleSearch?: SubtitleSearch | null;
 }
 
@@ -130,7 +130,6 @@ const GET_MOVIE_QUERY = `
         createdAt
         finishedAt
       }
-      subtitleSearch
       latestSubtitleSearch {
         id
         status
@@ -410,4 +409,51 @@ export async function embedMovieSubtitlesAction(
   }
 
   return { success: true };
+}
+
+const SEARCH_MOVIE_SUBTITLES_MUTATION = `
+  mutation SearchMovieSubtitles($movieId: Int!) {
+    searchMovieSubtitles(movieId: $movieId) {
+      id
+      status
+      errorKey
+      languages {
+        languageIso3
+        outcome
+        reasonKey
+      }
+      createdAt
+      finishedAt
+    }
+  }
+`;
+
+// Spec 106, REQ-9
+export async function searchMovieSubtitlesAction(
+  movieId: string,
+): Promise<SubtitleSearchResult> {
+  type Payload = { searchMovieSubtitles: SubtitleSearch | null };
+  let result: Awaited<ReturnType<typeof fetchGraphQL<Payload>>>;
+  try {
+    result = await fetchGraphQL<Payload>(SEARCH_MOVIE_SUBTITLES_MUTATION, {
+      movieId: Number(movieId),
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { data, errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  if (!data?.searchMovieSubtitles) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  return { search: data.searchMovieSubtitles };
 }

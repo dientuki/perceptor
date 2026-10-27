@@ -154,6 +154,47 @@ describe('SubtitleSearchService worker reports', () => {
   });
 });
 
+// This suite exists because the worker validates against the path `details`
+// answers, and a title Perceptor never delivered has no filePath: without the
+// libraryPath fallback the search is reported "not found" to the worker with no
+// error anywhere, and the subtitle is never measured (Article IX, Spec 106, REQ-7).
+describe('SubtitleSearchService details', () => {
+  const detailsFor = (search: Record<string, unknown>) => {
+    const prisma = {
+      subtitleSearchAttempt: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          stagedPath: '/downloads/.perceptor/1.srt',
+          search: { movie: null, episode: null, libraryPath: null, ...search },
+        }),
+      },
+    };
+    return new SubtitleSearchService(prisma as never, {} as never).details(1);
+  };
+
+  it('prefers the delivered filePath', async () => {
+    await expect(
+      detailsFor({
+        movie: { filePath: '/lib/A.mkv' },
+        libraryPath: '/lib/B.mkv',
+      }),
+    ).resolves.toMatchObject({ filePath: '/lib/A.mkv' });
+  });
+
+  it('falls back to the libraryPath of a title with no filePath', async () => {
+    await expect(
+      detailsFor({
+        movie: { filePath: null },
+        libraryPath: '/lib/B.mkv',
+      }),
+    ).resolves.toMatchObject({ filePath: '/lib/B.mkv' });
+  });
+
+  it('is not found when neither path exists', async () => {
+    await expect(detailsFor({ movie: { filePath: null } })).rejects.toThrow();
+  });
+});
+
 // This suite exists because a user token reaching these reports would let any
 // signed-in user rewrite a search, with nothing in the logs (Article IX,
 // Spec 103, REQ-10).
@@ -174,7 +215,7 @@ describe('SubtitleSearchResolver service-only surface', () => {
       completed: jest.fn(),
       failed: jest.fn(),
     };
-    resolver = new SubtitleSearchResolver(service as never);
+    resolver = new SubtitleSearchResolver(service as never, {} as never, {} as never);
   });
 
   it('refuses a user principal on all four before touching the service', () => {

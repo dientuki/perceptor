@@ -385,6 +385,104 @@ describe('SubtitleSearchDriver', () => {
       expect(wake).toHaveBeenCalledWith(1, 10 * MINUTE_MS);
     });
 
+    describe('a title with no filePath (Spec 106, REQ-7)', () => {
+      const realEmbed = () =>
+        new SubtitleEmbedService(
+          prisma as never,
+          {} as never,
+          mediaRoots,
+          { addEmbed: jest.fn() } as never,
+          new ActiveEmbedGuard(prisma as never),
+        );
+      const serverOnlyMovie = () =>
+        (
+          prisma.movie as Record<string, jest.Mock>
+        ).findUnique.mockResolvedValue({
+          filePath: null,
+          mediaServerPresentAt: new Date(),
+          tmdbId: 603,
+        });
+
+      it('accepts the item without a path comparison and records the translated library path', async () => {
+        serverOnlyMovie();
+        driver = build(realEmbed());
+        seedSearch();
+        client.listItemSubtitles.mockResolvedValue(
+          listing('/host/library/Movie.mkv'),
+        );
+
+        await driver.advance(1);
+
+        expect(search()).toMatchObject({
+          status: 'SEARCHING',
+          itemId: 'item-1',
+          libraryPath: movieFile,
+        });
+        expect(wake).toHaveBeenCalledWith(1, 0);
+      });
+
+      it('fails with not_mkv and spends no remote search on an .mp4 item', async () => {
+        await writeFile(join(libDir, 'Clip.mp4'), 'mp4');
+        serverOnlyMovie();
+        driver = build(realEmbed());
+        seedSearch();
+        client.listItemSubtitles.mockResolvedValue(
+          listing('/host/library/Clip.mp4'),
+        );
+
+        await driver.advance(1);
+
+        expect(search()).toMatchObject({
+          status: 'FAILED',
+          errorKey: ERROR_KEYS.SUBTITLE_EMBED_NOT_MKV,
+        });
+        expect(search().libraryPath).toBeUndefined();
+        expect(client.searchRemoteSubtitles).not.toHaveBeenCalled();
+      });
+
+      it('fails with outside_library and spends no remote search on an item outside the library root', async () => {
+        serverOnlyMovie();
+        driver = build(realEmbed());
+        seedSearch();
+        client.listItemSubtitles.mockResolvedValue(
+          listing('/host/elsewhere/Movie.mkv'),
+        );
+
+        await driver.advance(1);
+
+        expect(search()).toMatchObject({
+          status: 'FAILED',
+          errorKey: ERROR_KEYS.SUBTITLE_EMBED_OUTSIDE_LIBRARY,
+        });
+        expect(client.searchRemoteSubtitles).not.toHaveBeenCalled();
+      });
+
+      it('still counts a lookup miss toward the miss budget', async () => {
+        serverOnlyMovie();
+        driver = build(realEmbed());
+        seedSearch();
+        client.findByTmdbId.mockResolvedValue(null);
+
+        await driver.advance(1);
+
+        expect(search()).toMatchObject({ status: 'WAITING', checkCount: 1 });
+        expect(wake).toHaveBeenCalledWith(1, 10 * MINUTE_MS);
+      });
+
+      it('keeps the path comparison for a title that has a filePath', async () => {
+        driver = build(realEmbed());
+        seedSearch();
+        client.listItemSubtitles.mockResolvedValue(
+          listing('/host/library/Another Release.mkv'),
+        );
+
+        await driver.advance(1);
+
+        expect(search()).toMatchObject({ status: 'WAITING', checkCount: 1 });
+        expect(search().libraryPath).toBeUndefined();
+      });
+    });
+
     it('re-checks after 10, 20, 40 and 45 minutes and fails with item_not_found on the fifth miss', async () => {
       seedSearch();
       client.findByTmdbId.mockResolvedValue(null);

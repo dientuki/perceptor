@@ -126,6 +126,8 @@ export const MESSAGES_EN: Record<string, string> = {
     'This download has no associated torrent',
   [ERROR_KEYS.TORRENT_CLIENT_REJECTED]:
     'The torrent client rejected the request ({status})',
+  [ERROR_KEYS.TORRENT_CLIENT_UNAUTHORIZED]:
+    "The torrent client rejected Perceptor's credential: an administrator needs to check TORRENT_API_KEY",
 
   // uploads — GraphQL
   [ERROR_KEYS.UPLOAD_TARGET_AMBIGUOUS]:
@@ -219,6 +221,10 @@ export const MESSAGES_EN: Record<string, string> = {
     'The search was interrupted.',
   [ERROR_KEYS.SUBTITLE_SEARCH_SUPERSEDED]:
     'A newer delivery replaced this search.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_IN_PROGRESS]:
+    'A subtitle search is already in progress for this title.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_NO_LANGUAGES]:
+    'No subtitle languages are chosen for this title.',
 
   // scheduler
   [ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND]: 'Scheduled task not found',

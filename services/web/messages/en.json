@@ -64,6 +64,7 @@
     "download": {
       "not_a_torrent": "This download has no associated torrent",
       "torrent_client_rejected": "The torrent client rejected the request ({status})",
+      "torrent_client_unauthorized": "The torrent client rejected Perceptor's credential: an administrator needs to check TORRENT_API_KEY",
       "torrent_client_error": "The torrent client stopped the download ({state}): check disk space and permissions",
       "retry_replaced": "This item was replaced by another one and cannot be resumed",
       "retry_superseded": "Another source of this title is already being processed",
@@ -198,7 +199,9 @@
       "low_score": "The subtitle does not match this file.",
       "incomplete": "The subtitle is incomplete (it only covers part of the film).",
       "interrupted": "The search was interrupted.",
-      "superseded": "A newer delivery replaced this search."
+      "superseded": "A newer delivery replaced this search.",
+      "in_progress": "A subtitle search is already in progress for this title.",
+      "no_languages": "There are no subtitle languages chosen for this title."
     }
   },
   "landing": {
@@ -459,8 +462,7 @@
       "saving": "Saving...",
       "audioLabel": "Audio languages",
       "subtitleLabel": "Subtitle languages",
-      "audioMandatoryLabel": "Mandatory audio",
-      "subtitleSearchLabel": "Search for subtitles on the internet?"
+      "audioMandatoryLabel": "Mandatory audio"
     },
     "languagesPanel": {
       "title": "Languages",
@@ -470,9 +472,7 @@
       "mandatoryNo": "Audio is not mandatory",
       "inheritedNote": "(from your preferences)",
       "empty": "None set",
-      "changeButton": "Change",
-      "subtitleSearchYes": "Subtitle search is on",
-      "subtitleSearchNo": "Subtitle search is off"
+      "changeButton": "Change"
     },
     "languagesModal": {
       "title": "Languages",
@@ -495,6 +495,15 @@
       "confirm": "Remove",
       "cancel": "Cancel",
       "removing": "Removing..."
+    },
+    "searchSubtitles": {
+      "button": "Search subtitles",
+      "searching": "Searching…",
+      "title": "Search subtitles",
+      "body": "Perceptor will look for the missing subtitles of this title with the subtitle provider. Each download counts against the provider's daily download quota. Continue?",
+      "confirm": "Search",
+      "cancel": "Cancel",
+      "inProgress": "A search is already in progress"
     },
     "embedSubtitles": {
       "button": "Embed in file",
@@ -825,7 +834,7 @@
       "saved": "Preferences saved.",
       "save": "Save",
       "saving": "Saving...",
-      "subtitleSearchLabel": "Search for subtitles on the internet",
+      "subtitleSearchLabel": "Search for subtitles on the internet for every title delivered from now on",
       "subtitleSearchRequiresJellyfin": "Subtitle search requires Jellyfin as the media server."
     },
     "torrentGroups": {

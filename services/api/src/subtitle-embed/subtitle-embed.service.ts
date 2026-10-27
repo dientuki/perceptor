@@ -381,6 +381,19 @@ export class SubtitleEmbedService {
     return this.queueEmbed(ref, mkvPath, tracks);
   }
 
+  // Spec 106, REQ-3
+  async assertManualSearchPreflight(ref: TargetRef, userId: string) {
+    const target = await this.resolveTarget(ref, userId);
+    if (!hasPossession(target)) {
+      throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_NO_FILE);
+    }
+    if (target.filePath) {
+      await this.assertUsableMkv(target.filePath);
+    }
+    await this.assertNotBusy(ref, target);
+    return target;
+  }
+
   // Spec 101, REQ-10
   private async queueEmbed(
     ref: TargetRef,
@@ -610,7 +623,7 @@ export class SubtitleEmbedService {
   }
 
   // Spec 101, REQ-13
-  private async assertUsableMkv(mkvPath: string): Promise<void> {
+  async assertUsableMkv(mkvPath: string): Promise<void> {
     if (!mkvPath.toLowerCase().endsWith('.mkv')) {
       throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_NOT_MKV);
     }

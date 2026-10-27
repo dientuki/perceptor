@@ -1,3 +1,5 @@
+import { torrentAuthHeaders } from '@/clients/torrent/auth';
+
 export type SharedLoginResult = {
   target: 'qbittorrent' | 'prowlarr';
   ok: boolean;
@@ -16,6 +18,13 @@ function unreachable(): SharedLoginResult['reason'] {
   return 'inalcanzable';
 }
 
+// Spec 104, T005
+function qbittorrentReason(status: number): string {
+  return status === 401 || status === 403
+    ? 'credencial rechazada (TORRENT_API_KEY)'
+    : `HTTP ${status}`;
+}
+
 export async function setQbittorrentLogin(
   config: Record<string, string>,
   username: string,
@@ -29,7 +38,10 @@ export async function setQbittorrentLogin(
     // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#set-application-preferences
     const set = await fetchFn(`${base}/setPreferences`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        ...torrentAuthHeaders(),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
       body: new URLSearchParams({
         json: JSON.stringify({
           web_ui_username: username,
@@ -37,11 +49,13 @@ export async function setQbittorrentLogin(
         }),
       }).toString(),
     });
-    if (!set.ok) return { target, ok: false, reason: `HTTP ${set.status}` };
+    if (!set.ok) return { target, ok: false, reason: qbittorrentReason(set.status) };
 
     // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)#get-application-preferences
-    const read = await fetchFn(`${base}/preferences`);
-    if (!read.ok) return { target, ok: false, reason: `HTTP ${read.status}` };
+    const read = await fetchFn(`${base}/preferences`, {
+      headers: torrentAuthHeaders(),
+    });
+    if (!read.ok) return { target, ok: false, reason: qbittorrentReason(read.status) };
 
     const prefs = (await read.json()) as { web_ui_username?: string };
     if (prefs.web_ui_username !== username) {

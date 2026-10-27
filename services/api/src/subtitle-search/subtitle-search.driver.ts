@@ -29,6 +29,7 @@ type Search = Prisma.SubtitleSearchGetPayload<{ include: { attempts: true } }>;
 
 type Target = {
   filePath: string | null;
+  mediaServerPresentAt?: Date | null;
   tmdbId: number;
   seasonNumber?: number;
   episodeNumber?: number;
@@ -178,9 +179,37 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
     }
 
     const target = await this.loadTarget(search);
-    const listing = target?.filePath
-      ? await this.resolveItem(await this.clientOnce(ctx), search, target)
-      : null;
+    // Spec 106, REQ-7
+    const adoptsServerPath =
+      !!target && !target.filePath && !!target.mediaServerPresentAt;
+    const listing =
+      target && (target.filePath || adoptsServerPath)
+        ? await this.resolveItem(await this.clientOnce(ctx), search, target)
+        : null;
+
+    if (listing && adoptsServerPath) {
+      // Spec 106, REQ-7
+      const libraryPath =
+        listing.mediaHostPath === null
+          ? null
+          : this.mediaRoots.hostToContainerPath(
+              'library',
+              listing.mediaHostPath,
+            );
+      if (libraryPath === null) {
+        await this.fail(search.id, ERROR_KEYS.SUBTITLE_EMBED_OUTSIDE_LIBRARY);
+        return;
+      }
+      await this.subtitleEmbed.assertUsableMkv(libraryPath);
+      const moved = await this.transition(search.id, 'WAITING', 'SEARCHING', {
+        itemId: listing.itemId,
+        presentLanguages: listing.presentLanguagesIso3,
+        libraryPath,
+      });
+      if (moved) await this.wake(search.id, 0);
+      return;
+    }
+
     const expectedHostPath = target?.filePath
       ? this.mediaRoots.containerToHostPath('library', target.filePath)
       : null;
@@ -623,13 +652,14 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
     if (search.movieId !== null) {
       return this.prisma.movie.findUnique({
         where: { id: search.movieId },
-        select: { filePath: true, tmdbId: true },
+        select: { filePath: true, mediaServerPresentAt: true, tmdbId: true },
       });
     }
     const episode = await this.prisma.episode.findUnique({
       where: { id: search.episodeId! },
       select: {
         filePath: true,
+        mediaServerPresentAt: true,
         episodeNumber: true,
         season: {
           select: { seasonNumber: true, show: { select: { tmdbId: true } } },
@@ -639,6 +669,7 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
     if (!episode) return null;
     return {
       filePath: episode.filePath,
+      mediaServerPresentAt: episode.mediaServerPresentAt,
       tmdbId: episode.season.show.tmdbId,
       seasonNumber: episode.season.seasonNumber,
       episodeNumber: episode.episodeNumber,

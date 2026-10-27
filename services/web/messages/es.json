@@ -64,6 +64,7 @@
     "download": {
       "not_a_torrent": "Esta descarga no tiene un torrent asociado",
       "torrent_client_rejected": "El cliente de torrents rechazó la solicitud ({status})",
+      "torrent_client_unauthorized": "El cliente de torrents rechazó la credencial de Perceptor: un administrador tiene que revisar TORRENT_API_KEY",
       "torrent_client_error": "El cliente de torrents detuvo la descarga ({state}): revisá espacio en disco y permisos",
       "retry_replaced": "Este medio fue reemplazado por otro y no se puede retomar",
       "retry_superseded": "Otra fuente de este título ya se está procesando",
@@ -198,7 +199,9 @@
       "low_score": "El subtítulo no coincide con este archivo.",
       "incomplete": "El subtítulo está incompleto (solo cubre parte de la película).",
       "interrupted": "La búsqueda se interrumpió.",
-      "superseded": "Una entrega más nueva reemplazó esta búsqueda."
+      "superseded": "Una entrega más nueva reemplazó esta búsqueda.",
+      "in_progress": "Ya hay una búsqueda de subtítulos en curso para este título.",
+      "no_languages": "No hay idiomas de subtítulos elegidos para este título."
     }
   },
   "landing": {
@@ -459,8 +462,7 @@
       "saving": "Guardando...",
       "audioLabel": "Idiomas de audio",
       "subtitleLabel": "Idiomas de subtítulos",
-      "audioMandatoryLabel": "Audio obligatorio",
-      "subtitleSearchLabel": "¿Buscar subtítulos en internet?"
+      "audioMandatoryLabel": "Audio obligatorio"
     },
     "languagesPanel": {
       "title": "Idiomas",
@@ -470,9 +472,7 @@
       "mandatoryNo": "El audio no es obligatorio",
       "inheritedNote": "(de tus preferencias)",
       "empty": "Ninguno definido",
-      "changeButton": "Cambiar",
-      "subtitleSearchYes": "Búsqueda de subtítulos activada",
-      "subtitleSearchNo": "Búsqueda de subtítulos desactivada"
+      "changeButton": "Cambiar"
     },
     "languagesModal": {
       "title": "Idiomas",
@@ -495,6 +495,15 @@
       "confirm": "Quitar",
       "cancel": "Cancelar",
       "removing": "Quitando..."
+    },
+    "searchSubtitles": {
+      "button": "Buscar subtítulos",
+      "searching": "Buscando…",
+      "title": "Buscar subtítulos",
+      "body": "Perceptor va a buscar los subtítulos que le faltan a este título en el proveedor de subtítulos. Cada descarga cuenta contra la cuota diaria de descargas del proveedor. ¿Querés continuar?",
+      "confirm": "Buscar",
+      "cancel": "Cancelar",
+      "inProgress": "Ya hay una búsqueda en curso"
     },
     "embedSubtitles": {
       "button": "Incrustar en archivo",
@@ -825,7 +834,7 @@
       "saved": "Preferencias guardadas.",
       "save": "Guardar",
       "saving": "Guardando...",
-      "subtitleSearchLabel": "¿Buscar subtítulos en internet?",
+      "subtitleSearchLabel": "Buscar subtítulos en internet en cada título que se entregue de ahora en adelante",
       "subtitleSearchRequiresJellyfin": "La búsqueda de subtítulos requiere Jellyfin como servidor de medios."
     },
     "torrentGroups": {

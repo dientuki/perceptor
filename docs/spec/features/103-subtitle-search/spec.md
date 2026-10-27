@@ -1,9 +1,9 @@
 ---
 title: Subtitle Search
-spec_version: 0.4.0
+spec_version: 0.5.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-24
-last_updated: 2026-10-25
+last_updated: 2026-10-26
 status: Approved
 services: [api, worker, web]
 ---
@@ -36,10 +36,10 @@ Jellyfin is used to search and to fetch, never as a place to store the candidate
 into the downloads root that fails validation is deleted there, so nothing a rejected candidate leaves
 behind ever reaches the library folder (Article XII).
 
-The feature is gated twice. A per-user preference on `/preferences` and a per-title checkbox on the
-title's language form ("¿Buscar subtítulos en internet?", under the subtitle picker,
-`services/web/src/components/media/TitleLanguagesForm.tsx`). Both are only available while the
-configured media server is Jellyfin.
+The feature is controlled by one per-user preference on `/preferences`, available only while the
+configured media server is Jellyfin. There is no per-title control (amendment 0.5.0: a per-title
+checkbox, default off, left a user with the preference on and no search for a title they never
+ticked).
 
 Pipeline stages touched:
 
@@ -61,32 +61,24 @@ No title `status` ever changes because of a search.
       `MediaCapabilities.subtitleSearchAvailable`. It carries only that boolean, never the server
       type, host or key. While it is false:
       - `web` shows the `/preferences` checkbox disabled, with a hint that it requires Jellyfin;
-      - `web` hides the per-title checkbox;
       - no search ever starts.
 
       Stored flags are kept as they are, and take effect again if Jellyfin is configured again.
 - [ ] **REQ-2 (User preference)**: Each user has a `subtitleSearch` preference (default off),
       editable on `/preferences` in the download-languages tab under the subtitle language picker,
       saved by that page's existing Save button.
-- [ ] **REQ-3 (Per-title flag)**: Each owner of a film or series has their own `subtitleSearch`
-      flag on that title (default off). It is edited by a checkbox labelled
-      "¿Buscar subtítulos en internet?" under the subtitle picker of the title's language form,
-      saved by that form's existing Save button. An episode reads its series' owners' flags; there
-      is no per-episode flag.
-
-      The user preference (REQ-2) is a gate, not a default. The per-title checkbox is shown only
-      while both REQ-1 and the owner's preference are on. Every title starts off, and nothing
-      copies or falls back to the preference. An owner's **effective** flag is on only when REQ-1
-      holds, their preference is on and their per-title flag is on. Turning the preference off
-      keeps every per-title flag as stored but makes them all ineffective until it is turned on
-      again.
+- [ ] **REQ-3 (No per-title flag)**: *(amended 0.5.0; originally a per-title flag)* There is no
+      per-title `subtitleSearch` flag, field, mutation or checkbox. An owner is opted in exactly when
+      REQ-1 holds and that owner's `User.subtitleSearch` preference (REQ-2) is on. The preference
+      cannot be overridden for a single title. Turning the preference off makes the owner not opted in
+      for every title until it is turned on again.
 - [ ] **REQ-4 (Trigger)**: A search starts for a film or an episode when a file is delivered to it:
       `encodeCompleted` for its job, with or without compression, after the media-server
       notification. It starts only when REQ-1 holds and at least one owner of the title (the
-      series, for an episode) has an effective flag on (REQ-3). A season pack starts one search per
+      series, for an episode) is opted in (REQ-3). The owners are read from the database at that moment, so a preference changed before the encode ends is honoured. A season pack starts one search per
       delivered episode. There is no other trigger (see Out of Scope).
-- [ ] **REQ-5 (Wanted languages)**: The wanted languages are the union, over the owners whose flag
-      is on, of each owner's effective subtitle languages: the per-title subtitle list (`039`) when
+- [ ] **REQ-5 (Wanted languages)**: The wanted languages are the union, over the opted-in
+      owners (REQ-3), of each owner's effective subtitle languages: the per-title subtitle list (`039`) when
       it is non-empty, otherwise that owner's `subtitleLanguages` preference (`021`). Languages are
       compared by ISO 639-2 code. A regional variant (`es-419`, `es-ES`) is searched and matched as
       its base language (`spa`).
@@ -202,7 +194,7 @@ No title `status` ever changes because of a search.
 
 - [x] **NFR-1 (Constitution amendment)**: Article XII's first `101` exception (replacing a library
       `.mkv` with its verified remux) only applied at an administrator's explicit request. It is
-      widened to also cover an embed started by this spec for a title an owner opted into (REQ-3).
+      widened to also cover an embed started by this spec for a title with an opted-in owner (REQ-3).
       The second exception, sidecar deletion, is not widened: this spec never deletes anything under
       the destinations root. *Ratified as constitution v1.6.0 on 2026-10-24.*
 - [ ] **NFR-2 (External quota)**: Each candidate tried costs one download from the plugin's account,
@@ -231,7 +223,7 @@ No title `status` ever changes because of a search.
       - an offset over the bound is rejected;
       - a staged file is deleted on rejection and after a terminal embed;
       - a staged track is never deleted by the worker's sidecar rule;
-      - no search starts when the media server is not Jellyfin, or when no owner opted in;
+      - no search starts when the media server is not Jellyfin, or when no owner is opted in;
       - the 3-candidate cap holds;
       - an item whose path is not the delivered file is not used.
 
@@ -248,14 +240,8 @@ extend type UserPreferences {
 }
 
 extend type Movie {
-  """The caller's own flag (REQ-3)."""
-  subtitleSearch: Boolean!
   """The film's most recent search, null if it never had one."""
   latestSubtitleSearch: SubtitleSearch
-}
-
-extend type Show {
-  subtitleSearch: Boolean!
 }
 
 extend type Episode {
@@ -304,8 +290,6 @@ enum SubtitleSyncReference {
 
 type Mutation {
   setSubtitleSearch(enabled: Boolean!): UserPreferences!
-  setMovieSubtitleSearch(movieId: Int!, enabled: Boolean!): Boolean!
-  setShowSubtitleSearch(showId: Int!, enabled: Boolean!): Boolean!
 
   """Service-only (worker). Moves a queued validation to running; false if it is no longer queued."""
   subtitleSyncStarted(id: Int!): Boolean!
@@ -349,12 +333,10 @@ The queue payload gains one queue and one job: `subtitle-sync` / `subtitle-sync`
 `{ subtitleSyncId: number }`. The worker reads everything else through `subtitleSyncDetails`.
 
 `Episode.latestSubtitleSearch` resolves for any owner of the series, like the episode itself.
-`Movie.subtitleSearch`/`Show.subtitleSearch` are the caller's own row, like `audioMandatory`.
 
 | Condition | HTTP / GraphQL error | Message the user sees |
 | :-- | :-- | :-- |
-| `set*SubtitleSearch` while `subtitleSearchAvailable` is false | `BadRequestException` `error.subtitleSearch.unsupported_media_server` | `La búsqueda de subtítulos requiere Jellyfin como servidor de medios.` |
-| Film/series missing or not owned by the caller | `NotFoundException`, the existing `movie`/`show` not-found keys | the existing messages |
+| `setSubtitleSearch` while `subtitleSearchAvailable` is false | `BadRequestException` `error.subtitleSearch.unsupported_media_server` | `La búsqueda de subtítulos requiere Jellyfin como servidor de medios.` |
 | Service-only mutation/query called with a user token | the existing service-guard key | the existing message |
 | `subtitleSyncDetails` for an unknown id | `NotFoundException` `error.subtitleSearch.sync_not_found` | not user-facing (worker logs and abandons) |
 
@@ -374,16 +356,15 @@ Outcome keys, shown in the panel and never thrown (REQ-13/REQ-14):
 | `error.subtitleSearch.superseded` | `Una entrega más nueva reemplazó esta búsqueda.` |
 | `error.subtitleEmbed.busy` (reused from `101`) | `101`'s existing message |
 
-`web` must handle `unsupported_media_server` on save: show it in the form's existing error list and
-revert the checkbox, the same as the form's other errors. The `/preferences` form does the same.
+`web` must handle `unsupported_media_server` on save: show it in the `/preferences` form's existing error list
+and revert the checkbox.
 
 ## Data Model Changes
 
 | Model | Change | Nullable / default | Backfill needed? |
 | :-- | :-- | :-- | :-- |
 | `User` | `subtitleSearch Boolean` | `false` | No |
-| `UserMovie` | `subtitleSearch Boolean` | `false` | No |
-| `UserShow` | `subtitleSearch Boolean` | `false` | No |
+| `UserMovie`, `UserShow` | drop `subtitleSearch` (0.5.0) | — | No |
 | `SubtitleSearch` (new) | `movieId?`/`episodeId?` (exactly one, cascade), `status`, `errorKey?`, `subtitleEmbedId?` (the `101` embed it triggered), `checkCount` (REQ-6's bounded wait), `createdAt`, `finishedAt?` | — | No |
 | `SubtitleSearchAttempt` (new) | `searchId` (cascade), `languageIso3`, `providerSubtitleId`, `releaseName`, `rank`, `stagedPath?`, `status` (`QUEUED`/`RUNNING`/`ACCEPTED`/`REJECTED`/`FAILED`), `offsetMs?`, `framerateRatio?`, `reference?`, `score?`, `reasonKey?` | — | No |
 | `SubtitleEmbed.tracks` (JSON, `101`) | each track gains `isSidecar` | absent reads as `true` | No (absent = `101`'s behaviour) |
@@ -394,16 +375,16 @@ stored twice.
 ## Acceptance Criteria
 
 - [ ] **AC-1**: With the media server set to Plex or none, `/preferences` shows the "search subtitles
-      online" checkbox disabled with its hint, and a title's language form shows no
-      "¿Buscar subtítulos en internet?" checkbox. With Jellyfin configured and the user's preference
-      off, the per-title checkbox is still hidden. Turning the preference on shows it, unchecked.
-- [ ] **AC-1b**: With an opted-in title, turning the owner's preference off and delivering the title
-      creates no `subtitle_searches` row. Turning the preference back on shows the title's checkbox
-      still checked.
-- [ ] **AC-2**: With Jellyfin configured, calling `setMovieSubtitleSearch` and then switching the media
-      server to none and calling it again returns `La búsqueda de subtítulos requiere Jellyfin como
-      servidor de medios.`, and the stored flag is unchanged.
-- [ ] **AC-3**: A film whose owner wants `eng` and `spa` subtitles and opted in is delivered from a
+      online" checkbox disabled with its hint, and a title's language form shows no subtitle-search
+      checkbox. With Jellyfin configured the language forms still show none: the preference is the
+      only control.
+- [ ] **AC-1b**: With the owner's preference off, delivering a title creates no `subtitle_searches`
+      row. With it on, delivering a title creates one with no per-title action taken.
+- [ ] **AC-2**: With Jellyfin configured, `setSubtitleSearch(true)` succeeds; after switching the media
+      server to none it returns `La búsqueda de subtítulos requiere Jellyfin como servidor de medios.`
+      and the stored preference is unchanged. `schema.gql` has no `setMovieSubtitleSearch`,
+      `setShowSubtitleSearch`, `Movie.subtitleSearch` or `Show.subtitleSearch`.
+- [ ] **AC-3**: A film whose owner wants `eng` and `spa` subtitles and has the preference on is delivered from a
       release carrying only English. Within the REQ-6 window, `subtitle_search_attempts` holds `spa`
       rows only, and the film's panel shows English `ALREADY_PRESENT` and Spanish `EMBEDDED`.
       `mkvmerge -J` on the library file lists a new `spa` subtitle track titled `Español` after the
@@ -420,9 +401,9 @@ stored twice.
 - [ ] **AC-7 (failure)**: With Jellyfin stopped when the delivery completes, the search stays
       `WAITING` and then ends `FAILED` with `error.subtitleSearch.item_not_found` no later than two
       hours after the delivery. The title's status reads `COMPLETED` throughout.
-- [ ] **AC-8**: A delivery for a title where no owner opted in creates no `subtitle_searches` row and
+- [ ] **AC-8**: A delivery for a title where no owner is opted in creates no `subtitle_searches` row and
       makes no Jellyfin remote search call (Jellyfin's log shows none).
-- [ ] **AC-9**: A delivered episode of an opted-in series gets its own search. Delivering a two-episode
+- [ ] **AC-9**: A delivered episode of a series with an opted-in owner gets its own search. Delivering a two-episode
       season pack creates two searches. The first episode's search reaches `COMPLETED`, with its
       language `EMBEDDED`, while the second episode is still encoding, and the second follows when
       its own job finishes.
@@ -442,7 +423,7 @@ stored twice.
 ## Out of Scope
 
 - **Searching on demand, or for titles already in the library.** The only trigger is a delivery
-  (REQ-4). Turning a flag on for a film already delivered does nothing until its next delivery.
+  (REQ-4). Turning the preference on for a film already delivered does nothing until its next delivery.
   Turning it on for a whole series would mean one search per episode at once, which a free
   OpenSubtitles quota cannot absorb. A manual "search now" button is a later feature.
 - **Re-searching later.** A language `NOT_FOUND` today may have a subtitle next week. There is no
@@ -535,3 +516,21 @@ any of these; a threshold that rejects one only means no subtitle is embedded, n
   it apart from any other failure: every remaining candidate of the search is spent as
   `fetch_failed`.
 
+## Amendments (2026-10-26, `spec_version` 0.5.0)
+
+Found while testing the published `:latest` images: *Stand by Me* was delivered with the owner's
+preference on and no search was created, because the per-title flag (REQ-3, default off, never
+inherited) was never ticked. Nothing failed, so nothing was logged.
+
+**What changed:**
+
+1. **REQ-3 replaced.** The per-title flag, its checkbox, `Movie.subtitleSearch`, `Show.subtitleSearch`,
+   `setMovieSubtitleSearch`, `setShowSubtitleSearch` and the `UserMovie`/`UserShow.subtitleSearch`
+   columns are removed. The user preference is the only switch and cannot be overridden per title.
+2. **REQ-4** reads the opted-in owners from `User.subtitleSearch` at the end of the encode.
+3. **Behaviour change, intended:** a user with the preference on now gets a search on every
+   subsequent delivery. `/preferences` help text says so.
+4. **Migration:** drop the two columns. No backfill; the stored values are discarded.
+5. **Contract:** the four removed members above; no new error keys.
+6. **Unchanged:** the wanted languages (REQ-5), ranking, acceptance, embedding, and the absence of a
+   retroactive or on-demand search (Out of Scope).

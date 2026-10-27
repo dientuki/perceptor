@@ -100,9 +100,6 @@ type Movie {
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
 
-  """The caller's own flag (103 REQ-3)."""
-  subtitleSearch: Boolean!
-
   """
   How many *other* users have this film in their library. 0 when the caller is the last owner.
   """
@@ -353,9 +350,6 @@ type Show {
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
 
-  """The caller's own flag (103 REQ-3)."""
-  subtitleSearch: Boolean!
-
   """
   How many *other* users have this series in their library. 0 when the caller is the last owner.
   """
@@ -486,44 +480,6 @@ type EncodeCompletedResult {
   deleteDownloadPath: Boolean!
 }
 
-type MediaSearchResult {
-  id: Int!
-  title: String!
-  releaseDate: String
-  posterUrl: String
-  originalLanguage: String!
-  overview: String
-  type: String!
-  status: String
-  mediaId: Int
-  inLibrary: Boolean!
-  isShort: Boolean!
-}
-
-type MediaRef {
-  id: Int!
-  type: String!
-}
-
-type MediaCapabilities {
-  moviesEnabled: Boolean!
-  showsEnabled: Boolean!
-  shortsEnabled: Boolean!
-  catalogKeyConfigured: Boolean!
-
-  """
-  True while media_server_client is jellyfin (103 REQ-1). Never exposes the server type.
-  """
-  subtitleSearchAvailable: Boolean!
-}
-
-type FfprobeLog {
-  id: Int!
-  file: String!
-  ffprobe: String!
-  createdAt: DateTime!
-}
-
 type ExternalSubtitle {
   """
   The sidecar's base name (e.g. "Green Book (2018).spa.srt"); its identity, sent back unchanged in SubtitleEmbedInput.fileName.
@@ -585,6 +541,44 @@ type SubtitleEmbedDetails {
   """Absolute container path of the library .mkv to replace."""
   filePath: String!
   tracks: [SubtitleEmbedTrack!]!
+}
+
+type MediaSearchResult {
+  id: Int!
+  title: String!
+  releaseDate: String
+  posterUrl: String
+  originalLanguage: String!
+  overview: String
+  type: String!
+  status: String
+  mediaId: Int
+  inLibrary: Boolean!
+  isShort: Boolean!
+}
+
+type MediaRef {
+  id: Int!
+  type: String!
+}
+
+type MediaCapabilities {
+  moviesEnabled: Boolean!
+  showsEnabled: Boolean!
+  shortsEnabled: Boolean!
+  catalogKeyConfigured: Boolean!
+
+  """
+  True while media_server_client is jellyfin (103 REQ-1). Never exposes the server type.
+  """
+  subtitleSearchAvailable: Boolean!
+}
+
+type FfprobeLog {
+  id: Int!
+  file: String!
+  ffprobe: String!
+  createdAt: DateTime!
 }
 
 type SubtitleSearchLanguage {
@@ -771,6 +765,11 @@ type Query {
 
   """Datos que el worker necesita para encodear un ProcessJob"""
   processJob(id: Int!): EncodeJobDetails!
+
+  """
+  Service-only (worker). Container paths, same standing as EncodeJobDetails' outputRoot. Answers for any status.
+  """
+  subtitleEmbedDetails(id: Int!): SubtitleEmbedDetails!
   mediaCapabilities: MediaCapabilities!
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
   searchAllMedia(query: String!): [MediaSearchResult!]!
@@ -794,11 +793,6 @@ type Query {
   Titles in the caller's library released between from and to, inclusive (YYYY-MM-DD).
   """
   calendar(from: String!, to: String!): [CalendarEntry!]!
-
-  """
-  Service-only (worker). Container paths, same standing as EncodeJobDetails' outputRoot. Answers for any status.
-  """
-  subtitleEmbedDetails(id: Int!): SubtitleEmbedDetails!
 
   """
   Service-only (worker). Container paths, same standing as SubtitleEmbedDetails.
@@ -837,9 +831,6 @@ type Mutation {
   Marca si el audio en el idioma preferido es obligatorio para esta película
   """
   setMovieAudioMandatory(movieId: Int!, mandatory: Boolean!): Boolean!
-
-  """Sets whether subtitles are searched online for this film (103 REQ-3)."""
-  setMovieSubtitleSearch(movieId: Int!, enabled: Boolean!): Boolean!
 
   """Marca o desmarca una película como corto (048-shorts-category)"""
   setMovieShort(movieId: Int!, isShort: Boolean!): Movie!
@@ -902,11 +893,6 @@ type Mutation {
   Marca si el audio en el idioma preferido es obligatorio para esta serie
   """
   setShowAudioMandatory(showId: Int!, mandatory: Boolean!): Boolean!
-
-  """
-  Sets whether subtitles are searched online for this series (103 REQ-3).
-  """
-  setShowSubtitleSearch(showId: Int!, enabled: Boolean!): Boolean!
 
   """
   Reclasifica el estilo de animación de una serie (057-content-kind-classification)
@@ -991,18 +977,6 @@ type Mutation {
 
   """El worker pide borrar el torrent del cliente tras un encode exitoso"""
   downloadRemove(mediaSourceId: Int!, deleteFiles: Boolean = true): String!
-  addMedia(tmdbId: Int!, type: String!): MediaRef!
-
-  """The worker reports one raw ffprobe payload before an encode starts"""
-  recordFfprobe(file: String!, ffprobe: String!): FfprobeLog!
-
-  """Delete one recorded ffprobe payload by id"""
-  deleteFfprobeLog(id: Int!): Boolean!
-
-  """
-  Trigger a registered scheduled task immediately, regardless of its cadence
-  """
-  runScheduledTask(id: String!): ScheduledTask!
   embedMovieSubtitles(movieId: Int!, subtitles: [SubtitleEmbedInput!]!): SubtitleEmbed!
   embedEpisodeSubtitles(episodeId: Int!, subtitles: [SubtitleEmbedInput!]!): SubtitleEmbed!
 
@@ -1018,6 +992,26 @@ type Mutation {
 
   """Service-only (worker). Safe to receive more than once."""
   subtitleEmbedFailed(id: Int!, errorKey: String!): Boolean!
+  addMedia(tmdbId: Int!, type: String!): MediaRef!
+
+  """The worker reports one raw ffprobe payload before an encode starts"""
+  recordFfprobe(file: String!, ffprobe: String!): FfprobeLog!
+
+  """Delete one recorded ffprobe payload by id"""
+  deleteFfprobeLog(id: Int!): Boolean!
+
+  """
+  Trigger a registered scheduled task immediately, regardless of its cadence
+  """
+  runScheduledTask(id: String!): ScheduledTask!
+
+  """
+  Starts a 103 subtitle search for a film the caller owns that already holds a file (106).
+  """
+  searchMovieSubtitles(movieId: Int!): SubtitleSearch!
+
+  """Same, for an episode of a series the caller owns."""
+  searchEpisodeSubtitles(episodeId: Int!): SubtitleSearch!
 
   """
   Service-only (worker). Moves a queued validation to running; false if it is no longer queued.

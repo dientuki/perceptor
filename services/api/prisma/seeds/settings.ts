@@ -18,7 +18,6 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'torrent_client', value: 'qbittorrent' },
     { key: 'torrent_host', value: 'torrent' },
     { key: 'torrent_port', value: '8080' },
-    { key: 'torrent_api_key', value: '' },
 
     { key: 'tracker_client', value: 'prowlarr' },
     { key: 'tracker_host', value: 'indexer' },

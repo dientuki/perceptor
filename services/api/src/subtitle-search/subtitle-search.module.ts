@@ -6,6 +6,7 @@ import { MediaServerIndexModule } from '@/media-server-index/media-server-index.
 import { QueueModule } from '@/queue/queue.module';
 import { SettingsModule } from '@/settings/settings.module';
 import { SubtitleEmbedModule } from '@/subtitle-embed/subtitle-embed.module';
+import { SubtitleSearchRequestModule } from './subtitle-search-request.module';
 import { SubtitleSearchQueueModule } from './subtitle-search-queue.module';
 import { SubtitleSearchDriver } from './subtitle-search.driver';
 import { SubtitleSearchStaging } from './staging';
@@ -19,6 +20,7 @@ import {
 @Module({
   imports: [
     SubtitleSearchQueueModule,
+    SubtitleSearchRequestModule,
     SubtitleEmbedModule,
     MediaServerModule,
     MediaServerIndexModule,

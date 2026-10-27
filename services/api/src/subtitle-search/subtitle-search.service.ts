@@ -71,8 +71,11 @@ export class SubtitleSearchService {
         },
       },
     });
+    // Spec 106, REQ-7
     const filePath =
-      attempt?.search.movie?.filePath ?? attempt?.search.episode?.filePath;
+      attempt?.search.movie?.filePath ??
+      attempt?.search.episode?.filePath ??
+      attempt?.search.libraryPath;
     if (!attempt || !attempt.stagedPath || !filePath) {
       throw i18nError.notFound(ERROR_KEYS.SUBTITLE_SEARCH_SYNC_NOT_FOUND, {
         id,
