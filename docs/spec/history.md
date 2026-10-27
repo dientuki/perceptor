@@ -23,6 +23,32 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-26 — `106-manual-subtitle-search`
+
+`api`, `web`; one Prisma migration (`20261026130000_106_subtitle_search_library_path`, one nullable `ADD COLUMN`; `migrate status`: "Database schema is up to date!"). `worker` untouched. Contract delta: `searchMovieSubtitles(movieId)` and `searchEpisodeSubtitles(episodeId)` added to `Mutation`, plus two error keys (`error.subtitleSearch.in_progress`, `no_languages`); `schema.gql` also reordered some existing blocks on regeneration (Nest module ordering, no content change). Constitution Article XII amended to v1.7.0 first.
+
+- `api` typecheck: 0 errors. Tests (throwaway container on the compose network, so Redis is reachable): 82 suites, **1414 passed**. `bin/comments api` gate: PASS (1143 locators).
+- `web` typecheck: 7 errors, all in `Calendar.tsx` (`@fullcalendar/react`), predating this feature. `check-messages`: "en.json and es.json match exactly (715 keys)". `bin/comments web` gate: PASS (116 locators).
+- Article XII Check: `grep -rn "embedStaged\|requestFor" services/api/src --include=*.ts`, specs excluded, lists only `process-jobs/`, the driver, the request service, the resolver and the `embedStaged` definition.
+- Not done: the UI and the live pass were not exercised (no dev stack; the Jellyfin OpenSubtitles plugin and quota are needed): AC-1 to AC-8b stay with the maintainer, see `tasks.md` T010.
+
+## 2026-10-26 — `103-subtitle-search` (amendment 0.5.0 implemented; feature not closed)
+
+`api`, `web`; one Prisma migration (`20261026120000_drop_per_title_subtitle_search`, two `DROP COLUMN`, no backfill; `migrate status`: "Database schema is up to date!"). `worker` untouched. Contract delta: `Movie.subtitleSearch`, `Show.subtitleSearch`, `setMovieSubtitleSearch` and `setShowSubtitleSearch` removed (`schema.gql`: 14 lines deleted, nothing else). The user preference is now the only switch.
+
+- `api` typecheck: 0 errors. Tests (`bin/npm api test`): 82 suites, **1396 passed**. `bin/comments api`: PASS.
+- `web` typecheck: 7 errors, all in `Calendar.tsx` (`@fullcalendar/react`), predating this feature. `check-messages`: "en.json and es.json match exactly (706 keys)". `bin/comments web`: PASS (111 locators). No per-title `subtitleSearch` reference remains in `services/web/src` (`grep`).
+- Not done: the UI was not exercised (the dev stack could not start, another install holds ports 80/3000/4000); the manual pass for AC-1, AC-1b, AC-2 and AC-8 is T035.
+- Behaviour change to expect: a user with the preference on now gets a search on every later delivery, which spends provider quota.
+
+## 2026-10-25 — `104-torrent-api-key-auth`
+
+`infra`, `api`, `web`; no Prisma migration (a seed entry deleted), `worker` untouched. Contract delta: one new error key (`error.download.torrent_client_unauthorized`), no type or operation change; `git diff src/schema.gql` is empty.
+
+- `api` typecheck: 0 errors. Tests (`npm test` in a throwaway container with a throwaway Redis, since no dev stack was up): 82 suites, **1401 passed**. Run without Redis, `auth/session.service` and `uploads/upload-tickets.service` fail with `MaxRetriesPerRequestError`; with it they pass. Six assertions in the `episodes`/`seasons`/`movies` specs expected the raw `TorrentClientError` and were updated to the keyed error `104` now raises. `bin/comments api` gate: PASS (1136 locators).
+- `web` typecheck: 7 errors, all in `Calendar.tsx` (`@fullcalendar/react`), predating this feature. `scripts/check-messages.mjs`: "en.json and es.json match exactly (709 keys)". `worker`: unchanged, not re-run.
+- Live pass on the dev stack (`bin/dev -d` after rebuilding `torrent`, `indexer`, `api`): `torrent.<DOMAIN>/api/v2/app/version` and `localhost:8080/...` both `403`, `200` with the bearer, `AuthSubnetWhitelistEnabled=false` in the conf, `api`'s environment key accepted by `torrent` (`200`; none or another key `403`), zero occurrences of the key in `torrent`/`api`/`indexer` logs. AC-10 under compose: with `INDEXER_API_KEY=` the `indexer` restarts (exit 1), its log names the variable, `config.xml`'s `<ApiKey>` hash is unchanged, and recreating with the real `.env` brings `/ping` back to `200`. AC-7 verified in throwaway containers (empty key and a hex key both exit non-zero, naming `TORRENT_API_KEY`, key absent from the log). AC-1 to AC-6, AC-8 and AC-9 stay open: see `docs/spec/pending-acs.md`.
+
 ## 2026-10-25 — `103-subtitle-search` (amendment 0.4.0 implemented; feature not closed)
 
 `api`, `worker`, `web`, `infra`; one Prisma migration (`20261024192157_add_subtitle_search`, `migrate status`: "Database schema is up to date!"). Contract delta: `subtitleSyncCompleted` gained `mediaDurationMs: Int!` and `lastChapterStartMs: Int` in 0.4.0; the `schema.gql` diff is exactly those two arguments.

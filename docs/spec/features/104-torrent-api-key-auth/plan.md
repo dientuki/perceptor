@@ -2,7 +2,7 @@
 title: qBittorrent Authenticated by API Key, Not by Subnet — Implementation Plan
 spec_version: 0.3.0
 last_updated: 2026-10-25
-status: Approved
+status: Implemented
 ---
 
 # PLAN: qBittorrent Authenticated by API Key, Not by Subnet (`plan.md`)

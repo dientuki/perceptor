@@ -826,6 +826,7 @@ The full vocabulary, by owner:
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
 | `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash` |
 | `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.source.superseded` (`087-force-replacement-arbitration`), `error.processJob.not_found` |
+| `api` — downloads (torrent client) | `error.download.torrent_client_rejected` (`{status}`, `0` when unreachable), `error.download.torrent_client_unauthorized` (no params; `401`/`403` from qBittorrent — `104-torrent-api-key-auth`) |
 | `api` — ffprobe-logs | `error.ffprobeLog.not_found`, `error.ffprobeLog.empty_payload` |
 | `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
 | `api` — uploads (REST) | `error.upload.ticket_expired`, `error.upload.ticket_wrong_movie`, `error.upload.ticket_wrong_episode`, `error.upload.metadata_incomplete` |
@@ -1881,12 +1882,37 @@ No new error key — every refusal from `addTorrentToSeason` (and, now that it h
 `addMagnetToSeason`) surfaces through keys that already existed: `error.season.not_found` (`{ id }`,
 newly translated in `web`), `error.season.already_completed`, `error.magnet.already_attached`
 (`{ title }`), `error.magnet.not_a_magnet` / `invalid_infohash` / `v2_unsupported`,
-`error.download.torrent_client_rejected`, and `addTorrentToSeason`-only `error.indexer.no_infohash`.
+`error.download.torrent_client_rejected` (true only since `104`: before it, the client's error escaped
+these mutations unkeyed), and `addTorrentToSeason`-only `error.indexer.no_infohash`.
 
 Consumer obligations: `web` sends `infoHash` as `string | null` with no `?? ''` coercion, exactly
 like the episode twin; on `error.season.already_completed` it switches to the replace flow and
 resends with `force: true`, the same pattern `error.episode.already_completed` already has. `worker`
 has no obligation — it calls neither mutation and reads no episode status.
+
+### qBittorrent is called with an API key, and a rejected one has its own error (`104-torrent-api-key-auth`)
+
+No type, field, argument or operation changes. `api` now sends `Authorization: Bearer
+<TORRENT_API_KEY>` on every qBittorrent request instead of relying on a subnet whitelist, and one
+error key is new:
+
+| Condition | Error | `extensions.i18n` |
+| :-- | :-- | :-- |
+| qBittorrent answered `401`/`403` to `api`'s credential | `ServiceUnavailableException` | `error.download.torrent_client_unauthorized`, no params |
+| Any other qBittorrent failure, or unreachable | `ServiceUnavailableException` | `error.download.torrent_client_rejected` `{ status }` (`0` when unreachable) |
+
+Both apply to `downloadStart`, `downloadStop`, `downloadDelete` and the per-job controls that reach
+the torrent client, **and** to `addTorrentToMovie`, `addTorrentToEpisode`, `addTorrentToSeason`,
+`addMagnetToMovie`, `addMagnetToEpisode` and `addMagnetToSeason`. Those six used to let the client's
+error escape with no key; they now raise the keyed pair above, and a rejected `add()` creates no
+`MediaSource`. Live-status reads (`downloads`, `movieDownloads`, `showDownloads`,
+`MediaSource.downloadedFiles`) still degrade silently to empty/`null`, but `api`'s log names the
+rejected credential. The message names `TORRENT_API_KEY`, never its value; the key is read from
+`api`'s environment, never exposed by `settings` or `environmentInfo`.
+
+Consumer obligations: `web` adds `errors.download.torrent_client_unauthorized` to both catalogs and
+renders it wherever it renders `torrent_client_rejected`; no retry, since the condition clears only
+when an administrator fixes `.env`. `worker` has no obligation — it never talks to qBittorrent.
 
 ### The release calendar is one read-only query over calendar days (`062-release-calendar`)
 
@@ -2550,8 +2576,7 @@ Cancelling a queued or running embed is out of scope, so there is no cancel chan
 ```graphql
 type MediaCapabilities { subtitleSearchAvailable: Boolean! }        # media_server_client === jellyfin
 type UserPreferences { subtitleSearch: Boolean! }
-type Movie { subtitleSearch: Boolean!, latestSubtitleSearch: SubtitleSearch }
-type Show { subtitleSearch: Boolean! }
+type Movie { latestSubtitleSearch: SubtitleSearch }
 type Episode { latestSubtitleSearch: SubtitleSearch }
 type SubtitleSearch { id: Int!, status: SubtitleSearchStatus!, errorKey: String,
                       languages: [SubtitleSearchLanguage!]!, createdAt: DateTime!, finishedAt: DateTime }
@@ -2563,8 +2588,6 @@ type SubtitleSyncDetails { id: Int!, filePath: String!, candidatePath: String! }
 type SubtitleEmbedTrack { isSidecar: Boolean! }                      # 101 delta
 type Mutation {
   setSubtitleSearch(enabled: Boolean!): UserPreferences!
-  setMovieSubtitleSearch(movieId: Int!, enabled: Boolean!): Boolean!
-  setShowSubtitleSearch(showId: Int!, enabled: Boolean!): Boolean!
   subtitleSyncStarted(id: Int!): Boolean!                              # service only
   subtitleSyncCompleted(id: Int!, offsetMs: Int!, framerateRatio: Float!,
                         reference: SubtitleSyncReference!, score: Float!,
@@ -2579,8 +2602,8 @@ type Query { subtitleSyncDetails(id: Int!): SubtitleSyncDetails! }     # service
   a qualifying last chapter or else 60 % of the duration (`0.4.0`), score at or above the per-reference
   threshold) and stores the reason key. `offsetMs` follows `101`'s convention: the correction that
   undoes the delay, so a subtitle delayed by 2 s measures about -2000.
-- The three setters refuse only on the capability (`error.subtitleSearch.unsupported_media_server`),
-  even for `false`. `subtitleSearch` on `Movie`/`Show` is the caller's own row, `false` if none.
+- `setSubtitleSearch` refuses only on the capability (`error.subtitleSearch.unsupported_media_server`),
+  even for `false`. There is no per-title flag (`0.5.0`): the preference is the only switch.
 - `latestSubtitleSearch.languages` is derived from the attempt rows, never stored: `NOT_FOUND` has no
   row of its own.
 - Candidate subtitles are staged under `<downloads root>/.perceptor/subtitle-search/` and `filePath`
@@ -2594,6 +2617,29 @@ type Query { subtitleSyncDetails(id: Int!): SubtitleSyncDetails! }     # service
 `{ subtitleSyncId: number }`, declared in `services/api/src/queue/types.ts` and copied by hand into
 `services/worker/src/queue/types.ts`. A second queue, `subtitle-search`, is `api`-internal (produced and
 consumed by `api`, idempotent wake-ups `{ searchId }`) and is not part of the boundary.
+
+### Searching subtitles by hand (`106-manual-subtitle-search`)
+
+```graphql
+type Mutation {
+  searchMovieSubtitles(movieId: Int!): SubtitleSearch!
+  searchEpisodeSubtitles(episodeId: Int!): SubtitleSearch!
+}
+```
+
+- Both are user-authenticated, never `@AllowService`, and return the new `WAITING` search. There is
+  no season, series or library trigger.
+- Refusals, in this order: `error.subtitleSearch.unsupported_media_server`, `error.movie.not_found` /
+  `error.episode.not_found` (the caller must own the title), `error.subtitleEmbed.no_file`,
+  `error.subtitleEmbed.not_mkv` or `outside_library`, `error.subtitleEmbed.busy`,
+  `error.subtitleSearch.in_progress`, `error.subtitleSearch.no_languages`. The first five reuse `101`'s
+  keys and checks; `in_progress` (Conflict) and `no_languages` (BadRequest) are new.
+- A press never supersedes a running search: it refuses with `in_progress`. A delivery still supersedes.
+- A press wants the caller's own subtitle languages whatever their `subtitleSearch` preference, plus the
+  opted-in owners'. The press is the consent.
+- A search's `errorKey` may now be `error.subtitleEmbed.not_mkv` or `error.subtitleEmbed.outside_library`
+  (a title with no `filePath` is checked when the search leaves `WAITING`).
+- `SubtitleSearch.libraryPath` is `api`-internal and is not exposed.
 
 ## Known debt
 

@@ -1,7 +1,7 @@
 ---
 title: qBittorrent Authenticated by API Key, Not by Subnet — Tasks
 last_updated: 2026-10-25
-status: Draft
+status: Done
 ---
 
 # TASKS: qBittorrent Authenticated by API Key, Not by Subnet (`tasks.md`)
@@ -30,7 +30,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
 
 ### Group 1 — `infra`: the key exists and qBittorrent requires it
 
-- [ ] **T001** `[infra] [P]` Per `infra/plan.md` steps 1–2:
+- [x] **T001** `[infra] [P]` Per `infra/plan.md` steps 1–2:
       - drop the whitelist expression and its comment wording from `services/torrent/Dockerfile`;
       - add `services/torrent/custom-cont-init.d/30-qbittorrent-apikey`, which in order does:
         1. turns the whitelist off and deletes the `AuthSubnetWhitelist=` line, unconditionally;
@@ -49,7 +49,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
         `Password_PBKDF2` line unchanged;
       - an empty key and a hex key each exit non-zero, the log names `TORRENT_API_KEY`, the key
         value appears nowhere in the log, and the conf already reads `false`.
-- [ ] **T002** `[infra] [P]` Per step 6: in `services/indexer/custom-cont-init.d/10-prowlarr-apikey`,
+- [x] **T002** `[infra] [P]` Per step 6: in `services/indexer/custom-cont-init.d/10-prowlarr-apikey`,
       put the s6 exitcode and halt pair before each of the two existing `exit 1` lines, and nowhere
       else.
       *Done when:*
@@ -58,7 +58,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
         variable, and a pre-seeded scratch `config.xml` keeps its `<ApiKey>`;
       - with a valid key, on both a fresh and a pre-seeded `/config`, it stays up and `/ping`
         answers `200`.
-- [ ] **T003** `[infra]` Per steps 3–5:
+- [x] **T003** `[infra]` Per steps 3–5:
       - add `TORRENT_API_KEY=${TORRENT_API_KEY}` (no default) to `torrent` and `api` in
         `docker-compose.yaml`;
       - add `TORRENT_API_KEY=` with an English comment to `.env.example`;
@@ -77,7 +77,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
 
 ### Group 2 — `api`: send the key, name the rejection
 
-- [ ] **T004** `[api] [P]` Per `api/plan.md` steps 1–3:
+- [x] **T004** `[api] [P]` Per `api/plan.md` steps 1–3:
       - add `TORRENT_CLIENT_UNAUTHORIZED` to `src/i18n/error-keys.ts` and its English text (verbatim
         from the spec) to `src/i18n/messages.en.ts`;
       - add `src/downloads/torrent-client-failure.ts` with `torrentClientFailure` and
@@ -90,7 +90,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
       - `bin/npm api test -- torrent-client-failure messages.en` is green;
       - removing the `401` arm, or swapping the two keys, makes the new suite fail (fault injection,
         reverted after).
-- [ ] **T005** `[api]` Per steps 4 and 7:
+- [x] **T005** `[api]` Per steps 4 and 7:
       - add `src/clients/torrent/auth.ts`;
       - pass `headers: torrentAuthHeaders()` on all seven `fetch` calls of `QbittorrentClient`;
       - send the same headers from `setQbittorrentLogin`, mapping `401`/`403` to reason
@@ -105,7 +105,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
       - `bin/npm api test -- client shared-login` is green;
       - dropping the header from `setSavePath` alone makes the parametrized case fail (fault
         injection, reverted after).
-- [ ] **T006** `[api]` Per steps 5–6:
+- [x] **T006** `[api]` Per steps 5–6:
       - wrap `AttachSourceService.attach`'s reactivation `info()`/`start()` and its `add()` so a
         failure throws `torrentClientFailure(err)`;
       - log `describeTorrentClientFailure(err)` from `liveInfoByHash`, `liveInfoForHash` and
@@ -119,7 +119,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
       *Done when:*
       - `bin/npm api test -- attach-source downloads media-sources` is green;
       - moving the wrap out of `add()` makes the new case fail (fault injection, reverted after).
-- [ ] **T007** `[api]` Per step 8: delete the `torrent_api_key` entry from `prisma/seeds/settings.ts`.
+- [x] **T007** `[api]` Per step 8: delete the `torrent_api_key` entry from `prisma/seeds/settings.ts`.
       Then run the slice's full gate. → T005, T006
       *Done when:*
       - `grep -rn torrent_api_key services/api/src services/api/prisma/seeds` prints nothing;
@@ -130,7 +130,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
 
 ### Group 3 — `web`: the copy
 
-- [ ] **T008** `[web] [P]` Per `web/plan.md`: add `error.download.torrent_client_unauthorized` to
+- [x] **T008** `[web] [P]` Per `web/plan.md`: add `error.download.torrent_client_unauthorized` to
       `services/web/messages/en.json` and `es.json`, text verbatim from the spec, beside
       `torrent_client_rejected`.
       *Done when:*
@@ -140,7 +140,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
 
 ### Group 4 — docs and verification
 
-- [ ] **T009** `[docs]` `docs/spec/graphql-contract.md`:
+- [x] **T009** `[docs]` `docs/spec/graphql-contract.md`:
       - add a `104` section with the new key, its HTTP class, no params, and the six acquisition
         mutations now keyed;
       - correct the `059` paragraph so it is true;
@@ -150,7 +150,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
 
       *Done when:* `grep -n torrent_client_unauthorized docs/spec/graphql-contract.md` hits the new
       section and the vocabulary.
-- [ ] **T010** `[docs]` Update the docs:
+- [x] **T010** `[docs]` Update the docs:
       - root `CLAUDE.md`: § Environment gets a `TORRENT_API_KEY` bullet (declared, applied by
         `30-qbittorrent-apikey`, read by `api` from the environment, never a Setting). The
         **Download** row gets a `104` note (`api` authenticates by API key; no subnet bypass). Note
@@ -164,7 +164,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
 
       *Done when:* each of the three files names `TORRENT_API_KEY`, and the README's update section
       says to re-run `install.sh` for this version.
-- [ ] **T011** `[docs]` Manual pass on a live stack, per `plan.md` § Verification. Rebuild
+- [~] **T011** `[docs]` Manual pass on a live stack, per `plan.md` § Verification. Rebuild
       `torrent`, `indexer` and `api` together. Walk AC-1 to AC-10:
       - AC-1, AC-5 and AC-6 against an `install.sh` directory, both fresh and pre-`104`;
       - the rest on the dev stack.
@@ -175,7 +175,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
       → T001, T002, T003, T007, T008
 
       *Done when:* every AC in `spec.md` is `[x]`, or `[~]` with a row below naming what it needs.
-- [ ] **T012** `[docs]` Append a `104` entry to `docs/spec/history.md` (typecheck/test counts,
+- [x] **T012** `[docs]` Append a `104` entry to `docs/spec/history.md` (typecheck/test counts,
       migrations, contract diff). Run `/pending-acs`. Set `status: Implemented` on `spec.md`,
       `plan.md` and the three `<svc>/plan.md`, and `status: Done` here. → T009, T010, T011
       *Done when:*
@@ -187,3 +187,7 @@ The contract (`spec.md` § GraphQL Contract Delta) is frozen and produced by not
 
 | Task | Service | What blocked it | Needs |
 | :-- | :-- | :-- | :-- |
+| T011 (AC-1, AC-2) | docs | Observed on the dev stack with Traefik (`403` on both `torrent.<DOMAIN>/api/v2/app/version` and `localhost:8080`, `200` with the bearer, qBittorrent's login page served, conf `AuthSubnetWhitelistEnabled=false`), not on a fresh `install.sh` directory | One fresh `install.sh` run; repeat the two `curl`s |
+| T011 (AC-3, AC-4, AC-8) | docs | They need an authenticated app session and a completed download: the admin password is not in `.env`, and `reset-password` would overwrite the dev stack's logins. `api`'s environment key was checked against `torrent` live (`200` with it, `403` with none or another key) | A signed-in session: add a release and watch `/downloads`; run `reset-password`; restart `api` with another key and press Stop |
+| T011 (AC-5, AC-6) | docs | They need an install directory created before `104` holding a torrent (`ptor`, which this run must not touch) | Run the upgrade on `ptor`: pull-only (`torrent` restarts, names `TORRENT_API_KEY`), then re-run `install.sh` |
+| T011 (AC-9) | docs | `docker compose logs torrent api indexer` holds `0` occurrences of the key (checked live); the Settings screen and the `settings`/`environmentInfo` queries were not read, for lack of a session | A signed-in read of both queries |
