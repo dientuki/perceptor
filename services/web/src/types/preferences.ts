@@ -26,3 +26,26 @@ export type UserPreferences = {
   movieTorrentGroups: TorrentGroup[];
   showTorrentGroups: TorrentGroup[];
 };
+
+export type TmdbList = {
+  id: number;
+  tmdbListId: number;
+  name: string;
+  itemCount: number | null;
+  lastImportedAt: string | null;
+  lastError: string | null;
+};
+
+export type TmdbListTitle = {
+  id: string;
+  title: string;
+  overview: string | null;
+  posterUrl: string | null;
+  releaseDate: string | null;
+  status: string;
+};
+
+export type TmdbListDetail = TmdbList & {
+  movies: (TmdbListTitle & { isShort: boolean })[];
+  shows: TmdbListTitle[];
+};

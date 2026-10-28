@@ -57,6 +57,11 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.MEDIA_SEARCH_UNAVAILABLE]: 'Search is disabled on this system',
   [ERROR_KEYS.MEDIA_SHORTS_DISABLED]: 'Shorts are disabled on this system',
   [ERROR_KEYS.MEDIA_REFRESH_IN_PROGRESS]: 'This title is already being refreshed, try again in a moment',
+  [ERROR_KEYS.TMDB_LIST_INVALID_REFERENCE]: 'Not a TMDB list ID or link.',
+  [ERROR_KEYS.TMDB_LIST_UNREADABLE]:
+    'TMDB could not find the list, or it is not public.',
+  [ERROR_KEYS.TMDB_LIST_ALREADY_ATTACHED]: 'This list is already attached.',
+  [ERROR_KEYS.TMDB_LIST_NOT_FOUND]: 'The list does not exist.',
 
   // magnet parsing
   [ERROR_KEYS.MAGNET_NOT_A_MAGNET]: 'That does not look like a magnet link',

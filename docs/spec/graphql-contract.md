@@ -2793,6 +2793,88 @@ is a no-op (REQ-3), and `attempts: 1`.
 `web` reads two new nullable fields per type. They are prefixed `file` because `Movie.audioLanguages`/`subtitleLanguages` already exist (`039`: the caller's per-title preferred languages, `[Language!]!`) and mean something else; `Show` is not extended. `web` handles no new error. The worker abandons silently on every
 `libraryProbeDetails` error above.
 
+### Importing public TMDB lists (`109-tmdb-list-import`)
+
+```graphql
+type TmdbList {
+  id: Int!
+  tmdbListId: Int!
+  name: String!
+  lastImportedAt: DateTime
+  lastError: String
+  """Items TMDB reported for the list at its last successful read; null until then (109 0.2.0)."""
+  itemCount: Int
+  """Films of this list the caller owns today (seen by the list), ordered by title."""
+  movies: [Movie!]!
+  """Series of this list the caller owns today (seen by the list), ordered by title."""
+  shows: [Show!]!
+}
+
+extend type MediaCapabilities {
+  """True while the import_lists scheduled task is enabled (109 REQ-12). Never exposes its cadence."""
+  listImportEnabled: Boolean!
+}
+
+extend type Query {
+  tmdbLists: [TmdbList!]!
+  """One of the caller's lists; null for an id that is not theirs (109 0.2.0)."""
+  tmdbList(id: Int!): TmdbList
+}
+
+extend type Mutation {
+  addTmdbList(reference: String!): TmdbList!
+  removeTmdbList(id: Int!): Boolean!
+}
+```
+
+`TmdbList.lastError` is an i18n key (one of `error.tmdbList.unreadable`,
+`error.media.catalog_unauthorized`, `error.media.catalog_unavailable`), never English prose; `web`
+translates it through its message catalog. `lastImportedAt` is null until the first successful run.
+`tmdbLists` returns the caller's lists ordered by attach time, oldest first. All three operations
+require a user principal; the service principal is refused with the existing authorization error.
+The task appears in the admin-only scheduled-task query as one more row, id `import_lists`.
+Since 0.2.0, `tmdbList(id)` answers `null` both for a missing id and for another user's list (the
+`movie(id)` posture), and `movies`/`shows` are field resolvers run only when selected: `web`'s
+`/lists` listing does not select them, `/lists/<id>` does. `Movie.isShort` tells a short apart.
+
+
+Since 0.3.0 each user also chooses, per title, whether the daily sweeps may acquire it for them:
+
+```graphql
+extend type Movie {
+  """Whether the caller lets acquire_movies pick this film; false when the caller has no row (109 0.3.0)."""
+  autoAcquire: Boolean!
+}
+
+extend type Show {
+  """Whether the caller lets acquire_episodes pick this series' episodes (109 0.3.0)."""
+  autoAcquire: Boolean!
+}
+
+extend type Mutation {
+  setMovieAutoAcquire(movieId: Int!, autoAcquire: Boolean!): Boolean!
+  setShowAutoAcquire(showId: Int!, autoAcquire: Boolean!): Boolean!
+}
+```
+
+Both setters require a user principal and refuse a title the caller does not own with
+`error.movie.not_found` / `error.show.not_available`, changing nothing. The sweeps count only
+owners whose switch is on; manual search is unaffected.
+
+| Condition | HTTP / GraphQL error | Message the user sees |
+| :-- | :-- | :-- |
+| `reference` is neither a positive integer nor a `themoviedb.org` `/list/<id>` URL | `BadRequestException` `error.tmdbList.invalid_reference` | `No es un ID ni un enlace de lista de TMDB.` |
+| TMDB says the list does not exist or is private (404, or a 401 whose body is not `status_code` 7) | `BadRequestException` `error.tmdbList.unreadable` | `TMDB no encontró la lista, o no es pública.` |
+| The caller already has that TMDB list attached | `ConflictException` `error.tmdbList.already_attached` | `Ya tenés esta lista vinculada.` |
+| Catalog key empty, or TMDB rejects it (401, `status_code` 7) | `BadRequestException` `error.media.catalog_unauthorized` (reused from `071`) | its existing message |
+| Any other TMDB failure (network, 5xx, 429) | `ServiceUnavailableException` `error.media.catalog_unavailable` (reused) | its existing message |
+| `removeTmdbList` with an id that is not one of the caller's lists | `NotFoundException` `error.tmdbList.not_found` | `La lista no existe.` |
+
+What `web` does with each: on attach, every key above is shown inline under the input and the input
+keeps its value; on detach, `not_found` refreshes the list (it was already gone) and the message is
+shown on the section (there is no toast mechanism); `lastError` on a row is translated and shown on
+that row, which stays usable.
+
 ## Known debt
 
 - **No codegen.** The whole "gap" section above exists because of this. Fixing it means adding

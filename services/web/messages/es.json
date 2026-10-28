@@ -209,6 +209,12 @@
       "quota_exhausted": "Se agotaron las descargas diarias de OpenSubtitles.",
       "probe_failed": "No se pudo leer el archivo para ver qué subtítulos tiene.",
       "probe_not_found": "No se encontró la búsqueda de subtítulos."
+    },
+    "tmdbList": {
+      "invalid_reference": "No es un ID ni un enlace de lista de TMDB.",
+      "unreadable": "TMDB no encontró la lista, o no es pública.",
+      "already_attached": "Ya tenés esta lista vinculada.",
+      "not_found": "La lista no existe."
     }
   },
   "landing": {
@@ -227,6 +233,7 @@
     "movies": "Mis películas",
     "shorts": "Mis cortos",
     "shows": "Mis series",
+    "lists": "Mis listas",
     "calendar": "Calendario",
     "downloads": "Descargas",
     "downloadsBadge": "{count} descargas activas",
@@ -288,6 +295,13 @@
       "metadataTitle": "Cortos | Perceptor",
       "metadataDescription": "Listado de cortos seguidos"
     },
+    "lists": {
+      "title": "Mis listas",
+      "metadataTitle": "Listas | Perceptor",
+      "metadataDescription": "Listas de TMDB vinculadas a tu biblioteca",
+      "detailMetadataDescription": "Títulos de una lista de TMDB vinculada",
+      "empty": "Ningún título de esta lista está todavía en tu biblioteca."
+    },
     "showsAdd": {
       "title": "Agregar serie",
       "metadataTitle": "Agregar serie | Perceptor",
@@ -341,7 +355,8 @@
     "metadataTitle": "Recurso no disponible | Perceptor",
     "message": "Recurso no disponible para este usuario",
     "backToMovies": "Volver a películas",
-    "backToShows": "Volver a series"
+    "backToShows": "Volver a series",
+    "backToLists": "Volver a las listas"
   },
   "import": {
     "replace": {
@@ -447,11 +462,17 @@
     "unavailable": "Las películas y las series están deshabilitadas en este sistema."
   },
   "media": {
+    "autoAcquire": {
+      "label": "Descargar automáticamente",
+      "hint": "La búsqueda manual sigue funcionando igual."
+    },
     "card": {
       "noPoster": "Sin Poster",
       "typeMovie": "PELÍCULA",
       "typeShow": "SERIE",
-      "typeShort": "CORTO"
+      "typeShort": "CORTO",
+      "completed": "Ya lo tenés",
+      "notCompleted": "Todavía no lo tenés"
     },
     "list": {
       "emptyDefault": "No hay {noun} registradas",
@@ -750,6 +771,10 @@
         "acquire_episodes": {
           "label": "Bajar episodios nuevos",
           "description": "Busca y descarga un release para los episodios recién estrenados."
+        },
+        "import_lists": {
+          "label": "Importar listas",
+          "description": "Lee las listas públicas de TMDB que cada usuario adjuntó y agrega los títulos nuevos a su biblioteca. Nunca descarga nada por sí sola."
         }
       }
     },
@@ -858,6 +883,31 @@
       "chosenLabel": "Grupos elegidos",
       "emptyChosen": "No elegiste ningún grupo.",
       "removeGroup": "Quitar {name}"
+    }
+  },
+  "lists": {
+    "section": {
+      "description": "Vinculá listas públicas de TMDB. Sus títulos se agregan a tu biblioteca; la lista en sí no descarga nada.",
+      "itemCount": "{count, plural, one {# título} other {# títulos}}",
+      "itemCountUnknown": "Cantidad desconocida",
+      "openOnTmdb": "Abrir en TMDB",
+      "inputLabel": "ID o enlace de la lista",
+      "placeholder": "Ej.: 8300000 o https://www.themoviedb.org/list/8300000",
+      "attach": "Vincular",
+      "attaching": "Vinculando...",
+      "lastImport": "Última importación: {date}",
+      "neverImported": "Todavía no se importó",
+      "detach": "Desvincular",
+      "disabledNotice": "La importación de listas está desactivada por el administrador; tus listas se guardan pero todavía no se importan.",
+      "empty": "No tenés listas vinculadas.",
+      "removeError": "No se pudo desvincular la lista."
+    },
+    "remove": {
+      "title": "Desvincular lista",
+      "message": "<b>{name}</b> se desvincula. Los títulos que ya se importaron de ella quedan en tu biblioteca.",
+      "confirm": "Desvincular",
+      "cancel": "Cancelar",
+      "removing": "Desvinculando..."
     }
   },
   "status": {

@@ -5,6 +5,7 @@ import {
   Clapperboard,
   CloudDownload,
   Film,
+  ListVideo,
   Popcorn,
   Rocket,
   Settings,
@@ -79,6 +80,11 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
           },
         ]
       : []),
+    {
+      icon: <ListVideo />,
+      name: t("lists"),
+      path: "/lists",
+    },
     {
       icon: <Calendar />,
       name: t("calendar"),

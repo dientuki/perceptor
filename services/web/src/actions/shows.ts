@@ -54,6 +54,8 @@ export interface Show {
   originalLanguage: string;
   contentKind: ContentKind;
   grainMode: GrainMode;
+  // Spec 109, REQ-15
+  autoAcquire?: boolean;
   status: string;
   seasonsSyncedAt?: string;
   // Only present when fetched via getShowById — getShows() doesn't request it
@@ -113,6 +115,7 @@ const GET_SHOW_QUERY = `
       originalLanguage
       contentKind
       grainMode
+      autoAcquire
       status
       seasonsSyncedAt
       audioLanguages {
@@ -560,4 +563,36 @@ export async function searchEpisodeSubtitlesAction(
   }
 
   return { search: data.searchEpisodeSubtitles };
+}
+
+const SET_SHOW_AUTO_ACQUIRE_MUTATION = `
+  mutation SetShowAutoAcquire($showId: Int!, $autoAcquire: Boolean!) {
+    setShowAutoAcquire(showId: $showId, autoAcquire: $autoAcquire)
+  }
+`;
+
+// Spec 109, REQ-15
+export async function setShowAutoAcquireAction(
+  showId: string,
+  autoAcquire: boolean,
+): Promise<{ error: string; errorKey?: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_SHOW_AUTO_ACQUIRE_MUTATION, {
+      showId: Number(showId),
+      autoAcquire,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  return { success: true };
 }

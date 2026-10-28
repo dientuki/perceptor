@@ -85,6 +85,13 @@ export class ShowsResolver {
     return this.showsService.findAudioMandatoryFor(userId, show.id);
   }
 
+  // Spec 109, REQ-15
+  @ResolveField(() => Boolean)
+  async autoAcquire(@Parent() show: Show, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.showsService.findAutoAcquireFor(userId, show.id);
+  }
+
   // Replaces the authenticated user's per-title preference for one series,
   // for one kind — refused, unchanged, on a series the caller does not own
   // (see ShowsService.findOneFromDb and 009-show-detail's frozen error
@@ -127,6 +134,22 @@ export class ShowsResolver {
     const show = await this.showsService.findOneFromDb(showId, userId);
     if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
     return this.showsService.setAudioMandatoryFor(userId, showId, mandatory);
+  }
+
+  // Spec 109, REQ-15
+  @Mutation(() => Boolean, {
+    name: 'setShowAutoAcquire',
+    description: 'Marca si las búsquedas automáticas pueden adquirir esta serie para el usuario',
+  })
+  async setShowAutoAcquire(
+    @Args('showId', { type: () => Int }) showId: number,
+    @Args('autoAcquire', { type: () => Boolean }) autoAcquire: boolean,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    const show = await this.showsService.findOneFromDb(showId, userId);
+    if (!show) throw i18nError.notFound(ERROR_KEYS.SHOW_NOT_AVAILABLE);
+    return this.showsService.setAutoAcquireFor(userId, showId, autoAcquire);
   }
 
   @Mutation(() => Show, {

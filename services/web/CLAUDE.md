@@ -358,6 +358,32 @@ Enforcement itself is `api`-only and system-wide (no admin bypass); this slice i
 routing only, with the three `errors.media.*`/`errors.schedule.*` catalog keys as its backstop for
 the race where an administrator flips a switch between render and submit.
 
+## TMDB lists (`/lists`, `109-tmdb-list-import`)
+
+The sidebar's "Mis listas" entry (`ListVideo`, in `baseNavItems`, every user, never capability-gated)
+leads to `/lists`: `components/lists/TmdbListsSection.tsx` attaches by id or list URL and shows one
+row per list — the name linking to `/lists/<id>`, TMDB's `itemCount` (`—` while `null`), an "Open on
+TMDB" link, the last import through `formatDateTime` behind a `mounted` guard (server and browser
+format local time in different zones, which is a hydration mismatch otherwise), the translated
+`lastError`, and Unlink behind `RemoveTmdbListModal`. A notice shows while
+`mediaCapabilities.listImportEnabled` is false. There is no toast, so a detach
+`error.tmdbList.not_found` refreshes and shows the message inline; `removeTmdbListAction` returns
+`errorKey` for that check. The listing query never selects `movies`/`shows` (field resolvers).
+`/lists/[id]` copies `/movies/[id]`'s param validation, fixed metadata and segment `not-found.tsx`;
+`components/lists/ListTitles.tsx` merges `TmdbList.movies` and `shows`, sorts by title and renders
+`MediaCard` per item with **its own** `mediaType` (the card's link reads the prop, so one prop for a
+mixed grid would send series to `/movies/<id>`), the type badge, the short badge and `showPossession` — a green check over the poster when
+the title's own `status` is `COMPLETED` (the file is there), a red cross otherwise, the one signal on
+a page where every title is already in the library. The four overlay chips (type, short, check,
+cross) share one look: a 75%-opacity background with `backdrop-blur-[2px]`, the text kept opaque. `/preferences` carries nothing of this.
+
+Since 0.3.0 the film and series detail pages render `components/media/AutoAcquireSwitch.tsx` under the
+poster — only while the title's `status` is not `COMPLETED` — bound to the caller's own
+`Movie.autoAcquire`/`Show.autoAcquire` (selected in the detail queries only; they are field
+resolvers). It copies the short switch: `Switch` owns its state, so a refused toggle reverts by
+remounting with a new `key` and shows the translated error inline. `setMovieAutoAcquireAction` and
+`setShowAutoAcquireAction` return `{ success: true } | { error, errorKey? }`.
+
 ## Library file languages (`108-library-track-languages`)
 
 `components/media/FileTrackLanguages.tsx` renders `Movie`/`Episode.fileAudioLanguages` and `fileSubtitleLanguages` (nullable `[String!]`; the `file` prefix keeps them apart from `Movie.audioLanguages`, the caller's `039` preference). `null` hides a line and both `null` hides the block (the file was never read); `[]` shows `—`; codes are upper-cased 3-letter chips. `variant="boxes"` sits under a film's poster in `Movie.tsx`; `variant="compact"` fills the "Pistas" column of `SeasonAccordion.tsx`, which also holds `106`'s `SearchSubtitlesButton`. `web` triggers no read and shows no failure.

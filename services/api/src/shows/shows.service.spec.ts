@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { ShowsService } from './shows.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
@@ -491,6 +492,52 @@ describe('ShowsService', () => {
         update: {},
         create: { userId: 'user-1', showId: 5 },
       });
+    });
+  });
+
+  // Spec 109, NFR-4
+  // Two registrations of one new series racing past the findUnique both reach
+  // create(); the loser gets a raw P2002. Without recovery the list import
+  // fails that item and a search-add errors although the series exists, the
+  // caller left unlinked with no error naming the race.
+  describe('register (create race)', () => {
+    it("recovers from a P2002 on create by linking the caller and reconciling the winner's synced row", async () => {
+      prisma.show.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 5,
+          tmdbId: 42,
+          seasonsSyncedAt: new Date(),
+        });
+      redis.get.mockResolvedValue(
+        JSON.stringify({
+          id: 42,
+          title: 'Some Series',
+          releaseDate: '2020-01-01',
+          posterUrl: null,
+          originalLanguage: 'en',
+          overview: '...',
+          type: MEDIA_TYPE.SHOW,
+          genreIds: [18],
+        }),
+      );
+      prisma.show.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+      prisma.userShow.upsert.mockResolvedValue({ userId: 'user-1', showId: 5 });
+
+      const result = await service.register(42, 'user-1');
+
+      expect(result).toEqual({ id: 5, type: MEDIA_TYPE.SHOW });
+      expect(prisma.userShow.upsert).toHaveBeenCalledWith({
+        where: { userId_showId: { userId: 'user-1', showId: 5 } },
+        update: {},
+        create: { userId: 'user-1', showId: 5 },
+      });
+      expect(mediaServerReconcile.reconcileShow).toHaveBeenCalledWith(5, 42);
     });
   });
 

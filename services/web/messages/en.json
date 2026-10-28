@@ -209,6 +209,12 @@
       "quota_exhausted": "The daily OpenSubtitles download limit has been reached.",
       "probe_failed": "Could not read the file to see which subtitles it has.",
       "probe_not_found": "Subtitle search not found."
+    },
+    "tmdbList": {
+      "invalid_reference": "That is not a TMDB list ID or link.",
+      "unreadable": "TMDB could not find the list, or it is not public.",
+      "already_attached": "You already have this list linked.",
+      "not_found": "The list does not exist."
     }
   },
   "landing": {
@@ -227,6 +233,7 @@
     "movies": "My movies",
     "shorts": "My shorts",
     "shows": "My series",
+    "lists": "My lists",
     "calendar": "Calendar",
     "downloads": "Downloads",
     "downloadsBadge": "{count} active downloads",
@@ -288,6 +295,13 @@
       "metadataTitle": "Shorts | Perceptor",
       "metadataDescription": "List of tracked short films"
     },
+    "lists": {
+      "title": "My lists",
+      "metadataTitle": "Lists | Perceptor",
+      "metadataDescription": "TMDB lists linked to your library",
+      "detailMetadataDescription": "Titles of a linked TMDB list",
+      "empty": "None of this list's titles are in your library yet."
+    },
     "showsAdd": {
       "title": "Add series",
       "metadataTitle": "Add series | Perceptor",
@@ -341,7 +355,8 @@
     "metadataTitle": "Resource unavailable | Perceptor",
     "message": "Resource not available for this user",
     "backToMovies": "Back to movies",
-    "backToShows": "Back to series"
+    "backToShows": "Back to series",
+    "backToLists": "Back to lists"
   },
   "import": {
     "replace": {
@@ -447,11 +462,17 @@
     "unavailable": "Movies and series are both disabled on this system."
   },
   "media": {
+    "autoAcquire": {
+      "label": "Download automatically",
+      "hint": "Manual search still works either way."
+    },
     "card": {
       "noPoster": "No Poster",
       "typeMovie": "MOVIE",
       "typeShow": "SERIES",
-      "typeShort": "SHORT"
+      "typeShort": "SHORT",
+      "completed": "You have it",
+      "notCompleted": "You don't have it yet"
     },
     "list": {
       "emptyDefault": "No {noun} registered",
@@ -741,6 +762,10 @@
         "acquire_episodes": {
           "label": "Acquire episodes",
           "description": "Searches for and downloads a release for newly aired episodes."
+        },
+        "import_lists": {
+          "label": "Import lists",
+          "description": "Reads each user's attached public TMDB lists and adds the new titles to their library. It never downloads anything on its own."
         }
       }
     },
@@ -858,6 +883,31 @@
       "chosenLabel": "Chosen groups",
       "emptyChosen": "No groups chosen.",
       "removeGroup": "Remove {name}"
+    }
+  },
+  "lists": {
+    "section": {
+      "description": "Link public TMDB lists. Their titles are added to your library; the list itself downloads nothing.",
+      "itemCount": "{count, plural, one {# title} other {# titles}}",
+      "itemCountUnknown": "Unknown count",
+      "openOnTmdb": "Open on TMDB",
+      "inputLabel": "List ID or URL",
+      "placeholder": "e.g. 8300000 or https://www.themoviedb.org/list/8300000",
+      "attach": "Link",
+      "attaching": "Linking...",
+      "lastImport": "Last import: {date}",
+      "neverImported": "Not imported yet",
+      "detach": "Unlink",
+      "disabledNotice": "List import is turned off by the administrator; your lists are saved but not imported yet.",
+      "empty": "You have no linked lists.",
+      "removeError": "Could not unlink the list."
+    },
+    "remove": {
+      "title": "Unlink list",
+      "message": "<b>{name}</b> will be unlinked. Titles already imported from it stay in your library.",
+      "confirm": "Unlink",
+      "cancel": "Cancel",
+      "removing": "Unlinking..."
     }
   },
   "status": {

@@ -23,6 +23,35 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-28 — `109-tmdb-list-import` 0.3.0 (per-title "download automatically")
+
+`api`, `web`; one Prisma migration (`20261028043654_title_auto_acquire`: `UserMovie.autoAcquire`, `UserShow.autoAcquire`, both `NOT NULL`; created `DEFAULT true`, then switched to `DEFAULT false` by `20261028044526_title_auto_acquire_default_off` and every existing row reset to `false` by `20261028044540_title_auto_acquire_reset_existing`, after the maintainer asked for off by default), applied on the dev stack (`prisma migrate status`: up to date) and `api` restarted afterwards. GraphQL contract: `Movie.autoAcquire`, `Show.autoAcquire`, `setMovieAutoAcquire`, `setShowAutoAcquire`, matching the amended SDL.
+
+- `api` typecheck: 0 errors. Full suite: 93 suites, 1546 tests passed (the three touched suites, 46 tests, include the `MAX_MOVIES_PER_RUN` + 1 opted-out cap cases for films and episodes and the opted-out-owner cases in `ranking-context`). `bin/comments api`: PASS (1274 locators).
+- `web` typecheck: 0 errors (the seven `Calendar.tsx` errors recorded earlier no longer appear). `check-messages`: 766 keys in parity. `bin/comments web`: PASS (138 locators). Biome clean on the new file; 4 pre-existing `noNonNullAssertion` warnings in `actions/shows.ts`.
+- Not observed: the switch rendered in a browser on a `MISSING` and a `COMPLETED` title, and a live sweep run with the switch off (AC-18 … AC-22 stay open; the sweep behaviour is proven by unit tests only).
+
+## 2026-10-28 — `109-tmdb-list-import` 0.2.0 (lists pages)
+
+`api`, `web`; one Prisma migration (`20261028033541_tmdb_list_item_count`: `UserTmdbList.itemCount`), applied on the dev stack (`prisma migrate status`: 51 migrations, up to date). GraphQL contract: `TmdbList.itemCount`, `TmdbList.movies`/`shows` and `Query.tmdbList(id)`, matching the amended SDL. The lists UI moved out of `/preferences` into "Mis listas" (`/lists`, `/lists/<id>`).
+
+- `api` typecheck: 0 errors. Tests: `tmdb-lists` 2 suites, 20 passed; `client.spec` 4 suites, 57 passed. `bin/comments api`: PASS (1257 locators). Full suite and lint not run.
+- `web` typecheck: only the 7 known `Calendar.tsx` errors. Biome clean on every new or changed file except 3 pre-existing errors in `AppSidebar.tsx`. `check-messages`: 762 keys in parity. `bin/comments web`: PASS (133 locators).
+- Live pass as a throwaway non-admin user, since removed: AC-14, AC-16, AC-17 observed; AC-15 observed for films (11 posters, 10 after a removal) but not for a series or a short.
+- Process note: after `prisma migrate dev`, the running `api` still held the old Prisma client (`Unknown argument itemCount`, one `FAILED` run) until `docker compose restart api`.
+
+## 2026-10-27 — `109-tmdb-list-import`
+
+`api`, `web`; one Prisma migration (`20261027140000_tmdb_list_import`: `user_tmdb_lists`, `user_tmdb_list_items`), written offline with `prisma migrate diff` and `prisma validate`, then **applied** by `api`'s own boot on the dev stack (`prisma migrate status`: schema up to date, both tables present, both `schedule_import_lists_*` settings seeded). GraphQL contract: `schema.gql` carries the five spec pieces (`TmdbList`, `tmdbLists`, `addTmdbList`, `removeTmdbList`, `MediaCapabilities.listImportEnabled`), generated offline with `GraphQLSchemaFactory` and copied in by hand, not by a real boot. Also fixes the `register()` create race for films and series (NFR-4).
+
+- Measured in the throwaway node container as uid 1000 (the stack on this host is a different install).
+- `api` typecheck: 0 errors. Tests: 91 of 93 suites pass, **1516 passed, 20 failed**; the two failing suites (`auth/session.service.spec`, `uploads/upload-tickets.service.spec`) use a real Redis and are in files this feature does not touch. The feature's own suites (movies, shows, tmdb client, tmdb-lists, media-capabilities, scheduler): 16 suites, **265 passed**. Comments gate: PASS (1252 locators).
+- `api` lint (`npm run lint`): **not verified**. It reports 3180 problems tree-wide in the container, so it cannot be attributed to this change; `tmdb-lists.service.spec.ts` has unsafe-`any` mock typing like its neighbours.
+- `web` typecheck: 7 errors, all the pre-existing `@fullcalendar` ones in `Calendar.tsx`. `check-messages`: 754 keys match. Comments gate: PASS (125 locators). Biome on the eight files this change touched: no errors (2 warnings); tree-wide `biome check` reports 1549 errors in the container, not attributed.
+- Not measured: the manual pass (AC-1 to AC-5, AC-7 to AC-13), the live `runScheduledTask(id: "import_lists")`, `prisma migrate status`, and the `/preferences` section in a browser at 375 px. Only AC-6b is ticked (the forced-`P2002` cases in the movies and shows specs).
+
+- Live pass (2026-10-28, dev stack of this checkout, two throwaway users since removed): `runScheduledTask("import_lists")` → `SUCCESS` with 11 titles from a public 11-film list, then 0 on every rerun (AC-3); a film removed by the user was not re-added (AC-4); a second user attaching the same list owned all 11 with no duplicate `tmdbId` (AC-6); the `/preferences` section rendered and showed its inline error with no horizontal scroll at 375 px. It surfaced one defect, fixed: the last-import time threw a hydration error because server and browser formatted it in different time zones (`mounted` guard, as `SchedulingPanel`). Not covered: a list with a series, a real private list, the disabled-task notice on screen.
+
 ## 2026-10-27 — `108-library-track-languages`
 
 `api`, `worker`, `web`; one Prisma migration (`20261027130000_108_library_track_languages`: `fileAudioLanguages`, `fileSubtitleLanguages`, `tracksReadAt` on `movies` and `episodes`), applied; `prisma migrate status` up to date (49 migrations). GraphQL contract: `schema.gql` carries exactly the spec delta (four `file*Languages` fields, `LibraryProbeTarget`, `LibraryProbeDetails`, `libraryProbeDetails`, `libraryProbeCompleted`).

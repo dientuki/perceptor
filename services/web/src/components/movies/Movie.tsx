@@ -20,6 +20,7 @@ import {
 import Switch from "@/components/form/switch/Switch";
 import ImportFileModal from "@/components/import/importFileModal";
 import ImportMagnetModal from "@/components/import/importMagnetModal";
+import AutoAcquireSwitch from "@/components/media/AutoAcquireSwitch";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
 import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
 import FileTrackLanguages from "@/components/media/FileTrackLanguages";
@@ -131,6 +132,13 @@ export default function Movie({
           subtitles={movie.fileSubtitleLanguages ?? null}
           variant="boxes"
         />
+        {movie.status !== "COMPLETED" && (
+          <AutoAcquireSwitch
+            kind="movie"
+            id={movie.id}
+            initial={movie.autoAcquire ?? false}
+          />
+        )}
       </div>
 
       <div className="min-w-0 space-y-6">

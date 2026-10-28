@@ -1,7 +1,7 @@
 # Specs con Acceptance Criteria pendientes
 
 <!-- pending-acs:begin intro -->
-Medido el **2026-10-27**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
+Medido el **2026-10-28**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
 `## Acceptance Criteria`; las 50 specs que no aparecen estan en 100%.
 <!-- pending-acs:end intro -->
 
@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **58** de 108 |
-| ACs pendientes | **450** |
-| ACs totales del proyecto | 1320 |
-| ACs verificados | 870 (66%) |
+| Specs con ACs pendientes | **59** de 109 |
+| ACs pendientes | **466** |
+| ACs totales del proyecto | 1343 |
+| ACs verificados | 877 (65%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,6 +28,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 109 | tmdb-list-import | Implemented | 16/23 | 1, 2, 5, 7, 8, 9, 10, 11, 12, 13, 15, 18, 19, 20, 21, 22 | **Una lista de TMDB con una serie y otra privada.** Pasada en vivo el 2026-10-28 sobre un stack de este checkout (migracion aplicada, dos usuarios de prueba ya borrados), con listas publicas de solo peliculas: observados AC-3, AC-4, AC-6 y, tras la enmienda 0.2.0 (`/lists`), AC-14, AC-16 y AC-17; por API tambien el error de `hello`/URL de pelicula/lista inexistente, el duplicado, el borrado cruzado entre usuarios y `listImportEnabled` false→true. Abiertos por falta de una lista con serie (1, 2, 7), una lista privada real (8, 9), y por no haberse visto en pantalla el aviso de tarea deshabilitada (12), el duplicado y el desvincular conservando titulos (10, 11), ni una lista ajena con un segundo usuario (13); AC-5 pide agregar un titulo a una lista en TMDB; AC-15 (0.2.0) se vio con peliculas en `/lists/<id>` pero falta una serie y un corto. Lo ya probado por debajo: `tmdb-lists.service.spec` (10 casos), `list-reference.spec` y el `P2002` forzado de AC-6b. Enmienda 0.3.0 (AC-18 a 22): sin pasada en vivo, falta ver el interruptor en una pelicula y una serie `MISSING` y ausente en una `COMPLETED` (18), y correr `acquire_movies`/`acquire_episodes` con el interruptor apagado (19, 20, 21) y el rechazo sobre un titulo ajeno con un segundo usuario (22). Ya probado por debajo: los casos de tope (`MAX_MOVIES_PER_RUN` + 1 titulos apagados delante de uno que si) en `acquire-movies` y `acquire-episodes`, y el dueño apagado fuera de la union en `ranking-context` (46 tests). |
 | 108 | library-track-languages | Approved | 13/13 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | **Stack vivo con servidor de medios.** Ningun AC se observo: la pasada manual (T013) necesita parar la otra instalacion de Perceptor del host (`bin/stop -y`) y Jellyfin con peliculas reales; AC-3 ademas un servidor Plex. Ya probado por debajo: el trabajo del worker, la escritura protegida por `filePath`, los disparadores y la limpieza por demotion (unit, cada regla verificada rompiendola), `tsc`/comentarios/`check-messages` en verde y el contrato (`schema.gql`) igual al spec. AC-13 (nada se escribe en la biblioteca) tiene el spec del worker con listado de directorio antes/despues, falta verlo en vivo. |
 | 107 | opensubtitles-direct | Approved | 18/18 | 1, 2, 3, 4, 5, 6, 7, 8, 16, 17, 9, 10, 11, 12, 13, 14, 15, 18 | **Stack vivo con servidor de medios.** Se probo en vivo parte de la busqueda (pelicula 15: login corregido, la segunda busqueda llego a `EMBEDDING` y el usuario confirmo que anda), pero ningun AC esta tildado: faltan la pasada manual completa (T020), AC-16 que solo se puede ver en la primera RC publicada (T021) y las etiquetas de proveniencia (AC-18) sin implementar. Debajo: unit verde en `api`, `worker` y `web`. |
 | 106 | manual-subtitle-search | Implemented | 10/11 | 1, 2, 3, 4, 5, 6, 7, 8, 8b, 10 | **Jellyfin con el plugin de OpenSubtitles logueado y cupo.** AC-1 a AC-8b son el recorrido en vivo (botón, diálogo, la búsqueda que baja y embebe, el rechazo de `.mp4`, el segundo usuario, el título sin `filePath`) y no se corrieron: al cerrar no había stack de dev levantado ni un Jellyfin con cupo. Por debajo hay unit tests verdes (82 suites, 1414 tests): las siete negativas de REQ-3 sin fila ni wake, la unión de idiomas con la preferencia apagada, `in_progress` sin tocar la fila, delay 0 contra 5 min, la rama REQ-7 del driver y el fallback de `details`. AC-9 se tildó (grep del Article XII y `schema.gql` con solo las dos mutations). **AC-10 no se puede cumplir tal como está escrito:** pide `bin/npm web run test` y `web` no tiene runner (`services/web/CLAUDE.md`); la parte de `api` pasa, la de `web` es un error de redacción del spec y su puerta real es typecheck, Biome y la pasada manual. |
@@ -91,7 +92,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 450 ACs pendientes no son 450 problemas distintos. Se reducen a 25 destrabes, y los dos primeros se llevan el 54%:
+Los 466 ACs pendientes no son 466 problemas distintos. Se reducen a 26 destrabes, y los dos primeros se llevan el 53%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
@@ -101,6 +102,7 @@ Los 450 ACs pendientes no son 450 problemas distintos. Se reducen a 25 destrabes
 | Stack vivo con servidor de medios | 31 | 107, 108 |
 | Adquisiciones reales | 18 | 073, 076 |
 | Nada: no esta implementada | 17 | 081 |
+| Una lista de TMDB con una serie y otra privada | 16 | 109 |
 | Un token de usuario logueado | 12 | 037, 039, 093 |
 | Plex (descartado) | 12 | 072 |
 | Fuentes en vuelo, y un segundo usuario | 10 | 064 |

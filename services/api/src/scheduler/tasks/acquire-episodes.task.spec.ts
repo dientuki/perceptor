@@ -8,7 +8,8 @@ import { AUTO_ACQUIRE_EPISODES_SINCE_KEY } from '../scheduler.registry';
 // a grace boundary off by one downloads an episode on its air day (or never), a missing or ignored
 // cutoff sweeps a series' whole history into qBittorrent, an episode already in flight (its own
 // source, or a season pack) gets a second source, one failing episode aborts the rest of the run,
-// and a run where every attempt failed is recorded as SUCCESS and hides an outage. Each case is
+// a run where every attempt failed is recorded as SUCCESS and hides an outage, and opted-out
+// episodes fill the per-run cap ahead of a wanted one. Each case is
 // written to fail when the rule it covers is removed.
 describe('AcquireEpisodesTask', () => {
   const NOW = new Date('2026-09-26T15:30:00.000Z');
@@ -87,7 +88,40 @@ describe('AcquireEpisodesTask', () => {
     expect(where.releaseDate.lte).toEqual(new Date('2026-09-25T00:00:00.000Z'));
     expect(where.releaseDate.gte).toEqual(new Date('2026-09-01T00:00:00.000Z'));
     expect(where.season.seasonNumber).toEqual({ not: 0 });
-    expect(where.season.show).toEqual({ users: { some: {} } });
+    expect(where.season.show).toEqual({ users: { some: { autoAcquire: true } } });
+  });
+
+  // Spec 109, REQ-15
+  it('does not let opted-out episodes consume the per-run cap ahead of a wanted one', async () => {
+    const optedOut = Array.from({ length: MAX_EPISODES_PER_RUN + 1 }, (_, i) =>
+      episode(i + 1, {
+        releaseDate: new Date(Date.UTC(2026, 8, 2 + (i % 20))),
+        optedOut: true,
+      }),
+    );
+    const wanted = episode(900, { releaseDate: new Date('2026-09-24T00:00:00.000Z') });
+    prisma.episode.findMany.mockImplementation(
+      async (args: { where: { season: { show: { users: { some: { autoAcquire?: boolean } } } } } }) =>
+        [...optedOut, wanted].filter(
+          (row) =>
+            !(row as { optedOut?: boolean }).optedOut ||
+            args.where.season.show.users.some.autoAcquire === undefined,
+        ),
+    );
+
+    await task.run();
+
+    expect(episodes.addTorrentToEpisode.mock.calls.map((c) => c[0])).toEqual([900]);
+  });
+
+  it('looks the attaching owner up among opted-in owners only', async () => {
+    prisma.episode.findMany.mockResolvedValue([episode(1)]);
+    await task.run();
+    expect(prisma.userShow.findFirst.mock.calls[0][0].where).toEqual({
+      showId: 7,
+      autoAcquire: true,
+    });
+    expect(episodes.addTorrentToEpisode.mock.calls[0][2]).toBe('oldest');
   });
 
   it('orders the selection by air date ascending', async () => {

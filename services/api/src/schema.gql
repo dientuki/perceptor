@@ -99,6 +99,7 @@ type Movie {
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
+  autoAcquire: Boolean!
 
   """
   How many *other* users have this film in their library. 0 when the caller is the last owner.
@@ -369,6 +370,7 @@ type Show {
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
+  autoAcquire: Boolean!
 
   """
   How many *other* users have this series in their library. 0 when the caller is the last owner.
@@ -597,6 +599,11 @@ type MediaCapabilities {
   True while Perceptor's OpenSubtitles application key is present and the OpenSubtitles username and password Settings are set (107 REQ-2). Never exposes any of them.
   """
   subtitleSearchAvailable: Boolean!
+
+  """
+  True while the import_lists scheduled task is enabled (109 REQ-12). Never exposes its cadence.
+  """
+  listImportEnabled: Boolean!
 }
 
 type FfprobeLog {
@@ -604,6 +611,29 @@ type FfprobeLog {
   file: String!
   ffprobe: String!
   createdAt: DateTime!
+}
+
+type TmdbList {
+  id: Int!
+  tmdbListId: Int!
+  name: String!
+  lastImportedAt: DateTime
+  lastError: String
+
+  """
+  Items TMDB reported for the list at its last successful read; null until then (109 0.2.0).
+  """
+  itemCount: Int
+
+  """
+  Films of this list the caller owns today (seen by the list), ordered by title.
+  """
+  movies: [Movie!]!
+
+  """
+  Series of this list the caller owns today (seen by the list), ordered by title.
+  """
+  shows: [Show!]!
 }
 
 type SubtitleSearchLanguage {
@@ -820,6 +850,12 @@ type Query {
 
   """List every registered scheduled task and its current status"""
   scheduledTasks: [ScheduledTask!]!
+  tmdbLists: [TmdbList!]!
+
+  """
+  One of the caller's lists; null for an id that is not theirs (109 0.2.0).
+  """
+  tmdbList(id: Int!): TmdbList
 
   """
   How this installation is reachable as this container has it loaded: routing mode, domain, the four published-service ports/URLs, and the upload endpoint this container expects — never process.env wholesale, never a fabricated host.
@@ -861,6 +897,11 @@ type Mutation {
   updateUser(updateUserInput: UpdateUserInput!): User!
   removeUser(id: ID!): User!
   updateProfile(updateProfileInput: UpdateProfileInput!): User!
+
+  """
+  Marca si las búsquedas automáticas pueden adquirir esta película para el usuario
+  """
+  setMovieAutoAcquire(movieId: Int!, autoAcquire: Boolean!): Boolean!
 
   """Envía un release elegido a qBittorrent y lo asocia a la película"""
   addTorrentToMovie(movieId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
@@ -941,6 +982,11 @@ type Mutation {
   Marca si el audio en el idioma preferido es obligatorio para esta serie
   """
   setShowAudioMandatory(showId: Int!, mandatory: Boolean!): Boolean!
+
+  """
+  Marca si las búsquedas automáticas pueden adquirir esta serie para el usuario
+  """
+  setShowAutoAcquire(showId: Int!, autoAcquire: Boolean!): Boolean!
 
   """
   Reclasifica el estilo de animación de una serie (057-content-kind-classification)
@@ -1052,6 +1098,8 @@ type Mutation {
   Trigger a registered scheduled task immediately, regardless of its cadence
   """
   runScheduledTask(id: String!): ScheduledTask!
+  addTmdbList(reference: String!): TmdbList!
+  removeTmdbList(id: Int!): Boolean!
 
   """
   Starts a 103 subtitle search for a film the caller owns that already holds a file (106).

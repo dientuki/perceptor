@@ -3,7 +3,7 @@ title: Subtitle Translation and Adaptation
 spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-25
-last_updated: 2026-10-25
+last_updated: 2026-10-27
 status: Draft
 services: [api, worker, web]
 ---
@@ -173,12 +173,12 @@ library (Article XII).
       name, cues done and total, error key, warning key, output file name (base name only) and
       timestamps. `web` shows it on the button and in the modal. A translation never appears in
       `/downloads` or `activeDownloadCount`.
-- [ ] **REQ-16 (Live state on the page)**: [NEEDS CLARIFICATION: while a translation is in flight
-      and the user stays on the page, how does the button learn about progress? (a) a light poll of
-      only that title's translation every few seconds, stopping when terminal; (b) Server-Sent Events
-      from a `web` route handler, which would itself still poll `api` server-side; (c) a GraphQL
-      subscription over WebSocket from `api` to the browser, a new transport with its own auth and
-      Traefik route. Leaving and returning shows the right state in every case.]
+- [ ] **REQ-16 (Live state on the page)**: While the latest translation of the film or episode on
+      screen is not terminal, `web` re-reads only that translation every few seconds and updates the
+      button and the open modal; it stops at the first terminal status, when the user leaves the page,
+      and never runs while nothing is in flight. No WebSocket, subscription or Server-Sent Events
+      transport is added. The interval is a single constant in `web`. Leaving and returning shows the
+      current state from the page load alone.
 
 ### Non-Functional & Operational Requirements
 

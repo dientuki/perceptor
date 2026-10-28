@@ -111,7 +111,8 @@ export class RankingContextService {
   async forShowOwners(showId: number): Promise<RankingContext> {
     const [owners, show] = await Promise.all([
       this.prisma.userShow.findMany({
-        where: { showId },
+        // Spec 109, REQ-15
+        where: { showId, autoAcquire: true },
         orderBy: { createdAt: 'asc' },
       }),
       this.prisma.show.findUnique({ where: { id: showId }, select: { title: true } }),
@@ -157,7 +158,8 @@ export class RankingContextService {
   async forMovieOwners(movieId: number): Promise<MovieOwnersContext> {
     const [rows, movie] = await Promise.all([
       this.prisma.userMovie.findMany({
-        where: { movieId },
+        // Spec 109, REQ-15
+        where: { movieId, autoAcquire: true },
         orderBy: { createdAt: 'asc' },
         include: {
           user: {

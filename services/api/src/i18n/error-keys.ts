@@ -46,6 +46,12 @@ export const ERROR_KEYS = {
   MEDIA_SHORTS_DISABLED: 'error.media.shorts_disabled',
   MEDIA_REFRESH_IN_PROGRESS: 'error.media.refresh_in_progress',
 
+  // tmdb-lists (services/api/src/tmdb-lists/)
+  TMDB_LIST_INVALID_REFERENCE: 'error.tmdbList.invalid_reference',
+  TMDB_LIST_UNREADABLE: 'error.tmdbList.unreadable',
+  TMDB_LIST_ALREADY_ATTACHED: 'error.tmdbList.already_attached',
+  TMDB_LIST_NOT_FOUND: 'error.tmdbList.not_found',
+
   // magnet parsing (services/api/src/clients/torrent/magnet.ts)
   MAGNET_NOT_A_MAGNET: 'error.magnet.not_a_magnet',
   MAGNET_INVALID_INFOHASH: 'error.magnet.invalid_infohash',

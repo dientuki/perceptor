@@ -40,6 +40,8 @@ export interface MediaCapabilities {
   catalogKeyConfigured: boolean;
   // Spec 103, REQ-1
   subtitleSearchAvailable: boolean;
+  // Spec 109, REQ-12
+  listImportEnabled: boolean;
 }
 
 // Discriminated union so a target is either a movie or an episode, never
