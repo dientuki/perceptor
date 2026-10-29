@@ -26,6 +26,12 @@ export class UserPreferences {
   })
   subtitleSearch: boolean;
 
+  @Field({
+    description:
+      'Gate for audio variant detection (110 REQ-1). False for every user until they say otherwise.',
+  })
+  audioVariantDetection: boolean;
+
   @Field(() => [Language])
   audioLanguages: Language[];
 

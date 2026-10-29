@@ -21,6 +21,7 @@ export type UserPreferences = {
   acquirePhysical: boolean;
   audioMandatory: boolean;
   subtitleSearch: boolean;
+  audioVariantDetection: boolean;
   audioLanguages: Language[];
   subtitleLanguages: Language[];
   movieTorrentGroups: TorrentGroup[];

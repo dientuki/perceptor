@@ -118,6 +118,9 @@ model User {
   // Spec 103, REQ-2
   subtitleSearch Boolean @default(false)
 
+  // Spec 110, REQ-1
+  audioVariantDetection Boolean @default(false)
+
   movies UserMovie[]
   shows  UserShow[]
 

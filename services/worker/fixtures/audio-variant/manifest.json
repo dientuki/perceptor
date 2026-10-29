@@ -1,0 +1,19 @@
+{
+  "films": {
+    "it": {
+      "title": "It Chapter Two (2019)",
+      "tracks": [2, 3],
+      "expect": { "kind": "decided", "tags": { "2": "es-ES", "3": "es-419" } }
+    },
+    "interstellar": {
+      "title": "Interstellar (2014)",
+      "tracks": [2, 3],
+      "expect": { "kind": "decided", "tags": { "2": "es-ES", "3": "es-419" } }
+    },
+    "jp3": {
+      "title": "Jurassic Park III (2001)",
+      "tracks": [2, 3],
+      "expect": { "kind": "duplicate" }
+    }
+  }
+}

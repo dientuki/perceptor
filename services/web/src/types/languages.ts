@@ -7,4 +7,5 @@ export type Language = {
   iso2: string;
   iso3: string;
   name: string;
+  hasRegionalVariants: boolean;
 };

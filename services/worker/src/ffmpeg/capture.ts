@@ -13,7 +13,7 @@ export interface RunResult {
 }
 
 export interface CaptureOptions {
-  binary?: 'ffmpeg' | 'ffprobe' | 'mkvmerge' | 'ffsubsync';
+  binary?: 'ffmpeg' | 'ffprobe' | 'mkvmerge' | 'ffsubsync' | 'whisper-cli';
   keepStdout?: boolean;
   // Spec 102, REQ-4
   extraOutputs?: number;

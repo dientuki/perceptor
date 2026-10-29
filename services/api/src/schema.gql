@@ -64,6 +64,11 @@ type Language {
   iso2: String!
   iso3: String!
   name: String!
+
+  """
+  Two or more region-subtagged Language rows share this iso3 (110 REQ-3).
+  """
+  hasRegionalVariants: Boolean!
 }
 
 type Movie {
@@ -414,6 +419,11 @@ type UserPreferences {
   Gate for automatic subtitle search (103 REQ-2). False for every user until they say otherwise.
   """
   subtitleSearch: Boolean!
+
+  """
+  Gate for audio variant detection (110 REQ-1). False for every user until they say otherwise.
+  """
+  audioVariantDetection: Boolean!
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
 
@@ -484,6 +494,9 @@ type EncodeJobDetails {
   dubTrimEnabled: Boolean!
   streamEndTrimEnabled: Boolean!
   compressionResolution: String!
+
+  """Effective opt-in for this job (110 REQ-4)."""
+  audioVariantDetection: Boolean!
   allowedSubtitleFormats: [String!]!
   libraryLayout: String!
 }
@@ -1039,6 +1052,7 @@ type Mutation {
   setAcquisitionWindows(theatrical: Boolean!, digital: Boolean!, physical: Boolean!): UserPreferences!
   setAudioMandatory(mandatory: Boolean!): UserPreferences!
   setSubtitleSearch(enabled: Boolean!): UserPreferences!
+  setAudioVariantDetection(enabled: Boolean!): UserPreferences!
   setPreferredTrackLanguages(kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
   createTorrentGroup(name: String!): TorrentGroup!
   deleteTorrentGroup(id: Int!): Boolean!

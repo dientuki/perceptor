@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { NO_AUDIO_VARIANTS } from './variants';
 import { buildFfmpegCommand } from './buildCommand';
 import type { EncodeInput } from '../encode/types';
 
@@ -80,6 +81,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       false,
       null,
       new Set(),
+      NO_AUDIO_VARIANTS,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -101,6 +103,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       false,
       null,
       new Set(),
+      NO_AUDIO_VARIANTS,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -123,6 +126,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       false,
       null,
       new Set(),
+      NO_AUDIO_VARIANTS,
     );
 
     expect(crfOf(args)).toBe('22');
@@ -144,6 +148,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       false,
       null,
       new Set(),
+      NO_AUDIO_VARIANTS,
     );
 
     expect(crfOf(args)).toBe('24');
@@ -167,6 +172,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       false,
       null,
       new Set(),
+      NO_AUDIO_VARIANTS,
     );
 
     const i = args.indexOf('-t');
@@ -195,6 +201,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       false,
       null,
       new Set(),
+      NO_AUDIO_VARIANTS,
     );
 
     // One -map per selected audio stream: 0:0 (video) implicitly handled by
@@ -225,6 +232,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
         false,
         null,
         new Set(),
+        NO_AUDIO_VARIANTS,
       ),
     ).not.toThrow();
   });
@@ -271,6 +279,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       false,
       null,
       new Set(),
+      NO_AUDIO_VARIANTS,
     );
 
     // Audio: 0:1 (jpn) and 0:2 (eng) selected, 0:3 (spa) never — spa is not
@@ -294,7 +303,7 @@ describe('buildFfmpegCommand — trimAt (Spec 098, REQ-8)', () => {
     streams: [videoStream({ bit_rate: '8000000' }), audioStream({ codec_name: 'ac3' })],
   };
   const build = (trimAt: number | null) =>
-    buildFfmpegCommand('Some.Movie.WEB-DL.mkv', '/out/Some.Movie.WEB-DL.mkv', metadata, details(), false, trimAt, new Set());
+    buildFfmpegCommand('Some.Movie.WEB-DL.mkv', '/out/Some.Movie.WEB-DL.mkv', metadata, details(), false, trimAt, new Set(), NO_AUDIO_VARIANTS);
 
   afterEach(() => {
     delete process.env.ENCODE_SAMPLE_SECONDS;

@@ -1,6 +1,7 @@
 import { EncodeCancelledError } from './cancellation';
 import { runFfmpegCapture } from '../ffmpeg/capture';
 import { selectAudioStreams } from '../ffmpeg/params';
+import { NO_AUDIO_VARIANTS } from '../ffmpeg/variants';
 
 // Spec 099, REQ-6
 export const STREAM_END_TRIM_WINDOW_SECONDS = 300;
@@ -119,6 +120,7 @@ export async function resolveStreamEndTrim(
       details.allowedAudioLanguagesIso3,
       details.originalLanguageIso3,
       details.allowedAudioLanguageTags ?? [],
+      NO_AUDIO_VARIANTS,
     );
     if (kept.length === 0) throw new Error('no kept audio stream');
 

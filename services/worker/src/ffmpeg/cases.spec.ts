@@ -10,6 +10,7 @@
 // file: nothing here is edited, and no factory helper transcribes a stream by
 // hand — which is what used to lose the one field that mattered.
 
+import { type AudioVariantResolution, NO_AUDIO_VARIANTS } from './variants';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -58,6 +59,7 @@ type CaseInput = {
   containerTitle: string;
   sourceTag: string;
   trackTitles?: Record<string, string>;
+  audioVariants?: { tags: Record<string, string>; duplicates: number[] };
 };
 
 type Case = {
@@ -102,6 +104,7 @@ function validate(fileName: string, raw: unknown): Case {
     containerTitle,
     sourceTag,
     trackTitles,
+    audioVariants,
   } = input as Record<string, unknown>;
 
   if (typeof file !== 'string') fail(fileName, 'input.file must be a string');
@@ -155,6 +158,24 @@ function validate(fileName: string, raw: unknown): Case {
       Object.values(trackTitles as Record<string, unknown>).some((title) => typeof title !== 'string'))
   ) {
     fail(fileName, 'input.trackTitles must be an object of strings when present');
+  }
+  if (audioVariants !== undefined) {
+    const candidate = audioVariants as Record<string, unknown>;
+    const tags = candidate?.tags as Record<string, unknown> | undefined;
+    const duplicates = candidate?.duplicates;
+    if (
+      typeof tags !== 'object' ||
+      tags === null ||
+      Array.isArray(tags) ||
+      Object.entries(tags).some(([index, tag]) => !Number.isInteger(Number(index)) || typeof tag !== 'string') ||
+      !Array.isArray(duplicates) ||
+      duplicates.some((index) => !Number.isInteger(index))
+    ) {
+      fail(
+        fileName,
+        'input.audioVariants must be { tags: { "<index>": "<tag>" }, duplicates: [<index>] } when present',
+      );
+    }
   }
 
   const probe = value.ffprobe;
@@ -215,6 +236,14 @@ function loadCases(): LoadedCase[] {
 // directory holds.
 const cases = loadCases();
 
+function resolveAudioVariants(input: CaseInput): AudioVariantResolution {
+  if (input.audioVariants === undefined) return NO_AUDIO_VARIANTS;
+  return {
+    tags: new Map(Object.entries(input.audioVariants.tags).map(([index, tag]) => [Number(index), tag])),
+    duplicates: new Set(input.audioVariants.duplicates),
+  };
+}
+
 describe('ffmpeg cases', () => {
   let sampleSeconds: string | undefined;
 
@@ -265,6 +294,7 @@ describe('ffmpeg cases', () => {
         false,
         null,
         new Set(),
+        resolveAudioVariants(input),
       );
 
     if (parsed.throws !== undefined) {

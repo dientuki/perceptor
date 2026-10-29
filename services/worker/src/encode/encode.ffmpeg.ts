@@ -6,6 +6,7 @@ import { resolveDubTrim } from './dub-trim';
 import { resolveStreamEndTrim } from './stream-end-trim';
 import { resolveSubtitlePruning } from './subtitle-prune';
 import { buildFfmpegCommand } from '../ffmpeg/buildCommand';
+import { NO_AUDIO_VARIANTS } from '../ffmpeg/variants';
 import { runFfmpeg } from '../ffmpeg/runner';
 
 function toWorkingPath(input: string): string {
@@ -39,7 +40,7 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress,
   const prunedSubtitles = await resolveSubtitlePruning(details, input, metadata, signal);
   const cuts = [dubCut, endCut].filter((c): c is number => c !== null);
   const trimAt = cuts.length > 0 ? Math.min(...cuts) : null;
-  const args = buildFfmpegCommand(input, workingPath, metadata, details, filmGrain, trimAt, prunedSubtitles);
+  const args = buildFfmpegCommand(input, workingPath, metadata, details, filmGrain, trimAt, prunedSubtitles, NO_AUDIO_VARIANTS);
   // Spec 098, REQ-10
   const candidates = [sourceDuration];
   if (Number.isFinite(sample) && sample > 0) candidates.push(sample);

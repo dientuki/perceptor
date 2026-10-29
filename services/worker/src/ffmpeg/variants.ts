@@ -46,6 +46,17 @@ export function detectVariant(stream: any): string | undefined {
   return variant?.tag;
 }
 
+export interface AudioVariantResolution {
+  tags: ReadonlyMap<number, string>;
+  duplicates: ReadonlySet<number>;
+}
+
+export const NO_AUDIO_VARIANTS: AudioVariantResolution = { tags: new Map(), duplicates: new Set() };
+
+export function detectWithTags(tags: ReadonlyMap<number, string>): (stream: any) => string | undefined {
+  return (stream) => tags.get(stream.index) ?? detectVariant(stream);
+}
+
 // Spec 031, REQ-12 REQ-18
 export function variantTitle(tag: string): string | undefined {
   return LANGUAGE_VARIANTS.find((v) => v.tag === tag)?.title;
