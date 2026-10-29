@@ -99,14 +99,14 @@ as the contract is frozen (it is: `spec.md` is Approved).
       `ffmpeg.md` § L1: metadata labelling stays unconditional, and
       audio-derived labelling is gated by the opt-in. → T007
       *Done when:* `bin/npm worker test -- cases` passes, including the new case.
-- [ ] **T009** `[worker]` **(encode)** Per step 3: add the `audio-variant` verdict kind to `111`'s
+- [x] **T009** `[worker]` **(encode)** Per step 3: add the `audio-variant` verdict kind to `111`'s
       store and `src/encode/audio-variant.ts` `resolveAudioVariants`. It covers the gating, the
       store read (undecided counts as found), window extraction to an `mkdtemp` directory via
       `runFfmpegCapture`, `whisper-cli` via `runFfmpegCapture`, scoring, the store write, and the
       failure and abort postures. Write `audio-variant.spec.ts` with the cases listed in
       `worker/plan.md` § Tests. → T006, T007, spec `111`
       *Done when:* `bin/npm worker test -- audio-variant` passes.
-- [ ] **T010** `[worker]` **(encode)** Per step 4:
+- [x] **T010** `[worker]` **(encode)** Per step 4:
       - add `EncodeInput.audioVariantDetection`;
       - in `encode.ffmpeg.ts`, call the resolver after `resolveSubtitlePruning` and pass the map to
         `buildFfmpegCommand`;
@@ -147,4 +147,4 @@ as the contract is frozen (it is: `spec.md` is Approved).
 
 | Task | Service | What blocked it | Needs |
 | :-- | :-- | :-- | :-- |
-| T009, T010 | worker | Spec `111` (encode verdict persistence) is only a Draft spec; its store does not exist yet | Spec `111` implemented first (user's order: 110, then review and implement 111) |
+| T009 (steps 3 and 6) | worker | Store read and write are two `// Spec 110, REQ-8` seams in `resolveAudioVariants`; spec `111`'s store does not exist yet, so every encode recomputes the verdict | Spec `111` implemented, then add the `audio-variant` verdict kind and its store test cases |
