@@ -31,6 +31,7 @@ import { handleSubtitleSync } from './jobs/subtitle-sync.job';
 import { handleSubtitleProbe } from './jobs/subtitle-probe.job';
 import { handleLibraryProbe } from './jobs/library-probe.job';
 import { cancelEncode } from './encode/cancellation';
+import { VERDICT_CALL_TIMEOUT_MS, installVerdictStore } from './encode/verdict-store';
 import {
   LEASE_RENEW_INTERVAL_MS,
   acquireWorkerLease,
@@ -97,6 +98,18 @@ async function main() {
     reportEncodeWorkerStarted(),
   );
   console.log(`[worker] encodeWorkerStarted: reconciled ${reconciledCount} orphaned job(s)`);
+
+  // Spec 111, NFR-3
+  const verdictClient = new Redis({
+    ...connection,
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 0,
+    commandTimeout: VERDICT_CALL_TIMEOUT_MS,
+  });
+  verdictClient.on('error', (err) => {
+    console.warn(`[verdict] redis client error: ${err.message}`);
+  });
+  installVerdictStore(verdictClient);
 
   const scanWorker = new Worker<SourceReadyJob>(
     PROCESS_QUEUE,
@@ -292,6 +305,9 @@ async function main() {
     void subtitleProbeWorker.close();
     void libraryProbeWorker.close();
     void cancelSubscriber.quit();
+    // Spec 111, NFR-3
+    installVerdictStore(null);
+    void verdictClient.quit().catch(() => verdictClient.disconnect());
 
     // Releasing on the way out is what makes an orderly restart instant instead
     // of waiting out the TTL.

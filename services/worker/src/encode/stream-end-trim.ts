@@ -2,6 +2,7 @@ import { EncodeCancelledError } from './cancellation';
 import { runFfmpegCapture } from '../ffmpeg/capture';
 import { selectAudioStreams } from '../ffmpeg/params';
 import { NO_AUDIO_VARIANTS, type AudioVariantResolution } from '../ffmpeg/variants';
+import { fileIdentity, readVerdict, writeVerdict, type VerdictIdentity } from './verdict-store';
 
 // Spec 099, REQ-6
 export const STREAM_END_TRIM_WINDOW_SECONDS = 300;
@@ -125,6 +126,19 @@ export async function resolveStreamEndTrim(
     );
     if (kept.length === 0) throw new Error('no kept audio stream');
 
+    // Spec 111, REQ-2
+    const file = await fileIdentity(input);
+    const identity: VerdictIdentity = file
+      ? { ...file, video: video.index, audio: kept.map((s) => s.index as number).sort((a, b) => a - b) }
+      : null;
+    const stored = await readVerdict<number | null>('streamtrim', identity);
+    if (stored !== undefined) {
+      console.log(
+        `[streamtrim] input=${input} -> ${stored === null ? 'keep' : `cut=${stored.toFixed(3)}`} (reused)`,
+      );
+      return stored;
+    }
+
     const ends = await readTrackEnds(input, metadata, [video.index, ...kept.map((s) => s.index)], signal);
     const decision = decideStreamEndCut(
       ends.get(video.index),
@@ -137,6 +151,8 @@ export async function resolveStreamEndTrim(
       `[streamtrim] input=${input} video=${show(decision.video)} audio=${show(decision.audio)} -> ` +
         (decision.outOfWindow ? 'keep (out of window)' : cut === null ? 'keep' : `cut=${cut.toFixed(3)}`),
     );
+    // Spec 111, REQ-2
+    await writeVerdict('streamtrim', identity, cut);
     return cut;
   } catch (error) {
     if (error instanceof EncodeCancelledError) throw error;

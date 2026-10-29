@@ -45,7 +45,7 @@ src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly o
 src/scan/mark-downloaded.ts  flags each enumerated file isDownloaded against api's torrent-client answer (052)
 src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode, over InventoriedFile[] (052) — isDownloaded: false is excluded before either rule runs
 src/disc/                Blu-ray disc recognition, playlist choice and MKV assembly (see below, `100`)
-src/encode/              the driver seam (see below) · subtitle-prune (the content-pruning resolver, `102`)
+src/encode/              the driver seam (see below) · subtitle-prune (the content-pruning resolver, `102`) · verdict-store (the Redis store every pre-encode verdict goes through, `111`)
 src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639 · subtitle-content (pure C1–C3 rules, `102`)
 src/paths/build-output-path.ts   composes the final library path, one branch per `libraryLayout` (`072`)
 src/paths/library-layout.ts      `normalizeLibraryLayout`: unknown value warns, defaults to `jellyfin`
@@ -291,8 +291,8 @@ second only if the first passes:
   saved bitrate is ≥ `GRAIN_PROBE_SAVED_MBPS_THRESHOLD` (0.886 Mbps, **provisional**: measured at
   CRF 24, to be refitted at CRF 22).
 
-Definite verdicts are cached in a module-level `Map` by `mediaSourceId` (a season pack probes once;
-a worker restart re-probes). A failure is never cached and never fails the job: every non-cancellation
+Definite verdicts are stored in Redis (`src/encode/verdict-store.ts`, kind `grain`, by `mediaSourceId`, `111`) (a season pack probes once;
+a worker restart reuses the verdict). A failure is never cached and never fails the job: every non-cancellation
 throw becomes `false` with one warning; `EncodeCancelledError` is rethrown untouched. Each resolution
 prints one `[grain]` line naming the stage that decided and the figures. `src/ffmpeg/params.ts`'s
 three `svtav1KindParams` cases substitute `film-grain=8`/`film-grain-denoise=1` for `film-grain=0`
@@ -314,8 +314,8 @@ those trailing cards (fades, a logo) is not scored; the cut is the start of the 
 second that `buildFfmpegCommand`'s `trimAt` folds into the single `-t` (the minimum with
 `ENCODE_SAMPLE_SECONDS`). Progress uses the trimmed duration. A cut at or below 0 means keep.
 
-Verdicts are cached in a module-level `Map` keyed by **input path** (not `mediaSourceId`, since a
-season pack has many files); a failure is never cached. It is a luxury, so a failed detection is
+Verdicts are stored in Redis (kind `dubtrim`, `111`) keyed by the **input file** (path, size and mtime; not `mediaSourceId`, since a
+season pack has many files); a failure is never stored. It is a luxury, so a failed detection is
 completely silent (no warning, no log) and the whole file is encoded; only `EncodeCancelledError`
 propagates. A success prints one `[dubtrim]` line. The twelve real-file freeze logs (cuts and keeps, including the false-positive guards Haven S01E01, Arrival and Dawn of the Dragon Racers) the rule was
 validated on live in `fixtures/dub-trim/` (excluded from the image by `.dockerignore`).
@@ -333,8 +333,8 @@ first video stream and the audio tracks `selectAudioStreams` (extracted from `ge
 `src/ffmpeg/params.ts`) keeps count. It cuts at `min(video end, longest kept audio end)` when the two
 differ by more than 2 s; a kept track with no packet in the window means keep. `encode.ffmpeg.ts`
 passes the minimum of this cut and `098`'s as `trimAt`, so `buildCommand.ts` and the progress
-denominator are unchanged. There is no cache; a failure is silent and encodes the whole file, only
-`EncodeCancelledError` propagates. A completed analysis prints one `[streamtrim]` line.
+denominator are unchanged. Since `111` the verdict is stored in Redis (kind `streamtrim`), keyed by the input file plus the video index and the kept audio indices (so a `110` resolution that changes the kept set misses); a failure is silent, stores nothing and encodes the whole file, only
+`EncodeCancelledError` propagates. A completed analysis prints one `[streamtrim]` line, `(reused)` on a hit.
 
 ## Subtitle content pruning is resolved in the encode driver (`102-subtitle-content-pruning`)
 
@@ -355,7 +355,7 @@ track of the language is below it; **C2** collapses tracks with equal `NUMBER_OF
 `default`, then the lower index; **C3** drops a track of at least 3 sampled cues and at most half the
 other's size whose every cue's text is inside the overlapping cues of the other. The dropped indices
 reach `buildFfmpegCommand` as a required `subtitleDrops` set, so the command stays pure. The verdict is
-cached per input path on success only; a failure logs `[subs] read failed: …` and keeps every track,
+stored in Redis on success only (kind `subs`, `111`), keyed by the input file plus the qualifying text stream indices, so a settings change that alters the selection recomputes; a failure logs `[subs] read failed: …` and keeps every track,
 and only `EncodeCancelledError` propagates. One `[subs] <lang> <index>:<cues>:<share>%=<outcome>` line
 per group. Fixtures: `fixtures/subtitle-content/` (real 900 s samples with every word scrambled, plus
 `manifest.json`; the film text is never committed).
@@ -379,8 +379,7 @@ branch, runs `assemblePlaylist` (`mkvmerge -o <disc root>/<playlist>.perceptor.m
 `runFfmpegCapture`'s `binary: 'mkvmerge'`). Exit 0 and 1 (warnings) are success; anything else, or no
 output file, removes the partial and throws `error.encode.disc_remux_failed` (`{code, stderr}`, the
 tail of stdout + stderr — `mkvmerge` writes its errors to stdout). Both branches receive the assembled
-file; `buildSourceTag` and `cleanupSource` keep the playlist. The assembled file is removed in a
-guarded `finally` on every path except after the passthrough move, and before each assembly. Progress
+file; `buildSourceTag` and `cleanupSource` keep the playlist. Since `111` a completed assembly is kept and reused: its size and mtime are recorded in the verdict store (kind `assembly`, by the `.mpls`) and a matching file is reused with `[disc] reused`, otherwise it is removed and assembled again. The `finally` removes the assembled file only after a delivered compressed encode (the passthrough move aside); a stop, cancellation or failure keeps it, and `api`'s residue deletion removes it with the download folder. Progress
 stays at 0 during assembly; the disc files are never deleted on failure.
 
 ## The rules in `src/ffmpeg/` have their own agent and their own corpus
@@ -601,7 +600,7 @@ leaves a half-written file at the destination.
   `completed` and a file nobody can find — no error in any log (Constitution, Article IX).
 - **No linter or formatter.** No ESLint, no Prettier, no Biome — `api` has the first two, `web` has
   Biome, this service has nothing. Match the surrounding file by eye.
-- **Dependency skew with `api`**: `ioredis` ^5 here vs ^6 there, `@types/node` ^22 vs ^24. Not
+- **Dependency skew with `api`**: `@types/node` ^22 vs ^24 (`ioredis` is ^6 in both `package.json` files; a checkout whose `node_modules` predates that may still run 5.x, with the same option names `111` uses). Not
   currently causing trouble; worth knowing before debugging a Redis behaviour difference.
 - FFmpeg and mkvtoolnix are installed in the `base` stage of `services/worker/Dockerfile`, shared
   by `dev` and `prod`. Since spec `024`, the worker's HDR handling is a plain downscale that

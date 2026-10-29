@@ -1026,22 +1026,31 @@ describe('handleEncode — disc playlist assembly (Spec 100)', () => {
     expect(await exists(assembled)).toBe(false);
   });
 
-  it('removes the assembled file when the encode fails', async () => {
+  it('keeps the assembled file when the encode fails', async () => {
     mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
     encodeMock.mockRejectedValue(new Error('boom'));
 
     await expect(handleEncode(makeJob())).rejects.toThrow('boom');
 
-    expect(await exists(assembled)).toBe(false);
+    expect(await exists(assembled)).toBe(true);
   });
 
-  it('removes the assembled file when the encode is cancelled', async () => {
+  it('keeps the assembled file when the encode is cancelled', async () => {
     mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
     encodeMock.mockRejectedValue(new EncodeCancelledError());
 
     await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
-    expect(await exists(assembled)).toBe(false);
+    expect(await exists(assembled)).toBe(true);
+  });
+
+  it('keeps the assembled file when the encode throws a KeyedError', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
+    encodeMock.mockRejectedValue(new KeyedError(ERROR_ENCODE_PROBE_FAILED, 'ffprobe failed', { reason: 'x' }));
+
+    await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
+
+    expect(await exists(assembled)).toBe(true);
   });
 
   it('passes the assembled path to passthrough, keeps the .mkv extension and does not touch the file afterwards', async () => {
@@ -1058,13 +1067,13 @@ describe('handleEncode — disc playlist assembly (Spec 100)', () => {
     expect(await exists(assembled)).toBe(true);
   });
 
-  it('removes the assembled file when passthrough itself fails', async () => {
+  it('keeps the assembled file when passthrough itself fails', async () => {
     mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: false });
     passthroughMock.mockRejectedValue(new Error('disk full'));
 
     await expect(handleEncode(makeJob())).rejects.toThrow('disk full');
 
-    expect(await exists(assembled)).toBe(false);
+    expect(await exists(assembled)).toBe(true);
   });
 
   it('reports encodeFailed with disc_remux_failed and its params when assembly fails, and never runs a driver', async () => {

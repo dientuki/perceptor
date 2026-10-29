@@ -23,6 +23,14 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-29 — `111-encode-verdict-persistence`
+
+`worker` only; no Prisma migration, no GraphQL contract change (`services/api` and `services/web` untouched).
+
+- `worker` typecheck: 0 errors. Full suite: 60 files, 757 tests passed (new `verdict-store.spec.ts` 10 tests; grain-mode 24, dub-trim 39, stream-end-trim 35, subtitle-prune 12, assemble-playlist 16, encode.job 41). `bin/comments worker`: PASS (422 locators).
+- Not observed: AC-1…AC-7 and AC-9 (a live encode with Stop/Play, a worker restart, a host reboot and a Blu-ray source). AC-8 holds through the tests.
+- Found along the way: the worker's installed `ioredis` was 5.11.1 although both `package.json` files say ^6; the store's client options exist in both.
+
 ## 2026-10-28 — `109-tmdb-list-import` 0.3.0 (per-title "download automatically")
 
 `api`, `web`; one Prisma migration (`20261028043654_title_auto_acquire`: `UserMovie.autoAcquire`, `UserShow.autoAcquire`, both `NOT NULL`; created `DEFAULT true`, then switched to `DEFAULT false` by `20261028044526_title_auto_acquire_default_off` and every existing row reset to `false` by `20261028044540_title_auto_acquire_reset_existing`, after the maintainer asked for off by default), applied on the dev stack (`prisma migrate status`: up to date) and `api` restarted afterwards. GraphQL contract: `Movie.autoAcquire`, `Show.autoAcquire`, `setMovieAutoAcquire`, `setShowAutoAcquire`, matching the amended SDL.

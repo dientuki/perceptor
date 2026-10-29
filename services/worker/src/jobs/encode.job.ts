@@ -134,6 +134,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     // Spec 100, REQ-9 REQ-10
     let assembledPath: string | null = null;
     let assembledMoved = false;
+    let assembledDelivered = false;
 
     try {
       const outputPath = buildOutputPath({ ...details, layout: libraryLayout });
@@ -254,6 +255,8 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
           signal,
         );
         ffmpegCommand = encodeResult.ffmpegCommand;
+        // Spec 111, REQ-6 REQ-8
+        assembledDelivered = true;
       }
 
       // Spec 038, REQ-1
@@ -303,8 +306,8 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
 
       throw error;
     } finally {
-      // Spec 100, REQ-9 REQ-10
-      if (assembledPath && !assembledMoved) {
+      // Spec 111, REQ-6 REQ-8
+      if (assembledPath && !assembledMoved && assembledDelivered) {
         if (isInsideRoot(details.downloadsRoot, assembledPath)) {
           try {
             await rm(assembledPath, { force: true });

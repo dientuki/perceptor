@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { EncodeCancelledError } from './cancellation';
 import { findAudioVariantDetector, type AudioVariantDetector } from './audio-variant-detectors';
 import { decide, type AudioVariantVerdict } from './audio-variant-score';
+import { fileIdentity, readVerdict, writeVerdict } from './verdict-store';
 import { runFfmpegCapture } from '../ffmpeg/capture';
 import { normalizeIso3 } from '../ffmpeg/iso639';
 import { detectVariant, NO_AUDIO_VARIANTS, type AudioVariantResolution } from '../ffmpeg/variants';
@@ -149,8 +150,16 @@ export async function resolveAudioVariants(
 
   try {
     // Spec 110, REQ-8
+    const file = await fileIdentity(input);
+    const identity = file && { ...file, iso3: detector.iso3, streams: [pair[0].index, pair[1].index] };
+    const stored = await readVerdict<AudioVariantVerdict>('audio-variant', identity);
+    if (stored !== undefined) {
+      const reused = toResolution(stored, pair);
+      console.log(`${logLine(detector, pair, stored, reused)} (reused)`);
+      return reused;
+    }
     const verdict = await detectVerdict(detector, pair, input, metadata, signal);
-    // Spec 110, REQ-8
+    await writeVerdict('audio-variant', identity, verdict);
     const resolution = toResolution(verdict, pair);
     console.log(logLine(detector, pair, verdict, resolution));
     return resolution;

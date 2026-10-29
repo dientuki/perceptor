@@ -11,7 +11,8 @@
 // with the FFmpeg spawn mocked: it must never throw on a failed detection,
 // never cache a failure, and never swallow a cancellation.
 
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,11 +21,11 @@ import {
   classifyTail,
   isDubTail,
   parseFreezes,
-  resetDubTrimCache,
   resolveDubTrim,
   videoEndSeconds,
 } from './dub-trim';
 import { runFfmpegCapture } from '../ffmpeg/capture';
+import { installVerdictStore } from './verdict-store';
 
 vi.mock('../ffmpeg/capture', () => ({ runFfmpegCapture: vi.fn() }));
 
@@ -203,13 +204,32 @@ describe('resolveDubTrim', () => {
   const metadata = { streams: [{ codec_type: 'video', duration: '1000' }], format: {} };
   const on = { dubTrimEnabled: true };
 
+  let dir: string;
+  let a: string;
+  let b: string;
+  let store: Map<string, string>;
+
   beforeEach(() => {
-    resetDubTrimCache();
+    store = new Map();
+    installVerdictStore({
+      get: async (key) => store.get(key) ?? null,
+      set: async (key, value) => {
+        store.set(key, value);
+        return 'OK';
+      },
+    });
+    dir = mkdtempSync(join(tmpdir(), 'dubtrim-'));
+    a = join(dir, 'a.mkv');
+    b = join(dir, 'b.mkv');
+    writeFileSync(a, 'aaaa');
+    writeFileSync(b, 'bbbbbb');
     mockCapture.mockReset();
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
+    installVerdictStore(null);
+    rmSync(dir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
 
@@ -218,17 +238,17 @@ describe('resolveDubTrim', () => {
   }
 
   it('does nothing and spawns nothing when the switch is off', async () => {
-    expect(await resolveDubTrim({ dubTrimEnabled: false }, '/a.mkv', metadata, signal)).toBeNull();
+    expect(await resolveDubTrim({ dubTrimEnabled: false }, a, metadata, signal)).toBeNull();
     expect(mockCapture).not.toHaveBeenCalled();
     expect(console.log).not.toHaveBeenCalled();
   });
 
   it('returns the absolute cut and logs exactly one line', async () => {
     mockCapture.mockResolvedValueOnce(ok('neagley-s01e01'));
-    const cut = await resolveDubTrim(on, '/a.mkv', metadata, signal);
+    const cut = await resolveDubTrim(on, a, metadata, signal);
     expect(cut).toBeCloseTo(700 + 173.822, 3);
     expect(console.log).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain('[dubtrim] input=/a.mkv cards=60 multiples=60 -> cut=873.822');
+    expect(vi.mocked(console.log).mock.calls[0][0]).toContain(`[dubtrim] input=${a} cards=60 multiples=60 -> cut=873.822`);
     const args = mockCapture.mock.calls[0][0];
     expect(args).toContain('-vf');
     expect(args).not.toContain('-v');
@@ -237,39 +257,72 @@ describe('resolveDubTrim', () => {
 
   it('returns null and logs keep for a file with no dub tail', async () => {
     mockCapture.mockResolvedValueOnce(ok('foundation-s01e01'));
-    expect(await resolveDubTrim(on, '/a.mkv', metadata, signal)).toBeNull();
+    expect(await resolveDubTrim(on, a, metadata, signal)).toBeNull();
     expect(vi.mocked(console.log).mock.calls[0][0]).toContain('-> keep');
   });
 
   it('analyses each input path separately', async () => {
     mockCapture.mockResolvedValueOnce(ok('neagley-s01e01')).mockResolvedValueOnce(ok('war-machine'));
-    const a = await resolveDubTrim(on, '/a.mkv', metadata, signal);
-    const b = await resolveDubTrim(on, '/b.mkv', metadata, signal);
+    const cutA = await resolveDubTrim(on, a, metadata, signal);
+    const cutB = await resolveDubTrim(on, b, metadata, signal);
     expect(mockCapture).toHaveBeenCalledTimes(2);
-    expect(a).toBeCloseTo(873.822, 3);
-    expect(b).toBeCloseTo(840.905, 3);
+    expect(cutA).toBeCloseTo(873.822, 3);
+    expect(cutB).toBeCloseTo(840.905, 3);
   });
 
   it('reuses the verdict for the same input', async () => {
     mockCapture.mockResolvedValueOnce(ok('neagley-s01e01'));
-    const first = await resolveDubTrim(on, '/a.mkv', metadata, signal);
-    const second = await resolveDubTrim(on, '/a.mkv', metadata, signal);
+    const first = await resolveDubTrim(on, a, metadata, signal);
+    const second = await resolveDubTrim(on, a, metadata, signal);
     expect(second).toBe(first);
     expect(mockCapture).toHaveBeenCalledTimes(1);
+  });
+
+  it('hit skips freezedetect and logs reused', async () => {
+    mockCapture.mockResolvedValueOnce(ok('neagley-s01e01'));
+    const first = await resolveDubTrim(on, a, metadata, signal);
+    const second = await resolveDubTrim(on, a, metadata, signal);
+    expect(second).toBe(first);
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(console.log).mock.calls[1][0]).toContain('(reused)');
+  });
+
+  it('misses when the size changes', async () => {
+    mockCapture.mockResolvedValue(ok('neagley-s01e01'));
+    await resolveDubTrim(on, a, metadata, signal);
+    writeFileSync(a, 'aaaaaaaa');
+    await resolveDubTrim(on, a, metadata, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(2);
+  });
+
+  it('misses when the mtime changes', async () => {
+    mockCapture.mockResolvedValue(ok('neagley-s01e01'));
+    await resolveDubTrim(on, a, metadata, signal);
+    utimesSync(a, new Date(1_000_000), new Date(1_000_000));
+    await resolveDubTrim(on, a, metadata, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(2);
+  });
+
+  it('stores nothing on failure or cancellation', async () => {
+    mockCapture.mockResolvedValueOnce({ code: 1, stdoutBytes: 0, stderr: '' });
+    await resolveDubTrim(on, a, metadata, signal);
+    mockCapture.mockRejectedValueOnce(new EncodeCancelledError());
+    await expect(resolveDubTrim(on, a, metadata, signal)).rejects.toBeInstanceOf(EncodeCancelledError);
+    expect(store.size).toBe(0);
   });
 
   it('returns null silently on a non-zero exit and does not cache the failure', async () => {
     mockCapture
       .mockResolvedValueOnce({ code: 1, stdoutBytes: 0, stderr: '' })
       .mockResolvedValueOnce(ok('neagley-s01e01'));
-    expect(await resolveDubTrim(on, '/a.mkv', metadata, signal)).toBeNull();
+    expect(await resolveDubTrim(on, a, metadata, signal)).toBeNull();
     expect(console.log).not.toHaveBeenCalled();
-    expect(await resolveDubTrim(on, '/a.mkv', metadata, signal)).toBeCloseTo(873.822, 3);
+    expect(await resolveDubTrim(on, a, metadata, signal)).toBeCloseTo(873.822, 3);
     expect(mockCapture).toHaveBeenCalledTimes(2);
   });
 
   it('returns null silently when no duration is readable', async () => {
-    expect(await resolveDubTrim(on, '/a.mkv', { streams: [], format: {} }, signal)).toBeNull();
+    expect(await resolveDubTrim(on, a, { streams: [], format: {} }, signal)).toBeNull();
     expect(mockCapture).not.toHaveBeenCalled();
     expect(console.log).not.toHaveBeenCalled();
   });
@@ -283,12 +336,12 @@ describe('resolveDubTrim', () => {
         Array.from({ length: 5 }, (_, i) => `freeze_start: ${i * 2.002}\nfreeze_end: ${(i + 1) * 2.002}`).join('\n') +
         `\nfreeze_start: ${5 * 2.002}`,
     });
-    expect(await resolveDubTrim(on, '/a.mkv', short, signal)).toBeNull();
+    expect(await resolveDubTrim(on, a, short, signal)).toBeNull();
     expect(vi.mocked(console.log).mock.calls[0][0]).toContain('-> keep');
   });
 
   it('rethrows a cancellation', async () => {
     mockCapture.mockRejectedValueOnce(new EncodeCancelledError());
-    await expect(resolveDubTrim(on, '/a.mkv', metadata, signal)).rejects.toBeInstanceOf(EncodeCancelledError);
+    await expect(resolveDubTrim(on, a, metadata, signal)).rejects.toBeInstanceOf(EncodeCancelledError);
   });
 });

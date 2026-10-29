@@ -147,4 +147,3 @@ as the contract is frozen (it is: `spec.md` is Approved).
 
 | Task | Service | What blocked it | Needs |
 | :-- | :-- | :-- | :-- |
-| T009 (steps 3 and 6) | worker | Store read and write are two `// Spec 110, REQ-8` seams in `resolveAudioVariants`; spec `111`'s store does not exist yet, so every encode recomputes the verdict | Spec `111` implemented, then add the `audio-variant` verdict kind and its store test cases |
