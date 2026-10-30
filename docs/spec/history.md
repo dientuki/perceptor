@@ -23,6 +23,16 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-30 — `112-in-app-indexer-setup`
+
+`api`, `web`; no Prisma migration. GraphQL contract: `services/api/src/schema.gql` +38 lines, 0 removed (enum, two types, two queries, two mutations — matches the spec's SDL); `docs/spec/graphql-contract.md` gained the `112` section.
+
+- `api` typecheck: 0 errors. Full suite: 94 suites, 1602 tests passed (new `indexer-catalog.spec.ts` 20 tests; `indexer.service.spec.ts` 21; `clients/indexer` 30 across two suites). Fault injection: nine service rules broken one at a time, each failed only its own test(s). `bin/comments api`: PASS (1299 locators).
+- `web` typecheck: 0 errors. `check-messages`: 799 keys in parity. `bin/comments web`: PASS (150 locators). `bin/npm web run lint` fails repo-wide on existing errors (146 before, 145 after); Biome on the touched files is clean.
+- Prowlarr measured on the dev stack (T001): create without `forceSave` tests the site and answers `400` with an array of failures, saving nothing; `DELETE` of an unknown id answers `200 {}`, so `remove` checks the list first; the first app profile is `id` 1.
+- Observed in a browser (admin session): the three configured indexers as chips in Settings → Torrent manager; the modal on `/first-step` listing the catalog alphabetically with language/category chips and the FlareSolverr note; search narrowing to one entry shown as "Added"; the notice reading "3 indexers are configured".
+- Not observed: a live add and remove, the FlareSolverr tag on a real add, the `test_failed`/`not_found`/unavailable paths, and the 375 px layout.
+
 ## 2026-10-29 — `111-encode-verdict-persistence`
 
 `worker` only; no Prisma migration, no GraphQL contract change (`services/api` and `services/web` untouched).

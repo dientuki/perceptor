@@ -1,4 +1,4 @@
-import { ProwlarrClient } from './client';
+import { IndexerHttpError, ProwlarrClient } from './client';
 import { SettingsService } from '@/settings/settings.service';
 
 // resolveInfoHash's third path (parsing a fetched .torrent buffer via the ESM-only
@@ -323,5 +323,118 @@ describe('ProwlarrClient.countIndexers', () => {
     });
 
     await expect(client.countIndexers()).resolves.toBe(3);
+  });
+});
+
+// This test exists because otherwise the Spec 112 calls would treat a failed Prowlarr response as
+// data: a create that answered 400 (the connection test failed) would resolve as an added indexer,
+// a list call on a 401 would parse the error object as a list, and a DELETE would try to parse an
+// empty body. The status must also reach the caller so a failed test is not reported as an outage.
+describe('ProwlarrClient indexer management calls', () => {
+  const settings = {
+    getMap: jest.fn().mockResolvedValue({
+      tracker_host: 'indexer',
+      tracker_port: '9696',
+      tracker_api_key: 'a-key',
+    }),
+  } as unknown as SettingsService;
+
+  let client: ProwlarrClient;
+  let fetchSpy: jest.SpyInstance;
+
+  const failing = (status: number) => ({
+    ok: false,
+    status,
+    json: jest.fn(async () => {
+      throw new Error('body must not be parsed as data');
+    }),
+    text: async () => JSON.stringify([{ errorMessage: 'x'.repeat(1000) }]),
+  });
+
+  const calls: [string, (c: ProwlarrClient) => Promise<unknown>][] = [
+    ['getIndexerSchema', (c) => c.getIndexerSchema()],
+    ['listIndexers', (c) => c.listIndexers()],
+    ['createIndexer', (c) => c.createIndexer({ name: 'example-public' })],
+    ['deleteIndexer', (c) => c.deleteIndexer(7)],
+    ['listTags', (c) => c.listTags()],
+    ['listAppProfiles', (c) => c.listAppProfiles()],
+  ];
+
+  beforeEach(() => {
+    client = new ProwlarrClient(settings);
+    fetchSpy = jest.spyOn(global, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it.each(calls)('%s rejects on a non-2xx carrying the upstream status', async (_n, call) => {
+    const res = failing(400);
+    fetchSpy.mockResolvedValue(res);
+
+    const error = await call(client).then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+    expect(error).toBeInstanceOf(IndexerHttpError);
+    expect((error as IndexerHttpError).upstreamStatus).toBe(400);
+    expect((error as IndexerHttpError).detail.length).toBeLessThanOrEqual(300);
+    expect(res.json).not.toHaveBeenCalled();
+  });
+
+  it.each(['getIndexerSchema', 'listIndexers', 'listTags', 'listAppProfiles'] as const)(
+    '%s rejects when a 200 body is not an array',
+    async (name) => {
+      fetchSpy.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ message: 'nope' }),
+      });
+
+      await expect(client[name]()).rejects.toThrow('Could not reach the indexer');
+    },
+  );
+
+  it('createIndexer posts the JSON body and returns the created indexer', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: 5 }),
+    });
+
+    await expect(client.createIndexer({ name: 'example-public' })).resolves.toEqual({ id: 5 });
+
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe('http://indexer:9696/api/v1/indexer');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe(JSON.stringify({ name: 'example-public' }));
+    expect(init.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('deleteIndexer sends DELETE and does not parse the response body', async () => {
+    const json = jest.fn(async () => {
+      throw new Error('empty body');
+    });
+    fetchSpy.mockResolvedValue({ ok: true, status: 200, json });
+
+    await expect(client.deleteIndexer(7)).resolves.toBeUndefined();
+
+    expect(fetchSpy.mock.calls[0][0]).toBe('http://indexer:9696/api/v1/indexer/7');
+    expect(fetchSpy.mock.calls[0][1].method).toBe('DELETE');
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('treats a dropped connection as an outage without a status', async () => {
+    fetchSpy.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const error = await client.listTags().then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+    expect(error).not.toBeInstanceOf(IndexerHttpError);
+    expect((error as Error).message).toContain('Could not reach the indexer');
   });
 });

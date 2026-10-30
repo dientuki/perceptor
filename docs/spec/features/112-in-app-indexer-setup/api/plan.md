@@ -2,7 +2,7 @@
 title: In-app indexer setup — api slice
 service: api
 last_updated: 2026-10-30
-status: Approved
+status: Implemented
 ---
 
 # PLAN: In-app indexer setup — `api` (`api/plan.md`)
@@ -50,7 +50,7 @@ Writes are confined to `services/api/` and this directory.
 1. **Verify Prowlarr's create semantics** against the dev stack's Prowlarr (port 9696, dev
    `INDEXER_API_KEY`) before writing the add path: confirm that `POST /api/v1/indexer` without
    `forceSave` tests the indexer and answers `400` with a validation-failure array on failure, and
-   that `DELETE /api/v1/indexer/{id}` answers `404` for an unknown id. Record the result in your
+   that `DELETE /api/v1/indexer/{id}` answers `404` for an unknown id (measured: it answers `200 {}`; see Step 8). Record the result in your
    report. If create does not test, call `POST /api/v1/indexer/test` first and map its failure the
    same way.
 2. Widen `ProwlarrClient.request()` to `(path, { method, query, body })`, keeping GET as the
@@ -85,8 +85,10 @@ Writes are confined to `services/api/` and this directory.
    5. `createIndexer(buildIndexerPayload(...))`; a `400` → `INDEXER_TEST_FAILED` (log Prowlarr's
       failure messages truncated to ~300 chars, never the request body — NFR-4); other non-2xx →
       `INDEXER_UNAVAILABLE`; success → map the returned indexer to `ConfiguredIndexer`.
-8. `IndexerService.remove(id)`: `deleteIndexer(id)`; `404` → `INDEXER_NOT_FOUND`; success → `true`.
-   Never touches tags or proxies.
+8. `IndexerService.remove(id)`: `listIndexers()` first; an id not in the list → `INDEXER_NOT_FOUND`
+   without calling delete (T001 measured that Prowlarr answers `DELETE` of an unknown id with `200 {}`,
+   not `404`); then `deleteIndexer(id)`, still mapping a `404` to `INDEXER_NOT_FOUND` for other
+   Prowlarr versions; success → `true`. Never touches tags or proxies.
 9. Resolver: the four operations with descriptions, `@UseGuards(AdminGuard)` on each; `Int` for
    `id`, nullable `String` for `search`.
 10. Error keys and English messages (step 7/8 keys), matching the spec's English column.
@@ -116,7 +118,7 @@ the silent failure, in English (Article IX). Fixtures use invented definitions o
 - `src/indexer/indexer.service.spec.ts` (extend) — `add` of an already-held definition makes no
   create call (duplicates double every search result silently); a create `400` rejects with
   `test_failed` and never resolves as an added indexer; a marked definition with no tag rejects
-  with `flaresolverr_missing` and makes no create call; `remove` on `404` rejects with `not_found`;
+  with `flaresolverr_missing` and makes no create call; `remove` of an id absent from the list rejects with `not_found` and makes no delete call;
   `catalog` with Redis throwing still answers from Prowlarr.
 - `src/clients/indexer/client.spec.ts` (extend) — a non-2xx from each new call throws with its
   status before any body is parsed as data (the existing class of bug this file guards).

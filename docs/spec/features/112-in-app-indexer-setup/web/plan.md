@@ -2,7 +2,7 @@
 title: In-app indexer setup — web slice
 service: web
 last_updated: 2026-10-30
-status: Approved
+status: Implemented
 ---
 
 # PLAN: In-app indexer setup — `web` (`web/plan.md`)

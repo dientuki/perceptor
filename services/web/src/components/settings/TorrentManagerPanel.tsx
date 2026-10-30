@@ -9,6 +9,7 @@ import {
 } from "@/actions/preferences";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
+import IndexerSection from "@/components/indexers/IndexerSection";
 import PathPicker from "@/components/settings/PathPicker";
 import Badge from "@/components/ui/badge/Badge";
 import type { MediaRoot } from "@/types/media-roots";
@@ -90,6 +91,8 @@ export default function TorrentManagerPanel({
           defaultValue={trackerApiKey}
         />
       </div>
+
+      <IndexerSection />
 
       <div>
         <Label htmlFor="torrent_group_name">{t("groupNameLabel")}</Label>

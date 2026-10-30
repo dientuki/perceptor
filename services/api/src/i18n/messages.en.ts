@@ -103,6 +103,13 @@ export const MESSAGES_EN: Record<string, string> = {
     'Configure a media server before syncing the library.',
   [ERROR_KEYS.INDEXER_UNAVAILABLE]: 'Could not reach the indexer',
   [ERROR_KEYS.INDEXER_NO_INFOHASH]: 'Could not resolve an infoHash',
+  [ERROR_KEYS.INDEXER_DEFINITION_NOT_ALLOWED]:
+    "That indexer can't be added from Perceptor.",
+  [ERROR_KEYS.INDEXER_TEST_FAILED]:
+    "The indexer didn't respond to the test. Try again later or add it from Prowlarr.",
+  [ERROR_KEYS.INDEXER_FLARESOLVERR_MISSING]:
+    "FlareSolverr isn't set up in the indexer, so this site can't be reached.",
+  [ERROR_KEYS.INDEXER_NOT_FOUND]: 'That indexer no longer exists.',
   [ERROR_KEYS.SEARCH_TARGET_AMBIGUOUS]: 'Specify a single search target',
 
   // media-sources, process-jobs, downloads

@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-29
 last_updated: 2026-10-30
-status: Approved
+status: Implemented
 services: [api, web]
 ---
 
@@ -205,7 +205,7 @@ None.
       "Add indexer", and the modal lists only public torrent definitions with a film or TV category,
       alphabetically; the count matches a `jq` filter over `GET /api/v1/indexer/schema` with REQ-1's
       rules run against the same Prowlarr.
-- [ ] **AC-2**: Typing part of a name in the modal's search narrows the list to entries whose name
+- [x] **AC-2**: Typing part of a name in the modal's search narrows the list to entries whose name
       contains it, case-insensitively.
 - [ ] **AC-3**: Adding an entry with no FlareSolverr marker creates exactly one indexer in Prowlarr's
       UI, enabled, with no tags; the Torrent manager list shows it, and searching a title from a film's
@@ -225,13 +225,22 @@ None.
       reload.
 - [ ] **AC-10 (failure)**: A non-admin session calling `indexerCatalog` gets
       `error.auth.admin_required`; the Torrent manager tab is not reachable for them at all.
-- [ ] **AC-11**: Every definition name and every `indexerUrls` host in the live
+- [x] **AC-11**: Every definition name and every `indexerUrls` host in the live
       `GET /api/v1/indexer/schema`, grepped (`git grep -F -i`) against the repository after
       implementation, matches nothing (NFR-1).
 - [ ] **AC-12**: Removing an indexer from the Torrent manager list, after confirming, makes it
       disappear from that list and from Prowlarr's UI; the `flaresolverr` tag still exists afterwards.
 - [ ] **AC-13 (failure)**: Removing an indexer that was already deleted in Prowlarr's UI (list not
       reloaded) shows `error.indexer.not_found` and the list refreshes without it.
+
+**Verification status (2026-10-30).** AC-2 was observed in the browser (typing a fragment narrowed the
+list to the one matching entry, already configured, shown as added). AC-11 was run over every line the
+change added and every new file: 322 names, definition identifiers and `indexerUrls` hosts of the dev
+Prowlarr's public torrent definitions, no match. AC-1, AC-3 to AC-10, AC-12 and AC-13 are not yet
+observed: the modal listing and the chips were seen, but a live add or remove writes to the
+maintainer's own Prowlarr, and a non-admin token for AC-10 and a stopped `indexer` container for AC-5
+were not set up. The unit tests cover the same rules for AC-6 to AC-8, AC-13 and the idempotence and
+`remove` checks on the `api` side.
 
 ## Out of Scope
 

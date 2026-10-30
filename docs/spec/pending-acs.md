@@ -1,7 +1,7 @@
 # Specs con Acceptance Criteria pendientes
 
 <!-- pending-acs:begin intro -->
-Medido el **2026-10-29**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
+Medido el **2026-10-30**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
 `## Acceptance Criteria`; las 50 specs que no aparecen estan en 100%.
 <!-- pending-acs:end intro -->
 
@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **61** de 111 |
-| ACs pendientes | **488** |
-| ACs totales del proyecto | 1366 |
-| ACs verificados | 878 (64%) |
+| Specs con ACs pendientes | **62** de 112 |
+| ACs pendientes | **499** |
+| ACs totales del proyecto | 1379 |
+| ACs verificados | 880 (64%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,6 +28,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 112 | in-app-indexer-setup | Implemented | 11/13 | 1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13 | **Sesion admin en un browser.** El modal listo el catalogo alfabetico con chips y la busqueda angosto (AC-2), pero un alta o baja real escribe en el Prowlarr del mantenedor y no se hizo; AC-5 pide parar `indexer`, AC-7 y AC-10 un token de GraphQL (admin y no admin). Ya probado debajo: tests de `api` (filtro, payload, idempotencia, `test_failed`, `flaresolverr_missing`, `not_found`) con inyeccion de fallas, y en el Prowlarr de dev el alta sin `forceSave` prueba el sitio y falla con 400. |
 | 111 | encode-verdict-persistence | Implemented | 8/9 | 1, 2, 3, 4, 5, 6, 7, 9 | **Un encode real con Stop/Play, un reinicio del worker y una fuente Blu-ray.** Solo AC-8 esta verificado, por tests (757 en verde); el resto necesita ver los logs `(reused)` y las claves `perceptor:encode:*` en Redis durante un encode de verdad, y AC-6, AC-7 y AC-9 ademas un disco Blu-ray. |
 | 110 | audio-variant-detection | Approved | 13/13 | 1, 2, 3, 4, 4b, 5, 6, 7, 8, 9, 10, 11, 12 | **[OBS PENDIENTE DE ESCRIBIR]** |
 | 109 | tmdb-list-import | Implemented | 16/23 | 1, 2, 5, 7, 8, 9, 10, 11, 12, 13, 15, 18, 19, 20, 21, 22 | **Una lista de TMDB con una serie y otra privada.** Pasada en vivo el 2026-10-28 sobre un stack de este checkout (migracion aplicada, dos usuarios de prueba ya borrados), con listas publicas de solo peliculas: observados AC-3, AC-4, AC-6 y, tras la enmienda 0.2.0 (`/lists`), AC-14, AC-16 y AC-17; por API tambien el error de `hello`/URL de pelicula/lista inexistente, el duplicado, el borrado cruzado entre usuarios y `listImportEnabled` false→true. Abiertos por falta de una lista con serie (1, 2, 7), una lista privada real (8, 9), y por no haberse visto en pantalla el aviso de tarea deshabilitada (12), el duplicado y el desvincular conservando titulos (10, 11), ni una lista ajena con un segundo usuario (13); AC-5 pide agregar un titulo a una lista en TMDB; AC-15 (0.2.0) se vio con peliculas en `/lists/<id>` pero falta una serie y un corto. Lo ya probado por debajo: `tmdb-lists.service.spec` (10 casos), `list-reference.spec` y el `P2002` forzado de AC-6b. Enmienda 0.3.0 (AC-18 a 22): sin pasada en vivo, falta ver el interruptor en una pelicula y una serie `MISSING` y ausente en una `COMPLETED` (18), y correr `acquire_movies`/`acquire_episodes` con el interruptor apagado (19, 20, 21) y el rechazo sobre un titulo ajeno con un segundo usuario (22). Ya probado por debajo: los casos de tope (`MAX_MOVIES_PER_RUN` + 1 titulos apagados delante de uno que si) en `acquire-movies` y `acquire-episodes`, y el dueño apagado fuera de la union en `ranking-context` (46 tests). |
@@ -94,7 +95,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 488 ACs pendientes no son 488 problemas distintos. Se reducen a 27 destrabes, y los dos primeros se llevan el 53%:
+Los 499 ACs pendientes no son 499 problemas distintos. Se reducen a 28 destrabes, y los dos primeros se llevan el 52%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
@@ -107,6 +108,7 @@ Los 488 ACs pendientes no son 488 problemas distintos. Se reducen a 27 destrabes
 | Una lista de TMDB con una serie y otra privada | 16 | 109 |
 | Un token de usuario logueado | 12 | 037, 039, 093 |
 | Plex (descartado) | 12 | 072 |
+| Sesion admin en un browser | 11 | 112 |
 | Fuentes en vuelo, y un segundo usuario | 10 | 064 |
 | Jellyfin con el plugin de OpenSubtitles logueado y cupo | 10 | 106 |
 | Un browser que registre service workers | 9 | 080 |

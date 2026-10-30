@@ -824,7 +824,7 @@ The full vocabulary, by owner:
 | `api` — movies/shows/seasons/episodes | `error.movie.not_found`, `error.movie.not_in_catalog`, `error.movie.download_in_progress`, `error.show.not_available`, `error.show.not_in_catalog`, `error.season.not_found`, `error.season.download_in_progress`, `error.episode.not_found`, `error.episode.download_in_progress`, `error.magnet.already_attached`, `error.magnet.already_attached_season` (`063`, params `{show, number}`), `error.media.unsupported_type`, `error.media.catalog_unavailable` (`033-billboard-and-navigation`) |
 | `api` — magnet parsing | `error.magnet.not_a_magnet`, `error.magnet.invalid_infohash`, `error.magnet.v2_unsupported` |
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
-| `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash` |
+| `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash`, `error.indexer.definition_not_allowed`, `error.indexer.test_failed`, `error.indexer.flaresolverr_missing`, `error.indexer.not_found` (`112-in-app-indexer-setup`) |
 | `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.source.superseded` (`087-force-replacement-arbitration`), `error.processJob.not_found` |
 | `api` — downloads (torrent client) | `error.download.torrent_client_rejected` (`{status}`, `0` when unreachable), `error.download.torrent_client_unauthorized` (no params; `401`/`403` from qBittorrent — `104-torrent-api-key-auth`) |
 | `api` — ffprobe-logs | `error.ffprobeLog.not_found`, `error.ffprobeLog.empty_payload` |
@@ -2913,6 +2913,66 @@ type Mutation {
   payload without the field treats it as `false` and logs.
 - The verdict never crosses the boundary: it lives in the worker's Redis verdict store (`111`, kind
   `audio-variant`) and shows up only as the output track's title.
+
+### Choosing indexers from Prowlarr's own catalog (`112-in-app-indexer-setup`)
+
+```graphql
+enum IndexerMediaCategory {
+  MOVIES
+  TV
+  ANIME
+}
+
+type IndexerDefinition {
+  "Prowlarr's definition identifier (definitionName). Opaque to web."
+  definitionName: String!
+  name: String!
+  "As Prowlarr reports it (e.g. en-US). Null when Prowlarr reports none."
+  language: String
+  categories: [IndexerMediaCategory!]!
+  "Prowlarr marks this site as Cloudflare-fronted; addIndexer will attach the flaresolverr tag."
+  needsFlareSolverr: Boolean!
+  "This Prowlarr already holds an indexer of this definition."
+  configured: Boolean!
+}
+
+type ConfiguredIndexer {
+  id: Int!
+  name: String!
+  definitionName: String!
+  enabled: Boolean!
+  usesFlareSolverr: Boolean!
+}
+
+type Query {
+  indexerCatalog(search: String): [IndexerDefinition!]!
+  configuredIndexers: [ConfiguredIndexer!]!
+}
+
+type Mutation {
+  addIndexer(definitionName: String!): ConfiguredIndexer!
+  "Removes the indexer from Prowlarr. True on success."
+  removeIndexer(id: Int!): Boolean!
+}
+```
+
+All four operations are admin-only (`error.auth.admin_required` otherwise).
+
+| Error | Raised by | What `web` does |
+| :-- | :-- | :-- |
+| `error.indexer.unavailable` | all four, when Prowlarr is unreachable or answers an unexpected status (an error here, unlike `indexerStatus`) | Inline in the section or modal; the page stays rendered |
+| `error.indexer.definition_not_allowed` | `addIndexer` for an unknown, private, semi-private, usenet or non-film/TV definition | That row shows the message |
+| `error.indexer.test_failed` | `addIndexer` when Prowlarr's own test of the site fails (nothing is saved) | That row shows the message |
+| `error.indexer.flaresolverr_missing` | `addIndexer` for a Cloudflare-fronted definition when the `flaresolverr` tag does not exist | That row shows the message |
+| `error.indexer.not_found` | `removeIndexer` for an id Prowlarr no longer holds | Message in the section, list reloaded |
+
+- The catalog is filtered server-side to public torrent definitions with a film or TV category
+  (2000-2999, 5000-5999, subcategories included) and sorted alphabetically; there is no argument to
+  widen it. No site name is committed anywhere in the repository.
+- `addIndexer` of a definition already held is not an error: it returns the existing indexer.
+- Prowlarr answers `DELETE` of an unknown id with `200 {}`, so `removeIndexer` checks the list first
+  and raises `not_found` itself.
+- `ConfiguredIndexer` carries no URL, fields or tag list, only `usesFlareSolverr`.
 
 ## Known debt
 

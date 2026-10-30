@@ -328,6 +328,38 @@ type IndexerStatus {
   reachable: Boolean!
 }
 
+type IndexerDefinition {
+  """Prowlarr's definition identifier (definitionName). Opaque to web."""
+  definitionName: String!
+  name: String!
+
+  """As Prowlarr reports it (e.g. en-US). Null when Prowlarr reports none."""
+  language: String
+  categories: [IndexerMediaCategory!]!
+
+  """
+  Prowlarr marks this site as Cloudflare-fronted; addIndexer will attach the flaresolverr tag.
+  """
+  needsFlareSolverr: Boolean!
+
+  """This Prowlarr already holds an indexer of this definition."""
+  configured: Boolean!
+}
+
+enum IndexerMediaCategory {
+  MOVIES
+  TV
+  ANIME
+}
+
+type ConfiguredIndexer {
+  id: Int!
+  name: String!
+  definitionName: String!
+  enabled: Boolean!
+  usesFlareSolverr: Boolean!
+}
+
 type Episode {
   id: ID!
   episodeNumber: Int!
@@ -837,6 +869,8 @@ type Query {
   How many indexers the configured Prowlarr holds, and whether Prowlarr answered at all.
   """
   indexerStatus: IndexerStatus!
+  indexerCatalog(search: String): [IndexerDefinition!]!
+  configuredIndexers: [ConfiguredIndexer!]!
   shows: [Show!]!
   show(id: Int!): Show
   preferences: UserPreferences!
@@ -985,6 +1019,10 @@ type Mutation {
   Descarta un archivo de una fuente: cancela su codificación y borra su entrada
   """
   encodeJobDiscard(processJobId: Int!): Download!
+  addIndexer(definitionName: String!): ConfiguredIndexer!
+
+  """Removes the indexer from Prowlarr. True on success."""
+  removeIndexer(id: Int!): Boolean!
 
   """
   Reemplaza la preferencia de idiomas del usuario para una serie puntual, para un tipo de pista

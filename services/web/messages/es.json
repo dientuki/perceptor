@@ -56,7 +56,11 @@
     },
     "indexer": {
       "unavailable": "No se pudo conectar con el indexer",
-      "no_infohash": "No se pudo determinar el infoHash de este release"
+      "no_infohash": "No se pudo determinar el infoHash de este release",
+      "definition_not_allowed": "Ese indexer no se puede agregar desde Perceptor.",
+      "test_failed": "El indexer no respondió a la prueba. Probá más tarde o agregalo desde Prowlarr.",
+      "flaresolverr_missing": "FlareSolverr no está configurado en el indexer, así que este sitio no se puede usar.",
+      "not_found": "Ese indexer ya no existe."
     },
     "search": {
       "target_ambiguous": "Indicá un solo destino de búsqueda"
@@ -1037,5 +1041,41 @@
     "heading": "Estás sin conexión",
     "body": "No se puede contactar al servidor de Perceptor en este momento. Verificá que el stack esté corriendo y volvé a intentar.",
     "retry": "Reintentar"
+  },
+  "indexers": {
+    "add": "Agregar indexer",
+    "section": {
+      "title": "Indexers",
+      "loading": "Cargando indexers...",
+      "empty": "Todavía no hay indexers configurados.",
+      "disabled": "Deshabilitado",
+      "flaresolverr": "FlareSolverr",
+      "removeAria": "Quitar {name}"
+    },
+    "modal": {
+      "title": "Agregar un indexer",
+      "description": "Indexers de torrents públicos que Prowlarr ofrece para películas y series, en orden alfabético. Los que necesitan una cuenta se agregan desde Prowlarr.",
+      "searchLabel": "Buscar indexers",
+      "searchPlaceholder": "Buscá por nombre",
+      "loading": "Cargando catálogo...",
+      "empty": "Ningún indexer coincide.",
+      "close": "Cerrar",
+      "add": "Agregar",
+      "adding": "Agregando...",
+      "added": "Agregado",
+      "flaresolverrNote": "Este sitio está detrás de Cloudflare y pasa por FlareSolverr, así que puede ser más lento.",
+      "categories": {
+        "MOVIES": "Películas",
+        "TV": "Series",
+        "ANIME": "Anime"
+      }
+    },
+    "remove": {
+      "title": "Quitar indexer",
+      "message": "<b>{name}</b> se quita del indexer. Los releases ya descargados no se tocan.",
+      "confirm": "Quitar",
+      "cancel": "Cancelar",
+      "removing": "Quitando..."
+    }
   }
 }

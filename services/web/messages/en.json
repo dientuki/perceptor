@@ -56,7 +56,11 @@
     },
     "indexer": {
       "unavailable": "Could not reach the indexer",
-      "no_infohash": "Could not resolve an infoHash"
+      "no_infohash": "Could not resolve an infoHash",
+      "definition_not_allowed": "That indexer can't be added from Perceptor.",
+      "test_failed": "The indexer didn't respond to the test. Try again later or add it from Prowlarr.",
+      "flaresolverr_missing": "FlareSolverr isn't set up in the indexer, so this site can't be reached.",
+      "not_found": "That indexer no longer exists."
     },
     "search": {
       "target_ambiguous": "Provide a single search target"
@@ -1037,5 +1041,41 @@
     "heading": "You're offline",
     "body": "Perceptor's server can't be reached right now. Check that the stack is running and try again.",
     "retry": "Retry"
+  },
+  "indexers": {
+    "add": "Add indexer",
+    "section": {
+      "title": "Indexers",
+      "loading": "Loading indexers...",
+      "empty": "No indexers are configured yet.",
+      "disabled": "Disabled",
+      "flaresolverr": "FlareSolverr",
+      "removeAria": "Remove {name}"
+    },
+    "modal": {
+      "title": "Add an indexer",
+      "description": "Public torrent indexers that Prowlarr offers for films and series, in alphabetical order. Indexers that need an account are added from Prowlarr.",
+      "searchLabel": "Search indexers",
+      "searchPlaceholder": "Search by name",
+      "loading": "Loading catalog...",
+      "empty": "No indexers match.",
+      "close": "Close",
+      "add": "Add",
+      "adding": "Adding...",
+      "added": "Added",
+      "flaresolverrNote": "This site is behind Cloudflare and goes through FlareSolverr, so it may be slower.",
+      "categories": {
+        "MOVIES": "Films",
+        "TV": "Series",
+        "ANIME": "Anime"
+      }
+    },
+    "remove": {
+      "title": "Remove indexer",
+      "message": "<b>{name}</b> will be removed from the indexer. Releases already downloaded are not affected.",
+      "confirm": "Remove",
+      "cancel": "Cancel",
+      "removing": "Removing..."
+    }
   }
 }

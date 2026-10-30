@@ -295,8 +295,11 @@ whole setup lives in one place) and adds `IndexerSetupGuide.tsx` (same `onboardi
 sign in to Prowlarr, add an indexer, add a second one tagged `flaresolverr` for a Cloudflare-fronted
 tracker, then confirm from a title's detail page — fed by the new `getIndexerStatus()` action
 (`src/actions/indexer.ts`) and the indexer's URL/port read off `getEnvironmentInfo()`'s `endpoints`
-entry with `id === "indexer"` (`url` linked when non-null, otherwise the bare port with no
-constructed hostname). `IndexerSetupGuide` branches on `reachable` before `configuredIndexers`, so
+entry with `id === "indexer"` (`url` wins when non-null, i.e. under Traefik; otherwise the page builds
+`http://<host>:<port>/` server-side from the request's `x-forwarded-host`/`Host` header via
+`lib/request-host.ts`'s `parseRequestHostname`, which validates against a conservative hostname/IPv4/
+bracketed-IPv6 pattern and falls back to `localhost`, so the link works on an IP or any host; the
+bare-port text remains only for port 0). `IndexerSetupGuide` branches on `reachable` before `configuredIndexers`, so
 an unreachable Prowlarr never reads as "zero indexers configured". A short `about` paragraph opens
 the block explaining what an indexer is and why one is needed, before the reachable/zero/count
 notice. The four step screenshots live under `public/images/first-step/` (`indexer-login-2.png`,
@@ -324,6 +327,10 @@ in a popup. Unlike the sidebar entry above, **this one is unconditional**: an ad
 reach the tutorial from here, even once TMDB and every indexer are already configured — a
 deliberate difference from the sidebar (`settings/page.tsx` fetches no `indexerStatus` and
 `TorrentManagerPanel` takes no visibility props for this).
+
+## Choosing indexers in-app (`112-in-app-indexer-setup`)
+
+`src/components/indexers/` holds `IndexerSection.tsx` (Settings → Torrent manager, below the indexer API key field: the configured indexers as the same removable `Badge` chips as the torrent groups, X opens `RemoveIndexerModal` for a confirmation since it deletes in Prowlarr), `AddIndexerButton.tsx` + `AddIndexerModal.tsx` + `IndexerCatalogRow.tsx` (the catalog modal, mounted both in that section and on `/first-step` above the unchanged `IndexerSetupGuide`). Everything is fetched client-side through four result-union actions in `src/actions/indexer.ts` (`getIndexerCatalogAction`, `getConfiguredIndexersAction`, `addIndexerAction`, `removeIndexerAction`), never in a page's `Promise.all`, so an unreachable Prowlarr shows an inline error instead of breaking Settings. The catalog arrives filtered and alphabetical from `api`; `web` neither sorts nor filters it, and the search is a debounced `search` argument. A successful add or remove calls `router.refresh()` so the layout re-reads `indexerStatus` (sidebar entry, `/first-step` notice). No tracker name appears in code or catalogs. Copy lives in `indexers.*` and `errors.indexer.*`.
 
 ## Media type availability (`045-media-type-availability`)
 

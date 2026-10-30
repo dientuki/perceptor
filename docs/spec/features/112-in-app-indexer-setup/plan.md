@@ -2,7 +2,7 @@
 title: In-app indexer setup — Implementation Plan
 spec_version: 0.1.0
 last_updated: 2026-10-30
-status: Approved
+status: Implemented
 ---
 
 # PLAN: In-app indexer setup (`plan.md`)

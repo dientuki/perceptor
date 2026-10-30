@@ -83,6 +83,10 @@ export const ERROR_KEYS = {
   MEDIA_SERVER_NOT_CONFIGURED: 'error.mediaServer.not_configured',
   INDEXER_UNAVAILABLE: 'error.indexer.unavailable',
   INDEXER_NO_INFOHASH: 'error.indexer.no_infohash',
+  INDEXER_DEFINITION_NOT_ALLOWED: 'error.indexer.definition_not_allowed',
+  INDEXER_TEST_FAILED: 'error.indexer.test_failed',
+  INDEXER_FLARESOLVERR_MISSING: 'error.indexer.flaresolverr_missing',
+  INDEXER_NOT_FOUND: 'error.indexer.not_found',
   SEARCH_TARGET_AMBIGUOUS: 'error.search.target_ambiguous',
 
   // media-sources, process-jobs, downloads
