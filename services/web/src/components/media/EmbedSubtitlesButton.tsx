@@ -37,7 +37,11 @@ export default function EmbedSubtitlesButton({
   const { isOpen, openModal, closeModal } = useModal();
   const [staleMessage, setStaleMessage] = useState<string | null>(null);
 
-  const inFlight = embed?.status === "QUEUED" || embed?.status === "RUNNING";
+  // Spec 113, REQ-7
+  const inFlight =
+    embed != null && embed.status !== "COMPLETED" && embed.status !== "FAILED";
+  const inFlightLabel =
+    embed?.status === "SYNCING" ? t("syncing") : t("embedding");
   const fallback = tErrors("network.connectionFailed");
   const reasonOf = (key: string | null | undefined) =>
     translateErrorKey(
@@ -82,11 +86,11 @@ export default function EmbedSubtitlesButton({
           size="sm"
           variant="outline"
           disabled
-          title={t("embedding")}
+          title={inFlightLabel}
           className={fullWidth ? "w-full" : ""}
         >
           <Subtitles size={compact ? 16 : 18} />
-          {!compact && t("embedding")}
+          {!compact && inFlightLabel}
         </Button>
       ) : (
         <Button
@@ -102,7 +106,7 @@ export default function EmbedSubtitlesButton({
       )}
       {compact && inFlight && (
         <span className="text-base text-gray-500 dark:text-gray-400">
-          {t("embedding")}
+          {inFlightLabel}
         </span>
       )}
       {staleMessage && (

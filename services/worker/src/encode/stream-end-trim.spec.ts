@@ -8,10 +8,14 @@
 // a dropped audio track must never move the cut, a failed analysis must be
 // silent and encode the whole file, and a cancellation must propagate.
 
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EncodeCancelledError } from './cancellation';
 import { decideStreamEndCut, parsePacketEnds, resolveStreamEndTrim } from './stream-end-trim';
+import { installVerdictStore, type VerdictRedis } from './verdict-store';
 import { runFfmpegCapture } from '../ffmpeg/capture';
 
 vi.mock('../ffmpeg/capture', () => ({ runFfmpegCapture: vi.fn() }));
@@ -220,5 +224,122 @@ describe('resolveStreamEndTrim', () => {
     mockCapture.mockRejectedValueOnce(new EncodeCancelledError());
     await expect(resolveStreamEndTrim(on, '/a.mkv', metadata, signal)).rejects.toBeInstanceOf(EncodeCancelledError);
     expect(console.log).not.toHaveBeenCalled();
+  });
+});
+
+// Spec 111: a persisted verdict reused for the wrong input, or stored for an
+// analysis that never completed, silently cuts or keeps the wrong tail.
+class FakeStore implements VerdictRedis {
+  readonly entries = new Map<string, string>();
+  async get(key: string): Promise<string | null> {
+    return this.entries.get(key) ?? null;
+  }
+  async set(key: string, value: string): Promise<unknown> {
+    this.entries.set(key, value);
+    return 'OK';
+  }
+}
+
+describe('resolveStreamEndTrim verdict persistence', () => {
+  const signal = new AbortController().signal;
+  const metadata = {
+    format: { duration: '4121.760' },
+    streams: [
+      { index: 0, codec_type: 'video', codec_name: 'h264' },
+      { index: 1, codec_type: 'audio', codec_name: 'ac3', channels: 6, tags: { language: 'eng' } },
+      { index: 2, codec_type: 'audio', codec_name: 'ac3', channels: 6, tags: { language: 'spa' } },
+    ],
+  };
+  const on = {
+    streamEndTrimEnabled: true,
+    originalLanguageIso3: 'eng',
+    allowedAudioLanguagesIso3: ['eng'],
+    allowedAudioLanguageTags: [] as string[],
+  };
+  let dir: string;
+  let file: string;
+  let store: FakeStore;
+
+  function packets(ends: Record<number, number>) {
+    const stdout = Object.entries(ends)
+      .map(([index, end]) => `packet|stream_index=${index}|pts_time=${end}|duration_time=0`)
+      .join('\n');
+    return { code: 0, stdoutBytes: stdout.length, stderr: '', stdout };
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'streamtrim-'));
+    file = join(dir, 'a.mkv');
+    writeFileSync(file, 'x');
+    store = new FakeStore();
+    installVerdictStore(store);
+    mockCapture.mockReset();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    installVerdictStore(null);
+    rmSync(dir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it('reuses a stored cut without spawning ffprobe and logs (reused)', async () => {
+    mockCapture.mockResolvedValueOnce(packets({ 0: 4101.138, 1: 4121.76 }));
+    const first = await resolveStreamEndTrim(on, file, metadata, signal);
+    const second = await resolveStreamEndTrim(on, file, metadata, signal);
+    expect(second).toBe(first);
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(console.log).mock.calls[1][0]).toContain('cut=4101.138 (reused)');
+  });
+
+  it('treats a stored null (keep) as a hit', async () => {
+    mockCapture.mockResolvedValueOnce(packets({ 0: 4121.5, 1: 4121.76 }));
+    expect(await resolveStreamEndTrim(on, file, metadata, signal)).toBeNull();
+    expect(await resolveStreamEndTrim(on, file, metadata, signal)).toBeNull();
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(console.log).mock.calls[1][0]).toContain('-> keep (reused)');
+  });
+
+  it('stores the out-of-window keep', async () => {
+    mockCapture.mockResolvedValueOnce(packets({ 0: 4121.5 }));
+    expect(await resolveStreamEndTrim(on, file, metadata, signal)).toBeNull();
+    expect(store.entries.size).toBe(1);
+    expect([...store.entries.values()]).toEqual(['null']);
+    expect(await resolveStreamEndTrim(on, file, metadata, signal)).toBeNull();
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+  });
+
+  it('misses when a resolution changes the kept audio set', async () => {
+    mockCapture.mockResolvedValueOnce(packets({ 0: 4101.138, 1: 4101.2, 2: 4181 }));
+    expect(await resolveStreamEndTrim(on, file, metadata, signal)).toBeNull();
+    mockCapture.mockResolvedValueOnce(packets({ 0: 4101.138, 1: 4101.2, 2: 4181 }));
+    const widened = { ...on, allowedAudioLanguagesIso3: ['eng', 'spa'] };
+    expect(await resolveStreamEndTrim(widened, file, metadata, signal)).toBeCloseTo(4101.138, 3);
+    expect(mockCapture).toHaveBeenCalledTimes(2);
+    expect(store.entries.size).toBe(2);
+  });
+
+  it('misses when the file size or mtime changed', async () => {
+    mockCapture.mockResolvedValue(packets({ 0: 4101.138, 1: 4121.76 }));
+    await resolveStreamEndTrim(on, file, metadata, signal);
+    utimesSync(file, new Date(1_000_000), new Date(1_000_000));
+    await resolveStreamEndTrim(on, file, metadata, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(2);
+    writeFileSync(file, 'longer content');
+    await resolveStreamEndTrim(on, file, metadata, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(3);
+  });
+
+  it('stores nothing on a cancellation', async () => {
+    mockCapture.mockRejectedValueOnce(new EncodeCancelledError());
+    await expect(resolveStreamEndTrim(on, file, metadata, signal)).rejects.toBeInstanceOf(EncodeCancelledError);
+    expect(store.entries.size).toBe(0);
+  });
+
+  it('stores nothing on a failed analysis', async () => {
+    mockCapture.mockResolvedValueOnce({ code: 1, stdoutBytes: 0, stderr: '', stdout: '' });
+    expect(await resolveStreamEndTrim(on, file, metadata, signal)).toBeNull();
+    expect(store.entries.size).toBe(0);
   });
 });

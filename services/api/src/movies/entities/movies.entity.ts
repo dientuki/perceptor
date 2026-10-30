@@ -82,6 +82,10 @@ export class Movie {
   @Field()
   audioMandatory: boolean;
 
+  // Spec 109, REQ-15
+  @Field()
+  autoAcquire: boolean;
+
   // How many *other* users have this film in their library (067). Populated
   // by the resolver only when selected; never by MoviesService's listings.
   @Field(() => Int, { description: 'How many *other* users have this film in their library. 0 when the caller is the last owner.' })

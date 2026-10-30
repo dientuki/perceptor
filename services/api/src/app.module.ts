@@ -30,6 +30,7 @@ import { SubtitleSearchModule } from './subtitle-search/subtitle-search.module';
 import { LibraryProbeModule } from './library-probe/library-probe.module';
 import { EnvironmentModule } from './environment/environment.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { TmdbListsModule } from './tmdb-lists/tmdb-lists.module';
 import { AcquisitionModule } from './acquisition/acquisition.module';
 import { formatGraphQLError } from './i18n/graphql-error.formatter';
 
@@ -68,6 +69,7 @@ import { formatGraphQLError } from './i18n/graphql-error.formatter';
     EnvironmentModule,
     CalendarModule,
     AcquisitionModule,
+    TmdbListsModule,
     SubtitleEmbedModule,
     SubtitleSearchModule,
     LibraryProbeModule,

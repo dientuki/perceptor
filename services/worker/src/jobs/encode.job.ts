@@ -47,6 +47,8 @@ export type EncodeJobDetails = {
   dubTrimEnabled: boolean;
   // Spec 099, REQ-3
   streamEndTrimEnabled: boolean;
+  // Spec 110, REQ-5
+  audioVariantDetection?: boolean;
   libraryLayout: string;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -85,7 +87,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags allowedSubtitleFormats contentKind compressionResolution grainMode isShort dubTrimEnabled streamEndTrimEnabled libraryLayout
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags allowedSubtitleFormats contentKind compressionResolution grainMode isShort dubTrimEnabled streamEndTrimEnabled audioVariantDetection libraryLayout
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
         compressionEnabled
@@ -112,8 +114,13 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const dubTrimEnabled = compressing && details.dubTrimEnabled === true;
   // Spec 099, REQ-3 NFR-2
   const streamEndTrimEnabled = compressing && details.streamEndTrimEnabled === true;
+  // Spec 110, REQ-5
+  if (typeof details.audioVariantDetection !== 'boolean') {
+    console.log(`[encode] ${processJobId}: audioVariantDetection missing or not a boolean, treating as false`);
+  }
+  const audioVariantDetection = compressing && details.audioVariantDetection === true;
   console.log(
-    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution} grainMode=${grainMode} libraryLayout=${libraryLayout} allowedSubtitleFormats=${JSON.stringify(allowedSubtitleFormats)} isShort=${isShort} dubTrimEnabled=${dubTrimEnabled} streamEndTrimEnabled=${streamEndTrimEnabled}`,
+    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution} grainMode=${grainMode} libraryLayout=${libraryLayout} allowedSubtitleFormats=${JSON.stringify(allowedSubtitleFormats)} isShort=${isShort} dubTrimEnabled=${dubTrimEnabled} streamEndTrimEnabled=${streamEndTrimEnabled} audioVariantDetection=${audioVariantDetection}`,
   );
 
   const trackTitles = await fetchTrackTitles();
@@ -127,6 +134,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     // Spec 100, REQ-9 REQ-10
     let assembledPath: string | null = null;
     let assembledMoved = false;
+    let assembledDelivered = false;
 
     try {
       const outputPath = buildOutputPath({ ...details, layout: libraryLayout });
@@ -205,6 +213,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             isShort,
             dubTrimEnabled,
             streamEndTrimEnabled,
+            audioVariantDetection,
             mediaSourceId: details.mediaSourceId,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
@@ -235,6 +244,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             isShort,
             dubTrimEnabled,
             streamEndTrimEnabled,
+            audioVariantDetection,
             mediaSourceId: details.mediaSourceId,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
@@ -245,6 +255,8 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
           signal,
         );
         ffmpegCommand = encodeResult.ffmpegCommand;
+        // Spec 111, REQ-6 REQ-8
+        assembledDelivered = true;
       }
 
       // Spec 038, REQ-1
@@ -294,8 +306,8 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
 
       throw error;
     } finally {
-      // Spec 100, REQ-9 REQ-10
-      if (assembledPath && !assembledMoved) {
+      // Spec 111, REQ-6 REQ-8
+      if (assembledPath && !assembledMoved && assembledDelivered) {
         if (isInsideRoot(details.downloadsRoot, assembledPath)) {
           try {
             await rm(assembledPath, { force: true });

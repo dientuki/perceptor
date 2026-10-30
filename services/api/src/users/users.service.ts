@@ -230,4 +230,12 @@ export class UsersService {
       data: { subtitleSearch: enabled },
     });
   }
+
+  // Spec 110, REQ-1
+  async setAudioVariantDetection(userId: string, enabled: boolean): Promise<User> {
+    return await this.prisma.user.update({
+      where: { id: userId },
+      data: { audioVariantDetection: enabled },
+    });
+  }
 }

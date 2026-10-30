@@ -1,5 +1,6 @@
 import { EncodeCancelledError } from './cancellation';
 import { runFfmpegCapture } from '../ffmpeg/capture';
+import { fileIdentity, readVerdict, writeVerdict } from './verdict-store';
 
 // Spec 098, REQ-5
 export const DUB_TRIM_WINDOW_SECONDS = 300;
@@ -167,13 +168,6 @@ export async function detectDubTail(
   return { cards: tail.cards, multiples: tail.multiples, cut };
 }
 
-// Spec 098, REQ-11
-const verdictCache = new Map<string, number | null>();
-
-export function resetDubTrimCache(): void {
-  verdictCache.clear();
-}
-
 // Spec 098, REQ-3 REQ-11 REQ-12 NFR-1
 export async function resolveDubTrim(
   details: { dubTrimEnabled: boolean },
@@ -183,13 +177,22 @@ export async function resolveDubTrim(
 ): Promise<number | null> {
   if (!details.dubTrimEnabled) return null;
 
-  if (verdictCache.has(input)) return verdictCache.get(input) ?? null;
+  // Spec 111, REQ-2
+  const identity = await fileIdentity(input);
+  const stored = await readVerdict<{ cut: number | null }>('dubtrim', identity && { ...identity });
+  if (stored !== undefined) {
+    const reused = typeof stored.cut === 'number' && stored.cut > 0 ? stored.cut : null;
+    console.log(
+      `[dubtrim] input=${input} -> ` + (reused === null ? 'keep' : `cut=${reused.toFixed(3)}`) + ' (reused)',
+    );
+    return reused;
+  }
 
   try {
     const detection = await detectDubTail(input, metadata, signal);
     // A cut at or below zero would produce an empty file; treat it as keep.
     const cut = detection.cut !== null && detection.cut > 0 ? detection.cut : null;
-    verdictCache.set(input, cut);
+    await writeVerdict('dubtrim', identity && { ...identity }, { cut });
     console.log(
       `[dubtrim] input=${input} cards=${detection.cards} multiples=${detection.multiples} -> ` +
         (cut === null ? 'keep' : `cut=${cut.toFixed(3)}`),

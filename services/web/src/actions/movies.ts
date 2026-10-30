@@ -36,6 +36,8 @@ export interface Movie {
   contentKind: ContentKind;
   grainMode: GrainMode;
   isShort: boolean;
+  // Spec 109, REQ-15
+  autoAcquire?: boolean;
   status: string;
   audioLanguages: Language[];
   subtitleLanguages: Language[];
@@ -102,6 +104,7 @@ const GET_MOVIE_QUERY = `
       contentKind
       grainMode
       isShort
+      autoAcquire
       status
       audioLanguages {
         id
@@ -461,4 +464,36 @@ export async function searchMovieSubtitlesAction(
   }
 
   return { search: data.searchMovieSubtitles };
+}
+
+const SET_MOVIE_AUTO_ACQUIRE_MUTATION = `
+  mutation SetMovieAutoAcquire($movieId: Int!, $autoAcquire: Boolean!) {
+    setMovieAutoAcquire(movieId: $movieId, autoAcquire: $autoAcquire)
+  }
+`;
+
+// Spec 109, REQ-15
+export async function setMovieAutoAcquireAction(
+  movieId: string,
+  autoAcquire: boolean,
+): Promise<{ error: string; errorKey?: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_MOVIE_AUTO_ACQUIRE_MUTATION, {
+      movieId: Number(movieId),
+      autoAcquire,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  return { success: true };
 }

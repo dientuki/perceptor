@@ -9,6 +9,7 @@ import {
   setAcquisitionWindowsAction,
   setAllowCinemaReleasesAction,
   setAudioMandatoryAction,
+  setAudioVariantDetectionAction,
   setPreferredTorrentGroupsAction,
   setPreferredTrackLanguagesAction,
   setSubtitleSearchAction,
@@ -82,6 +83,12 @@ export default function PreferencesForm({
   );
   const [audioMandatory, setAudioMandatory] = useState(
     preferences.audioMandatory,
+  );
+  const [audioVariantDetection, setAudioVariantDetection] = useState(
+    preferences.audioVariantDetection,
+  );
+  const variantDetectionAvailable = languages.some(
+    (l) => audioTags.includes(l.tag) && l.hasRegionalVariants,
   );
   const [subtitleSearch, setSubtitleSearch] = useState(
     preferences.subtitleSearch,
@@ -178,6 +185,7 @@ export default function PreferencesForm({
         subtitleResult,
         cinemaResult,
         audioMandatoryResult,
+        audioVariantDetectionResult,
         subtitleSearchResult,
         movieResult,
         windowsResult,
@@ -189,6 +197,7 @@ export default function PreferencesForm({
         setPreferredTrackLanguagesAction("SUBTITLE", null, subtitleForm),
         setAllowCinemaReleasesAction(allowCinemaReleases),
         setAudioMandatoryAction(audioMandatory),
+        setAudioVariantDetectionAction(audioVariantDetection),
         capabilities.subtitleSearchAvailable
           ? setSubtitleSearchAction(subtitleSearch)
           : Promise.resolve(null),
@@ -242,6 +251,13 @@ export default function PreferencesForm({
       if ("error" in audioMandatoryResult && audioMandatoryResult.error) {
         newErrors.push(audioMandatoryResult.error);
         setAudioMandatory(preferences.audioMandatory);
+      }
+      if (
+        "error" in audioVariantDetectionResult &&
+        audioVariantDetectionResult.error
+      ) {
+        newErrors.push(audioVariantDetectionResult.error);
+        setAudioVariantDetection(preferences.audioVariantDetection);
       }
       if (
         subtitleSearchResult &&
@@ -315,6 +331,21 @@ export default function PreferencesForm({
                 onChange={setAudioMandatory}
                 label={t("audioMandatoryLabel")}
               />
+              <Checkbox
+                id="audio-variant-detection"
+                checked={audioVariantDetection}
+                onChange={setAudioVariantDetection}
+                label={t("audioVariantDetectionLabel")}
+                disabled={!variantDetectionAvailable}
+              />
+              <p className="text-gray-500 dark:text-gray-400">
+                {t("audioVariantDetectionHelp")}
+              </p>
+              {!variantDetectionAvailable && (
+                <p className="text-gray-500 dark:text-gray-400">
+                  {t("audioVariantDetectionDisabledHint")}
+                </p>
+              )}
             </div>
             <div className="space-y-4">
               <LanguagePickerField

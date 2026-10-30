@@ -1,7 +1,8 @@
 // Spec 031, REQ-4 REQ-5 REQ-6 REQ-9
 
 import { describe, expect, it, vi } from 'vitest';
-import { detectVariant, narrowToVariants, requestedVariants } from './variants';
+import { getAudioParams, selectAudioStreams } from './params';
+import { NO_AUDIO_VARIANTS, detectVariant, detectWithTags, narrowToVariants, requestedVariants } from './variants';
 
 function stream(overrides: Record<string, any>) {
   return {
@@ -131,5 +132,52 @@ describe('narrowToVariants', () => {
         { tag: 'es-ES', streams: [streams[1]] },
       ],
     });
+  });
+});
+
+describe('detectWithTags (Spec 110)', () => {
+  it('lets a map entry override the title markers for that index only', () => {
+    const detect = detectWithTags(new Map([[2, 'es-419']]));
+
+    expect(detect(stream({ index: 2, tags: { title: 'Castellano' } }))).toBe('es-419');
+    expect(detect(stream({ index: 3, tags: { title: 'Castellano' } }))).toBe('es-ES');
+  });
+
+  it('reads the title markers for a stream absent from the map', () => {
+    const detect = detectWithTags(new Map([[2, 'es-419']]));
+
+    expect(detect(stream({ index: 5, tags: { title: 'Latino' } }))).toBe('es-419');
+    expect(detect(stream({ index: 6, tags: { title: 'BTM' } }))).toBeUndefined();
+  });
+});
+
+describe('audio variant resolution (Spec 110)', () => {
+  const spanish = (index: number, channels: number) =>
+    stream({ index, codec_name: 'ac3', channels, tags: { language: 'spa', title: 'BTM' } });
+
+  it('selects the mapped requested variant and titles it from the map', () => {
+    const streams = [spanish(2, 6), spanish(3, 2)];
+    const audioVariants = { tags: new Map([[2, 'es-ES'], [3, 'es-419']]), duplicates: new Set<number>() };
+
+    const selection = selectAudioStreams(streams, ['spa'], 'spa', ['es-419'], audioVariants);
+    const params = getAudioParams(streams, ['spa'], 'spa', ['es-419'], {}, audioVariants);
+
+    expect(selection.streams.map((s) => s.index)).toEqual([3]);
+    expect(params).toContain('title=Latino Stereo (Opus)');
+  });
+
+  it('drops a duplicate stream before any selection rule', () => {
+    const streams = [spanish(2, 6), spanish(3, 2)];
+    const audioVariants = { tags: new Map<number, string>(), duplicates: new Set([2]) };
+
+    const selection = selectAudioStreams(streams, ['spa'], 'spa', [], audioVariants);
+
+    expect(selection.streams.map((s) => s.index)).toEqual([3]);
+  });
+
+  it('is a no-op with an empty resolution', () => {
+    const streams = [spanish(2, 6), spanish(3, 2)];
+
+    expect(selectAudioStreams(streams, ['spa'], 'spa', [], NO_AUDIO_VARIANTS).streams.map((s) => s.index)).toEqual([2]);
   });
 });

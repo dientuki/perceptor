@@ -20,11 +20,11 @@ import {
   GRAIN_MODE_VALUES,
   normalizeGrainMode,
   normalizeIsShort,
-  resetGrainVerdictCache,
   resolveFilmGrain,
 } from './grain-mode';
 import { probeGrainSaving } from './grain-probe';
 import type { EncodeInput } from './types';
+import { installVerdictStore, type VerdictRedis } from './verdict-store';
 
 vi.mock('./grain-gate', () => ({ scoreGrainGate: vi.fn() }));
 vi.mock('./grain-probe', () => ({
@@ -76,7 +76,20 @@ describe('normalizeGrainMode', () => {
   });
 });
 
+function fakeStore() {
+  const data = new Map<string, string>();
+  const redis: VerdictRedis = {
+    get: async (key) => data.get(key) ?? null,
+    set: async (key, value) => {
+      data.set(key, value);
+      return 'OK';
+    },
+  };
+  return { data, redis };
+}
+
 describe('resolveFilmGrain', () => {
+  let store: ReturnType<typeof fakeStore>;
   const gateMock = vi.mocked(scoreGrainGate);
   const probeMock = vi.mocked(probeGrainSaving);
   const signal = new AbortController().signal;
@@ -91,7 +104,8 @@ describe('resolveFilmGrain', () => {
   const probeResult = { mbpsGrain0: 11, savingPct: 24, savedMbps: 2.7, passed: true };
 
   beforeEach(() => {
-    resetGrainVerdictCache();
+    store = fakeStore();
+    installVerdictStore(store.redis);
     gateMock.mockReset();
     probeMock.mockReset();
     gateMock.mockReturnValue(passingGate);
@@ -101,6 +115,7 @@ describe('resolveFilmGrain', () => {
   });
 
   afterEach(() => {
+    installVerdictStore(null);
     warnSpy.mockRestore();
     logSpy.mockRestore();
   });
@@ -143,6 +158,23 @@ describe('resolveFilmGrain', () => {
     expect(probeMock).toHaveBeenCalledTimes(1);
   });
 
+  it('reuses a stored verdict without gate or probe and logs it as reused', async () => {
+    await resolveFilmGrain(details({ mediaSourceId: 9 }), 'a.mkv', {}, signal);
+    gateMock.mockClear();
+    probeMock.mockClear();
+    logSpy.mockClear();
+    await expect(resolveFilmGrain(details({ mediaSourceId: 9 }), 'a.mkv', {}, signal)).resolves.toBe(true);
+    expect(gateMock).not.toHaveBeenCalled();
+    expect(probeMock).not.toHaveBeenCalled();
+    expect(logSpy.mock.calls.map((c) => String(c[0])).some((l) => l.includes('stage=cache') && l.includes('(reused)'))).toBe(true);
+  });
+
+  it('stores nothing for ON and OFF', async () => {
+    await resolveFilmGrain(details({ grainMode: 'ON' }), 'a.mkv', {}, signal);
+    await resolveFilmGrain(details({ grainMode: 'OFF' }), 'a.mkv', {}, signal);
+    expect(store.data.size).toBe(0);
+  });
+
   it('probes again for a different mediaSourceId', async () => {
     await resolveFilmGrain(details({ mediaSourceId: 7 }), 'a.mkv', {}, signal);
     await resolveFilmGrain(details({ mediaSourceId: 8 }), 'a.mkv', {}, signal);
@@ -154,6 +186,7 @@ describe('resolveFilmGrain', () => {
     await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).resolves.toBe(false);
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls[0]?.[0]).toContain('boom');
+    expect(store.data.size).toBe(0);
 
     await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).resolves.toBe(true);
     expect(probeMock).toHaveBeenCalledTimes(2);
@@ -163,6 +196,7 @@ describe('resolveFilmGrain', () => {
     probeMock.mockRejectedValueOnce(new EncodeCancelledError());
     await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).rejects.toBeInstanceOf(EncodeCancelledError);
     expect(warnSpy).not.toHaveBeenCalled();
+    expect(store.data.size).toBe(0);
 
     await resolveFilmGrain(details(), 'a.mkv', {}, signal);
     expect(probeMock).toHaveBeenCalledTimes(2);

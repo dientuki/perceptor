@@ -118,11 +118,15 @@ model User {
   // Spec 103, REQ-2
   subtitleSearch Boolean @default(false)
 
+  // Spec 110, REQ-1
+  audioVariantDetection Boolean @default(false)
+
   movies UserMovie[]
   shows  UserShow[]
 
   languages     UserLanguagePreference[]
   torrentGroups UserTorrentGroup[]
+  tmdbLists     UserTmdbList[]
 
   @@map("users")
 }
@@ -139,6 +143,9 @@ model UserMovie {
   createdAt DateTime @default(now())
 
   audioMandatory Boolean @default(false)
+
+  // Spec 109, REQ-15
+  autoAcquire Boolean @default(false)
 
   languages UserMovieLanguage[]
 
@@ -159,6 +166,9 @@ model UserShow {
   createdAt DateTime @default(now())
 
   audioMandatory Boolean @default(false)
+
+  // Spec 109, REQ-15
+  autoAcquire Boolean @default(false)
 
   languages UserShowLanguage[]
 
@@ -500,6 +510,7 @@ model Episode {
 }
 
 enum SubtitleEmbedStatus {
+  SYNCING
   QUEUED
   RUNNING
   COMPLETED
@@ -667,4 +678,32 @@ model ScheduledTaskRun {
 
   @@index([taskId, startedAt])
   @@map("scheduled_task_runs")
+}
+
+model UserTmdbList {
+  id             Int       @id @default(autoincrement())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tmdbListId     Int
+  name           String
+  lastImportedAt DateTime?
+  lastError      String?
+  itemCount      Int?
+  createdAt      DateTime  @default(now())
+
+  items UserTmdbListItem[]
+
+  @@unique([userId, tmdbListId])
+  @@map("user_tmdb_lists")
+}
+
+model UserTmdbListItem {
+  listId    Int
+  list      UserTmdbList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  tmdbId    Int
+  mediaType String       @db.VarChar(5)
+  seenAt    DateTime     @default(now())
+
+  @@id([listId, tmdbId, mediaType])
+  @@map("user_tmdb_list_items")
 }

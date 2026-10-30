@@ -8,7 +8,7 @@ import { AcquireMoviesTask, buildMovieQuery, MAX_MOVIES_PER_RUN } from './acquir
 // flood qBittorrent (or starves the oldest window), one failing film aborts the rest, an all-failed
 // run is recorded as SUCCESS and hides an outage while an all-skipped run is wrongly failed, a
 // closed window's source-quality floor never reaches the ranking so a cam release is attached, and
-// an idle install still hits the indexer. Each case is written to fail when its rule is removed.
+// an idle install still hits the indexer, and opted-out films fill the cap ahead of a wanted one. Each case is written to fail when its rule is removed.
 describe('AcquireMoviesTask', () => {
   const NOW = new Date('2026-09-26T15:30:00.000Z');
   const context = { languageRequirement: null, preferredGroups: [], allowCinemaReleases: true };
@@ -94,6 +94,42 @@ describe('AcquireMoviesTask', () => {
     expect(movies.addTorrentToMovie).toHaveBeenCalledTimes(1);
     expect(movies.addTorrentToMovie.mock.calls[0][0]).toBe(4);
     expect(result).toEqual({ itemsProcessed: 1 });
+  });
+
+  // Spec 109, REQ-15
+  it('does not let opted-out films consume the per-run cap ahead of a wanted film', async () => {
+    const optedOut = Array.from({ length: MAX_MOVIES_PER_RUN + 1 }, (_, i) =>
+      film(i + 1, {
+        digitalReleaseDate: new Date(Date.UTC(2026, 7, 1 + i)),
+        users: [{ autoAcquire: false }],
+      }),
+    );
+    const wanted = film(500, {
+      digitalReleaseDate: new Date('2026-09-10T00:00:00.000Z'),
+      users: [{ autoAcquire: true }],
+    });
+    prisma.movie.findMany.mockImplementation(
+      async (args: { where: { users: { some: { autoAcquire?: boolean } } } }) =>
+        [...optedOut, wanted].filter(
+          (row) =>
+            args.where.users.some.autoAcquire === undefined ||
+            (row as unknown as { users: Array<{ autoAcquire: boolean }> }).users.some(
+              (u) => u.autoAcquire === args.where.users.some.autoAcquire,
+            ),
+        ),
+    );
+
+    const result = await task.run();
+
+    expect(movies.addTorrentToMovie.mock.calls.map((c) => c[0])).toEqual([500]);
+    expect(result.itemsProcessed).toBe(1);
+  });
+
+  it('attaches a two-owner film as the opted-in owner the ranking context names', async () => {
+    prisma.movie.findMany.mockResolvedValue([film(1)]);
+    rankingContext.forMovieOwners.mockResolvedValue(owners('in'));
+    await task.run();
+    expect(movies.addTorrentToMovie.mock.calls[0][2]).toBe('in');
   });
 
   it('makes zero indexer calls when nothing is eligible', async () => {

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { IndexerService } from './indexer.service';
-import { ProwlarrClient } from '@/clients/indexer/client';
+import { IndexerHttpError, ProwlarrClient } from '@/clients/indexer/client';
 import { RedisService } from '@/redis/redis.service';
 import { TorrentResult } from '@/clients/indexer/types';
 
@@ -207,5 +207,151 @@ describe('IndexerService', () => {
     expect(returned).toEqual([]);
     expect(redis.get).not.toHaveBeenCalled();
     expect(prowlarr.search).not.toHaveBeenCalled();
+  });
+});
+
+// This suite exists because the in-app indexer setup (Spec 112) fails silently in four ways a
+// successful-looking response hides: adding a definition Prowlarr already holds doubles every
+// search result; resolving an add whose connection test failed shows a dead indexer as working;
+// saving a Cloudflare-fronted indexer without its FlareSolverr tag makes every search through it
+// return nothing; and Prowlarr answers DELETE of an unknown id with 200, so without the prior
+// listing a stale id would report success. A Redis outage must never take the catalog down.
+describe('IndexerService catalog management', () => {
+  let service: IndexerService;
+  let prowlarr: Record<string, jest.Mock>;
+  let redis: { get: jest.Mock; set: jest.Mock };
+
+  const def = (definitionName: string, over: Record<string, unknown> = {}) => ({
+    definitionName,
+    name: definitionName,
+    privacy: 'public',
+    protocol: 'torrent',
+    indexerUrls: ['https://example.invalid/'],
+    capabilities: { categories: [{ id: 2000, subCategories: [] }] },
+    fields: [{ name: 'baseUrl', value: '' }],
+    ...over,
+  });
+  const marked = def('example-cf', { fields: [{ name: 'info_flaresolverr' }] });
+
+  beforeEach(async () => {
+    prowlarr = {
+      getIndexerSchema: jest.fn().mockResolvedValue([
+        def('example-b'),
+        def('example-a'),
+        marked,
+        def('example-private', { privacy: 'private' }),
+      ]),
+      listIndexers: jest.fn().mockResolvedValue([]),
+      listTags: jest.fn().mockResolvedValue([{ id: 7, label: 'flaresolverr' }]),
+      listAppProfiles: jest.fn().mockResolvedValue([{ id: 1 }]),
+      createIndexer: jest.fn().mockResolvedValue({
+        id: 42, name: 'example-a', definitionName: 'example-a', enable: true, tags: [], apiKey: 'secret',
+      }),
+      deleteIndexer: jest.fn().mockResolvedValue(undefined),
+    };
+    redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue('OK') };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        IndexerService,
+        { provide: ProwlarrClient, useValue: prowlarr },
+        { provide: RedisService, useValue: redis },
+      ],
+    }).compile();
+    service = module.get(IndexerService);
+  });
+
+  it('makes no create call for a definition that is already held', async () => {
+    prowlarr.listIndexers.mockResolvedValue([
+      { id: 5, name: 'example-a', definitionName: 'example-a', enable: true, tags: [] },
+    ]);
+
+    await expect(service.add('example-a')).resolves.toMatchObject({ id: 5 });
+    expect(prowlarr.createIndexer).not.toHaveBeenCalled();
+  });
+
+  it('rejects test_failed on a create 400 and never resolves as added', async () => {
+    prowlarr.createIndexer.mockRejectedValue(new IndexerHttpError(400, 'unable to connect'));
+
+    await expect(service.add('example-a')).rejects.toMatchObject({
+      response: { i18n: { key: 'error.indexer.test_failed' } },
+    });
+  });
+
+  it('rejects flaresolverr_missing with no create call when the tag is absent', async () => {
+    prowlarr.listTags.mockResolvedValue([]);
+
+    await expect(service.add('example-cf')).rejects.toMatchObject({
+      response: { i18n: { key: 'error.indexer.flaresolverr_missing' } },
+    });
+    expect(prowlarr.createIndexer).not.toHaveBeenCalled();
+  });
+
+  it('rejects definition_not_allowed for an unknown or private id with no create call', async () => {
+    for (const name of ['example-private', 'example-unknown']) {
+      await expect(service.add(name)).rejects.toMatchObject({
+        response: { i18n: { key: 'error.indexer.definition_not_allowed' } },
+      });
+    }
+    expect(prowlarr.createIndexer).not.toHaveBeenCalled();
+  });
+
+  it('returns only the projected fields of a created indexer', async () => {
+    await expect(service.add('example-a')).resolves.toEqual({
+      id: 42, name: 'example-a', definitionName: 'example-a', enabled: true, usesFlareSolverr: false,
+    });
+  });
+
+  it('rejects not_found for an id absent from the list and makes no delete call', async () => {
+    prowlarr.listIndexers.mockResolvedValue([{ id: 1 }]);
+
+    await expect(service.remove(99)).rejects.toMatchObject({
+      response: { i18n: { key: 'error.indexer.not_found' } },
+    });
+    expect(prowlarr.deleteIndexer).not.toHaveBeenCalled();
+  });
+
+  it('deletes a listed id', async () => {
+    prowlarr.listIndexers.mockResolvedValue([{ id: 1 }]);
+
+    await expect(service.remove(1)).resolves.toBe(true);
+    expect(prowlarr.deleteIndexer).toHaveBeenCalledWith(1);
+  });
+
+  it('answers the catalog sorted, filtered and flagged live even when Redis throws', async () => {
+    redis.get.mockRejectedValue(new Error('down'));
+    redis.set.mockRejectedValue(new Error('down'));
+    prowlarr.listIndexers.mockResolvedValue([{ id: 1, definitionName: 'example-b' }]);
+
+    const all = await service.catalog();
+    expect(all.map((e) => [e.name, e.configured])).toEqual([
+      ['example-a', false],
+      ['example-b', true],
+      ['example-cf', false],
+    ]);
+    expect((await service.catalog('CF')).map((e) => e.name)).toEqual(['example-cf']);
+  });
+
+  it('computes configured live from a cached projection', async () => {
+    redis.get.mockResolvedValue(
+      JSON.stringify([{ definitionName: 'example-a', name: 'example-a', language: null, categories: ['MOVIES'], needsFlareSolverr: false }]),
+    );
+    prowlarr.listIndexers.mockResolvedValue([{ id: 1, definitionName: 'example-a' }]);
+
+    const result = await service.catalog();
+    expect(result[0].configured).toBe(true);
+    expect(prowlarr.getIndexerSchema).not.toHaveBeenCalled();
+  });
+
+  it('marks usesFlareSolverr from the tag id in configured()', async () => {
+    prowlarr.listIndexers.mockResolvedValue([
+      { id: 2, name: 'b', definitionName: 'b', enable: true, tags: [7] },
+      { id: 1, name: 'a', definitionName: 'a', enable: false, tags: [] },
+    ]);
+
+    const result = await service.configured();
+    expect(result.map((r) => [r.name, r.usesFlareSolverr, r.enabled])).toEqual([
+      ['a', false, false],
+      ['b', true, true],
+    ]);
   });
 });

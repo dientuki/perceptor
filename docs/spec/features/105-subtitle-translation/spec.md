@@ -1,10 +1,10 @@
 ---
 title: Subtitle Translation and Adaptation
-spec_version: 0.1.0
+spec_version: 0.4.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-25
-last_updated: 2026-10-25
-status: Draft
+last_updated: 2026-10-29
+status: Approved
 services: [api, worker, web]
 ---
 
@@ -13,22 +13,28 @@ services: [api, worker, web]
 ## Context & Goal
 
 `101-jellyfin-subtitle-embed` lets an administrator embed sidecar subtitles, and
-`103-subtitle-search` fetches a missing language from OpenSubtitles through Jellyfin. Both stop when
-no subtitle in the wanted language exists anywhere. A release often carries an English track and
-nothing in Spanish, or a Castilian (`es-ES`) track where the household wants Latin American Spanish
-(`es-419`). Today the only way out is translating the file by hand outside Perceptor.
+`103-subtitle-search`/`107-opensubtitles-direct` fetch a missing language from OpenSubtitles. Both
+stop when no subtitle in the wanted language exists anywhere. A release often carries an English
+track and nothing in Spanish, or a Castilian (`es-ES`) track where the household wants Latin
+American Spanish (`es-419`). Today the only way out is translating the file by hand outside
+Perceptor.
 
 This spec lets an owner of a film or episode produce that subtitle with an LLM. From the film's
 detail page, or an episode's row in the season accordion, a button opens a modal. The owner picks
-one **source** subtitle the file already has (a text track embedded in the `.mkv`, or a sidecar
-`.srt` Jellyfin lists beside it) and one **target** language. When the target is a different
-language the operation is a **translation** (English → Castilian Spanish); when it is the same base
-language in another variant it is an **adaptation** (`es-ES` → `es-419`). Each operation uses its
-own prompt. The output is always an SRT with the source's cues and timings, written next to the
-library file with Jellyfin's sidecar naming, after which Jellyfin is asked to rescan the item
-(`101`'s `modifiedMedia`). Embedding the result into the `.mkv` stays manual, through `101`'s
-existing "Incrustar en archivo" button, because a machine translation can be wrong and the user
-should watch it first.
+one **source** subtitle embedded in the library file (a text track; sidecars are never a source)
+and one **target** language. When the target is a different language the
+operation is a **translation** (English → Castilian Spanish); when it is the same base language in
+another variant it is an **adaptation** (`es-ES` → `es-419`). Each operation uses its own prompt.
+The output is always an SRT with the source's cues and timings, written next to the library file
+with the sidecar naming Jellyfin and Plex read, after which the configured media server, if any, is
+told the file changed (`107` REQ-10's posture). Embedding the result into the `.mkv` stays manual,
+through `101`'s existing "Incrustar en archivo" button, because a machine translation can be wrong
+and the user should watch it first.
+
+Nothing here depends on a particular media server. The source list comes from `108`'s library read
+(`library-probe`), which this spec extends to report each embedded subtitle track individually, not
+only its language. The library file's path is resolved exactly as `107` REQ-4 / `108` REQ-2
+resolve it: the title's `filePath`, else the path the configured media server reports.
 
 The LLM is reached through a small set of provider clients in `api`
 (`services/api/src/clients/llm/`), next to the TMDB, indexer, torrent and media-server clients. An
@@ -41,10 +47,12 @@ they come back.
 
 Pipeline stages touched:
 
-- **Notify media server:** reuses `101`'s subtitle listing and `modifiedMedia`; no new Jellyfin call.
-- **Transcode** (`worker`): two new small jobs, one that stages the source subtitle as UTF-8 SRT in
-  the downloads root and one that writes the result beside the library file. Neither is part of an
-  encode.
+- **Notify media server:** reuses `107` REQ-10's notification (Jellyfin `modifiedMedia`, Plex
+  path-scoped scan, nothing with no media server) and `107` REQ-4's path resolution; no new
+  media-server call.
+- **Transcode** (`worker`): `108`'s `library-probe` reports per-track subtitle detail; two new small
+  jobs, one that stages the source subtitle as UTF-8 SRT in the downloads root and one that writes
+  the result beside the library file. None is part of an encode.
 - **Browse library:** the button and modal on both detail pages, and a new Settings tab for
   providers and models.
 
@@ -87,27 +95,30 @@ library (Article XII).
       returned, to any role; an administrator sees only whether one is set. Editing a provider with
       no key value keeps the stored key; an explicit empty value clears it. Keys never appear in a
       log line, an error message or a stored error key.
-- [ ] **REQ-6 (Availability)**: Translation is available while both hold:
-      - the installation's `media_server_client` is `jellyfin` (the source list and the rescan come
-        from it, as in `101`/`103`);
-      - at least one enabled model under an enabled provider exists.
-
-      `api` exposes this to every user as `MediaCapabilities.subtitleTranslationAvailable`, and the
-      enabled models (display name, provider display name and kind, never a key or URL) as
-      `translationModels`. While unavailable, `web` hides the button.
+- [ ] **REQ-6 (Availability)**: Translation is available while at least one enabled model under an
+      enabled provider exists, whatever the media server (none, Jellyfin or Plex). `api` exposes this
+      to every user as `MediaCapabilities.subtitleTranslationAvailable`, and the enabled models
+      (display name, provider display name and kind, never a key or URL) as `translationModels`.
+      While it is false, `web` hides the button. While it is true, the button shows on a film, and on
+      an episode row, that holds a library file (`filePath` or `mediaServerPresentAt`, `108` REQ-2).
 - [ ] **REQ-7 (Request)**: Any owner of a film, or of an episode's series, can request a translation
       of that film or episode. The modal lists:
-      - **sources**: every subtitle Jellyfin reports for the item that is not forced and is text —
-        an embedded track whose codec is SRT, ASS/SSA, WebVTT or mov_text, or an external `.srt`
-        sidecar in the item's folder (`101` REQ-1's listing). Image tracks are never offered. Each
-        shows its language, its title and whether it is embedded or a sidecar;
+      - **sources**: the title's translatable subtitles as recorded by its latest library read
+        (REQ-17): every embedded track that is not forced and whose codec is SRT, ASS/SSA, WebVTT or
+        mov_text. Image tracks and sidecars are never offered. Each shows its language and its
+        title. A title never read yet shows no sources and the line
+        `Todavía no se leyó el archivo; probá en un momento.`;
       - **target**: one language from the `Language` table, by tag (`es`, `es-419`, `es-ES`, `en`, …);
       - **model**: one of `translationModels`.
 
       The mode is derived, never chosen: when the source's and the target's ISO 639-2 codes differ
       it is `TRANSLATE`; when they are equal it is `ADAPT`. The modal shows which one will run
-      ("Traducir" / "Adaptar") before the user confirms. A source language Jellyfin does not report
-      is refused (`error.subtitleTranslation.source_language_unknown`).
+      ("Traducir" / "Adaptar") before the user confirms. A source whose language does not resolve
+      (an untagged or `und` track) is
+      listed but cannot be picked (`error.subtitleTranslation.source_language_unknown`). The library
+      path is resolved at request time as `107` REQ-4 resolves it and stored on the translation; no
+      path refuses the request with `error.subtitleTranslation.no_library_path`, an unreachable
+      media server with `error.subtitleTranslation.media_server_unavailable`.
 - [ ] **REQ-8 (Translation contract)**: The source is parsed as SRT into cues. Cues are sent to the
       model in consecutive batches, each with the mode's prompt (REQ-12), the source language and the
       target language tag. A batch's answer must parse as SRT with exactly the same number of cues
@@ -140,45 +151,68 @@ library (Article XII).
       a second request is refused with `error.subtitleTranslation.busy`. Translations run one at a
       time installation-wide, in request order. There is no cancel (see Out of Scope).
 - [ ] **REQ-11 (Source staging)**: The worker writes the selected source into a staging file under
-      the downloads root as UTF-8 SRT: an embedded text track is extracted from the library `.mkv`
-      (ASS/SSA styling flattened, as `070` does); a sidecar is read where it lies (`101` REQ-14) and
-      re-encoded to UTF-8 when it is not. Before extracting an embedded track the worker checks that
-      the track it resolved has the language the request named; a mismatch fails with
-      `error.subtitleTranslation.source_mismatch`, never a translation of the wrong track. `api`
+      the downloads root as UTF-8 SRT: the embedded text track is extracted from the library file
+      (ASS/SSA styling flattened, as `070` does). Before extracting, the worker checks the track is
+      still what the request named: a text subtitle track at that ordinal with that language. Any
+      difference fails with `error.subtitleTranslation.source_mismatch`,
+      never a translation of the wrong track. `api`
       deletes the staging files of a translation once it is terminal, either way.
 - [ ] **REQ-12 (Prompts)**: There is exactly one prompt per mode, `TRANSLATE` and `ADAPT`, each a
       single constant in `api` that receives the source language, the target language tag and the
       batch. **The text of both prompts is out of scope** (see Out of Scope): this spec ships a
       minimal working placeholder for each, and replacing it later changes one constant and no
       contract.
-- [ ] **REQ-13 (Output file)**: The worker writes the result beside the library `.mkv`, in the same
-      folder, as `<base>.<suffix>.srt` where `<base>` is the `.mkv`'s name without extension. It
-      writes a scratch `.part` file first and renames it into place. It never overwrites a file: when
-      the name is taken it appends Jellyfin's `.N` counter (`.2`, `.3`, …) before `.srt`. When the
-      `.mkv` is no longer at the path the request was made against, nothing is written and the
+- [ ] **REQ-13 (Output file)**: The worker writes the result beside the library file, in the same
+      folder, as `<base>[.<title>].<language>.srt`, where `<base>` is the library file's name without
+      extension. It writes a scratch `.part` file first and renames it into place. It never
+      overwrites a file: when the name is taken it appends the `.N` counter (`.2`, `.3`, …) before
+      `.srt`. When the library file is no longer at the stored path, nothing is written and the
       translation fails with `error.subtitleTranslation.file_gone`.
 
-      The name follows Jellyfin's external-subtitle convention, `<base>[.<title>].<language>.srt`,
-      so Jellyfin lists the file with the right language and `101`'s embed reads it back the same
-      way. `<language>` is the target's ISO 639-2 code (`spa`, `eng`). `<title>` is present only for
-      a regional variant, and is that variant's track title from `051`/`101` REQ-5 (`Latino` for
-      `es-419`, `Español (España)` for `es-ES`), since both variants share `spa`. A base language has
-      no title segment (`<base>.spa.srt`). The plan verifies this form against the installed
-      Jellyfin (language and title as listed by `101` REQ-1) before the worker task is written.
-- [ ] **REQ-14 (Rescan)**: After a successful write `api` calls `101`'s `modifiedMedia` for the
-      `.mkv`'s host path. A rescan failure does not fail the translation: it completes, and the
-      record carries `error.subtitleTranslation.rescan_failed` as a warning, shown next to the result.
+      The name follows Jellyfin's external-subtitle convention, which Plex also reads for the
+      language. `<language>` is the target's ISO 639-2 code (`spa`, `eng`). `<title>` is present only
+      for a regional variant, and is that variant's track title from `051` (`Latino` for `es-419`,
+      `Español (España)` for `es-ES`), since both variants share `spa`. A base language has no title
+      segment (`<base>.spa.srt`). The plan verifies this form against an installed Jellyfin and Plex
+      (language and title as each lists them) before the worker task is written.
+- [ ] **REQ-14 (Notify)**: After a successful write `api` tells the configured media server the file
+      changed exactly as `107` REQ-10 does after an embed: Jellyfin's `modifiedMedia`, Plex's
+      path-scoped scan, nothing with no media server. A failed notification does not fail the
+      translation: it completes, and the record carries `error.subtitleTranslation.notify_failed` as
+      a warning, shown next to the result. With no media server there is nothing to notify and no
+      warning. In every case `api` also queues a `108` library read of the title, so the new sidecar's
+      language appears in the subtitle box.
 - [ ] **REQ-15 (Readable on the title)**: Every owner of the film (the series, for an episode) can
       read its latest translation on it: status, mode, source description, target tag, model display
       name, cues done and total, error key, warning key, output file name (base name only) and
       timestamps. `web` shows it on the button and in the modal. A translation never appears in
       `/downloads` or `activeDownloadCount`.
-- [ ] **REQ-16 (Live state on the page)**: [NEEDS CLARIFICATION: while a translation is in flight
-      and the user stays on the page, how does the button learn about progress? (a) a light poll of
-      only that title's translation every few seconds, stopping when terminal; (b) Server-Sent Events
-      from a `web` route handler, which would itself still poll `api` server-side; (c) a GraphQL
-      subscription over WebSocket from `api` to the browser, a new transport with its own auth and
-      Traefik route. Leaving and returning shows the right state in every case.]
+- [ ] **REQ-16 (Live state on the page)**: While the latest translation of the film or episode on
+      screen is not terminal, `web` re-reads only that translation every few seconds and updates the
+      button and the open modal; it stops at the first terminal status, when the user leaves the page,
+      and never runs while nothing is in flight. No WebSocket, subscription or Server-Sent Events
+      transport is added. The interval is a single constant in `web`. Leaving and returning shows the
+      current state from the page load alone.
+- [ ] **REQ-17 (Per-track library read, extends `108`)**: `108`'s library read also reports, for the
+      file it read, every embedded subtitle track individually: its subtitle-relative ordinal
+      (`0:s:N`), codec, ISO 639-2 language (normalized as `108` REQ-1, null when untagged or `und`),
+      title and forced flag.
+
+      `api` stores the translatable ones (REQ-7's codec rule, forced left out) on the
+      film or episode, replacing them on every completed read and clearing them with the language
+      lists (`108` REQ-4); a stale report is discarded with the rest (`108` REQ-5). A worker that
+      does not send the new field leaves the stored sources untouched.
+
+      The sidecar name rule of `107` REQ-3 / `108` REQ-1 is widened to read back REQ-13's form, so a
+      translated file counts as its language in `108`'s subtitle box and in `107`'s missing-language
+      check: after
+      the `<base>.` prefix and before the extension, trailing flag segments (`forced`, `foreign`,
+      `sdh`, `cc`, `default`) and a purely numeric `.N` counter (REQ-13's collision suffix) are
+      stripped, the **last** remaining segment is the language tag, and
+      any segments before it are the title. `<base>.es.srt` and `<base>.es-419.forced.srt` read as
+      today; `<base>.Latino.spa.srt` now reads as `spa` with title `Latino` instead of the
+      unresolvable tag `Latino`, and `<base>.spa.2.srt` reads as `spa` instead of the unresolvable
+      tag `2`. Dropping a file for `forced`/`foreign` is unchanged and applies to the stripped flags.
 
 ### Non-Functional & Operational Requirements
 
@@ -195,8 +229,8 @@ library (Article XII).
       attempt allowed by REQ-8/REQ-9. Nothing triggers a translation except an owner's request
       (REQ-7) and an administrator's test (REQ-4); nothing retries a failed translation
       automatically.
-- [ ] **NFR-4 (No new image dependency)**: The worker uses the FFmpeg and SRT normalization it
-      already has; `api` calls providers over plain HTTPS with no provider SDK unless the plan shows
+- [ ] **NFR-4 (No new image dependency)**: The worker uses the FFmpeg, `ffprobe` and SRT
+      normalization it already has; `api` calls providers over plain HTTPS with no provider SDK unless the plan shows
       one is unavoidable for a kind.
 - [ ] **NFR-5 (Reaching a local server)**: An `OLLAMA` or `OPENAI_COMPATIBLE` provider is reached
       at the base URL the administrator types, typically a LAN address such as
@@ -227,11 +261,6 @@ enum SubtitleTranslationStatus {
   WRITING
   COMPLETED
   FAILED
-}
-
-enum SubtitleSourceKind {
-  EMBEDDED
-  SIDECAR
 }
 
 """Admin-only. Never carries the key."""
@@ -272,16 +301,17 @@ type LlmModelTestResult {
 }
 
 extend type MediaCapabilities {
-  """REQ-6. Never exposes the media-server type or any provider detail."""
+  """REQ-6. True while at least one enabled model under an enabled provider exists. Never exposes any provider detail."""
   subtitleTranslationAvailable: Boolean!
 }
 
 type SubtitleTranslationSource {
-  kind: SubtitleSourceKind!
   """Opaque; sent back unchanged in RequestSubtitleTranslationInput.sourceId."""
   id: String!
-  languageIso3: String!
+  """Null when the language does not resolve; such a source cannot be requested (REQ-7)."""
+  languageIso3: String
   title: String
+  """The stream codec (subrip, ass, webvtt, mov_text)."""
   codec: String!
 }
 
@@ -289,7 +319,6 @@ type SubtitleTranslation {
   id: Int!
   status: SubtitleTranslationStatus!
   mode: SubtitleTranslationMode!
-  sourceKind: SubtitleSourceKind!
   sourceLanguageIso3: String!
   sourceTitle: String
   targetTag: String!
@@ -345,9 +374,11 @@ type Query {
   llmProviders: [LlmProvider!]!
   """Every user; enabled models under enabled providers only."""
   translationModels: [TranslationModel!]!
-  """Owner of the film / the episode's series. Text, non-forced subtitles only (REQ-7)."""
-  movieTranslationSources(movieId: Int!): [SubtitleTranslationSource!]!
-  episodeTranslationSources(episodeId: Int!): [SubtitleTranslationSource!]!
+  """Owner of the film / the episode's series (REQ-16's poll target). Null when the id is unknown or not the caller's."""
+  subtitleTranslation(id: Int!): SubtitleTranslation
+  """Owner of the film / the episode's series. From the latest library read (REQ-17); null while the file was never read."""
+  movieTranslationSources(movieId: Int!): [SubtitleTranslationSource!]
+  episodeTranslationSources(episodeId: Int!): [SubtitleTranslationSource!]
 
   """Service-only (worker). Container paths, same standing as SubtitleEmbedDetails."""
   subtitleTranslationDetails(id: Int!): SubtitleTranslationDetails!
@@ -355,20 +386,31 @@ type Query {
 
 type SubtitleTranslationDetails {
   id: Int!
-  """Absolute container path of the library .mkv."""
+  """Absolute container path of the library file (the path stored at request time, REQ-7)."""
   filePath: String!
-  sourceKind: SubtitleSourceKind!
-  """EMBEDDED: the subtitle-relative stream ordinal in filePath (0:s:N)."""
-  embeddedOrdinal: Int
-  """SIDECAR: absolute container path of the .srt, in filePath's directory."""
-  sidecarPath: String
+  """The subtitle-relative stream ordinal in filePath (0:s:N)."""
+  sourceOrdinal: Int!
   sourceLanguageIso3: String!
   """Absolute container path under the downloads root the worker writes the staged source to."""
   stagedSourcePath: String!
   """Absolute container path under the downloads root holding the translated SRT, set for WRITING."""
   stagedOutputPath: String
-  """REQ-13's suffix, without dots."""
-  outputSuffix: String!
+  """The target's Language.tag (es, es-419, en); the worker derives REQ-13's title segment from it with its own 051 regional titles."""
+  targetTag: String!
+  """The target's ISO 639-2 code, REQ-13's language segment."""
+  targetIso3: String!
+}
+
+input LibrarySubtitleSourceInput {
+  """Subtitle-relative stream ordinal (0:s:N)."""
+  ordinal: Int!
+  """Stream codec as ffprobe names it."""
+  codec: String!
+  """Normalized ISO 639-2, null when untagged or und."""
+  languageIso3: String
+  """The track's title tag."""
+  title: String
+  forced: Boolean!
 }
 
 type Mutation {
@@ -389,8 +431,24 @@ type Mutation {
   subtitleTranslationSourceStaged(id: Int!): Boolean!
   subtitleTranslationWritten(id: Int!, outputFileName: String!): Boolean!
   subtitleTranslationWorkerFailed(id: Int!, errorKey: String!): Boolean!
+
+  """108's mutation, unchanged except for one new optional argument (REQ-17). Absent leaves the stored sources untouched."""
+  libraryProbeCompleted(
+    target: LibraryProbeTarget!
+    filePath: String!
+    audioLanguagesIso3: [String!]!
+    embeddedSubtitleLanguagesIso3: [String!]!
+    sidecarLanguageTags: [String!]!
+    subtitleSources: [LibrarySubtitleSourceInput!]
+  ): Boolean!
 }
 ```
+
+**Change to `108`'s worker contract**: `libraryProbeCompleted` gains the optional `subtitleSources`
+argument above, and `sidecarLanguageTags` follows REQ-17's widened name rule (the last non-flag
+segment). `108` is approved; this field and that rule are the only edits to it. `107`'s
+`subtitle-probe` applies the same name rule to its own `sidecarLanguageTags`, since both share the
+worker's sidecar parser.
 
 The worker gains one queue, `subtitle-translation`, with two jobs: `stage-source` and
 `write-output`, payload `{ subtitleTranslationId: number }`, concurrency 1, never inside an encode.
@@ -398,7 +456,9 @@ It reads everything else through `subtitleTranslationDetails`. The provider call
 an `api`-internal queue (103's `subtitle-search` posture), never in the worker.
 
 `Episode.latestSubtitleTranslation` and `episodeTranslationSources` resolve for any owner of the
-series, like the episode itself.
+series, like the episode itself. `subtitleTranslation(id)` exists for REQ-16's poll: there is no
+`episode(id)` query, and re-reading a whole `show(id)` every few seconds to watch one episode would
+be the expensive way.
 
 | Condition | HTTP / GraphQL error | Message the user sees |
 | :-- | :-- | :-- |
@@ -410,13 +470,13 @@ series, like the episode itself.
 | Unknown provider/model id | `NotFoundException` `error.llm.provider_not_found` / `error.llm.model_not_found` | `El proveedor no existe.` / `El modelo no existe.` |
 | `requestSubtitleTranslation` while `subtitleTranslationAvailable` is false | `BadRequestException` `error.subtitleTranslation.unavailable` | `La traducción de subtítulos no está disponible en esta instalación.` |
 | Film/episode missing or not owned by the caller | `NotFoundException`, the existing `movie`/`episode` not-found keys | the existing messages |
-| Title has no library file | `BadRequestException` `error.subtitleTranslation.no_file` | `Este título todavía no tiene archivo en la biblioteca.` |
-| `sourceId` not among the current sources (REQ-7) | `BadRequestException` `error.subtitleTranslation.source_not_found` | `El subtítulo de origen ya no está disponible.` |
+| No `filePath` and no media server holding the title (REQ-7) | `BadRequestException` `error.subtitleTranslation.no_library_path` | `Perceptor no sabe dónde está el archivo de este título.` |
+| No `filePath` and the media server unreachable (REQ-7) | `ServiceUnavailableException` `error.subtitleTranslation.media_server_unavailable` | `No se pudo contactar al servidor de medios para ubicar el archivo.` |
+| `sourceId` not among the title's stored sources (REQ-7) | `BadRequestException` `error.subtitleTranslation.source_not_found` | `El subtítulo de origen ya no está disponible.` |
 | Source language unknown (REQ-7) | `BadRequestException` `error.subtitleTranslation.source_language_unknown` | `No se sabe en qué idioma está el subtítulo de origen.` |
 | Unknown target tag | `BadRequestException` `error.subtitleTranslation.target_not_found` | `El idioma de destino no existe.` |
 | Model not enabled, or its provider not enabled | `BadRequestException` `error.subtitleTranslation.model_unavailable` | `Ese modelo ya no está habilitado.` |
 | A translation of that film/episode is in flight (REQ-10) | `ConflictException` `error.subtitleTranslation.busy` | `Ya hay una traducción en curso para este título.` |
-| Jellyfin unreachable while listing sources | `ServiceUnavailableException` `error.subtitleTranslation.media_server_unavailable` | `No se pudo contactar a Jellyfin.` |
 | Service-only query/mutation called with a user token | the existing service-guard key | the existing message |
 | `subtitleTranslationDetails` for an unknown id | `NotFoundException` `error.subtitleTranslation.not_found` | not user-facing (worker logs and abandons) |
 
@@ -437,12 +497,12 @@ REQ-11, REQ-13, REQ-14, NFR-2). `testLlmModel` returns the first six:
 | `error.subtitleTranslation.file_gone` | `El archivo de la biblioteca cambió; no se escribió nada.` |
 | `error.subtitleTranslation.write_failed` | `No se pudo guardar el subtítulo en la biblioteca.` |
 | `error.subtitleTranslation.interrupted` | `La traducción se interrumpió.` |
-| `error.subtitleTranslation.rescan_failed` (warning) | `Subtítulo guardado, pero Jellyfin no se actualizó todavía.` |
+| `error.subtitleTranslation.notify_failed` (warning) | `Subtítulo guardado, pero el servidor de medios no se actualizó todavía.` |
 
 `web` must handle, in the modal: `busy` and `model_unavailable` by showing the message and
 re-reading the title (the button then shows the in-flight translation, or the model list without
-the disabled model); `source_not_found` and `media_server_unavailable` by showing the message and
-reloading the source list; every other thrown key in the modal's error line. In Settings, every
+the disabled model); `source_not_found` by showing the message and reloading the source list;
+`no_library_path` and `media_server_unavailable` by showing the message and disabling confirm; every other thrown key in the modal's error line. In Settings, every
 `error.llm.*` key in the form's error line, keeping the user's input.
 
 ## Data Model Changes
@@ -451,8 +511,9 @@ reloading the source list; every other thrown key in the modal's error line. In 
 | :-- | :-- | :-- | :-- |
 | `LlmProvider` (new) | `kind` (enum), `name` (unique), `baseUrl?`, `apiKey?` (text), `enabled`, timestamps | `enabled` default `true` | No |
 | `LlmModel` (new) | `providerId` (cascade), `model`, `label?`, `enabled`, timestamps; unique (`providerId`, `model`) | `enabled` default `true` | No |
-| `SubtitleTranslation` (new) | `movieId?`/`episodeId?` (exactly one, cascade), `requestedById?` (User, set null), `modelId?` (set null), `modelDisplayName` (snapshot), `mode`, `status`, `sourceKind`, `sourceRef` (ordinal or sidecar file name), `sourceLanguageIso3`, `sourceTitle?`, `targetTag`, `cuesDone`, `cuesTotal?`, `errorKey?`, `warningKey?`, `outputFileName?`, `createdAt`, `finishedAt?` | `cuesDone` default `0` | No |
-| enums | `LlmProviderKind`, `SubtitleTranslationMode`, `SubtitleTranslationStatus`, `SubtitleSourceKind` | — | No |
+| `SubtitleTranslation` (new) | `movieId?`/`episodeId?` (exactly one, cascade), `requestedById?` (User, set null), `modelId?` (set null), `modelDisplayName` (snapshot), `libraryPath` (container path resolved at request, REQ-7), `mode`, `status`, `sourceOrdinal`, `sourceLanguageIso3`, `sourceTitle?`, `targetTag`, `cuesDone`, `cuesTotal?`, `errorKey?`, `warningKey?`, `outputFileName?`, `createdAt`, `finishedAt?` | `cuesDone` default `0` | No |
+| `Movie`, `Episode` | `fileSubtitleSources Json?` — REQ-17's translatable sources from the latest read; replaced and cleared with `108`'s `fileSubtitleLanguages` | `null` (never read) | No schema backfill. Data: `108`'s boot pass (REQ-3.4) widens its predicate from "never read" to "`fileSubtitleSources` is null", so one pass at the first boot after the migration re-reads every title that has a file and fills it; a read that fails leaves it null and shows REQ-7's "not read yet" line |
+| enums | `LlmProviderKind`, `SubtitleTranslationMode`, `SubtitleTranslationStatus` | — | No |
 
 No `Setting` key is added: providers and models are rows, not settings, because there are many and
 each carries its own secret.
@@ -474,18 +535,24 @@ each carries its own secret.
 - [ ] **AC-4**: As a non-administrator, `llmProviders` and `createLlmProvider` are refused with the
       admin-guard message; `translationModels` returns the enabled models with no key or URL.
       Disable every model: the translate button disappears from every detail page.
-- [ ] **AC-5**: With the media server set to Plex or none, no detail page shows the translate button,
-      and `requestSubtitleTranslation` is refused with
-      `La traducción de subtítulos no está disponible en esta instalación.`
+- [ ] **AC-5**: With the media server set to none, a film delivered by Perceptor (`filePath` set)
+      shows the translate button; translating it writes the sidecar, the translation reads
+      `COMPLETED` with no warning, and no media-server call appears in `api`'s log. With the media
+      server set to none, a film with no `filePath` shows no button, and calling
+      `requestSubtitleTranslation` for it is refused with
+      `Perceptor no sabe dónde está el archivo de este título.`
 - [ ] **AC-6**: On a film whose `.mkv` carries an embedded English SRT track and a PGS track, the
       modal lists the SRT track and not the PGS one. Pick target `es`: the modal says "Traducir".
       Confirm, leave the page, return: the button shows the translation in flight with its progress.
       When it completes, `<base>.spa.srt` exists beside the `.mkv` with the same number of cues and
-      byte-identical timing lines as the English track, Jellyfin lists it as Spanish, and `101`'s
-      "Incrustar en archivo" offers it.
-- [ ] **AC-7**: On an episode whose folder has a Castilian sidecar (`<base>.spa.srt`, not UTF-8),
-      pick it as source and `es-419` as target: the modal says "Adaptar". When it completes, a new
-      sidecar named per REQ-13 exists, the original sidecar is untouched, and the new file is UTF-8.
+      byte-identical timing lines as the English track; with Jellyfin configured, Jellyfin lists it as
+      Spanish and `101`'s "Incrustar en archivo" offers it; after a page reload the film's subtitle
+      box (`108`) shows `SPA` and the modal still lists only the embedded tracks.
+- [ ] **AC-7**: On an episode whose `.mkv` carries an embedded Castilian track (`spa`, titled
+      `Español (España)`), pick it as source and `es-419` as target: the modal says "Adaptar". When it
+      completes, `<base>.Latino.spa.srt` exists beside the `.mkv` in UTF-8, Jellyfin lists it as
+      Spanish titled `Latino`, and after the follow-up read the episode's subtitle line (`108`)
+      counts it as `SPA`. Repeat with Plex as the media server: Plex lists the new file as Spanish.
 - [ ] **AC-8**: Request a second translation of the same film while one is in flight: refused with
       `Ya hay una traducción en curso para este título.` and no new record exists.
 - [ ] **AC-9**: Point a model at a provider that answers with fewer cues than sent (a stub, or a
@@ -497,12 +564,17 @@ each carries its own secret.
 - [ ] **AC-11**: Restart the `api` container while a translation reads `TRANSLATING`: after boot it
       reads `FAILED` with `La traducción se interrumpió.` and its staging files are gone. Do the same
       with the `worker` container during `EXTRACTING`: same outcome.
-- [ ] **AC-12**: Stop Jellyfin after a translation's write but before the rescan (or make the rescan
-      fail): the translation reads `COMPLETED`, the file exists, and the modal shows
-      `Subtítulo guardado, pero Jellyfin no se actualizó todavía.`
+- [ ] **AC-12**: Stop the configured media server after a translation's write but before the
+      notification (or make it fail): the translation reads `COMPLETED`, the file exists, and the
+      modal shows `Subtítulo guardado, pero el servidor de medios no se actualizó todavía.`
+- [ ] **AC-14**: Between a request and its extraction, replace the library file with one whose
+      subtitle track at that ordinal has another language (or none): the translation ends `FAILED` with `La pista elegida no coincide con la del archivo.` and nothing is
+      written.
 - [ ] **AC-13**: `api` unit tests cover REQ-8's batch validation (count mismatch, renumbered cues,
       altered timings, empty text kept) and REQ-9's mapping for every provider kind against recorded
-      responses; `worker` unit tests cover REQ-13's naming (free name, `.N` counter, `file_gone`).
+      responses; `worker` unit tests cover REQ-13's naming (free name, `.N` counter, `file_gone`) and
+      REQ-17's sidecar name rule (`.es.srt`, `.es-419.forced.srt`, `.Latino.spa.srt`,
+      `.Español (España).spa.srt`, `.spa.2.srt`, a flag-only name).
       `bin/npm api run test` and `bin/npm worker run test` pass.
 
 ## Out of Scope
@@ -519,9 +591,13 @@ each carries its own secret.
   user, or capping spend, needs a cost model this installation (~5 users) does not have.
 - **Listing a provider's models from its API.** Models are typed by the administrator on purpose:
   provider catalogues change constantly and differ in shape. REQ-4's test is the validation.
+- **Sidecars as a source.** The source is always a text track embedded in the library file. A loose
+  `.srt` beside it (one the user dropped there, or one this spec wrote) cannot be translated or
+  adapted; embedding it first through `101` makes it a source.
 - **Image subtitles (PGS/VobSub) as a source.** They would need OCR first.
-- **Translating without Jellyfin.** The source list and the rescan come from Jellyfin, like `101`
-  and `103`. Plex has no equivalent sidecar listing in this codebase.
+- **Embedding the result without Jellyfin.** Translation works with any media server or none, but
+  `101`'s manual embed still lists sidecars through Jellyfin (`107` REQ-11). With Plex or no media
+  server the translated sidecar stays a sidecar, which both Plex and Jellyfin play as is.
 - **Editing or deleting a generated sidecar from Perceptor.** Article XII: a file written to the
   library stays; the user removes it through Jellyfin or by hand.
 - **Season-wide translation.** One film or one episode per request.

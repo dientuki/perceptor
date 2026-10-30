@@ -55,6 +55,13 @@ export class MoviesResolver {
     return this.moviesService.findAudioMandatoryFor(userId, movie.id);
   }
 
+  // Spec 109, REQ-15
+  @ResolveField(() => Boolean)
+  async autoAcquire(@Parent() movie: Movie, @CurrentUser() principal: AuthPrincipal) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.findAutoAcquireFor(userId, movie.id);
+  }
+
   // 067-title-removal: other users holding this film, only when selected —
   // a per-row count, so it must never be part of a listing.
   @ResolveField(() => Int)
@@ -84,6 +91,22 @@ export class MoviesResolver {
   async getMovieById(@Args('id', { type: () => Int }) id: number, @CurrentUser() principal: AuthPrincipal) {
     const userId = principal.type === 'user' ? principal.id : '';
     return this.moviesService.findOneFromDb(id, userId);
+  }
+
+  // Spec 109, REQ-15
+  @Mutation(() => Boolean, {
+    name: 'setMovieAutoAcquire',
+    description: 'Marca si las búsquedas automáticas pueden adquirir esta película para el usuario',
+  })
+  async setMovieAutoAcquire(
+    @Args('movieId', { type: () => Int }) movieId: number,
+    @Args('autoAcquire', { type: () => Boolean }) autoAcquire: boolean,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    const movie = await this.moviesService.findOneFromDb(movieId, userId);
+    if (!movie) throw i18nError.notFound(ERROR_KEYS.MOVIE_NOT_FOUND, { id: movieId });
+    return this.moviesService.setAutoAcquireFor(userId, movieId, autoAcquire);
   }
 
   @Mutation(() => Movie, {

@@ -9,6 +9,7 @@ import type { AuthPrincipal } from '@/auth/auth.types';
 import { ActiveEmbedGuard } from './active-embed.guard';
 import { SubtitleEmbedService, newRequestMemo } from './subtitle-embed.service';
 import { SubtitleEmbedInput } from './dto/subtitle-embed.input';
+import { SubtitleEmbedSyncService } from './subtitle-embed-sync.service';
 
 const anyDate = (): Date => expect.any(Date) as Date;
 const containing = <T extends object>(shape: T): T =>
@@ -48,6 +49,7 @@ describe('SubtitleEmbedService', () => {
   let client: Record<string, jest.Mock>;
   let mediaServer: { createClient: jest.Mock };
   let queue: { addEmbed: jest.Mock };
+  let syncQueue: { addEmbedSync: jest.Mock };
   let service: SubtitleEmbedService;
 
   const admin: AuthPrincipal = {
@@ -73,6 +75,7 @@ describe('SubtitleEmbedService', () => {
     languageIso3: 'spa',
     isDefault: false,
     offsetMs: 0,
+    autoOffset: false,
     ...over,
   });
 
@@ -212,6 +215,7 @@ describe('SubtitleEmbedService', () => {
     };
     mediaServer = { createClient: jest.fn().mockResolvedValue(client) };
     queue = { addEmbed: jest.fn().mockResolvedValue(undefined) };
+    syncQueue = { addEmbedSync: jest.fn().mockResolvedValue(undefined) };
 
     libraryProbeQueue = { request: jest.fn().mockResolvedValue(undefined) };
 
@@ -222,6 +226,11 @@ describe('SubtitleEmbedService', () => {
       queue as never,
       new ActiveEmbedGuard(prisma as never),
       libraryProbeQueue as never,
+      new SubtitleEmbedSyncService(
+        prisma as never,
+        syncQueue as never,
+        queue as never,
+      ),
     );
   });
 
@@ -592,7 +601,10 @@ describe('SubtitleEmbedService', () => {
 
         expect(await key(embed())).toBe(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
         expect(prisma.subtitleEmbed.count).toHaveBeenCalledWith({
-          where: { status: { in: ['QUEUED', 'RUNNING'] }, movieId: 1 },
+          where: {
+            status: { in: ['SYNCING', 'QUEUED', 'RUNNING'] },
+            movieId: 1,
+          },
         });
         expectNothingQueued();
       });
@@ -606,6 +618,40 @@ describe('SubtitleEmbedService', () => {
 
         expect(prisma.subtitleEmbed.create).not.toHaveBeenCalled();
         expect(queue.addEmbed).not.toHaveBeenCalled();
+      });
+
+      // Spec 113, T002
+      it('counts a SYNCING row as active inside the creating transaction and stores the requested initial status', async () => {
+        const guarded = service as unknown as {
+          createGuarded: (
+            column: { movieId: number },
+            filePath: string,
+            tracks: unknown[],
+            status?: string,
+          ) => Promise<unknown>;
+        };
+        const createGuarded = (
+          ...args: Parameters<typeof guarded.createGuarded>
+        ) => guarded.createGuarded(...args);
+        prisma.subtitleEmbed.count.mockResolvedValue(0);
+        prisma.subtitleEmbed.create.mockResolvedValue({ id: 9 });
+
+        await createGuarded({ movieId: 1 }, '/x.mkv', [], 'SYNCING');
+
+        expect(prisma.subtitleEmbed.count).toHaveBeenCalledWith({
+          where: {
+            movieId: 1,
+            status: { in: ['SYNCING', 'QUEUED', 'RUNNING'] },
+          },
+        });
+        expect(prisma.subtitleEmbed.create).toHaveBeenCalledWith({
+          data: containing({ status: 'SYNCING' }),
+        });
+
+        prisma.subtitleEmbed.count.mockResolvedValue(1);
+        await expect(
+          createGuarded({ movieId: 1 }, '/x.mkv', [], 'SYNCING'),
+        ).rejects.toBeDefined();
       });
 
       it('maps a lost serializable transaction (P2034) to busy', async () => {
@@ -736,6 +782,92 @@ describe('SubtitleEmbedService', () => {
     });
   });
 
+  // Spec 113, REQ-2 REQ-3: an automatic embed that was queued for the remux
+  // before its offsets were measured would burn in offset 0 with no error
+  // anywhere.
+  describe('an automatic embed (Spec 113, REQ-2 REQ-3)', () => {
+    const auto = (over: Partial<SubtitleEmbedInput> = {}) =>
+      input({ autoOffset: true, ...over });
+
+    it('creates the row SYNCING, enqueues one measurement per automatic track and never the remux', async () => {
+      const result = await service.embedMovie(
+        1,
+        [
+          auto(),
+          auto({ fileName: 'Movie (2020).eng.srt', languageIso3: 'eng' }),
+        ],
+        'u1',
+      );
+
+      const { data } = firstArg<{
+        data: {
+          status: string;
+          tracks: { autoOffset?: boolean; offsetMs: number }[];
+        };
+      }>(prisma.subtitleEmbed.create);
+      expect(data.status).toBe('SYNCING');
+      expect(data.tracks.map((t) => t.autoOffset)).toEqual([true, true]);
+      expect(syncQueue.addEmbedSync).toHaveBeenCalledTimes(2);
+      expect(syncQueue.addEmbedSync).toHaveBeenCalledWith(
+        { subtitleEmbedId: 5, fileName: 'Movie (2020).spa.srt' },
+        0,
+      );
+      expect(queue.addEmbed).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ id: 5, status: 'SYNCING' });
+    });
+
+    it('does not range-check the offset of an automatic track, but still does for a manual one', async () => {
+      await expect(
+        service.embedMovie(1, [auto({ offsetMs: 999999 })], 'u1'),
+      ).resolves.toMatchObject({ status: 'SYNCING' });
+
+      expect(
+        await key(service.embedMovie(1, [input({ offsetMs: 999999 })], 'u1')),
+      ).toBe(ERROR_KEYS.SUBTITLE_EMBED_OFFSET_OUT_OF_RANGE);
+    });
+
+    it('measures only the automatic tracks of a mixed embed and keeps the typed offset of the manual one', async () => {
+      await service.embedMovie(
+        1,
+        [
+          auto(),
+          input({
+            fileName: 'Movie (2020).eng.srt',
+            languageIso3: 'eng',
+            offsetMs: 1500,
+          }),
+        ],
+        'u1',
+      );
+
+      const { data } = firstArg<{
+        data: { tracks: { offsetMs: number }[] };
+      }>(prisma.subtitleEmbed.create);
+      expect(data.tracks.map((t) => t.offsetMs)).toEqual([0, 1500]);
+      expect(syncQueue.addEmbedSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('creates a manual-only embed QUEUED and queues the remux', async () => {
+      const result = await service.embedMovie(1, [input()], 'u1');
+
+      expect(result.status).toBe('QUEUED');
+      expect(syncQueue.addEmbedSync).not.toHaveBeenCalled();
+      expect(queue.addEmbed).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes the row when a measurement cannot be enqueued', async () => {
+      syncQueue.addEmbedSync.mockRejectedValue(new Error('redis down'));
+
+      await expect(service.embedMovie(1, [auto()], 'u1')).rejects.toThrow(
+        'redis down',
+      );
+
+      expect(prisma.subtitleEmbed.delete).toHaveBeenCalledWith({
+        where: { id: 5 },
+      });
+    });
+  });
+
   describe('worker reports (REQ-11 REQ-12)', () => {
     const row = (over: Record<string, unknown> = {}) => ({
       id: 5,
@@ -794,14 +926,20 @@ describe('SubtitleEmbedService', () => {
 
       // Spec 108, REQ-3
       it('requests a library track read for the embed title only when it won the claim', async () => {
-        prisma.subtitleEmbed.findUnique.mockResolvedValue(row({ movieId: 42, episodeId: null }));
+        prisma.subtitleEmbed.findUnique.mockResolvedValue(
+          row({ movieId: 42, episodeId: null }),
+        );
         await service.completed(5, null);
         expect(libraryProbeQueue.request).toHaveBeenCalledWith({ movieId: 42 });
 
         libraryProbeQueue.request.mockClear();
-        prisma.subtitleEmbed.findUnique.mockResolvedValue(row({ movieId: null, episodeId: 9 }));
+        prisma.subtitleEmbed.findUnique.mockResolvedValue(
+          row({ movieId: null, episodeId: 9 }),
+        );
         await service.completed(5, null);
-        expect(libraryProbeQueue.request).toHaveBeenCalledWith({ episodeId: 9 });
+        expect(libraryProbeQueue.request).toHaveBeenCalledWith({
+          episodeId: 9,
+        });
 
         libraryProbeQueue.request.mockClear();
         prisma.subtitleEmbed.updateMany.mockResolvedValue({ count: 0 });
@@ -837,13 +975,16 @@ describe('SubtitleEmbedService', () => {
           'a client that cannot be notified',
           () => mediaServer.createClient.mockResolvedValue({}),
         ],
-      ])('no client -> completed stores no warning (%s)', async (_name, arrange) => {
-        prisma.subtitleEmbed.findUnique.mockResolvedValue(row());
-        arrange();
+      ])(
+        'no client -> completed stores no warning (%s)',
+        async (_name, arrange) => {
+          prisma.subtitleEmbed.findUnique.mockResolvedValue(row());
+          arrange();
 
-        expect(await service.completed(5, null)).toBe(true);
-        expect(prisma.subtitleEmbed.update).not.toHaveBeenCalled();
-      });
+          expect(await service.completed(5, null)).toBe(true);
+          expect(prisma.subtitleEmbed.update).not.toHaveBeenCalled();
+        },
+      );
 
       it('records jellyfin_refresh_failed when the path has no host translation', async () => {
         prisma.subtitleEmbed.findUnique.mockResolvedValue(
@@ -902,7 +1043,7 @@ describe('SubtitleEmbedService', () => {
         ).toBe(true);
 
         expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledWith({
-          where: { id: 5, status: { in: ['QUEUED', 'RUNNING'] } },
+          where: { id: 5, status: { in: ['SYNCING', 'QUEUED', 'RUNNING'] } },
           data: {
             status: 'FAILED',
             errorKey: ERROR_KEYS.SUBTITLE_EMBED_CHARSET_UNDETECTED,
@@ -917,7 +1058,7 @@ describe('SubtitleEmbedService', () => {
         await service.failed(5, 'error.nonsense');
 
         expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledWith({
-          where: { id: 5, status: { in: ['QUEUED', 'RUNNING'] } },
+          where: { id: 5, status: { in: ['SYNCING', 'QUEUED', 'RUNNING'] } },
           data: containing({
             errorKey: ERROR_KEYS.SUBTITLE_EMBED_REMUX_FAILED,
           }),
@@ -1096,9 +1237,10 @@ describe('SubtitleEmbedService', () => {
 
       await service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv);
 
-      expect(firstArg<{ data: { filePath: string } }>(
-        prisma.subtitleEmbed.create,
-      ).data.filePath).toBe(mkv);
+      expect(
+        firstArg<{ data: { filePath: string } }>(prisma.subtitleEmbed.create)
+          .data.filePath,
+      ).toBe(mkv);
       expect(mediaServer.createClient).not.toHaveBeenCalled();
     });
 
@@ -1136,7 +1278,9 @@ describe('SubtitleEmbedService', () => {
       prisma.mediaSource.count.mockResolvedValue(1);
 
       expect(
-        await key(service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv)),
+        await key(
+          service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv),
+        ),
       ).toBe(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
 
       expect(prisma.subtitleEmbed.create).not.toHaveBeenCalled();
@@ -1147,7 +1291,9 @@ describe('SubtitleEmbedService', () => {
       prisma.subtitleEmbed.count.mockResolvedValue(1);
 
       expect(
-        await key(service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv)),
+        await key(
+          service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv),
+        ),
       ).toBe(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
       expect(queue.addEmbed).not.toHaveBeenCalled();
     });

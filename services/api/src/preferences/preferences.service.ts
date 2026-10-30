@@ -46,6 +46,7 @@ export class PreferencesService {
       allowCinemaReleases: user.allowCinemaReleases,
       audioMandatory: user.audioMandatory,
       subtitleSearch: user.subtitleSearch,
+      audioVariantDetection: user.audioVariantDetection,
       audioLanguages,
       subtitleLanguages,
       movieTorrentGroups,
@@ -139,6 +140,12 @@ export class PreferencesService {
   async setSubtitleSearch(userId: string, enabled: boolean): Promise<UserPreferences> {
     await this.mediaCapabilities.assertSubtitleSearchAvailable();
     await this.usersService.setSubtitleSearch(userId, enabled);
+    return this.findForUser(userId);
+  }
+
+  // Spec 110, REQ-1
+  async setAudioVariantDetection(userId: string, enabled: boolean): Promise<UserPreferences> {
+    await this.usersService.setAudioVariantDetection(userId, enabled);
     return this.findForUser(userId);
   }
 

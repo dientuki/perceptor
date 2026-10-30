@@ -52,3 +52,11 @@ export type LibraryProbeJob = {
   movieId?: number;
   episodeId?: number;
 };
+
+// Spec 113, T005
+export const SUBTITLE_EMBED_SYNC_JOB = 'subtitle-embed-sync';
+
+export type SubtitleEmbedSyncJob = {
+  subtitleEmbedId: number;
+  fileName: string;
+};

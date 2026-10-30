@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { MoviesService } from './movies.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
@@ -519,6 +520,50 @@ describe('MoviesService', () => {
         update: {},
         create: { userId: 'user-1', movieId: 5 },
       });
+    });
+
+    // Two registrations of one new film racing past the findUnique both reach
+    // create(); the loser gets a raw P2002. Without recovery the list import
+    // would fail that item (and a user's search-add would 500) although the
+    // film exists, with the caller left unlinked and no error pointing at the
+    // race.
+    it('recovers from a P2002 on create by linking and reconciling the row the winner wrote', async () => {
+      prisma.movie.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 5, tmdbId: 42, title: 'Dune' });
+      redis.get.mockResolvedValue(
+        JSON.stringify({
+          id: 42,
+          title: 'Dune',
+          releaseDate: '2021-10-21',
+          posterUrl: null,
+          originalLanguage: 'en',
+          overview: 'Sand.',
+          type: MEDIA_TYPE.MOVIE,
+          runtime: 155,
+          genreIds: [35],
+        }),
+      );
+      prisma.movie.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+      prisma.userMovie.upsert.mockResolvedValue({
+        userId: 'user-1',
+        movieId: 5,
+      });
+
+      const result = await service.register(42, 'user-1');
+
+      expect(result).toEqual({ id: 5, type: MEDIA_TYPE.MOVIE });
+      expect(prisma.userMovie.upsert).toHaveBeenCalledWith({
+        where: { userId_movieId: { userId: 'user-1', movieId: 5 } },
+        update: {},
+        create: { userId: 'user-1', movieId: 5 },
+      });
+      expect(mediaServerReconcile.reconcileMovie).toHaveBeenCalledWith(5, 42);
     });
 
     // Spec 056, REQ-7

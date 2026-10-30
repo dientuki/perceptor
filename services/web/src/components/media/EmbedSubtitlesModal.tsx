@@ -26,6 +26,7 @@ interface RowState {
   languageIso3: string;
   isDefault: boolean;
   offset: string;
+  autoOffset: boolean;
 }
 
 const OFFSET_LIMIT = 600000;
@@ -49,6 +50,7 @@ function initialRows(subtitles: ExternalSubtitle[]): Record<string, RowState> {
       languageIso3: subtitle.languageIso3 ?? "",
       isDefault: false,
       offset: "0",
+      autoOffset: true,
     };
   }
   return rows;
@@ -131,7 +133,8 @@ export default function EmbedSubtitlesModal({
     included.every((s) => {
       const row = rowFor(s.fileName);
       return (
-        knownIso3.has(row.languageIso3) && parseOffset(row.offset) !== null
+        knownIso3.has(row.languageIso3) &&
+        (row.autoOffset || parseOffset(row.offset) !== null)
       );
     });
 
@@ -139,13 +142,14 @@ export default function EmbedSubtitlesModal({
     const payload: SubtitleEmbedInput[] = [];
     for (const subtitle of included) {
       const row = rowFor(subtitle.fileName);
-      const offsetMs = parseOffset(row.offset);
+      const offsetMs = row.autoOffset ? 0 : parseOffset(row.offset);
       if (offsetMs === null) return;
       payload.push({
         fileName: subtitle.fileName,
         languageIso3: row.languageIso3,
         isDefault: row.isDefault,
         offsetMs,
+        autoOffset: row.autoOffset,
       });
     }
 
@@ -252,13 +256,29 @@ export default function EmbedSubtitlesModal({
                       min={-OFFSET_LIMIT}
                       max={OFFSET_LIMIT}
                       value={row.offset}
-                      disabled={!row.include}
+                      disabled={!row.include || row.autoOffset}
                       onChange={(e) =>
                         update(subtitle.fileName, { offset: e.target.value })
                       }
-                      aria-invalid={row.include && offsetInvalid}
+                      aria-invalid={
+                        row.include && !row.autoOffset && offsetInvalid
+                      }
                       className={`${INPUT_CLASS} w-32`}
                     />
+                  </label>
+
+                  <label className="flex items-center gap-2 pb-2 text-base text-gray-600 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={row.autoOffset}
+                      disabled={!row.include}
+                      onChange={(e) =>
+                        update(subtitle.fileName, {
+                          autoOffset: e.target.checked,
+                        })
+                      }
+                    />
+                    {t("autoOffset")}
                   </label>
 
                   <label className="flex items-center gap-2 pb-2 text-base text-gray-600 dark:text-gray-300">

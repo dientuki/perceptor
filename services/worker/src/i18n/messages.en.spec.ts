@@ -55,6 +55,7 @@ const KNOWN_PARAMS: Record<string, Record<string, string | number>> = {
   [errorKeys.ERROR_SUBTITLE_EMBED_VERIFY_FAILED]: { detail: 'duration drift' },
   [errorKeys.ERROR_SUBTITLE_EMBED_NOT_WRITABLE]: { detail: 'EACCES' },
   [errorKeys.ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED]: {},
+  [errorKeys.ERROR_SUBTITLE_EMBED_SYNC_FAILED]: {},
   [errorKeys.ERROR_SUBTITLE_SEARCH_SYNC_FAILED]: {},
   [errorKeys.ERROR_SUBTITLE_SEARCH_INTERRUPTED]: {},
   [errorKeys.ERROR_SUBTITLE_SEARCH_PROBE_FAILED]: {},
@@ -108,7 +109,7 @@ describe('messagesEn — Blu-ray disc keys', () => {
 describe('messagesEn — subtitle embed keys', () => {
   it('renders every subtitle embed key with its params', () => {
     const keys = ALL_KEYS.filter((key) => key.startsWith('error.subtitleEmbed.'));
-    expect(keys).toHaveLength(6);
+    expect(keys).toHaveLength(7);
     for (const key of keys) {
       const rendered = renderMessage(key, KNOWN_PARAMS[key]);
       expect(rendered.length).toBeGreaterThan(0);

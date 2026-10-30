@@ -9,6 +9,7 @@ import type { EncodeInput } from './types';
 import { EncodeCancelledError } from './cancellation';
 import { scoreGrainGate } from './grain-gate';
 import { GRAIN_PROBE_SAVED_MBPS_THRESHOLD, probeGrainSaving } from './grain-probe';
+import { readVerdict, writeVerdict } from './verdict-store';
 
 export type GrainMode = 'AUTO' | 'ON' | 'OFF';
 
@@ -33,14 +34,7 @@ export function normalizeGrainMode(raw: string | null | undefined): GrainMode {
   return 'OFF';
 }
 
-// Spec 094, REQ-9
-const verdictCache = new Map<number, boolean>();
-
-export function resetGrainVerdictCache(): void {
-  verdictCache.clear();
-}
-
-// Spec 092, REQ-9; Spec 094, REQ-2 REQ-9 REQ-10 REQ-11 NFR-1
+// Spec 092, REQ-9; Spec 094, REQ-2 REQ-9 REQ-10 REQ-11 NFR-1; Spec 111, REQ-1
 export async function resolveFilmGrain(
   details: EncodeInput,
   input: string,
@@ -56,7 +50,8 @@ export async function resolveFilmGrain(
     return filmGrain;
   }
 
-  const cached = verdictCache.get(id);
+  const identity = { mediaSourceId: id };
+  const cached = await readVerdict<boolean>('grain', identity);
   if (cached !== undefined) {
     console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=cache -> filmGrain=${cached} (reused)`);
     return cached;
@@ -67,20 +62,20 @@ export async function resolveFilmGrain(
     const gateText = `gateScore=${gate.score} reasons=${JSON.stringify(gate.reasons)}`;
 
     if (!gate.passed) {
-      verdictCache.set(id, false);
+      await writeVerdict('grain', identity, false);
       console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=gate ${gateText} -> filmGrain=false`);
       return false;
     }
 
     if (details.isShort) {
-      verdictCache.set(id, false);
+      await writeVerdict('grain', identity, false);
       console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=short ${gateText} -> filmGrain=false`);
       return false;
     }
 
     console.log(`[grain] mediaSourceId=${id} mode=${mode} probe starting ${gateText}`);
     const probe = await probeGrainSaving(input, metadata, details.contentKind, signal);
-    verdictCache.set(id, probe.passed);
+    await writeVerdict('grain', identity, probe.passed);
     console.log(
       `[grain] mediaSourceId=${id} mode=${mode} stage=probe ${gateText} ` +
         `mbpsGrain0=${probe.mbpsGrain0.toFixed(3)} savingPct=${probe.savingPct.toFixed(2)} ` +

@@ -20,10 +20,21 @@ import { resolveEffectiveGrainMode } from '@/settings/grain-mode';
 import { COMPRESSION_RESOLUTIONS, DEFAULT_COMPRESSION_RESOLUTION } from '@/settings/settings.catalog';
 import { TitleStatusService } from '@/title-status/title-status.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { LanguagesService } from '@/languages/languages.service';
 import { SubtitleSearchRequestService } from '@/subtitle-search/subtitle-search-request.service';
 
 // Spec 054, REQ-4
 const RECOVERY_ALLOWANCE = 1;
+
+type AllowedLanguages = {
+  audioIso3Codes: string[];
+  audioTags: string[];
+  subtitleIso3Codes: string[];
+  subtitleTags: string[];
+  audioVariantDetection: boolean;
+};
+
+type OwnerLanguageRows = Array<{ kind: LanguageTrackKind; language: { tag: string; iso3: string } }>;
 
 @Injectable()
 export class ProcessJobsService {
@@ -46,6 +57,8 @@ export class ProcessJobsService {
     private readonly subtitleProbeQueue: SubtitleProbeQueueService,
     // Spec 108, T005
     private readonly libraryProbeQueue: LibraryProbeQueueService,
+    // Spec 110, REQ-3 REQ-4
+    private readonly languages: LanguagesService,
   ) {}
 
   async getEncodeJobDetails(id: number): Promise<EncodeJobDetails> {
@@ -98,6 +111,7 @@ export class ProcessJobsService {
         audioTags: allowedAudioLanguageTags,
         subtitleIso3Codes: allowedSubtitleLanguagesIso3,
         subtitleTags: allowedSubtitleLanguageTags,
+        audioVariantDetection,
       } = await this.mergeMovieAllowedLanguages(movie.id, original);
       // Spec 048, REQ-12; Spec 048, REQ-13
       const outputSettingKey =
@@ -128,6 +142,7 @@ export class ProcessJobsService {
         allowedAudioLanguageTags,
         allowedSubtitleLanguagesIso3,
         allowedSubtitleLanguageTags,
+        audioVariantDetection,
       };
     }
 
@@ -140,6 +155,7 @@ export class ProcessJobsService {
         audioTags: allowedAudioLanguageTags,
         subtitleIso3Codes: allowedSubtitleLanguagesIso3,
         subtitleTags: allowedSubtitleLanguageTags,
+        audioVariantDetection,
       } = await this.mergeShowAllowedLanguages(show.id, original);
       return {
         ...base,
@@ -164,6 +180,7 @@ export class ProcessJobsService {
         allowedAudioLanguageTags,
         allowedSubtitleLanguagesIso3,
         allowedSubtitleLanguageTags,
+        audioVariantDetection,
       };
     }
 
@@ -191,13 +208,14 @@ export class ProcessJobsService {
   private async mergeMovieAllowedLanguages(
     movieId: number,
     original: { tag: string; iso3: string },
-  ): Promise<{ audioIso3Codes: string[]; audioTags: string[]; subtitleIso3Codes: string[]; subtitleTags: string[] }> {
+  ): Promise<AllowedLanguages> {
     const owners = await this.prisma.userMovie.findMany({
       where: { movieId },
       select: {
         languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
         user: {
           select: {
+            audioVariantDetection: true,
             languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
           },
         },
@@ -210,13 +228,14 @@ export class ProcessJobsService {
   private async mergeShowAllowedLanguages(
     showId: number,
     original: { tag: string; iso3: string },
-  ): Promise<{ audioIso3Codes: string[]; audioTags: string[]; subtitleIso3Codes: string[]; subtitleTags: string[] }> {
+  ): Promise<AllowedLanguages> {
     const owners = await this.prisma.userShow.findMany({
       where: { showId },
       select: {
         languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
         user: {
           select: {
+            audioVariantDetection: true,
             languages: { select: { kind: true, language: { select: { tag: true, iso3: true } } } },
           },
         },
@@ -253,10 +272,10 @@ export class ProcessJobsService {
   private async collectAllowedLanguages(
     original: { tag: string; iso3: string },
     owners: Array<{
-      languages: Array<{ kind: LanguageTrackKind; language: { tag: string; iso3: string } }>;
-      user: { languages: Array<{ kind: LanguageTrackKind; language: { tag: string; iso3: string } }> };
+      languages: OwnerLanguageRows;
+      user: { audioVariantDetection: boolean; languages: OwnerLanguageRows };
     }>,
-  ): Promise<{ audioIso3Codes: string[]; audioTags: string[]; subtitleIso3Codes: string[]; subtitleTags: string[] }> {
+  ): Promise<AllowedLanguages> {
     const audioIso3Codes = new Set<string>([original.iso3]);
     const audioTags = new Set<string>([original.tag]);
     const subtitleIso3Codes = new Set<string>([original.iso3]);
@@ -279,7 +298,17 @@ export class ProcessJobsService {
         }
       }
     }
+    // Spec 110, REQ-4
+    const variantIso3s = await this.languages.regionalVariantIso3s();
+    const audioVariantDetection = owners.some(
+      (owner) =>
+        owner.user.audioVariantDetection &&
+        [...owner.languages, ...owner.user.languages].some(
+          (pref) => pref.kind === LanguageTrackKind.AUDIO && variantIso3s.has(pref.language.iso3),
+        ),
+    );
     return {
+      audioVariantDetection,
       audioIso3Codes: Array.from(audioIso3Codes),
       audioTags: Array.from(audioTags),
       subtitleIso3Codes: Array.from(subtitleIso3Codes),
@@ -478,7 +507,7 @@ export class ProcessJobsService {
   async reconcileOrphanedEncodes(): Promise<number> {
     // Spec 101, NFR-3
     await this.prisma.subtitleEmbed.updateMany({
-      where: { status: 'RUNNING' },
+      where: { status: { in: ['SYNCING', 'RUNNING'] } },
       data: {
         status: 'FAILED',
         errorKey: ERROR_KEYS.SUBTITLE_EMBED_INTERRUPTED,

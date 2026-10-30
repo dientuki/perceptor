@@ -83,6 +83,8 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'auto_acquire_episodes_since', value: '' },
     { key: 'schedule_acquire_movies_enabled', value: 'false' },
     { key: 'schedule_acquire_movies_cron', value: '0 2 * * *' },
+    { key: 'schedule_import_lists_enabled', value: 'false' },
+    { key: 'schedule_import_lists_cron', value: '0 */6 * * *' },
 
     // State the system writes about the media-server index rebuild (034), not
     // configuration a person sets — deliberately absent from

@@ -129,6 +129,7 @@ const BOOLEAN_KEYS = [
   "schedule_refresh_episodes_enabled",
   "schedule_acquire_movies_enabled",
   "schedule_acquire_episodes_enabled",
+  "schedule_import_lists_enabled",
 ] as const;
 
 const LIST_KEYS = [

@@ -46,6 +46,12 @@ export const ERROR_KEYS = {
   MEDIA_SHORTS_DISABLED: 'error.media.shorts_disabled',
   MEDIA_REFRESH_IN_PROGRESS: 'error.media.refresh_in_progress',
 
+  // tmdb-lists (services/api/src/tmdb-lists/)
+  TMDB_LIST_INVALID_REFERENCE: 'error.tmdbList.invalid_reference',
+  TMDB_LIST_UNREADABLE: 'error.tmdbList.unreadable',
+  TMDB_LIST_ALREADY_ATTACHED: 'error.tmdbList.already_attached',
+  TMDB_LIST_NOT_FOUND: 'error.tmdbList.not_found',
+
   // magnet parsing (services/api/src/clients/torrent/magnet.ts)
   MAGNET_NOT_A_MAGNET: 'error.magnet.not_a_magnet',
   MAGNET_INVALID_INFOHASH: 'error.magnet.invalid_infohash',
@@ -77,6 +83,10 @@ export const ERROR_KEYS = {
   MEDIA_SERVER_NOT_CONFIGURED: 'error.mediaServer.not_configured',
   INDEXER_UNAVAILABLE: 'error.indexer.unavailable',
   INDEXER_NO_INFOHASH: 'error.indexer.no_infohash',
+  INDEXER_DEFINITION_NOT_ALLOWED: 'error.indexer.definition_not_allowed',
+  INDEXER_TEST_FAILED: 'error.indexer.test_failed',
+  INDEXER_FLARESOLVERR_MISSING: 'error.indexer.flaresolverr_missing',
+  INDEXER_NOT_FOUND: 'error.indexer.not_found',
   SEARCH_TARGET_AMBIGUOUS: 'error.search.target_ambiguous',
 
   // media-sources, process-jobs, downloads
@@ -154,6 +164,14 @@ export const ERROR_KEYS = {
   SUBTITLE_EMBED_INTERRUPTED: 'error.subtitleEmbed.interrupted',
   SUBTITLE_EMBED_SIDECAR_DELETE_FAILED: 'error.subtitleEmbed.sidecar_delete_failed',
   SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED: 'error.subtitleEmbed.jellyfin_refresh_failed',
+
+  // Spec 113, REQ-4
+  SUBTITLE_EMBED_SYNC_FAILED: 'error.subtitleEmbed.sync_failed',
+  SUBTITLE_EMBED_SYNC_FRAMERATE_MISMATCH: 'error.subtitleEmbed.sync_framerate_mismatch',
+  SUBTITLE_EMBED_SYNC_OFFSET_TOO_LARGE: 'error.subtitleEmbed.sync_offset_too_large',
+  SUBTITLE_EMBED_SYNC_INCOMPLETE: 'error.subtitleEmbed.sync_incomplete',
+  SUBTITLE_EMBED_SYNC_LOW_SCORE: 'error.subtitleEmbed.sync_low_score',
+  SUBTITLE_EMBED_SYNC_NOT_FOUND: 'error.subtitleEmbed.sync_not_found',
 
   // Spec 103
   SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER: 'error.subtitleSearch.unsupported_media_server',

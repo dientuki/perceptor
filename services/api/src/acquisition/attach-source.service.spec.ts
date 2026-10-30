@@ -4,7 +4,10 @@ import { AttachSourceService, AttachInput } from './attach-source.service';
 import { AttachTarget } from './attach-target';
 import { ERROR_KEYS, ErrorKey } from '@/i18n/error-keys';
 import { SourceKind, SourceStatus } from '@prisma/client';
-import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
+import {
+  ACTIVE_EMBED_STATUSES,
+  ActiveEmbedGuard,
+} from '@/subtitle-embed/active-embed.guard';
 
 // This suite exists because two bugs in the pre-088 three-copy attach path
 // produced no error anywhere, in any log, and no failure in any existing
@@ -488,17 +491,17 @@ describe('AttachSourceService — refused while a subtitle embed is active (Spec
     [
       'a film',
       'movieId',
-      { status: { in: ['QUEUED', 'RUNNING'] }, movieId: 5 },
+      { status: { in: [...ACTIVE_EMBED_STATUSES] }, movieId: 5 },
     ],
     [
       'an episode',
       'episodeId',
-      { status: { in: ['QUEUED', 'RUNNING'] }, episodeId: 5 },
+      { status: { in: [...ACTIVE_EMBED_STATUSES] }, episodeId: 5 },
     ],
     [
       'a season, through any of its episodes',
       'seasonId',
-      { status: { in: ['QUEUED', 'RUNNING'] }, episode: { seasonId: 5 } },
+      { status: { in: [...ACTIVE_EMBED_STATUSES] }, episode: { seasonId: 5 } },
     ],
   ] as const)(
     'refuses %s with an active embed, before refuse() and before any write',

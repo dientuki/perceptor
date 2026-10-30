@@ -1,5 +1,6 @@
 import { EncodeCancelledError } from './cancellation';
 import type { SubtitleFormat } from './subtitle-formats';
+import { fileIdentity, readVerdict, writeVerdict } from './verdict-store';
 import { runFfmpegCapture } from '../ffmpeg/capture';
 import { normalizeIso3 } from '../ffmpeg/iso639';
 import { isImageSubtitle, selectSubtitleStreams } from '../ffmpeg/params';
@@ -25,13 +26,6 @@ export function buildSubtitleSampleArgs(input: string, indices: number[]): strin
     args.push('-map', `0:${index}`, '-t', String(SUBTITLE_SAMPLE_SECONDS), '-c:s', 'srt', '-f', 'srt', `pipe:${3 + k}`);
   });
   return args;
-}
-
-// Spec 102, NFR-3
-const verdictCache = new Map<string, ReadonlySet<number>>();
-
-export function resetSubtitlePruneCache(): void {
-  verdictCache.clear();
 }
 
 type Group = { lang: string; streams: any[] };
@@ -82,8 +76,16 @@ export async function resolveSubtitlePruning(
   const groups = qualifyingGroups(metadata, details);
   if (groups.length === 0) return new Set();
 
-  const cached = verdictCache.get(input);
-  if (cached) return cached;
+  // Spec 111, REQ-4
+  const base = await fileIdentity(input);
+  const identity = base
+    ? { ...base, streams: groups.flatMap((g) => g.streams.map((s) => s.index as number)).sort((a, b) => a - b) }
+    : null;
+  const stored = await readVerdict<number[]>('subs', identity);
+  if (Array.isArray(stored)) {
+    console.log(`[subs] reused drops=[${stored.join(',')}]`);
+    return new Set(stored);
+  }
 
   try {
     const streams = groups.flatMap((g) => g.streams);
@@ -124,7 +126,7 @@ export async function resolveSubtitlePruning(
       lines.push(`[subs] ${group.lang} ${parts.join(' ')}`);
     }
 
-    verdictCache.set(input, drops);
+    await writeVerdict('subs', identity, [...drops].sort((a, b) => a - b));
     lines.forEach((line) => console.log(line));
     return drops;
   } catch (error) {

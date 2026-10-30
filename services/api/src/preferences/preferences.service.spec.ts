@@ -6,6 +6,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { LanguagesService } from '@/languages/languages.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { UsersService } from '@/users/users.service';
+import { SessionService } from '@/auth/session.service';
 
 // setPreferredTorrentGroupsFor replaces a caller's selection for one scope by
 // deleting the old rows and inserting the new ones. If that delete is keyed on
@@ -266,5 +267,71 @@ describe('PreferencesService — createTorrentGroup name collision', () => {
     );
 
     expect(rows).toHaveLength(1);
+  });
+});
+
+// The audio-variant opt-in crosses three layers (UsersService writes the
+// column, PreferencesService reads it back, the worker gates a ten-minute
+// transcription on it). If `findForUser` forgot to map the column, the
+// mutation would return `false` for a value that was stored, `web` would
+// revert the checkbox, and nothing would throw. This suite runs the real
+// UsersService against a fake `users` table so the round trip is exercised
+// end to end, not just the call arguments.
+describe('PreferencesService — audioVariantDetection round trip (spec 110)', () => {
+  let row: Record<string, unknown>;
+  let service: PreferencesService;
+
+  beforeEach(async () => {
+    row = {
+      id: 'user-1',
+      allowCinemaReleases: false,
+      audioMandatory: false,
+      subtitleSearch: false,
+      audioVariantDetection: false,
+      acquireTheatrical: false,
+      acquireDigital: false,
+      acquirePhysical: false,
+    };
+    const prisma = {
+      user: {
+        findUniqueOrThrow: jest.fn(async () => ({ ...row })),
+        update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+          Object.assign(row, data);
+          return { ...row };
+        }),
+      },
+      userTorrentGroup: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PreferencesService,
+        UsersService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: LanguagesService, useValue: { findPreferredTrackLanguagesFor: jest.fn().mockResolvedValue([]) } },
+        { provide: MediaCapabilitiesService, useValue: {} },
+        { provide: SessionService, useValue: {} },
+      ],
+    }).compile();
+    service = module.get<PreferencesService>(PreferencesService);
+    jest.spyOn(service, 'findSelectedTorrentGroupsFor' as never).mockResolvedValue([] as never);
+  });
+
+  it('reads false by default and returns the stored value after each write', async () => {
+    expect((await service.findForUser('user-1')).audioVariantDetection).toBe(false);
+
+    expect((await service.setAudioVariantDetection('user-1', true)).audioVariantDetection).toBe(true);
+    expect(row.audioVariantDetection).toBe(true);
+    expect((await service.findForUser('user-1')).audioVariantDetection).toBe(true);
+
+    expect((await service.setAudioVariantDetection('user-1', false)).audioVariantDetection).toBe(false);
+  });
+
+  it('leaves the other boolean preferences alone', async () => {
+    row.subtitleSearch = true;
+
+    const result = await service.setAudioVariantDetection('user-1', true);
+
+    expect(result.subtitleSearch).toBe(true);
+    expect(result.audioMandatory).toBe(false);
   });
 });

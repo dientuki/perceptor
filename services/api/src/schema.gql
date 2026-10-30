@@ -64,6 +64,11 @@ type Language {
   iso2: String!
   iso3: String!
   name: String!
+
+  """
+  Two or more region-subtagged Language rows share this iso3 (110 REQ-3).
+  """
+  hasRegionalVariants: Boolean!
 }
 
 type Movie {
@@ -99,6 +104,7 @@ type Movie {
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
+  autoAcquire: Boolean!
 
   """
   How many *other* users have this film in their library. 0 when the caller is the last owner.
@@ -322,6 +328,38 @@ type IndexerStatus {
   reachable: Boolean!
 }
 
+type IndexerDefinition {
+  """Prowlarr's definition identifier (definitionName). Opaque to web."""
+  definitionName: String!
+  name: String!
+
+  """As Prowlarr reports it (e.g. en-US). Null when Prowlarr reports none."""
+  language: String
+  categories: [IndexerMediaCategory!]!
+
+  """
+  Prowlarr marks this site as Cloudflare-fronted; addIndexer will attach the flaresolverr tag.
+  """
+  needsFlareSolverr: Boolean!
+
+  """This Prowlarr already holds an indexer of this definition."""
+  configured: Boolean!
+}
+
+enum IndexerMediaCategory {
+  MOVIES
+  TV
+  ANIME
+}
+
+type ConfiguredIndexer {
+  id: Int!
+  name: String!
+  definitionName: String!
+  enabled: Boolean!
+  usesFlareSolverr: Boolean!
+}
+
 type Episode {
   id: ID!
   episodeNumber: Int!
@@ -369,6 +407,7 @@ type Show {
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
   audioMandatory: Boolean!
+  autoAcquire: Boolean!
 
   """
   How many *other* users have this series in their library. 0 when the caller is the last owner.
@@ -412,6 +451,11 @@ type UserPreferences {
   Gate for automatic subtitle search (103 REQ-2). False for every user until they say otherwise.
   """
   subtitleSearch: Boolean!
+
+  """
+  Gate for audio variant detection (110 REQ-1). False for every user until they say otherwise.
+  """
+  audioVariantDetection: Boolean!
   audioLanguages: [Language!]!
   subtitleLanguages: [Language!]!
 
@@ -482,6 +526,9 @@ type EncodeJobDetails {
   dubTrimEnabled: Boolean!
   streamEndTrimEnabled: Boolean!
   compressionResolution: String!
+
+  """Effective opt-in for this job (110 REQ-4)."""
+  audioVariantDetection: Boolean!
   allowedSubtitleFormats: [String!]!
   libraryLayout: String!
 }
@@ -532,10 +579,59 @@ type SubtitleEmbed {
 }
 
 enum SubtitleEmbedStatus {
+  SYNCING
   QUEUED
   RUNNING
   COMPLETED
   FAILED
+}
+
+type SubtitleSearchLanguage {
+  languageIso3: String!
+  outcome: SubtitleSearchLanguageOutcome!
+
+  """i18n key when outcome is FAILED or REJECTED, else null."""
+  reasonKey: String
+}
+
+enum SubtitleSearchLanguageOutcome {
+  PENDING
+  ALREADY_PRESENT
+  EMBEDDED
+  NOT_FOUND
+  REJECTED
+  FAILED
+}
+
+type SubtitleSearch {
+  id: Int!
+  status: SubtitleSearchStatus!
+
+  """i18n key when status is FAILED, else null."""
+  errorKey: String
+  languages: [SubtitleSearchLanguage!]!
+  createdAt: DateTime!
+  finishedAt: DateTime
+}
+
+enum SubtitleSearchStatus {
+  WAITING
+  SEARCHING
+  VALIDATING
+  EMBEDDING
+  COMPLETED
+  FAILED
+}
+
+type SubtitleEmbedSyncDetails {
+  subtitleEmbedId: Int!
+  fileName: String!
+
+  """Absolute container path of the library .mkv used as the reference."""
+  filePath: String!
+
+  """Absolute container path of the sidecar, in filePath's directory."""
+  candidatePath: String!
 }
 
 type SubtitleEmbedTrack {
@@ -597,6 +693,11 @@ type MediaCapabilities {
   True while Perceptor's OpenSubtitles application key is present and the OpenSubtitles username and password Settings are set (107 REQ-2). Never exposes any of them.
   """
   subtitleSearchAvailable: Boolean!
+
+  """
+  True while the import_lists scheduled task is enabled (109 REQ-12). Never exposes its cadence.
+  """
+  listImportEnabled: Boolean!
 }
 
 type FfprobeLog {
@@ -606,41 +707,27 @@ type FfprobeLog {
   createdAt: DateTime!
 }
 
-type SubtitleSearchLanguage {
-  languageIso3: String!
-  outcome: SubtitleSearchLanguageOutcome!
-
-  """i18n key when outcome is FAILED or REJECTED, else null."""
-  reasonKey: String
-}
-
-enum SubtitleSearchLanguageOutcome {
-  PENDING
-  ALREADY_PRESENT
-  EMBEDDED
-  NOT_FOUND
-  REJECTED
-  FAILED
-}
-
-type SubtitleSearch {
+type TmdbList {
   id: Int!
-  status: SubtitleSearchStatus!
+  tmdbListId: Int!
+  name: String!
+  lastImportedAt: DateTime
+  lastError: String
 
-  """i18n key when status is FAILED, else null."""
-  errorKey: String
-  languages: [SubtitleSearchLanguage!]!
-  createdAt: DateTime!
-  finishedAt: DateTime
-}
+  """
+  Items TMDB reported for the list at its last successful read; null until then (109 0.2.0).
+  """
+  itemCount: Int
 
-enum SubtitleSearchStatus {
-  WAITING
-  SEARCHING
-  VALIDATING
-  EMBEDDING
-  COMPLETED
-  FAILED
+  """
+  Films of this list the caller owns today (seen by the list), ordered by title.
+  """
+  movies: [Movie!]!
+
+  """
+  Series of this list the caller owns today (seen by the list), ordered by title.
+  """
+  shows: [Show!]!
 }
 
 type SubtitleProbeDetails {
@@ -794,6 +881,8 @@ type Query {
   How many indexers the configured Prowlarr holds, and whether Prowlarr answered at all.
   """
   indexerStatus: IndexerStatus!
+  indexerCatalog(search: String): [IndexerDefinition!]!
+  configuredIndexers: [ConfiguredIndexer!]!
   shows: [Show!]!
   show(id: Int!): Show
   preferences: UserPreferences!
@@ -807,6 +896,11 @@ type Query {
   Service-only (worker). Container paths, same standing as EncodeJobDetails' outputRoot. Answers for any status.
   """
   subtitleEmbedDetails(id: Int!): SubtitleEmbedDetails!
+
+  """
+  Service-only (worker). Refused with error.subtitleEmbed.sync_not_found unless the embed is SYNCING and fileName is one of its automatic tracks.
+  """
+  subtitleEmbedSyncDetails(subtitleEmbedId: Int!, fileName: String!): SubtitleEmbedSyncDetails!
   mediaCapabilities: MediaCapabilities!
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
   searchAllMedia(query: String!): [MediaSearchResult!]!
@@ -820,6 +914,12 @@ type Query {
 
   """List every registered scheduled task and its current status"""
   scheduledTasks: [ScheduledTask!]!
+  tmdbLists: [TmdbList!]!
+
+  """
+  One of the caller's lists; null for an id that is not theirs (109 0.2.0).
+  """
+  tmdbList(id: Int!): TmdbList
 
   """
   How this installation is reachable as this container has it loaded: routing mode, domain, the four published-service ports/URLs, and the upload endpoint this container expects — never process.env wholesale, never a fabricated host.
@@ -861,6 +961,11 @@ type Mutation {
   updateUser(updateUserInput: UpdateUserInput!): User!
   removeUser(id: ID!): User!
   updateProfile(updateProfileInput: UpdateProfileInput!): User!
+
+  """
+  Marca si las búsquedas automáticas pueden adquirir esta película para el usuario
+  """
+  setMovieAutoAcquire(movieId: Int!, autoAcquire: Boolean!): Boolean!
 
   """Envía un release elegido a qBittorrent y lo asocia a la película"""
   addTorrentToMovie(movieId: Int!, infoHash: String, urls: [String!]!, releaseTitle: String, force: Boolean = false): Movie!
@@ -931,6 +1036,10 @@ type Mutation {
   Descarta un archivo de una fuente: cancela su codificación y borra su entrada
   """
   encodeJobDiscard(processJobId: Int!): Download!
+  addIndexer(definitionName: String!): ConfiguredIndexer!
+
+  """Removes the indexer from Prowlarr. True on success."""
+  removeIndexer(id: Int!): Boolean!
 
   """
   Reemplaza la preferencia de idiomas del usuario para una serie puntual, para un tipo de pista
@@ -941,6 +1050,11 @@ type Mutation {
   Marca si el audio en el idioma preferido es obligatorio para esta serie
   """
   setShowAudioMandatory(showId: Int!, mandatory: Boolean!): Boolean!
+
+  """
+  Marca si las búsquedas automáticas pueden adquirir esta serie para el usuario
+  """
+  setShowAutoAcquire(showId: Int!, autoAcquire: Boolean!): Boolean!
 
   """
   Reclasifica el estilo de animación de una serie (057-content-kind-classification)
@@ -993,6 +1107,7 @@ type Mutation {
   setAcquisitionWindows(theatrical: Boolean!, digital: Boolean!, physical: Boolean!): UserPreferences!
   setAudioMandatory(mandatory: Boolean!): UserPreferences!
   setSubtitleSearch(enabled: Boolean!): UserPreferences!
+  setAudioVariantDetection(enabled: Boolean!): UserPreferences!
   setPreferredTrackLanguages(kind: LanguageTrackKind!, tags: [String!]!): [Language!]!
   createTorrentGroup(name: String!): TorrentGroup!
   deleteTorrentGroup(id: Int!): Boolean!
@@ -1040,6 +1155,16 @@ type Mutation {
 
   """Service-only (worker). Safe to receive more than once."""
   subtitleEmbedFailed(id: Int!, errorKey: String!): Boolean!
+
+  """
+  Service-only (worker). Same arguments as subtitleSyncCompleted. Safe to receive more than once; false when the embed is no longer SYNCING.
+  """
+  subtitleEmbedSyncCompleted(subtitleEmbedId: Int!, fileName: String!, offsetMs: Int!, framerateRatio: Float!, reference: SubtitleSyncReference!, score: Float!, mediaDurationMs: Int!, lastChapterStartMs: Int): Boolean!
+
+  """
+  Service-only (worker). Safe to receive more than once; false when the embed is no longer SYNCING.
+  """
+  subtitleEmbedSyncFailed(subtitleEmbedId: Int!, fileName: String!, errorKey: String!): Boolean!
   addMedia(tmdbId: Int!, type: String!): MediaRef!
 
   """The worker reports one raw ffprobe payload before an encode starts"""
@@ -1052,6 +1177,8 @@ type Mutation {
   Trigger a registered scheduled task immediately, regardless of its cadence
   """
   runScheduledTask(id: String!): ScheduledTask!
+  addTmdbList(reference: String!): TmdbList!
+  removeTmdbList(id: Int!): Boolean!
 
   """
   Starts a 103 subtitle search for a film the caller owns that already holds a file (106).
@@ -1188,6 +1315,11 @@ input SubtitleEmbedInput {
   languageIso3: String!
   isDefault: Boolean!
   offsetMs: Int!
+
+  """
+  True: api measures the offset (113 REQ-3) and ignores offsetMs. Defaults to false (101's behaviour).
+  """
+  autoOffset: Boolean! = false
 }
 
 enum SubtitleSyncReference {

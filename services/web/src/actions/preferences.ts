@@ -23,6 +23,7 @@ const PREFERENCES_QUERY = `
       acquirePhysical
       audioMandatory
       subtitleSearch
+      audioVariantDetection
       audioLanguages {
         id
         tag
@@ -69,6 +70,7 @@ export async function getPreferences(): Promise<UserPreferences> {
       acquirePhysical: false,
       audioMandatory: false,
       subtitleSearch: false,
+      audioVariantDetection: false,
       audioLanguages: [],
       subtitleLanguages: [],
       movieTorrentGroups: [],
@@ -176,6 +178,7 @@ const SET_AUDIO_MANDATORY_MUTATION = `
       acquirePhysical
       audioMandatory
       subtitleSearch
+      audioVariantDetection
       audioLanguages {
         id
         tag
@@ -248,6 +251,38 @@ export async function setSubtitleSearchAction(
   let result: Awaited<ReturnType<typeof fetchGraphQL>>;
   try {
     result = await fetchGraphQL(SET_SUBTITLE_SEARCH_MUTATION, { enabled });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { error: await translateGraphQLError(errors[0]) };
+  }
+
+  return { success: true };
+}
+
+const SET_AUDIO_VARIANT_DETECTION_MUTATION = `
+  mutation SetAudioVariantDetection($enabled: Boolean!) {
+    setAudioVariantDetection(enabled: $enabled) {
+      audioVariantDetection
+    }
+  }
+`;
+
+// Spec 110, REQ-1
+export async function setAudioVariantDetectionAction(
+  enabled: boolean,
+): Promise<{ error: string } | { success: true }> {
+  let result: Awaited<ReturnType<typeof fetchGraphQL>>;
+  try {
+    result = await fetchGraphQL(SET_AUDIO_VARIANT_DETECTION_MUTATION, {
+      enabled,
+    });
   } catch (_err) {
     const t = await getTranslations("errors");
     return { error: t("network.connectionFailed") };
@@ -433,6 +468,7 @@ const SET_ACQUISITION_WINDOWS_MUTATION = `
       acquirePhysical
       audioMandatory
       subtitleSearch
+      audioVariantDetection
       audioLanguages {
         id
         tag

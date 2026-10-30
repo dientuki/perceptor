@@ -7,6 +7,7 @@ import { IndexerModule } from '@/indexer/indexer.module';
 import { EpisodesModule } from '@/episodes/episodes.module';
 import { ShowsModule } from '@/shows/shows.module';
 import { MoviesModule } from '@/movies/movies.module';
+import { TmdbListsModule } from '@/tmdb-lists/tmdb-lists.module';
 import { SchedulerResolver } from './scheduler.resolver';
 import { SchedulerService } from './scheduler.service';
 import { RefreshMoviesTask } from './tasks/refresh-movies.task';
@@ -14,6 +15,7 @@ import { RefreshShowsTask } from './tasks/refresh-shows.task';
 import { RefreshEpisodesTask } from './tasks/refresh-episodes.task';
 import { AcquireEpisodesTask } from './tasks/acquire-episodes.task';
 import { AcquireMoviesTask } from './tasks/acquire-movies.task';
+import { ImportListsTask } from './tasks/import-lists.task';
 
 @Module({
   imports: [
@@ -24,6 +26,7 @@ import { AcquireMoviesTask } from './tasks/acquire-movies.task';
     EpisodesModule,
     ShowsModule,
     MoviesModule,
+    TmdbListsModule,
   ],
   providers: [
     SchedulerResolver,
@@ -33,6 +36,7 @@ import { AcquireMoviesTask } from './tasks/acquire-movies.task';
     RefreshEpisodesTask,
     AcquireMoviesTask,
     AcquireEpisodesTask,
+    ImportListsTask,
   ],
   exports: [SchedulerService],
 })

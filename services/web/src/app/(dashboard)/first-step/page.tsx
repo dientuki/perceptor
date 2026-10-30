@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
@@ -6,8 +7,10 @@ import { getEnvironmentInfo } from "@/actions/environment";
 import { getIndexerStatus } from "@/actions/indexer";
 import { getMediaCapabilities } from "@/actions/media";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+import AddIndexerButton from "@/components/indexers/AddIndexerButton";
 import IndexerSetupGuide from "@/components/onboarding/IndexerSetupGuide";
 import TmdbKeyOnboarding from "@/components/onboarding/TmdbKeyOnboarding";
+import { parseRequestHostname, resolveServiceUrl } from "@/lib/request-host";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("pages.firstStep");
@@ -39,6 +42,14 @@ export default async function FirstStepPage() {
 
   const indexerEndpoint =
     environment.endpoints.find((endpoint) => endpoint.id === "indexer") ?? null;
+  const indexerPort = indexerEndpoint?.port ?? 0;
+  const requestHeaders = await headers();
+  const host = parseRequestHostname(
+    requestHeaders.get("x-forwarded-host"),
+    requestHeaders.get("host"),
+  );
+  // Spec 112, first-step indexer link
+  const indexerUrl = resolveServiceUrl(indexerEndpoint, host);
 
   return (
     <div>
@@ -49,10 +60,13 @@ export default async function FirstStepPage() {
           keyRejected={false}
           alreadyConfigured={mediaCapabilities.catalogKeyConfigured}
         />
+        <div>
+          <AddIndexerButton />
+        </div>
         <IndexerSetupGuide
           status={indexerStatus}
-          indexerUrl={indexerEndpoint?.url ?? null}
-          indexerPort={indexerEndpoint?.port ?? 0}
+          indexerUrl={indexerUrl}
+          indexerPort={indexerPort}
         />
       </div>
     </div>

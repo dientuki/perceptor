@@ -42,3 +42,28 @@ export type TorrentResult = {
   candidate: boolean;
   candidateRank: number | null;
 };
+
+export type IndexerMediaCategory = "MOVIES" | "TV" | "ANIME";
+
+export type IndexerDefinition = {
+  definitionName: string;
+  name: string;
+  language: string | null;
+  categories: IndexerMediaCategory[];
+  needsFlareSolverr: boolean;
+  configured: boolean;
+};
+
+export type ConfiguredIndexer = {
+  id: string;
+  name: string;
+  definitionName: string;
+  enabled: boolean;
+  usesFlareSolverr: boolean;
+};
+
+export type IndexerActionError = {
+  ok: false;
+  error: string;
+  errorKey?: string;
+};

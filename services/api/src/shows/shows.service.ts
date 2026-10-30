@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MediaStatus } from '@prisma/client';
+import { MediaStatus, Prisma } from '@prisma/client';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -143,36 +143,38 @@ export class ShowsService implements MediaTypeService {
 
   async register(tmdbId: number, userId: string): Promise<MediaRef> {
     const existing = await this.prisma.show.findUnique({ where: { tmdbId } });
-    if (existing) {
-      await this.linkUserToShow(userId, existing.id);
-
-      // Spec 006, REQ-14
-      if (existing.seasonsSyncedAt === null) {
-        void this.hydrate(existing.id, tmdbId);
-      } else {
-        // Spec 034, REQ-18
-        void this.mediaServerReconcile.reconcileShow(existing.id, tmdbId);
-      }
-
-      return { id: existing.id, type: MEDIA_TYPE.SHOW };
-    }
+    if (existing) return this.joinRegisteredShow(existing, tmdbId, userId);
 
     const cached = await this.getCachedShow(tmdbId);
     const contentKind = await this.deriveContentKind(cached);
 
-    const show = await this.prisma.show.create({
-      data: {
-        tmdbId: cached.id,
-        title: cached.title,
-        overview: cached.overview,
-        posterUrl: cached.posterUrl ?? undefined,
-        releaseDate: cached.releaseDate
-          ? new Date(cached.releaseDate)
-          : undefined,
-        originalLanguage: cached.originalLanguage,
-        contentKind,
-      },
-    });
+    let show: { id: number };
+    try {
+      show = await this.prisma.show.create({
+        data: {
+          tmdbId: cached.id,
+          title: cached.title,
+          overview: cached.overview,
+          posterUrl: cached.posterUrl ?? undefined,
+          releaseDate: cached.releaseDate
+            ? new Date(cached.releaseDate)
+            : undefined,
+          originalLanguage: cached.originalLanguage,
+          contentKind,
+        },
+      });
+    } catch (error) {
+      // Spec 109, NFR-4
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== 'P2002'
+      ) {
+        throw error;
+      }
+      const raced = await this.prisma.show.findUnique({ where: { tmdbId } });
+      if (!raced) throw error;
+      return this.joinRegisteredShow(raced, tmdbId, userId);
+    }
 
     await this.linkUserToShow(userId, show.id);
 
@@ -180,6 +182,24 @@ export class ShowsService implements MediaTypeService {
     void this.hydrate(show.id, tmdbId);
 
     return { id: show.id, type: MEDIA_TYPE.SHOW };
+  }
+
+  private async joinRegisteredShow(
+    existing: { id: number; seasonsSyncedAt: Date | null },
+    tmdbId: number,
+    userId: string,
+  ): Promise<MediaRef> {
+    await this.linkUserToShow(userId, existing.id);
+
+    // Spec 006, REQ-14
+    if (existing.seasonsSyncedAt === null) {
+      void this.hydrate(existing.id, tmdbId);
+    } else {
+      // Spec 034, REQ-18
+      void this.mediaServerReconcile.reconcileShow(existing.id, tmdbId);
+    }
+
+    return { id: existing.id, type: MEDIA_TYPE.SHOW };
   }
 
   private hydrateClaimKey(tmdbId: number): string {
@@ -422,6 +442,23 @@ export class ShowsService implements MediaTypeService {
       data: { audioMandatory: mandatory },
     });
     return mandatory;
+  }
+
+  // Spec 109, REQ-15
+  async findAutoAcquireFor(userId: string, showId: number): Promise<boolean> {
+    const row = await this.prisma.userShow.findUnique({
+      where: { userId_showId: { userId, showId } },
+    });
+    return row?.autoAcquire ?? false;
+  }
+
+  // Spec 109, REQ-15
+  async setAutoAcquireFor(userId: string, showId: number, autoAcquire: boolean): Promise<boolean> {
+    await this.prisma.userShow.update({
+      where: { userId_showId: { userId, showId } },
+      data: { autoAcquire },
+    });
+    return autoAcquire;
   }
 
   // Spec 057, REQ-9

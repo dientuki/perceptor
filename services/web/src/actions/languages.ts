@@ -18,6 +18,7 @@ const LANGUAGES_QUERY = `
       iso2
       iso3
       name
+      hasRegionalVariants
     }
   }
 `;
