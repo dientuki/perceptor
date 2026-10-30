@@ -213,6 +213,20 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED]:
     'Subtitles embedded, but Jellyfin could not be notified. They will appear on its next scan.',
 
+  // Spec 113, REQ-4
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_FAILED]:
+    'The automatic offset of a subtitle could not be computed. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_FRAMERATE_MISMATCH]:
+    'A subtitle is from a release with a different framerate. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_OFFSET_TOO_LARGE]:
+    'A subtitle is too far out of sync to be fixed automatically. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_INCOMPLETE]:
+    'A subtitle only covers part of the file. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_LOW_SCORE]:
+    'A subtitle does not match this file. Try the manual offset. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_NOT_FOUND]:
+    'No automatic offset measurement is pending for that subtitle.',
+
   // Spec 103
   [ERROR_KEYS.SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER]:
     'Subtitle search requires Jellyfin as the media server.',

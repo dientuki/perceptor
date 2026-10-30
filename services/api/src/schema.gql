@@ -579,10 +579,59 @@ type SubtitleEmbed {
 }
 
 enum SubtitleEmbedStatus {
+  SYNCING
   QUEUED
   RUNNING
   COMPLETED
   FAILED
+}
+
+type SubtitleSearchLanguage {
+  languageIso3: String!
+  outcome: SubtitleSearchLanguageOutcome!
+
+  """i18n key when outcome is FAILED or REJECTED, else null."""
+  reasonKey: String
+}
+
+enum SubtitleSearchLanguageOutcome {
+  PENDING
+  ALREADY_PRESENT
+  EMBEDDED
+  NOT_FOUND
+  REJECTED
+  FAILED
+}
+
+type SubtitleSearch {
+  id: Int!
+  status: SubtitleSearchStatus!
+
+  """i18n key when status is FAILED, else null."""
+  errorKey: String
+  languages: [SubtitleSearchLanguage!]!
+  createdAt: DateTime!
+  finishedAt: DateTime
+}
+
+enum SubtitleSearchStatus {
+  WAITING
+  SEARCHING
+  VALIDATING
+  EMBEDDING
+  COMPLETED
+  FAILED
+}
+
+type SubtitleEmbedSyncDetails {
+  subtitleEmbedId: Int!
+  fileName: String!
+
+  """Absolute container path of the library .mkv used as the reference."""
+  filePath: String!
+
+  """Absolute container path of the sidecar, in filePath's directory."""
+  candidatePath: String!
 }
 
 type SubtitleEmbedTrack {
@@ -679,43 +728,6 @@ type TmdbList {
   Series of this list the caller owns today (seen by the list), ordered by title.
   """
   shows: [Show!]!
-}
-
-type SubtitleSearchLanguage {
-  languageIso3: String!
-  outcome: SubtitleSearchLanguageOutcome!
-
-  """i18n key when outcome is FAILED or REJECTED, else null."""
-  reasonKey: String
-}
-
-enum SubtitleSearchLanguageOutcome {
-  PENDING
-  ALREADY_PRESENT
-  EMBEDDED
-  NOT_FOUND
-  REJECTED
-  FAILED
-}
-
-type SubtitleSearch {
-  id: Int!
-  status: SubtitleSearchStatus!
-
-  """i18n key when status is FAILED, else null."""
-  errorKey: String
-  languages: [SubtitleSearchLanguage!]!
-  createdAt: DateTime!
-  finishedAt: DateTime
-}
-
-enum SubtitleSearchStatus {
-  WAITING
-  SEARCHING
-  VALIDATING
-  EMBEDDING
-  COMPLETED
-  FAILED
 }
 
 type SubtitleProbeDetails {
@@ -884,6 +896,11 @@ type Query {
   Service-only (worker). Container paths, same standing as EncodeJobDetails' outputRoot. Answers for any status.
   """
   subtitleEmbedDetails(id: Int!): SubtitleEmbedDetails!
+
+  """
+  Service-only (worker). Refused with error.subtitleEmbed.sync_not_found unless the embed is SYNCING and fileName is one of its automatic tracks.
+  """
+  subtitleEmbedSyncDetails(subtitleEmbedId: Int!, fileName: String!): SubtitleEmbedSyncDetails!
   mediaCapabilities: MediaCapabilities!
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
   searchAllMedia(query: String!): [MediaSearchResult!]!
@@ -1138,6 +1155,16 @@ type Mutation {
 
   """Service-only (worker). Safe to receive more than once."""
   subtitleEmbedFailed(id: Int!, errorKey: String!): Boolean!
+
+  """
+  Service-only (worker). Same arguments as subtitleSyncCompleted. Safe to receive more than once; false when the embed is no longer SYNCING.
+  """
+  subtitleEmbedSyncCompleted(subtitleEmbedId: Int!, fileName: String!, offsetMs: Int!, framerateRatio: Float!, reference: SubtitleSyncReference!, score: Float!, mediaDurationMs: Int!, lastChapterStartMs: Int): Boolean!
+
+  """
+  Service-only (worker). Safe to receive more than once; false when the embed is no longer SYNCING.
+  """
+  subtitleEmbedSyncFailed(subtitleEmbedId: Int!, fileName: String!, errorKey: String!): Boolean!
   addMedia(tmdbId: Int!, type: String!): MediaRef!
 
   """The worker reports one raw ffprobe payload before an encode starts"""
@@ -1288,6 +1315,11 @@ input SubtitleEmbedInput {
   languageIso3: String!
   isDefault: Boolean!
   offsetMs: Int!
+
+  """
+  True: api measures the offset (113 REQ-3) and ignores offsetMs. Defaults to false (101's behaviour).
+  """
+  autoOffset: Boolean! = false
 }
 
 enum SubtitleSyncReference {

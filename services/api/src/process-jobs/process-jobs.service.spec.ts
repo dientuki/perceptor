@@ -1836,14 +1836,14 @@ describe('ProcessJobsService', () => {
     // no error anywhere. Only RUNNING may be failed: a QUEUED embed is still in
     // Redis and a COMPLETED one is history.
     describe('subtitle embeds (Spec 101, NFR-3)', () => {
-      it('fails only RUNNING embeds, with the interrupted key and a finishedAt', async () => {
+      it('fails only SYNCING and RUNNING embeds, with the interrupted key and a finishedAt', async () => {
         prisma.processJob.findMany.mockResolvedValue([]);
 
         await service.reconcileOrphanedEncodes();
 
         expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledTimes(1);
         expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledWith({
-          where: { status: 'RUNNING' },
+          where: { status: { in: ['SYNCING', 'RUNNING'] } },
           data: {
             status: 'FAILED',
             errorKey: ERROR_KEYS.SUBTITLE_EMBED_INTERRUPTED,

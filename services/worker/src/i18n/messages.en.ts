@@ -27,6 +27,7 @@ import {
   ERROR_SUBTITLE_EMBED_VERIFY_FAILED,
   ERROR_SUBTITLE_SEARCH_INTERRUPTED,
   ERROR_SUBTITLE_SEARCH_PROBE_FAILED,
+  ERROR_SUBTITLE_EMBED_SYNC_FAILED,
   ERROR_SUBTITLE_SEARCH_SYNC_FAILED,
 } from './error-keys';
 
@@ -63,6 +64,7 @@ export const messagesEn: Record<string, string> = {
     'The library folder is not writable or the file owner cannot be preserved: {detail}',
   [ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED]:
     'Subtitles embedded, but the external .srt file could not be deleted',
+  [ERROR_SUBTITLE_EMBED_SYNC_FAILED]: 'The subtitle offset could not be measured.',
   [ERROR_SUBTITLE_SEARCH_SYNC_FAILED]:
     "The subtitle's synchronization could not be validated.",
   [ERROR_SUBTITLE_SEARCH_INTERRUPTED]: 'The search was interrupted.',

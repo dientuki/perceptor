@@ -23,6 +23,16 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-30 — `113-embed-auto-offset`
+
+`api`, `worker`, `web`; one Prisma migration (`20261030120000_subtitle_embed_syncing`, hand-written `ALTER ... MODIFY COLUMN status ENUM(...)`, **not applied**: this host has no database for the checkout, so `prisma migrate status` was not run). GraphQL contract: `services/api/src/schema.gql` +69/-37, the deletions being the generator moving the `SubtitleSearch*` blocks, no content change; the added lines match the spec's SDL (`SYNCING`, `autoOffset: Boolean! = false`, `SubtitleEmbedSyncDetails`, one query, two mutations); `docs/spec/graphql-contract.md` gained the `113` section.
+
+- `api` typecheck: 0 errors. Suite: 97 suites, 1645 tests: 95 suites / 1625 tests pass; `auth/session.service.spec.ts` and `uploads/upload-tickets.service.spec.ts` fail (20 tests) because they need a real Redis this host lacks, same on the untouched code path. New: `subtitle-embed-sync.service.spec.ts`, `sidecar-text.spec.ts`, `active-embed.guard.spec.ts`, plus cases in `subtitle-embed.service.spec.ts`, `process-jobs.service.spec.ts`, the resolver spec and `attach-source.service.spec.ts` (stale `QUEUED`/`RUNNING` expectation fixed after T002 added `SYNCING`). `bin/comments api`: PASS (1335 locators). ESLint on the touched files leaves two prettier errors in `subtitle-embed.service.ts` (spec 108 lines) and one unsafe-member error in `subtitle-search.driver.spec.ts:761`, both pre-existing and left alone.
+- `worker` typecheck: 0 errors. Suite: 61 files, 772 tests passed (new `subtitle-embed-sync.job.spec.ts` 5 tests; `subtitle-sync.job.spec.ts` unmodified and green after the `measureSync` extraction). `bin/comments worker`: PASS (430). The worker has no lint script.
+- `web` typecheck: 0 errors. `check-messages`: 808 keys in parity. Biome on the touched files: clean. `bin/comments web`: PASS (152). `web` has no test runner.
+- Measured from throwaway `node:24.18.0-alpine` containers as uid 1000, not through `bin/`.
+- Not observed: all nine acceptance criteria. The manual pass (Jellyfin, `ffsubsync`, a real sidecar, the dialog in a browser, a worker restart while `SYNCING`) needs a dev stack of this checkout.
+
 ## 2026-10-30 — `112-in-app-indexer-setup`
 
 `api`, `web`; no Prisma migration. GraphQL contract: `services/api/src/schema.gql` +38 lines, 0 removed (enum, two types, two queries, two mutations — matches the spec's SDL); `docs/spec/graphql-contract.md` gained the `112` section.

@@ -507,7 +507,7 @@ export class ProcessJobsService {
   async reconcileOrphanedEncodes(): Promise<number> {
     // Spec 101, NFR-3
     await this.prisma.subtitleEmbed.updateMany({
-      where: { status: 'RUNNING' },
+      where: { status: { in: ['SYNCING', 'RUNNING'] } },
       data: {
         status: 'FAILED',
         errorKey: ERROR_KEYS.SUBTITLE_EMBED_INTERRUPTED,

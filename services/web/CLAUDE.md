@@ -836,6 +836,8 @@ bounds the offset to ±600000 ms and keeps the default checkboxes mutually exclu
 inline and keep the modal open; `stale_listing` closes it and `router.refresh()`es. Refresh is manual,
 never polled. Copy lives in `media.embedSubtitles.*` and `errors.subtitleEmbed.*`.
 
+Since `113`, each sidecar row has an "Automático" checkbox (checked by default) that disables its offset input; the payload sends `autoOffset` and `offsetMs: 0` for it, and the range bound applies to manual rows only. The button treats any status other than `COMPLETED`/`FAILED` as in flight and labels `SYNCING` "Sincronizando subtítulos…" (`media.embedSubtitles.syncing`).
+
 ## Automatic subtitle search (`103-subtitle-search`)
 
 One opt-in switch, disabled unless `mediaCapabilities.subtitleSearchAvailable` is true (Jellyfin is

@@ -1,6 +1,7 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { AdminGuard } from '@/auth/guards/admin.guard';
 import type { AuthPrincipal } from '@/auth/auth.types';
+import { SubtitleSyncReference } from '@/subtitle-search/entities/subtitle-search.entity';
 import { SubtitleEmbedResolver } from './subtitle-embed.resolver';
 
 function guardsOf(method: keyof SubtitleEmbedResolver): unknown[] {
@@ -27,7 +28,15 @@ describe('SubtitleEmbedResolver', () => {
     embedMovie: jest.fn(),
     embedEpisode: jest.fn(),
   };
-  const resolver = new SubtitleEmbedResolver(service as never);
+  const syncService = {
+    details: jest.fn().mockResolvedValue({ subtitleEmbedId: 1 }),
+    completed: jest.fn().mockResolvedValue(true),
+    failed: jest.fn().mockResolvedValue(true),
+  };
+  const resolver = new SubtitleEmbedResolver(
+    service as never,
+    syncService as never,
+  );
   const user: AuthPrincipal = {
     type: 'user',
     id: 'u',
@@ -55,6 +64,30 @@ describe('SubtitleEmbedResolver', () => {
       'subtitleEmbedDetails',
       (p: AuthPrincipal) => resolver.subtitleEmbedDetails(1, p),
     ],
+    [
+      'subtitleEmbedSyncDetails',
+      (p: AuthPrincipal) => resolver.subtitleEmbedSyncDetails(1, 'a.srt', p),
+    ],
+    [
+      'subtitleEmbedSyncCompleted',
+      (p: AuthPrincipal) =>
+        resolver.subtitleEmbedSyncCompleted(
+          1,
+          'a.srt',
+          0,
+          1,
+          SubtitleSyncReference.AUDIO,
+          1,
+          1,
+          null,
+          p,
+        ),
+    ],
+    [
+      'subtitleEmbedSyncFailed',
+      (p: AuthPrincipal) =>
+        resolver.subtitleEmbedSyncFailed(1, 'a.srt', 'k', p),
+    ],
   ])(
     '%s refuses a user principal and reaches the service for the worker',
     async (_name, call) => {
@@ -63,6 +96,9 @@ describe('SubtitleEmbedResolver', () => {
       expect(service.completed).not.toHaveBeenCalled();
       expect(service.failed).not.toHaveBeenCalled();
       expect(service.details).not.toHaveBeenCalled();
+      expect(syncService.details).not.toHaveBeenCalled();
+      expect(syncService.completed).not.toHaveBeenCalled();
+      expect(syncService.failed).not.toHaveBeenCalled();
 
       await expect(call(worker)).resolves.toBeDefined();
     },
@@ -80,6 +116,9 @@ describe('SubtitleEmbedResolver', () => {
     'subtitleEmbedCompleted',
     'subtitleEmbedFailed',
     'subtitleEmbedDetails',
+    'subtitleEmbedSyncDetails',
+    'subtitleEmbedSyncCompleted',
+    'subtitleEmbedSyncFailed',
   ] as const)(
     '%s is not behind AdminGuard, since the worker has no user',
     (method) => {

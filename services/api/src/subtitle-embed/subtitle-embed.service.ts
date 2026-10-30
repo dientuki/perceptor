@@ -18,12 +18,13 @@ import {
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import type { AuthPrincipal } from '@/auth/auth.types';
-import { ActiveEmbedGuard } from './active-embed.guard';
+import { ACTIVE_EMBED_STATUSES, ActiveEmbedGuard } from './active-embed.guard';
 import { ExternalSubtitle } from './entities/external-subtitle.entity';
 import { SubtitleEmbed } from './entities/subtitle-embed.entity';
 import { SubtitleEmbedDetails } from './entities/subtitle-embed-details.entity';
 import { SubtitleEmbedInput } from './dto/subtitle-embed.input';
 import { SubtitleEmbedStatus } from './entities/subtitle-embed-status.enum';
+import { SubtitleEmbedSyncService } from './subtitle-embed-sync.service';
 
 // Spec 101, REQ-4
 const MAX_OFFSET_MS = 600_000;
@@ -79,6 +80,8 @@ type StoredTrack = {
   stagedPath?: string;
   // Spec 107, REQ-14
   provenance?: string;
+  // Spec 113, REQ-2
+  autoOffset?: boolean;
 };
 
 function toExternalSubtitle(
@@ -127,6 +130,8 @@ export class SubtitleEmbedService {
     private readonly activeEmbed: ActiveEmbedGuard,
     // Spec 108, T005
     private readonly libraryProbeQueue: LibraryProbeQueueService,
+    // Spec 113, REQ-3
+    private readonly embedSync: SubtitleEmbedSyncService,
   ) {}
 
   // Spec 101, REQ-2 REQ-3
@@ -333,8 +338,9 @@ export class SubtitleEmbedService {
         baseTitles.get(subtitle.languageIso3) ?? subtitle.languageIso3,
       isDefault: subtitle.isDefault,
       isForced: listedByName.get(subtitle.fileName)!.isForced,
-      offsetMs: subtitle.offsetMs,
+      offsetMs: subtitle.autoOffset ? 0 : subtitle.offsetMs,
       provenance: USER_PROVENANCE,
+      ...(subtitle.autoOffset ? { autoOffset: true } : {}),
     }));
 
     return this.queueEmbed(ref, mkvPath, tracks);
@@ -409,10 +415,18 @@ export class SubtitleEmbedService {
   ): Promise<SubtitleEmbed> {
     const targetColumn =
       ref.kind === 'movie' ? { movieId: ref.id } : { episodeId: ref.id };
-    const row = await this.createGuarded(targetColumn, mkvPath, tracks);
+    // Spec 113, REQ-3
+    const automatic = tracks.some((track) => track.autoOffset);
+    const row = await this.createGuarded(
+      targetColumn,
+      mkvPath,
+      tracks,
+      automatic ? 'SYNCING' : 'QUEUED',
+    );
 
     try {
-      await this.queue.addEmbed({ subtitleEmbedId: row.id });
+      if (automatic) await this.embedSync.enqueue(row);
+      else await this.queue.addEmbed({ subtitleEmbedId: row.id });
     } catch (error) {
       await this.prisma.subtitleEmbed.delete({ where: { id: row.id } });
       throw error;
@@ -576,8 +590,9 @@ export class SubtitleEmbedService {
       throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_MULTIPLE_DEFAULTS);
     }
 
+    // Spec 113, REQ-2
     for (const subtitle of subtitles) {
-      this.assertOffsetInRange(subtitle.offsetMs);
+      if (!subtitle.autoOffset) this.assertOffsetInRange(subtitle.offsetMs);
     }
 
     const baseTitles = await this.lookupBaseTitles(
@@ -697,12 +712,13 @@ export class SubtitleEmbedService {
     column: { movieId: number } | { episodeId: number },
     filePath: string,
     tracks: StoredTrack[],
+    status: 'SYNCING' | 'QUEUED' = 'QUEUED',
   ): Promise<SubtitleEmbedRow> {
     try {
       return await this.prisma.$transaction(
         async (tx) => {
           const active = await tx.subtitleEmbed.count({
-            where: { ...column, status: { in: ['QUEUED', 'RUNNING'] } },
+            where: { ...column, status: { in: [...ACTIVE_EMBED_STATUSES] } },
           });
           if (active > 0) {
             throw i18nError.conflict(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
@@ -711,6 +727,7 @@ export class SubtitleEmbedService {
             data: {
               ...column,
               filePath,
+              status,
               tracks: tracks as unknown as Prisma.InputJsonValue,
             },
           });
@@ -753,7 +770,7 @@ export class SubtitleEmbedService {
     }
 
     await this.prisma.subtitleEmbed.updateMany({
-      where: { id, status: { in: ['QUEUED', 'RUNNING'] } },
+      where: { id, status: { in: [...ACTIVE_EMBED_STATUSES] } },
       data: { status: 'FAILED', errorKey: key, finishedAt: new Date() },
     });
     return true;

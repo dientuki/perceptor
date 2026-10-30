@@ -2,6 +2,7 @@ import { UseGuards } from '@nestjs/common';
 import {
   Args,
   Context,
+  Float,
   Int,
   Mutation,
   Parent,
@@ -20,6 +21,9 @@ import { Episode } from '@/shows/entities/episode.entity';
 import { SubtitleEmbedInput } from './dto/subtitle-embed.input';
 import { ExternalSubtitle } from './entities/external-subtitle.entity';
 import { SubtitleEmbed } from './entities/subtitle-embed.entity';
+import { SubtitleSyncReference } from '@/subtitle-search/entities/subtitle-search.entity';
+import { SubtitleEmbedSyncDetails } from './entities/subtitle-embed-sync-details.entity';
+import { SubtitleEmbedSyncService } from './subtitle-embed-sync.service';
 import { SubtitleEmbedDetails } from './entities/subtitle-embed-details.entity';
 import {
   SubtitleEmbedRequestMemo,
@@ -95,7 +99,10 @@ export class EpisodeSubtitleEmbedFieldsResolver {
 // Spec 101, REQ-3
 @Resolver()
 export class SubtitleEmbedResolver {
-  constructor(private readonly service: SubtitleEmbedService) {}
+  constructor(
+    private readonly service: SubtitleEmbedService,
+    private readonly syncService: SubtitleEmbedSyncService,
+  ) {}
 
   @UseGuards(AdminGuard)
   @Mutation(() => SubtitleEmbed, { name: 'embedMovieSubtitles' })
@@ -175,6 +182,70 @@ export class SubtitleEmbedResolver {
   ) {
     assertService(principal);
     return this.service.details(id);
+  }
+
+  // Spec 113, REQ-3
+  @AllowService()
+  @Query(() => SubtitleEmbedSyncDetails, {
+    name: 'subtitleEmbedSyncDetails',
+    description:
+      'Service-only (worker). Refused with error.subtitleEmbed.sync_not_found unless the embed is SYNCING and fileName is one of its automatic tracks.',
+  })
+  subtitleEmbedSyncDetails(
+    @Args('subtitleEmbedId', { type: () => Int }) subtitleEmbedId: number,
+    @Args('fileName') fileName: string,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    assertService(principal);
+    return this.syncService.details(subtitleEmbedId, fileName);
+  }
+
+  // Spec 113, REQ-4
+  @AllowService()
+  @Mutation(() => Boolean, {
+    name: 'subtitleEmbedSyncCompleted',
+    description:
+      'Service-only (worker). Same arguments as subtitleSyncCompleted. Safe to receive more than once; false when the embed is no longer SYNCING.',
+  })
+  subtitleEmbedSyncCompleted(
+    @Args('subtitleEmbedId', { type: () => Int }) subtitleEmbedId: number,
+    @Args('fileName') fileName: string,
+    @Args('offsetMs', { type: () => Int }) offsetMs: number,
+    @Args('framerateRatio', { type: () => Float }) framerateRatio: number,
+    @Args('reference', { type: () => SubtitleSyncReference })
+    reference: SubtitleSyncReference,
+    @Args('score', { type: () => Float }) score: number,
+    @Args('mediaDurationMs', { type: () => Int }) mediaDurationMs: number,
+    @Args('lastChapterStartMs', { type: () => Int, nullable: true })
+    lastChapterStartMs: number | null | undefined,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    assertService(principal);
+    return this.syncService.completed(subtitleEmbedId, fileName, {
+      offsetMs,
+      framerateRatio,
+      reference,
+      score,
+      mediaDurationMs,
+      lastChapterStartMs: lastChapterStartMs ?? null,
+    });
+  }
+
+  // Spec 113, REQ-5
+  @AllowService()
+  @Mutation(() => Boolean, {
+    name: 'subtitleEmbedSyncFailed',
+    description:
+      'Service-only (worker). Safe to receive more than once; false when the embed is no longer SYNCING.',
+  })
+  subtitleEmbedSyncFailed(
+    @Args('subtitleEmbedId', { type: () => Int }) subtitleEmbedId: number,
+    @Args('fileName') fileName: string,
+    @Args('errorKey') errorKey: string,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    assertService(principal);
+    return this.syncService.failed(subtitleEmbedId, fileName, errorKey);
   }
 }
 

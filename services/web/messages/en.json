@@ -188,6 +188,11 @@
       "verify_failed": "The generated file failed verification. The original was not touched.",
       "not_writable": "The worker cannot replace this file (folder or owner permissions).",
       "interrupted": "The embed was interrupted by a worker restart. Try again.",
+      "sync_failed": "Could not work out the automatic offset of a subtitle. The file was not touched.",
+      "sync_framerate_mismatch": "A subtitle is from a version with a different framerate. The file was not touched.",
+      "sync_offset_too_large": "A subtitle is too far out of sync to fix automatically. The file was not touched.",
+      "sync_incomplete": "A subtitle only covers part of the file. The file was not touched.",
+      "sync_low_score": "A subtitle does not match this file. Try the manual offset. The file was not touched.",
       "sidecar_delete_failed": "Subtitles embedded, but the external .srt could not be deleted. Delete it by hand or from Jellyfin.",
       "jellyfin_refresh_failed": "Subtitles embedded, but the media server could not be notified. They will appear on its next scan."
     },
@@ -542,6 +547,7 @@
     "embedSubtitles": {
       "button": "Embed in file",
       "embedding": "Embedding…",
+      "syncing": "Syncing subtitles…",
       "title": "Embed subtitles in the file",
       "intro": "Choose the external subtitles Jellyfin lists to write into the file. Each embedded sidecar is deleted afterwards.",
       "include": "Include",
@@ -550,6 +556,7 @@
       "makeDefault": "Default",
       "forced": "Forced",
       "offset": "Offset (ms)",
+      "autoOffset": "Automatic",
       "confirm": "Embed",
       "cancel": "Cancel",
       "submitting": "Embedding…",

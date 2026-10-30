@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **62** de 112 |
-| ACs pendientes | **499** |
-| ACs totales del proyecto | 1379 |
-| ACs verificados | 880 (64%) |
+| Specs con ACs pendientes | **63** de 113 |
+| ACs pendientes | **508** |
+| ACs totales del proyecto | 1388 |
+| ACs verificados | 880 (63%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,6 +28,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 113 | embed-auto-offset | Implemented | 9/9 | 1, 2, 3, 4, 5, 6, 7, 8, 9 | **Sesion admin en un browser.** Los nueve piden un stack dev de este checkout con un Jellyfin que liste un sidecar `.srt`, `ffsubsync` y un archivo real; el host corre la instalacion de usuario, asi que nada se observo en vivo. AC-6 ademas pide reiniciar el `worker` con el embed en `SYNCING`, AC-7 tocar un torrent con el embed en curso. Ya probado debajo: tests de `api` (`SYNCING` activo en el busy check, `createGuarded`, reconcile, rechazo todo-o-nada, UTF-16, reporte duplicado, fallo del enqueue), del `worker` (exito, falla de `measureSync`, `sync_not_found`, sin escrituras junto al sidecar) y el contrato generado contra la spec; `web` sin runner de tests. |
 | 112 | in-app-indexer-setup | Implemented | 11/13 | 1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13 | **Sesion admin en un browser.** El modal listo el catalogo alfabetico con chips y la busqueda angosto (AC-2), pero un alta o baja real escribe en el Prowlarr del mantenedor y no se hizo; AC-5 pide parar `indexer`, AC-7 y AC-10 un token de GraphQL (admin y no admin). Ya probado debajo: tests de `api` (filtro, payload, idempotencia, `test_failed`, `flaresolverr_missing`, `not_found`) con inyeccion de fallas, y en el Prowlarr de dev el alta sin `forceSave` prueba el sitio y falla con 400. |
 | 111 | encode-verdict-persistence | Implemented | 8/9 | 1, 2, 3, 4, 5, 6, 7, 9 | **Un encode real con Stop/Play, un reinicio del worker y una fuente Blu-ray.** Solo AC-8 esta verificado, por tests (757 en verde); el resto necesita ver los logs `(reused)` y las claves `perceptor:encode:*` en Redis durante un encode de verdad, y AC-6, AC-7 y AC-9 ademas un disco Blu-ray. |
 | 110 | audio-variant-detection | Approved | 13/13 | 1, 2, 3, 4, 4b, 5, 6, 7, 8, 9, 10, 11, 12 | **[OBS PENDIENTE DE ESCRIBIR]** |
@@ -95,7 +96,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 499 ACs pendientes no son 499 problemas distintos. Se reducen a 28 destrabes, y los dos primeros se llevan el 52%:
+Los 508 ACs pendientes no son 508 problemas distintos. Se reducen a 28 destrabes, y los dos primeros se llevan el 51%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
@@ -103,12 +104,12 @@ Los 499 ACs pendientes no son 499 problemas distintos. Se reducen a 28 destrabes
 | Una corrida de pipeline | 126 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091, 098, 101 |
 | Una instalacion fresca | 33 | 015, 049, 061, 066, 104 |
 | Stack vivo con servidor de medios | 31 | 107, 108 |
+| Sesion admin en un browser | 20 | 112, 113 |
 | Adquisiciones reales | 18 | 073, 076 |
 | Nada: no esta implementada | 17 | 081 |
 | Una lista de TMDB con una serie y otra privada | 16 | 109 |
 | Un token de usuario logueado | 12 | 037, 039, 093 |
 | Plex (descartado) | 12 | 072 |
-| Sesion admin en un browser | 11 | 112 |
 | Fuentes en vuelo, y un segundo usuario | 10 | 064 |
 | Jellyfin con el plugin de OpenSubtitles logueado y cupo | 10 | 106 |
 | Un browser que registre service workers | 9 | 080 |

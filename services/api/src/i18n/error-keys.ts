@@ -165,6 +165,14 @@ export const ERROR_KEYS = {
   SUBTITLE_EMBED_SIDECAR_DELETE_FAILED: 'error.subtitleEmbed.sidecar_delete_failed',
   SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED: 'error.subtitleEmbed.jellyfin_refresh_failed',
 
+  // Spec 113, REQ-4
+  SUBTITLE_EMBED_SYNC_FAILED: 'error.subtitleEmbed.sync_failed',
+  SUBTITLE_EMBED_SYNC_FRAMERATE_MISMATCH: 'error.subtitleEmbed.sync_framerate_mismatch',
+  SUBTITLE_EMBED_SYNC_OFFSET_TOO_LARGE: 'error.subtitleEmbed.sync_offset_too_large',
+  SUBTITLE_EMBED_SYNC_INCOMPLETE: 'error.subtitleEmbed.sync_incomplete',
+  SUBTITLE_EMBED_SYNC_LOW_SCORE: 'error.subtitleEmbed.sync_low_score',
+  SUBTITLE_EMBED_SYNC_NOT_FOUND: 'error.subtitleEmbed.sync_not_found',
+
   // Spec 103
   SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER: 'error.subtitleSearch.unsupported_media_server',
   SUBTITLE_SEARCH_SYNC_NOT_FOUND: 'error.subtitleSearch.sync_not_found',

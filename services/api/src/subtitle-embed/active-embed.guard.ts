@@ -7,7 +7,8 @@ import { ERROR_KEYS } from '@/i18n/error-keys';
 export type EmbedTarget =
   { movieId: number } | { episodeId: number } | { seasonId: number };
 
-const ACTIVE_EMBED_STATUSES = ['QUEUED', 'RUNNING'] as const;
+// Spec 113, T002
+export const ACTIVE_EMBED_STATUSES = ['SYNCING', 'QUEUED', 'RUNNING'] as const;
 
 // Spec 101, REQ-16
 @Injectable()

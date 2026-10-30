@@ -188,6 +188,11 @@
       "verify_failed": "El archivo generado no pasó la verificación. El original no se tocó.",
       "not_writable": "El worker no puede reemplazar este archivo (permisos de la carpeta o del dueño).",
       "interrupted": "La incrustación se interrumpió por un reinicio del worker. Probá de nuevo.",
+      "sync_failed": "No se pudo calcular el desfase automático de un subtítulo. El archivo no se tocó.",
+      "sync_framerate_mismatch": "Un subtítulo es de una versión con otro framerate. El archivo no se tocó.",
+      "sync_offset_too_large": "Un subtítulo está demasiado desfasado para corregirlo automáticamente. El archivo no se tocó.",
+      "sync_incomplete": "Un subtítulo solo cubre parte del archivo. El archivo no se tocó.",
+      "sync_low_score": "Un subtítulo no coincide con este archivo. Probá con el desfase manual. El archivo no se tocó.",
       "sidecar_delete_failed": "Subtítulos incrustados, pero no se pudo borrar el .srt externo. Borralo a mano o desde Jellyfin.",
       "jellyfin_refresh_failed": "Subtítulos incrustados, pero no se pudo avisar al servidor de medios. Aparecerán en su próximo escaneo."
     },
@@ -542,6 +547,7 @@
     "embedSubtitles": {
       "button": "Incrustar en archivo",
       "embedding": "Incrustando…",
+      "syncing": "Sincronizando subtítulos…",
       "title": "Incrustar subtítulos en el archivo",
       "intro": "Elegí los subtítulos externos que lista Jellyfin para escribirlos en el archivo. Cada subtítulo externo incrustado se borra después.",
       "include": "Incluir",
@@ -550,6 +556,7 @@
       "makeDefault": "Predeterminado",
       "forced": "Forzado",
       "offset": "Desfase (ms)",
+      "autoOffset": "Automático",
       "confirm": "Incrustar",
       "cancel": "Cancelar",
       "submitting": "Incrustando…",

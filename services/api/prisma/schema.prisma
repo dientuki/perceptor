@@ -510,6 +510,7 @@ model Episode {
 }
 
 enum SubtitleEmbedStatus {
+  SYNCING
   QUEUED
   RUNNING
   COMPLETED

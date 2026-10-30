@@ -2974,6 +2974,60 @@ All four operations are admin-only (`error.auth.admin_required` otherwise).
   and raises `not_found` itself.
 - `ConfiguredIndexer` carries no URL, fields or tag list, only `usesFlareSolverr`.
 
+### Automatic offset for a hand embed (`113-embed-auto-offset`)
+
+The authority is `docs/spec/features/113-embed-auto-offset/spec.md` § GraphQL Contract Delta. The
+types are in `schema.gql`.
+
+```graphql
+enum SubtitleEmbedStatus { SYNCING QUEUED RUNNING COMPLETED FAILED }
+
+input SubtitleEmbedInput {
+  fileName: String!  languageIso3: String!  isDefault: Boolean!  offsetMs: Int!
+  autoOffset: Boolean! = false     # true: api measures the offset and ignores offsetMs
+}
+
+type SubtitleEmbedSyncDetails { subtitleEmbedId: Int!  fileName: String!  filePath: String!  candidatePath: String! }
+
+type Query {
+  subtitleEmbedSyncDetails(subtitleEmbedId: Int!, fileName: String!): SubtitleEmbedSyncDetails!   # service only
+}
+type Mutation {
+  subtitleEmbedSyncCompleted(
+    subtitleEmbedId: Int!, fileName: String!, offsetMs: Int!, framerateRatio: Float!,
+    reference: SubtitleSyncReference!, score: Float!, mediaDurationMs: Int!, lastChapterStartMs: Int
+  ): Boolean!                                                                                       # service only
+  subtitleEmbedSyncFailed(subtitleEmbedId: Int!, fileName: String!, errorKey: String!): Boolean!   # service only
+}
+```
+
+- **Queue contract.** Job `subtitle-embed-sync` on the existing queue `subtitle-sync`, payload
+  `{ subtitleEmbedId: number, fileName: string }`, declared in `services/api/src/queue/types.ts` and
+  copied by hand into `services/worker/src/queue/types.ts`. `103`'s `subtitle-sync` job is unchanged.
+- **The worker reports measurements, never a verdict.** It sends `subtitleEmbedSyncCompleted` with
+  the raw measurement, or `subtitleEmbedSyncFailed` with `error.subtitleEmbed.sync_failed` only.
+  `api` applies `103`'s `accept()` and owns every `sync_*` verdict key.
+- **All or nothing.** The first rejected track sets the embed `FAILED` and nothing is written to the
+  library. The embed is `SYNCING` until every automatic track has an accepted measurement, then
+  `QUEUED` and the `101` remux runs as before. The worker never sees `SYNCING`.
+- **`web`** must treat any status other than `COMPLETED`/`FAILED` as in flight, so an unknown status
+  never reads as idle.
+- Both reports are safe to repeat; `false` means the embed is no longer `SYNCING`. A
+  `subtitleEmbedSyncDetails` for an embed not `SYNCING` or a non-automatic file is refused with
+  `error.subtitleEmbed.sync_not_found`, and the worker drops the job.
+
+| Key | Meaning |
+| :-- | :-- |
+| `error.subtitleEmbed.sync_failed` | Measurement could not run (reported by the worker) |
+| `error.subtitleEmbed.sync_framerate_mismatch` | Framerate ratio outside 1 ± 0.0005 |
+| `error.subtitleEmbed.sync_offset_too_large` | Offset over 600 s |
+| `error.subtitleEmbed.sync_incomplete` | Last cue does not cover the file |
+| `error.subtitleEmbed.sync_low_score` | Score under the reference's threshold |
+| `error.subtitleEmbed.sync_not_found` | Service-only refusal; the worker reports nothing |
+
+`busy`, `offset_out_of_range` (manual rows only) and `interrupted` (also raised for a `SYNCING` embed
+when the worker restarts) are the existing keys.
+
 ## Known debt
 
 - **No codegen.** The whole "gap" section above exists because of this. Fixing it means adding

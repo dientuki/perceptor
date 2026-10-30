@@ -1,4 +1,4 @@
-import { UnrecoverableError, Worker } from 'bullmq';
+import { UnrecoverableError, Worker, type Job } from 'bullmq';
 import Redis from 'ioredis';
 import {
   PROCESS_QUEUE,
@@ -14,6 +14,7 @@ import {
   LIBRARY_PROBE_QUEUE,
   LIBRARY_PROBE_JOB,
   SUBTITLE_SYNC_JOB,
+  SUBTITLE_EMBED_SYNC_JOB,
 } from './queue/types';
 import type {
   SourceReadyJob,
@@ -21,6 +22,7 @@ import type {
   EncodeCancelMessage,
   SubtitleEmbedJob,
   SubtitleSyncJob,
+  SubtitleEmbedSyncJob,
   SubtitleProbeJob,
   LibraryProbeJob,
 } from './queue/types';
@@ -28,6 +30,7 @@ import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
 import { handleSubtitleEmbed } from './jobs/subtitle-embed.job';
 import { handleSubtitleSync } from './jobs/subtitle-sync.job';
+import { handleSubtitleEmbedSync } from './jobs/subtitle-embed-sync.job';
 import { handleSubtitleProbe } from './jobs/subtitle-probe.job';
 import { handleLibraryProbe } from './jobs/library-probe.job';
 import { cancelEncode } from './encode/cancellation';
@@ -189,15 +192,20 @@ async function main() {
   });
 
   // Spec 103, REQ-10
-  const subtitleSyncWorker = new Worker<SubtitleSyncJob>(
+  const subtitleSyncWorker = new Worker<SubtitleSyncJob | SubtitleEmbedSyncJob>(
     SUBTITLE_SYNC_QUEUE,
     async (job) => {
+      // Spec 113, T009
+      if (job.name === SUBTITLE_EMBED_SYNC_JOB) {
+        await handleSubtitleEmbedSync(job as Job<SubtitleEmbedSyncJob>);
+        return;
+      }
       if (job.name !== SUBTITLE_SYNC_JOB) {
         console.log(`[worker] unknown job ${job.name}, ignoring`);
         return;
       }
 
-      await handleSubtitleSync(job);
+      await handleSubtitleSync(job as Job<SubtitleSyncJob>);
     },
     {
       connection,
