@@ -131,7 +131,7 @@ as the contract is frozen (it is: `spec.md` is Approved).
       `worker/plan.md` (AC-11). → T005, T008, T010, T011
       *Done when:* every AC in `spec.md` has an observed result written next to it in this file, or a
       named blocker.
-- [ ] **T013** `[docs]` Update `services/worker/CLAUDE.md` with a new section, "Audio variant
+- [x] **T013** `[docs]` Update `services/worker/CLAUDE.md` with a new section, "Audio variant
       detection is resolved in the encode driver (`110`)", and its rows in § Layout. Update
       `services/api/CLAUDE.md` for the preference and the effective opt-in, and `services/web/CLAUDE.md`
       for the preference. Update the root `CLAUDE.md` Transcode row (and the spec refs on the Browse

@@ -261,6 +261,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   (`UserMovieLanguage`/`UserShowLanguage`) changed shape for the tag rework — both still reference
   `Language.id`, so a preference for a variant is the same kind of row a preference for a language
   already was.
+  Since `110-audio-variant-detection`, both `Language` builders also set `hasRegionalVariants` from `regionalVariantIso3s()` (every `iso3` shared by two or more region-subtagged rows), so the rule is data-driven, never a hardcoded Spanish check.
 - **`media-sources/` scan failure (`065-pipeline-error-resume`)** — `sourceScanFailed` is the second
   service-only mutation: it moves a `READY` source and its film/episode to `ERROR` through the same
   `markScanFailed` the empty-match branch of `sourceScanned` uses, and answers `true` for a source
@@ -613,6 +614,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `iso3` (`es-419`/`es-ES` both resolve to `spa`); the worker has read them since
   `031-worker-language-variants`, now split per kind and routed to `getAudioParams`/`getSubtitleParams`
   respectively (`services/worker/CLAUDE.md`).
+  Since `110-audio-variant-detection`, `EncodeJobDetails.audioVariantDetection` is the effective opt-in, computed in `collectAllowedLanguages` from the same owner rows: `true` when some owner has `User.audioVariantDetection` on and their audio languages (global plus per-title) include an `iso3` from `regionalVariantIso3s()`. It is not combined with `compressionEnabled`; the worker gates it, and the verdict never comes back to `api` (it lives in the worker's Redis verdict store).
 - **`ffprobe-logs/`** — an append-only diagnostic log: one row per `ffprobe` the worker runs, holding
   the probed path and the raw JSON as an opaque `MediumText` string this service never parses.
   `recordFfprobe` is the worker's write path and carries `@AllowService()`; `ffprobeLogs`,
@@ -682,6 +684,7 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `setPreferredTrackLanguagesFor`/`findPreferredTrackLanguagesFor` live on `LanguagesService`, beside
   the per-title pairs, narrowed to `{ userId, kind }` for the same reason. Imports `LanguagesModule`
   and `UsersModule` (which now `exports: [UsersService]` for this).
+  Since `110-audio-variant-detection`, `UserPreferences.audioVariantDetection` and the self-only `setAudioVariantDetection` mutation (`UsersService.setAudioVariantDetection`, column `User.audioVariantDetection`, default `false`) follow the `setSubtitleSearch` pattern; `true` is stored even when the caller has no language with variants, where it is simply inert.
 - **`media-roots/`** — the two declared roots and every path translation. See below.
 - **`environment/`** (`055-environment-panel`) — a leaf module reporting how this installation is
   reachable, read-only, admin-only. Copies `media-roots/`'s factory-behind-a-token shape

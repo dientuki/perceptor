@@ -848,6 +848,18 @@ latest search is non-terminal. The actions `searchMovieSubtitlesAction`/`searchE
 return `{ search } | { error, errorKey? }`; `in_progress` also refreshes the page. There is no season or
 series button: the provider's free quota is about 20 downloads a day.
 
+## Audio variant detection preference (`110-audio-variant-detection`)
+
+One opt-in checkbox in `/preferences` (`PreferencesForm.tsx`), `audioVariantDetection`, saved in the
+same batch as the rest of the form through `setAudioVariantDetectionAction` and reverted with the
+translated error key on failure, like `subtitleSearch`. It is always shown but **enabled** only while
+the live audio language selection (`audioTags`, before saving) includes a language whose
+`Language.hasRegionalVariants` is true; otherwise it is disabled with
+`preferences.form.audioVariantDetectionDisabledHint`. Disabling it never clears the stored value: the
+box shows the stored state, greyed. Which languages qualify comes from `api` (`hasRegionalVariants`),
+never from a hardcoded Spanish check in `web`. The verdict itself is never shown; it surfaces only as
+the output track's title.
+
 ## Tests: there are none
 
 No test file, no runner, no `test` script. This is the largest maturity gap of the three services.

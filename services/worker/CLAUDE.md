@@ -45,7 +45,7 @@ src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly o
 src/scan/mark-downloaded.ts  flags each enumerated file isDownloaded against api's torrent-client answer (052)
 src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode, over InventoriedFile[] (052) — isDownloaded: false is excluded before either rule runs
 src/disc/                Blu-ray disc recognition, playlist choice and MKV assembly (see below, `100`)
-src/encode/              the driver seam (see below) · subtitle-prune (the content-pruning resolver, `102`) · verdict-store (the Redis store every pre-encode verdict goes through, `111`)
+src/encode/              the driver seam (see below) · subtitle-prune (the content-pruning resolver, `102`) · verdict-store (the Redis store every pre-encode verdict goes through, `111`) · audio-variant, audio-variant-detectors, audio-variant-score (the dub-variant resolver, its per-language registry and its pure scoring, `110`)
 src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639 · subtitle-content (pure C1–C3 rules, `102`)
 src/paths/build-output-path.ts   composes the final library path, one branch per `libraryLayout` (`072`)
 src/paths/library-layout.ts      `normalizeLibraryLayout`: unknown value warns, defaults to `jellyfin`
@@ -359,6 +359,32 @@ stored in Redis on success only (kind `subs`, `111`), keyed by the input file pl
 and only `EncodeCancelledError` propagates. One `[subs] <lang> <index>:<cues>:<share>%=<outcome>` line
 per group. Fixtures: `fixtures/subtitle-content/` (real 900 s samples with every word scrambled, plus
 `manifest.json`; the film text is never committed).
+
+## Audio variant detection is resolved in the encode driver (`110-audio-variant-detection`)
+
+`EncodeJobDetails.audioVariantDetection` (the effective opt-in `api` resolves from the owners'
+preference and audio languages) is normalized in `src/jobs/encode.job.ts` (missing → `false` plus a
+log, the `contentKind` posture), gated on `compressing` and carried on `EncodeInput`. When true,
+`resolveAudioVariants` (`src/encode/audio-variant.ts`, called in `encode.ffmpeg.ts` after
+`resolveDubTrim` and before `resolveStreamEndTrim`) looks, for each allowed audio language with a
+registered detector (`audio-variant-detectors.ts`, keyed by `iso3`; only Spanish, `es-ES` vs
+`es-419`), for **exactly two** streams `031`'s `detectVariant` leaves unresolved; any other count
+skips. It extracts `VARIANT_WINDOWS` (3) windows of `VARIANT_WINDOW_SECONDS` (120 s) at proportional
+positions of each stream into an `mkdtemp` directory (the `FC` channel when the layout has one, else a
+mono downmix), transcribes them with `whisper-cli` (whisper.cpp, `ggml-small-q5_1.bin`, both built
+into `/opt/whisper` by the Dockerfile's `whisper` stage and put on `PATH` in `base`; CPU, offline)
+through `runFfmpegCapture`'s `binary: 'whisper-cli'`, and decides with the pure
+`audio-variant-score.ts`: deduplicated transcripts similar enough are a **duplicate** (the stream with
+fewer channels, else the higher index, is dropped), otherwise weighted dialect markers decide by a
+margin or leave both **undecided**. The result is an `AudioVariantResolution` (`tags` map plus
+`duplicates` set) handed to `buildFfmpegCommand` and to `resolveStreamEndTrim`, so `031`'s narrowing
+and titling (`Latino`, `Español (España)`) apply as if the title carried the marker; undecided
+streams stay plain `Español`. Every verdict, undecided included, is stored in the verdict store (kind
+`audio-variant`, keyed by the input file, the detector `iso3` and the two stream indices) and reused
+with `(reused)`. A failure logs `[variant] detection failed: …`, stores nothing and encodes as if the
+feature were off; only `EncodeCancelledError` propagates. Progress stays at 0 while it runs, and one
+`[variant] … detecting` line marks the start. The window count, weights and margin are provisional
+until the live tuning on the three-film corpus (`110` T012). Fixtures: `fixtures/audio-variant/`.
 
 ## Blu-ray disc releases are assembled before the encode (`100-bluray-disc-remux`)
 

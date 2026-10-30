@@ -36,6 +36,7 @@ RUN apk add --no-cache python3 py3-pip py3-numpy && \
 # whisper-cli, its shared libraries and the model (see the whisper stage).
 RUN apk add --no-cache libstdc++ libgomp
 COPY --from=whisper /out/ /opt/whisper/
+ENV PATH="/opt/whisper:${PATH}"
 WORKDIR /app
 
 # ==========================================

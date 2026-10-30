@@ -2875,6 +2875,45 @@ keeps its value; on detach, `not_found` refreshes the list (it was already gone)
 shown on the section (there is no toast mechanism); `lastError` on a row is translated and shown on
 that row, which stays usable.
 
+### Telling two Spanish dubs apart from the audio (`110-audio-variant-detection`)
+
+```graphql
+type Language {
+  """Two or more region-subtagged Language rows share this iso3 (110 REQ-3)."""
+  hasRegionalVariants: Boolean!
+}
+
+type UserPreferences {
+  """Gate for audio variant detection (110 REQ-1). False for every user until they say otherwise."""
+  audioVariantDetection: Boolean!
+}
+
+type EncodeJobDetails {
+  """Effective opt-in for this job (110 REQ-4)."""
+  audioVariantDetection: Boolean!
+}
+
+type Mutation {
+  setAudioVariantDetection(enabled: Boolean!): UserPreferences!
+}
+```
+
+- `hasRegionalVariants` is data-driven: `LanguagesService.regionalVariantIso3s()` returns every
+  `iso3` shared by two or more region-subtagged rows. Today that is `spa` (`es`, `es-419`, `es-ES`);
+  a seeded `pt-BR`/`pt-PT` pair would make Portuguese qualify with no code change.
+- `setAudioVariantDetection` has no refusal of its own: `true` is accepted and stored even when the
+  caller has no audio language with variants, and is simply inert (REQ-2/REQ-4). The only error is
+  the existing `error.auth.unauthenticated`. `web` reverts the checkbox and shows the translated key on
+  any error, like `setSubtitleSearch`.
+- `EncodeJobDetails.audioVariantDetection` is resolved at query time by
+  `ProcessJobsService`: `true` when at least one owner of the job's title has the preference on and
+  that owner's audio languages (global merged with per-title, the same rows that feed
+  `allowedAudioLanguageTags`) include a language with regional variants. It is **not** combined with
+  `compressionEnabled` by `api`; the worker gates it on compression. A worker reading a details
+  payload without the field treats it as `false` and logs.
+- The verdict never crosses the boundary: it lives in the worker's Redis verdict store (`111`, kind
+  `audio-variant`) and shows up only as the output track's title.
+
 ## Known debt
 
 - **No codegen.** The whole "gap" section above exists because of this. Fixing it means adding

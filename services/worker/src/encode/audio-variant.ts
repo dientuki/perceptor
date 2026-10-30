@@ -158,6 +158,8 @@ export async function resolveAudioVariants(
       console.log(`${logLine(detector, pair, stored, reused)} (reused)`);
       return reused;
     }
+    // Spec 110, REQ-12
+    console.log(`[variant] ${detector.iso3} ${pair[0].index}/${pair[1].index} detecting input=${input}`);
     const verdict = await detectVerdict(detector, pair, input, metadata, signal);
     await writeVerdict('audio-variant', identity, verdict);
     const resolution = toResolution(verdict, pair);
