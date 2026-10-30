@@ -100,6 +100,9 @@ export class EncodeJobDetails {
   @Field()
   compressionResolution: string;
 
+  @Field({ description: 'Effective opt-in for this job (110 REQ-4).' })
+  audioVariantDetection: boolean;
+
   @Field(() => [String])
   allowedSubtitleFormats: string[];
 

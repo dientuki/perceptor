@@ -256,3 +256,86 @@ describe('TmdbClient non-ok responses', () => {
     expect(err.status).toBe(503);
   });
 });
+
+// This block exists because otherwise a list import cannot tell an invalid API
+// key from a private list: TMDB answers 401 for both and only the response-body
+// status_code (7 = invalid key) differs, so a wrong key would be reported to the
+// user as "this list is private" with no error anywhere. The mapping case guards
+// the same silent class: a person or collection row in a list must be dropped,
+// not registered as a film.
+describe('TmdbClient.list', () => {
+  let client: TmdbClient;
+
+  beforeEach(() => {
+    client = new TmdbClient(settingsStub());
+    global.fetch = jest.fn();
+  });
+
+  it('carries the body status_code on the TmdbHttpError of a 401', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () =>
+        Promise.resolve({ status_code: 7, status_message: 'Invalid API key' }),
+    });
+
+    const err = await client.list(8, 1).catch((e) => e);
+
+    expect(err).toBeInstanceOf(TmdbHttpError);
+    expect(err.status).toBe(401);
+    expect(err.statusCode).toBe(7);
+  });
+
+  it('leaves statusCode undefined when the error body is not JSON', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+      json: () => Promise.reject(new SyntaxError('bad json')),
+    });
+
+    const err = await client.list(8, 1).catch((e) => e);
+
+    expect(err.status).toBe(502);
+    expect(err.statusCode).toBeUndefined();
+  });
+
+  it('maps movie and tv rows and drops every other media type', async () => {
+    mockFetchOnce({
+      name: 'Favourites',
+      item_count: 42,
+      page: 1,
+      total_pages: 3,
+      items: [
+        { id: 10, media_type: 'movie' },
+        { id: 20, media_type: 'tv' },
+        { id: 30, media_type: 'person' },
+        { id: 40 },
+      ],
+    });
+
+    const page = await client.list(8, 1);
+
+    expect(page).toEqual({
+      name: 'Favourites',
+      itemCount: 42,
+      totalPages: 3,
+      items: [
+        { tmdbId: 10, mediaType: 'movie' },
+        { tmdbId: 20, mediaType: 'show' },
+      ],
+    });
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toContain(
+      '/list/8?page=1',
+    );
+  });
+
+  it('reports a null itemCount when TMDB omits item_count', async () => {
+    mockFetchOnce({ name: 'Bare', page: 1, total_pages: 1, items: [] });
+
+    const page = await client.list(8, 1);
+
+    expect(page.itemCount).toBeNull();
+  });
+});

@@ -11,6 +11,7 @@ import {
   setShowContentKindAction,
   setShowGrainModeAction,
 } from "@/actions/shows";
+import AutoAcquireSwitch from "@/components/media/AutoAcquireSwitch";
 import ContentKindSelect from "@/components/media/ContentKindSelect";
 import GrainModeSelect from "@/components/media/GrainModeSelect";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
@@ -72,6 +73,13 @@ export default async function Show({
           <div className="flex aspect-[2/3] items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
             <span className="text-gray-400 italic">{t("noPoster")}</span>
           </div>
+        )}
+        {show.status !== "COMPLETED" && (
+          <AutoAcquireSwitch
+            kind="show"
+            id={show.id}
+            initial={show.autoAcquire ?? false}
+          />
         )}
       </div>
 

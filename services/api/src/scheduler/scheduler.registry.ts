@@ -3,6 +3,7 @@ import { Type } from '@nestjs/common';
 import { MediaType } from '@/types/media';
 import { AcquireEpisodesTask } from './tasks/acquire-episodes.task';
 import { AcquireMoviesTask } from './tasks/acquire-movies.task';
+import { ImportListsTask } from './tasks/import-lists.task';
 import { RefreshEpisodesTask } from './tasks/refresh-episodes.task';
 import { RefreshMoviesTask } from './tasks/refresh-movies.task';
 import { RefreshShowsTask } from './tasks/refresh-shows.task';
@@ -66,6 +67,11 @@ export const SCHEDULED_TASKS: readonly ScheduledTaskDefinition[] = [
     defaultCron: '0 2 * * *',
     handler: AcquireMoviesTask,
     mediaType: 'movie',
+  },
+  {
+    id: 'import_lists',
+    defaultCron: '0 */6 * * *',
+    handler: ImportListsTask,
   },
 ] as const;
 

@@ -23,6 +23,63 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-10-30 — `113-embed-auto-offset`
+
+`api`, `worker`, `web`; one Prisma migration (`20261030120000_subtitle_embed_syncing`, hand-written `ALTER ... MODIFY COLUMN status ENUM(...)`, **not applied**: this host has no database for the checkout, so `prisma migrate status` was not run). GraphQL contract: `services/api/src/schema.gql` +69/-37, the deletions being the generator moving the `SubtitleSearch*` blocks, no content change; the added lines match the spec's SDL (`SYNCING`, `autoOffset: Boolean! = false`, `SubtitleEmbedSyncDetails`, one query, two mutations); `docs/spec/graphql-contract.md` gained the `113` section.
+
+- `api` typecheck: 0 errors. Suite: 97 suites, 1645 tests: 95 suites / 1625 tests pass; `auth/session.service.spec.ts` and `uploads/upload-tickets.service.spec.ts` fail (20 tests) because they need a real Redis this host lacks, same on the untouched code path. New: `subtitle-embed-sync.service.spec.ts`, `sidecar-text.spec.ts`, `active-embed.guard.spec.ts`, plus cases in `subtitle-embed.service.spec.ts`, `process-jobs.service.spec.ts`, the resolver spec and `attach-source.service.spec.ts` (stale `QUEUED`/`RUNNING` expectation fixed after T002 added `SYNCING`). `bin/comments api`: PASS (1335 locators). ESLint on the touched files leaves two prettier errors in `subtitle-embed.service.ts` (spec 108 lines) and one unsafe-member error in `subtitle-search.driver.spec.ts:761`, both pre-existing and left alone.
+- `worker` typecheck: 0 errors. Suite: 61 files, 772 tests passed (new `subtitle-embed-sync.job.spec.ts` 5 tests; `subtitle-sync.job.spec.ts` unmodified and green after the `measureSync` extraction). `bin/comments worker`: PASS (430). The worker has no lint script.
+- `web` typecheck: 0 errors. `check-messages`: 808 keys in parity. Biome on the touched files: clean. `bin/comments web`: PASS (152). `web` has no test runner.
+- Measured from throwaway `node:24.18.0-alpine` containers as uid 1000, not through `bin/`.
+- Not observed: all nine acceptance criteria. The manual pass (Jellyfin, `ffsubsync`, a real sidecar, the dialog in a browser, a worker restart while `SYNCING`) needs a dev stack of this checkout.
+
+## 2026-10-30 — `112-in-app-indexer-setup`
+
+`api`, `web`; no Prisma migration. GraphQL contract: `services/api/src/schema.gql` +38 lines, 0 removed (enum, two types, two queries, two mutations — matches the spec's SDL); `docs/spec/graphql-contract.md` gained the `112` section.
+
+- `api` typecheck: 0 errors. Full suite: 94 suites, 1602 tests passed (new `indexer-catalog.spec.ts` 20 tests; `indexer.service.spec.ts` 21; `clients/indexer` 30 across two suites). Fault injection: nine service rules broken one at a time, each failed only its own test(s). `bin/comments api`: PASS (1299 locators).
+- `web` typecheck: 0 errors. `check-messages`: 799 keys in parity. `bin/comments web`: PASS (150 locators). `bin/npm web run lint` fails repo-wide on existing errors (146 before, 145 after); Biome on the touched files is clean.
+- Prowlarr measured on the dev stack (T001): create without `forceSave` tests the site and answers `400` with an array of failures, saving nothing; `DELETE` of an unknown id answers `200 {}`, so `remove` checks the list first; the first app profile is `id` 1.
+- Observed in a browser (admin session): the three configured indexers as chips in Settings → Torrent manager; the modal on `/first-step` listing the catalog alphabetically with language/category chips and the FlareSolverr note; search narrowing to one entry shown as "Added"; the notice reading "3 indexers are configured".
+- Not observed: a live add and remove, the FlareSolverr tag on a real add, the `test_failed`/`not_found`/unavailable paths, and the 375 px layout.
+
+## 2026-10-29 — `111-encode-verdict-persistence`
+
+`worker` only; no Prisma migration, no GraphQL contract change (`services/api` and `services/web` untouched).
+
+- `worker` typecheck: 0 errors. Full suite: 60 files, 757 tests passed (new `verdict-store.spec.ts` 10 tests; grain-mode 24, dub-trim 39, stream-end-trim 35, subtitle-prune 12, assemble-playlist 16, encode.job 41). `bin/comments worker`: PASS (422 locators).
+- Not observed: AC-1…AC-7 and AC-9 (a live encode with Stop/Play, a worker restart, a host reboot and a Blu-ray source). AC-8 holds through the tests.
+- Found along the way: the worker's installed `ioredis` was 5.11.1 although both `package.json` files say ^6; the store's client options exist in both.
+
+## 2026-10-28 — `109-tmdb-list-import` 0.3.0 (per-title "download automatically")
+
+`api`, `web`; one Prisma migration (`20261028043654_title_auto_acquire`: `UserMovie.autoAcquire`, `UserShow.autoAcquire`, both `NOT NULL`; created `DEFAULT true`, then switched to `DEFAULT false` by `20261028044526_title_auto_acquire_default_off` and every existing row reset to `false` by `20261028044540_title_auto_acquire_reset_existing`, after the maintainer asked for off by default), applied on the dev stack (`prisma migrate status`: up to date) and `api` restarted afterwards. GraphQL contract: `Movie.autoAcquire`, `Show.autoAcquire`, `setMovieAutoAcquire`, `setShowAutoAcquire`, matching the amended SDL.
+
+- `api` typecheck: 0 errors. Full suite: 93 suites, 1546 tests passed (the three touched suites, 46 tests, include the `MAX_MOVIES_PER_RUN` + 1 opted-out cap cases for films and episodes and the opted-out-owner cases in `ranking-context`). `bin/comments api`: PASS (1274 locators).
+- `web` typecheck: 0 errors (the seven `Calendar.tsx` errors recorded earlier no longer appear). `check-messages`: 766 keys in parity. `bin/comments web`: PASS (138 locators). Biome clean on the new file; 4 pre-existing `noNonNullAssertion` warnings in `actions/shows.ts`.
+- Not observed: the switch rendered in a browser on a `MISSING` and a `COMPLETED` title, and a live sweep run with the switch off (AC-18 … AC-22 stay open; the sweep behaviour is proven by unit tests only).
+
+## 2026-10-28 — `109-tmdb-list-import` 0.2.0 (lists pages)
+
+`api`, `web`; one Prisma migration (`20261028033541_tmdb_list_item_count`: `UserTmdbList.itemCount`), applied on the dev stack (`prisma migrate status`: 51 migrations, up to date). GraphQL contract: `TmdbList.itemCount`, `TmdbList.movies`/`shows` and `Query.tmdbList(id)`, matching the amended SDL. The lists UI moved out of `/preferences` into "Mis listas" (`/lists`, `/lists/<id>`).
+
+- `api` typecheck: 0 errors. Tests: `tmdb-lists` 2 suites, 20 passed; `client.spec` 4 suites, 57 passed. `bin/comments api`: PASS (1257 locators). Full suite and lint not run.
+- `web` typecheck: only the 7 known `Calendar.tsx` errors. Biome clean on every new or changed file except 3 pre-existing errors in `AppSidebar.tsx`. `check-messages`: 762 keys in parity. `bin/comments web`: PASS (133 locators).
+- Live pass as a throwaway non-admin user, since removed: AC-14, AC-16, AC-17 observed; AC-15 observed for films (11 posters, 10 after a removal) but not for a series or a short.
+- Process note: after `prisma migrate dev`, the running `api` still held the old Prisma client (`Unknown argument itemCount`, one `FAILED` run) until `docker compose restart api`.
+
+## 2026-10-27 — `109-tmdb-list-import`
+
+`api`, `web`; one Prisma migration (`20261027140000_tmdb_list_import`: `user_tmdb_lists`, `user_tmdb_list_items`), written offline with `prisma migrate diff` and `prisma validate`, then **applied** by `api`'s own boot on the dev stack (`prisma migrate status`: schema up to date, both tables present, both `schedule_import_lists_*` settings seeded). GraphQL contract: `schema.gql` carries the five spec pieces (`TmdbList`, `tmdbLists`, `addTmdbList`, `removeTmdbList`, `MediaCapabilities.listImportEnabled`), generated offline with `GraphQLSchemaFactory` and copied in by hand, not by a real boot. Also fixes the `register()` create race for films and series (NFR-4).
+
+- Measured in the throwaway node container as uid 1000 (the stack on this host is a different install).
+- `api` typecheck: 0 errors. Tests: 91 of 93 suites pass, **1516 passed, 20 failed**; the two failing suites (`auth/session.service.spec`, `uploads/upload-tickets.service.spec`) use a real Redis and are in files this feature does not touch. The feature's own suites (movies, shows, tmdb client, tmdb-lists, media-capabilities, scheduler): 16 suites, **265 passed**. Comments gate: PASS (1252 locators).
+- `api` lint (`npm run lint`): **not verified**. It reports 3180 problems tree-wide in the container, so it cannot be attributed to this change; `tmdb-lists.service.spec.ts` has unsafe-`any` mock typing like its neighbours.
+- `web` typecheck: 7 errors, all the pre-existing `@fullcalendar` ones in `Calendar.tsx`. `check-messages`: 754 keys match. Comments gate: PASS (125 locators). Biome on the eight files this change touched: no errors (2 warnings); tree-wide `biome check` reports 1549 errors in the container, not attributed.
+- Not measured: the manual pass (AC-1 to AC-5, AC-7 to AC-13), the live `runScheduledTask(id: "import_lists")`, `prisma migrate status`, and the `/preferences` section in a browser at 375 px. Only AC-6b is ticked (the forced-`P2002` cases in the movies and shows specs).
+
+- Live pass (2026-10-28, dev stack of this checkout, two throwaway users since removed): `runScheduledTask("import_lists")` → `SUCCESS` with 11 titles from a public 11-film list, then 0 on every rerun (AC-3); a film removed by the user was not re-added (AC-4); a second user attaching the same list owned all 11 with no duplicate `tmdbId` (AC-6); the `/preferences` section rendered and showed its inline error with no horizontal scroll at 375 px. It surfaced one defect, fixed: the last-import time threw a hydration error because server and browser formatted it in different time zones (`mounted` guard, as `SchedulingPanel`). Not covered: a list with a series, a real private list, the disabled-task notice on screen.
+
 ## 2026-10-27 — `108-library-track-languages`
 
 `api`, `worker`, `web`; one Prisma migration (`20261027130000_108_library_track_languages`: `fileAudioLanguages`, `fileSubtitleLanguages`, `tracksReadAt` on `movies` and `episodes`), applied; `prisma migrate status` up to date (49 migrations). GraphQL contract: `schema.gql` carries exactly the spec delta (four `file*Languages` fields, `LibraryProbeTarget`, `LibraryProbeDetails`, `libraryProbeDetails`, `libraryProbeCompleted`).

@@ -36,6 +36,9 @@ who isn't on your own machine.
   the middle.
 - **No telemetry.** Perceptor sends no usage data, crash reports or analytics anywhere, and Next.js's
   own telemetry is disabled in the image (`NEXT_TELEMETRY_DISABLED=1`).
+- **Speech stays on your machine.** When the worker listens to an audio track to tell Latin American
+  from European Spanish, it uses a speech model shipped inside the image and runs offline, on your
+  CPU. No audio is ever uploaded anywhere.
 - **Your own TMDB key.** Every installation talks to TMDB with the key you paste in Settings, so
   catalog lookups are a matter between you and TMDB — nobody aggregates them. Posters are fetched
   by your server, not by your browser.
@@ -57,7 +60,7 @@ welcome. It has no production deployment and no users besides its author.
 The published images are release candidates (`v0.1.0-rc1` through `v0.6.0-rc1`); there is no stable
 release yet, so `latest` resolves to the newest release candidate rather than to a final version.
 
-One hundred and eight feature specs (`001` through `108`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
+One hundred and thirteen feature specs (`001` through `113`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
 stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -66,7 +69,7 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   tus-js-client, Biome
 - **API:** NestJS 11, Apollo Server 5 with code-first GraphQL, Prisma 7, `@tus/server`, JWT auth,
   Jest
-- **Worker:** Node.js 24, BullMQ, FFmpeg (SVT-AV1, Opus), MKVToolNix, ffsubsync, Vitest
+- **Worker:** Node.js 24, BullMQ, FFmpeg (SVT-AV1, Opus), MKVToolNix, ffsubsync, whisper.cpp, Vitest
 - **Data:** MariaDB 12, Redis 7 (BullMQ queues, pub/sub, search cache)
 - **Infrastructure:** Docker Compose (runtime, build and dev overlays), multi-stage Dockerfiles,
   Traefik v3.7 (optional), GitHub Actions release workflow publishing to GHCR
@@ -88,6 +91,10 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
 - 📤 **Or upload what you already have**, resumable, up to tens of gigabytes, straight from the
   browser: one file for a film or an episode, or a whole season's episodes at once from the season
   header, matched to their episodes by `SxxEyy` like any season pack.
+- 📋 **Follow TMDB lists.** Attach any public TMDB list from **Mis listas** (`/lists`), by its id or
+  its `themoviedb.org/list/…` URL, and an opt-in task brings its films and series into your library
+  every six hours. It only ever adds — a title you remove later is not brought back — and it never
+  downloads anything on its own.
 - 🪞 **A title you already own isn't re-downloaded.** Registering something reconciles it against
   your media server first: if your media server already has the film — or some of the episodes — they come
   in as complete, not missing.
@@ -99,10 +106,14 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   short, privacy-first tutorial instead of an empty screen, and a key TMDB rejects brings the same
   guide back with a notice.
 - 🚦 **A first-step page for a fresh install.** `/first-step`, admin only, puts both setup jobs in
-  one place: getting a TMDB key, and getting Prowlarr usable — sign in, add an indexer, and add a
-  second one tagged `flaresolverr` for a Cloudflare-fronted tracker. It reports how many indexers
-  are configured and whether Prowlarr answers at all, without ever treating "not reachable yet" as
-  an error.
+  one place: getting a TMDB key, and getting Prowlarr usable. It reports how many indexers are
+  configured and whether Prowlarr answers at all, without ever treating "not reachable yet" as an
+  error.
+- 🧭 **Pick indexers without leaving Perceptor.** Settings → Torrent manager lists the configured
+  indexers and an **Add indexer** dialog offers Prowlarr's own catalog, narrowed to public torrent
+  trackers with film or TV categories. Prowlarr tests the site when it is added, and one that sits
+  behind Cloudflare gets the FlareSolverr tag automatically. Perceptor names no tracker and keeps
+  no list of its own.
 
 ### Acquire
 - 🌐 **Indexer search through Prowlarr**, for a film, one specific episode or a whole season, with a
@@ -114,7 +125,8 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   release and attach it for you. For series, newly aired episodes are picked up on their own. For
   films, each user marks which windows they care about in `/preferences`: theatrical (2 days after
   release, any quality), digital (1 day, WEB-DL or better) and physical (5 days, UHD or remux). A
-  quality floor vetoes releases below it before the best tier is chosen.
+  quality floor vetoes releases below it before the best tier is chosen. Nothing is grabbed for a
+  title until one of its owners turns on **Descargar automáticamente** under its poster.
 - ⚡ **Repeat searches are cached** for ten minutes, so re-opening the modal doesn't hammer your
   trackers.
 - ⬇️ **Downloads through qBittorrent**, each with its own save path, with live progress and speed in
@@ -161,6 +173,11 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   screens.
 - 🌎 **Regional variants are first-class.** `es-419` and `es-ES` are different preferences, and the
   encode picks the right one instead of guessing from the track title.
+- 👂 **Latino or castellano, told apart by listening.** Releases often carry two Spanish audio
+  tracks with nothing in their metadata to say which is which. Opt in from `/preferences` and the
+  worker transcribes three short stretches of each track with whisper.cpp, offline, and scores
+  dialect markers: a clear answer picks and labels the right track, the same dub twice keeps one,
+  and anything undecided keeps both as plain `Español`.
 - 🧠 **Decisions made from the container, not the filename.** Remux vs. web-grade quality comes from
   `ffprobe` metadata, so a badly named release still gets the right treatment.
 - 📦 **Season packs fan out correctly**: every file is enumerated, matched to its episode by
@@ -188,7 +205,9 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
 - 🩹 **A crashed encode picks itself back up.** If the worker container dies mid-encode, the job is
   requeued from scratch when the worker boots again. A second crash on the same job marks it as
   failed instead of looping forever. Only one worker runs at a time: a second instance exits
-  instead of resetting the first one's live encode.
+  instead of resetting the first one's live encode. The slow analyses that run before an encode —
+  grain, the two trims, subtitle pruning, the Spanish variant check and a Blu-ray assembly — are
+  kept for 30 days, so a restart or a reboot doesn't redo them; only FFmpeg itself starts over.
 - 🌾 **Film grain, detected or per title.** AV1 can strip a film's grain and resynthesize it on
   playback, which saves a lot of bits on grainy sources. Each film or series has its own On / Off /
   Inherit choice on its detail page; Inherit defers to the installation-wide setting in Settings →
@@ -221,7 +240,9 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   release dates. They refresh only; they never download anything.
 - 💬 **Fold Jellyfin's subtitles into the file.** When Jellyfin holds external `.srt` files for a
   film or an episode, for example from its OpenSubtitles plugin, an administrator can embed them
-  into the `.mkv` from the detail page, with a default flag and a timing offset for each one. The
+  into the `.mkv` from the detail page, with a default flag and a timing offset for each one —
+  measured automatically with `ffsubsync` unless you untick **Automático** and type it yourself;
+  if any subtitle fails the check, nothing is written. The
   file is remuxed next to the original, verified and swapped in one atomic rename, and only then
   are the `.srt` files deleted. Jellyfin rescans the item, so it lists each subtitle once.
 - 🔍 **Missing subtitle languages can be found for you.** Once an administrator enters an
@@ -262,7 +283,7 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   error.
 - ⏰ **Scheduled tasks** an admin can enable and pace from Settings, for the work that has to happen
   after registration rather than during it.
-- ⚙️ **Settings in the UI**, split into tabs: paths, TMDB key, indexer key, media server,
+- ⚙️ **Settings in the UI**, split into tabs: paths, TMDB key, indexers, media server,
   compression (resolution ceiling, subtitle formats, grain and the two trims), scheduling, and which media types are enabled. A read-only **Environment** tab
   shows how the installation is reachable and flags an upload URL that doesn't match your domain.
   **Disabling films or series actually
@@ -651,8 +672,9 @@ Rough edges, stated plainly:
   no manual review step and no upgrade later. Everything else is still picked by a human.
 - **AV1 encoding is CPU-bound by design** — no current consumer GPU encodes AV1 in hardware, and
   the pipeline has no GPU-accelerated stage of any kind.
-- **Which indexers sit behind Cloudflare is a manual call.** The FlareSolverr proxy is registered
-  automatically, but tagging the indexers that need it stays a step in Prowlarr's UI.
+- **Cloudflare detection is Prowlarr's call.** An indexer added from Perceptor gets the FlareSolverr
+  tag when Prowlarr's definition marks it as Cloudflare-fronted; one added directly in Prowlarr's
+  UI, or one Prowlarr doesn't mark, still needs the tag by hand.
 - **Jellyfin and Plex are the only media server clients**, and both are expected to run outside
   this stack. Plex is index-backed and falls back to a full refresh when a path-scoped scan can't
   be done. Embedding the `.srt` files a media server saved next to a film works only with Jellyfin;

@@ -824,7 +824,7 @@ The full vocabulary, by owner:
 | `api` — movies/shows/seasons/episodes | `error.movie.not_found`, `error.movie.not_in_catalog`, `error.movie.download_in_progress`, `error.show.not_available`, `error.show.not_in_catalog`, `error.season.not_found`, `error.season.download_in_progress`, `error.episode.not_found`, `error.episode.download_in_progress`, `error.magnet.already_attached`, `error.magnet.already_attached_season` (`063`, params `{show, number}`), `error.media.unsupported_type`, `error.media.catalog_unavailable` (`033-billboard-and-navigation`) |
 | `api` — magnet parsing | `error.magnet.not_a_magnet`, `error.magnet.invalid_infohash`, `error.magnet.v2_unsupported` |
 | `api` — media-roots | `error.mediaRoot.unknown`, `error.mediaRoot.not_mounted`, `error.mediaRoot.invalid_path`, `error.mediaRoot.absolute_path`, `error.mediaRoot.escapes_root`, `error.mediaRoot.folder_not_found`, `error.mediaRoot.not_a_folder` |
-| `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash` |
+| `api` — settings/languages/clients | `error.setting.not_editable`, `error.setting.expected_boolean`, `error.setting.expected_int`, `error.setting.expected_enum`, `error.setting.missing`, `error.language.duplicate`, `error.language.unavailable`, `error.mediaServer.unknown`, `error.mediaServer.not_configured` (`034-jellyfin-library-reconciliation`), `error.indexer.unavailable`, `error.indexer.no_infohash`, `error.indexer.definition_not_allowed`, `error.indexer.test_failed`, `error.indexer.flaresolverr_missing`, `error.indexer.not_found` (`112-in-app-indexer-setup`) |
 | `api` — media-sources/process-jobs | `error.source.not_found`, `error.source.no_target`, `error.source.match_not_reported`, `error.source.scan_no_video`, `error.source.no_download_path`, `error.source.replaced`, `error.source.superseded` (`087-force-replacement-arbitration`), `error.processJob.not_found` |
 | `api` — downloads (torrent client) | `error.download.torrent_client_rejected` (`{status}`, `0` when unreachable), `error.download.torrent_client_unauthorized` (no params; `401`/`403` from qBittorrent — `104-torrent-api-key-auth`) |
 | `api` — ffprobe-logs | `error.ffprobeLog.not_found`, `error.ffprobeLog.empty_payload` |
@@ -2792,6 +2792,241 @@ is a no-op (REQ-3), and `attempts: 1`.
 
 `web` reads two new nullable fields per type. They are prefixed `file` because `Movie.audioLanguages`/`subtitleLanguages` already exist (`039`: the caller's per-title preferred languages, `[Language!]!`) and mean something else; `Show` is not extended. `web` handles no new error. The worker abandons silently on every
 `libraryProbeDetails` error above.
+
+### Importing public TMDB lists (`109-tmdb-list-import`)
+
+```graphql
+type TmdbList {
+  id: Int!
+  tmdbListId: Int!
+  name: String!
+  lastImportedAt: DateTime
+  lastError: String
+  """Items TMDB reported for the list at its last successful read; null until then (109 0.2.0)."""
+  itemCount: Int
+  """Films of this list the caller owns today (seen by the list), ordered by title."""
+  movies: [Movie!]!
+  """Series of this list the caller owns today (seen by the list), ordered by title."""
+  shows: [Show!]!
+}
+
+extend type MediaCapabilities {
+  """True while the import_lists scheduled task is enabled (109 REQ-12). Never exposes its cadence."""
+  listImportEnabled: Boolean!
+}
+
+extend type Query {
+  tmdbLists: [TmdbList!]!
+  """One of the caller's lists; null for an id that is not theirs (109 0.2.0)."""
+  tmdbList(id: Int!): TmdbList
+}
+
+extend type Mutation {
+  addTmdbList(reference: String!): TmdbList!
+  removeTmdbList(id: Int!): Boolean!
+}
+```
+
+`TmdbList.lastError` is an i18n key (one of `error.tmdbList.unreadable`,
+`error.media.catalog_unauthorized`, `error.media.catalog_unavailable`), never English prose; `web`
+translates it through its message catalog. `lastImportedAt` is null until the first successful run.
+`tmdbLists` returns the caller's lists ordered by attach time, oldest first. All three operations
+require a user principal; the service principal is refused with the existing authorization error.
+The task appears in the admin-only scheduled-task query as one more row, id `import_lists`.
+Since 0.2.0, `tmdbList(id)` answers `null` both for a missing id and for another user's list (the
+`movie(id)` posture), and `movies`/`shows` are field resolvers run only when selected: `web`'s
+`/lists` listing does not select them, `/lists/<id>` does. `Movie.isShort` tells a short apart.
+
+
+Since 0.3.0 each user also chooses, per title, whether the daily sweeps may acquire it for them:
+
+```graphql
+extend type Movie {
+  """Whether the caller lets acquire_movies pick this film; false when the caller has no row (109 0.3.0)."""
+  autoAcquire: Boolean!
+}
+
+extend type Show {
+  """Whether the caller lets acquire_episodes pick this series' episodes (109 0.3.0)."""
+  autoAcquire: Boolean!
+}
+
+extend type Mutation {
+  setMovieAutoAcquire(movieId: Int!, autoAcquire: Boolean!): Boolean!
+  setShowAutoAcquire(showId: Int!, autoAcquire: Boolean!): Boolean!
+}
+```
+
+Both setters require a user principal and refuse a title the caller does not own with
+`error.movie.not_found` / `error.show.not_available`, changing nothing. The sweeps count only
+owners whose switch is on; manual search is unaffected.
+
+| Condition | HTTP / GraphQL error | Message the user sees |
+| :-- | :-- | :-- |
+| `reference` is neither a positive integer nor a `themoviedb.org` `/list/<id>` URL | `BadRequestException` `error.tmdbList.invalid_reference` | `No es un ID ni un enlace de lista de TMDB.` |
+| TMDB says the list does not exist or is private (404, or a 401 whose body is not `status_code` 7) | `BadRequestException` `error.tmdbList.unreadable` | `TMDB no encontró la lista, o no es pública.` |
+| The caller already has that TMDB list attached | `ConflictException` `error.tmdbList.already_attached` | `Ya tenés esta lista vinculada.` |
+| Catalog key empty, or TMDB rejects it (401, `status_code` 7) | `BadRequestException` `error.media.catalog_unauthorized` (reused from `071`) | its existing message |
+| Any other TMDB failure (network, 5xx, 429) | `ServiceUnavailableException` `error.media.catalog_unavailable` (reused) | its existing message |
+| `removeTmdbList` with an id that is not one of the caller's lists | `NotFoundException` `error.tmdbList.not_found` | `La lista no existe.` |
+
+What `web` does with each: on attach, every key above is shown inline under the input and the input
+keeps its value; on detach, `not_found` refreshes the list (it was already gone) and the message is
+shown on the section (there is no toast mechanism); `lastError` on a row is translated and shown on
+that row, which stays usable.
+
+### Telling two Spanish dubs apart from the audio (`110-audio-variant-detection`)
+
+```graphql
+type Language {
+  """Two or more region-subtagged Language rows share this iso3 (110 REQ-3)."""
+  hasRegionalVariants: Boolean!
+}
+
+type UserPreferences {
+  """Gate for audio variant detection (110 REQ-1). False for every user until they say otherwise."""
+  audioVariantDetection: Boolean!
+}
+
+type EncodeJobDetails {
+  """Effective opt-in for this job (110 REQ-4)."""
+  audioVariantDetection: Boolean!
+}
+
+type Mutation {
+  setAudioVariantDetection(enabled: Boolean!): UserPreferences!
+}
+```
+
+- `hasRegionalVariants` is data-driven: `LanguagesService.regionalVariantIso3s()` returns every
+  `iso3` shared by two or more region-subtagged rows. Today that is `spa` (`es`, `es-419`, `es-ES`);
+  a seeded `pt-BR`/`pt-PT` pair would make Portuguese qualify with no code change.
+- `setAudioVariantDetection` has no refusal of its own: `true` is accepted and stored even when the
+  caller has no audio language with variants, and is simply inert (REQ-2/REQ-4). The only error is
+  the existing `error.auth.unauthenticated`. `web` reverts the checkbox and shows the translated key on
+  any error, like `setSubtitleSearch`.
+- `EncodeJobDetails.audioVariantDetection` is resolved at query time by
+  `ProcessJobsService`: `true` when at least one owner of the job's title has the preference on and
+  that owner's audio languages (global merged with per-title, the same rows that feed
+  `allowedAudioLanguageTags`) include a language with regional variants. It is **not** combined with
+  `compressionEnabled` by `api`; the worker gates it on compression. A worker reading a details
+  payload without the field treats it as `false` and logs.
+- The verdict never crosses the boundary: it lives in the worker's Redis verdict store (`111`, kind
+  `audio-variant`) and shows up only as the output track's title.
+
+### Choosing indexers from Prowlarr's own catalog (`112-in-app-indexer-setup`)
+
+```graphql
+enum IndexerMediaCategory {
+  MOVIES
+  TV
+  ANIME
+}
+
+type IndexerDefinition {
+  "Prowlarr's definition identifier (definitionName). Opaque to web."
+  definitionName: String!
+  name: String!
+  "As Prowlarr reports it (e.g. en-US). Null when Prowlarr reports none."
+  language: String
+  categories: [IndexerMediaCategory!]!
+  "Prowlarr marks this site as Cloudflare-fronted; addIndexer will attach the flaresolverr tag."
+  needsFlareSolverr: Boolean!
+  "This Prowlarr already holds an indexer of this definition."
+  configured: Boolean!
+}
+
+type ConfiguredIndexer {
+  id: Int!
+  name: String!
+  definitionName: String!
+  enabled: Boolean!
+  usesFlareSolverr: Boolean!
+}
+
+type Query {
+  indexerCatalog(search: String): [IndexerDefinition!]!
+  configuredIndexers: [ConfiguredIndexer!]!
+}
+
+type Mutation {
+  addIndexer(definitionName: String!): ConfiguredIndexer!
+  "Removes the indexer from Prowlarr. True on success."
+  removeIndexer(id: Int!): Boolean!
+}
+```
+
+All four operations are admin-only (`error.auth.admin_required` otherwise).
+
+| Error | Raised by | What `web` does |
+| :-- | :-- | :-- |
+| `error.indexer.unavailable` | all four, when Prowlarr is unreachable or answers an unexpected status (an error here, unlike `indexerStatus`) | Inline in the section or modal; the page stays rendered |
+| `error.indexer.definition_not_allowed` | `addIndexer` for an unknown, private, semi-private, usenet or non-film/TV definition | That row shows the message |
+| `error.indexer.test_failed` | `addIndexer` when Prowlarr's own test of the site fails (nothing is saved) | That row shows the message |
+| `error.indexer.flaresolverr_missing` | `addIndexer` for a Cloudflare-fronted definition when the `flaresolverr` tag does not exist | That row shows the message |
+| `error.indexer.not_found` | `removeIndexer` for an id Prowlarr no longer holds | Message in the section, list reloaded |
+
+- The catalog is filtered server-side to public torrent definitions with a film or TV category
+  (2000-2999, 5000-5999, subcategories included) and sorted alphabetically; there is no argument to
+  widen it. No site name is committed anywhere in the repository.
+- `addIndexer` of a definition already held is not an error: it returns the existing indexer.
+- Prowlarr answers `DELETE` of an unknown id with `200 {}`, so `removeIndexer` checks the list first
+  and raises `not_found` itself.
+- `ConfiguredIndexer` carries no URL, fields or tag list, only `usesFlareSolverr`.
+
+### Automatic offset for a hand embed (`113-embed-auto-offset`)
+
+The authority is `docs/spec/features/113-embed-auto-offset/spec.md` § GraphQL Contract Delta. The
+types are in `schema.gql`.
+
+```graphql
+enum SubtitleEmbedStatus { SYNCING QUEUED RUNNING COMPLETED FAILED }
+
+input SubtitleEmbedInput {
+  fileName: String!  languageIso3: String!  isDefault: Boolean!  offsetMs: Int!
+  autoOffset: Boolean! = false     # true: api measures the offset and ignores offsetMs
+}
+
+type SubtitleEmbedSyncDetails { subtitleEmbedId: Int!  fileName: String!  filePath: String!  candidatePath: String! }
+
+type Query {
+  subtitleEmbedSyncDetails(subtitleEmbedId: Int!, fileName: String!): SubtitleEmbedSyncDetails!   # service only
+}
+type Mutation {
+  subtitleEmbedSyncCompleted(
+    subtitleEmbedId: Int!, fileName: String!, offsetMs: Int!, framerateRatio: Float!,
+    reference: SubtitleSyncReference!, score: Float!, mediaDurationMs: Int!, lastChapterStartMs: Int
+  ): Boolean!                                                                                       # service only
+  subtitleEmbedSyncFailed(subtitleEmbedId: Int!, fileName: String!, errorKey: String!): Boolean!   # service only
+}
+```
+
+- **Queue contract.** Job `subtitle-embed-sync` on the existing queue `subtitle-sync`, payload
+  `{ subtitleEmbedId: number, fileName: string }`, declared in `services/api/src/queue/types.ts` and
+  copied by hand into `services/worker/src/queue/types.ts`. `103`'s `subtitle-sync` job is unchanged.
+- **The worker reports measurements, never a verdict.** It sends `subtitleEmbedSyncCompleted` with
+  the raw measurement, or `subtitleEmbedSyncFailed` with `error.subtitleEmbed.sync_failed` only.
+  `api` applies `103`'s `accept()` and owns every `sync_*` verdict key.
+- **All or nothing.** The first rejected track sets the embed `FAILED` and nothing is written to the
+  library. The embed is `SYNCING` until every automatic track has an accepted measurement, then
+  `QUEUED` and the `101` remux runs as before. The worker never sees `SYNCING`.
+- **`web`** must treat any status other than `COMPLETED`/`FAILED` as in flight, so an unknown status
+  never reads as idle.
+- Both reports are safe to repeat; `false` means the embed is no longer `SYNCING`. A
+  `subtitleEmbedSyncDetails` for an embed not `SYNCING` or a non-automatic file is refused with
+  `error.subtitleEmbed.sync_not_found`, and the worker drops the job.
+
+| Key | Meaning |
+| :-- | :-- |
+| `error.subtitleEmbed.sync_failed` | Measurement could not run (reported by the worker) |
+| `error.subtitleEmbed.sync_framerate_mismatch` | Framerate ratio outside 1 ± 0.0005 |
+| `error.subtitleEmbed.sync_offset_too_large` | Offset over 600 s |
+| `error.subtitleEmbed.sync_incomplete` | Last cue does not cover the file |
+| `error.subtitleEmbed.sync_low_score` | Score under the reference's threshold |
+| `error.subtitleEmbed.sync_not_found` | Service-only refusal; the worker reports nothing |
+
+`busy`, `offset_out_of_range` (manual rows only) and `interrupted` (also raised for a `SYNCING` embed
+when the worker restarts) are the existing keys.
 
 ## Known debt
 

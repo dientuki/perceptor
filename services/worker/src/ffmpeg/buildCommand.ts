@@ -1,4 +1,5 @@
 import { getVideoParams, getAudioParams, getSubtitleParams } from './params';
+import type { AudioVariantResolution } from './variants';
 import { isRemux } from './remux-detection';
 import type { EncodeInput } from '../encode/types';
 
@@ -26,6 +27,7 @@ export function buildFfmpegCommand(
   filmGrain: boolean,
   trimAt: number | null,
   subtitleDrops: ReadonlySet<number>,
+  audioVariants: AudioVariantResolution,
 ): string[] {
   const vStream = metadata.streams.find((s) => s.codec_type === "video");
   const aStreams = metadata.streams.filter((s) => s.codec_type === "audio");
@@ -51,6 +53,7 @@ export function buildFfmpegCommand(
       details.originalLanguageIso3,
       details.allowedAudioLanguageTags,
       details.trackTitles,
+      audioVariants,
     ),
     ...getSubtitleParams(
       sStreams,

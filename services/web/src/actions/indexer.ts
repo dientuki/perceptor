@@ -6,7 +6,14 @@ import {
 } from '@/lib/auth-session';
 import { fetchGraphQL } from '@/lib/graphql-client';
 import { toActionError, translateGraphQLError } from '@/lib/graphql-error';
-import type { IndexerStatus, SearchTarget, TorrentResult } from '@/types/indexer';
+import type {
+  ConfiguredIndexer,
+  IndexerActionError,
+  IndexerDefinition,
+  IndexerStatus,
+  SearchTarget,
+  TorrentResult,
+} from '@/types/indexer';
 import type { AcquisitionResult } from '@/types/media';
 
 const INDEXER_STATUS_QUERY = `
@@ -112,4 +119,116 @@ export async function addTorrentToMovieAction(
   }
 
   return { success: true, ...data!.addTorrentToMovie };
+}
+
+const INDEXER_CATALOG_QUERY = `
+  query IndexerCatalog($search: String) {
+    indexerCatalog(search: $search) {
+      definitionName
+      name
+      language
+      categories
+      needsFlareSolverr
+      configured
+    }
+  }
+`;
+
+const CONFIGURED_INDEXERS_QUERY = `
+  query ConfiguredIndexers {
+    configuredIndexers {
+      id
+      name
+      definitionName
+      enabled
+      usesFlareSolverr
+    }
+  }
+`;
+
+const ADD_INDEXER_MUTATION = `
+  mutation AddIndexer($definitionName: String!) {
+    addIndexer(definitionName: $definitionName) {
+      id
+      name
+      definitionName
+      enabled
+      usesFlareSolverr
+    }
+  }
+`;
+
+const REMOVE_INDEXER_MUTATION = `
+  mutation RemoveIndexer($id: Int!) {
+    removeIndexer(id: $id)
+  }
+`;
+
+// Spec 112, REQ-12
+export async function getIndexerCatalogAction(
+  search: string,
+): Promise<{ ok: true; data: IndexerDefinition[] } | IndexerActionError> {
+  const { data, errors } = await fetchGraphQL<{
+    indexerCatalog: IndexerDefinition[];
+  }>(INDEXER_CATALOG_QUERY, { search: search.trim() || null });
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { ok: false, ...(await toActionError(errors[0])) };
+  }
+
+  return { ok: true, data: data?.indexerCatalog ?? [] };
+}
+
+// Spec 112, REQ-9
+export async function getConfiguredIndexersAction(): Promise<
+  { ok: true; data: ConfiguredIndexer[] } | IndexerActionError
+> {
+  const { data, errors } = await fetchGraphQL<{
+    configuredIndexers: ConfiguredIndexer[];
+  }>(CONFIGURED_INDEXERS_QUERY);
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { ok: false, ...(await toActionError(errors[0])) };
+  }
+
+  return { ok: true, data: data?.configuredIndexers ?? [] };
+}
+
+// Spec 112, REQ-5
+export async function addIndexerAction(
+  definitionName: string,
+): Promise<{ ok: true; data: ConfiguredIndexer } | IndexerActionError> {
+  const { data, errors } = await fetchGraphQL<{
+    addIndexer: ConfiguredIndexer;
+  }>(ADD_INDEXER_MUTATION, { definitionName });
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { ok: false, ...(await toActionError(errors[0])) };
+  }
+
+  if (!data?.addIndexer) {
+    return { ok: false, error: 'No se pudo agregar el indexer' };
+  }
+
+  return { ok: true, data: data.addIndexer };
+}
+
+// Spec 112, REQ-10
+export async function removeIndexerAction(
+  id: string,
+): Promise<{ ok: true } | IndexerActionError> {
+  const { errors } = await fetchGraphQL<{ removeIndexer: boolean }>(
+    REMOVE_INDEXER_MUTATION,
+    { id: Number(id) },
+  );
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return { ok: false, ...(await toActionError(errors[0])) };
+  }
+
+  return { ok: true };
 }

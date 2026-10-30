@@ -56,7 +56,11 @@
     },
     "indexer": {
       "unavailable": "Could not reach the indexer",
-      "no_infohash": "Could not resolve an infoHash"
+      "no_infohash": "Could not resolve an infoHash",
+      "definition_not_allowed": "That indexer can't be added from Perceptor.",
+      "test_failed": "The indexer didn't respond to the test. Try again later or add it from Prowlarr.",
+      "flaresolverr_missing": "FlareSolverr isn't set up in the indexer, so this site can't be reached.",
+      "not_found": "That indexer no longer exists."
     },
     "search": {
       "target_ambiguous": "Provide a single search target"
@@ -184,6 +188,11 @@
       "verify_failed": "The generated file failed verification. The original was not touched.",
       "not_writable": "The worker cannot replace this file (folder or owner permissions).",
       "interrupted": "The embed was interrupted by a worker restart. Try again.",
+      "sync_failed": "Could not work out the automatic offset of a subtitle. The file was not touched.",
+      "sync_framerate_mismatch": "A subtitle is from a version with a different framerate. The file was not touched.",
+      "sync_offset_too_large": "A subtitle is too far out of sync to fix automatically. The file was not touched.",
+      "sync_incomplete": "A subtitle only covers part of the file. The file was not touched.",
+      "sync_low_score": "A subtitle does not match this file. Try the manual offset. The file was not touched.",
       "sidecar_delete_failed": "Subtitles embedded, but the external .srt could not be deleted. Delete it by hand or from Jellyfin.",
       "jellyfin_refresh_failed": "Subtitles embedded, but the media server could not be notified. They will appear on its next scan."
     },
@@ -209,6 +218,12 @@
       "quota_exhausted": "The daily OpenSubtitles download limit has been reached.",
       "probe_failed": "Could not read the file to see which subtitles it has.",
       "probe_not_found": "Subtitle search not found."
+    },
+    "tmdbList": {
+      "invalid_reference": "That is not a TMDB list ID or link.",
+      "unreadable": "TMDB could not find the list, or it is not public.",
+      "already_attached": "You already have this list linked.",
+      "not_found": "The list does not exist."
     }
   },
   "landing": {
@@ -227,6 +242,7 @@
     "movies": "My movies",
     "shorts": "My shorts",
     "shows": "My series",
+    "lists": "My lists",
     "calendar": "Calendar",
     "downloads": "Downloads",
     "downloadsBadge": "{count} active downloads",
@@ -237,6 +253,8 @@
   "userMenu": {
     "editProfile": "Edit profile",
     "preferences": "Preferences",
+    "indexer": "Indexer",
+    "torrentClient": "Torrent client",
     "signOut": "Sign out",
     "themeLight": "Light mode",
     "themeDark": "Dark mode"
@@ -287,6 +305,13 @@
       "title": "Shorts",
       "metadataTitle": "Shorts | Perceptor",
       "metadataDescription": "List of tracked short films"
+    },
+    "lists": {
+      "title": "My lists",
+      "metadataTitle": "Lists | Perceptor",
+      "metadataDescription": "TMDB lists linked to your library",
+      "detailMetadataDescription": "Titles of a linked TMDB list",
+      "empty": "None of this list's titles are in your library yet."
     },
     "showsAdd": {
       "title": "Add series",
@@ -341,7 +366,8 @@
     "metadataTitle": "Resource unavailable | Perceptor",
     "message": "Resource not available for this user",
     "backToMovies": "Back to movies",
-    "backToShows": "Back to series"
+    "backToShows": "Back to series",
+    "backToLists": "Back to lists"
   },
   "import": {
     "replace": {
@@ -447,11 +473,17 @@
     "unavailable": "Movies and series are both disabled on this system."
   },
   "media": {
+    "autoAcquire": {
+      "label": "Download automatically",
+      "hint": "Manual search still works either way."
+    },
     "card": {
       "noPoster": "No Poster",
       "typeMovie": "MOVIE",
       "typeShow": "SERIES",
-      "typeShort": "SHORT"
+      "typeShort": "SHORT",
+      "completed": "You have it",
+      "notCompleted": "You don't have it yet"
     },
     "list": {
       "emptyDefault": "No {noun} registered",
@@ -515,6 +547,7 @@
     "embedSubtitles": {
       "button": "Embed in file",
       "embedding": "Embedding…",
+      "syncing": "Syncing subtitles…",
       "title": "Embed subtitles in the file",
       "intro": "Choose the external subtitles Jellyfin lists to write into the file. Each embedded sidecar is deleted afterwards.",
       "include": "Include",
@@ -523,6 +556,7 @@
       "makeDefault": "Default",
       "forced": "Forced",
       "offset": "Offset (ms)",
+      "autoOffset": "Automatic",
       "confirm": "Embed",
       "cancel": "Cancel",
       "submitting": "Embedding…",
@@ -741,6 +775,10 @@
         "acquire_episodes": {
           "label": "Acquire episodes",
           "description": "Searches for and downloads a release for newly aired episodes."
+        },
+        "import_lists": {
+          "label": "Import lists",
+          "description": "Reads each user's attached public TMDB lists and adds the new titles to their library. It never downloads anything on its own."
         }
       }
     },
@@ -840,6 +878,9 @@
       "dateFormatLabel": "Date format",
       "audioLanguagesLabel": "Audio languages",
       "audioMandatoryLabel": "Mandatory audio",
+      "audioVariantDetectionLabel": "Detect the dub variant from the audio",
+      "audioVariantDetectionHelp": "When a file carries two Spanish tracks that do not say which is Latin American and which is from Spain, a sample of each is listened to in order to tell them apart. Processing takes a few minutes longer.",
+      "audioVariantDetectionDisabledHint": "Available when you pick an audio language with regional variants, such as Spanish.",
       "subtitleLanguagesLabel": "Subtitle languages",
       "cinemaLabel": "Allow cinema releases",
       "acquireTheatricalLabel": "Acquire from 2 days after the theatrical release (any quality; does nothing unless cinema releases are allowed)",
@@ -858,6 +899,31 @@
       "chosenLabel": "Chosen groups",
       "emptyChosen": "No groups chosen.",
       "removeGroup": "Remove {name}"
+    }
+  },
+  "lists": {
+    "section": {
+      "description": "Link public TMDB lists. Their titles are added to your library; the list itself downloads nothing.",
+      "itemCount": "{count, plural, one {# title} other {# titles}}",
+      "itemCountUnknown": "Unknown count",
+      "openOnTmdb": "Open on TMDB",
+      "inputLabel": "List ID or URL",
+      "placeholder": "e.g. 8300000 or https://www.themoviedb.org/list/8300000",
+      "attach": "Link",
+      "attaching": "Linking...",
+      "lastImport": "Last import: {date}",
+      "neverImported": "Not imported yet",
+      "detach": "Unlink",
+      "disabledNotice": "List import is turned off by the administrator; your lists are saved but not imported yet.",
+      "empty": "You have no linked lists.",
+      "removeError": "Could not unlink the list."
+    },
+    "remove": {
+      "title": "Unlink list",
+      "message": "<b>{name}</b> will be unlinked. Titles already imported from it stay in your library.",
+      "confirm": "Unlink",
+      "cancel": "Cancel",
+      "removing": "Unlinking..."
     }
   },
   "status": {
@@ -984,5 +1050,41 @@
     "heading": "You're offline",
     "body": "Perceptor's server can't be reached right now. Check that the stack is running and try again.",
     "retry": "Retry"
+  },
+  "indexers": {
+    "add": "Add indexer",
+    "section": {
+      "title": "Indexers",
+      "loading": "Loading indexers...",
+      "empty": "No indexers are configured yet.",
+      "disabled": "Disabled",
+      "flaresolverr": "FlareSolverr",
+      "removeAria": "Remove {name}"
+    },
+    "modal": {
+      "title": "Add an indexer",
+      "description": "Public torrent indexers that Prowlarr offers for films and series, in alphabetical order. Indexers that need an account are added from Prowlarr.",
+      "searchLabel": "Search indexers",
+      "searchPlaceholder": "Search by name",
+      "loading": "Loading catalog...",
+      "empty": "No indexers match.",
+      "close": "Close",
+      "add": "Add",
+      "adding": "Adding...",
+      "added": "Added",
+      "flaresolverrNote": "This site is behind Cloudflare and goes through FlareSolverr, so it may be slower.",
+      "categories": {
+        "MOVIES": "Films",
+        "TV": "Series",
+        "ANIME": "Anime"
+      }
+    },
+    "remove": {
+      "title": "Remove indexer",
+      "message": "<b>{name}</b> will be removed from the indexer. Releases already downloaded are not affected.",
+      "confirm": "Remove",
+      "cancel": "Cancel",
+      "removing": "Removing..."
+    }
   }
 }

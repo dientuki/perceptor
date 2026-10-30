@@ -4,6 +4,7 @@ import { MediaRootsModule } from '@/media-roots/media-roots.module';
 import { QueueModule } from '@/queue/queue.module';
 import { ActiveEmbedGuardModule } from './active-embed-guard.module';
 import { SubtitleEmbedService } from './subtitle-embed.service';
+import { SubtitleEmbedSyncService } from './subtitle-embed-sync.service';
 import {
   EpisodeSubtitleEmbedFieldsResolver,
   MovieSubtitleEmbedFieldsResolver,
@@ -20,6 +21,7 @@ import {
   ],
   providers: [
     SubtitleEmbedService,
+    SubtitleEmbedSyncService,
     SubtitleEmbedResolver,
     MovieSubtitleEmbedFieldsResolver,
     EpisodeSubtitleEmbedFieldsResolver,

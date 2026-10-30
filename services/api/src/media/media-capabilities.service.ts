@@ -25,6 +25,8 @@ export class MediaCapabilitiesService {
         openSubtitlesApiKey() !== null &&
         (map['opensubtitles_username'] ?? '').trim() !== '' &&
         (map['opensubtitles_password'] ?? '').trim() !== '',
+      // Spec 109, REQ-12
+      listImportEnabled: map['schedule_import_lists_enabled'] === 'true',
     };
   }
 

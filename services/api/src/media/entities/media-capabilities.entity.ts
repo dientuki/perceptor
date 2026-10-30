@@ -23,4 +23,10 @@ export class MediaCapabilities {
       "True while Perceptor's OpenSubtitles application key is present and the OpenSubtitles username and password Settings are set (107 REQ-2). Never exposes any of them.",
   })
   subtitleSearchAvailable: boolean;
+
+  @Field({
+    description:
+      'True while the import_lists scheduled task is enabled (109 REQ-12). Never exposes its cadence.',
+  })
+  listImportEnabled: boolean;
 }

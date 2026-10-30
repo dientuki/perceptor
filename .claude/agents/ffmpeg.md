@@ -220,6 +220,12 @@ random and silently lose the right one.
   is labelled from its title whether or not anyone requested that variant, because the title written
   to the output (L2) must not depend on who triggered the encode. What the request gates is
   selection, never labelling.
+
+  Since `110`, that holds for **metadata** labelling (title markers, the `language` tag) only.
+  Labelling derived from the audio itself (variant tags and duplicate verdicts resolved by the
+  encode driver, arriving as `AudioVariantResolution`) is gated by the opt-in: without it the
+  resolution is `NO_AUDIO_VARIANTS` and nothing is inferred from content. Corpus cases `4.json`
+  and `5.json` pin the two outcomes through the optional `input.audioVariants`.
 - **L2 (track title).** The title written to the output is **always** replaced, never inherited.
   The library is homogeneous: the same language reads the same in every file, whatever the release
   group typed. `Spanish (Latin America)`, `BTM`, `FORCED` and an absent title all resolve through

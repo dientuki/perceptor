@@ -48,7 +48,8 @@ export class AcquireEpisodesTask implements ScheduledTaskHandler {
     const rows = await this.prisma.episode.findMany({
       where: {
         releaseDate: { not: null, lte: graceCutoff, gte: startOfUtcDay(since) },
-        season: { seasonNumber: { not: 0 }, show: { users: { some: {} } } },
+        // Spec 109, REQ-15
+        season: { seasonNumber: { not: 0 }, show: { users: { some: { autoAcquire: true } } } },
       },
       orderBy: { releaseDate: 'asc' },
       include: {
@@ -78,7 +79,7 @@ export class AcquireEpisodesTask implements ScheduledTaskHandler {
         let context = series.get(show.id);
         if (!context) {
           const owner = await this.prisma.userShow.findFirst({
-            where: { showId: show.id },
+            where: { showId: show.id, autoAcquire: true },
             orderBy: { createdAt: 'asc' },
             select: { userId: true },
           });

@@ -75,6 +75,8 @@ export const SETTINGS_CATALOG: Record<string, SettingCatalogEntry> = {
   schedule_acquire_episodes_cron: { kind: 'cron' },
   schedule_acquire_movies_enabled: { kind: 'boolean' },
   schedule_acquire_movies_cron: { kind: 'cron' },
+  schedule_import_lists_enabled: { kind: 'boolean' },
+  schedule_import_lists_cron: { kind: 'cron' },
 };
 
 export function getSettingCatalogEntry(key: string): SettingCatalogEntry | undefined {

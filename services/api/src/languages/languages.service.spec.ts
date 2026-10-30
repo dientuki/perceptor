@@ -289,6 +289,9 @@ describe('LanguagesService — preference writes', () => {
 // ordinary language (`en`, `ja`, `fr`, … all have tag === iso2) and would
 // empty the picker down to just the two Spanish variants. Nothing would
 // throw; the picker would just be silently, catastrophically empty.
+// The hasRegionalVariants cases at the end of this suite exist because `web` disables
+// the audio-variant checkbox when no picked language carries the flag, so a
+// builder that misses it disables the control for everyone with no error.
 describe('LanguagesService — findAll (pickable catalog)', () => {
   let service: LanguagesService;
   let languageFindMany: jest.Mock;
@@ -327,6 +330,38 @@ describe('LanguagesService — findAll (pickable catalog)', () => {
     const result = await service.findAll();
 
     expect(result.map((row) => row.tag).sort()).toEqual(['en', 'ja']);
+  });
+
+  // Spec 110, REQ-3
+  it('flags every row sharing an iso3 with two region-subtagged rows, and no other', async () => {
+    languageFindMany.mockResolvedValue([spanish, spanishLatam, spanishSpain, english, japanese]);
+
+    const flags = Object.fromEntries(
+      (await service.findAll()).map((row) => [row.tag, row.hasRegionalVariants]),
+    );
+
+    expect(flags).toEqual({ 'es-419': true, 'es-ES': true, en: false, ja: false });
+    expect(await service.regionalVariantIso3s()).toEqual(new Set(['spa']));
+  });
+
+  it('flags the base es row on the preference read path, where it is not filtered out', async () => {
+    languageFindMany.mockResolvedValue([spanish, spanishLatam, spanishSpain, english]);
+    const prisma = {
+      language: { findMany: languageFindMany },
+      userLanguagePreference: {
+        findMany: jest.fn().mockResolvedValue([{ language: spanish }, { language: english }]),
+      },
+    };
+    const module = await Test.createTestingModule({
+      providers: [LanguagesService, { provide: PrismaService, useValue: prisma }],
+    }).compile();
+
+    const result = await module.get(LanguagesService).findPreferredTrackLanguagesFor('u1', 'AUDIO');
+
+    expect(result.map((row) => [row.tag, row.hasRegionalVariants])).toEqual([
+      ['es', true],
+      ['en', false],
+    ]);
   });
 });
 

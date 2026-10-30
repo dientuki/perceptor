@@ -39,10 +39,11 @@ function build(options: {
   prefsByUser?: Record<string, Prefs>;
   titleLanguages?: Record<string, { iso2: string; iso3: string }[]>;
   titleMandatory?: Record<string, boolean>;
-  owners?: { userId: string; audioMandatory: boolean }[];
+  owners?: { userId: string; audioMandatory: boolean; autoAcquire?: boolean }[];
   movieOwners?: {
     userId: string;
     audioMandatory: boolean;
+    autoAcquire?: boolean;
     user: { acquireTheatrical: boolean; acquireDigital: boolean; acquirePhysical: boolean };
   }[];
 }) {
@@ -81,8 +82,16 @@ function build(options: {
     ),
   };
   const prisma = {
-    userShow: { findMany: jest.fn(async () => options.owners ?? []) },
-    userMovie: { findMany: jest.fn(async () => options.movieOwners ?? []) },
+    userShow: {
+      findMany: jest.fn(async (args: { where: { autoAcquire?: boolean } }) =>
+        honourAutoAcquire(options.owners ?? [], args.where),
+      ),
+    },
+    userMovie: {
+      findMany: jest.fn(async (args: { where: { autoAcquire?: boolean } }) =>
+        honourAutoAcquire(options.movieOwners ?? [], args.where),
+      ),
+    },
     show: { findUnique: jest.fn(async () => ({ title: 'Show' })) },
     movie: { findUnique: jest.fn(async () => ({ title: 'Grown Ups' })) },
   };
@@ -97,6 +106,15 @@ function build(options: {
     prisma as never,
   );
   return { service, movies, seasons, episodes, prisma };
+}
+
+// Fake rows carry an optional autoAcquire (absent means the column default, true); the fake
+// findMany applies the filter the query asks for, so dropping it from the query changes the result.
+function honourAutoAcquire<T extends { autoAcquire?: boolean }>(
+  rows: T[],
+  where: { autoAcquire?: boolean },
+): T[] {
+  return where.autoAcquire === true ? rows.filter((row) => row.autoAcquire !== false) : rows;
 }
 
 describe('RankingContextService.forCaller', () => {
@@ -275,7 +293,7 @@ describe('RankingContextService.forMovieOwners', () => {
       ['c', false, false],
     ]);
     expect(prisma.userMovie.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { movieId: 10 }, orderBy: { createdAt: 'asc' } }),
+      expect.objectContaining({ where: { movieId: 10, autoAcquire: true }, orderBy: { createdAt: 'asc' } }),
     );
   });
 
@@ -312,5 +330,53 @@ describe('RankingContextService.forMovieOwners', () => {
     });
 
     expect((await service.forMovieOwners(10)).context.allowCinemaReleases).toBe(true);
+  });
+});
+
+// Spec 109, REQ-15 — this block exists because an owner who switched automatic acquisition off
+// for a title would otherwise still contribute their languages and groups to the union the
+// sweeps rank with (and could be picked as the attaching owner), with no error anywhere.
+describe('RankingContextService owners opted out of automatic acquisition', () => {
+  const off = { acquireTheatrical: false, acquireDigital: true, acquirePhysical: false };
+
+  it('leaves an opted-out film owner out of the union and out of the owners list', async () => {
+    const { service } = build({
+      movieOwners: [
+        { userId: 'out', autoAcquire: false, audioMandatory: true, user: off },
+        { userId: 'in', autoAcquire: true, audioMandatory: false, user: off },
+      ],
+      prefsByUser: {
+        out: prefs({ allowCinemaReleases: true, movieTorrentGroups: [{ name: 'OUT' }] }),
+        in: prefs({ allowCinemaReleases: true, movieTorrentGroups: [{ name: 'IN' }] }),
+      },
+      titleLanguages: { out: [JAPANESE], in: [ENGLISH] },
+    });
+
+    const { context, owners } = await service.forMovieOwners(10);
+
+    expect(owners.map((o) => o.userId)).toEqual(['in']);
+    expect(context.preferredGroups).toEqual(['IN']);
+    expect(context.languageRequirement?.mandatory).toBe(false);
+    expect(context.languageRequirement?.languages.map((l) => l.iso3)).toEqual(['eng']);
+  });
+
+  it('leaves an opted-out series owner out of the union', async () => {
+    const { service } = build({
+      owners: [
+        { userId: 'out', autoAcquire: false, audioMandatory: true },
+        { userId: 'in', autoAcquire: true, audioMandatory: false },
+      ],
+      prefsByUser: {
+        out: prefs({ showTorrentGroups: [{ name: 'OUT' }] }),
+        in: prefs({ showTorrentGroups: [{ name: 'IN' }] }),
+      },
+      titleLanguages: { out: [JAPANESE], in: [ENGLISH] },
+    });
+
+    const context = await service.forShowOwners(5);
+
+    expect(context.preferredGroups).toEqual(['IN']);
+    expect(context.languageRequirement?.mandatory).toBe(false);
+    expect(context.languageRequirement?.languages.map((l) => l.iso3)).toEqual(['eng']);
   });
 });

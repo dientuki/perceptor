@@ -31,6 +31,7 @@ export class LanguagesService {
     // whose tag equals its iso2 unconditionally would hide every ordinary
     // language (`en`, `ja`, `fr`, …), since a single-row language's tag *is*
     // its iso2, and would empty the picker down to just the variants.
+    const variantIso3s = variantIso3sOf(rows);
     const iso2Counts = new Map<string, number>();
     for (const row of rows) {
       iso2Counts.set(row.iso2, (iso2Counts.get(row.iso2) ?? 0) + 1);
@@ -43,6 +44,7 @@ export class LanguagesService {
         iso2: row.iso2,
         iso3: row.iso3,
         name: languageNameFor(row.tag),
+        hasRegionalVariants: variantIso3s.has(row.iso3),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -133,7 +135,7 @@ export class LanguagesService {
       where: { userId, movieId, kind },
       include: { language: true },
     });
-    return rows.map((row) => this.toLanguage(row.language));
+    return this.toLanguages(rows.map((row) => row.language));
   }
 
   // A user's per-title, per-kind preference for a series, added to the
@@ -170,7 +172,7 @@ export class LanguagesService {
       where: { userId, showId, kind },
       include: { language: true },
     });
-    return rows.map((row) => this.toLanguage(row.language));
+    return this.toLanguages(rows.map((row) => row.language));
   }
 
   // The caller's own preference, split by kind rather than per-title
@@ -204,16 +206,37 @@ export class LanguagesService {
       where: { userId, kind },
       include: { language: true },
     });
-    return rows.map((row) => this.toLanguage(row.language));
+    return this.toLanguages(rows.map((row) => row.language));
   }
 
-  private toLanguage(row: { id: number; tag: string; iso2: string; iso3: string }): Language {
-    return {
+  // Spec 110, REQ-3
+  async regionalVariantIso3s(): Promise<Set<string>> {
+    const rows = await this.prisma.language.findMany({ select: { tag: true, iso3: true } });
+    return variantIso3sOf(rows);
+  }
+
+  private async toLanguages(
+    rows: Array<{ id: number; tag: string; iso2: string; iso3: string }>,
+  ): Promise<Language[]> {
+    if (rows.length === 0) return [];
+    const variantIso3s = await this.regionalVariantIso3s();
+    return rows.map((row) => ({
       id: row.id,
       tag: row.tag,
       iso2: row.iso2,
       iso3: row.iso3,
       name: languageNameFor(row.tag),
-    };
+      hasRegionalVariants: variantIso3s.has(row.iso3),
+    }));
   }
+}
+
+// Spec 110, REQ-3
+function variantIso3sOf(rows: Array<{ tag: string; iso3: string }>): Set<string> {
+  const regionCounts = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.tag.includes('-')) continue;
+    regionCounts.set(row.iso3, (regionCounts.get(row.iso3) ?? 0) + 1);
+  }
+  return new Set(Array.from(regionCounts).filter(([, count]) => count >= 2).map(([iso3]) => iso3));
 }

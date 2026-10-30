@@ -17,4 +17,7 @@ export class Language {
 
   @Field()
   name: string;
+
+  @Field({ description: 'Two or more region-subtagged Language rows share this iso3 (110 REQ-3).' })
+  hasRegionalVariants: boolean;
 }

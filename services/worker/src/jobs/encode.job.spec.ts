@@ -1026,22 +1026,31 @@ describe('handleEncode — disc playlist assembly (Spec 100)', () => {
     expect(await exists(assembled)).toBe(false);
   });
 
-  it('removes the assembled file when the encode fails', async () => {
+  it('keeps the assembled file when the encode fails', async () => {
     mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
     encodeMock.mockRejectedValue(new Error('boom'));
 
     await expect(handleEncode(makeJob())).rejects.toThrow('boom');
 
-    expect(await exists(assembled)).toBe(false);
+    expect(await exists(assembled)).toBe(true);
   });
 
-  it('removes the assembled file when the encode is cancelled', async () => {
+  it('keeps the assembled file when the encode is cancelled', async () => {
     mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
     encodeMock.mockRejectedValue(new EncodeCancelledError());
 
     await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
 
-    expect(await exists(assembled)).toBe(false);
+    expect(await exists(assembled)).toBe(true);
+  });
+
+  it('keeps the assembled file when the encode throws a KeyedError', async () => {
+    mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: true });
+    encodeMock.mockRejectedValue(new KeyedError(ERROR_ENCODE_PROBE_FAILED, 'ffprobe failed', { reason: 'x' }));
+
+    await expect(handleEncode(makeJob())).rejects.toBeInstanceOf(UnrecoverableError);
+
+    expect(await exists(assembled)).toBe(true);
   });
 
   it('passes the assembled path to passthrough, keeps the .mkv extension and does not touch the file afterwards', async () => {
@@ -1058,13 +1067,13 @@ describe('handleEncode — disc playlist assembly (Spec 100)', () => {
     expect(await exists(assembled)).toBe(true);
   });
 
-  it('removes the assembled file when passthrough itself fails', async () => {
+  it('keeps the assembled file when passthrough itself fails', async () => {
     mockGraphQL({ ...PROCESS_JOB_DETAILS, inputFilePath: playlist, downloadsRoot: root, compressionEnabled: false });
     passthroughMock.mockRejectedValue(new Error('disk full'));
 
     await expect(handleEncode(makeJob())).rejects.toThrow('disk full');
 
-    expect(await exists(assembled)).toBe(false);
+    expect(await exists(assembled)).toBe(true);
   });
 
   it('reports encodeFailed with disc_remux_failed and its params when assembly fails, and never runs a driver', async () => {
@@ -1102,5 +1111,69 @@ describe('handleEncode — disc playlist assembly (Spec 100)', () => {
     await handleEncode(makeJob());
 
     expect(await exists(assembled)).toBe(true);
+  });
+});
+
+// Defends the payload seam of 110-audio-variant-detection: the field dropped from the selection set,
+// or a missing value read as true, would run a multi-minute transcription nobody opted into.
+describe('handleEncode — audioVariantDetection (Spec 110, REQ-5)', () => {
+  function mockSuccessfulGraphQL(processJob: Record<string, unknown>) {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob });
+      }
+      if (query.includes('encodeCompleted')) {
+        return Promise.resolve({
+          encodeCompleted: {
+            message: 'ok',
+            removeTorrent: false,
+            deleteInputFile: false,
+            deleteDownloadPath: false,
+          },
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('queries audioVariantDetection', async () => {
+    mockSuccessfulGraphQL({ ...PROCESS_JOB_DETAILS, audioVariantDetection: true });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+    await handleEncode(makeJob());
+    expect(fetchGraphQLMock.mock.calls[0][0]).toContain('audioVariantDetection');
+  });
+
+  it('a true value reaches the encode() call', async () => {
+    mockSuccessfulGraphQL({ ...PROCESS_JOB_DETAILS, audioVariantDetection: true });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+    await handleEncode(makeJob());
+    const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(details.audioVariantDetection).toBe(true);
+  });
+
+  it('a missing value normalizes to false and logs', async () => {
+    mockSuccessfulGraphQL(PROCESS_JOB_DETAILS);
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+    await handleEncode(makeJob());
+    const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(details.audioVariantDetection).toBe(false);
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('audioVariantDetection missing or not a boolean'));
+  });
+
+  it('a non-boolean value normalizes to false', async () => {
+    mockSuccessfulGraphQL({ ...PROCESS_JOB_DETAILS, audioVariantDetection: 'true' });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+    await handleEncode(makeJob());
+    const [, , details] = encodeMock.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(details.audioVariantDetection).toBe(false);
   });
 });

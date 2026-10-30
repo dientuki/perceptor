@@ -36,6 +36,14 @@ export type SubtitleSyncJob = {
   subtitleSyncId: number;
 };
 
+// Spec 113, T005
+export const SUBTITLE_EMBED_SYNC_JOB = 'subtitle-embed-sync';
+
+export type SubtitleEmbedSyncJob = {
+  subtitleEmbedId: number;
+  fileName: string;
+};
+
 // Spec 107, T012
 export const SUBTITLE_PROBE_QUEUE = 'subtitle-probe';
 export const SUBTITLE_PROBE_JOB = 'subtitle-probe';

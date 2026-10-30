@@ -40,6 +40,8 @@ export interface MediaCapabilities {
   catalogKeyConfigured: boolean;
   // Spec 103, REQ-1
   subtitleSearchAvailable: boolean;
+  // Spec 109, REQ-12
+  listImportEnabled: boolean;
 }
 
 // Discriminated union so a target is either a movie or an episode, never
@@ -103,7 +105,12 @@ export type TitleRemovalResult =
   | { success: true; deleted: boolean; remainingOwners: number }
   | { error: string };
 
-export type SubtitleEmbedStatus = "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
+export type SubtitleEmbedStatus =
+  | "QUEUED"
+  | "SYNCING"
+  | "RUNNING"
+  | "COMPLETED"
+  | "FAILED";
 
 /** A sidecar Jellyfin lists for a title; `fileName` is its identity, sent back verbatim. */
 export interface ExternalSubtitle {
@@ -128,6 +135,8 @@ export interface SubtitleEmbedInput {
   languageIso3: string;
   isDefault: boolean;
   offsetMs: number;
+  // Spec 113, REQ-1
+  autoOffset: boolean;
 }
 
 /** Outcome of embedMovieSubtitles/embedEpisodeSubtitles; `errorKey` lets the caller react to stale_listing. */

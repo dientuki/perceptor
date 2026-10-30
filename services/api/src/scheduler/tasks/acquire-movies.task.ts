@@ -31,7 +31,8 @@ export class AcquireMoviesTask implements ScheduledTaskHandler {
 
     const rows = await this.prisma.movie.findMany({
       where: {
-        users: { some: {} },
+        // Spec 109, REQ-15
+        users: { some: { autoAcquire: true } },
         OR: [
           { theatricalReleaseDate: { not: null } },
           { digitalReleaseDate: { not: null } },

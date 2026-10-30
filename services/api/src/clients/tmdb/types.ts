@@ -105,3 +105,24 @@ export interface TmdbShowKeywords {
   id: number;
   results: { id: number; name: string }[];
 }
+
+// Spec 109, T003
+export interface TmdbListResponse {
+  name?: string;
+  item_count?: number;
+  page: number;
+  total_pages: number;
+  items?: { id: number; media_type?: string }[];
+}
+
+export interface TmdbListItem {
+  tmdbId: number;
+  mediaType: 'movie' | 'show';
+}
+
+export interface TmdbListPage {
+  name: string;
+  itemCount: number | null;
+  totalPages: number;
+  items: TmdbListItem[];
+}

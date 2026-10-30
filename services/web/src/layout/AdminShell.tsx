@@ -16,6 +16,8 @@ interface AdminShellProps {
   activeDownloadCount: number;
   indexerStatus: IndexerStatus | null;
   monthFirst: boolean;
+  indexerUrl: string | null;
+  torrentUrl: string | null;
   children: React.ReactNode;
 }
 
@@ -25,6 +27,8 @@ export default function AdminShell({
   activeDownloadCount,
   indexerStatus,
   monthFirst,
+  indexerUrl,
+  torrentUrl,
   children,
 }: AdminShellProps) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
@@ -52,7 +56,12 @@ export default function AdminShell({
           className={`flex-1 min-w-0 transition-all  duration-300 ease-in-out ${mainContentMargin}`}
         >
           {/* Header */}
-          <AppHeader user={user} capabilities={capabilities} />
+          <AppHeader
+            user={user}
+            capabilities={capabilities}
+            indexerUrl={indexerUrl}
+            torrentUrl={torrentUrl}
+          />
           {/* Page Content */}
           <div className="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
             {children}

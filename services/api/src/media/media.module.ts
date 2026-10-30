@@ -12,5 +12,6 @@ import { RedisModule } from '@/redis/redis.module';
 @Module({
   imports: [MoviesModule, ShowsModule, SettingsModule, RedisModule, MediaCapabilitiesModule],
   providers: [MediaResolver, MediaDispatchService, MediaSearchService, PopularMediaService],
+  exports: [MediaDispatchService],
 })
 export class MediaModule {}

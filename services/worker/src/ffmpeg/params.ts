@@ -1,5 +1,5 @@
 import { normalizeIso3 } from './iso639';
-import { detectVariant, narrowToVariants, preferring, requestedVariants, titleMarks, titleWords, variantTitle } from './variants';
+import { type AudioVariantResolution, detectWithTags, detectVariant, narrowToVariants, preferring, requestedVariants, titleMarks, titleWords, variantTitle } from './variants';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
 import type { ContentKind } from '../encode/content-kind';
@@ -258,7 +258,9 @@ export function selectAudioStreams(
   allowedLanguagesIso3: string[],
   originalLanguageIso3: string,
   allowedLanguageTags: string[],
+  audioVariants: AudioVariantResolution,
 ): AudioSelection {
+  const detect = detectWithTags(audioVariants.tags);
   // Both sides of every comparison go through normalizeIso3: ffprobe may tag
   // a track with the ISO-639-2/T form (e.g. "fra") while the allow-list
   // arrives in the /B form the `languages` table seeds ("fre") — see
@@ -272,6 +274,7 @@ export function selectAudioStreams(
   const priority = ['truehd', 'dts', 'eac3', 'ac3'];
 
   const candidates = audioStreams.filter(s => {
+    if (audioVariants.duplicates.has(s.index)) return false;
     const lang = normalizeIso3(s.tags?.language || "");
     const title = (s.tags?.title || "").toLowerCase();
     return allowedLangs.includes(lang) && !blacklistWords.some(word => title.includes(word));
@@ -334,7 +337,7 @@ export function selectAudioStreams(
       return;
     }
 
-    const narrowed = narrowToVariants(langStreams, requestedForLang);
+    const narrowed = narrowToVariants(langStreams, requestedForLang, detect);
 
     // Spec 031, REQ-5
     if (!narrowed.matched) {
@@ -358,13 +361,16 @@ export function getAudioParams(
   originalLanguageIso3: string,
   allowedLanguageTags: string[],
   trackTitles: Record<string, string>,
+  audioVariants: AudioVariantResolution,
 ) {
   const { streams: selectedStreams, missingLanguages } = selectAudioStreams(
     audioStreams,
     allowedLanguagesIso3,
     originalLanguageIso3,
     allowedLanguageTags,
+    audioVariants,
   );
+  const detect = detectWithTags(audioVariants.tags);
 
   missingLanguages.forEach((langCode) => {
     console.warn(`[ffmpeg] allowed language "${langCode}" has no audio track in the file; continuing without it.`);
@@ -376,7 +382,7 @@ export function getAudioParams(
     const lang = (s.tags?.language || "und").toLowerCase();
     const channels = Number(s.channels || 0);
     // Spec 031, REQ-12
-    const languageTitle = trackLanguageTitle(s, trackTitles);
+    const languageTitle = trackLanguageTitle(s, trackTitles, detect);
 
     params.push("-map", `0:${s.index}`);
     params.push(`-c:a:${index}`, "libopus");
@@ -471,9 +477,13 @@ function isCommentary(stream: any): boolean {
   return stream.disposition?.comment === 1 || titleMarks(stream, ['commentary']);
 }
 
-function trackLanguageTitle(stream: any, trackTitles: Record<string, string>): string {
+function trackLanguageTitle(
+  stream: any,
+  trackTitles: Record<string, string>,
+  detect: (stream: any) => string | undefined = detectVariant,
+): string {
   const lang = normalizeIso3(stream.tags?.language || 'und');
-  const variant = detectVariant(stream);
+  const variant = detect(stream);
   if (variant) {
     const title = variantTitle(variant);
     if (title) return title;

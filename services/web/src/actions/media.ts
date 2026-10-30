@@ -18,6 +18,7 @@ const MEDIA_CAPABILITIES_QUERY = `
       shortsEnabled
       catalogKeyConfigured
       subtitleSearchAvailable
+      listImportEnabled
     }
   }
 `;

@@ -12,6 +12,7 @@ import { SubtitleProbeQueueService } from '@/queue/subtitle-probe-queue.service'
 import { TitleStatusService } from '@/title-status/title-status.service';
 import { SubtitleSearchRequestService } from '@/subtitle-search/subtitle-search-request.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { LanguagesService } from '@/languages/languages.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 
@@ -47,6 +48,7 @@ describe('ProcessJobsService', () => {
   let subtitleSearchRequest: { requestFor: jest.Mock };
   let libraryProbeQueue: { request: jest.Mock };
   let probeQueue: { addProbe: jest.Mock; removeProbe: jest.Mock };
+  let languagesService: { regionalVariantIso3s: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -86,9 +88,12 @@ describe('ProcessJobsService', () => {
     libraryProbeQueue = { request: jest.fn().mockResolvedValue(undefined) };
     probeQueue = { addProbe: jest.fn().mockResolvedValue(undefined), removeProbe: jest.fn().mockResolvedValue(undefined) };
 
+    languagesService = { regionalVariantIso3s: jest.fn().mockResolvedValue(new Set(['spa'])) };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProcessJobsService,
+        { provide: LanguagesService, useValue: languagesService },
         { provide: PrismaService, useValue: prisma },
         { provide: QbittorrentClient, useValue: torrentClient },
         { provide: SettingsService, useValue: settings },
@@ -184,6 +189,7 @@ describe('ProcessJobsService', () => {
   ) => ({
     languages: titleIso3s.map((iso3, i) => ({ kind, language: { iso3, tag: tags[i] } })),
     user: {
+      audioVariantDetection: false,
       languages: globalIso3s.map((iso3, i) => ({ kind: globalKind, language: { iso3, tag: globalTags[i] } })),
     },
   });
@@ -485,6 +491,65 @@ describe('ProcessJobsService', () => {
     it('reads the same value on the episode arm', async () => {
       expect((await read({ dub_trim_enabled: 'true' }, 'episode')).dubTrimEnabled).toBe(true);
       expect((await read({}, 'episode')).dubTrimEnabled).toBe(false);
+    });
+  });
+
+  // Spec 110, REQ-4: the effective opt-in gates a ten-minute transcription
+  // per encode. A wrong `true` burns that time on every encode for a user who
+  // cannot benefit; a wrong `false` leaves the feature dead. Neither throws.
+  // The kind matters: a SUBTITLE `es-419` must not qualify, since detection
+  // only ever decides audio tracks.
+  describe('getEncodeJobDetails — audioVariantDetection', () => {
+    const optedIn = (o: ReturnType<typeof owner>, on = true) => ({ ...o, user: { ...o.user, audioVariantDetection: on } });
+
+    const read = async (owners: unknown[], kind: 'movie' | 'episode' = 'movie') => {
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue(owners);
+      prisma.userShow.findMany.mockResolvedValue(owners);
+      prisma.processJob.findUnique.mockResolvedValue(kind === 'movie' ? movieProcessJob() : episodeProcessJob());
+      return (await service.getEncodeJobDetails(kind === 'movie' ? 1 : 2)).audioVariantDetection;
+    };
+
+    it('is true for an opted-in owner with a global es-419 audio preference', async () => {
+      expect(await read([optedIn(owner([], [], 'AUDIO', ['spa'], ['es-419']))])).toBe(true);
+    });
+
+    it('is false for an opted-in owner whose audio languages have no variants', async () => {
+      expect(await read([optedIn(owner([], [], 'AUDIO', ['eng'], ['en']))])).toBe(false);
+    });
+
+    it('is false for an owner who has not opted in, even with es-419', async () => {
+      expect(await read([optedIn(owner([], [], 'AUDIO', ['spa'], ['es-419']), false)])).toBe(false);
+    });
+
+    it('is true when a second owner opted in with es', async () => {
+      const first = optedIn(owner([], [], 'AUDIO', ['eng'], ['en']));
+      const second = optedIn(owner([], [], 'AUDIO', ['spa'], ['es']));
+      expect(await read([first, second])).toBe(true);
+    });
+
+    it('does not let one owner opt in and another supply the language', async () => {
+      const optIn = optedIn(owner([], [], 'AUDIO', ['eng'], ['en']));
+      const language = optedIn(owner([], [], 'AUDIO', ['spa'], ['es-ES']), false);
+      expect(await read([optIn, language])).toBe(false);
+    });
+
+    it('counts a per-title AUDIO es-ES preference', async () => {
+      expect(await read([optedIn(owner(['spa'], ['es-ES'], 'AUDIO'))])).toBe(true);
+    });
+
+    it('does not count a SUBTITLE es-419 preference, per-title or global', async () => {
+      expect(await read([optedIn(owner(['spa'], ['es-419'], 'SUBTITLE'))])).toBe(false);
+      expect(await read([optedIn(owner([], [], 'AUDIO', ['spa'], ['es-419'], 'SUBTITLE'))])).toBe(false);
+    });
+
+    it('is false for a title with no owners', async () => {
+      expect(await read([])).toBe(false);
+    });
+
+    it('reads the same on the episode arm', async () => {
+      expect(await read([optedIn(owner([], [], 'AUDIO', ['spa'], ['es-419']))], 'episode')).toBe(true);
+      expect(await read([], 'episode')).toBe(false);
     });
   });
 
@@ -1771,14 +1836,14 @@ describe('ProcessJobsService', () => {
     // no error anywhere. Only RUNNING may be failed: a QUEUED embed is still in
     // Redis and a COMPLETED one is history.
     describe('subtitle embeds (Spec 101, NFR-3)', () => {
-      it('fails only RUNNING embeds, with the interrupted key and a finishedAt', async () => {
+      it('fails only SYNCING and RUNNING embeds, with the interrupted key and a finishedAt', async () => {
         prisma.processJob.findMany.mockResolvedValue([]);
 
         await service.reconcileOrphanedEncodes();
 
         expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledTimes(1);
         expect(prisma.subtitleEmbed.updateMany).toHaveBeenCalledWith({
-          where: { status: 'RUNNING' },
+          where: { status: { in: ['SYNCING', 'RUNNING'] } },
           data: {
             status: 'FAILED',
             errorKey: ERROR_KEYS.SUBTITLE_EMBED_INTERRUPTED,

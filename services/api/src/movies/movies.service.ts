@@ -11,7 +11,7 @@ import { MediaSearchResult as MediaSearchResultEntity } from '@/media/entities/m
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { TmdbMovie } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
-import { ContentKind as PrismaContentKind, GrainMode as PrismaGrainMode } from '@prisma/client';
+import { ContentKind as PrismaContentKind, GrainMode as PrismaGrainMode, Prisma } from '@prisma/client';
 import { isReleaseWindowClosed } from './release-window';
 import { classifyContentKind } from '@/media/content-kind';
 import { QbittorrentClient, TorrentCategory } from '@/clients/torrent/client';
@@ -166,13 +166,7 @@ export class MoviesService implements MediaTypeService {
   // Spec 005, REQ-3
   async register(tmdbId: number, userId: string): Promise<MediaRef> {
     const existing = await this.prisma.movie.findUnique({ where: { tmdbId } });
-    if (existing) {
-      // Spec 048, REQ-6
-      await this.linkUserToMovie(userId, existing.id);
-      // Spec 034, NFR-3
-      await this.mediaServerReconcile.reconcileMovie(existing.id, tmdbId);
-      return { id: existing.id, type: MEDIA_TYPE.MOVIE };
-    }
+    if (existing) return this.joinRegisteredMovie(existing.id, tmdbId, userId);
 
     const cached = await this.getCachedMovie(tmdbId);
     // 057-content-kind-classification: the single shared top-up — one
@@ -182,37 +176,61 @@ export class MoviesService implements MediaTypeService {
     const isShort = await this.deriveIsShort(topped);
     const contentKind = await this.deriveContentKind(topped);
 
-    const movie = await this.prisma.movie.create({
-      data: {
-        tmdbId: cached.id,
-        title: cached.title,
-        overview: cached.overview,
-        posterUrl: cached.posterUrl ?? undefined,
-        releaseDate:
-          topped.earliestReleaseDate || cached.releaseDate
-            ? new Date((topped.earliestReleaseDate || cached.releaseDate)!)
+    let movie: { id: number };
+    try {
+      movie = await this.prisma.movie.create({
+        data: {
+          tmdbId: cached.id,
+          title: cached.title,
+          overview: cached.overview,
+          posterUrl: cached.posterUrl ?? undefined,
+          releaseDate:
+            topped.earliestReleaseDate || cached.releaseDate
+              ? new Date((topped.earliestReleaseDate || cached.releaseDate)!)
+              : undefined,
+          originalLanguage: cached.originalLanguage,
+          // 075: typed days and TMDB status, only from what the top-up already
+          // fetched; undefined leaves NULL for the sweep. Never catalogClosedAt.
+          theatricalReleaseDate: topped.theatricalReleaseDate
+            ? new Date(topped.theatricalReleaseDate)
             : undefined,
-        originalLanguage: cached.originalLanguage,
-        // 075: typed days and TMDB status, only from what the top-up already
-        // fetched; undefined leaves NULL for the sweep. Never catalogClosedAt.
-        theatricalReleaseDate: topped.theatricalReleaseDate
-          ? new Date(topped.theatricalReleaseDate)
-          : undefined,
-        digitalReleaseDate: topped.digitalReleaseDate
-          ? new Date(topped.digitalReleaseDate)
-          : undefined,
-        physicalReleaseDate: topped.physicalReleaseDate
-          ? new Date(topped.physicalReleaseDate)
-          : undefined,
-        tmdbStatus: topped.tmdbStatus || undefined,
-        isShort,
-        contentKind,
-      },
-    });
+          digitalReleaseDate: topped.digitalReleaseDate
+            ? new Date(topped.digitalReleaseDate)
+            : undefined,
+          physicalReleaseDate: topped.physicalReleaseDate
+            ? new Date(topped.physicalReleaseDate)
+            : undefined,
+          tmdbStatus: topped.tmdbStatus || undefined,
+          isShort,
+          contentKind,
+        },
+      });
+    } catch (error) {
+      // Spec 109, NFR-4
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== 'P2002'
+      ) {
+        throw error;
+      }
+      const raced = await this.prisma.movie.findUnique({ where: { tmdbId } });
+      if (!raced) throw error;
+      return this.joinRegisteredMovie(raced.id, tmdbId, userId);
+    }
 
-    await this.linkUserToMovie(userId, movie.id);
-    await this.mediaServerReconcile.reconcileMovie(movie.id, tmdbId);
-    return { id: movie.id, type: MEDIA_TYPE.MOVIE };
+    return this.joinRegisteredMovie(movie.id, tmdbId, userId);
+  }
+
+  private async joinRegisteredMovie(
+    movieId: number,
+    tmdbId: number,
+    userId: string,
+  ): Promise<MediaRef> {
+    // Spec 048, REQ-6
+    await this.linkUserToMovie(userId, movieId);
+    // Spec 034, NFR-3
+    await this.mediaServerReconcile.reconcileMovie(movieId, tmdbId);
+    return { id: movieId, type: MEDIA_TYPE.MOVIE };
   }
 
   // Spec 039, REQ-9
@@ -236,6 +254,23 @@ export class MoviesService implements MediaTypeService {
       data: { audioMandatory: mandatory },
     });
     return mandatory;
+  }
+
+  // Spec 109, REQ-15
+  async findAutoAcquireFor(userId: string, movieId: number): Promise<boolean> {
+    const row = await this.prisma.userMovie.findUnique({
+      where: { userId_movieId: { userId, movieId } },
+    });
+    return row?.autoAcquire ?? false;
+  }
+
+  // Spec 109, REQ-15
+  async setAutoAcquireFor(userId: string, movieId: number, autoAcquire: boolean): Promise<boolean> {
+    await this.prisma.userMovie.update({
+      where: { userId_movieId: { userId, movieId } },
+      data: { autoAcquire },
+    });
+    return autoAcquire;
   }
 
   // 067-title-removal: how many OTHER users hold this film. Advisory for the

@@ -1,6 +1,7 @@
 // components/Media/MediaCard.tsx
 "use client";
 
+import { Check, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -14,6 +15,7 @@ interface MediaCardProps {
   showTypeBadge?: boolean; // Opt-in: a mixed grid needs it, a single-type grid doesn't
   showMeta?: boolean; // Opt-in: hide title/overview/year when the card renders its own caption
   showShortBadge?: boolean; // Opt-in: only rendered while shorts are effectively enabled
+  showPossession?: boolean;
 }
 
 export function MediaCard({
@@ -24,6 +26,7 @@ export function MediaCard({
   showTypeBadge = false,
   showMeta = true,
   showShortBadge = false,
+  showPossession = false,
 }: MediaCardProps) {
   const t = useTranslations("media.card");
   // Read from the item's own type, never the `mediaType` prop — on a mixed
@@ -55,17 +58,39 @@ export function MediaCard({
         {showTypeBadge && (
           <span
             className={`absolute left-2 top-2 z-10 rounded-full px-2 py-0.5 text-theme-sm font-semibold uppercase text-white ${
-              isShow ? "bg-purple-500" : "bg-brand-500"
+              isShow
+                ? "bg-purple-500/60 [filter:drop-shadow(0_0_1px_var(--color-purple-500))_drop-shadow(0_1px_2px_var(--color-purple-500))]"
+                : "bg-brand-500/60 [filter:drop-shadow(0_0_1px_var(--color-brand-500))_drop-shadow(0_1px_2px_var(--color-brand-500))]"
             }`}
           >
             {isShow ? t("typeShow") : t("typeMovie")}
           </span>
         )}
         {isShort && (
-          <span className="absolute right-2 top-2 z-10 rounded-full bg-amber-500 px-2 py-0.5 text-theme-sm font-semibold uppercase text-white">
+          <span className="absolute right-2 top-2 z-10 rounded-full bg-amber-500/60 [filter:drop-shadow(0_0_1px_var(--color-amber-500))_drop-shadow(0_1px_2px_var(--color-amber-500))] px-2 py-0.5 text-theme-sm font-semibold uppercase text-white">
             {t("typeShort")}
           </span>
         )}
+        {showPossession &&
+          (item.status === "COMPLETED" ? (
+            <span
+              className="absolute bottom-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-success-500/60 text-white [filter:drop-shadow(0_0_1px_var(--color-success-500))_drop-shadow(0_1px_2px_var(--color-success-500))]"
+              title={t("completed")}
+              role="img"
+              aria-label={t("completed")}
+            >
+              <Check className="h-4 w-4" strokeWidth={3} />
+            </span>
+          ) : (
+            <span
+              className="absolute bottom-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-error-500/60 text-white [filter:drop-shadow(0_0_1px_var(--color-error-500))_drop-shadow(0_1px_2px_var(--color-error-500))]"
+              title={t("notCompleted")}
+              role="img"
+              aria-label={t("notCompleted")}
+            >
+              <X className="h-4 w-4" strokeWidth={3} />
+            </span>
+          ))}
         {showLink ? (
           <Link
             href={

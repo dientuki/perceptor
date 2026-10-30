@@ -57,6 +57,9 @@ export const ERROR_SUBTITLE_EMBED_VERIFY_FAILED = 'error.subtitleEmbed.verify_fa
 export const ERROR_SUBTITLE_EMBED_NOT_WRITABLE = 'error.subtitleEmbed.not_writable';
 export const ERROR_SUBTITLE_EMBED_SIDECAR_DELETE_FAILED = 'error.subtitleEmbed.sidecar_delete_failed';
 
+// Spec 113, T009
+export const ERROR_SUBTITLE_EMBED_SYNC_FAILED = 'error.subtitleEmbed.sync_failed';
+
 // Spec 103, REQ-10
 export const ERROR_SUBTITLE_SEARCH_SYNC_FAILED = 'error.subtitleSearch.sync_failed';
 export const ERROR_SUBTITLE_SEARCH_INTERRUPTED = 'error.subtitleSearch.interrupted';

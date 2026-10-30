@@ -843,6 +843,7 @@ describe('SubtitleSearchDriver', () => {
         { addEmbed } as never,
         new ActiveEmbedGuard(prisma as never),
         { request: jest.fn() } as never,
+        {} as never,
       );
       driver = build(real);
 

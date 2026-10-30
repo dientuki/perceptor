@@ -287,6 +287,8 @@ behaviour, only the import path and `t()` namespace changed. The component also 
 renders a small marker near the title instead of hiding any of the reason or the five steps, since
 `/first-step` always shows the whole panel even with a working key.
 
+For admins only, `UserDropdown` carries two new-tab links (indexer, torrent client) whose URLs `(dashboard)/layout.tsx` resolves server-side with the same `resolveServiceUrl` from `getEnvironmentInfo()` (endpoint ids `indexer`/`torrent`; fetch failure resolves to null and hides the item), passed as `indexerUrl`/`torrentUrl` through `AdminShell` -> `AppHeader` -> `UserDropdown`.
+
 `/first-step` (`src/app/(dashboard)/first-step/page.tsx`) is admin-only — `notFound()` from a
 sequential `getCurrentUser()` check *before* the page's `Promise.all`, the same ordering
 `users/page.tsx`/`settings/page.tsx` use to keep a non-admin's request a clean 404 rather than a
@@ -295,8 +297,11 @@ whole setup lives in one place) and adds `IndexerSetupGuide.tsx` (same `onboardi
 sign in to Prowlarr, add an indexer, add a second one tagged `flaresolverr` for a Cloudflare-fronted
 tracker, then confirm from a title's detail page — fed by the new `getIndexerStatus()` action
 (`src/actions/indexer.ts`) and the indexer's URL/port read off `getEnvironmentInfo()`'s `endpoints`
-entry with `id === "indexer"` (`url` linked when non-null, otherwise the bare port with no
-constructed hostname). `IndexerSetupGuide` branches on `reachable` before `configuredIndexers`, so
+entry with `id === "indexer"` (the link is decided by the shared pure `resolveServiceUrl(endpoint, requestHost)` in `lib/request-host.ts`: the endpoint `url` is used only when the admin reached Perceptor by a name — not an IPv4/IPv6 literal or `localhost` — otherwise, and for port > 0, it builds
+`http://<host>:<port>/` server-side from the request's `x-forwarded-host`/`Host` header via
+`lib/request-host.ts`'s `parseRequestHostname`, which validates against a conservative hostname/IPv4/
+bracketed-IPv6 pattern and falls back to `localhost`, so the link works on an IP or any host; the
+bare-port text remains only for port 0). `IndexerSetupGuide` branches on `reachable` before `configuredIndexers`, so
 an unreachable Prowlarr never reads as "zero indexers configured". A short `about` paragraph opens
 the block explaining what an indexer is and why one is needed, before the reachable/zero/count
 notice. The four step screenshots live under `public/images/first-step/` (`indexer-login-2.png`,
@@ -324,6 +329,10 @@ in a popup. Unlike the sidebar entry above, **this one is unconditional**: an ad
 reach the tutorial from here, even once TMDB and every indexer are already configured — a
 deliberate difference from the sidebar (`settings/page.tsx` fetches no `indexerStatus` and
 `TorrentManagerPanel` takes no visibility props for this).
+
+## Choosing indexers in-app (`112-in-app-indexer-setup`)
+
+`src/components/indexers/` holds `IndexerSection.tsx` (Settings → Torrent manager, below the indexer API key field: the configured indexers as the same removable `Badge` chips as the torrent groups, X opens `RemoveIndexerModal` for a confirmation since it deletes in Prowlarr), `AddIndexerButton.tsx` + `AddIndexerModal.tsx` + `IndexerCatalogRow.tsx` (the catalog modal, mounted both in that section and on `/first-step` above the unchanged `IndexerSetupGuide`). Everything is fetched client-side through four result-union actions in `src/actions/indexer.ts` (`getIndexerCatalogAction`, `getConfiguredIndexersAction`, `addIndexerAction`, `removeIndexerAction`), never in a page's `Promise.all`, so an unreachable Prowlarr shows an inline error instead of breaking Settings. The catalog arrives filtered and alphabetical from `api`; `web` neither sorts nor filters it, and the search is a debounced `search` argument. A successful add or remove calls `router.refresh()` so the layout re-reads `indexerStatus` (sidebar entry, `/first-step` notice). No tracker name appears in code or catalogs. Copy lives in `indexers.*` and `errors.indexer.*`.
 
 ## Media type availability (`045-media-type-availability`)
 
@@ -357,6 +366,32 @@ would make saving any unrelated setting silently disable the task for good.
 Enforcement itself is `api`-only and system-wide (no admin bypass); this slice is display and
 routing only, with the three `errors.media.*`/`errors.schedule.*` catalog keys as its backstop for
 the race where an administrator flips a switch between render and submit.
+
+## TMDB lists (`/lists`, `109-tmdb-list-import`)
+
+The sidebar's "Mis listas" entry (`ListVideo`, in `baseNavItems`, every user, never capability-gated)
+leads to `/lists`: `components/lists/TmdbListsSection.tsx` attaches by id or list URL and shows one
+row per list — the name linking to `/lists/<id>`, TMDB's `itemCount` (`—` while `null`), an "Open on
+TMDB" link, the last import through `formatDateTime` behind a `mounted` guard (server and browser
+format local time in different zones, which is a hydration mismatch otherwise), the translated
+`lastError`, and Unlink behind `RemoveTmdbListModal`. A notice shows while
+`mediaCapabilities.listImportEnabled` is false. There is no toast, so a detach
+`error.tmdbList.not_found` refreshes and shows the message inline; `removeTmdbListAction` returns
+`errorKey` for that check. The listing query never selects `movies`/`shows` (field resolvers).
+`/lists/[id]` copies `/movies/[id]`'s param validation, fixed metadata and segment `not-found.tsx`;
+`components/lists/ListTitles.tsx` merges `TmdbList.movies` and `shows`, sorts by title and renders
+`MediaCard` per item with **its own** `mediaType` (the card's link reads the prop, so one prop for a
+mixed grid would send series to `/movies/<id>`), the type badge, the short badge and `showPossession` — a green check over the poster when
+the title's own `status` is `COMPLETED` (the file is there), a red cross otherwise, the one signal on
+a page where every title is already in the library. The four overlay chips (type, short, check,
+cross) share one look: a 75%-opacity background with `backdrop-blur-[2px]`, the text kept opaque. `/preferences` carries nothing of this.
+
+Since 0.3.0 the film and series detail pages render `components/media/AutoAcquireSwitch.tsx` under the
+poster — only while the title's `status` is not `COMPLETED` — bound to the caller's own
+`Movie.autoAcquire`/`Show.autoAcquire` (selected in the detail queries only; they are field
+resolvers). It copies the short switch: `Switch` owns its state, so a refused toggle reverts by
+remounting with a new `key` and shows the translated error inline. `setMovieAutoAcquireAction` and
+`setShowAutoAcquireAction` return `{ success: true } | { error, errorKey? }`.
 
 ## Library file languages (`108-library-track-languages`)
 
@@ -801,6 +836,8 @@ bounds the offset to ±600000 ms and keeps the default checkboxes mutually exclu
 inline and keep the modal open; `stale_listing` closes it and `router.refresh()`es. Refresh is manual,
 never polled. Copy lives in `media.embedSubtitles.*` and `errors.subtitleEmbed.*`.
 
+Since `113`, each sidecar row has an "Automático" checkbox (checked by default) that disables its offset input; the payload sends `autoOffset` and `offsetMs: 0` for it, and the range bound applies to manual rows only. The button treats any status other than `COMPLETED`/`FAILED` as in flight and labels `SYNCING` "Sincronizando subtítulos…" (`media.embedSubtitles.syncing`).
+
 ## Automatic subtitle search (`103-subtitle-search`)
 
 One opt-in switch, disabled unless `mediaCapabilities.subtitleSearchAvailable` is true (Jellyfin is
@@ -821,6 +858,18 @@ manual, never polled.
 latest search is non-terminal. The actions `searchMovieSubtitlesAction`/`searchEpisodeSubtitlesAction`
 return `{ search } | { error, errorKey? }`; `in_progress` also refreshes the page. There is no season or
 series button: the provider's free quota is about 20 downloads a day.
+
+## Audio variant detection preference (`110-audio-variant-detection`)
+
+One opt-in checkbox in `/preferences` (`PreferencesForm.tsx`), `audioVariantDetection`, saved in the
+same batch as the rest of the form through `setAudioVariantDetectionAction` and reverted with the
+translated error key on failure, like `subtitleSearch`. It is always shown but **enabled** only while
+the live audio language selection (`audioTags`, before saving) includes a language whose
+`Language.hasRegionalVariants` is true; otherwise it is disabled with
+`preferences.form.audioVariantDetectionDisabledHint`. Disabling it never clears the stored value: the
+box shows the stored state, greyed. Which languages qualify comes from `api` (`hasRegionalVariants`),
+never from a hardcoded Spanish check in `web`. The verdict itself is never shown; it surfaces only as
+the output track's title.
 
 ## Tests: there are none
 

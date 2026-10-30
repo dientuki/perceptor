@@ -1,9 +1,11 @@
-import { Resolver, Query, Args, Int } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { IndexerService } from './indexer.service';
 import { RankingContextService, SearchTarget } from './ranking-context.service';
 import { TorrentResult } from './entities/torrent-result.entity';
 import { IndexerStatus } from './entities/indexer-status.entity';
+import { IndexerDefinition } from './entities/indexer-definition.entity';
+import { ConfiguredIndexer } from './entities/configured-indexer.entity';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '@/auth/auth.types';
 import { i18nError } from '@/i18n/i18n-error';
@@ -51,5 +53,36 @@ export class IndexerResolver {
   })
   indexerStatus(): Promise<IndexerStatus> {
     return this.indexerService.status();
+  }
+
+  @UseGuards(AdminGuard)
+  @Query(() => [IndexerDefinition], { name: 'indexerCatalog' })
+  indexerCatalog(
+    @Args('search', { type: () => String, nullable: true }) search?: string,
+  ): Promise<IndexerDefinition[]> {
+    return this.indexerService.catalog(search) as Promise<IndexerDefinition[]>;
+  }
+
+  @UseGuards(AdminGuard)
+  @Query(() => [ConfiguredIndexer], { name: 'configuredIndexers' })
+  configuredIndexers(): Promise<ConfiguredIndexer[]> {
+    return this.indexerService.configured();
+  }
+
+  @UseGuards(AdminGuard)
+  @Mutation(() => ConfiguredIndexer, { name: 'addIndexer' })
+  addIndexer(
+    @Args('definitionName', { type: () => String }) definitionName: string,
+  ): Promise<ConfiguredIndexer> {
+    return this.indexerService.add(definitionName);
+  }
+
+  @UseGuards(AdminGuard)
+  @Mutation(() => Boolean, {
+    name: 'removeIndexer',
+    description: 'Removes the indexer from Prowlarr. True on success.',
+  })
+  removeIndexer(@Args('id', { type: () => Int }) id: number): Promise<boolean> {
+    return this.indexerService.remove(id);
   }
 }

@@ -9,6 +9,8 @@ import {
   TmdbMultiSearchResult,
   TmdbMovieKeywords,
   TmdbShowKeywords,
+  TmdbListResponse,
+  TmdbListPage,
 } from './types';
 import { mapMultiSearchResults } from './multi';
 import { mapPopularMovies, mapPopularShows } from './popular';
@@ -118,7 +120,19 @@ export class TmdbClient implements MovieDBClient {
     const res = await fetch(urlPath.toString(), this.options(config.movie_db_api_key));
 
     if (!res.ok) {
-      throw new TmdbHttpError(res.status, `TMDB request failed: ${res.status} ${res.statusText} (${urlPath.toString()})`);
+      let statusCode: number | undefined;
+      try {
+        const body = (await res.json()) as { status_code?: unknown };
+        if (typeof body?.status_code === 'number')
+          statusCode = body.status_code;
+      } catch {
+        statusCode = undefined;
+      }
+      throw new TmdbHttpError(
+        res.status,
+        `TMDB request failed: ${res.status} ${res.statusText} (${urlPath.toString()})`,
+        statusCode,
+      );
     }
 
     return (await res.json()) as T;
@@ -210,6 +224,26 @@ export class TmdbClient implements MovieDBClient {
       }
     }
     return dates;
+  }
+
+  // Spec 109, T003
+  async list(listId: number, page: number): Promise<TmdbListPage> {
+    const data = await this.fetchOne<TmdbListResponse>(
+      `list/${listId}?page=${page}`,
+    );
+    const items: TmdbListPage['items'] = [];
+    for (const row of data.items ?? []) {
+      if (row.media_type === 'movie')
+        items.push({ tmdbId: row.id, mediaType: 'movie' });
+      else if (row.media_type === 'tv')
+        items.push({ tmdbId: row.id, mediaType: 'show' });
+    }
+    return {
+      name: data.name ?? '',
+      itemCount: data.item_count ?? null,
+      totalPages: data.total_pages ?? 1,
+      items,
+    };
   }
 
   async seasonDetails(id: number, seasonNumber: number): Promise<EpisodeDetail[]> {

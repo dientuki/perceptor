@@ -57,6 +57,11 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.MEDIA_SEARCH_UNAVAILABLE]: 'Search is disabled on this system',
   [ERROR_KEYS.MEDIA_SHORTS_DISABLED]: 'Shorts are disabled on this system',
   [ERROR_KEYS.MEDIA_REFRESH_IN_PROGRESS]: 'This title is already being refreshed, try again in a moment',
+  [ERROR_KEYS.TMDB_LIST_INVALID_REFERENCE]: 'Not a TMDB list ID or link.',
+  [ERROR_KEYS.TMDB_LIST_UNREADABLE]:
+    'TMDB could not find the list, or it is not public.',
+  [ERROR_KEYS.TMDB_LIST_ALREADY_ATTACHED]: 'This list is already attached.',
+  [ERROR_KEYS.TMDB_LIST_NOT_FOUND]: 'The list does not exist.',
 
   // magnet parsing
   [ERROR_KEYS.MAGNET_NOT_A_MAGNET]: 'That does not look like a magnet link',
@@ -98,6 +103,13 @@ export const MESSAGES_EN: Record<string, string> = {
     'Configure a media server before syncing the library.',
   [ERROR_KEYS.INDEXER_UNAVAILABLE]: 'Could not reach the indexer',
   [ERROR_KEYS.INDEXER_NO_INFOHASH]: 'Could not resolve an infoHash',
+  [ERROR_KEYS.INDEXER_DEFINITION_NOT_ALLOWED]:
+    "That indexer can't be added from Perceptor.",
+  [ERROR_KEYS.INDEXER_TEST_FAILED]:
+    "The indexer didn't respond to the test. Try again later or add it from Prowlarr.",
+  [ERROR_KEYS.INDEXER_FLARESOLVERR_MISSING]:
+    "FlareSolverr isn't set up in the indexer, so this site can't be reached.",
+  [ERROR_KEYS.INDEXER_NOT_FOUND]: 'That indexer no longer exists.',
   [ERROR_KEYS.SEARCH_TARGET_AMBIGUOUS]: 'Specify a single search target',
 
   // media-sources, process-jobs, downloads
@@ -200,6 +212,20 @@ export const MESSAGES_EN: Record<string, string> = {
     'Subtitles embedded, but the external .srt could not be deleted. Delete it by hand or from Jellyfin.',
   [ERROR_KEYS.SUBTITLE_EMBED_JELLYFIN_REFRESH_FAILED]:
     'Subtitles embedded, but Jellyfin could not be notified. They will appear on its next scan.',
+
+  // Spec 113, REQ-4
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_FAILED]:
+    'The automatic offset of a subtitle could not be computed. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_FRAMERATE_MISMATCH]:
+    'A subtitle is from a release with a different framerate. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_OFFSET_TOO_LARGE]:
+    'A subtitle is too far out of sync to be fixed automatically. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_INCOMPLETE]:
+    'A subtitle only covers part of the file. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_LOW_SCORE]:
+    'A subtitle does not match this file. Try the manual offset. The file was not touched.',
+  [ERROR_KEYS.SUBTITLE_EMBED_SYNC_NOT_FOUND]:
+    'No automatic offset measurement is pending for that subtitle.',
 
   // Spec 103
   [ERROR_KEYS.SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER]:
