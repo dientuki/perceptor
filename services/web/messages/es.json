@@ -248,6 +248,8 @@
   "userMenu": {
     "editProfile": "Editar perfil",
     "preferences": "Preferencias",
+    "indexer": "Indexer",
+    "torrentClient": "Cliente de torrents",
     "signOut": "Cerrar sesión",
     "themeLight": "Modo claro",
     "themeDark": "Modo oscuro"

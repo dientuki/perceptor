@@ -287,6 +287,8 @@ behaviour, only the import path and `t()` namespace changed. The component also 
 renders a small marker near the title instead of hiding any of the reason or the five steps, since
 `/first-step` always shows the whole panel even with a working key.
 
+For admins only, `UserDropdown` carries two new-tab links (indexer, torrent client) whose URLs `(dashboard)/layout.tsx` resolves server-side with the same `resolveServiceUrl` from `getEnvironmentInfo()` (endpoint ids `indexer`/`torrent`; fetch failure resolves to null and hides the item), passed as `indexerUrl`/`torrentUrl` through `AdminShell` -> `AppHeader` -> `UserDropdown`.
+
 `/first-step` (`src/app/(dashboard)/first-step/page.tsx`) is admin-only — `notFound()` from a
 sequential `getCurrentUser()` check *before* the page's `Promise.all`, the same ordering
 `users/page.tsx`/`settings/page.tsx` use to keep a non-admin's request a clean 404 rather than a
@@ -295,7 +297,7 @@ whole setup lives in one place) and adds `IndexerSetupGuide.tsx` (same `onboardi
 sign in to Prowlarr, add an indexer, add a second one tagged `flaresolverr` for a Cloudflare-fronted
 tracker, then confirm from a title's detail page — fed by the new `getIndexerStatus()` action
 (`src/actions/indexer.ts`) and the indexer's URL/port read off `getEnvironmentInfo()`'s `endpoints`
-entry with `id === "indexer"` (`url` wins when non-null, i.e. under Traefik; otherwise the page builds
+entry with `id === "indexer"` (the link is decided by the shared pure `resolveServiceUrl(endpoint, requestHost)` in `lib/request-host.ts`: the endpoint `url` is used only when the admin reached Perceptor by a name — not an IPv4/IPv6 literal or `localhost` — otherwise, and for port > 0, it builds
 `http://<host>:<port>/` server-side from the request's `x-forwarded-host`/`Host` header via
 `lib/request-host.ts`'s `parseRequestHostname`, which validates against a conservative hostname/IPv4/
 bracketed-IPv6 pattern and falls back to `localhost`, so the link works on an IP or any host; the

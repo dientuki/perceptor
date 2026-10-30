@@ -10,7 +10,7 @@ import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import AddIndexerButton from "@/components/indexers/AddIndexerButton";
 import IndexerSetupGuide from "@/components/onboarding/IndexerSetupGuide";
 import TmdbKeyOnboarding from "@/components/onboarding/TmdbKeyOnboarding";
-import { parseRequestHostname } from "@/lib/request-host";
+import { parseRequestHostname, resolveServiceUrl } from "@/lib/request-host";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("pages.firstStep");
@@ -49,9 +49,7 @@ export default async function FirstStepPage() {
     requestHeaders.get("host"),
   );
   // Spec 112, first-step indexer link
-  const indexerUrl =
-    indexerEndpoint?.url ??
-    (indexerPort > 0 ? `http://${host}:${indexerPort}/` : null);
+  const indexerUrl = resolveServiceUrl(indexerEndpoint, host);
 
   return (
     <div>

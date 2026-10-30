@@ -11,3 +11,29 @@ export function parseRequestHostname(
 
   return match?.[1] ?? "localhost";
 }
+
+const IPV4_HOST = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+
+export function resolveServiceUrl(
+  endpoint: { url: string | null; port: number | null } | null | undefined,
+  requestHost: string,
+): string | null {
+  if (!endpoint) {
+    return null;
+  }
+
+  const byName =
+    !requestHost.startsWith("[") &&
+    !IPV4_HOST.test(requestHost) &&
+    requestHost.toLowerCase() !== "localhost";
+
+  if (byName && endpoint.url) {
+    return endpoint.url;
+  }
+
+  if (endpoint.port !== null && endpoint.port > 0) {
+    return `http://${requestHost}:${endpoint.port}/`;
+  }
+
+  return endpoint.url ?? null;
+}

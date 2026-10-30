@@ -12,9 +12,16 @@ import type { MediaCapabilities } from "@/types/media";
 interface AppHeaderProps {
   user: CurrentUser;
   capabilities: MediaCapabilities;
+  indexerUrl: string | null;
+  torrentUrl: string | null;
 }
 
-const AppHeader: React.FC<AppHeaderProps> = ({ user, capabilities }) => {
+const AppHeader: React.FC<AppHeaderProps> = ({
+  user,
+  capabilities,
+  indexerUrl,
+  torrentUrl,
+}) => {
   const t = useTranslations("header");
   const router = useRouter();
 
@@ -98,7 +105,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({ user, capabilities }) => {
           </div>
         </form>
 
-        <UserDropdown user={user} />
+        <UserDropdown
+          user={user}
+          indexerUrl={indexerUrl}
+          torrentUrl={torrentUrl}
+        />
       </div>
     </header>
   );

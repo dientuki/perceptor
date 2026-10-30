@@ -1,10 +1,12 @@
 "use client";
 import {
+  Binoculars,
   LogOut,
   Moon,
   SlidersHorizontal,
   Sun,
   UserPen,
+  UsersCollaboration,
 } from "lucide-react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
@@ -19,9 +21,15 @@ import { useTheme } from "@/context/ThemeContext";
 
 interface UserDropdownProps {
   user: CurrentUser;
+  indexerUrl: string | null;
+  torrentUrl: string | null;
 }
 
-export default function UserDropdown({ user }: UserDropdownProps) {
+export default function UserDropdown({
+  user,
+  indexerUrl,
+  torrentUrl,
+}: UserDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const t = useTranslations("userMenu");
@@ -109,6 +117,38 @@ export default function UserDropdown({ user }: UserDropdownProps) {
             </DropdownItem>
           </li>
         </ul>
+        {user.isAdmin && (indexerUrl || torrentUrl) && (
+          <ul className="flex flex-col gap-1 py-3 border-b border-gray-200 dark:border-gray-800">
+            {indexerUrl && user.isAdmin && (
+              <li>
+                <a
+                  href={indexerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={closeDropdown}
+                  className="flex min-h-11 items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300 md:min-h-0"
+                >
+                  <Binoculars size={18} />
+                  {t("indexer")}
+                </a>
+              </li>
+            )}
+            {torrentUrl && user.isAdmin && (
+              <li>
+                <a
+                  href={torrentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={closeDropdown}
+                  className="flex min-h-11 items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300 md:min-h-0"
+                >
+                  <UsersCollaboration size={18} />
+                  {t("torrentClient")}
+                </a>
+              </li>
+            )}
+          </ul>
+        )}
         <form action={logoutAction}>
           <button
             type="submit"
