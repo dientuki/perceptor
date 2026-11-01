@@ -1,4 +1,4 @@
-FROM lscr.io/linuxserver/prowlarr:2.6.5
+FROM lscr.io/linuxserver/prowlarr:2.7.0
 
 # jq edits the JSON of /api/v1/config/host; curl already ships in the base image
 # (docker-compose.yaml's healthcheck uses it).

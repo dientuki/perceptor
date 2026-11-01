@@ -1,4 +1,4 @@
-FROM lscr.io/linuxserver/qbittorrent:5.2.4
+FROM lscr.io/linuxserver/qbittorrent:5.3.0
 
 # A save path backed by a volume.
 # It goes into the image's defaults: init-qbittorrent-config copies them to /config

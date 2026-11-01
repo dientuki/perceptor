@@ -1,7 +1,7 @@
 # ==========================================
 # 0. WHISPER: whisper.cpp CLI and its model (this stage is never published)
 # ==========================================
-FROM node:26.10.0-alpine AS whisper
+FROM node:26.13.0-alpine AS whisper
 RUN apk add --no-cache build-base cmake git curl
 ARG WHISPER_CPP_TAG=v1.9.5
 ARG WHISPER_MODEL_REV=5359861c739e955e79d9a303bcbc70fb988958b1
@@ -23,7 +23,7 @@ RUN curl -fsSL -o /out/ggml-small-q5_1.bin \
 # ==========================================
 # 1. BASE: shared environment (Alpine + FFmpeg + libc6)
 # ==========================================
-FROM node:26.10.0-alpine AS base
+FROM node:26.13.0-alpine AS base
 # FFmpeg and the compatibility libraries the worker needs.
 # mkvtoolnix: mkvmerge for the final remux (see src/ffmpeg/runner.ts).
 RUN apk add --no-cache ffmpeg mkvtoolnix libc6-compat
