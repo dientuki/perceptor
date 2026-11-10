@@ -31,17 +31,24 @@ export class SubtitleSearchService {
   ) {}
 
   // Spec 103, REQ-13
-  async latestForMovie(movieId: number): Promise<SubtitleSearch | null> {
-    return this.latest({ movieId });
+  async latestForMovie(
+    movieId: number,
+    fileLanguages: string[] | null = null,
+  ): Promise<SubtitleSearch | null> {
+    return this.latest({ movieId }, fileLanguages);
   }
 
   // Spec 103, REQ-13
-  async latestForEpisode(episodeId: number): Promise<SubtitleSearch | null> {
-    return this.latest({ episodeId });
+  async latestForEpisode(
+    episodeId: number,
+    fileLanguages: string[] | null = null,
+  ): Promise<SubtitleSearch | null> {
+    return this.latest({ episodeId }, fileLanguages);
   }
 
   private async latest(
     where: { movieId: number } | { episodeId: number },
+    fileLanguages: string[] | null = null,
   ): Promise<SubtitleSearch | null> {
     const row = await this.prisma.subtitleSearch.findFirst({
       where,
@@ -54,7 +61,7 @@ export class SubtitleSearchService {
       id: row.id,
       status: row.status as SubtitleSearchStatus,
       errorKey: row.status === 'FAILED' ? row.errorKey : null,
-      languages: deriveLanguages(row, row.attempts),
+      languages: deriveLanguages(row, row.attempts, fileLanguages),
       createdAt: row.createdAt,
       finishedAt: row.finishedAt,
     };
@@ -128,7 +135,9 @@ export class SubtitleSearchService {
   }
 
   // Spec 103, REQ-10
-  private async readLastCueEnd(stagedPath: string | null): Promise<number | null> {
+  private async readLastCueEnd(
+    stagedPath: string | null,
+  ): Promise<number | null> {
     if (!stagedPath) return null;
     try {
       return lastCueEndMs(await readFile(stagedPath, 'utf8'));

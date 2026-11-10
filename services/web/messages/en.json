@@ -577,7 +577,8 @@
       "outcome": {
         "PENDING": "Pending",
         "ALREADY_PRESENT": "Already present",
-        "EMBEDDED": "Embedded",
+        "RESOLVED": "Resolved",
+        "MISSING": "Missing from file",
         "NOT_FOUND": "Not found",
         "REJECTED": "Rejected",
         "FAILED": "Failed"
@@ -939,7 +940,7 @@
   },
   "contentKind": {
     "LIVE_ACTION": "Live action",
-    "ANIME": "Anime",
+    "ANIME": "Anime/Cartoon",
     "CGI": "CGI / 3D animation"
   },
   "grainMode": {
@@ -1025,25 +1026,19 @@
     },
     "indexer": {
       "title": "Set up an indexer",
-      "about": "Indexers are the torrent sites Prowlarr searches for you — every title search in Perceptor asks Prowlarr, and Prowlarr asks every indexer you've added. With none configured, a search finds nothing no matter how popular the title is; that's the whole reason this page exists.",
+      "about": "Indexers are the torrent sites Perceptor searches for releases. With none configured, a search finds nothing no matter how popular the title is — that's the whole reason this page exists. You add them right here, without leaving Perceptor.",
       "unreachable": "The indexer could not be reached.",
       "zeroNotice": "No indexer is configured yet. Every release search will return nothing until you add one.",
       "countNotice": "{count, plural, one {# indexer is configured.} other {# indexers are configured.}}",
       "stepsTitle": "How to add one",
-      "step1": "Open the indexer's web UI.",
-      "step1LinkLabel": "Open Prowlarr",
-      "step1PortOnly": "Available at port {port} (no domain is configured for it).",
-      "step2": "Sign in with the same username and password as Perceptor's administrator account — one login serves Perceptor, the torrent client and the indexer.",
-      "step2ImageAlt": "Prowlarr's sign-in screen",
-      "step3": "Browse the list that opens. Filter Privacy to \"Public\" (no account needed, easiest to start with) and Categories to \"Movies\" or \"TV\" to narrow it down to trackers that actually carry what you search for in Perceptor.",
-      "step3ImageAlt": "Prowlarr's \"Add Indexer\" list filtered to Public trackers for Movies",
-      "step4": "Click the orange \"Add Indexer\" button in the top-left toolbar. Type a public tracker's name (for example \"1337x\") into the search box that opens, click the matching row to open its settings, then click \"Test\" and \"Save\" at the bottom of that dialog.",
-      "step4ImageAlt": "Prowlarr's \"Add Indexer\" dialog with Test and Save buttons",
-      "step5": "Click \"Add Indexer\" again for a tracker that sits behind Cloudflare. In the same settings dialog, scroll down to the \"Tags\" field, click it, type flaresolverr and pick the existing tag from the suggestions that appear — that's what routes this indexer's requests through the in-stack FlareSolverr proxy, already set up for you. Then click \"Test\" and \"Save\" as before.",
-      "step5ImageAlt": "Prowlarr's \"Add Indexer\" dialog with the flaresolverr tag added in the Tags field",
-      "step6": "Return to Perceptor and search a title from its detail page — releases now appear.",
-      "apiKeyNote": "You don't need to copy the indexer API key anywhere — the installer already wired it in.",
-      "viewFullSize": "View full size"
+      "step1": "Click \"Add indexer\" above.",
+      "step2": "Search the catalog by name. It lists only public torrent sites that carry films or series, so none of them needs an account.",
+      "step3": "Click \"Add\" on a site. Perceptor tests it before saving it; if the test fails, the reason shows on that row — pick another one.",
+      "step4": "Add two or three for better coverage. A site behind Cloudflare is routed through the built-in FlareSolverr proxy automatically; it may just be slower.",
+      "step5": "Return to a title's detail page and search — releases now appear.",
+      "privateNote": "Trackers that need an account are not in the catalog; add those in the indexer itself.",
+      "privateLinkLabel": "Open Prowlarr",
+      "privatePortOnly": "It is available at port {port} (no domain is configured for it)."
     }
   },
   "offline": {

@@ -266,6 +266,16 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   service-only mutation: it moves a `READY` source and its film/episode to `ERROR` through the same
   `markScanFailed` the empty-match branch of `sourceScanned` uses, and answers `true` for a source
   that is missing or no longer `READY`.
+- **`media-sources/` scan retry (`116-season-scan-write-conflict`)** — `sourceScanned`'s interactive
+  transaction runs up to `SCAN_MAX_ATTEMPTS` (3, first attempt included) times, and only when
+  `isSnapshotWriteConflict` (`src/prisma/write-conflict.ts`) says so: a `PrismaClientKnownRequestError`
+  `P2039` whose `meta.driverAdapterError.cause.originalCode` is `'1020'` (MariaDB 12's
+  `innodb_snapshot_isolation=ON` rejecting a read or foreign-key check of a row changed after the
+  snapshot). Not `P2034`: Prisma 7's MariaDB adapter maps only deadlock 1213 to it, and retrying
+  deadlocks is a separate decision. The per-attempt state (`processJobIdsToQueue`,
+  `episodeIdsToRecompute`, `scanFailedTarget`) is created inside `scanTransaction` and returned, never
+  hoisted: a rolled-back attempt must leave nothing to enqueue. Exhaustion rethrows the error
+  unchanged, so the worker still reports `error.source.scan_failed`.
 - **`media-sources/`** — the `MediaSource` row representing one acquisition attempt. `sourceScanned`
   takes `matches: [ScannedMatchInput!]!`, one entry per file the worker resolved (a film or single
   episode reports exactly one, both numbers `null`). The service loads the source with its season's
@@ -308,6 +318,10 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `AttachSourceService.attach()` directly from each public method, with no wrapper of its own.
   `AcquisitionModule` (imports `SettingsModule`, `DownloadsModule`) is what the three domain modules
   import instead of each owning its own copy of this logic.
+- **`seasons/` ordering (`116-season-scan-write-conflict`)** — `finishSeasonUpload` completes
+  `titleStatus.recomputeSeason` before `queue.addSourceReady`, like the film and episode upload paths.
+  The recompute rewrites every episode of the season; run after the enqueue, it raced the worker's
+  scan transaction and MariaDB aborted the scan with 1020. Never move it back behind the enqueue.
 - **`seasons/`** — same collapse as `episodes/` above: no private attach body of its own. Two
   mutations as of `059-season-pack-acquisition-ui` — `addMagnetToSeason(seasonId, magnet, force)`
   and `addTorrentToSeason(seasonId, infoHash, urls, releaseTitle, force)` (twin of
@@ -434,6 +448,11 @@ types in `entities/` and inputs in `dto/`. Follow the neighbours.
   `to` turned into an exclusive UTC bound once, at most 62 days. The per-episode status comes from
   `deriveEpisodeStatus` in `pipeline-status/`, extracted from `ShowsService.deriveSeasonEpisodeStatuses`
   so the calendar and the detail page can never disagree on an episode. Since `093-movie-release-dates-display`, a film is no longer one entry on `releaseDate`: `movie-release-days.ts` (pure, beside `group-episodes.ts`) expands it into one entry per distinct in-range day among its three typed dates, each tagged with `releaseTypes` (fixed order theatrical, digital, physical; `[]` for the fallback; `null` on episodes). Typed dates win — a film with at least one is never also listed on `releaseDate` — and the fallback applies only when all three are `NULL`. `MoviesService.findReleasedBetween` is an `OR` over `releaseDate` and the three typed columns, so the range stays bounded; `(mediaId, date)` is unique per film entry.
+- **`downloads/` scan resume ordering (`116-season-scan-write-conflict`)** — Play on a source whose
+  failed stage is `SCAN` recomputes the target inside `resumeScanStage`, after `removeSourceReady` and
+  before `addSourceReady`, and `resumeErroredSource` skips its trailing `recomputeStatus` only when
+  that returned `true`; the ENCODE and DOWNLOAD stages keep the trailing recompute. A recompute that
+  throws there rolls the source back to `ERROR` with `retry_enqueue_failed`, like an enqueue failure.
 - **`downloads/`** — `torrentCompleted`, called by qBittorrent's AutoRun hook. Matches **exclusively
   by infoHash** and silently ignores unknown hashes by design. An episode-owned source moves its
   `Episode` to `ENCODING` just as a movie-owned one does; a source already `ERROR` (superseded by a

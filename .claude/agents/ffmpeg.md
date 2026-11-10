@@ -79,7 +79,7 @@ add the spelling and name the case that forced it.
 
 - **V1.** No video stream is a hard failure: `error.encode.no_video_stream`.
 - **V2 (`058-compression-resolution`).** Every recognized codec — `h264`, `hevc`/`h265`, `vc1`,
-  `av1` — is transcoded to AV1, whether or not it is downscaled. The administrator's
+  `mpeg2video`, `av1` — is transcoded to AV1, whether or not it is downscaled. `mpeg1video`, `mpeg4`/`msmpeg4*`, `vp8`, `vp9` and `wmv3` are not recognized (V5). The administrator's
   `compression_resolution` setting (`EncodeJobDetails.compressionResolution`, one of `4k` / `1080p`
   / `720p` / `480p` / `360p`) names a bounding box the output must fit — `4k` none, `1080p`
   1920×1080, `720p` 1280×720, `480p` 854×480, `360p` 640×360 — and a source is downscaled only when
@@ -95,20 +95,40 @@ add the spelling and name the case that forced it.
   -color_primaries bt2020 -color_trc smpte2084`; HLG writes the same `bt2020nc`/`bt2020` pair but
   `-color_trc arib-std-b67` — its own form, no longer mislabelled as HDR10's `smpte2084`. SDR now
   gets explicit `-color_range tv -colorspace bt709 -color_primaries bt709 -color_trc bt709` on
-  **every** AV1 encode, not only VC-1 and 4K SDR as before.
+  **every** AV1 encode, not only VC-1 and 4K SDR as before. **SD BT.601 (`115`, case `6.json`).**
+  Inside the SDR outcome, a source is SD BT.601 and keeps BT.601 tags instead of `bt709` when any of
+  its primaries, matrix or transfer is tagged `bt470bg` (PAL: `-color_range tv -colorspace bt470bg
+  -color_primaries bt470bg -color_trc gamma28`) or `smpte170m` (NTSC: `-color_range tv -colorspace
+  smpte170m -color_primaries smpte170m -color_trc smpte170m`); the checks run primaries, then matrix,
+  then transfer, and the first BT.601 tag found decides, so a PAL tag outranks an NTSC one only by
+  that order. When all three are absent, `unknown` or `unspecified` and the height is at most 576,
+  the set is PAL at exactly 576 lines with a 25 fps `avg_frame_rate` (parsed as a rational) and NTSC
+  otherwise. Every other SDR source, including an untagged one taller than 576 and one explicitly
+  tagged `bt709` at any height, keeps the `bt709` set. HDR forms are unaffected.
 - **V4 (copy fallback #1, `058`).** An AV1 source that fits its box (V2's tolerance) is stream-copied,
   never re-encoded — re-encoding AV1 to AV1 only loses quality. An AV1 source that exceeds the box is
   re-encoded and downscaled like any other recognized codec.
 - **V5 (copy fallback #2, `058`).** A codec outside V2's recognized list is stream-copied at its own
   resolution, even when it exceeds the box, and the worker logs the codec and, only when the box
   would have applied, that the ceiling was not applied. It never fails the encode. The copy title
-  stays `Video (Direct Copy)`.
+  stays `Video (Direct Copy)`. The standing example is `mpeg4` (Xvid); MPEG-2 is recognized since
+  `115` and no longer falls here.
 - **V6 (track title, `058`).** The AV1 track title always starts with plain `AV1`, never a target
   tier: unscaled it is `AV1 (Converted from <CODEC> <HDR>)` (e.g. `AV1 (Converted from H264 SDR)`);
   downscaled it is `AV1 (Downscaled from <SOURCE> <CODEC> <HDR>)` (e.g.
   `AV1 (Downscaled from 4K HEVC DoVi)`), where `<SOURCE>` is the smallest tier box (`360p`…`1080p`,
   else `4K`) the source fits within tolerance — a label of where it came from, never where it is
-  going. `<CODEC>` is `H264`/`HEVC`/`VC-1`/`AV1`; `<HDR>` is `DoVi`/`HDR10`/`HLG`/`SDR`.
+  going. `<CODEC>` is `H264`/`HEVC`/`VC-1`/`MPEG-2`/`AV1`; `<HDR>` is `DoVi`/`HDR10`/`HLG`/`SDR`.
+- **V7 (`115-sd-mpeg2-encode`, case `6.json`).** Deinterlace and display aspect, both on the AV1
+  encode path only (never the copy path), both from the parsed `ffprobe` of the first video stream.
+  Deinterlace: `field_order` `tt`/`bt` maps to parity `tff`, `bb`/`tb` to `bff`; `progressive`,
+  `unknown` or absent adds nothing and leaves the command exactly as before. The filter is
+  `bwdif=mode=send_frame:parity=<p>:deint=interlaced` (one output frame per input frame, only frames
+  flagged interlaced are touched) and it is the first step of the single `-vf`, so it runs before the
+  V2 scale: `bwdif=…,scale=…`. Aspect: when `sample_aspect_ratio` and `display_aspect_ratio` are both
+  present and the SAR is more than 1% from square (`1:1` and roundings such as `1385:1384` are
+  square), `-aspect <display_aspect_ratio>` is written after `-pix_fmt`, so an anamorphic 720×576
+  source keeps 16:9.
 
 Proven by `src/ffmpeg/params.spec.ts`'s synthetic-stream matrix (every tier × below/at/+2%/+2%+1px
 per dimension, every recognized codec, HDR form, and both title shapes), not by the corpus: the
@@ -142,6 +162,14 @@ later, separate pass.
   shipped files with the wrong audio and reported success. No case in the corpus currently exercises
   the `throws` path — the one that did (`7.json`) was retired (REQ-8 of `024`).
 - **A6.** A missing track in any *other* allowed language is logged and skipped, not an error.
+- **A7 (`115`, case `6.json`).** A selected track whose `codec_name` is `opus` is stream-copied
+  (`-map 0:<index> -c:a:<n> copy`) and never re-encoded: no `-vbr`, `-b`, `-filter` or
+  `-mapping_family` is written for it, so channels, layout and bitrate stay the source's. It still
+  gets the language tag and a regenerated title, `<Language title> Surround 7.1|Surround 5.1|Stereo
+  (Opus)` from its own channel count and the L2 table (variants included); the source's title is
+  never kept. Selection is untouched: A3's ranking still decides, so an Opus track is copied only
+  when A1–A4 pick it, and a language with both Opus and AC3 selects and encodes the AC3. Every
+  non-Opus track keeps the `libopus` encode, whatever the video decision.
 
 ### Subtitles
 

@@ -188,10 +188,10 @@ export class SeasonsService {
     });
     if (count === 0) throw i18nError.conflict(ERROR_KEYS.UPLOAD_SESSION_NOT_OPEN);
 
-    await this.queue.addSourceReady({ mediaSourceId });
-
-    // Spec 089, REQ-13
+    // Spec 116, REQ-1
     await this.titleStatus.recomputeSeason(seasonId);
+
+    await this.queue.addSourceReady({ mediaSourceId });
 
     return this.findSeasonWithEpisodes(seasonId);
   }

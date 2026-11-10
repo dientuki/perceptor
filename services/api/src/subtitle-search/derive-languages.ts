@@ -48,11 +48,37 @@ const PAST_SEARCHING = ['VALIDATING', 'EMBEDDING', 'COMPLETED'];
 export function deriveLanguages(
   search: SearchRow,
   attempts: AttemptRow[],
+  fileLanguages: string[] | null = null,
 ): SubtitleSearchLanguage[] {
+  const inFile =
+    fileLanguages === null ? null : new Set(asStrings(fileLanguages));
+  const terminal = search.status === 'COMPLETED' || search.status === 'FAILED';
   const present = new Set(asStrings(search.presentLanguages));
   const languageErrors = errorKeys(search.languageErrors);
 
   return asStrings(search.wantedLanguages).map((languageIso3) => {
+    const derived = deriveLanguage(languageIso3);
+    // Spec 114, REQ-1
+    if (inFile === null || !terminal) return derived;
+    if (inFile.has(languageIso3)) {
+      return {
+        languageIso3,
+        outcome: present.has(languageIso3)
+          ? Outcome.ALREADY_PRESENT
+          : Outcome.RESOLVED,
+        reasonKey: null,
+      };
+    }
+    if (
+      derived.outcome === Outcome.RESOLVED ||
+      derived.outcome === Outcome.ALREADY_PRESENT
+    ) {
+      return { languageIso3, outcome: Outcome.MISSING, reasonKey: null };
+    }
+    return derived;
+  });
+
+  function deriveLanguage(languageIso3: string): SubtitleSearchLanguage {
     const result = (outcome: Outcome, reasonKey: string | null = null) => ({
       languageIso3,
       outcome,
@@ -81,7 +107,7 @@ export function deriveLanguages(
       return result(Outcome.FAILED, search.errorKey);
     }
     return derived;
-  });
+  }
 }
 
 function deriveOne(
@@ -93,7 +119,7 @@ function deriveOne(
   ) => SubtitleSearchLanguage,
 ): SubtitleSearchLanguage {
   if (own.some((attempt) => attempt.status === 'ACCEPTED')) {
-    if (search.status === 'COMPLETED') return result(Outcome.EMBEDDED);
+    if (search.status === 'COMPLETED') return result(Outcome.RESOLVED);
     if (search.status === 'FAILED') {
       return result(Outcome.FAILED, search.errorKey);
     }

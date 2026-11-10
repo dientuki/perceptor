@@ -577,7 +577,8 @@
       "outcome": {
         "PENDING": "Pendiente",
         "ALREADY_PRESENT": "Ya estaba",
-        "EMBEDDED": "Incrustado",
+        "RESOLVED": "Resuelto",
+        "MISSING": "Falta en el archivo",
         "NOT_FOUND": "No encontrado",
         "REJECTED": "Rechazado",
         "FAILED": "Falló"
@@ -939,7 +940,7 @@
   },
   "contentKind": {
     "LIVE_ACTION": "Live action",
-    "ANIME": "Anime",
+    "ANIME": "Anime/Dibujos",
     "CGI": "CGI / Animación 3D"
   },
   "grainMode": {
@@ -1025,25 +1026,19 @@
     },
     "indexer": {
       "title": "Configurá un indexer",
-      "about": "Los indexers son los sitios de torrents que Prowlarr consulta por vos — cada búsqueda de un título en Perceptor le pregunta a Prowlarr, y Prowlarr le pregunta a cada indexer que agregaste. Sin ninguno configurado, una búsqueda no encuentra nada por más popular que sea el título; para eso existe esta página.",
+      "about": "Los indexers son los sitios de torrents donde Perceptor busca releases. Sin ninguno configurado, una búsqueda no encuentra nada por más popular que sea el título — para eso existe esta página. Se agregan acá mismo, sin salir de Perceptor.",
       "unreachable": "No se pudo contactar al indexer.",
       "zeroNotice": "Todavía no hay ningún indexer configurado. Ninguna búsqueda de releases va a devolver resultados hasta que agregues uno.",
       "countNotice": "{count, plural, one {Hay # indexer configurado.} other {Hay # indexers configurados.}}",
       "stepsTitle": "Cómo agregar uno",
-      "step1": "Abrí la interfaz web del indexer.",
-      "step1LinkLabel": "Abrir Prowlarr",
-      "step1PortOnly": "Disponible en el puerto {port} (no tiene un dominio configurado).",
-      "step2": "Iniciá sesión con el mismo usuario y contraseña que la cuenta de administrador de Perceptor — un solo login sirve para Perceptor, el cliente de torrents y el indexer.",
-      "step2ImageAlt": "Pantalla de inicio de sesión de Prowlarr",
-      "step3": "Recorré la lista que se abre. Filtrá Privacy en \"Public\" (no hace falta cuenta, es lo más fácil para empezar) y Categories en \"Movies\" o \"TV\" para acotarla a los trackers que realmente tienen lo que buscás en Perceptor.",
-      "step3ImageAlt": "Lista \"Add Indexer\" de Prowlarr filtrada a trackers públicos de Movies",
-      "step4": "Hacé clic en el botón naranja \"Add Indexer\" de la barra superior izquierda. Escribí el nombre de un indexer público (por ejemplo \"1337x\") en el buscador que aparece, hacé clic en la fila que coincide para abrir su configuración, y después clic en \"Test\" y \"Save\" al pie de ese diálogo.",
-      "step4ImageAlt": "Diálogo \"Add Indexer\" de Prowlarr con los botones Test y Save",
-      "step5": "Hacé clic de nuevo en \"Add Indexer\", esta vez para un tracker que está detrás de Cloudflare. En el mismo diálogo de configuración, bajá hasta el campo \"Tags\", hacé clic ahí, escribí flaresolverr y elegí la tag que ya existe entre las sugerencias — eso enruta los pedidos de ese indexer a través del proxy de FlareSolverr que ya corre en el stack. Después clic en \"Test\" y \"Save\" igual que antes.",
-      "step5ImageAlt": "Diálogo \"Add Indexer\" de Prowlarr con la tag flaresolverr agregada en el campo Tags",
-      "step6": "Volvé a Perceptor y buscá un título desde su página de detalle — ahora aparecen releases.",
-      "apiKeyNote": "No hace falta que copies la clave de API del indexer a ningún lado — el instalador ya la configuró.",
-      "viewFullSize": "Ver tamaño completo"
+      "step1": "Hacé clic en \"Agregar indexer\", arriba.",
+      "step2": "Buscá en el catálogo por nombre. Solo lista sitios de torrents públicos que tienen películas o series, así que ninguno necesita cuenta.",
+      "step3": "Hacé clic en \"Agregar\" en un sitio. Perceptor lo prueba antes de guardarlo; si la prueba falla, el motivo aparece en esa fila — elegí otro.",
+      "step4": "Agregá dos o tres para tener mejor cobertura. Un sitio detrás de Cloudflare pasa automáticamente por el proxy de FlareSolverr incluido; solo puede ser más lento.",
+      "step5": "Volvé a la página de detalle de un título y buscá — ahora aparecen releases.",
+      "privateNote": "Los trackers que necesitan cuenta no están en el catálogo; esos se agregan desde el indexer.",
+      "privateLinkLabel": "Abrir Prowlarr",
+      "privatePortOnly": "Está disponible en el puerto {port} (no tiene un dominio configurado)."
     }
   },
   "offline": {

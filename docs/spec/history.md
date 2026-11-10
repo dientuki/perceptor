@@ -23,6 +23,27 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-11-07 — `116-season-scan-write-conflict`
+
+`api` only; no Prisma migration, no GraphQL contract change (`schema.gql` untouched).
+
+- `api` typecheck: 0 errors. Suite: 98 suites, 1665 tests: 96 suites / 1645 tests pass; `auth/session.service.spec.ts` and `uploads/upload-tickets.service.spec.ts` fail (20 tests) because they need a real Redis this host lacks, the same two as in the `113` entry, files untouched by this feature. The five touched suites (`seasons`, `downloads`, `media-sources`, `prisma/write-conflict`) pass.
+- Test-first (AC-1): before any production change, 4 new cases failed and `write-conflict.spec.ts` failed to load; the two "no retry" cases passed already, as they should.
+- Fault injection (AC-2/5/6): each reverted rule turned its test red: recompute after the enqueue (a), trailing recompute for `SCAN` (b), per-attempt state shared across attempts (c), `SCAN_MAX_ATTEMPTS = 1` (c, d), classifier widened to any `P2039` (`write-conflict.spec.ts`).
+- `bin/comments api`: PASS (1350 locators resolved). Two test headers lost their prose to satisfy the gate, which allows prose only above a `describe(`.
+- Measured from a throwaway `node:26.10.0-alpine` container as uid 1000 with `NODE_OPTIONS=--experimental-vm-modules` (the `24.18.0` image in `tasks.md` cannot load the ESM suite), not through `bin/`; `bin/comments` ran through its wrapper.
+- Not observed: AC-3 and AC-7 (a real season upload on a stack running this checkout) and AC-4 (Play on production source 422): this host runs the production install.
+
+## 2026-10-31 — `115-sd-mpeg2-encode`
+
+`worker` only; no Prisma migration, no GraphQL contract change (`schema.gql` untouched).
+
+- `worker` typecheck: 0 errors. Suite: 61 files, 801 tests passed (was 772 after 113): new `params.spec.ts` cases for MPEG-2 recognition, deinterlace parity, SD BT.601 colour, anamorphic `-aspect` and the Opus copy; new corpus case `ffmpeg/6.json` (a real PAL DVD rip). `bin/comments worker`: PASS (429 locators).
+- Two older corpus cases were touched with the user's decision, each recorded under Blocked in `tasks.md`: `4.json` and `5.json` carry all-Opus probes, so their frozen audio lines moved from `libopus` to the Opus copy (selection and variant expectations unchanged); `1.json` was left byte-identical by making a SAR within 1 % of square (its `1385:1384`) count as square, which amended REQ-6.
+- Measured from a throwaway `node:24.18.0-alpine` container as uid 1000, not through `bin/`.
+- Not observed: AC-10 and AC-11 (live pass: the DVD rip through the real pipeline, and the hand-built Opus MKV) — they need the checkout's stack, and this host runs the production install.
+- Follow-up, not done: `094`'s grain probe does not deinterlace, so an interlaced source under `AUTO` grain may measure combing as grain.
+
 ## 2026-10-30 — `113-embed-auto-offset`
 
 `api`, `worker`, `web`; one Prisma migration (`20261030120000_subtitle_embed_syncing`, hand-written `ALTER ... MODIFY COLUMN status ENUM(...)`, **not applied**: this host has no database for the checkout, so `prisma migrate status` was not run). GraphQL contract: `services/api/src/schema.gql` +69/-37, the deletions being the generator moving the `SubtitleSearch*` blocks, no content change; the added lines match the spec's SDL (`SYNCING`, `autoOffset: Boolean! = false`, `SubtitleEmbedSyncDetails`, one query, two mutations); `docs/spec/graphql-contract.md` gained the `113` section.

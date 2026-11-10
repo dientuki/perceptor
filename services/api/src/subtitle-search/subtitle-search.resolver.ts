@@ -35,7 +35,12 @@ export class MovieSubtitleSearchFieldsResolver {
     description: "The film's most recent search, null if it never had one.",
   })
   latestSubtitleSearch(@Parent() movie: Movie) {
-    return this.service.latestForMovie(Number(movie.id));
+    const languages = (movie as unknown as Record<string, unknown>)
+      .fileSubtitleLanguages;
+    return this.service.latestForMovie(
+      Number(movie.id),
+      Array.isArray(languages) ? languages.map(String) : null,
+    );
   }
 }
 
@@ -46,7 +51,12 @@ export class EpisodeSubtitleSearchFieldsResolver {
 
   @ResolveField(() => SubtitleSearch, { nullable: true })
   latestSubtitleSearch(@Parent() episode: Episode) {
-    return this.service.latestForEpisode(Number(episode.id));
+    const languages = (episode as unknown as Record<string, unknown>)
+      .fileSubtitleLanguages;
+    return this.service.latestForEpisode(
+      Number(episode.id),
+      Array.isArray(languages) ? languages.map(String) : null,
+    );
   }
 }
 
@@ -71,7 +81,10 @@ export class SubtitleSearchResolver {
   ) {
     const userId = assertUser(principal);
     await this.capabilities.assertSubtitleSearchAvailable();
-    await this.requests.requestForCaller({ kind: 'movie', id: movieId }, userId);
+    await this.requests.requestForCaller(
+      { kind: 'movie', id: movieId },
+      userId,
+    );
     return this.latestOrFail(await this.service.latestForMovie(movieId));
   }
 
@@ -219,7 +232,8 @@ export class SubtitleSearchResolver {
     sidecarLanguageTags: string[],
     @Args('fileSizeBytes', {
       type: () => Float,
-      description: "File size in bytes. Float: a library file exceeds Int's 2^31.",
+      description:
+        "File size in bytes. Float: a library file exceeds Int's 2^31.",
     })
     fileSizeBytes: number,
     @Args('movieHash', {

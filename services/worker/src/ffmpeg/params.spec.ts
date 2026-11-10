@@ -266,12 +266,18 @@ describe('getVideoParams', () => {
 
     it('copies an unrecognized codec exceeding the box and logs the codec and that the ceiling was not applied (Spec 058, REQ-12 AC-9)', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const args = getVideoParams(videoStream({ codec_name: 'mpeg2video', width: 1920, height: 1080 }), 'LIVE_ACTION', '720p');
+      const args = getVideoParams(videoStream({ codec_name: 'mpeg4', width: 1920, height: 1080 }), 'LIVE_ACTION', '720p');
 
       expect(args).toEqual(['-map', '0:v:0', '-c:v', 'copy', '-metadata:s:v:0', 'title=Video (Direct Copy)']);
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('mpeg2video'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('mpeg4'));
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('not applied'));
       warnSpy.mockRestore();
+    });
+
+    it('encodes mpeg2video to AV1 titled with the MPEG-2 label', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'mpeg2video', width: 720, height: 576 }), 'LIVE_ACTION', '1080p');
+      expect(args[args.indexOf('-c:v') + 1]).toBe('libsvtav1');
+      expect(titleOf(args)).toBe('AV1 (Converted from MPEG-2)');
     });
   });
 
@@ -322,6 +328,108 @@ describe('getVideoParams', () => {
       expect(args[args.indexOf('-c:v') + 1]).toBe('libsvtav1');
       expect(colorTrcOf(args)).toBe('smpte2084');
       expect(vfOf(args)).toBe('scale=1920:1080:force_original_aspect_ratio=decrease:force_divisible_by=2');
+    });
+  });
+
+  describe('deinterlacing (Spec 115, REQ-2 REQ-3 REQ-4)', () => {
+    const sd = { codec_name: 'mpeg2video', width: 720, height: 576 };
+
+    it.each([
+      ['tt', 'tff'],
+      ['bt', 'tff'],
+      ['bb', 'bff'],
+      ['tb', 'bff'],
+    ])('field_order %s deinterlaces with parity %s on flagged frames only', (fieldOrder, parity) => {
+      const args = getVideoParams(videoStream({ ...sd, field_order: fieldOrder }), 'LIVE_ACTION', '1080p');
+      expect(vfOf(args)).toBe(`bwdif=mode=send_frame:parity=${parity}:deint=interlaced`);
+    });
+
+    it.each(['progressive', 'unknown', undefined])('field_order %s adds no -vf', (fieldOrder) => {
+      const args = getVideoParams(videoStream({ ...sd, field_order: fieldOrder }), 'LIVE_ACTION', '1080p');
+      expect(vfOf(args)).toBeUndefined();
+      expect(args[args.indexOf('-c:v') + 1]).toBe('libsvtav1');
+    });
+
+    it('deinterlaces before scaling when an interlaced 720x576 source is downscaled by 480p', () => {
+      const args = getVideoParams(videoStream({ ...sd, field_order: 'tt' }), 'LIVE_ACTION', '480p');
+      expect(vfOf(args)).toBe(
+        'bwdif=mode=send_frame:parity=tff:deint=interlaced,scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2',
+      );
+      expect(args.filter((arg) => arg === '-vf')).toHaveLength(1);
+    });
+  });
+
+  describe('SD BT.601 colour tags (Spec 115, REQ-5)', () => {
+    const PAL = ['-color_range', 'tv', '-colorspace', 'bt470bg', '-color_primaries', 'bt470bg', '-color_trc', 'gamma28'];
+    const NTSC = ['-color_range', 'tv', '-colorspace', 'smpte170m', '-color_primaries', 'smpte170m', '-color_trc', 'smpte170m'];
+    const BT709 = ['-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
+    const tagsOf = (args: string[]) => args.slice(args.indexOf('-color_range'), args.indexOf('-color_range') + 8);
+    const run = (overrides: Record<string, any>) =>
+      tagsOf(getVideoParams(videoStream({ codec_name: 'h264', ...overrides }), 'LIVE_ACTION', '1080p'));
+
+    it('keeps bt470bg tags as the PAL set', () => {
+      expect(run({ width: 720, height: 576, color_space: 'bt470bg', color_primaries: 'bt470bg', color_transfer: 'bt470bg' })).toEqual(PAL);
+    });
+
+    it('writes the NTSC set for a source tagged smpte170m at 480 lines', () => {
+      expect(run({ width: 720, height: 480, color_space: 'smpte170m', color_primaries: 'smpte170m', color_transfer: 'smpte170m' })).toEqual(NTSC);
+    });
+
+    it('writes the PAL set for an untagged 576-line source at 25 fps', () => {
+      expect(run({ width: 720, height: 576, avg_frame_rate: '25/1' })).toEqual(PAL);
+    });
+
+    it('writes the NTSC set for an untagged 480-line source at 29.97 fps', () => {
+      expect(run({ width: 720, height: 480, avg_frame_rate: '30000/1001' })).toEqual(NTSC);
+    });
+
+    it('writes the NTSC set for an untagged 576-line source that is not 25 fps', () => {
+      expect(run({ width: 720, height: 576, avg_frame_rate: '30000/1001' })).toEqual(NTSC);
+    });
+
+    it('keeps bt709 for an untagged 720-line source', () => {
+      expect(run({ width: 1280, height: 720 })).toEqual(BT709);
+    });
+
+    it('keeps bt709 for a 576-line source explicitly tagged bt709', () => {
+      expect(run({ width: 720, height: 576, color_space: 'bt709', color_primaries: 'bt709', color_transfer: 'bt709' })).toEqual(BT709);
+    });
+
+    it('leaves HDR unaffected at SD height', () => {
+      expect(run({ width: 720, height: 576, color_transfer: 'smpte2084' })).toContain('smpte2084');
+    });
+  });
+
+  describe('anamorphic display aspect (Spec 115, REQ-6)', () => {
+    const aspectOf = (overrides: Record<string, any>) => {
+      const args = getVideoParams(videoStream({ codec_name: 'mpeg2video', width: 720, height: 576, ...overrides }), 'LIVE_ACTION', '1080p');
+      const i = args.indexOf('-aspect');
+      return i === -1 ? undefined : args.slice(i, i + 2);
+    };
+
+    it('writes -aspect for SAR 64:45', () => {
+      expect(aspectOf({ sample_aspect_ratio: '64:45', display_aspect_ratio: '16:9' })).toEqual(['-aspect', '16:9']);
+    });
+
+    it('omits -aspect for SAR 1:1', () => {
+      expect(aspectOf({ sample_aspect_ratio: '1:1', display_aspect_ratio: '4:3' })).toBeUndefined();
+    });
+
+    it('omits -aspect for SAR 1385:1384, within 1% of square', () => {
+      expect(aspectOf({ sample_aspect_ratio: '1385:1384', display_aspect_ratio: '320:173' })).toBeUndefined();
+    });
+
+    it('omits -aspect for SAR 0:1', () => {
+      expect(aspectOf({ sample_aspect_ratio: '0:1', display_aspect_ratio: '0:1' })).toBeUndefined();
+    });
+
+    it('omits -aspect when there is no SAR', () => {
+      expect(aspectOf({})).toBeUndefined();
+    });
+
+    it('never writes -aspect on the copy path', () => {
+      const args = getVideoParams(videoStream({ codec_name: 'mpeg4', sample_aspect_ratio: '64:45', display_aspect_ratio: '16:9' }), 'LIVE_ACTION', '1080p');
+      expect(args).not.toContain('-aspect');
     });
   });
 
@@ -557,6 +665,86 @@ describe('getAudioParams', () => {
     expect(selection.streams.map((s) => `0:${s.index}`)).toEqual(mapped);
     expect(mapped).toEqual(['0:1', '0:3']);
     expect(selection.missingLanguages).toEqual(['spa']);
+  });
+
+  describe('Opus copy (Spec 115, REQ-11 REQ-12)', () => {
+    const ENCODE_FLAGS = /^-(b|vbr|filter|mapping_family):a:/;
+
+    it('copies an Opus 5.1 track and replaces its title (AC-7)', () => {
+      const streams = [audioStream({ index: 2, codec_name: 'opus', channels: 6, tags: { language: 'eng', title: 'Surround 5.1' } })];
+
+      const params = getAudioParams(streams, ['eng'], 'eng', [], TRACK_TITLES, NO_AUDIO_VARIANTS);
+
+      expect(params).toEqual([
+        '-map', '0:2',
+        '-c:a:0', 'copy',
+        '-metadata:s:a:0', 'title=English Surround 5.1 (Opus)',
+        '-metadata:s:a:0', 'language=eng',
+      ]);
+      expect(params.some((arg) => ENCODE_FLAGS.test(arg))).toBe(false);
+    });
+
+    it('titles Opus 7.1 and stereo from their own channel count', () => {
+      const surround = getAudioParams(
+        [audioStream({ index: 1, codec_name: 'opus', channels: 8, tags: { language: 'eng' } })],
+        ['eng'], 'eng', [], TRACK_TITLES, NO_AUDIO_VARIANTS,
+      );
+      const stereo = getAudioParams(
+        [audioStream({ index: 1, codec_name: 'opus', channels: 2, tags: { language: 'eng', title: 'Stereo' } })],
+        ['eng'], 'eng', [], TRACK_TITLES, NO_AUDIO_VARIANTS,
+      );
+
+      expect(surround).toContain('title=English Surround 7.1 (Opus)');
+      expect(surround).toContain('-c:a:0');
+      expect(surround).not.toContain('libopus');
+      expect(stereo).toContain('title=English Stereo (Opus)');
+      expect(stereo).not.toContain('libopus');
+    });
+
+    it('applies regional-variant titles to a copied track', () => {
+      const streams = [audioStream({ index: 1, codec_name: 'opus', channels: 6, tags: { language: 'spa', title: 'Spanish Latino' } })];
+
+      const params = getAudioParams(streams, ['spa'], 'spa', ['es-419'], TRACK_TITLES, NO_AUDIO_VARIANTS);
+
+      expect(params).toContain('title=Latino Surround 5.1 (Opus)');
+      expect(params).toContain('copy');
+    });
+
+    it('keeps per-track indices when one language is copied and another encoded (AC-8)', () => {
+      const streams = [
+        audioStream({ index: 1, codec_name: 'opus', channels: 6, tags: { language: 'eng' } }),
+        audioStream({ index: 2, codec_name: 'ac3', channels: 6, tags: { language: 'spa' } }),
+      ];
+
+      const params = getAudioParams(streams, ['eng', 'spa'], 'eng', [], TRACK_TITLES, NO_AUDIO_VARIANTS);
+
+      expect(params).toEqual([
+        '-map', '0:1',
+        '-c:a:0', 'copy',
+        '-metadata:s:a:0', 'title=English Surround 5.1 (Opus)',
+        '-metadata:s:a:0', 'language=eng',
+        '-map', '0:2',
+        '-c:a:1', 'libopus', '-vbr:a:1', 'on',
+        '-b:a:1', '320k', '-filter:a:1', 'channelmap=channel_layout=5.1', '-mapping_family:a:1', '1',
+        '-metadata:s:a:1', 'title=Español Surround 5.1 (Opus)',
+        '-metadata:s:a:1', 'language=spa',
+      ]);
+    });
+
+    it('still selects and encodes the AC3 when Opus and AC3 share a language (AC-9)', () => {
+      const streams = [
+        audioStream({ index: 1, codec_name: 'opus', channels: 6, tags: { language: 'eng' } }),
+        audioStream({ index: 2, codec_name: 'ac3', channels: 6, tags: { language: 'eng' } }),
+      ];
+
+      const params = getAudioParams(streams, ['eng'], 'eng', [], TRACK_TITLES, NO_AUDIO_VARIANTS);
+
+      expect(mapArgCount(params)).toBe(1);
+      expect(params).toContain('0:2');
+      expect(params).not.toContain('0:1');
+      expect(params).toContain('libopus');
+      expect(params).not.toContain('copy');
+    });
   });
 });
 
