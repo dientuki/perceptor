@@ -13,14 +13,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "bullmq": "^6.5.2",
-    "dotenv": "^18.0.9",
+    "bullmq": "^6.7.6",
+    "dotenv": "^18.0.10",
     "ioredis": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   }
 }
