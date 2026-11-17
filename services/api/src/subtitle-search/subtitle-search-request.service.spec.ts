@@ -11,14 +11,24 @@ type SearchRow = {
   errorKey: string | null;
   wantedLanguages: string[];
   libraryPath?: string;
+  wantedVariants?: unknown;
+  replaceLanguages?: unknown;
 };
 
 type Fixture = {
   available: boolean;
   userMovies: Array<{ userId: string; preference: boolean }>;
   userShows: Array<{ userId: string; preference: boolean }>;
+  fileSubtitleLanguages: unknown;
   titleLanguages: Record<string, string[]>;
   userLanguages: Record<string, string[]>;
+  variantOwners: Array<{
+    languages: Array<{ kind: string; language: { tag: string; iso3: string } }>;
+    user: {
+      audioVariantDetection: boolean;
+      languages: Array<{ kind: string; language: { tag: string; iso3: string } }>;
+    };
+  }>;
 };
 
 // This suite exists because a search that starts when it should not is silent in both directions:
@@ -39,6 +49,7 @@ describe('SubtitleSearchRequestService', () => {
   let fixture: Fixture;
   let service: SubtitleSearchRequestService;
   let nextId: number;
+  let movieLookup: jest.Mock;
 
   const language = (iso3: string) => ({ language: { iso3 } });
 
@@ -51,8 +62,10 @@ describe('SubtitleSearchRequestService', () => {
       available: true,
       userMovies: [{ userId: 'u1', preference: true }],
       userShows: [],
+      fileSubtitleLanguages: null,
       titleLanguages: {},
       userLanguages: { u1: ['spa'] },
+      variantOwners: [],
     };
 
     const create = jest.fn(
@@ -113,14 +126,22 @@ describe('SubtitleSearchRequestService', () => {
       fn({ subtitleSearch: { create, updateMany, count } }),
     );
 
+    const movieFindUnique = jest.fn(() =>
+      Promise.resolve({
+        season: { showId: 3 },
+        fileSubtitleLanguages: fixture.fileSubtitleLanguages,
+      }),
+    );
+    movieLookup = movieFindUnique;
     const prisma = {
       userMovie: {
         findMany: jest.fn(
-          ({ where }: { where: Record<string, unknown> & { user: { subtitleSearch: boolean } } }) => {
+          ({ where }: { where: Record<string, unknown> & { user?: { subtitleSearch: boolean } } }) => {
+            if (!where.user) return Promise.resolve(fixture.variantOwners);
             expect(where).not.toHaveProperty('subtitleSearch');
             return Promise.resolve(
               fixture.userMovies
-                .filter((row) => row.preference === where.user.subtitleSearch)
+                .filter((row) => row.preference === where.user!.subtitleSearch)
                 .map((row) => ({ userId: row.userId })),
             );
           },
@@ -128,19 +149,21 @@ describe('SubtitleSearchRequestService', () => {
       },
       userShow: {
         findMany: jest.fn(
-          ({ where }: { where: Record<string, unknown> & { user: { subtitleSearch: boolean } } }) => {
+          ({ where }: { where: Record<string, unknown> & { user?: { subtitleSearch: boolean } } }) => {
+            if (!where.user) return Promise.resolve(fixture.variantOwners);
             expect(where).not.toHaveProperty('subtitleSearch');
             return Promise.resolve(
               fixture.userShows
-                .filter((row) => row.preference === where.user.subtitleSearch)
+                .filter((row) => row.preference === where.user!.subtitleSearch)
                 .map((row) => ({ userId: row.userId })),
             );
           },
         ),
       },
       episode: {
-        findUnique: jest.fn().mockResolvedValue({ season: { showId: 3 } }),
+        findUnique: movieFindUnique,
       },
+      movie: { findUnique: movieFindUnique },
       userMovieLanguage: {
         findMany: jest.fn(({ where }: { where: { userId: string } }) =>
           Promise.resolve(
@@ -189,6 +212,7 @@ describe('SubtitleSearchRequestService', () => {
       } as never,
       mediaServer as never,
       mediaRoots as never,
+      { regionalVariantIso3s: jest.fn().mockResolvedValue(new Set(['spa'])) } as never,
     );
   });
 
@@ -320,6 +344,7 @@ describe('SubtitleSearchRequestService', () => {
       { assertManualSearchPreflight: preflight } as never,
       mediaServer as never,
       mediaRoots as never,
+      {} as never,
     );
 
     await expect(
@@ -335,6 +360,51 @@ describe('SubtitleSearchRequestService', () => {
     ).resolves.toBeUndefined();
 
     expect(searches).toHaveLength(1);
+  });
+
+  // This block exists because a wrong wantedVariants snapshot is silent in both directions: a
+  // non-null value for owners who never opted in rejects good subtitles, and a null for owners who
+  // did makes detection run for nobody. Spec 118, REQ-3.
+  describe('wantedVariants snapshot', () => {
+    const subtitle = (tag: string, iso3: string) => ({
+      kind: 'SUBTITLE',
+      language: { tag, iso3 },
+    });
+    const owner = (detect: boolean, tags: Array<[string, string]>) => ({
+      languages: [],
+      user: {
+        audioVariantDetection: detect,
+        languages: tags.map(([tag, iso3]) => subtitle(tag, iso3)),
+      },
+    });
+
+    it('stores null when no owner opted in', async () => {
+      fixture.variantOwners = [owner(false, [['es-419', 'spa']])];
+      await service.requestFor({ kind: 'movie', id: 10 });
+      expect(searches[0].wantedVariants).toBe(Prisma.DbNull);
+    });
+
+    it('stores {} for an opted-in owner who wants plain es', async () => {
+      fixture.variantOwners = [owner(true, [['es', 'spa']])];
+      await service.requestFor({ kind: 'movie', id: 10 });
+      expect(searches[0].wantedVariants).toEqual({});
+    });
+
+    it('stores the variant tag for an opted-in owner, including owners without subtitleSearch', async () => {
+      fixture.variantOwners = [owner(true, [['es-419', 'spa']])];
+      fixture.userMovies = [{ userId: 'u1', preference: true }];
+      await service.requestFor({ kind: 'movie', id: 10 });
+      expect(searches[0].wantedVariants).toEqual({ spa: 'es-419' });
+    });
+
+    it('stores the snapshot on the manual path and for an episode', async () => {
+      fixture.variantOwners = [owner(true, [['es-419', 'spa']])];
+      await service.requestForCaller({ kind: 'movie', id: 10 }, 'u1');
+      expect(searches[0].wantedVariants).toEqual({ spa: 'es-419' });
+      fixture.userShows = [{ userId: 'u1', preference: true }];
+      await service.requestFor({ kind: 'episode', id: 5 });
+      expect(searches.at(-1)?.wantedVariants).toEqual({ spa: 'es-419' });
+    });
   });
 
   describe('requestForCaller', () => {
@@ -536,6 +606,64 @@ describe('SubtitleSearchRequestService', () => {
 
         expect(mediaServer.createClient).not.toHaveBeenCalled();
         expect(searches[0].libraryPath).toBeUndefined();
+      });
+    });
+
+    // This test exists because a stale page naming a language that is not searched or not in the
+    // file must be refused before a row exists, or the search spends provider quota on it.
+    describe('replaceLanguages', () => {
+      beforeEach(() => {
+        fixture.userLanguages = { c1: ['spa', 'eng'], u1: ['spa'] };
+        fixture.fileSubtitleLanguages = ['spa'];
+      });
+
+      it('refuses a language that is not wanted and creates no row', async () => {
+        await expect(
+          keyOf(service.requestForCaller(movie, 'c1', ['fra'])),
+        ).resolves.toBe(ERROR_KEYS.SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_WANTED);
+
+        expect(searches).toHaveLength(0);
+        expect(wake).not.toHaveBeenCalled();
+      });
+
+      it('refuses a wanted language the file does not hold and creates no row', async () => {
+        await expect(
+          keyOf(service.requestForCaller(movie, 'c1', ['eng'])),
+        ).resolves.toBe(ERROR_KEYS.SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_PRESENT);
+
+        expect(searches).toHaveLength(0);
+        expect(wake).not.toHaveBeenCalled();
+      });
+
+      it('treats a file with no stored languages as holding none', async () => {
+        fixture.fileSubtitleLanguages = null;
+
+        await expect(
+          keyOf(service.requestForCaller(movie, 'c1', ['spa'])),
+        ).resolves.toBe(ERROR_KEYS.SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_PRESENT);
+        expect(searches).toHaveLength(0);
+      });
+
+      it('stores the lower-cased, deduplicated list', async () => {
+        await service.requestForCaller(movie, 'c1', ['SPA', 'spa']);
+
+        expect(searches[0].replaceLanguages).toEqual(['spa']);
+      });
+
+      it('stores NULL and reads no file languages when the list is empty or absent', async () => {
+        await service.requestForCaller(movie, 'c1');
+        await searches.splice(0);
+        await service.requestForCaller(movie, 'c1', []);
+
+        expect(searches[0].replaceLanguages).toBe(Prisma.DbNull);
+        expect(movieLookup).not.toHaveBeenCalled();
+      });
+
+      it('never sets the list on the automatic path', async () => {
+        await service.requestFor(movie);
+
+        expect(searches).toHaveLength(1);
+        expect(searches[0]).not.toHaveProperty('replaceLanguages');
       });
     });
 

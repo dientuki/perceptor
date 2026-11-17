@@ -51,4 +51,11 @@ export class SubtitleEmbedDetails {
 
   @Field(() => [SubtitleEmbedTrack])
   tracks: SubtitleEmbedTrack[];
+
+  // Spec 119, REQ-5
+  @Field(() => [String], {
+    description:
+      'ISO 639-2 codes whose existing non-forced text subtitle tracks the worker drops in the same remux (119 REQ-5); empty means append only.',
+  })
+  replaceLanguagesIso3: string[];
 }

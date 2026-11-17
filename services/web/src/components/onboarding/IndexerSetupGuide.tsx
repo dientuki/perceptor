@@ -1,5 +1,5 @@
-import Image from "next/image";
 import { getTranslations } from "next-intl/server";
+import AddIndexerButton from "@/components/indexers/AddIndexerButton";
 import type { IndexerStatus } from "@/types/indexer";
 
 const linkClass =
@@ -14,33 +14,6 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
       className={linkClass}
     >
       {label}
-    </a>
-  );
-}
-
-function StepScreenshot({
-  src,
-  alt,
-  viewFullSize,
-}: {
-  src: string;
-  alt: string;
-  viewFullSize: string;
-}) {
-  return (
-    <a
-      href={src}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={viewFullSize}
-    >
-      <Image
-        src={src}
-        alt={alt}
-        width={1280}
-        height={900}
-        className="mt-3 h-auto w-full max-w-xl rounded-lg border border-gray-200 dark:border-gray-800"
-      />
     </a>
   );
 }
@@ -89,54 +62,29 @@ export default async function IndexerSetupGuide({
         </div>
       )}
 
+      <div className="mt-4">
+        <AddIndexerButton />
+      </div>
+
       <h3 className="mt-6 font-semibold text-gray-800 dark:text-white/90">
         {t("stepsTitle")}
       </h3>
       <ol className="mt-2 list-decimal space-y-3 pl-6 text-gray-600 dark:text-gray-400">
-        <li>
-          {t("step1")}{" "}
-          {indexerUrl ? (
-            <ExternalLink href={indexerUrl} label={t("step1LinkLabel")} />
-          ) : (
-            <span>{t("step1PortOnly", { port: indexerPort })}</span>
-          )}
-        </li>
-        <li>
-          {t("step2")}
-          <StepScreenshot
-            src="/images/first-step/indexer-login-2.png"
-            alt={t("step2ImageAlt")}
-            viewFullSize={t("viewFullSize")}
-          />
-        </li>
-        <li>
-          {t("step3")}
-          <StepScreenshot
-            src="/images/first-step/indexer-filter-2.png"
-            alt={t("step3ImageAlt")}
-            viewFullSize={t("viewFullSize")}
-          />
-        </li>
-        <li>
-          {t("step4")}
-          <StepScreenshot
-            src="/images/first-step/indexer-add-2.png"
-            alt={t("step4ImageAlt")}
-            viewFullSize={t("viewFullSize")}
-          />
-        </li>
-        <li>
-          {t("step5")}
-          <StepScreenshot
-            src="/images/first-step/indexer-flaresolverr-2.png"
-            alt={t("step5ImageAlt")}
-            viewFullSize={t("viewFullSize")}
-          />
-        </li>
-        <li>{t("step6")}</li>
+        <li>{t("step1")}</li>
+        <li>{t("step2")}</li>
+        <li>{t("step3")}</li>
+        <li>{t("step4")}</li>
+        <li>{t("step5")}</li>
       </ol>
 
-      <p className="mt-4 text-gray-600 dark:text-gray-400">{t("apiKeyNote")}</p>
+      <p className="mt-4 text-gray-600 dark:text-gray-400">
+        {t("privateNote")}{" "}
+        {indexerUrl ? (
+          <ExternalLink href={indexerUrl} label={t("privateLinkLabel")} />
+        ) : (
+          <span>{t("privatePortOnly", { port: indexerPort })}</span>
+        )}
+      </p>
     </div>
   );
 }

@@ -728,17 +728,19 @@ export class DownloadsService {
     }
 
     const stage = verdict.lastError?.stage;
+    let recomputed = false;
     if (stage === 'ENCODE') {
       await this.resumeEncodeStage(jobs);
     } else if (stage === 'SCAN') {
-      await this.resumeScanStage(source.id);
+      recomputed = await this.resumeScanStage(source);
     } else if (stage === 'DOWNLOAD' && source.infoHash) {
       const infoHash = source.infoHash;
       await this.callTorrentClient(() => this.qbittorrent.start(infoHash));
       await this.clearTorrentClientError(source.id, 'QUEUED');
     }
 
-    await this.recomputeStatus(source);
+    // Spec 116, REQ-1
+    if (!recomputed) await this.recomputeStatus(source);
 
     const fresh = await this.findOwnedSource(source.id, userId);
     const [liveAfter, jobsAfter, compressionEnabled, siblingsAfter] = await Promise.all([
@@ -815,20 +817,26 @@ export class DownloadsService {
     });
   }
 
-  private async resumeScanStage(mediaSourceId: number): Promise<void> {
+  private async resumeScanStage(
+    source: Pick<MediaSourceRow, 'id' | 'movieId' | 'episodeId' | 'seasonId'>,
+  ): Promise<boolean> {
+    const mediaSourceId = source.id;
     const result = await this.prisma.mediaSource.updateMany({
       where: { id: mediaSourceId, status: 'ERROR' },
       data: { status: 'READY' },
     });
-    if (result.count === 0) return;
+    if (result.count === 0) return false;
 
     // Spec 087, REQ-5 REQ-6
     let raceResult: RaceOutcome;
     try {
       raceResult = await this.resolveRace(mediaSourceId);
-      if (raceResult.outcome !== 'WON') return;
+      if (raceResult.outcome !== 'WON') return false;
       await this.queue.removeSourceReady(mediaSourceId);
+      // Spec 116, REQ-1
+      await this.recomputeStatus(source);
       await this.queue.addSourceReady({ mediaSourceId });
+      return true;
     } catch (err) {
       console.error(`[DownloadsService] failed to re-enqueue scan for mediaSource ${mediaSourceId}:`, err);
       await this.prisma.mediaSource.updateMany({

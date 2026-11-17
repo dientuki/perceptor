@@ -1,5 +1,6 @@
 import { Captions, Music2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import LanguageChips from "./LanguageChips";
 
 type Props = {
   audio: string[] | null;
@@ -23,9 +24,6 @@ export default function FileTrackLanguages({
 
   const compact = variant === "compact";
   const iconSize = compact ? 14 : 20;
-  const chipClass = compact
-    ? "rounded bg-gray-100 px-1 py-0.5 text-xs font-medium text-gray-700 dark:bg-white/[0.05] dark:text-gray-300"
-    : "rounded-md bg-gray-100 px-2 py-0.5 text-sm font-medium text-gray-700 dark:bg-white/[0.05] dark:text-gray-300";
 
   const lines = [
     { key: "audio", codes: audio, Icon: Music2, label: t("audio") },
@@ -44,7 +42,9 @@ export default function FileTrackLanguages({
           <div
             key={key}
             className={
-              compact ? "flex flex-nowrap items-center gap-1 whitespace-nowrap" : `${BOX_CLASS}`
+              compact
+                ? "flex flex-nowrap items-center gap-1 whitespace-nowrap"
+                : `${BOX_CLASS}`
             }
           >
             <Icon
@@ -53,17 +53,7 @@ export default function FileTrackLanguages({
               role="img"
               className="shrink-0 text-gray-500 dark:text-gray-400"
             />
-            {codes.length === 0 ? (
-              <span className="text-gray-400 dark:text-gray-500">—</span>
-            ) : (
-              <span className={compact ? "flex gap-1" : "flex flex-wrap gap-1"}>
-                {codes.map((code) => (
-                  <span key={code} className={chipClass}>
-                    {code.toUpperCase()}
-                  </span>
-                ))}
-              </span>
-            )}
+            <LanguageChips codes={codes} variant={variant} />
           </div>
         ),
       )}

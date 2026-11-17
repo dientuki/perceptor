@@ -28,7 +28,7 @@ export class UserPreferences {
 
   @Field({
     description:
-      'Gate for audio variant detection (110 REQ-1). False for every user until they say otherwise.',
+      'Gate for audio and subtitle variant detection (110 REQ-1, 118 REQ-1). False for every user until they say otherwise.',
   })
   audioVariantDetection: boolean;
 

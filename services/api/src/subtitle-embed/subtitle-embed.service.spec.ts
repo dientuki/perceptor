@@ -1101,6 +1101,7 @@ describe('SubtitleEmbedService', () => {
         expect(details).toEqual({
           id: 5,
           filePath: mkv,
+          replaceLanguagesIso3: [],
           tracks: [
             {
               sourcePath: join(libDir, 'Movie (2020).spa.srt'),
@@ -1114,6 +1115,23 @@ describe('SubtitleEmbedService', () => {
             },
           ],
         });
+      });
+
+      // This test exists because otherwise a replace request reaches the worker as append-only and
+      // the old track survives beside the new one with no error anywhere.
+      it('serves the stored replace languages, and [] for a row that has none', async () => {
+        prisma.subtitleEmbed.findUnique.mockResolvedValue(
+          row({ replaceLanguages: ['spa', 'eng'] }),
+        );
+        expect((await service.details(5)).replaceLanguagesIso3).toEqual([
+          'spa',
+          'eng',
+        ]);
+
+        prisma.subtitleEmbed.findUnique.mockResolvedValue(
+          row({ replaceLanguages: null }),
+        );
+        expect((await service.details(5)).replaceLanguagesIso3).toEqual([]);
       });
 
       // Spec 103, REQ-11
@@ -1226,6 +1244,46 @@ describe('SubtitleEmbedService', () => {
       expect(prisma.movie.findFirst).toHaveBeenCalledWith(
         containing({ where: { id: 1 } }),
       );
+    });
+
+    // This test exists because otherwise a decided variant track is embedded under the plain base title with no error anywhere.
+    it.each([
+      ['es-419', 'Latino'],
+      ['es-ES', 'Español (España)'],
+      [null, 'Español'],
+    ])('titles a staged track with variantTag %s as %s', async (variantTag, title) => {
+      await service.embedStaged(
+        { kind: 'movie', id: 1 },
+        [track({ variantTag })],
+        mkv,
+      );
+
+      const { data } = firstArg<{
+        data: { tracks: Array<{ trackTitle: string; languageIso3: string }> };
+      }>(prisma.subtitleEmbed.create);
+      expect(data.tracks[0]).toMatchObject({
+        trackTitle: title,
+        languageIso3: 'spa',
+      });
+    });
+
+    it('stores the replace languages on the row, and NULL when there are none', async () => {
+      await service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv, [
+        'spa',
+      ]);
+      expect(
+        firstArg<{ data: { replaceLanguages: unknown } }>(
+          prisma.subtitleEmbed.create,
+        ).data.replaceLanguages,
+      ).toEqual(['spa']);
+
+      prisma.subtitleEmbed.create.mockClear();
+      await service.embedStaged({ kind: 'movie', id: 1 }, [track()], mkv);
+      expect(
+        firstArg<{ data: { replaceLanguages: unknown } }>(
+          prisma.subtitleEmbed.create,
+        ).data.replaceLanguages,
+      ).toBe(Prisma.DbNull);
     });
 
     it('embeds into the given path and never consults a media server', async () => {

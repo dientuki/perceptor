@@ -22,6 +22,7 @@ export type SearchRow = {
   wantedLanguages: unknown;
   presentLanguages: unknown;
   languageErrors?: unknown;
+  replaceLanguages?: unknown;
 };
 
 function asStrings(value: unknown): string[] {
@@ -48,18 +49,48 @@ const PAST_SEARCHING = ['VALIDATING', 'EMBEDDING', 'COMPLETED'];
 export function deriveLanguages(
   search: SearchRow,
   attempts: AttemptRow[],
+  fileLanguages: string[] | null = null,
 ): SubtitleSearchLanguage[] {
+  const inFile =
+    fileLanguages === null ? null : new Set(asStrings(fileLanguages));
+  const terminal = search.status === 'COMPLETED' || search.status === 'FAILED';
   const present = new Set(asStrings(search.presentLanguages));
   const languageErrors = errorKeys(search.languageErrors);
+  // Spec 119, REQ-8
+  const ticked = new Set(asStrings(search.replaceLanguages));
 
   return asStrings(search.wantedLanguages).map((languageIso3) => {
+    const derived = deriveLanguage(languageIso3);
+    // Spec 114, REQ-1
+    if (inFile === null || !terminal || ticked.has(languageIso3)) return derived;
+    if (inFile.has(languageIso3)) {
+      return {
+        languageIso3,
+        outcome: present.has(languageIso3)
+          ? Outcome.ALREADY_PRESENT
+          : Outcome.RESOLVED,
+        reasonKey: null,
+      };
+    }
+    if (
+      derived.outcome === Outcome.RESOLVED ||
+      derived.outcome === Outcome.ALREADY_PRESENT
+    ) {
+      return { languageIso3, outcome: Outcome.MISSING, reasonKey: null };
+    }
+    return derived;
+  });
+
+  function deriveLanguage(languageIso3: string): SubtitleSearchLanguage {
     const result = (outcome: Outcome, reasonKey: string | null = null) => ({
       languageIso3,
       outcome,
       reasonKey,
     });
 
-    if (present.has(languageIso3)) return result(Outcome.ALREADY_PRESENT);
+    if (present.has(languageIso3) && !ticked.has(languageIso3)) {
+      return result(Outcome.ALREADY_PRESENT);
+    }
 
     const own = attempts
       .filter((attempt) => attempt.languageIso3 === languageIso3)
@@ -76,12 +107,17 @@ export function deriveLanguages(
 
     const derived = deriveOne(search, own, result);
 
+    // Spec 119, REQ-8
+    if (ticked.has(languageIso3) && derived.outcome === Outcome.RESOLVED) {
+      return result(Outcome.REPLACED);
+    }
+
     // A terminal search never leaves a language reading PENDING forever.
     if (derived.outcome === Outcome.PENDING && search.status === 'FAILED') {
       return result(Outcome.FAILED, search.errorKey);
     }
     return derived;
-  });
+  }
 }
 
 function deriveOne(
@@ -93,7 +129,7 @@ function deriveOne(
   ) => SubtitleSearchLanguage,
 ): SubtitleSearchLanguage {
   if (own.some((attempt) => attempt.status === 'ACCEPTED')) {
-    if (search.status === 'COMPLETED') return result(Outcome.EMBEDDED);
+    if (search.status === 'COMPLETED') return result(Outcome.RESOLVED);
     if (search.status === 'FAILED') {
       return result(Outcome.FAILED, search.errorKey);
     }

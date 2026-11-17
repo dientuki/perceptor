@@ -1,4 +1,5 @@
 import { normalizeIso3 } from './iso639';
+import { parseFrameRate } from './remux-detection';
 import { type AudioVariantResolution, detectWithTags, detectVariant, narrowToVariants, preferring, requestedVariants, titleMarks, titleWords, variantTitle } from './variants';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
@@ -45,6 +46,7 @@ export function buildSvtav1Params(contentKind: ContentKind, filmGrain: boolean):
 
 type Av1EncodeOptions = {
   vf?: string;
+  aspect?: string;
   colorTags?: string[];
   title: string;
 };
@@ -70,6 +72,10 @@ function buildAv1EncodeArgs(
     "-pix_fmt", "yuv420p10le",
   );
 
+  if (options.aspect) {
+    args.push("-aspect", options.aspect);
+  }
+
   if (options.colorTags) {
     args.push(...options.colorTags);
   }
@@ -84,6 +90,20 @@ const SDR_BT709_COLOR_TAGS = [
   "-colorspace", "bt709",
   "-color_primaries", "bt709",
   "-color_trc", "bt709",
+];
+
+const SD_PAL_COLOR_TAGS = [
+  "-color_range", "tv",
+  "-colorspace", "bt470bg",
+  "-color_primaries", "bt470bg",
+  "-color_trc", "gamma28",
+];
+
+const SD_NTSC_COLOR_TAGS = [
+  "-color_range", "tv",
+  "-colorspace", "smpte170m",
+  "-color_primaries", "smpte170m",
+  "-color_trc", "smpte170m",
 ];
 
 const HDR_BT2020_COLOR_TAGS = [
@@ -101,7 +121,7 @@ const HLG_BT2020_COLOR_TAGS = [
 ];
 
 // Spec 058, REQ-10 REQ-12
-const RECOGNIZED_VIDEO_CODECS = ['h264', 'hevc', 'h265', 'vc1', 'av1'];
+const RECOGNIZED_VIDEO_CODECS = ['h264', 'hevc', 'h265', 'vc1', 'av1', 'mpeg2video'];
 
 type ResolutionBox = { width: number; height: number; label: string };
 
@@ -142,6 +162,7 @@ function codecLabel(codec: string): string {
     case 'h265': return 'HEVC';
     case 'vc1': return 'VC-1';
     case 'av1': return 'AV1';
+    case 'mpeg2video': return 'MPEG-2';
     default: return codec.toUpperCase();
   }
 }
@@ -168,7 +189,70 @@ function hdrFormOf(videoStream: any): HdrForm {
   return 'SDR';
 }
 
-function colorTagsFor(form: HdrForm): string[] {
+type Bt601Set = 'PAL' | 'NTSC';
+
+const MAX_SD_HEIGHT = 576;
+const PAL_FRAME_RATE = 25;
+
+function isUntagged(value: unknown): boolean {
+  return !value || value === 'unknown' || value === 'unspecified';
+}
+
+function bt601ColorSet(videoStream: any): Bt601Set | null {
+  const tags = [videoStream.color_primaries, videoStream.color_space, videoStream.color_transfer];
+
+  for (const tag of tags) {
+    if (tag === 'bt470bg') return 'PAL';
+    if (tag === 'smpte170m') return 'NTSC';
+  }
+
+  const height = Number(videoStream.height ?? 0);
+  if (!tags.every(isUntagged) || height <= 0 || height > MAX_SD_HEIGHT) return null;
+
+  return height === MAX_SD_HEIGHT && parseFrameRate(videoStream.avg_frame_rate) === PAL_FRAME_RATE
+    ? 'PAL'
+    : 'NTSC';
+}
+
+function sdrColorTags(videoStream: any): string[] {
+  switch (bt601ColorSet(videoStream)) {
+    case 'PAL': return SD_PAL_COLOR_TAGS;
+    case 'NTSC': return SD_NTSC_COLOR_TAGS;
+    default: return SDR_BT709_COLOR_TAGS;
+  }
+}
+
+function deinterlaceParity(videoStream: any): 'tff' | 'bff' | null {
+  switch (videoStream.field_order) {
+    case 'tt':
+    case 'bt': return 'tff';
+    case 'bb':
+    case 'tb': return 'bff';
+    default: return null;
+  }
+}
+
+function deinterlaceFilter(videoStream: any): string | undefined {
+  const parity = deinterlaceParity(videoStream);
+  return parity ? `bwdif=mode=send_frame:parity=${parity}:deint=interlaced` : undefined;
+}
+
+const SQUARE_PIXEL_TOLERANCE = 0.01;
+
+function isSquarePixel(sar: string): boolean {
+  const [num, den] = sar.split(':').map(Number);
+  if (!Number.isFinite(num) || !Number.isFinite(den) || num <= 0 || den <= 0) return true;
+  return Math.abs(num / den - 1) < SQUARE_PIXEL_TOLERANCE;
+}
+
+function anamorphicAspect(videoStream: any): string | undefined {
+  const sar = videoStream.sample_aspect_ratio;
+  const dar = videoStream.display_aspect_ratio;
+  if (!sar || !dar || isSquarePixel(sar)) return undefined;
+  return dar;
+}
+
+function colorTagsFor(videoStream: any, form: HdrForm): string[] {
   switch (form) {
     case 'DoVi':
     case 'HDR10':
@@ -176,7 +260,7 @@ function colorTagsFor(form: HdrForm): string[] {
     case 'HLG':
       return HLG_BT2020_COLOR_TAGS;
     case 'SDR':
-      return SDR_BT709_COLOR_TAGS;
+      return sdrColorTags(videoStream);
   }
 }
 
@@ -231,16 +315,18 @@ export function getVideoParams(
   }
 
   const form = hdrFormOf(videoStream);
-  const vf = exceeds && box
+  const scale = exceeds && box
     ? `scale=${box.width}:${box.height}:force_original_aspect_ratio=decrease:force_divisible_by=2`
     : undefined;
+  const vf = [deinterlaceFilter(videoStream), scale].filter(Boolean).join(',') || undefined;
 
   return buildAv1EncodeArgs(
     contentKind,
     quality,
     {
       vf,
-      colorTags: colorTagsFor(form),
+      aspect: anamorphicAspect(videoStream),
+      colorTags: colorTagsFor(videoStream, form),
       title: videoTitle(codec, exceeds, sourceTierLabel(width, height)),
     },
     filmGrain,
@@ -354,6 +440,39 @@ export function selectAudioStreams(
   return { streams: selectedStreams, missingLanguages };
 }
 
+function opusLayoutTitle(channels: number): string {
+  if (channels >= 8) return "Surround 7.1 (Opus)";
+  if (channels >= 6) return "Surround 5.1 (Opus)";
+  return "Stereo (Opus)";
+}
+
+function isOpus(stream: any): boolean {
+  return (stream.codec_name || '').toLowerCase() === 'opus';
+}
+
+function opusCopyArgs(index: number): string[] {
+  return [`-c:a:${index}`, "copy"];
+}
+
+function opusEncodeArgs(index: number, channels: number): string[] {
+  const args = [`-c:a:${index}`, "libopus", `-vbr:a:${index}`, "on"];
+
+  if (channels >= 8) {
+    args.push(`-b:a:${index}`, "512k", `-filter:a:${index}`, "channelmap=channel_layout=7.1", `-mapping_family:a:${index}`, "1");
+  } else if (channels >= 6) {
+    args.push(`-b:a:${index}`, "320k", `-filter:a:${index}`, "channelmap=channel_layout=5.1", `-mapping_family:a:${index}`, "1");
+  } else {
+    args.push(`-b:a:${index}`, "128k");
+  }
+
+  return args;
+}
+
+function audioTagArgs(stream: any, index: number, title: string): string[] {
+  const lang = (stream.tags?.language || "und").toLowerCase();
+  return [`-metadata:s:a:${index}`, `title=${title}`, `-metadata:s:a:${index}`, `language=${lang}`];
+}
+
 // Spec 011, REQ-3 REQ-4 REQ-6 REQ-7
 export function getAudioParams(
   audioStreams: any[],
@@ -379,37 +498,12 @@ export function getAudioParams(
   const params: string[] = [];
   
   selectedStreams.forEach((s, index) => {
-    const lang = (s.tags?.language || "und").toLowerCase();
     const channels = Number(s.channels || 0);
-    // Spec 031, REQ-12
     const languageTitle = trackLanguageTitle(s, trackTitles, detect);
 
     params.push("-map", `0:${s.index}`);
-    params.push(`-c:a:${index}`, "libopus");
-    params.push(`-vbr:a:${index}`, "on");
-
-    if (channels >= 8) {
-        // Surround 7.1
-        params.push(`-b:a:${index}`, "512k");
-        //params.push(`-filter:a:${index}`, "channelmap=map=0|1|2|3|4|5|6|7:channel_layout=7.1");
-        params.push(`-filter:a:${index}`, "channelmap=channel_layout=7.1");
-        params.push(`-mapping_family:a:${index}`, "1");
-        params.push(`-metadata:s:a:${index}`, `title=${languageTitle} Surround 7.1 (Opus)`);
-        
-    } else if (channels >= 6) {
-        params.push(`-b:a:${index}`, "320k");
-        //params.push(`-filter:a:${index}`, "aformat=channel_layouts=5.1");
-        params.push(`-filter:a:${index}`, "channelmap=channel_layout=5.1");
-        params.push(`-mapping_family:a:${index}`, "1");
-        params.push(`-metadata:s:a:${index}`, `title=${languageTitle} Surround 5.1 (Opus)`);
-        
-    } else {
-        // Stereo or less
-        params.push(`-b:a:${index}`, "128k");
-        params.push(`-metadata:s:a:${index}`, `title=${languageTitle} Stereo (Opus)`);
-    }
-
-    params.push(`-metadata:s:a:${index}`, `language=${lang}`);
+    params.push(...(isOpus(s) ? opusCopyArgs(index) : opusEncodeArgs(index, channels)));
+    params.push(...audioTagArgs(s, index, `${languageTitle} ${opusLayoutTitle(channels)}`));
   });
 
   return params;
@@ -496,6 +590,7 @@ export function selectSubtitleStreams(
   allowedFormats: SubtitleFormat[],
   allowedLanguagesIso3: string[],
   allowedLanguageTags: string[],
+  detect: (stream: any) => string | undefined = detectVariant,
 ): { selected: any[]; commentary: any[] } {
   const allowedLangs = Array.from(
     new Set(allowedLanguagesIso3.map((lang) => normalizeIso3(lang))),
@@ -522,7 +617,7 @@ export function selectSubtitleStreams(
 
     const requestedForLang = requestedVariants(langCode, allowedLanguageTags);
     if (requestedForLang.length > 0) {
-      const narrowed = narrowToVariants(langStreams, requestedForLang);
+      const narrowed = narrowToVariants(langStreams, requestedForLang, detect);
       langStreams = narrowed.matched
         ? narrowed.groups.flatMap((group) => group.streams)
         : narrowed.streams;
@@ -541,6 +636,7 @@ export function getSubtitleParams(
   allowedLanguageTags: string[],
   trackTitles: Record<string, string>,
   contentDrops: ReadonlySet<number>,
+  detect: (stream: any) => string | undefined = detectVariant,
 ) {
   if (allowedFormats.length === 0) {
     console.log('[ffmpeg] subtitles disabled by settings (allowedSubtitleFormats empty).');
@@ -552,6 +648,7 @@ export function getSubtitleParams(
     allowedFormats,
     allowedLanguagesIso3,
     allowedLanguageTags,
+    detect,
   );
 
   commentary.forEach((s) => console.log(`[subs] ${s.index} drop (commentary)`));
@@ -568,7 +665,7 @@ export function getSubtitleParams(
   selected.forEach((s, index) => {
     params.push('-map', `0:${s.index}`);
     params.push(`-c:s:${index}`, isImageSubtitle(s) ? 'copy' : 'srt');
-    params.push(`-metadata:s:s:${index}`, `title=${trackLanguageTitle(s, trackTitles)}`);
+    params.push(`-metadata:s:s:${index}`, `title=${trackLanguageTitle(s, trackTitles, detect)}`);
   });
 
   return params;

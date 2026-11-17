@@ -82,6 +82,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       null,
       new Set(),
       NO_AUDIO_VARIANTS,
+      new Map(),
     );
 
     expect(crfOf(args)).toBe('22');
@@ -104,6 +105,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       null,
       new Set(),
       NO_AUDIO_VARIANTS,
+      new Map(),
     );
 
     expect(crfOf(args)).toBe('22');
@@ -127,6 +129,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       null,
       new Set(),
       NO_AUDIO_VARIANTS,
+      new Map(),
     );
 
     expect(crfOf(args)).toBe('22');
@@ -149,6 +152,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       null,
       new Set(),
       NO_AUDIO_VARIANTS,
+      new Map(),
     );
 
     expect(crfOf(args)).toBe('24');
@@ -173,6 +177,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       null,
       new Set(),
       NO_AUDIO_VARIANTS,
+      new Map(),
     );
 
     const i = args.indexOf('-t');
@@ -202,6 +207,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       null,
       new Set(),
       NO_AUDIO_VARIANTS,
+      new Map(),
     );
 
     // One -map per selected audio stream: 0:0 (video) implicitly handled by
@@ -233,6 +239,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
         null,
         new Set(),
         NO_AUDIO_VARIANTS,
+      new Map(),
       ),
     ).not.toThrow();
   });
@@ -280,6 +287,7 @@ describe('buildFfmpegCommand — CRF selection (Spec 011, REQ-9)', () => {
       null,
       new Set(),
       NO_AUDIO_VARIANTS,
+      new Map(),
     );
 
     // Audio: 0:1 (jpn) and 0:2 (eng) selected, 0:3 (spa) never — spa is not
@@ -303,7 +311,7 @@ describe('buildFfmpegCommand — trimAt (Spec 098, REQ-8)', () => {
     streams: [videoStream({ bit_rate: '8000000' }), audioStream({ codec_name: 'ac3' })],
   };
   const build = (trimAt: number | null) =>
-    buildFfmpegCommand('Some.Movie.WEB-DL.mkv', '/out/Some.Movie.WEB-DL.mkv', metadata, details(), false, trimAt, new Set(), NO_AUDIO_VARIANTS);
+    buildFfmpegCommand('Some.Movie.WEB-DL.mkv', '/out/Some.Movie.WEB-DL.mkv', metadata, details(), false, trimAt, new Set(), NO_AUDIO_VARIANTS, new Map());
 
   afterEach(() => {
     delete process.env.ENCODE_SAMPLE_SECONDS;
@@ -334,5 +342,52 @@ describe('buildFfmpegCommand — trimAt (Spec 098, REQ-8)', () => {
   it('emits no -t when neither limit is set', () => {
     delete process.env.ENCODE_SAMPLE_SECONDS;
     expect(build(null)).not.toContain('-t');
+  });
+});
+
+describe('buildFfmpegCommand — subtitleVariants (Spec 118, REQ-8)', () => {
+  const metadata = {
+    streams: [
+      videoStream({ bit_rate: '8000000' }),
+      audioStream({ codec_name: 'ac3', tags: { language: 'eng' } }),
+      { index: 4, codec_type: 'subtitle' as const, codec_name: 'subrip', tags: { language: 'spa' } },
+      { index: 5, codec_type: 'subtitle' as const, codec_name: 'subrip', tags: { language: 'spa' } },
+    ],
+  };
+  const build = (tags: string[], variants: Map<number, string>) =>
+    buildFfmpegCommand(
+      'Some.Movie.WEB-DL.mkv',
+      '/out/Some.Movie.WEB-DL.mkv',
+      metadata,
+      details({ allowedSubtitleLanguagesIso3: ['spa'], allowedSubtitleLanguageTags: tags }),
+      false,
+      null,
+      new Set(),
+      NO_AUDIO_VARIANTS,
+      variants,
+    );
+  const decided = new Map([[4, 'es-ES'], [5, 'es-419']]);
+
+  it('keeps only the decided es-419 stream, titled Latino, when es-419 is requested', () => {
+    const args = build(['es-419'], decided);
+
+    expect(args).toContain('0:5');
+    expect(args).not.toContain('0:4');
+    expect(args).toContain('title=Latino');
+  });
+
+  it('keeps both, titled by variant, when plain es is requested', () => {
+    const args = build(['es'], decided);
+
+    expect(args).toContain('title=Latino');
+    expect(args).toContain('title=Español (España)');
+  });
+
+  it('keeps both and writes the same output as before with an empty map', () => {
+    const args = build(['es-419'], new Map());
+
+    expect(args).toContain('0:4');
+    expect(args).toContain('0:5');
+    expect(args).toEqual(build(['es-419'], new Map()));
   });
 });

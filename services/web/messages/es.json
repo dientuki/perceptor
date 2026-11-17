@@ -197,6 +197,8 @@
       "jellyfin_refresh_failed": "Subtítulos incrustados, pero no se pudo avisar al servidor de medios. Aparecerán en su próximo escaneo."
     },
     "subtitleSearch": {
+      "replace_language_not_wanted": "Ese idioma no está entre los que se buscan en este título.",
+      "replace_language_not_present": "El archivo no tiene subtítulos en ese idioma para reemplazar.",
       "unsupported_media_server": "La búsqueda de subtítulos requiere Jellyfin como servidor de medios.",
       "sync_not_found": "No se encontró la búsqueda de subtítulos.",
       "item_not_found": "Jellyfin no indexó el archivo a tiempo; no se buscaron subtítulos.",
@@ -206,6 +208,7 @@
       "framerate_mismatch": "El subtítulo es de una versión con otro framerate.",
       "offset_too_large": "El subtítulo está demasiado desfasado.",
       "low_score": "El subtítulo no coincide con este archivo.",
+      "wrong_variant": "El subtítulo encontrado es de la otra variante del idioma.",
       "incomplete": "El subtítulo está incompleto (solo cubre parte de la película).",
       "interrupted": "La búsqueda se interrumpió.",
       "superseded": "Una entrega más nueva reemplazó esta búsqueda.",
@@ -491,6 +494,32 @@
       "showNoun": "series",
       "emptyShorts": "No hay cortos registrados"
     },
+    "library": {
+      "filter": {
+        "all": "Todas",
+        "downloaded": "Descargadas",
+        "added": "Agregadas"
+      },
+      "view": {
+        "grid": "Vista de grilla",
+        "list": "Vista de lista"
+      },
+      "perPage": "Por página",
+      "pagination": "Paginación",
+      "first": "Primera",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "last": "Última",
+      "pageOf": "Página {page} de {totalPages}",
+      "column": {
+        "year": "Año",
+        "title": "Título",
+        "audio": "Audio",
+        "subtitles": "Subtítulos",
+        "status": "Estado"
+      },
+      "emptyFilter": "Ningún título coincide con este filtro"
+    },
     "languagePicker": {
       "defaultLabel": "Idiomas preferidos",
       "empty": "No hay idiomas disponibles.",
@@ -538,7 +567,9 @@
     "searchSubtitles": {
       "button": "Buscar subtítulos",
       "searching": "Buscando…",
-      "title": "Buscar subtítulos",
+      "title": "Buscar y reemplazar subtítulos",
+      "replaceLabel": "Reemplazar los que ya están",
+      "replaceHint": "Marcá un idioma para buscar uno nuevo y reemplazar el que está dentro del archivo. Si no se encuentra uno aceptable, el actual se conserva. Los subtítulos forzados, los de imagen y los externos no se tocan.",
       "body": "Perceptor va a buscar los subtítulos que le faltan a este título en el proveedor de subtítulos. Cada descarga cuenta contra la cuota diaria de descargas del proveedor. ¿Querés continuar?",
       "confirm": "Buscar",
       "cancel": "Cancelar",
@@ -577,7 +608,9 @@
       "outcome": {
         "PENDING": "Pendiente",
         "ALREADY_PRESENT": "Ya estaba",
-        "EMBEDDED": "Incrustado",
+        "REPLACED": "Reemplazado",
+        "RESOLVED": "Resuelto",
+        "MISSING": "Falta en el archivo",
         "NOT_FOUND": "No encontrado",
         "REJECTED": "Rechazado",
         "FAILED": "Falló"
@@ -878,9 +911,9 @@
       "dateFormatLabel": "Formato de fecha",
       "audioLanguagesLabel": "Idiomas de audio",
       "audioMandatoryLabel": "Audio obligatorio",
-      "audioVariantDetectionLabel": "Detectar la variante del doblaje por el audio",
-      "audioVariantDetectionHelp": "Si un archivo trae dos pistas en español sin indicar cuál es latino y cuál es de España, se escucha un fragmento de cada una para distinguirlas. Hace que el procesamiento tarde unos minutos más.",
-      "audioVariantDetectionDisabledHint": "Disponible cuando elegís un idioma de audio con variantes regionales, como el español.",
+      "audioVariantDetectionLabel": "Detectar la variante del español (latino o España) en audio y subtítulos",
+      "audioVariantDetectionHelp": "Si un archivo trae dos pistas en español, de audio o de subtítulos, sin indicar cuál es latino y cuál es de España, se compara su contenido para distinguirlas. Los subtítulos que se bajan de internet se revisan igual, y se descartan los de la variante que no elegiste. En el audio, el procesamiento tarda unos minutos más.",
+      "audioVariantDetectionDisabledHint": "Disponible cuando elegís un idioma de audio o de subtítulos con variantes regionales, como el español.",
       "subtitleLanguagesLabel": "Idiomas de subtítulos",
       "cinemaLabel": "Permitir películas de cine",
       "acquireTheatricalLabel": "Bajar desde 2 días después del estreno en cines (cualquier calidad; no hace nada si no permitís estrenos de cine)",
@@ -939,7 +972,7 @@
   },
   "contentKind": {
     "LIVE_ACTION": "Live action",
-    "ANIME": "Anime",
+    "ANIME": "Anime/Dibujos",
     "CGI": "CGI / Animación 3D"
   },
   "grainMode": {
@@ -1025,25 +1058,19 @@
     },
     "indexer": {
       "title": "Configurá un indexer",
-      "about": "Los indexers son los sitios de torrents que Prowlarr consulta por vos — cada búsqueda de un título en Perceptor le pregunta a Prowlarr, y Prowlarr le pregunta a cada indexer que agregaste. Sin ninguno configurado, una búsqueda no encuentra nada por más popular que sea el título; para eso existe esta página.",
+      "about": "Los indexers son los sitios de torrents donde Perceptor busca releases. Sin ninguno configurado, una búsqueda no encuentra nada por más popular que sea el título — para eso existe esta página. Se agregan acá mismo, sin salir de Perceptor.",
       "unreachable": "No se pudo contactar al indexer.",
       "zeroNotice": "Todavía no hay ningún indexer configurado. Ninguna búsqueda de releases va a devolver resultados hasta que agregues uno.",
       "countNotice": "{count, plural, one {Hay # indexer configurado.} other {Hay # indexers configurados.}}",
       "stepsTitle": "Cómo agregar uno",
-      "step1": "Abrí la interfaz web del indexer.",
-      "step1LinkLabel": "Abrir Prowlarr",
-      "step1PortOnly": "Disponible en el puerto {port} (no tiene un dominio configurado).",
-      "step2": "Iniciá sesión con el mismo usuario y contraseña que la cuenta de administrador de Perceptor — un solo login sirve para Perceptor, el cliente de torrents y el indexer.",
-      "step2ImageAlt": "Pantalla de inicio de sesión de Prowlarr",
-      "step3": "Recorré la lista que se abre. Filtrá Privacy en \"Public\" (no hace falta cuenta, es lo más fácil para empezar) y Categories en \"Movies\" o \"TV\" para acotarla a los trackers que realmente tienen lo que buscás en Perceptor.",
-      "step3ImageAlt": "Lista \"Add Indexer\" de Prowlarr filtrada a trackers públicos de Movies",
-      "step4": "Hacé clic en el botón naranja \"Add Indexer\" de la barra superior izquierda. Escribí el nombre de un indexer público (por ejemplo \"1337x\") en el buscador que aparece, hacé clic en la fila que coincide para abrir su configuración, y después clic en \"Test\" y \"Save\" al pie de ese diálogo.",
-      "step4ImageAlt": "Diálogo \"Add Indexer\" de Prowlarr con los botones Test y Save",
-      "step5": "Hacé clic de nuevo en \"Add Indexer\", esta vez para un tracker que está detrás de Cloudflare. En el mismo diálogo de configuración, bajá hasta el campo \"Tags\", hacé clic ahí, escribí flaresolverr y elegí la tag que ya existe entre las sugerencias — eso enruta los pedidos de ese indexer a través del proxy de FlareSolverr que ya corre en el stack. Después clic en \"Test\" y \"Save\" igual que antes.",
-      "step5ImageAlt": "Diálogo \"Add Indexer\" de Prowlarr con la tag flaresolverr agregada en el campo Tags",
-      "step6": "Volvé a Perceptor y buscá un título desde su página de detalle — ahora aparecen releases.",
-      "apiKeyNote": "No hace falta que copies la clave de API del indexer a ningún lado — el instalador ya la configuró.",
-      "viewFullSize": "Ver tamaño completo"
+      "step1": "Hacé clic en \"Agregar indexer\", arriba.",
+      "step2": "Buscá en el catálogo por nombre. Solo lista sitios de torrents públicos que tienen películas o series, así que ninguno necesita cuenta.",
+      "step3": "Hacé clic en \"Agregar\" en un sitio. Perceptor lo prueba antes de guardarlo; si la prueba falla, el motivo aparece en esa fila — elegí otro.",
+      "step4": "Agregá dos o tres para tener mejor cobertura. Un sitio detrás de Cloudflare pasa automáticamente por el proxy de FlareSolverr incluido; solo puede ser más lento.",
+      "step5": "Volvé a la página de detalle de un título y buscá — ahora aparecen releases.",
+      "privateNote": "Los trackers que necesitan cuenta no están en el catálogo; esos se agregan desde el indexer.",
+      "privateLinkLabel": "Abrir Prowlarr",
+      "privatePortOnly": "Está disponible en el puerto {port} (no tiene un dominio configurado)."
     }
   },
   "offline": {

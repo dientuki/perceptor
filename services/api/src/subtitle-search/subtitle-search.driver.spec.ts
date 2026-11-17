@@ -430,6 +430,36 @@ describe('SubtitleSearchDriver', () => {
       );
     });
 
+    // This test exists because otherwise a ticked present language is skipped as already done and
+    // the replace the user asked for never searches, with no error anywhere.
+    it('searches a present language the user ticked for replacement', async () => {
+      seedSearch({
+        wantedLanguages: ['spa'],
+        presentLanguages: ['spa'],
+        replaceLanguages: ['spa'],
+      });
+
+      await driver.advance(1);
+
+      expect(client.search).toHaveBeenCalledTimes(1);
+      expect(client.search).toHaveBeenCalledWith(
+        expect.objectContaining({ languages: 'es' }),
+      );
+      expect(attempts.some((row) => row.languageIso3 === 'spa')).toBe(true);
+    });
+
+    it('does not search a present language that was not ticked', async () => {
+      seedSearch({
+        wantedLanguages: ['spa'],
+        presentLanguages: ['spa'],
+        replaceLanguages: null,
+      });
+
+      await driver.advance(1);
+
+      expect(client.search).not.toHaveBeenCalled();
+    });
+
     it('completes with no provider call when no language is missing', async () => {
       seedSearch({ wantedLanguages: ['eng'] });
 
@@ -510,6 +540,71 @@ describe('SubtitleSearchDriver', () => {
       await driver.advance(1);
 
       expect(client.search).not.toHaveBeenCalled();
+    });
+
+    // This block exists because the variant-first query spends the shared provider quota twice
+    // when it should not, or returns more than three candidates, or lists one subtitle twice,
+    // with no error anywhere (Article IX, Spec 118, REQ-13).
+    describe('wanted variant query (Spec 118 REQ-13)', () => {
+      const variants = { spa: 'es-419' };
+      const ids = () =>
+        attempts
+          .filter((row) => row.searchId === 1)
+          .map((row) => row.providerSubtitleId);
+
+      it('does not run the plain query when the variant query already fills the cap', async () => {
+        seedSearch({ wantedVariants: variants });
+        remote = {
+          ea: [candidate('v1'), candidate('v2'), candidate('v3')],
+          es: [candidate('p1')],
+        };
+
+        await driver.advance(1);
+
+        expect(client.search).toHaveBeenCalledTimes(1);
+        expect(client.search).toHaveBeenCalledWith(
+          expect.objectContaining({ languages: 'ea' }),
+        );
+        expect(ids()).toEqual(['v1', 'v2', 'v3']);
+      });
+
+      it('fills from the plain query after the variant ones, three in total', async () => {
+        seedSearch({ wantedVariants: variants });
+        remote = {
+          ea: [candidate('v1')],
+          es: [candidate('p1'), candidate('p2'), candidate('p3')],
+        };
+
+        await driver.advance(1);
+
+        expect(client.search).toHaveBeenCalledTimes(2);
+        expect(ids()).toEqual(['v1', 'p1', 'p2']);
+      });
+
+      it('lists a subtitle both queries return once', async () => {
+        seedSearch({ wantedVariants: variants });
+        remote = {
+          ea: [candidate('v1'), candidate('same')],
+          es: [candidate('same'), candidate('p1')],
+        };
+
+        await driver.advance(1);
+
+        expect(ids()).toEqual(['v1', 'same', 'p1']);
+      });
+
+      it("runs only today's plain query when no variant is wanted", async () => {
+        seedSearch({ wantedVariants: null });
+
+        await driver.advance(1);
+
+        expect(client.search).toHaveBeenCalledTimes(1);
+        expect(client.search).toHaveBeenCalledWith({
+          tmdbId: 603,
+          languages: 'es',
+          moviehash: 'abcdef0123456789',
+        });
+      });
     });
 
     describe('provider outcomes (Spec 107 REQ-9)', () => {
@@ -711,6 +806,7 @@ describe('SubtitleSearchDriver', () => {
           },
         ],
         movieFile,
+        [],
       );
       expect(search().subtitleEmbedId).toBe(500);
       expect(await exists(accepted.stagedPath as string)).toBe(true);
@@ -724,6 +820,46 @@ describe('SubtitleSearchDriver', () => {
       await driver.advance(1);
       expect(search().status).toBe('COMPLETED');
       expect(await exists(stagingDir(1))).toBe(false);
+    });
+
+    // This test exists because otherwise a ticked language that found nothing still reaches the
+    // remux and drops the file's existing tracks for nothing.
+    it('hands the embed only the ticked languages that have an accepted attempt', async () => {
+      const row = seedSearch({
+        status: 'EMBEDDING',
+        presentLanguages: ['eng', 'fra'],
+        wantedLanguages: ['eng', 'fra', 'spa'],
+        replaceLanguages: ['eng', 'fra'],
+      });
+      attempts.push({
+        id: 900,
+        searchId: row.id,
+        languageIso3: 'spa',
+        rank: 1,
+        status: 'ACCEPTED',
+        offsetMs: 0,
+        stagedPath: join(stagingDir(1), '900.srt'),
+        providerSubtitleId: 'x',
+        providerFileName: null,
+        variantTag: null,
+      });
+      attempts.push({
+        id: 901,
+        searchId: row.id,
+        languageIso3: 'eng',
+        rank: 1,
+        status: 'ACCEPTED',
+        offsetMs: 0,
+        stagedPath: join(stagingDir(1), '901.srt'),
+        providerSubtitleId: 'y',
+        providerFileName: null,
+        variantTag: null,
+      });
+
+      await driver.advance(1);
+
+      expect(embedStaged).toHaveBeenCalledTimes(1);
+      expect(embedStaged.mock.calls[0][3]).toEqual(['eng']);
     });
 
     // Spec 107, AC-18
@@ -742,6 +878,30 @@ describe('SubtitleSearchDriver', () => {
         expect.anything(),
         [expect.objectContaining({ provenance: 'Movie.2020.es.srt' })],
         movieFile,
+        [],
+      );
+    });
+
+    // Spec 118, REQ-16
+    it('hands the accepted attempt variantTag to the embed', async () => {
+      remote.es = [candidate('a')];
+      seedSearch();
+      await driver.advance(1);
+      const rows = attempts.filter((row) => row.searchId === 1);
+      Object.assign(rows[0], {
+        status: 'ACCEPTED',
+        offsetMs: 250,
+        variantTag: 'es-419',
+      });
+      await driver.advance(1);
+      await driver.advance(1);
+      await driver.advance(1);
+
+      expect(embedStaged).toHaveBeenCalledWith(
+        expect.anything(),
+        [expect.objectContaining({ variantTag: 'es-419' })],
+        movieFile,
+        [],
       );
     });
 

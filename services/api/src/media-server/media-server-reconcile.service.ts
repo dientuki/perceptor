@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ShowTrackLanguagesService } from '@/show-track-languages/show-track-languages.service';
 import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
 import { SettingsService } from '@/settings/settings.service';
 import { MediaServerIndexService } from '@/media-server-index/media-server-index.service';
@@ -56,6 +57,7 @@ export class MediaServerReconcileService {
     private readonly index: MediaServerIndexService,
     // Spec 108, T005
     private readonly libraryProbeQueue: LibraryProbeQueueService,
+    private readonly showTrackLanguages: ShowTrackLanguagesService,
   ) {}
 
   async reconcileMovie(movieId: number, tmdbId: number): Promise<void> {
@@ -241,6 +243,8 @@ export class MediaServerReconcileService {
           'COMPLETED',
         );
       }
+      // Spec 117, REQ-7
+      if (demoted > 0) await this.showTrackLanguages.recompute(showId);
       // Spec 108, REQ-3
       for (const id of [...buckets.present.aired, ...buckets.present.unaired]) {
         void this.libraryProbeQueue.request({ episodeId: id });

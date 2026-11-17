@@ -1,7 +1,7 @@
 # ==========================================
 # 1. BASE: shared environment (Alpine + libc6)
 # ==========================================
-FROM node:26.10.0-alpine AS base
+FROM node:26.13.0-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 

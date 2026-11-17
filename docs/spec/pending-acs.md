@@ -1,8 +1,8 @@
 # Specs con Acceptance Criteria pendientes
 
 <!-- pending-acs:begin intro -->
-Medido el **2026-10-30**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
-`## Acceptance Criteria`; las 50 specs que no aparecen estan en 100%.
+Medido el **2026-11-17**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
+`## Acceptance Criteria`; las 51 specs que no aparecen estan en 100%.
 <!-- pending-acs:end intro -->
 
 **No editar a mano los bloques entre los marcadores `pending-acs:begin`/`end`.** Los regenera
@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **63** de 113 |
-| ACs pendientes | **508** |
-| ACs totales del proyecto | 1388 |
-| ACs verificados | 880 (63%) |
+| Specs con ACs pendientes | **68** de 119 |
+| ACs pendientes | **544** |
+| ACs totales del proyecto | 1453 |
+| ACs verificados | 909 (63%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,6 +28,11 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 119 | subtitle-search-replace | Implemented | 12/12 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 | **Sesion admin en un browser.** Los doce piden un stack dev de este checkout con una sesion de usuario y un archivo real: AC-1 y AC-2 ven el dialogo, AC-3 a AC-6, AC-9 y AC-12 reemplazan pistas con `ffprobe` antes y despues y gastan descargas de OpenSubtitles (cuota de unas 20 por dia, con respaldo del archivo), AC-7 y AC-10 piden la fila `SubtitleSearch` de una busqueda manual y una automatica, AC-8 y AC-11 dos mutations a mano con un token de GraphQL. Ya probado debajo: `api` (`requestForCaller` con las dos negativas y sin fila, `missingLanguages`, el driver pasando solo los idiomas aceptados, `deriveLanguages` con `REPLACED` y sin el override de `114`, `replaceLanguagesIso3` con `[]` para `NULL`), `worker` (`tracksToDrop`, `--subtitle-tracks !`, `verifyEmbed` con las pistas quitadas, el reporte sin la lista) y el contrato generado contra la spec; `web` sin runner de tests, solo typecheck y `check-messages`. |
+| 118 | subtitle-variant-detection | Implemented | 13/24 | 6, 7, 8, 9, 10, 12, 14, 15, 16, 16b, 16c, 16d, 17 | **Una corrida de pipeline.** Los once ACs de busqueda y de encode sin ticar piden la corrida completa por cola y `api`; el 2026-11-15 solo se observaron el driver de encode sobre archivos armados con subtitulos de OpenSubtitles (AC-1 a AC-5, AC-4b, AC-11) y una busqueda real en Reacher S02E05 (AC-13, AC-18). AC-9, AC-10 y AC-12 tienen su mitad unitaria en verde (`encode.job.spec.ts`, `subtitle-prune.spec.ts`) sin corrida viva; AC-8 vio el veredicto reutilizado entre dos procesos pero no mato el contenedor del worker. AC-14 a AC-17 necesitan descargas de OpenSubtitles (quedaban 3 el 2026-11-15, 16b ademas un episodio cuyo codigo latino devuelva exactamente un candidato: el de Reacher devolvio 0). AC-6 y AC-7 necesitan una **sesion admin en un browser** sobre `/preferences`. |
+| 116 | season-scan-write-conflict | Implemented | 4/7 | 2, 3, 4, 7 | **Un stack corriendo este checkout.** La mitad unitaria esta probada: los tests (a)-(e) fallaron antes del arreglo y pasan despues, la inyeccion de fallas puso en rojo cada uno, tsc da 0 errores y `bin/comments api` pasa. AC-2 sigue abierto porque la suite completa da 98 suites con 2 en rojo (`session.service` y `upload-tickets.service`, 20 tests) por falta de Redis en el contenedor descartable, los mismos dos de la 113. AC-3 y AC-7 piden subir una temporada real; AC-4 pide apretar Play sobre la fuente 422 de produccion despues de desplegar. Este host solo corre la instalacion de produccion y el 1020 depende de tiempos reales, asi que los mocks no lo reproducen. |
+| 115 | sd-mpeg2-encode | Implemented | 2/11 | 10, 11 | **Pasada en vivo con un archivo real.** AC-10 pide importar `A1_t00.mkv` como pelicula y mirar el `ffprobe` de la salida y un paneo; AC-11 pide el MKV con Opus armado a mano y el comando FFmpeg grabado. Ambos necesitan el stack dev de este checkout, y el host corre la instalacion de usuario, asi que nada se observo en vivo. |
+| 114 | subtitle-search-current-file | Implemented | 5/10 | 1, 2, 4, 7, 9 | **Sesion admin en un browser.** Los cinco piden la build nueva desplegada y una pagina abierta: AC-1 la pelicula 73 (Guyver) en verde, AC-2 un idioma incrustado por la busqueda, AC-4 un `NOT_FOUND` sin pista, AC-7 un episodio incrustado a mano, y AC-9 comparar las filas de `subtitle_searches`/`subtitle_search_attempts` antes y despues de cargar. AC-3, 5, 6, 8 y 10 se tildaron por `derive-languages.spec.ts`. |
 | 113 | embed-auto-offset | Implemented | 9/9 | 1, 2, 3, 4, 5, 6, 7, 8, 9 | **Sesion admin en un browser.** Los nueve piden un stack dev de este checkout con un Jellyfin que liste un sidecar `.srt`, `ffsubsync` y un archivo real; el host corre la instalacion de usuario, asi que nada se observo en vivo. AC-6 ademas pide reiniciar el `worker` con el embed en `SYNCING`, AC-7 tocar un torrent con el embed en curso. Ya probado debajo: tests de `api` (`SYNCING` activo en el busy check, `createGuarded`, reconcile, rechazo todo-o-nada, UTF-16, reporte duplicado, fallo del enqueue), del `worker` (exito, falla de `measureSync`, `sync_not_found`, sin escrituras junto al sidecar) y el contrato generado contra la spec; `web` sin runner de tests. |
 | 112 | in-app-indexer-setup | Implemented | 11/13 | 1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13 | **Sesion admin en un browser.** El modal listo el catalogo alfabetico con chips y la busqueda angosto (AC-2), pero un alta o baja real escribe en el Prowlarr del mantenedor y no se hizo; AC-5 pide parar `indexer`, AC-7 y AC-10 un token de GraphQL (admin y no admin). Ya probado debajo: tests de `api` (filtro, payload, idempotencia, `test_failed`, `flaresolverr_missing`, `not_found`) con inyeccion de fallas, y en el Prowlarr de dev el alta sin `forceSave` prueba el sitio y falla con 400. |
 | 111 | encode-verdict-persistence | Implemented | 8/9 | 1, 2, 3, 4, 5, 6, 7, 9 | **Un encode real con Stop/Play, un reinicio del worker y una fuente Blu-ray.** Solo AC-8 esta verificado, por tests (757 en verde); el resto necesita ver los logs `(reused)` y las claves `perceptor:encode:*` en Redis durante un encode de verdad, y AC-6, AC-7 y AC-9 ademas un disco Blu-ray. |
@@ -96,15 +101,15 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 508 ACs pendientes no son 508 problemas distintos. Se reducen a 28 destrabes, y los dos primeros se llevan el 51%:
+Los 544 ACs pendientes no son 544 problemas distintos. Se reducen a 30 destrabes, y los dos primeros se llevan el 50%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
+| Una corrida de pipeline | 139 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091, 098, 101, 118 |
 | Sin clasificar | 133 | 094, 095, 096, 097, 099, 100, 102, 103, 105, 110 |
-| Una corrida de pipeline | 126 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091, 098, 101 |
+| Sesion admin en un browser | 37 | 112, 113, 114, 119 |
 | Una instalacion fresca | 33 | 015, 049, 061, 066, 104 |
 | Stack vivo con servidor de medios | 31 | 107, 108 |
-| Sesion admin en un browser | 20 | 112, 113 |
 | Adquisiciones reales | 18 | 073, 076 |
 | Nada: no esta implementada | 17 | 081 |
 | Una lista de TMDB con una serie y otra privada | 16 | 109 |
@@ -121,10 +126,12 @@ Los 508 ACs pendientes no son 508 problemas distintos. Se reducen a 28 destrabes
 | Un reemplazo forzado (`force`) en una instalacion real | 5 | 089 |
 | Tres cosas distintas, ninguna la sesion | 4 | 062 |
 | Un segundo usuario, y decisiones del duenio | 4 | 078 |
+| Un stack corriendo este checkout | 4 | 116 |
 | Sujetos que el indexer no devuelve | 3 | 036 |
 | La UI de GitHub | 3 | 085 |
 | Un segundo usuario | 2 | 042, 071 |
 | Dos peliculas que esta biblioteca no tiene | 2 | 075 |
+| Pasada en vivo con un archivo real | 2 | 115 |
 | Una biblioteca vacia | 1 | 007 |
 | Un problema de disenio, no una medicion | 1 | 077 |
 | Un dispositivo real | 1 | 079 |

@@ -7,6 +7,11 @@
 // not bound the extracted track), failures degrade to "keep everything" and are
 // never cached, a cancellation propagates, and the candidate indices it reads
 // equal the ones getSubtitleParams maps for the same input.
+//
+// The subtitle-variant cases defend against a regional variant that is silently
+// never decided, or decided from the wrong tracks: one shared read for the
+// union of streams, pair versus lone decisions, an undecided verdict that is
+// stored, the opt-in gate, and failures that keep the drops already known.
 
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -97,7 +102,7 @@ describe('resolveSubtitlePruning', () => {
   it('does not spawn or log when no language has more than one text track', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const metadata = { streams: [sub(2, 'eng'), sub(3, 'spa'), sub(4, 'fra', { codec_name: 'hdmv_pgs_subtitle' })] };
-    const drops = await resolveSubtitlePruning(details, file, metadata, signal);
+    const { drops } = await resolveSubtitlePruning(details, file, metadata, signal);
     expect(drops.size).toBe(0);
     expect(mockCapture).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
@@ -107,7 +112,7 @@ describe('resolveSubtitlePruning', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockCapture.mockResolvedValue({ code: 1, stdoutBytes: 0, stderr: '' });
     const metadata = { streams: [sub(2, 'eng'), sub(3, 'eng')] };
-    const drops = await resolveSubtitlePruning(details, file, metadata, signal);
+    const { drops } = await resolveSubtitlePruning(details, file, metadata, signal);
     expect(drops.size).toBe(0);
     expect(log).toHaveBeenCalledTimes(1);
     expect(log.mock.calls[0][0]).toMatch(/^\[subs\] read failed: /);
@@ -117,7 +122,7 @@ describe('resolveSubtitlePruning', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockCapture.mockRejectedValue(new Error('spawn ENOENT'));
     const metadata = { streams: [sub(2, 'eng'), sub(3, 'eng')] };
-    const drops = await resolveSubtitlePruning(details, file, metadata, signal);
+    const { drops } = await resolveSubtitlePruning(details, file, metadata, signal);
     expect(drops.size).toBe(0);
     expect(log).toHaveBeenCalledTimes(1);
     expect(log.mock.calls[0][0]).toContain('spawn ENOENT');
@@ -136,8 +141,8 @@ describe('resolveSubtitlePruning', () => {
     mockCapture.mockResolvedValueOnce({ code: 1, stdoutBytes: 0, stderr: '' });
     mockCapture.mockResolvedValueOnce({ code: 0, stdoutBytes: 0, stderr: '', outputs: [SAME, SDH] });
     const metadata = { streams: [sub(2, 'eng'), sub(3, 'eng')] };
-    expect((await resolveSubtitlePruning(details, file, metadata, signal)).size).toBe(0);
-    expect([...(await resolveSubtitlePruning(details, file, metadata, signal))]).toEqual([3]);
+    expect((await resolveSubtitlePruning(details, file, metadata, signal)).drops.size).toBe(0);
+    expect([...(await resolveSubtitlePruning(details, file, metadata, signal)).drops]).toEqual([3]);
     expect(mockCapture).toHaveBeenCalledTimes(2);
   });
 
@@ -147,7 +152,7 @@ describe('resolveSubtitlePruning', () => {
     const metadata = {
       streams: [sub(2, 'eng'), sub(3, 'eng'), sub(4, 'spa'), sub(5, 'spa')],
     };
-    const first = await resolveSubtitlePruning(details, file, metadata, signal);
+    const first = (await resolveSubtitlePruning(details, file, metadata, signal)).drops;
     expect(mockCapture).toHaveBeenCalledTimes(1);
     expect(mockCapture.mock.calls[0][2]).toEqual({ extraOutputs: 4 });
     expect([...first].sort()).toEqual([3, 5]);
@@ -155,7 +160,7 @@ describe('resolveSubtitlePruning', () => {
     expect(log.mock.calls[0][0]).toBe('[subs] eng 2:3:0.0%=keep 3:3:66.7%=drop (sdh)');
     expect(log.mock.calls[1][0]).toBe('[subs] spa 4:3:0.0%=keep 5:3:0.0%=drop (same as 4)');
 
-    const second = await resolveSubtitlePruning(details, file, metadata, signal);
+    const second = (await resolveSubtitlePruning(details, file, metadata, signal)).drops;
     expect(second).toEqual(first);
     expect(mockCapture).toHaveBeenCalledTimes(1);
   });
@@ -167,7 +172,7 @@ describe('resolveSubtitlePruning', () => {
     const metadata = { streams: [sub(2, 'eng'), sub(3, 'eng')] };
     await resolveSubtitlePruning(details, file, metadata, signal);
     log.mockClear();
-    const again = await resolveSubtitlePruning(details, file, metadata, signal);
+    const again = (await resolveSubtitlePruning(details, file, metadata, signal)).drops;
     expect(again).toBeInstanceOf(Set);
     expect([...again]).toEqual([3]);
     expect(mockCapture).toHaveBeenCalledTimes(1);
@@ -252,3 +257,180 @@ describe('resolveSubtitlePruning', () => {
     expect([...read].sort((a, b) => a - b)).toEqual([...expected].sort((a, b) => a - b));
   });
 });
+
+function longSrt(make: (i: number) => string, count = 150): string {
+  const stamp = (t: number) => {
+    const m = Math.floor(t / 60);
+    return `00:${String(m).padStart(2, '0')}:${String(t % 60).padStart(2, '0')},000`;
+  };
+  return Array.from({ length: count }, (_, i) => `${i + 1}\n${stamp(i * 4)} --> ${stamp(i * 4 + 2)}\n${make(i)}\n`).join('\n');
+}
+
+const SPAIN = longSrt((i) => `Vosotros ya habéis visto el coche número ${i} de la casa`);
+const LATIN = longSrt((i) => `La casa número ${i} está en la calle de enfrente hoy`);
+const SPAIN_S = longSrt((i) => `Vosotros ya habéis visto el coche número ${i} de la casa`, 30);
+const LATIN_S = longSrt((i) => `La casa número ${i} está en la calle de enfrente hoy`, 30);
+const SPAIN_TWO = longSrt((i) => `Vosotros ya habéis visto la moto número ${i} de la plaza`);
+const LATIN_TWO_S = longSrt((i) => `El perro número ${i} duerme en el patio de atrás hoy`, 30);
+const SHORT_LATIN = longSrt((i) => `La casa número ${i} está en la calle`, 20);
+
+const optIn = { ...details, subtitleVariantDetection: true };
+const spa = (index: number, extra: Record<string, unknown> = {}) => sub(index, 'spa', extra);
+
+function variantEntries(): string[] {
+  return [...redis.entries.keys()].filter((k) => k.includes(':subtitle-variant:'));
+}
+
+describe('resolveSubtitlePruning, subtitle variants', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  // Spec 118, REQ-6 NFR-1
+  it('compares two unresolved text tracks as a pair with a single read', async () => {
+    mockCapture.mockResolvedValue({ code: 0, stdoutBytes: 0, stderr: '', outputs: [LATIN_S, SPAIN_S] });
+    const { variants } = await resolveSubtitlePruning(optIn, file, { streams: [spa(2), spa(3)] }, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+    expect(mockCapture.mock.calls[0][2]).toEqual({ extraOutputs: 2 });
+    expect([...variants]).toEqual([[3, 'es-ES'], [2, 'es-419']].sort((a, b) => Number(a[0]) - Number(b[0])));
+  });
+
+  // Spec 118, REQ-6b
+  it('decides a lone track of a single-track language absolutely, reading just that track', async () => {
+    mockCapture.mockResolvedValue({ code: 0, stdoutBytes: 0, stderr: '', outputs: [SPAIN] });
+    const { variants } = await resolveSubtitlePruning(optIn, file, { streams: [sub(2, 'eng'), spa(3)] }, signal);
+    const args = mockCapture.mock.calls[0][0];
+    expect(args.filter((a) => a === '-map')).toHaveLength(1);
+    expect(args).toContain('0:3');
+    expect([...variants]).toEqual([[3, 'es-ES']]);
+  });
+
+  // Spec 118, REQ-6b
+  it('decides three unresolved tracks each on its own with no pairwise comparison', async () => {
+    mockCapture.mockResolvedValue({ code: 0, stdoutBytes: 0, stderr: '', outputs: [SPAIN, LATIN, SPAIN_TWO] });
+    const { variants } = await resolveSubtitlePruning(optIn, file, { streams: [spa(2), spa(3), spa(4)] }, signal);
+    expect(variants.get(2)).toBe('es-ES');
+    expect(variants.get(3)).toBe('es-419');
+    expect(variants.get(4)).toBe('es-ES');
+    expect(variantEntries()).toHaveLength(3);
+  });
+
+  // Spec 118, REQ-6b
+  it('stores an undecided verdict for a lone track below the minimum word count', async () => {
+    mockCapture.mockResolvedValue({ code: 0, stdoutBytes: 0, stderr: '', outputs: [SHORT_LATIN] });
+    const { variants } = await resolveSubtitlePruning(optIn, file, { streams: [spa(2)] }, signal);
+    expect(variants.size).toBe(0);
+    const stored = variantEntries();
+    expect(stored).toHaveLength(1);
+    expect(JSON.parse(redis.entries.get(stored[0])!)).toEqual({ undecided: true });
+    await resolveSubtitlePruning(optIn, file, { streams: [spa(2)] }, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+  });
+
+  // Spec 118, REQ-8 NFR-1
+  it('stores an undecided pair and does not read it again', async () => {
+    mockCapture.mockResolvedValue({ code: 0, stdoutBytes: 0, stderr: '', outputs: [LATIN_S, LATIN_TWO_S] });
+    const metadata = { streams: [spa(2), spa(3)] };
+    const first = await resolveSubtitlePruning(optIn, file, metadata, signal);
+    expect(first.variants.size).toBe(0);
+    expect(variantEntries()).toHaveLength(1);
+    await resolveSubtitlePruning(optIn, file, metadata, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+  });
+
+  // Spec 118, REQ-8 NFR-1
+  it('reads only the candidates when the drops are stored and the variant verdict misses', async () => {
+    const metadata = { streams: [spa(2), spa(3)] };
+    mockCapture.mockResolvedValueOnce({ code: 0, stdoutBytes: 0, stderr: '', outputs: [LATIN_S, SPAIN_S] });
+    await resolveSubtitlePruning(details, file, metadata, signal);
+    mockCapture.mockResolvedValueOnce({ code: 0, stdoutBytes: 0, stderr: '', outputs: [LATIN_S, SPAIN_S] });
+    const { variants } = await resolveSubtitlePruning(optIn, file, metadata, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(2);
+    expect(mockCapture.mock.calls[1][2]).toEqual({ extraOutputs: 2 });
+    expect(variants.get(3)).toBe('es-ES');
+  });
+
+  // Spec 118, REQ-8 NFR-1
+  it('makes no read when both the drops and the variant verdict are stored', async () => {
+    const metadata = { streams: [spa(2), spa(3)] };
+    mockCapture.mockResolvedValue({ code: 0, stdoutBytes: 0, stderr: '', outputs: [LATIN_S, SPAIN_S] });
+    const first = await resolveSubtitlePruning(optIn, file, metadata, signal);
+    const second = await resolveSubtitlePruning(optIn, file, metadata, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+    expect([...second.variants]).toEqual([...first.variants]);
+  });
+
+  // Spec 118, REQ-5
+  it('does no detection for a titled pair or a PGS pair', async () => {
+    const titled = { streams: [spa(2, { tags: { language: 'spa', title: 'Latino', NUMBER_OF_FRAMES: '500' } }), spa(3, { tags: { language: 'spa', title: 'Castellano', NUMBER_OF_FRAMES: '500' } })] };
+    expect((await resolveSubtitlePruning(optIn, file, titled, signal)).variants.size).toBe(0);
+    const pgs = { streams: [spa(2, { codec_name: 'hdmv_pgs_subtitle' }), spa(3, { codec_name: 'hdmv_pgs_subtitle' })] };
+    expect((await resolveSubtitlePruning(optIn, file, pgs, signal)).variants.size).toBe(0);
+    expect(variantEntries()).toHaveLength(0);
+    const variantReads = mockCapture.mock.calls.filter((c) => c[0].includes('0:2') && !c[0].includes('0:3'));
+    expect(variantReads).toHaveLength(0);
+  });
+
+  // Spec 118, REQ-5
+  it('does not detect or read a subtitle-variant verdict when the opt-in is false', async () => {
+    mockCapture.mockResolvedValue({ code: 0, stdoutBytes: 0, stderr: '', outputs: [LATIN_S, SPAIN_S] });
+    const metadata = { streams: [spa(2), spa(3)] };
+    await resolveSubtitlePruning(optIn, file, metadata, signal);
+    mockCapture.mockClear();
+    const stored = new FakeRedis();
+    const reads: string[] = [];
+    installVerdictStore({
+      get: async (key) => {
+        reads.push(key);
+        return redis.entries.get(key) ?? stored.entries.get(key) ?? null;
+      },
+      set: async () => 'OK',
+    });
+    const { variants } = await resolveSubtitlePruning(details, file, metadata, signal);
+    expect(variants.size).toBe(0);
+    expect(mockCapture).not.toHaveBeenCalled();
+    expect(reads.some((k) => k.includes(':subtitle-variant:'))).toBe(false);
+  });
+
+  // Spec 118, REQ-9
+  it('still returns the drops and stores no variant when the read fails', async () => {
+    mockCapture.mockResolvedValue({ code: 1, stdoutBytes: 0, stderr: '' });
+    const { drops, variants } = await resolveSubtitlePruning(optIn, file, { streams: [spa(2), spa(3)] }, signal);
+    expect(drops.size).toBe(0);
+    expect(variants.size).toBe(0);
+    expect(redis.entries.size).toBe(0);
+  });
+
+  // Spec 118, REQ-9
+  it('keeps the stored drops when only the variant read fails', async () => {
+    const metadata = { streams: [spa(2), spa(3), spa(4)] };
+    mockCapture.mockResolvedValueOnce({ code: 0, stdoutBytes: 0, stderr: '', outputs: [LATIN, SDH, SPAIN] });
+    const first = await resolveSubtitlePruning(details, file, metadata, signal);
+    expect([...first.drops]).toEqual([3]);
+    mockCapture.mockResolvedValueOnce({ code: 1, stdoutBytes: 0, stderr: '' });
+    const second = await resolveSubtitlePruning(optIn, file, metadata, signal);
+    expect([...second.drops]).toEqual([3]);
+    expect(second.variants.size).toBe(0);
+    expect(variantEntries()).toHaveLength(0);
+  });
+
+  // Spec 118, REQ-9
+  it('propagates a cancellation raised during a variant read', async () => {
+    mockCapture.mockRejectedValue(new EncodeCancelledError());
+    await expect(
+      resolveSubtitlePruning(optIn, file, { streams: [spa(2)] }, signal),
+    ).rejects.toBeInstanceOf(EncodeCancelledError);
+  });
+
+  // Spec 118, REQ-8
+  it('misses for a different file', async () => {
+    mockCapture.mockResolvedValue({ code: 0, stdoutBytes: 0, stderr: '', outputs: [LATIN_S, SPAIN_S] });
+    const metadata = { streams: [spa(2), spa(3)] };
+    await resolveSubtitlePruning(optIn, file, metadata, signal);
+    const other = join(dir, 'other.mkv');
+    writeFileSync(other, 'yy');
+    await resolveSubtitlePruning(optIn, other, metadata, signal);
+    expect(mockCapture).toHaveBeenCalledTimes(2);
+  });
+});
+

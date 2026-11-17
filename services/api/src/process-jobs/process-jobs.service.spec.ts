@@ -553,6 +553,47 @@ describe('ProcessJobsService', () => {
     });
   });
 
+  // Spec 118, REQ-3: the subtitle opt-in gates a worker-side text read per
+  // encode. It must follow the SUBTITLE rows only, so an audio-only owner
+  // never turns it on and a subtitle-only owner never turns the audio flag on.
+  describe('getEncodeJobDetails — subtitleVariantDetection', () => {
+    const optedIn = (o: ReturnType<typeof owner>, on = true) => ({ ...o, user: { ...o.user, audioVariantDetection: on } });
+
+    const read = async (owners: unknown[], kind: 'movie' | 'episode' = 'movie') => {
+      prisma.language.findUnique.mockResolvedValue(languageRow('ja', 'jpn'));
+      prisma.userMovie.findMany.mockResolvedValue(owners);
+      prisma.userShow.findMany.mockResolvedValue(owners);
+      prisma.processJob.findUnique.mockResolvedValue(kind === 'movie' ? movieProcessJob() : episodeProcessJob());
+      return service.getEncodeJobDetails(kind === 'movie' ? 1 : 2);
+    };
+
+    it('is true and leaves audio false for an opted-in subtitle-only owner', async () => {
+      const details = await read([optedIn(owner([], [], 'AUDIO', ['spa'], ['es-419'], 'SUBTITLE'))]);
+      expect(details.subtitleVariantDetection).toBe(true);
+      expect(details.audioVariantDetection).toBe(false);
+    });
+
+    it('is false and leaves audio true for an opted-in audio-only owner', async () => {
+      const details = await read([optedIn(owner(['spa'], ['es-ES'], 'AUDIO'))]);
+      expect(details.subtitleVariantDetection).toBe(false);
+      expect(details.audioVariantDetection).toBe(true);
+    });
+
+    it('is false for an owner who has not opted in', async () => {
+      expect((await read([optedIn(owner(['spa'], ['es-419'], 'SUBTITLE'), false)])).subtitleVariantDetection).toBe(false);
+    });
+
+    it('is false for a subtitle language without variants', async () => {
+      expect((await read([optedIn(owner(['eng'], ['en'], 'SUBTITLE'))])).subtitleVariantDetection).toBe(false);
+    });
+
+    it('is false for a title with no owners and reads the same on the episode arm', async () => {
+      expect((await read([])).subtitleVariantDetection).toBe(false);
+      const on = await read([optedIn(owner(['spa'], ['es'], 'SUBTITLE'))], 'episode');
+      expect(on.subtitleVariantDetection).toBe(true);
+    });
+  });
+
   // Spec 099, REQ-2: a wrong read here silently trims every encode's stream
   // tail, or none, with no error anywhere. Only the exact string 'true'
   // enables it, it is independent of dub_trim_enabled, and the episode arm

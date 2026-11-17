@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   completed: vi.fn(),
   failed: vi.fn(),
   capture: vi.fn(),
+  variant: vi.fn(),
   metadata: vi.fn(),
   chapters: vi.fn(),
   tempDirs: [] as string[],
@@ -21,6 +22,9 @@ vi.mock('../api/subtitle-sync-reports', () => ({
   subtitleSyncStarted: (...a: unknown[]) => h.started(...a),
   subtitleSyncCompleted: (...a: unknown[]) => h.completed(...a),
   subtitleSyncFailed: (...a: unknown[]) => h.failed(...a),
+}));
+vi.mock('../subtitles/subtitle-variant', () => ({
+  detectDownloadedVariant: (...a: unknown[]) => h.variant(...a),
 }));
 vi.mock('../ffmpeg/capture', () => ({
   runFfmpegCapture: (...a: unknown[]) => h.capture(...a),
@@ -80,6 +84,7 @@ beforeEach(async () => {
   h.events.length = 0;
   h.tempDirs.length = 0;
   h.details.mockReset().mockResolvedValue({ id: 5, filePath: join(dir, 'Film.mkv'), candidatePath: candidate });
+  h.variant.mockReset().mockResolvedValue('es-419');
   h.started.mockReset().mockResolvedValue(true);
   h.completed.mockReset().mockResolvedValue(true);
   h.failed.mockReset().mockResolvedValue(true);
@@ -99,7 +104,7 @@ describe('handleSubtitleSync', () => {
   it('reports the measurements and removes the temp directory on success', async () => {
     await handleSubtitleSync(job);
 
-    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null);
+    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null, null);
     expect(h.failed).not.toHaveBeenCalled();
     expect(await Promise.all(h.tempDirs.map(exists))).toEqual([false]);
     expect(await exists(candidate)).toBe(true);
@@ -112,7 +117,7 @@ describe('handleSubtitleSync', () => {
     const [args] = h.capture.mock.calls[0];
     expect(args).toContain('--vad');
     expect(args).toContain('a:0');
-    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'AUDIO', 1234.5, 7265432, null);
+    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'AUDIO', 1234.5, 7265432, null, null);
   });
 
   it('reports sync_failed on ffsubsync exit 1 and removes the temp directory', async () => {
@@ -154,14 +159,14 @@ describe('handleSubtitleSync', () => {
     h.chapters.mockResolvedValue([{ start_time: '0.000000' }, { start_time: '3600.000000' }, { start_time: '7100.5' }]);
     await handleSubtitleSync(job);
 
-    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, 7100500);
+    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, 7100500, null);
   });
 
   it('reports a null last chapter with a single chapter', async () => {
     h.chapters.mockResolvedValue([{ start_time: '0.000000' }]);
     await handleSubtitleSync(job);
 
-    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null);
+    expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null, null);
   });
 
   it.each([
@@ -209,5 +214,65 @@ describe('handleSubtitleSync', () => {
   it('rethrows any other details error', async () => {
     h.details.mockRejectedValue(new Error('graphql down'));
     await expect(handleSubtitleSync(job)).rejects.toThrow('graphql down');
+  });
+
+  // Spec 118, REQ-12 REQ-14 REQ-17
+  describe('variant check', () => {
+    // Defends against a decided variant never reaching api, a tag reported for a search that did
+    // not ask for one, or a failed check dropping the measurement.
+    const withIso3 = (iso3: string | null | undefined) => ({
+      id: 5,
+      filePath: join(dir, 'Film.mkv'),
+      candidatePath: candidate,
+      variantDetectionIso3: iso3,
+    });
+
+    it('reports the decided tag after checking the staged candidate when variantDetectionIso3 is set', async () => {
+      h.details.mockResolvedValue(withIso3('spa'));
+      await handleSubtitleSync(job);
+
+      expect(h.variant).toHaveBeenCalledWith(candidate, 'spa');
+      expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null, 'es-419');
+    });
+
+    it('runs the check before the measurement', async () => {
+      h.details.mockResolvedValue(withIso3('spa'));
+      h.variant.mockImplementation(async () => {
+        h.events.push('variant');
+        return 'es-ES';
+      });
+      h.capture.mockImplementation(async () => {
+        h.events.push('capture');
+        return { code: 0, stdoutBytes: 0, stderr: LOG };
+      });
+      await handleSubtitleSync(job);
+
+      expect(h.events.filter((e) => e === 'variant' || e === 'capture')).toEqual(['variant', 'capture']);
+    });
+
+    it.each([['null', null], ['missing', undefined]])('reports a null tag and never checks when variantDetectionIso3 is %s', async (_n, value) => {
+      h.details.mockResolvedValue(withIso3(value));
+      await handleSubtitleSync(job);
+
+      expect(h.variant).not.toHaveBeenCalled();
+      expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null, null);
+    });
+
+    it('reports a null tag when the check decides nothing', async () => {
+      h.details.mockResolvedValue(withIso3('spa'));
+      h.variant.mockResolvedValue(null);
+      await handleSubtitleSync(job);
+
+      expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null, null);
+    });
+
+    it('still reports the measurement with a null tag when the check throws', async () => {
+      h.details.mockResolvedValue(withIso3('spa'));
+      h.variant.mockRejectedValue(new Error('unreadable'));
+      await handleSubtitleSync(job);
+
+      expect(h.completed).toHaveBeenCalledWith(5, -2000, 1, 'SUBTITLE', 1234.5, 7265432, null, null);
+      expect(h.failed).not.toHaveBeenCalled();
+    });
   });
 });

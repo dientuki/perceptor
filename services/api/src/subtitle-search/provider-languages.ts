@@ -18,3 +18,13 @@ export function providerLanguageCodes(
   );
   return row ? [row.tag.toLowerCase()] : [];
 }
+
+// Spec 118, REQ-13
+export const PROVIDER_VARIANT_CODES: Record<string, string> = {
+  'es-419': 'ea',
+};
+
+// Spec 118, REQ-13
+export function providerVariantCode(tag: string): string | null {
+  return PROVIDER_VARIANT_CODES[tag] ?? null;
+}

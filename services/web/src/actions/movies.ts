@@ -54,40 +54,6 @@ export interface Movie {
   latestSubtitleSearch?: SubtitleSearch | null;
 }
 
-export async function getMovies(isShort?: boolean): Promise<Movie[]> {
-  const query = `
-    query GetStoredMovies($isShort: Boolean) {
-      movies(isShort: $isShort) {
-        id
-        overview
-        title
-        posterUrl
-        releaseDate
-      }
-    }
-  `;
-
-  // Spec 048, REQ-8 REQ-11
-  const { data, errors } = await fetchGraphQL<{ movies: Movie[] }>(query, {
-    isShort,
-  });
-
-  if (errors && errors.length > 0) {
-    // Called directly from MoviesPage's Server Component render — cookie
-    // mutation is illegal there, so hand off to the Route Handler instead of
-    // redirectIfUnauthenticated (which throws by mutating cookies).
-    redirectToClearSession(errors);
-    // Any other error: log it server-side and fall back to an empty list,
-    // matching what the client component's try/catch used to do silently —
-    // there is no app/(dashboard)/error.tsx, so letting this throw would
-    // surface Next's default error screen instead of the empty state.
-    console.error("Failed to fetch movies:", errors[0]?.message);
-    return [];
-  }
-
-  return data?.movies ?? [];
-}
-
 const GET_MOVIE_QUERY = `
   query GetMovie($id: Int!) {
     movie(id: $id) {
@@ -420,8 +386,8 @@ export async function embedMovieSubtitlesAction(
 }
 
 const SEARCH_MOVIE_SUBTITLES_MUTATION = `
-  mutation SearchMovieSubtitles($movieId: Int!) {
-    searchMovieSubtitles(movieId: $movieId) {
+  mutation SearchMovieSubtitles($movieId: Int!, $replaceLanguages: [String!]) {
+    searchMovieSubtitles(movieId: $movieId, replaceLanguages: $replaceLanguages) {
       id
       status
       errorKey
@@ -439,12 +405,15 @@ const SEARCH_MOVIE_SUBTITLES_MUTATION = `
 // Spec 106, REQ-9
 export async function searchMovieSubtitlesAction(
   movieId: string,
+  replaceLanguages: string[] = [],
 ): Promise<SubtitleSearchResult> {
   type Payload = { searchMovieSubtitles: SubtitleSearch | null };
   let result: Awaited<ReturnType<typeof fetchGraphQL<Payload>>>;
   try {
     result = await fetchGraphQL<Payload>(SEARCH_MOVIE_SUBTITLES_MUTATION, {
       movieId: Number(movieId),
+      // Spec 119, T007
+      ...(replaceLanguages.length > 0 ? { replaceLanguages } : {}),
     });
   } catch (_err) {
     const t = await getTranslations("errors");

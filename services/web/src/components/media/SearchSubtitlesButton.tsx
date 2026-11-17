@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import Checkbox from "@/components/form/input/Checkbox";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
 import { useModal } from "@/hooks/useModal";
@@ -12,7 +13,8 @@ import type { SubtitleSearch, SubtitleSearchResult } from "@/types/media";
 
 interface SearchSubtitlesButtonProps {
   search: SubtitleSearch | null | undefined;
-  onSearch: () => Promise<SubtitleSearchResult>;
+  onSearch: (replaceLanguages: string[]) => Promise<SubtitleSearchResult>;
+  replaceableLanguages?: string[];
   compact?: boolean;
   fullWidth?: boolean;
 }
@@ -28,6 +30,7 @@ const ERROR_CLASS =
 export default function SearchSubtitlesButton({
   search,
   onSearch,
+  replaceableLanguages = [],
   compact = false,
   fullWidth = false,
 }: SearchSubtitlesButtonProps) {
@@ -37,6 +40,7 @@ export default function SearchSubtitlesButton({
   const { isOpen, openModal, closeModal } = useModal();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const [ticked, setTicked] = useState<string[]>([]);
 
   const inFlight = search ? IN_FLIGHT_STATUSES.includes(search.status) : false;
 
@@ -49,6 +53,8 @@ export default function SearchSubtitlesButton({
 
   const handleOpen = () => {
     setError(null);
+    // Spec 119, T007
+    setTicked([]);
     openModal();
   };
 
@@ -56,7 +62,9 @@ export default function SearchSubtitlesButton({
     setIsPending(true);
     setError(null);
     try {
-      const result = await onSearch();
+      const result = await onSearch(
+        replaceableLanguages.filter((code) => ticked.includes(code)),
+      );
       if ("search" in result) {
         closeModal();
         router.refresh();
@@ -110,6 +118,31 @@ export default function SearchSubtitlesButton({
               </p>
             )}
             <p className="text-gray-600 dark:text-gray-300">{t("body")}</p>
+            {replaceableLanguages.length > 0 && (
+              <div className="space-y-2">
+                <p className="font-medium text-gray-800 dark:text-white/90">
+                  {t("replaceLabel")}
+                </p>
+                <p className="text-base text-gray-500 dark:text-gray-400">
+                  {t("replaceHint")}
+                </p>
+                {replaceableLanguages.map((code) => (
+                  <Checkbox
+                    key={code}
+                    id={`replace-subtitle-${code}`}
+                    checked={ticked.includes(code)}
+                    onChange={(checked) =>
+                      setTicked((current) =>
+                        checked
+                          ? [...current, code]
+                          : current.filter((c) => c !== code),
+                      )
+                    }
+                    label={code.toUpperCase()}
+                  />
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
             <Button

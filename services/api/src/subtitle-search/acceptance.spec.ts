@@ -1,7 +1,7 @@
 // The acceptance rule is the only thing between a mistimed subtitle and the
 // library file. A ratio check, an offset bound or a score threshold that
 // quietly stops applying embeds a wrong track and nothing errors: the search
-// still reads EMBEDDED. Each case below fails when its rule is removed.
+// still reads RESOLVED. Each case below fails when its rule is removed.
 
 import {
   accept,

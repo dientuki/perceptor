@@ -22,6 +22,8 @@ export type EncodeInput = {
   streamEndTrimEnabled: boolean;
   // Spec 110, REQ-5
   audioVariantDetection?: boolean;
+  // Spec 118, REQ-3
+  subtitleVariantDetection?: boolean;
   mediaSourceId: number;
   containerTitle: string;
   sourceTag: string;

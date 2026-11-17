@@ -3,6 +3,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { LibraryLocationService } from '@/library-location/library-location.service';
+import { ShowTrackLanguagesService } from '@/show-track-languages/show-track-languages.service';
 import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
 import { POSSESSION_WHERE } from '@/pipeline-status/pipeline-status';
 import { resolveSidecarLanguages } from '@/subtitle-search/sidecar-languages';
@@ -26,6 +27,7 @@ export class LibraryProbeService implements OnApplicationBootstrap {
     private readonly prisma: PrismaService,
     private readonly location: LibraryLocationService,
     private readonly queue: LibraryProbeQueueService,
+    private readonly showTrackLanguages: ShowTrackLanguagesService,
   ) {}
 
   onApplicationBootstrap() {
@@ -109,16 +111,21 @@ export class LibraryProbeService implements OnApplicationBootstrap {
   ): Promise<boolean> {
     const resolved = this.resolveTarget(target);
 
-    const current =
-      resolved.kind === 'movie'
-        ? await this.prisma.movie.findUnique({
-            where: { id: resolved.id },
-            select: { filePath: true },
-          })
-        : await this.prisma.episode.findUnique({
-            where: { id: resolved.id },
-            select: { filePath: true },
-          });
+    let current: { filePath: string | null } | null;
+    let showId: number | null = null;
+    if (resolved.kind === 'movie') {
+      current = await this.prisma.movie.findUnique({
+        where: { id: resolved.id },
+        select: { filePath: true },
+      });
+    } else {
+      const episode = await this.prisma.episode.findUnique({
+        where: { id: resolved.id },
+        select: { filePath: true, season: { select: { showId: true } } },
+      });
+      current = episode;
+      showId = episode?.season.showId ?? null;
+    }
     if (!current) return false;
 
     const languages =
@@ -149,6 +156,10 @@ export class LibraryProbeService implements OnApplicationBootstrap {
       resolved.kind === 'movie'
         ? await this.prisma.movie.updateMany({ where, data })
         : await this.prisma.episode.updateMany({ where, data });
+    // Spec 117, REQ-7
+    if (result.count === 1 && showId !== null) {
+      await this.showTrackLanguages.recompute(showId);
+    }
     return result.count === 1;
   }
 

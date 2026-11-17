@@ -1409,6 +1409,35 @@ describe('DownloadsService', () => {
       expect(order).toEqual(['remove', 'add']);
     });
 
+    // Spec 116, REQ-1 REQ-2
+    it('recomputes the season before re-enqueueing the scan, and not again afterwards', async () => {
+      const order: string[] = [];
+      queue.removeSourceReady.mockImplementation(async () => void order.push('remove'));
+      queue.addSourceReady.mockImplementation(async () => void order.push('add'));
+      titleStatus.recomputeSeason.mockImplementation(async () => void order.push('recompute'));
+      const seasonSource = (over: Record<string, unknown>) =>
+        sourceRow({
+          kind: 'LOCAL_FOLDER',
+          infoHash: null,
+          movieId: null,
+          movie: null,
+          seasonId: 42,
+          season: { seasonNumber: 2, show: { id: 3, title: 'Show', users: [{ userId: 'user-1' }] } },
+          ...over,
+        });
+      prisma.mediaSource.findUnique
+        .mockResolvedValueOnce(
+          seasonSource({ status: 'ERROR', errorKey: 'error.source.scan_failed', errorMessage: 'boom' }),
+        )
+        .mockResolvedValue(seasonSource({ status: 'READY', errorKey: null, errorMessage: null }));
+      prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.downloadStart(1, 'user-1');
+
+      expect(titleStatus.recomputeSeason).toHaveBeenCalledWith(42);
+      expect(order).toEqual(['remove', 'recompute', 'add']);
+    });
+
     it('restores the jobs to ERROR with their original error when the encode enqueue fails', async () => {
       encodeQueue.addEncode.mockRejectedValue(new Error('redis down'));
       prisma.mediaSource.findUnique.mockResolvedValue(sourceRow());

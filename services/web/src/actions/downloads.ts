@@ -142,7 +142,7 @@ const DOWNLOAD_DELETE_MUTATION = `
 // or unowned title rather than answering with an empty/null result (see the
 // GraphQL Contract Delta's error table). The page already renders notFound()
 // off getMovieById's null, called in the same Promise.all — swallowing a
-// non-auth error here and falling back to [] (as getMovies() already does)
+// non-auth error here and falling back to [] (as the library listing already does)
 // avoids that same condition surfacing a second time as an uncaught 500
 // racing the real notFound() check.
 export async function getMovieDownloads(movieId: number): Promise<Download[]> {

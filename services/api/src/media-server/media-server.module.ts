@@ -6,9 +6,10 @@ import { SettingsModule } from '@/settings/settings.module';
 import { MediaRootsModule } from '@/media-roots/media-roots.module';
 import { QueueModule } from '@/queue/queue.module';
 import { MediaServerIndexModule } from '@/media-server-index/media-server-index.module';
+import { ShowTrackLanguagesModule } from '@/show-track-languages/show-track-languages.module';
 
 @Module({
-  imports: [SettingsModule, MediaRootsModule, MediaServerIndexModule, QueueModule],
+  imports: [SettingsModule, MediaRootsModule, MediaServerIndexModule, QueueModule, ShowTrackLanguagesModule],
   providers: [
     MediaServerResolver,
     MediaServerService,
