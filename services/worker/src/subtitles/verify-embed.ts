@@ -25,13 +25,16 @@ const MAX_DRIFT_SECONDS = 1;
 const lang = (stream: VerifyStream) => normalizeIso3(stream.tags?.language ?? '');
 const fail = (reason: string): VerifyResult => ({ ok: false, reason });
 
-// Spec 101, REQ-9 REQ-10
+// Spec 101, REQ-9 REQ-10; Spec 119, REQ-5
 export function verifyEmbed(
   original: VerifyMetadata,
   result: VerifyMetadata,
   tracks: VerifyTrack[],
+  dropIndexes: number[] = [],
 ): VerifyResult {
-  const before = original.streams ?? [];
+  // Spec 119, REQ-5
+  const dropped = new Set(dropIndexes);
+  const before = (original.streams ?? []).filter((_, i) => !dropped.has(i));
   const after = result.streams ?? [];
 
   if (after.length !== before.length + tracks.length) {

@@ -198,6 +198,15 @@ export const ERROR_KEYS = {
   SUBTITLE_SEARCH_QUOTA_EXHAUSTED: 'error.subtitleSearch.quota_exhausted',
   SUBTITLE_SEARCH_PROBE_FAILED: 'error.subtitleSearch.probe_failed',
 
+  // Spec 118, REQ-15
+  SUBTITLE_SEARCH_WRONG_VARIANT: 'error.subtitleSearch.wrong_variant',
+
+  // Spec 119, REQ-3
+  SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_WANTED:
+    'error.subtitleSearch.replace_language_not_wanted',
+  SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_PRESENT:
+    'error.subtitleSearch.replace_language_not_present',
+
   CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
   CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',
 

@@ -88,7 +88,9 @@ export default function PreferencesForm({
     preferences.audioVariantDetection,
   );
   const variantDetectionAvailable = languages.some(
-    (l) => audioTags.includes(l.tag) && l.hasRegionalVariants,
+    (l) =>
+      (audioTags.includes(l.tag) || subtitleTags.includes(l.tag)) &&
+      l.hasRegionalVariants,
   );
   const [subtitleSearch, setSubtitleSearch] = useState(
     preferences.subtitleSearch,

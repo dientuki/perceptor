@@ -1,12 +1,8 @@
-import type { AudioVariantDetector, AudioVariantMarkers } from './audio-variant-detectors';
+import type { AudioVariantDetector } from './variant-detectors';
+import { dedupeLines, score } from './variant-score';
 
 export const DUPLICATE_THRESHOLD = 0.75;
 export const DECISION_MARGIN = 6;
-
-const STRONG_A_WEIGHT = 3;
-const WEAK_A_WEIGHT = 1;
-const PRESENT_PERFECT_WEIGHT = 1;
-const B_WEIGHT = -2;
 
 export interface VariantTranscript {
   index: number;
@@ -17,19 +13,6 @@ export type AudioVariantVerdict =
   | { kind: 'duplicate'; similarity: number }
   | { kind: 'decided'; tags: Record<number, string>; scores: [number, number]; similarity: number }
   | { kind: 'undecided'; scores: [number, number]; similarity: number };
-
-export function dedupeLines(text: string): string {
-  const seen = new Set<string>();
-  const kept: string[] = [];
-  for (const raw of text.split('\n')) {
-    const line = raw.trim().toLowerCase();
-    if (line && !seen.has(line)) {
-      seen.add(line);
-      kept.push(line);
-    }
-  }
-  return kept.join(' \n');
-}
 
 function words(text: string): string[] {
   return dedupeLines(text).match(/[a-záéíóúüñ]+/g) ?? [];
@@ -77,22 +60,6 @@ export function similarity(a: string, b: string): number {
   const length = wordsA.length + wordsB.length;
   if (length === 0) return 1;
   return (2 * matchingTotal(wordsA, wordsB)) / length;
-}
-
-function count(text: string, patterns: RegExp[]): number {
-  let total = 0;
-  for (const pattern of patterns) total += text.match(new RegExp(pattern.source, pattern.flags))?.length ?? 0;
-  return total;
-}
-
-export function score(text: string, markers: AudioVariantMarkers): number {
-  const deduped = dedupeLines(text);
-  return (
-    STRONG_A_WEIGHT * count(deduped, markers.strongA) +
-    WEAK_A_WEIGHT * count(deduped, markers.weakA) +
-    PRESENT_PERFECT_WEIGHT * count(deduped, markers.presentPerfect) +
-    B_WEIGHT * count(deduped, markers.b)
-  );
 }
 
 export function decide(

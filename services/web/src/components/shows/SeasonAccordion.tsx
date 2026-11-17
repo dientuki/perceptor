@@ -22,18 +22,21 @@ import Button from "@/components/ui/button/Button";
 import { useDateMonthFirst } from "@/context/DateFormatContext";
 import { useModal } from "@/hooks/useModal";
 import { formatDate } from "@/lib/format";
+import { replaceableSubtitleLanguages } from "@/lib/replaceable-subtitle-languages";
 import type { Language } from "@/types/languages";
 import type { AcquisitionTarget } from "@/types/media";
 
 function EpisodeRow({
   episode,
   subtitleSearchAvailable,
+  subtitleLanguages,
   onOpenSearchModal,
   onOpenFileModal,
   onOpenMagnetModal,
 }: {
   episode: Episode;
   subtitleSearchAvailable: boolean;
+  subtitleLanguages: Language[];
   onOpenSearchModal: (episode: Episode) => void;
   onOpenFileModal: (episode: Episode) => void;
   onOpenMagnetModal: (episode: Episode) => void;
@@ -89,6 +92,10 @@ function EpisodeRow({
               fullWidth
               search={episode.latestSubtitleSearch}
               onSearch={searchEpisodeSubtitlesAction.bind(null, episode.id)}
+              replaceableLanguages={replaceableSubtitleLanguages(
+                episode.fileSubtitleLanguages,
+                subtitleLanguages,
+              )}
             />
           )}
         </div>
@@ -138,6 +145,7 @@ export default function SeasonAccordion({
   audioMandatory,
   audioLanguages,
   subtitleSearchAvailable,
+  subtitleLanguages,
 }: {
   season: Season;
   defaultOpen: boolean;
@@ -145,6 +153,7 @@ export default function SeasonAccordion({
   audioMandatory: boolean;
   audioLanguages: Language[];
   subtitleSearchAvailable: boolean;
+  subtitleLanguages: Language[];
 }) {
   const t = useTranslations("shows.seasonAccordion");
   const hasEpisodes = season.episodes.length > 0;
@@ -311,6 +320,7 @@ export default function SeasonAccordion({
                   key={episode.id}
                   episode={episode}
                   subtitleSearchAvailable={subtitleSearchAvailable}
+                  subtitleLanguages={subtitleLanguages}
                   onOpenSearchModal={handleOpenSearchModal}
                   onOpenFileModal={handleOpenFileModal}
                   onOpenMagnetModal={handleOpenMagnetModal}

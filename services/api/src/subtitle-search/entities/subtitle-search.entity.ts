@@ -16,7 +16,9 @@ registerEnumType(SubtitleSearchStatus, { name: 'SubtitleSearchStatus' });
 export enum SubtitleSearchLanguageOutcome {
   PENDING = 'PENDING',
   ALREADY_PRESENT = 'ALREADY_PRESENT',
-  EMBEDDED = 'EMBEDDED',
+  RESOLVED = 'RESOLVED',
+  REPLACED = 'REPLACED',
+  MISSING = 'MISSING',
   NOT_FOUND = 'NOT_FOUND',
   REJECTED = 'REJECTED',
   FAILED = 'FAILED',

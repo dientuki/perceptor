@@ -709,6 +709,22 @@ describe('SeasonsService', () => {
         expect(queue.addSourceReady).toHaveBeenCalledTimes(1);
       });
 
+      // Spec 116, REQ-1 REQ-2
+      it('recomputes the season before enqueueing the scan', async () => {
+        await writeFile(join(dir, 'e01.mkv'), 'x');
+        const order: string[] = [];
+        titleStatus.recomputeSeason.mockImplementation(async () => void order.push('recompute'));
+        queue.addSourceReady.mockImplementation(async () => void order.push('add'));
+        sessions.findOpenSeasonSession.mockResolvedValue(open());
+        downloads.resolveRace.mockResolvedValue({ outcome: 'WON', message: 'ganador: mediaSource 900, 0 pausado(s)' });
+        prisma.mediaSource.updateMany.mockResolvedValue({ count: 1 });
+
+        await service.finishSeasonUpload(900, 'user-1');
+
+        expect(titleStatus.recomputeSeason).toHaveBeenCalledWith(42);
+        expect(order).toEqual(['recompute', 'add']);
+      });
+
       it('does not enqueue when a concurrent close already flipped the row', async () => {
         await writeFile(join(dir, 'e01.mkv'), 'x');
         sessions.findOpenSeasonSession.mockResolvedValue(open());

@@ -6,6 +6,7 @@ import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { Movie } from '@/movies/entities/movies.entity';
 import { Episode } from '@/shows/entities/episode.entity';
+import { Show } from '@/shows/entities/show.entity';
 import { LibraryProbeService } from './library-probe.service';
 import { LibraryProbeTarget } from './dto/library-probe-target.input';
 import { LibraryProbeDetails } from './entities/library-probe-details.entity';
@@ -55,6 +56,28 @@ export class EpisodeLibraryTracksResolver {
   })
   fileSubtitleLanguages(@Parent() episode: Record<string, unknown>) {
     return asLanguages(episode.fileSubtitleLanguages);
+  }
+}
+
+// Spec 117, REQ-7 REQ-13
+@Resolver(() => Show)
+export class ShowLibraryTracksResolver {
+  @ResolveField(() => [String], {
+    nullable: true,
+    description:
+      'ISO 639-2 audio languages present in every episode in scope (117 REQ-7); null when no episode is in scope.',
+  })
+  fileAudioLanguages(@Parent() show: Record<string, unknown>) {
+    return asLanguages(show.fileAudioLanguages);
+  }
+
+  @ResolveField(() => [String], {
+    nullable: true,
+    description:
+      'ISO 639-2 subtitle languages present in every episode in scope (117 REQ-7); null when no episode is in scope.',
+  })
+  fileSubtitleLanguages(@Parent() show: Record<string, unknown>) {
+    return asLanguages(show.fileSubtitleLanguages);
   }
 }
 

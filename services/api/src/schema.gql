@@ -156,6 +156,22 @@ enum GrainMode {
   OFF
 }
 
+type MoviePage {
+  items: [Movie!]!
+
+  """Titles matching the filter, across every page."""
+  totalCount: Int!
+
+  """
+  The page actually returned, after clamping to [1, totalPages] (117 REQ-11).
+  """
+  page: Int!
+  pageSize: Int!
+
+  """ceil(totalCount / pageSize), and 1 when totalCount is 0."""
+  totalPages: Int!
+}
+
 """The outcome of removing a title from the caller's library."""
 type TitleRemoval {
   """
@@ -413,6 +429,24 @@ type Show {
   How many *other* users have this series in their library. 0 when the caller is the last owner.
   """
   otherOwners: Int!
+
+  """
+  ISO 639-2 audio languages present in every episode in scope (117 REQ-7); null when no episode is in scope.
+  """
+  fileAudioLanguages: [String!]
+
+  """
+  ISO 639-2 subtitle languages present in every episode in scope (117 REQ-7); null when no episode is in scope.
+  """
+  fileSubtitleLanguages: [String!]
+}
+
+type ShowPage {
+  items: [Show!]!
+  totalCount: Int!
+  page: Int!
+  pageSize: Int!
+  totalPages: Int!
 }
 
 type SeasonUploadSession {
@@ -453,7 +487,7 @@ type UserPreferences {
   subtitleSearch: Boolean!
 
   """
-  Gate for audio variant detection (110 REQ-1). False for every user until they say otherwise.
+  Gate for audio and subtitle variant detection (110 REQ-1, 118 REQ-1). False for every user until they say otherwise.
   """
   audioVariantDetection: Boolean!
   audioLanguages: [Language!]!
@@ -529,6 +563,11 @@ type EncodeJobDetails {
 
   """Effective opt-in for this job (110 REQ-4)."""
   audioVariantDetection: Boolean!
+
+  """
+  Effective opt-in for subtitle variant detection on this job (118 REQ-3).
+  """
+  subtitleVariantDetection: Boolean!
   allowedSubtitleFormats: [String!]!
   libraryLayout: String!
 }
@@ -597,7 +636,9 @@ type SubtitleSearchLanguage {
 enum SubtitleSearchLanguageOutcome {
   PENDING
   ALREADY_PRESENT
-  EMBEDDED
+  RESOLVED
+  REPLACED
+  MISSING
   NOT_FOUND
   REJECTED
   FAILED
@@ -662,6 +703,11 @@ type SubtitleEmbedDetails {
   """Absolute container path of the library .mkv to replace."""
   filePath: String!
   tracks: [SubtitleEmbedTrack!]!
+
+  """
+  ISO 639-2 codes whose existing non-forced text subtitle tracks the worker drops in the same remux (119 REQ-5); empty means append only.
+  """
+  replaceLanguagesIso3: [String!]!
 }
 
 type MediaSearchResult {
@@ -747,6 +793,11 @@ type SubtitleSyncDetails {
   Absolute container path of the staged candidate, under the downloads root.
   """
   candidatePath: String!
+
+  """
+  iso3 of the candidate's language when the variant check must run (118 REQ-12); null means do not run it.
+  """
+  variantDetectionIso3: String
 }
 
 type LibraryProbeDetails {
@@ -840,6 +891,11 @@ type Query {
   users: [User!]!
   user(id: ID!): User!
   movies(isShort: Boolean): [Movie!]!
+
+  """
+  One page of the caller's films, newest registration first (117 REQ-8). isShort behaves exactly as on movies(isShort).
+  """
+  moviePage(isShort: Boolean, possession: LibraryPossession! = ALL, page: Int! = 1, pageSize: Int! = 24): MoviePage!
   movie(id: Int!): Movie
   defaultUiLocale: String
 
@@ -884,6 +940,11 @@ type Query {
   indexerCatalog(search: String): [IndexerDefinition!]!
   configuredIndexers: [ConfiguredIndexer!]!
   shows: [Show!]!
+
+  """
+  One page of the caller's series, newest registration first (117 REQ-8).
+  """
+  showPage(possession: LibraryPossession! = ALL, page: Int! = 1, pageSize: Int! = 24): ShowPage!
   show(id: Int!): Show
   preferences: UserPreferences!
   torrentGroups: [TorrentGroup!]!
@@ -941,6 +1002,17 @@ type Query {
 
   """Service-only (worker). Exactly one of movieId/episodeId is set."""
   libraryProbeDetails(target: LibraryProbeTarget!): LibraryProbeDetails!
+}
+
+enum LibraryPossession {
+  """Every title in the caller's library."""
+  ALL
+
+  """status COMPLETED (117 REQ-4)."""
+  DOWNLOADED
+
+  """Any status other than COMPLETED (117 REQ-4)."""
+  ADDED
 }
 
 input LibraryProbeTarget {
@@ -1183,10 +1255,10 @@ type Mutation {
   """
   Starts a 103 subtitle search for a film the caller owns that already holds a file (106).
   """
-  searchMovieSubtitles(movieId: Int!): SubtitleSearch!
+  searchMovieSubtitles(movieId: Int!, replaceLanguages: [String!]): SubtitleSearch!
 
   """Same, for an episode of a series the caller owns."""
-  searchEpisodeSubtitles(episodeId: Int!): SubtitleSearch!
+  searchEpisodeSubtitles(episodeId: Int!, replaceLanguages: [String!]): SubtitleSearch!
 
   """
   Service-only (worker). Moves a queued validation to running; false if it is no longer queued.
@@ -1196,7 +1268,20 @@ type Mutation {
   """
   Service-only (worker). Safe to receive more than once (038's posture). api applies REQ-10's acceptance rule.
   """
-  subtitleSyncCompleted(id: Int!, offsetMs: Int!, framerateRatio: Float!, reference: SubtitleSyncReference!, score: Float!, mediaDurationMs: Int!, lastChapterStartMs: Int): Boolean!
+  subtitleSyncCompleted(
+    id: Int!
+    offsetMs: Int!
+    framerateRatio: Float!
+    reference: SubtitleSyncReference!
+    score: Float!
+    mediaDurationMs: Int!
+    lastChapterStartMs: Int
+
+    """
+    Variant tag the check decided (`es-ES`, `es-419`); null when undecided, failed or not run (118 REQ-14 REQ-17).
+    """
+    variantTag: String
+  ): Boolean!
 
   """Service-only (worker). Safe to receive more than once."""
   subtitleSyncFailed(id: Int!, errorKey: String!): Boolean!

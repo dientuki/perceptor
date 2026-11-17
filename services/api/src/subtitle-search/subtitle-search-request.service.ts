@@ -8,6 +8,8 @@ import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { LibraryLocationService } from '@/library-location/library-location.service';
 import { SubtitleEmbedService } from '@/subtitle-embed/subtitle-embed.service';
+import { LanguagesService } from '@/languages/languages.service';
+import { wantedVariants } from '@/languages/variant-opt-in';
 import { SubtitleSearchQueueService } from './subtitle-search-queue.service';
 
 export type SubtitleSearchTarget =
@@ -33,6 +35,7 @@ export class SubtitleSearchRequestService {
     private readonly embed: SubtitleEmbedService,
     private readonly mediaServer: MediaServerService,
     private readonly mediaRoots: MediaRootsService,
+    private readonly languages: LanguagesService,
     @Optional() location?: LibraryLocationService,
   ) {
     this.location =
@@ -56,6 +59,7 @@ export class SubtitleSearchRequestService {
     if (wanted.length === 0) return;
 
     const column = this.column(target);
+    const variants = await this.resolveWantedVariants(target);
 
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.subtitleSearch.updateMany({
@@ -71,6 +75,7 @@ export class SubtitleSearchRequestService {
           ...column,
           status: 'WAITING',
           wantedLanguages: wanted,
+          wantedVariants: variants ?? Prisma.DbNull,
         },
       });
     });
@@ -88,6 +93,7 @@ export class SubtitleSearchRequestService {
   async requestForCaller(
     target: SubtitleSearchTarget,
     userId: string,
+    replaceLanguages: string[] = [],
   ): Promise<number> {
     const facts = await this.embed.assertManualSearchPreflight(target, userId);
 
@@ -96,12 +102,22 @@ export class SubtitleSearchRequestService {
       throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_SEARCH_NO_LANGUAGES);
     }
 
+    // Spec 119, REQ-3
+    const replace = await this.validateReplace(target, wanted, replaceLanguages);
+
     // Spec 107, REQ-4
     const libraryPath = facts.filePath
       ? null
       : await this.resolveLibraryPath(target, facts);
 
-    const created = await this.createGuarded(target, wanted, libraryPath);
+    const variants = await this.resolveWantedVariants(target);
+    const created = await this.createGuarded(
+      target,
+      wanted,
+      variants,
+      libraryPath,
+      replace,
+    );
 
     try {
       await this.queue.wake(created.id, 0);
@@ -111,6 +127,45 @@ export class SubtitleSearchRequestService {
       );
     }
     return created.id;
+  }
+
+  // Spec 119, REQ-3
+  private async validateReplace(
+    target: SubtitleSearchTarget,
+    wanted: string[],
+    requested: string[],
+  ): Promise<string[]> {
+    const replace = [...new Set(requested.map((iso3) => iso3.toLowerCase()))];
+    if (replace.length === 0) return [];
+
+    if (replace.some((iso3) => !wanted.includes(iso3))) {
+      throw i18nError.badRequest(
+        ERROR_KEYS.SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_WANTED,
+      );
+    }
+
+    const select = { fileSubtitleLanguages: true } as const;
+    const row =
+      target.kind === 'movie'
+        ? await this.prisma.movie.findUnique({
+            where: { id: target.id },
+            select,
+          })
+        : await this.prisma.episode.findUnique({
+            where: { id: target.id },
+            select,
+          });
+    const held = new Set(
+      Array.isArray(row?.fileSubtitleLanguages)
+        ? row.fileSubtitleLanguages.map((item) => String(item).toLowerCase())
+        : [],
+    );
+    if (replace.some((iso3) => !held.has(iso3))) {
+      throw i18nError.badRequest(
+        ERROR_KEYS.SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_PRESENT,
+      );
+    }
+    return replace;
   }
 
   // Spec 107, REQ-4; Spec 108, REQ-3
@@ -147,7 +202,9 @@ export class SubtitleSearchRequestService {
   private async createGuarded(
     target: SubtitleSearchTarget,
     wanted: string[],
+    variants: Record<string, string> | null,
     libraryPath: string | null = null,
+    replaceLanguages: string[] = [],
   ) {
     const column = this.column(target);
     try {
@@ -164,6 +221,12 @@ export class SubtitleSearchRequestService {
               ...column,
               status: 'WAITING',
               wantedLanguages: wanted,
+              wantedVariants: variants ?? Prisma.DbNull,
+              // Spec 119, REQ-3
+              replaceLanguages:
+                replaceLanguages.length > 0
+                  ? replaceLanguages
+                  : Prisma.DbNull,
               ...(libraryPath === null ? {} : { libraryPath }),
             },
           });
@@ -179,6 +242,32 @@ export class SubtitleSearchRequestService {
       }
       throw error;
     }
+  }
+
+  // Spec 118, REQ-3
+  private async resolveWantedVariants(
+    target: SubtitleSearchTarget,
+  ): Promise<Record<string, string> | null> {
+    const rows = { select: { kind: true, language: { select: { tag: true, iso3: true } } } };
+    const select = {
+      languages: rows,
+      user: { select: { audioVariantDetection: true, languages: rows } },
+    };
+    let owners;
+    if (target.kind === 'movie') {
+      owners = await this.prisma.userMovie.findMany({
+        where: { movieId: target.id },
+        select,
+      });
+    } else {
+      const showId = await this.showIdOf(target);
+      if (showId === null) return null;
+      owners = await this.prisma.userShow.findMany({
+        where: { showId },
+        select,
+      });
+    }
+    return wantedVariants(owners, await this.languages.regionalVariantIso3s());
   }
 
   private column(target: SubtitleSearchTarget) {

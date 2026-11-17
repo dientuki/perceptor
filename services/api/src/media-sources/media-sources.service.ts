@@ -10,6 +10,9 @@ import { MESSAGES_EN } from '@/i18n/messages.en';
 import { describeTorrentClientFailure } from '@/downloads/torrent-client-failure';
 import { QbittorrentClient } from '@/clients/torrent/client';
 import { TitleStatusService } from '@/title-status/title-status.service';
+import { isSnapshotWriteConflict } from '@/prisma/write-conflict';
+
+const SCAN_MAX_ATTEMPTS = 3;
 
 @Injectable()
 export class MediaSourcesService {
@@ -94,12 +97,16 @@ export class MediaSourcesService {
     return true;
   }
 
-  async sourceScanned(mediaSourceId: number, files: SourceFileInput[], matches: ScannedMatchInput[]) {
-    const processJobIdsToQueue: number[] = [];
-    let scanFailedTarget: { movieId: number | null; episodeId: number | null } | null = null;
-    const episodeIdsToRecompute = new Set<number>();
+  private async scanTransaction(
+    mediaSourceId: number,
+    files: SourceFileInput[],
+    matches: ScannedMatchInput[],
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const processJobIdsToQueue: number[] = [];
+      let scanFailedTarget: { movieId: number | null; episodeId: number | null } | null = null;
+      const episodeIdsToRecompute = new Set<number>();
 
-    await this.prisma.$transaction(async (tx) => {
       const mediaSource = await tx.mediaSource.findUnique({
         where: { id: mediaSourceId },
         include: {
@@ -188,7 +195,7 @@ export class MediaSourcesService {
         await this.markScanFailed(tx, mediaSource, errorKey, null, errorMessage, hasUnmatchedFiles);
         scanFailedTarget = { movieId, episodeId: mediaSource.episodeId };
 
-        return;
+        return { processJobIdsToQueue, episodeIdsToRecompute, scanFailedTarget };
       }
 
       for (const resolved of resolvedMatches) {
@@ -252,7 +259,26 @@ export class MediaSourcesService {
           hasUnmatchedFiles,
         },
       });
+
+      return { processJobIdsToQueue, episodeIdsToRecompute, scanFailedTarget };
     });
+  }
+
+  async sourceScanned(mediaSourceId: number, files: SourceFileInput[], matches: ScannedMatchInput[]) {
+    // Spec 116, REQ-3 REQ-4 REQ-5
+    let result: Awaited<ReturnType<MediaSourcesService['scanTransaction']>>;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        result = await this.scanTransaction(mediaSourceId, files, matches);
+        break;
+      } catch (error) {
+        if (!isSnapshotWriteConflict(error) || attempt >= SCAN_MAX_ATTEMPTS) throw error;
+        console.log(
+          `[sourceScanned] mediaSource ${mediaSourceId}: write conflict, attempt ${attempt}/${SCAN_MAX_ATTEMPTS}`,
+        );
+      }
+    }
+    const { processJobIdsToQueue, episodeIdsToRecompute, scanFailedTarget } = result;
 
     // Spec 089, REQ-1 REQ-2
     if (scanFailedTarget) {

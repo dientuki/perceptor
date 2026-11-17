@@ -20,6 +20,14 @@ import { sanitizeTag } from '@/clients/torrent/tags';
 import { resolveInfoHash } from '@/clients/indexer/resolve-info-hash';
 import { SourceKind } from '@prisma/client';
 import { MediaTypeService } from '@/media/media-type.interface';
+import { LibraryPossession } from '@/media/entities/library-possession.enum';
+import {
+  LIBRARY_ORDER,
+  clampPage,
+  clampPageSize,
+  possessionWhere,
+  totalPages,
+} from '@/media/library-page';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
@@ -106,6 +114,38 @@ export class MoviesService implements MediaTypeService {
       },
     });
     return movies.map((movie) => this.withDerivedStatus(movie));
+  }
+
+  // Spec 117, REQ-8 REQ-11
+  async findPage(
+    userId: string,
+    isShort: boolean | undefined,
+    possession: LibraryPossession,
+    page: number,
+    pageSize: number,
+  ) {
+    const where = {
+      users: { some: { userId } },
+      ...(isShort === undefined ? {} : { isShort }),
+      ...possessionWhere(possession),
+    };
+    const size = clampPageSize(pageSize);
+    const totalCount = await this.prisma.movie.count({ where });
+    const pages = totalPages(totalCount, size);
+    const current = clampPage(page, pages);
+    const movies = await this.prisma.movie.findMany({
+      where,
+      orderBy: LIBRARY_ORDER,
+      skip: (current - 1) * size,
+      take: size,
+    });
+    return {
+      items: movies.map((movie) => this.withDerivedStatus(movie)),
+      totalCount,
+      page: current,
+      pageSize: size,
+      totalPages: pages,
+    };
   }
 
   async findReleasedBetween(userId: string, from: Date, toExclusive: Date) {

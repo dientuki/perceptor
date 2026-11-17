@@ -89,4 +89,33 @@ describe('buildEmbedArgs', () => {
     expect(args.slice(i, i + 3)).toEqual(['--tags', '0:/tmp/x/0.tags.xml', '/tmp/x/0.srt']);
     expect(args.filter((a) => a === '--tags')).toHaveLength(1);
   });
+
+  it('adds no --subtitle-tracks without drops', () => {
+    expect(build([track()])).not.toContain('--subtitle-tracks');
+  });
+
+  it('excludes the dropped tracks of the original, right before the original path', () => {
+    const args = buildEmbedArgs({
+      originalPath: '/lib/Film.mkv',
+      partPath: '/lib/Film.mkv.part.mkv',
+      originalStreams: streams,
+      tracks: [track()],
+      dropIndexes: [3, 2],
+    });
+    const i = args.indexOf('--subtitle-tracks');
+    expect(args.slice(i, i + 3)).toEqual(['--subtitle-tracks', '!2,3', '/lib/Film.mkv']);
+    expect(args.filter((a) => a === '--subtitle-tracks')).toHaveLength(1);
+  });
+
+  it('does not clear the default flag of a dropped stream', () => {
+    const args = buildEmbedArgs({
+      originalPath: '/lib/Film.mkv',
+      partPath: '/lib/Film.mkv.part.mkv',
+      originalStreams: streams,
+      tracks: [track({ isDefault: true })],
+      dropIndexes: [2],
+    });
+    expect(args).not.toContain('2:0');
+    expect(args).toContain('3:0');
+  });
 });

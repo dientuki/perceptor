@@ -6,6 +6,7 @@ import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client'
 import { SourceFileInput } from './dto/source-file.input';
 import { ScannedMatchInput } from './dto/scanned-match.input';
 import { TitleStatusService } from '@/title-status/title-status.service';
+import { Prisma } from '@prisma/client';
 
 // This suite exists because sourceScanned's per-match episode resolution is
 // the only place a season pack's files get filed under a row in the
@@ -101,6 +102,100 @@ describe('MediaSourcesService — sourceScanned fan-out', () => {
       async ({ data }: { data: Record<string, unknown> }) => ({ id: nextId++, ...data }),
     );
   };
+
+  // Spec 116, REQ-3 REQ-4 REQ-5 — MariaDB aborts a transaction that touched a row changed
+  // after its snapshot (error 1020). These cases exist because without a bounded retry the
+  // scan fails with no ProcessJob and no log beyond the worker's report; a retry that keeps
+  // state from the rolled-back attempt would enqueue a job that never committed or enqueue
+  // one twice; an unbounded or over-eager retry hides real errors or loops forever.
+  describe('write conflict retry', () => {
+    const conflict = () =>
+      new Prisma.PrismaClientKnownRequestError('Record has changed since last read', {
+        code: 'P2039',
+        clientVersion: 'test',
+        meta: { driverAdapterError: { cause: { originalCode: '1020' } } },
+      });
+
+    const wireSeasonSource = () => {
+      wireSourceFileUpsert();
+      wireProcessJobCreate();
+      tx.mediaSource.findUnique.mockResolvedValue({
+        id: 30,
+        status: 'ENCODING',
+        episodeId: null,
+        movie: null,
+        season: { seasonNumber: 2, episodes: [{ id: 301, episodeNumber: 1 }, { id: 302, episodeNumber: 2 }] },
+      });
+    };
+    const files = [videoFile('S02E01.mkv'), videoFile('S02E02.mkv')];
+    const matches = [match('S02E01.mkv', 2, 1), match('S02E02.mkv', 2, 2)];
+
+    it('commits on the second attempt after a 1020 and enqueues only the committed jobs, once each', async () => {
+      wireSeasonSource();
+      let calls = 0;
+      prisma.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => {
+        calls++;
+        const result = await callback(tx);
+        if (calls === 1) throw conflict();
+        return result;
+      });
+
+      await service.sourceScanned(30, files, matches);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      expect(tx.processJob.create).toHaveBeenCalledTimes(4);
+      expect(encodeQueue.addEncode.mock.calls.map((c) => c[0])).toEqual([
+        { processJobId: 9002 },
+        { processJobId: 9003 },
+      ]);
+      expect(titleStatus.recomputeEpisode).toHaveBeenCalledTimes(2);
+      expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: [9002, 9003] } },
+        data: { status: 'QUEUED' },
+      });
+    });
+
+    it('makes exactly 3 attempts when every one conflicts, rethrows, and enqueues nothing', async () => {
+      wireSeasonSource();
+      const error = conflict();
+      prisma.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => {
+        await callback(tx);
+        throw error;
+      });
+
+      await expect(service.sourceScanned(30, files, matches)).rejects.toBe(error);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+      expect(encodeQueue.addEncode).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeEpisode).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('does not retry an error that is not a write conflict', async () => {
+      wireSeasonSource();
+      const other = new Prisma.PrismaClientKnownRequestError('other', {
+        code: 'P2039',
+        clientVersion: 'test',
+        meta: { driverAdapterError: { cause: { originalCode: '1213' } } },
+      });
+      prisma.$transaction.mockRejectedValue(other);
+
+      await expect(service.sourceScanned(30, files, matches)).rejects.toBe(other);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses a match that was not reported on the first attempt, with no retry', async () => {
+      wireSeasonSource();
+
+      await expect(service.sourceScanned(30, files, [match('missing.mkv', 2, 1)])).rejects.toMatchObject({
+        response: { i18n: { key: 'error.source.match_not_reported' } },
+      });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+  });
 
   it('a single-episode source resolves matches to mediaSource.episodeId regardless of parsed numbers', async () => {
     wireSourceFileUpsert();

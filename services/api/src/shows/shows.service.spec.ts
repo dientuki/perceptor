@@ -53,6 +53,7 @@ describe('ShowsService', () => {
   let prisma: {
     show: {
       findMany: jest.Mock;
+      count: jest.Mock;
       findUnique: jest.Mock;
       findFirst: jest.Mock;
       create: jest.Mock;
@@ -84,6 +85,7 @@ describe('ShowsService', () => {
     prisma = {
       show: {
         findMany: jest.fn(),
+        count: jest.fn(),
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         create: jest.fn(),
@@ -193,6 +195,50 @@ describe('ShowsService', () => {
       );
 
       expect(result[0].status).toBe('DOWNLOADING');
+    });
+  });
+
+  // Spec 117, REQ-8 REQ-11
+  describe('findPage', () => {
+    // Exists because dropping the ownership clause (or the stable id
+    // tiebreak) still returns a well-formed page: other users' series leak
+    // or rows repeat across pages with no error anywhere.
+    it('hands the ownership where, possession, order and clamped skip/take to Prisma', async () => {
+      prisma.show.count.mockResolvedValue(30);
+      prisma.show.findMany.mockResolvedValue([{ id: 1 }]);
+
+      const result = await service.findPage('user-1', 'DOWNLOADED' as never, 2, 12);
+
+      const where = { users: { some: { userId: 'user-1' } }, status: 'COMPLETED' };
+      expect(prisma.show.count).toHaveBeenCalledWith({ where });
+      expect(prisma.show.findMany).toHaveBeenCalledWith({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: 12,
+        take: 12,
+      });
+      expect(result).toMatchObject({ totalCount: 30, page: 2, pageSize: 12, totalPages: 3 });
+    });
+
+    it('clamps an unknown page size to 24 and page 999 to the last page', async () => {
+      prisma.show.count.mockResolvedValue(30);
+      prisma.show.findMany.mockResolvedValue([]);
+
+      const result = await service.findPage('user-1', 'ALL' as never, 999, 7);
+
+      expect(prisma.show.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 24, take: 24 }),
+      );
+      expect(result).toMatchObject({ page: 2, pageSize: 24, totalPages: 2 });
+    });
+
+    it('clamps page 0 to 1 and answers an empty library as one empty page', async () => {
+      prisma.show.count.mockResolvedValue(0);
+      prisma.show.findMany.mockResolvedValue([]);
+
+      const result = await service.findPage('', 'ALL' as never, 0, 24);
+
+      expect(result).toEqual({ items: [], totalCount: 0, page: 1, pageSize: 24, totalPages: 1 });
     });
   });
 

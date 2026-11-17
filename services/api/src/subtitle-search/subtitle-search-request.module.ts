@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
+import { LanguagesModule } from '@/languages/languages.module';
 import { LibraryLocationModule } from '@/library-location/library-location.module';
 import { MediaRootsModule } from '@/media-roots/media-roots.module';
 import { MediaServerModule } from '@/media-server/media-server.module';
@@ -16,6 +17,7 @@ import { SubtitleSearchRequestService } from './subtitle-search-request.service'
     MediaServerModule,
     MediaRootsModule,
     LibraryLocationModule,
+    LanguagesModule,
   ],
   providers: [SubtitleSearchRequestService],
   exports: [SubtitleSearchRequestService],

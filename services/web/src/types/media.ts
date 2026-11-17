@@ -161,7 +161,9 @@ export type SubtitleSearchStatus =
 export type SubtitleSearchLanguageOutcome =
   | "PENDING"
   | "ALREADY_PRESENT"
-  | "EMBEDDED"
+  | "REPLACED"
+  | "RESOLVED"
+  | "MISSING"
   | "NOT_FOUND"
   | "REJECTED"
   | "FAILED";

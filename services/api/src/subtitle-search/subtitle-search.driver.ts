@@ -19,8 +19,11 @@ import { openSubtitlesApiKey } from '@/clients/opensubtitles/key';
 import { OpenSubtitlesClient } from '@/clients/opensubtitles/client';
 import { OpenSubtitlesHttpError } from '@/clients/opensubtitles/errors';
 import { OsSearchParams } from '@/clients/opensubtitles/types';
-import { filterAndRank } from './candidates';
-import { providerLanguageCodes } from './provider-languages';
+import { MAX_CANDIDATES_PER_LANGUAGE, filterAndRank } from './candidates';
+import {
+  providerLanguageCodes,
+  providerVariantCode,
+} from './provider-languages';
 import { LanguageRow } from './sidecar-languages';
 import { SubtitleSearchQueueService } from './subtitle-search-queue.service';
 import { SubtitleSearchStaging } from './staging';
@@ -319,22 +322,54 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
     const codes = providerLanguageCodes(language, await ctx.languages);
     if (codes.length === 0) return [];
 
-    const params: OsSearchParams =
-      search.movieId !== null
-        ? {
-            tmdbId: target.tmdbId,
-            languages: codes.join(','),
-            moviehash: search.movieHash,
-          }
-        : {
-            parentTmdbId: target.tmdbId,
-            season: target.seasonNumber!,
-            episode: target.episodeNumber!,
-            languages: codes.join(','),
-            moviehash: search.movieHash,
-          };
     const releaseName = await this.releaseName(search);
-    return filterAndRank(await this.openSubtitles.search(params), releaseName);
+    const query = async (languages: string[]) => {
+      const params: OsSearchParams =
+        search.movieId !== null
+          ? {
+              tmdbId: target.tmdbId,
+              languages: languages.join(','),
+              moviehash: search.movieHash,
+            }
+          : {
+              parentTmdbId: target.tmdbId,
+              season: target.seasonNumber!,
+              episode: target.episodeNumber!,
+              languages: languages.join(','),
+              moviehash: search.movieHash,
+            };
+      return filterAndRank(
+        await this.openSubtitles.search(params),
+        releaseName,
+      );
+    };
+
+    // Spec 118, REQ-13
+    const wanted = (search.wantedVariants ?? null) as Record<
+      string,
+      string
+    > | null;
+    const variantCode = wanted?.[language]
+      ? providerVariantCode(wanted[language])
+      : null;
+    if (!variantCode) return query(codes);
+
+    const preferred = await query([variantCode]);
+    this.logger.debug(
+      `Subtitle search ${search.id} ${language}: variant query ${variantCode} returned ${preferred.length}`,
+    );
+    if (preferred.length >= MAX_CANDIDATES_PER_LANGUAGE) {
+      return preferred.slice(0, MAX_CANDIDATES_PER_LANGUAGE);
+    }
+    const plain = await query(codes);
+    this.logger.debug(
+      `Subtitle search ${search.id} ${language}: plain query ${codes.join(',')} returned ${plain.length}`,
+    );
+    const seen = new Set(preferred.map((c) => c.id));
+    return [...preferred, ...plain.filter((c) => !seen.has(c.id))].slice(
+      0,
+      MAX_CANDIDATES_PER_LANGUAGE,
+    );
   }
 
   private unresolved(search: Search): string[] {
@@ -432,6 +467,8 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
           languageIso3: attempt.languageIso3,
           stagedPath: attempt.stagedPath!,
           offsetMs: attempt.offsetMs!,
+          // Spec 118, REQ-16
+          variantTag: attempt.variantTag,
           provenance:
             attempt.providerFileName ??
             `opensubtitles:${attempt.providerSubtitleId}`,
@@ -453,6 +490,10 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
         this.refOf(search),
         tracks,
         mkvPath,
+        // Spec 119, REQ-5
+        strings(search.replaceLanguages).filter((iso3) =>
+          tracks.some((track) => track.languageIso3 === iso3),
+        ),
       );
       const stored = await this.prisma.subtitleSearch.updateMany({
         where: { id: search.id, status: 'EMBEDDING', subtitleEmbedId: null },
@@ -701,7 +742,11 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
   }
 
   private missingLanguages(search: Search): string[] {
-    const present = new Set(strings(search.presentLanguages));
+    // Spec 119, REQ-4
+    const ticked = new Set(strings(search.replaceLanguages));
+    const present = new Set(
+      strings(search.presentLanguages).filter((iso3) => !ticked.has(iso3)),
+    );
     return strings(search.wantedLanguages).filter(
       (language) => !present.has(language),
     );

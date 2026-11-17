@@ -18,6 +18,8 @@ export interface EmbedArgsInput {
   partPath: string;
   originalStreams: ProbedStream[];
   tracks: EmbedTrack[];
+  // Spec 119, REQ-5
+  dropIndexes?: number[];
 }
 
 const flag = (value: boolean) => (value ? '1' : '0');
@@ -25,13 +27,19 @@ const flag = (value: boolean) => (value ? '1' : '0');
 // Spec 101, REQ-5 REQ-6 REQ-9
 export function buildEmbedArgs(input: EmbedArgsInput): string[] {
   const args = ['-o', input.partPath];
+  const dropped = new Set(input.dropIndexes ?? []);
 
   if (input.tracks.some((track) => track.isDefault)) {
     for (const stream of input.originalStreams) {
-      if (stream.codec_type === 'subtitle') {
+      if (stream.codec_type === 'subtitle' && !dropped.has(stream.index)) {
         args.push('--default-track-flag', `${stream.index}:0`);
       }
     }
+  }
+
+  // Spec 119, REQ-5
+  if (dropped.size > 0) {
+    args.push('--subtitle-tracks', `!${[...dropped].sort((a, b) => a - b).join(',')}`);
   }
 
   args.push(input.originalPath);

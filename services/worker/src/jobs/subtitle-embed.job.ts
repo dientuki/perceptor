@@ -38,6 +38,7 @@ import { buildEmbedArgs } from '../subtitles/embed-args';
 import type { EmbedTrack } from '../subtitles/embed-args';
 import { buildTrackTagsXml } from '../subtitles/embed-tags';
 import { normalizeSrt } from '../subtitles/normalize-srt';
+import { tracksToDrop } from '../subtitles/replace-tracks';
 import { mayDeleteSidecar } from '../subtitles/sidecar-guard';
 import { verifyEmbed } from '../subtitles/verify-embed';
 
@@ -154,6 +155,15 @@ export async function handleSubtitleEmbed(job: Job<SubtitleEmbedJob>): Promise<v
 
     const { metadata: originalMetadata } = await getMetadata(filePath);
 
+    // Spec 119, REQ-5
+    const dropIndexes = tracksToDrop(
+      (originalMetadata.streams ?? []).map((stream: any, i: number) => ({
+        ...stream,
+        index: stream.index ?? i,
+      })),
+      details.replaceLanguagesIso3 ?? [],
+    );
+
     tempDir = await mkdtemp(join(tmpdir(), 'perceptor-subtitle-embed-'));
     const embedTracks: EmbedTrack[] = [];
     for (const [n, track] of details.tracks.entries()) {
@@ -190,12 +200,13 @@ export async function handleSubtitleEmbed(job: Job<SubtitleEmbedJob>): Promise<v
         partPath,
         originalStreams: originalMetadata.streams ?? [],
         tracks: embedTracks,
+        dropIndexes,
       }),
       partPath,
     );
 
     const { metadata: resultMetadata } = await getMetadata(partPath);
-    const verdict = verifyEmbed(originalMetadata, resultMetadata, embedTracks);
+    const verdict = verifyEmbed(originalMetadata, resultMetadata, embedTracks, dropIndexes);
     if (!verdict.ok) {
       throw keyed(ERROR_SUBTITLE_EMBED_VERIFY_FAILED, { detail: verdict.reason });
     }

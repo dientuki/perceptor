@@ -30,7 +30,8 @@ const TONE_CLASS: Record<StatusTone, string> = {
 const OUTCOME_TEXT_CLASS: Partial<
   Record<SubtitleSearchLanguageOutcome, string>
 > = {
-  EMBEDDED: "text-green-500",
+  RESOLVED: "text-green-500",
+  MISSING: "text-error-500",
   FAILED: "text-error-500",
   REJECTED: "text-error-500",
 };

@@ -294,8 +294,10 @@ sequential `getCurrentUser()` check *before* the page's `Promise.all`, the same 
 `users/page.tsx`/`settings/page.tsx` use to keep a non-admin's request a clean 404 rather than a
 race into a 500 from a guarded resolver. It repeats the TMDB onboarding block (so a fresh install's
 whole setup lives in one place) and adds `IndexerSetupGuide.tsx` (same `onboarding/` directory):
-sign in to Prowlarr, add an indexer, add a second one tagged `flaresolverr` for a Cloudflare-fronted
-tracker, then confirm from a title's detail page — fed by the new `getIndexerStatus()` action
+since `112` the guide walks through the in-app catalog (`AddIndexerButton`, rendered inside the guide
+right under the status notice) — open it, search, add, add a couple more, then confirm from a title's
+detail page; Prowlarr itself is only linked at the end, for trackers that need an account —
+fed by the new `getIndexerStatus()` action
 (`src/actions/indexer.ts`) and the indexer's URL/port read off `getEnvironmentInfo()`'s `endpoints`
 entry with `id === "indexer"` (the link is decided by the shared pure `resolveServiceUrl(endpoint, requestHost)` in `lib/request-host.ts`: the endpoint `url` is used only when the admin reached Perceptor by a name — not an IPv4/IPv6 literal or `localhost` — otherwise, and for port > 0, it builds
 `http://<host>:<port>/` server-side from the request's `x-forwarded-host`/`Host` header via
@@ -304,15 +306,8 @@ bracketed-IPv6 pattern and falls back to `localhost`, so the link works on an IP
 bare-port text remains only for port 0). `IndexerSetupGuide` branches on `reachable` before `configuredIndexers`, so
 an unreachable Prowlarr never reads as "zero indexers configured". A short `about` paragraph opens
 the block explaining what an indexer is and why one is needed, before the reachable/zero/count
-notice. The four step screenshots live under `public/images/first-step/` (`indexer-login-2.png`,
-`indexer-filter-2.png`, `indexer-add-2.png`, `indexer-flaresolverr-2.png` — the `-2` suffix is a
-cache-buster, bumped on every replacement since Next 16 refuses a query string on a local
-`next/image` source unless allow-listed in `images.localPatterns`, and a same-named overwrite left
-every browser serving the old file from its own disk cache), captured live against the dev stack's
-own Prowlarr at `localhost:9696`: signing in, the "Add Indexer" list filtered to Public trackers for
-Movies (step 3, before picking one), the settings dialog for a chosen indexer with Test/Save, and
-the same dialog with the `flaresolverr` tag added in Tags. NFR-6 still applies if Prowlarr's UI
-changes and they go stale. The sidebar entry sits inside `AppSidebar.tsx`'s existing `isAdmin`
+notice. The guide carries no screenshots any more; the four Prowlarr captures `078` committed under
+`public/images/first-step/` were deleted with the move to the in-app catalog. The sidebar entry sits inside `AppSidebar.tsx`'s existing `isAdmin`
 branch, alongside Settings/Users — and, like the Settings help link below, only while setup looks
 incomplete (same `!catalogKeyConfigured || configuredIndexers === 0` condition): the page itself
 stays reachable by direct URL either way, only the nav entry hides. The admin-only `indexerStatus`
@@ -332,7 +327,7 @@ deliberate difference from the sidebar (`settings/page.tsx` fetches no `indexerS
 
 ## Choosing indexers in-app (`112-in-app-indexer-setup`)
 
-`src/components/indexers/` holds `IndexerSection.tsx` (Settings → Torrent manager, below the indexer API key field: the configured indexers as the same removable `Badge` chips as the torrent groups, X opens `RemoveIndexerModal` for a confirmation since it deletes in Prowlarr), `AddIndexerButton.tsx` + `AddIndexerModal.tsx` + `IndexerCatalogRow.tsx` (the catalog modal, mounted both in that section and on `/first-step` above the unchanged `IndexerSetupGuide`). Everything is fetched client-side through four result-union actions in `src/actions/indexer.ts` (`getIndexerCatalogAction`, `getConfiguredIndexersAction`, `addIndexerAction`, `removeIndexerAction`), never in a page's `Promise.all`, so an unreachable Prowlarr shows an inline error instead of breaking Settings. The catalog arrives filtered and alphabetical from `api`; `web` neither sorts nor filters it, and the search is a debounced `search` argument. A successful add or remove calls `router.refresh()` so the layout re-reads `indexerStatus` (sidebar entry, `/first-step` notice). No tracker name appears in code or catalogs. Copy lives in `indexers.*` and `errors.indexer.*`.
+`src/components/indexers/` holds `IndexerSection.tsx` (Settings → Torrent manager, below the indexer API key field: the configured indexers as the same removable `Badge` chips as the torrent groups, X opens `RemoveIndexerModal` for a confirmation since it deletes in Prowlarr), `AddIndexerButton.tsx` + `AddIndexerModal.tsx` + `IndexerCatalogRow.tsx` (the catalog modal, mounted both in that section and inside `/first-step`'s `IndexerSetupGuide`). Everything is fetched client-side through four result-union actions in `src/actions/indexer.ts` (`getIndexerCatalogAction`, `getConfiguredIndexersAction`, `addIndexerAction`, `removeIndexerAction`), never in a page's `Promise.all`, so an unreachable Prowlarr shows an inline error instead of breaking Settings. The catalog arrives filtered and alphabetical from `api`; `web` neither sorts nor filters it, and the search is a debounced `search` argument. A successful add or remove calls `router.refresh()` so the layout re-reads `indexerStatus` (sidebar entry, `/first-step` notice). No tracker name appears in code or catalogs. Copy lives in `indexers.*` and `errors.indexer.*`.
 
 ## Media type availability (`045-media-type-availability`)
 
@@ -739,14 +734,16 @@ gated it. The header menu's *Ajustes* item was never admin-gated before this fea
 
 ## Library listings: two parallel screens, not one parameterized one
 
-`/movies` and `/shows` are deliberately **separate** implementations (`getMovies()` +
-`components/movies/Movies.tsx`, `getShows()` + `components/shows/Shows.tsx`). This is the opposite of
+`/movies` and `/shows` are deliberately **separate** implementations (`getMoviePage()` +
+`components/movies/Movies.tsx`, `getShowPage()` + `components/shows/Shows.tsx`). This is the opposite of
 `SearchContainer` above and is not an oversight: `api` exposes `movies` and `shows` as two sibling
 queries with two independent types. Do not merge them; the duplication is cheaper than the parameter.
 
 What *is* shared is the rendering: both pass rows to `src/components/media/MediaList.tsx`, which takes
 a `mediaType` prop and already produces the right Spanish empty state for each. Never pass a custom
-`emptyMessage`, never fork `MediaList`/`MediaCard`.
+`emptyMessage` (the one exception, `117`: `media.library.emptyFilter` when the possession filter is not All), never fork `MediaList`/`MediaCard`.
+
+**Paging, filter and view (`117`).** The pages read `moviePage`/`showPage` through `src/actions/library.ts`; the state is `page`/`pageSize`/`filter`/`view` in the URL, parsed by the pure `src/lib/library-params.ts` (`normalize`, `libraryHref`, which is idempotent so a correction never loops). A bad value redirects server-side to the canonical URL, as does a page `api` clamped. View and page size are also kept in the `perceptor_library_display` cookie (`"<view>:<pageSize>"`, written by the `setLibraryDisplay` server action, never from a render). `LibraryToolbar` (client, props only), `LibraryPager` (links) and `MediaTable` (list view) live in `components/media/`; `LanguageChips` is the one chip rendering, shared with `FileTrackLanguages`. A listing selects no per-row field resolver.
 
 **Both list components are Server Components, not client fetches** — `async function` components that
 `await` their action during render, no `"use client"`, no `useEffect`. An earlier client-fetching
@@ -857,11 +854,11 @@ manual, never polled.
 (`web` has no possession field, so `COMPLETED` stands in for "holds a file"). It is disabled while the
 latest search is non-terminal. The actions `searchMovieSubtitlesAction`/`searchEpisodeSubtitlesAction`
 return `{ search } | { error, errorKey? }`; `in_progress` also refreshes the page. There is no season or
-series button: the provider's free quota is about 20 downloads a day.
+series button: the provider's free quota is about 20 downloads a day. Since `119-subtitle-search-replace` the dialog is "Buscar y reemplazar subtítulos": the optional `replaceableLanguages` prop (computed by `lib/replaceable-subtitle-languages.ts` from `fileSubtitleLanguages` and the caller's effective subtitle languages — on a film `effective.subtitleLanguages`, on an episode the show page computes it and passes it to `SeasonAccordion` as `subtitleLanguages`) renders one `Checkbox` per language, unticked on every open, and `onSearch(replaceLanguages)` sends the ticked ones as lower-case ISO 3 only when non-empty. `REPLACED` renders as "Reemplazado"; the two `replace_language_*` error keys are a stale-page case and show inline.
 
 ## Audio variant detection preference (`110-audio-variant-detection`)
 
-One opt-in checkbox in `/preferences` (`PreferencesForm.tsx`), `audioVariantDetection`, saved in the
+One opt-in checkbox in `/preferences` (`PreferencesForm.tsx`), `audioVariantDetection` (since `118` also enabled by a subtitle language with variants, and its copy covers subtitles), saved in the
 same batch as the rest of the form through `setAudioVariantDetectionAction` and reverted with the
 translated error key on failure, like `subtitleSearch`. It is always shown but **enabled** only while
 the live audio language selection (`audioTags`, before saving) includes a language whose

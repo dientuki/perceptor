@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { availableParallelism, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EncodeCancelledError } from './cancellation';
-import { findAudioVariantDetector, type AudioVariantDetector } from './audio-variant-detectors';
+import { findAudioVariantDetector, type AudioVariantDetector } from './variant-detectors';
 import { decide, type AudioVariantVerdict } from './audio-variant-score';
 import { fileIdentity, readVerdict, writeVerdict } from './verdict-store';
 import { runFfmpegCapture } from '../ffmpeg/capture';

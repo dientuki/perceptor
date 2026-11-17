@@ -103,6 +103,9 @@ export class EncodeJobDetails {
   @Field({ description: 'Effective opt-in for this job (110 REQ-4).' })
   audioVariantDetection: boolean;
 
+  @Field({ description: 'Effective opt-in for subtitle variant detection on this job (118 REQ-3).' })
+  subtitleVariantDetection: boolean;
+
   @Field(() => [String])
   allowedSubtitleFormats: string[];
 

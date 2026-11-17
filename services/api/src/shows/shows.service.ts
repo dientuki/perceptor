@@ -10,6 +10,14 @@ import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { TmdbShow } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
 import { MediaTypeService } from '@/media/media-type.interface';
+import { LibraryPossession } from '@/media/entities/library-possession.enum';
+import {
+  LIBRARY_ORDER,
+  clampPage,
+  clampPageSize,
+  possessionWhere,
+  totalPages,
+} from '@/media/library-page';
 import { MediaRef } from '@/media/entities/media-ref.entity';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { CalendarEpisodeRow } from '@/calendar/group-episodes';
@@ -67,6 +75,30 @@ export class ShowsService implements MediaTypeService {
       where: { users: { some: { userId } } },
       orderBy: { createdAt: 'desc' }, // Most recently added first
     });
+  }
+
+  // Spec 117, REQ-8 REQ-11
+  async findPage(
+    userId: string,
+    possession: LibraryPossession,
+    page: number,
+    pageSize: number,
+  ) {
+    const where = {
+      users: { some: { userId } },
+      ...possessionWhere(possession),
+    };
+    const size = clampPageSize(pageSize);
+    const totalCount = await this.prisma.show.count({ where });
+    const pages = totalPages(totalCount, size);
+    const current = clampPage(page, pages);
+    const items = await this.prisma.show.findMany({
+      where,
+      orderBy: LIBRARY_ORDER,
+      skip: (current - 1) * size,
+      take: size,
+    });
+    return { items, totalCount, page: current, pageSize: size, totalPages: pages };
   }
 
   // Spec 009, NFR-2; Spec 043, REQ-4

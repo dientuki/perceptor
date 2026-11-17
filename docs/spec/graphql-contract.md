@@ -2586,7 +2586,7 @@ type SubtitleSearch { id: Int!, status: SubtitleSearchStatus!, errorKey: String,
                       languages: [SubtitleSearchLanguage!]!, createdAt: DateTime!, finishedAt: DateTime }
 type SubtitleSearchLanguage { languageIso3: String!, outcome: SubtitleSearchLanguageOutcome!, reasonKey: String }
 enum SubtitleSearchStatus { WAITING SEARCHING VALIDATING EMBEDDING COMPLETED FAILED }
-enum SubtitleSearchLanguageOutcome { PENDING ALREADY_PRESENT EMBEDDED NOT_FOUND REJECTED FAILED }
+enum SubtitleSearchLanguageOutcome { PENDING ALREADY_PRESENT EMBEDDED NOT_FOUND REJECTED FAILED }  # Superseded by 114: EMBEDDED → RESOLVED, + MISSING
 enum SubtitleSyncReference { SUBTITLE AUDIO }
 type SubtitleSyncDetails { id: Int!, filePath: String!, candidatePath: String! }
 type SubtitleEmbedTrack { isSidecar: Boolean! }                      # 101 delta
@@ -3027,6 +3027,204 @@ type Mutation {
 
 `busy`, `offset_out_of_range` (manual rows only) and `interrupted` (also raised for a `SYNCING` embed
 when the worker restarts) are the existing keys.
+
+### A language's outcome follows the current file (`114-subtitle-search-current-file`)
+
+```graphql
+enum SubtitleSearchLanguageOutcome {
+  PENDING
+  ALREADY_PRESENT
+  RESOLVED   # replaces EMBEDDED: the wanted language is in the file, by the search or any other way
+  MISSING    # the search had it (resolved or already present) and the current file does not
+  NOT_FOUND
+  REJECTED
+  FAILED
+}
+```
+
+`EMBEDDED` is removed, not deprecated: `web` is the only consumer and ships in the same release.
+The outcome is still derived at read time and never stored. While a search is `WAITING`,
+`SEARCHING`, `VALIDATING` or `EMBEDDING` its languages are derived from its own rows, as `103` set
+it. Once it is `COMPLETED` or `FAILED`, and the title's `fileSubtitleLanguages` (`108`) is not
+`null`, the current file decides first: a wanted language the file holds reads `ALREADY_PRESENT` if
+the search found it present, otherwise `RESOLVED`; one the file lacks reads `MISSING` when the
+search's own outcome was `RESOLVED` or `ALREADY_PRESENT`, and that outcome unchanged otherwise.
+`fileSubtitleLanguages` `null` means no override. `Movie.latestSubtitleSearch` and
+`Episode.latestSubtitleSearch` each read their own parent row, with no extra query. `reasonKey` is
+non-null only for `FAILED` and `REJECTED`; it is `null` for `RESOLVED` and `MISSING`. No new error
+key.
+
+### Library lists are read one page at a time (`117-library-list-paging-views`)
+
+The authority is `docs/spec/features/117-library-list-paging-views/spec.md` § GraphQL Contract Delta.
+Two queries beside the untouched `movies(isShort)`/`shows`, each returning one page plus the counts a
+pager needs. `page`/`pageSize` are clamped by `api`, never rejected.
+
+```graphql
+enum LibraryPossession {
+  """Every title in the caller's library."""
+  ALL
+  """status COMPLETED (117 REQ-4)."""
+  DOWNLOADED
+  """Any status other than COMPLETED (117 REQ-4)."""
+  ADDED
+}
+
+type MoviePage {
+  items: [Movie!]!
+  """Titles matching the filter, across every page."""
+  totalCount: Int!
+  """The page actually returned, after clamping to [1, totalPages] (117 REQ-11)."""
+  page: Int!
+  pageSize: Int!
+  """ceil(totalCount / pageSize), and 1 when totalCount is 0."""
+  totalPages: Int!
+}
+
+type ShowPage {
+  items: [Show!]!
+  totalCount: Int!
+  page: Int!
+  pageSize: Int!
+  totalPages: Int!
+}
+
+extend type Show {
+  """
+  ISO 639-2 audio languages present in every episode in scope (117 REQ-7); null when no episode is in scope.
+  """
+  fileAudioLanguages: [String!]
+  """
+  ISO 639-2 subtitle languages present in every episode in scope (117 REQ-7); null when no episode is in scope.
+  """
+  fileSubtitleLanguages: [String!]
+}
+
+type Query {
+  """
+  One page of the caller's films, newest registration first (117 REQ-8). isShort behaves exactly as on movies(isShort).
+  """
+  moviePage(isShort: Boolean, possession: LibraryPossession! = ALL, page: Int! = 1, pageSize: Int! = 24): MoviePage!
+
+  """One page of the caller's series, newest registration first (117 REQ-8)."""
+  showPage(possession: LibraryPossession! = ALL, page: Int! = 1, pageSize: Int! = 24): ShowPage!
+}
+```
+
+Clamping (`api`): `pageSize` outside `{12, 24, 48, 96}` becomes 24; `page` below 1 becomes 1; a `page`
+above `totalPages` becomes `totalPages`; `totalPages` is 1 for an empty result. The response's `page`
+and `pageSize` name what was actually returned, which `web` uses to correct the URL. `ADDED` means any
+status other than `COMPLETED`. `Show.fileAudioLanguages`/`fileSubtitleLanguages` are stored columns,
+recomputed whenever an episode's file languages are written, and `null` means no downloaded episode
+is in scope (`[]` means they share no language).
+
+| Condition | Result |
+| :-- | :-- |
+| No valid session | the existing auth guard error; `web` clears the session |
+| Service token | no error: an empty page (`items: []`, `totalCount: 0`, `page: 1`, `totalPages: 1`) |
+| `possession` not an enum value | GraphQL validation error (`web` never sends one) |
+| Any other failure | `INTERNAL_SERVER_ERROR`; `web` logs it and renders the empty state |
+
+**Consumers.** `web` only; `web` no longer calls `movies`/`shows` for its listings. The `worker` never
+calls either query.
+
+### Telling two Spanish subtitles apart, and checking downloaded ones (`118-subtitle-variant-detection`)
+
+```graphql
+type UserPreferences {
+  # …existing fields unchanged…
+  """Gate for audio and subtitle variant detection (110 REQ-1, 118 REQ-1). False for every user until they say otherwise."""
+  audioVariantDetection: Boolean!
+}
+
+type EncodeJobDetails {
+  # …existing fields unchanged, audioVariantDetection included…
+  """Effective opt-in for subtitle variant detection on this job (118 REQ-3)."""
+  subtitleVariantDetection: Boolean!
+}
+
+type SubtitleSyncDetails {
+  id: Int!
+  filePath: String!
+  candidatePath: String!
+  """iso3 of the candidate's language when the variant check must run (118 REQ-12); null means do not run it."""
+  variantDetectionIso3: String
+}
+
+type Mutation {
+  subtitleSyncCompleted(
+    id: Int!, offsetMs: Int!, framerateRatio: Float!,
+    reference: SubtitleSyncReference!, score: Float!,
+    mediaDurationMs: Int!, lastChapterStartMs: Int,
+    """Variant tag the check decided (`es-ES`, `es-419`); null when undecided, failed or not run (118 REQ-14 REQ-17)."""
+    variantTag: String
+  ): Boolean!                                                          # service only
+}
+```
+
+`api` rejects a candidate whose decided `variantTag` differs from the wanted variant stored in
+`SubtitleSearch.wantedVariants` before it applies `103`'s `accept()`. The rejection travels in the
+existing `SubtitleSearchLanguage.reasonKey` as `error.subtitleSearch.wrong_variant` with
+`outcome: REJECTED`; it is not an error. A `variantTag` that is no registered variant of the
+candidate's language is logged and treated as undecided. `worker` reads a missing
+`subtitleVariantDetection` as `false` and a missing `variantDetectionIso3` as `null`, logging both,
+and reports `variantTag: null` for anything other than a decided verdict. The encode verdict never
+crosses the boundary: it lives in `111`'s worker-only Redis store.
+
+New catalog entry in `web/messages/{en,es}.json`, and new values for the three existing
+`preferences.form.audioVariantDetection{Label,Help,DisabledHint}` keys (see the spec's copy table):
+
+| Key | `es` | `en` |
+| :-- | :-- | :-- |
+| `error.subtitleSearch.wrong_variant` | `El subtítulo encontrado es de la otra variante del idioma.` | `The subtitle found is in the other variant of the language.` |
+
+### Replacing subtitles from the manual search (`119-subtitle-search-replace`)
+
+```graphql
+type Mutation {
+  searchMovieSubtitles(movieId: Int!, replaceLanguages: [String!]): SubtitleSearch!
+  searchEpisodeSubtitles(episodeId: Int!, replaceLanguages: [String!]): SubtitleSearch!
+}
+
+enum SubtitleSearchLanguageOutcome {
+  PENDING
+  ALREADY_PRESENT
+  RESOLVED
+  REPLACED
+  MISSING
+  NOT_FOUND
+  REJECTED
+  FAILED
+}
+
+type SubtitleEmbedDetails {
+  """ISO 3 languages whose existing non-forced text subtitle tracks the remux drops (119 REQ-5). Empty for a hand embed or a search without replace; never null."""
+  replaceLanguagesIso3: [String!]!
+}
+```
+
+`replaceLanguages` holds lower-case ISO 3 codes. `api` lower-cases and dedupes the list, refuses a
+code that is not one of the search's wanted languages with `error.subtitleSearch.replace_language_not_wanted`,
+then one the title's stored `fileSubtitleLanguages` does not hold with
+`error.subtitleSearch.replace_language_not_present` (both `BadRequest`, both before any row is
+created), and snapshots the list on `SubtitleSearch.replaceLanguages`. An absent or empty list is
+`106`'s search. Only the two manual mutations carry it; the automatic search never does.
+
+`api` treats a ticked language as missing for the whole search and, when it embeds, passes the
+embed only the ticked languages that have an `ACCEPTED` attempt, so a language nothing was found for
+keeps its tracks. `worker` drops, in the same `mkvmerge` call, every text subtitle track of a listed
+language that is not forced; image tracks, forced tracks, other languages and sidecars are never
+touched, and an unknown language drops nothing. `worker` reads a missing `replaceLanguagesIso3` as
+`[]` and logs. `REPLACED` means a ticked language's accepted candidate was embedded; `api` never
+learns how many tracks the worker dropped, and an older `web` would show the raw key, which is why
+`api` and `web` ship together.
+
+New catalog entries in `web/messages/{en,es}.json`:
+
+| Key | `es` | `en` |
+| :-- | :-- | :-- |
+| `error.subtitleSearch.replace_language_not_wanted` | `Ese idioma no está entre los que se buscan en este título.` | `That language is not one of the languages searched for this title.` |
+| `error.subtitleSearch.replace_language_not_present` | `El archivo no tiene subtítulos en ese idioma para reemplazar.` | `The file has no subtitle in that language to replace.` |
 
 ## Known debt
 

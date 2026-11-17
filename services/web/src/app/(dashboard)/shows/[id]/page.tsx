@@ -11,6 +11,7 @@ import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import DownloadsPanel from "@/components/downloads/DownloadsPanel";
 import SeasonAccordion from "@/components/shows/SeasonAccordion";
 import Show from "@/components/shows/Show";
+import { effectiveLanguages } from "@/lib/effective-languages";
 
 const getShow = cache(getShowById);
 
@@ -83,6 +84,16 @@ export default async function ShowDetailsPage({ params }: PageProps) {
     notFound();
   }
 
+  // Spec 119, T007
+  const effectiveSubtitleLanguages = effectiveLanguages(
+    {
+      audioLanguages: show.audioLanguages ?? [],
+      audioMandatory: show.audioMandatory ?? false,
+      subtitleLanguages: show.subtitleLanguages ?? [],
+    },
+    preferences,
+  ).subtitleLanguages;
+
   const seasons = show.seasons ?? [];
   const lastSeasonNumber = Math.max(...seasons.map((s) => s.seasonNumber));
   // Display order only — newest season first. Episodes within a season and
@@ -112,6 +123,7 @@ export default async function ShowDetailsPage({ params }: PageProps) {
             audioMandatory={show.audioMandatory ?? false}
             audioLanguages={show.audioLanguages ?? []}
             subtitleSearchAvailable={capabilities.subtitleSearchAvailable}
+            subtitleLanguages={effectiveSubtitleLanguages}
           />
         ))}
       </div>

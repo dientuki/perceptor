@@ -38,6 +38,7 @@ describe('LibraryProbeService', () => {
   let queue: { request: jest.Mock };
   let languageFind: jest.Mock;
   let service: LibraryProbeService;
+  let recompute: jest.Mock;
 
   const row = (over: Partial<Row>): Row => ({
     id: 1,
@@ -76,13 +77,19 @@ describe('LibraryProbeService', () => {
         findUnique: jest.fn(({ where }: any) => {
           const r = rows.find((x) => x.id === where.id);
           return Promise.resolve(
-            r && { ...r, episodeNumber: 3, season: { seasonNumber: 2, show: { tmdbId: 9 } } },
+            r && { ...r, episodeNumber: 3, season: { seasonNumber: 2, showId: 5, show: { tmdbId: 9 } } },
           );
         }),
       },
       language: { findMany: languageFind },
     };
-    service = new LibraryProbeService(prisma as never, location as never, queue as never);
+    recompute = jest.fn().mockResolvedValue(undefined);
+    service = new LibraryProbeService(
+      prisma as never,
+      location as never,
+      queue as never,
+      { recompute } as never,
+    );
   });
 
   describe('details', () => {
@@ -190,6 +197,16 @@ describe('LibraryProbeService', () => {
       await service.completed({ movieId: 1 }, '/lib/a.mkv', [], [], []);
       expect(rows[0].fileAudioLanguages).toEqual([]);
       expect(rows[0].fileSubtitleLanguages).toEqual([]);
+    });
+
+    // Without the recompute the series column keeps the intersection of the old reads, with no error.
+    it('recomputes the series languages after an accepted episode report, and only then', async () => {
+      await service.completed({ episodeId: 1 }, '/lib/a.mkv', ['eng'], [], []);
+      expect(recompute).toHaveBeenCalledWith(5);
+      recompute.mockClear();
+      await service.completed({ episodeId: 1 }, '/lib/old.mkv', ['eng'], [], []);
+      await service.completed({ movieId: 1 }, '/lib/a.mkv', ['eng'], [], []);
+      expect(recompute).not.toHaveBeenCalled();
     });
 
     it('resolves false for a missing title', async () => {

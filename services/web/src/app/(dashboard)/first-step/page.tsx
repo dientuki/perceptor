@@ -7,7 +7,6 @@ import { getEnvironmentInfo } from "@/actions/environment";
 import { getIndexerStatus } from "@/actions/indexer";
 import { getMediaCapabilities } from "@/actions/media";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-import AddIndexerButton from "@/components/indexers/AddIndexerButton";
 import IndexerSetupGuide from "@/components/onboarding/IndexerSetupGuide";
 import TmdbKeyOnboarding from "@/components/onboarding/TmdbKeyOnboarding";
 import { parseRequestHostname, resolveServiceUrl } from "@/lib/request-host";
@@ -60,9 +59,6 @@ export default async function FirstStepPage() {
           keyRejected={false}
           alreadyConfigured={mediaCapabilities.catalogKeyConfigured}
         />
-        <div>
-          <AddIndexerButton />
-        </div>
         <IndexerSetupGuide
           status={indexerStatus}
           indexerUrl={indexerUrl}

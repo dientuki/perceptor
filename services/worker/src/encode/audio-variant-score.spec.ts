@@ -10,8 +10,9 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { AUDIO_VARIANT_DETECTORS, findAudioVariantDetector } from './audio-variant-detectors';
-import { dedupeLines, decide, score, similarity } from './audio-variant-score';
+import { AUDIO_VARIANT_DETECTORS, findAudioVariantDetector } from './variant-detectors';
+import { decide, similarity } from './audio-variant-score';
+import { dedupeLines, score } from './variant-score';
 
 const FIXTURES = join(__dirname, '..', '..', 'fixtures', 'audio-variant');
 const manifest = JSON.parse(readFileSync(join(FIXTURES, 'manifest.json'), 'utf8')) as {

@@ -20,6 +20,7 @@ import { resolveEffectiveGrainMode } from '@/settings/grain-mode';
 import { COMPRESSION_RESOLUTIONS, DEFAULT_COMPRESSION_RESOLUTION } from '@/settings/settings.catalog';
 import { TitleStatusService } from '@/title-status/title-status.service';
 import { DownloadsService } from '@/downloads/downloads.service';
+import { wantsVariantDetection } from '@/languages/variant-opt-in';
 import { LanguagesService } from '@/languages/languages.service';
 import { SubtitleSearchRequestService } from '@/subtitle-search/subtitle-search-request.service';
 
@@ -32,6 +33,7 @@ type AllowedLanguages = {
   subtitleIso3Codes: string[];
   subtitleTags: string[];
   audioVariantDetection: boolean;
+  subtitleVariantDetection: boolean;
 };
 
 type OwnerLanguageRows = Array<{ kind: LanguageTrackKind; language: { tag: string; iso3: string } }>;
@@ -112,6 +114,7 @@ export class ProcessJobsService {
         subtitleIso3Codes: allowedSubtitleLanguagesIso3,
         subtitleTags: allowedSubtitleLanguageTags,
         audioVariantDetection,
+        subtitleVariantDetection,
       } = await this.mergeMovieAllowedLanguages(movie.id, original);
       // Spec 048, REQ-12; Spec 048, REQ-13
       const outputSettingKey =
@@ -143,6 +146,7 @@ export class ProcessJobsService {
         allowedSubtitleLanguagesIso3,
         allowedSubtitleLanguageTags,
         audioVariantDetection,
+        subtitleVariantDetection,
       };
     }
 
@@ -156,6 +160,7 @@ export class ProcessJobsService {
         subtitleIso3Codes: allowedSubtitleLanguagesIso3,
         subtitleTags: allowedSubtitleLanguageTags,
         audioVariantDetection,
+        subtitleVariantDetection,
       } = await this.mergeShowAllowedLanguages(show.id, original);
       return {
         ...base,
@@ -181,6 +186,7 @@ export class ProcessJobsService {
         allowedSubtitleLanguagesIso3,
         allowedSubtitleLanguageTags,
         audioVariantDetection,
+        subtitleVariantDetection,
       };
     }
 
@@ -298,17 +304,17 @@ export class ProcessJobsService {
         }
       }
     }
-    // Spec 110, REQ-4
+    // Spec 110, REQ-4; Spec 118, REQ-3
     const variantIso3s = await this.languages.regionalVariantIso3s();
-    const audioVariantDetection = owners.some(
-      (owner) =>
-        owner.user.audioVariantDetection &&
-        [...owner.languages, ...owner.user.languages].some(
-          (pref) => pref.kind === LanguageTrackKind.AUDIO && variantIso3s.has(pref.language.iso3),
-        ),
+    const audioVariantDetection = owners.some((owner) =>
+      wantsVariantDetection(owner, LanguageTrackKind.AUDIO, variantIso3s),
+    );
+    const subtitleVariantDetection = owners.some((owner) =>
+      wantsVariantDetection(owner, LanguageTrackKind.SUBTITLE, variantIso3s),
     );
     return {
       audioVariantDetection,
+      subtitleVariantDetection,
       audioIso3Codes: Array.from(audioIso3Codes),
       audioTags: Array.from(audioTags),
       subtitleIso3Codes: Array.from(subtitleIso3Codes),
