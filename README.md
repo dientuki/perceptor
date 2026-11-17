@@ -57,7 +57,7 @@ who isn't on your own machine.
 register, find a release, download, scan, transcode, file, notify and browse. Bug reports are
 welcome. It has no production deployment and no users besides its author.
 
-The published images are release candidates (`v0.1.0-rc1` through `v0.6.0-rc2`); there is no stable
+The published images are release candidates (`v0.1.0-rc1` through `v0.7.0-rc1`); there is no stable
 release yet, so `latest` resolves to the newest release candidate rather than to a final version.
 
 One hundred and nineteen feature specs (`001` through `119`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
