@@ -13,6 +13,7 @@ import {
 import { SubtitleProbeDetails } from './entities/subtitle-probe-details.entity';
 import { resolveSidecarLanguages } from './sidecar-languages';
 import { SubtitleSyncDetails } from './entities/subtitle-sync-details.entity';
+import { LanguagesService } from '@/languages/languages.service';
 import { SubtitleSearchQueueService } from './subtitle-search-queue.service';
 
 const WORKER_ERROR_KEYS: string[] = [
@@ -28,6 +29,7 @@ export class SubtitleSearchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: SubtitleSearchQueueService,
+    private readonly languages: LanguagesService,
   ) {}
 
   // Spec 103, REQ-13
@@ -90,7 +92,18 @@ export class SubtitleSearchService {
         id,
       });
     }
-    return { id, filePath, candidatePath: attempt.stagedPath };
+    // Spec 118, REQ-12
+    const wanted = attempt.search.wantedVariants;
+    const variantIso3s =
+      wanted === null ? new Set<string>() : await this.languages.regionalVariantIso3s();
+    return {
+      id,
+      filePath,
+      candidatePath: attempt.stagedPath,
+      variantDetectionIso3: variantIso3s.has(attempt.languageIso3)
+        ? attempt.languageIso3
+        : null,
+    };
   }
 
   // Spec 103, REQ-10
@@ -106,9 +119,11 @@ export class SubtitleSearchService {
   async completed(
     id: number,
     report: Omit<SyncMeasurement, 'lastCueEndMs'>,
+    variantTag: string | null = null,
   ): Promise<boolean> {
     const row = await this.prisma.subtitleSearchAttempt.findUnique({
       where: { id },
+      include: { search: { select: { wantedVariants: true } } },
     });
     if (!row) return false;
     if (row.status !== 'RUNNING') return true;
@@ -117,7 +132,21 @@ export class SubtitleSearchService {
       ...report,
       lastCueEndMs: await this.readLastCueEnd(row.stagedPath),
     };
-    const reasonKey = accept(measurement);
+    const validTag = await this.validVariantTag(
+      id,
+      row.languageIso3,
+      variantTag,
+    );
+    // Spec 118, REQ-15
+    const wantedMap = row.search.wantedVariants as Record<
+      string,
+      string
+    > | null;
+    const wanted = wantedMap?.[row.languageIso3];
+    const reasonKey =
+      wanted !== undefined && validTag !== null && validTag !== wanted
+        ? ERROR_KEYS.SUBTITLE_SEARCH_WRONG_VARIANT
+        : accept(measurement);
     const claimed = await this.prisma.subtitleSearchAttempt.updateMany({
       where: { id, status: 'RUNNING' },
       data: {
@@ -127,11 +156,32 @@ export class SubtitleSearchService {
         reference: measurement.reference,
         score: measurement.score,
         reasonKey,
+        variantTag: validTag,
         finishedAt: new Date(),
       },
     });
     if (claimed.count === 1) await this.wake(row.searchId);
     return true;
+  }
+
+  // Spec 118, REQ-14
+  private async validVariantTag(
+    id: number,
+    iso3: string,
+    tag: string | null,
+  ): Promise<string | null> {
+    if (tag === null) return null;
+    const known = tag.includes('-')
+      ? await this.prisma.language.findFirst({
+          where: { tag, iso3 },
+          select: { id: true },
+        })
+      : null;
+    if (known) return tag;
+    this.logger.warn(
+      `Ignoring invalid variant tag "${tag}" for subtitle attempt ${id}`,
+    );
+    return null;
   }
 
   // Spec 103, REQ-10

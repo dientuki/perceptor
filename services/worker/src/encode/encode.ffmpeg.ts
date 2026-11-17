@@ -39,10 +39,10 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress,
   const audioVariants = await resolveAudioVariants(details, input, metadata, signal);
   const endCut = await resolveStreamEndTrim(details, input, metadata, signal, audioVariants);
   // Spec 102, REQ-1
-  const prunedSubtitles = await resolveSubtitlePruning(details, input, metadata, signal);
+  const { drops: prunedSubtitles, variants: subtitleVariants } = await resolveSubtitlePruning(details, input, metadata, signal);
   const cuts = [dubCut, endCut].filter((c): c is number => c !== null);
   const trimAt = cuts.length > 0 ? Math.min(...cuts) : null;
-  const args = buildFfmpegCommand(input, workingPath, metadata, details, filmGrain, trimAt, prunedSubtitles, audioVariants);
+  const args = buildFfmpegCommand(input, workingPath, metadata, details, filmGrain, trimAt, prunedSubtitles, audioVariants, subtitleVariants);
   // Spec 098, REQ-10
   const candidates = [sourceDuration];
   if (Number.isFinite(sample) && sample > 0) candidates.push(sample);

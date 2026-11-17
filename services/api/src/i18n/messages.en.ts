@@ -272,6 +272,12 @@ export const MESSAGES_EN: Record<string, string> = {
     'The OpenSubtitles daily downloads are exhausted.',
   [ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED]:
     'The file could not be read to see which subtitles it has.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_WRONG_VARIANT]:
+    'The subtitle found is in the other variant of the language.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_WANTED]:
+    'That language is not one of the languages searched for this title.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_PRESENT]:
+    'The file has no subtitle in that language to replace.',
 
   // scheduler
   [ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND]: 'Scheduled task not found',

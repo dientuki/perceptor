@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { VARIANT_TRACK_TITLES } from '@/languages/variant-opt-in';
 import { Prisma, SubtitleEmbed as SubtitleEmbedRow } from '@prisma/client';
 import { stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -58,6 +59,8 @@ export type StagedTrackInput = {
   offsetMs: number;
   // Spec 107, REQ-14
   provenance: string;
+  // Spec 118, REQ-16
+  variantTag?: string | null;
 };
 
 // Spec 107, REQ-14
@@ -351,6 +354,7 @@ export class SubtitleEmbedService {
     ref: TargetRef,
     staged: StagedTrackInput[],
     mkvPath: string,
+    replaceLanguages: string[] = [],
   ): Promise<SubtitleEmbed> {
     if (staged.length === 0) {
       throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_EMPTY_SELECTION);
@@ -384,14 +388,18 @@ export class SubtitleEmbedService {
       fileName: basename(track.stagedPath),
       stagedPath: track.stagedPath,
       languageIso3: track.languageIso3,
-      trackTitle: baseTitles.get(track.languageIso3) ?? track.languageIso3,
+      // Spec 118, REQ-16
+      trackTitle:
+        (track.variantTag ? VARIANT_TRACK_TITLES[track.variantTag] : undefined) ??
+        baseTitles.get(track.languageIso3) ??
+        track.languageIso3,
       isDefault: false,
       isForced: false,
       offsetMs: track.offsetMs,
       provenance: track.provenance,
     }));
 
-    return this.queueEmbed(ref, mkvPath, tracks);
+    return this.queueEmbed(ref, mkvPath, tracks, replaceLanguages);
   }
 
   // Spec 106, REQ-3
@@ -412,6 +420,7 @@ export class SubtitleEmbedService {
     ref: TargetRef,
     mkvPath: string,
     tracks: StoredTrack[],
+    replaceLanguages: string[] = [],
   ): Promise<SubtitleEmbed> {
     const targetColumn =
       ref.kind === 'movie' ? { movieId: ref.id } : { episodeId: ref.id };
@@ -422,6 +431,7 @@ export class SubtitleEmbedService {
       mkvPath,
       tracks,
       automatic ? 'SYNCING' : 'QUEUED',
+      replaceLanguages,
     );
 
     try {
@@ -713,6 +723,7 @@ export class SubtitleEmbedService {
     filePath: string,
     tracks: StoredTrack[],
     status: 'SYNCING' | 'QUEUED' = 'QUEUED',
+    replaceLanguages: string[] = [],
   ): Promise<SubtitleEmbedRow> {
     try {
       return await this.prisma.$transaction(
@@ -729,6 +740,11 @@ export class SubtitleEmbedService {
               filePath,
               status,
               tracks: tracks as unknown as Prisma.InputJsonValue,
+              // Spec 119, REQ-5
+              replaceLanguages:
+                replaceLanguages.length > 0
+                  ? replaceLanguages
+                  : Prisma.DbNull,
             },
           });
         },
@@ -864,6 +880,13 @@ export class SubtitleEmbedService {
         (track.stagedPath == null ? USER_PROVENANCE : STAGED_PROVENANCE),
     }));
 
-    return { id: row.id, filePath: row.filePath, tracks };
+    // Spec 119, REQ-5
+    const replaceLanguagesIso3 = Array.isArray(row.replaceLanguages)
+      ? row.replaceLanguages.filter(
+          (item): item is string => typeof item === 'string',
+        )
+      : [];
+
+    return { id: row.id, filePath: row.filePath, tracks, replaceLanguagesIso3 };
   }
 }

@@ -197,6 +197,8 @@
       "jellyfin_refresh_failed": "Subtitles embedded, but the media server could not be notified. They will appear on its next scan."
     },
     "subtitleSearch": {
+      "replace_language_not_wanted": "That language is not among the ones searched for this title.",
+      "replace_language_not_present": "The file has no subtitles in that language to replace.",
       "unsupported_media_server": "Subtitle search requires Jellyfin as the media server.",
       "sync_not_found": "Subtitle search not found.",
       "item_not_found": "Jellyfin did not index the file in time; no subtitles were searched.",
@@ -206,6 +208,7 @@
       "framerate_mismatch": "The subtitle is from a version with a different framerate.",
       "offset_too_large": "The subtitle is too far out of sync.",
       "low_score": "The subtitle does not match this file.",
+      "wrong_variant": "The subtitle found is in the other variant of the language.",
       "incomplete": "The subtitle is incomplete (it only covers part of the film).",
       "interrupted": "The search was interrupted.",
       "superseded": "A newer delivery replaced this search.",
@@ -491,6 +494,32 @@
       "showNoun": "series",
       "emptyShorts": "No shorts registered"
     },
+    "library": {
+      "filter": {
+        "all": "All",
+        "downloaded": "Downloaded",
+        "added": "Added"
+      },
+      "view": {
+        "grid": "Grid view",
+        "list": "List view"
+      },
+      "perPage": "Per page",
+      "pagination": "Pagination",
+      "first": "First",
+      "previous": "Previous",
+      "next": "Next",
+      "last": "Last",
+      "pageOf": "Page {page} of {totalPages}",
+      "column": {
+        "year": "Year",
+        "title": "Title",
+        "audio": "Audio",
+        "subtitles": "Subtitles",
+        "status": "Status"
+      },
+      "emptyFilter": "No titles match this filter"
+    },
     "languagePicker": {
       "defaultLabel": "Preferred languages",
       "empty": "No languages available.",
@@ -538,7 +567,9 @@
     "searchSubtitles": {
       "button": "Search subtitles",
       "searching": "Searching…",
-      "title": "Search subtitles",
+      "title": "Search and replace subtitles",
+      "replaceLabel": "Replace the ones already there",
+      "replaceHint": "Tick a language to search for a new one and replace the one inside the file. If no acceptable one is found, the current one is kept. Forced, image and external subtitles are not touched.",
       "body": "Perceptor will look for the missing subtitles of this title with the subtitle provider. Each download counts against the provider's daily download quota. Continue?",
       "confirm": "Search",
       "cancel": "Cancel",
@@ -577,6 +608,7 @@
       "outcome": {
         "PENDING": "Pending",
         "ALREADY_PRESENT": "Already present",
+        "REPLACED": "Replaced",
         "RESOLVED": "Resolved",
         "MISSING": "Missing from file",
         "NOT_FOUND": "Not found",
@@ -879,9 +911,9 @@
       "dateFormatLabel": "Date format",
       "audioLanguagesLabel": "Audio languages",
       "audioMandatoryLabel": "Mandatory audio",
-      "audioVariantDetectionLabel": "Detect the dub variant from the audio",
-      "audioVariantDetectionHelp": "When a file carries two Spanish tracks that do not say which is Latin American and which is from Spain, a sample of each is listened to in order to tell them apart. Processing takes a few minutes longer.",
-      "audioVariantDetectionDisabledHint": "Available when you pick an audio language with regional variants, such as Spanish.",
+      "audioVariantDetectionLabel": "Detect the Spanish variant (Latin American or Spain) in audio and subtitles",
+      "audioVariantDetectionHelp": "When a file carries two Spanish tracks, audio or subtitles, that do not say which is Latin American and which is from Spain, their content is compared to tell them apart. Subtitles downloaded from the internet are checked the same way, and the ones in the variant you did not pick are discarded. For audio, processing takes a few minutes longer.",
+      "audioVariantDetectionDisabledHint": "Available when you pick an audio or subtitle language with regional variants, such as Spanish.",
       "subtitleLanguagesLabel": "Subtitle languages",
       "cinemaLabel": "Allow cinema releases",
       "acquireTheatricalLabel": "Acquire from 2 days after the theatrical release (any quality; does nothing unless cinema releases are allowed)",

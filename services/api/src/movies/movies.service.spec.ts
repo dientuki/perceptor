@@ -65,6 +65,7 @@ describe('MoviesService', () => {
       create: jest.Mock;
       update: jest.Mock;
       findUniqueOrThrow: jest.Mock;
+      count: jest.Mock;
       delete: jest.Mock;
     };
     userMovie: {
@@ -118,6 +119,7 @@ describe('MoviesService', () => {
         update: jest.fn(),
         findUniqueOrThrow: jest.fn(),
         delete: jest.fn(),
+        count: jest.fn(),
       },
       userMovie: {
         upsert: jest.fn(),
@@ -288,6 +290,58 @@ describe('MoviesService', () => {
         include: { mediaSources: true, processJobs: true },
       });
       expect(result[0].status).toBe('MISSING');
+    });
+  });
+
+  // Spec 117, REQ-8 REQ-11
+  describe('findPage', () => {
+    // Exists because dropping the ownership clause (or the stable id
+    // tiebreak) still returns a well-formed page: other users' titles leak
+    // or rows repeat across pages with no error anywhere. A mocked Prisma
+    // answers whatever it is told, so only the call arguments can catch it.
+    it('hands the ownership where, possession, order and clamped skip/take to Prisma', async () => {
+      prisma.movie.count.mockResolvedValue(30);
+      prisma.movie.findMany.mockResolvedValue([{ id: 1, status: 'MISSING' }]);
+
+      const result = await service.findPage('user-1', true, 'ADDED' as never, 2, 12);
+
+      const where = {
+        users: { some: { userId: 'user-1' } },
+        isShort: true,
+        status: { not: 'COMPLETED' },
+      };
+      expect(prisma.movie.count).toHaveBeenCalledWith({ where });
+      expect(prisma.movie.findMany).toHaveBeenCalledWith({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: 12,
+        take: 12,
+      });
+      expect(result).toMatchObject({ totalCount: 30, page: 2, pageSize: 12, totalPages: 3 });
+    });
+
+    it('clamps an unknown page size to 24 and page 999 to the last page', async () => {
+      prisma.movie.count.mockResolvedValue(30);
+      prisma.movie.findMany.mockResolvedValue([]);
+
+      const result = await service.findPage('user-1', undefined, 'ALL' as never, 999, 7);
+
+      expect(prisma.movie.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 24, take: 24 }),
+      );
+      expect(result).toMatchObject({ page: 2, pageSize: 24, totalPages: 2 });
+    });
+
+    it('clamps page 0 to 1 and answers an empty library as one empty page', async () => {
+      prisma.movie.count.mockResolvedValue(0);
+      prisma.movie.findMany.mockResolvedValue([]);
+
+      const result = await service.findPage('', undefined, 'ALL' as never, 0, 24);
+
+      expect(prisma.movie.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 0, take: 24 }),
+      );
+      expect(result).toEqual({ items: [], totalCount: 0, page: 1, pageSize: 24, totalPages: 1 });
     });
   });
 

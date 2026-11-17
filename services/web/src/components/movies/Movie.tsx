@@ -35,6 +35,7 @@ import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
 import { effectiveLanguages } from "@/lib/effective-languages";
+import { replaceableSubtitleLanguages } from "@/lib/replaceable-subtitle-languages";
 import type { Language } from "@/types/languages";
 import type { AcquisitionTarget, ContentKind, GrainMode } from "@/types/media";
 import type { UserPreferences } from "@/types/preferences";
@@ -246,6 +247,10 @@ export default function Movie({
                 <SearchSubtitlesButton
                   search={movie.latestSubtitleSearch}
                   onSearch={searchMovieSubtitlesAction.bind(null, movie.id)}
+                  replaceableLanguages={replaceableSubtitleLanguages(
+                    movie.fileSubtitleLanguages,
+                    effective.subtitleLanguages,
+                  )}
                   fullWidth
                 />
               )}

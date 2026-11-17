@@ -23,6 +23,35 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-11-17 — `119-subtitle-search-replace`
+
+`api`, `web` and `worker`; one Prisma migration (`20261115130000_subtitle_search_replace`: `subtitle_searches.replaceLanguages` and `subtitle_embeds.replaceLanguages`, both nullable JSON; `prisma migrate status` reports the schema up to date); GraphQL contract: `docs/spec/graphql-contract.md` gained the `119` section, and `schema.gql` carries `replaceLanguages: [String!]` on `searchMovieSubtitles` and `searchEpisodeSubtitles`, `SubtitleSearchLanguageOutcome.REPLACED` and `SubtitleEmbedDetails.replaceLanguagesIso3` (compared by those four items; the diff also holds other specs' uncommitted changes).
+
+- `api` typecheck: 0 errors. Suite: 102 suites, 1742 tests, all pass. Comments gate: PASS (1404 locators).
+- `worker` typecheck: 0 errors. Suite: 65 files, 901 tests, all pass. Comments gate: PASS (479 locators).
+- `web` typecheck: 0 errors; `check-messages`: `OK: en.json and es.json match exactly (827 keys)`; comments gate: PASS (165 locators). `biome check` on the touched files reports only the pre-existing warnings; `npm run lint` repo-wide still fails (143 errors in files this feature did not touch).
+- Live pass (T008): not run. It costs OpenSubtitles downloads and rewrites a real file, and no title was chosen. All 12 acceptance criteria stay unticked, with unit coverage underneath for AC-3 to AC-12.
+
+## 2026-11-15 — `118-subtitle-variant-detection`
+
+`api`, `web` and `worker`; one Prisma migration (`20261115120000_subtitle_variant_check`: `subtitle_searches.wantedVariants` JSON and `subtitle_search_attempts.variantTag` VARCHAR(10), both nullable; applied by `api`'s boot, `prisma migrate status` reports the schema up to date); GraphQL contract: `docs/spec/graphql-contract.md` gained the `118` section, and `schema.gql` carries `UserPreferences.audioVariantDetection`'s new description, `EncodeJobDetails.subtitleVariantDetection`, `SubtitleSyncDetails.variantDetectionIso3` and `subtitleSyncCompleted(variantTag)` (its diff also holds other specs' uncommitted changes, so it was compared by those four items, not line for line).
+
+- `api` typecheck: 0 errors. Suite: 102 suites, 1726 tests, all pass. Comments gate: PASS (1393 locators).
+- `worker` typecheck: 0 errors. Suite: 64 files, 882 tests, all pass. Comments gate: PASS (471 locators). REQ-4b's markers also reach `110`'s audio scoring; `audio-variant-score.spec.ts` kept every expectation (only its imports changed).
+- `web` typecheck: 0 errors (run in a throwaway `node:22` container, since the running `web` image is the production one); `check-messages`: `OK: en.json and es.json match exactly (822 keys)`; comments gate: PASS (160 locators).
+- Corpus: 13 OpenSubtitles files scored (Spain 14.5 to 15.8 per 1000 words, Latin -2.0 to 1.2, one ambiguous Latin file at 5.6). Thresholds 10 and 3, minimum 1000 words, encode margin 10 (extrapolated). The Spain side is two translations of one film.
+- Live passes (details in `plan.md`): the encode driver on files built from the corpus (AC-1 to AC-5, AC-4b, AC-11) and a real search on Reacher S02E05 (AC-13: a Spain candidate rejected with `wrong_variant`, a Latin one embedded as `Latino`). Ticked: AC-1 to AC-5, AC-4b, AC-4c, AC-4d, AC-11, AC-13, AC-18. Unticked: AC-6, AC-7, AC-8, AC-9, AC-10, AC-12, AC-14 to AC-17 (see the spec's verification status).
+
+## 2026-11-10 — `117-library-list-paging-views`
+
+`api` and `web`; one Prisma migration (`20261110120000_show_file_track_languages`, two nullable `JSON` columns on `shows`, written by hand because no dev database was available, so `migrate status` was not run); GraphQL contract additions only (`LibraryPossession`, `MoviePage`, `ShowPage`, `moviePage`, `showPage`, `Show.fileAudioLanguages`/`fileSubtitleLanguages`). Measured in throwaway `node:24.18.0-alpine` containers as uid 1000, since the host's running stack is a different install.
+
+- `api` typecheck: 0 errors. Suite: 101 suites, 1691 tests: 99 suites / 1671 tests pass; `auth/session.service.spec.ts` and `uploads/upload-tickets.service.spec.ts` fail (20 tests) on a missing Redis, the same two as in the `116` entry, files untouched by this feature. New suites: `media/library-page.spec.ts` (6), `show-track-languages/intersect.spec.ts` (8), `show-track-languages.service.spec.ts` (4), plus new cases in the movies, shows, library-probe and media-server-reconcile suites. Fault injections that failed as they should: `ADDED` as `MISSING`-only, `id` dropped from the order, season 0 / unread-episode filters, `DbNull` replaced by `null`, each of the two `recompute` calls removed, the ownership clause removed from `findPage`.
+- `api` comments gate: PASS (1370 locators). `npm run lint` is 3332 errors repo-wide before this feature, mostly `prettier/prettier`; the one non-prettier error in a new file was fixed.
+- `web` typecheck: 0 errors; `check-messages`: `OK: en.json and es.json match exactly (821 keys)`; comments gate: PASS (160 locators). `web` has no tests.
+- GraphQL contract: `docs/spec/graphql-contract.md` gained the `117` section. `services/api/src/schema.gql` was **not** regenerated (nothing could boot the api); an offline Nest schema build, compared after `lexicographicSortSchema`, differs from the committed file only by the 117 additions and by a pre-existing stale enum (`SubtitleSearchLanguageOutcome`). Regenerate it with one real boot.
+- Manual pass: not run. 15 of 16 acceptance criteria are `[~]`; AC-15 is `[x]`.
+
 ## 2026-11-07 — `116-season-scan-write-conflict`
 
 `api` only; no Prisma migration, no GraphQL contract change (`schema.gql` untouched).

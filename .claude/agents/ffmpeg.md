@@ -254,6 +254,11 @@ random and silently lose the right one.
   encode driver, arriving as `AudioVariantResolution`) is gated by the opt-in: without it the
   resolution is `NO_AUDIO_VARIANTS` and nothing is inferred from content. Corpus cases `4.json`
   and `5.json` pin the two outcomes through the optional `input.audioVariants`.
+
+  Since `118` the same gate covers subtitles: a variant decided from a subtitle track's own text
+  arrives as the required `subtitleVariants` map (stream index → tag) on `buildFfmpegCommand` and is
+  applied through `detectWithTags`; without the opt-in the map is empty and nothing is inferred from
+  content. Narrowing still never empties a language.
 - **L2 (track title).** The title written to the output is **always** replaced, never inherited.
   The library is homogeneous: the same language reads the same in every file, whatever the release
   group typed. `Spanish (Latin America)`, `BTM`, `FORCED` and an absent title all resolve through

@@ -17,6 +17,8 @@ export interface SubtitleEmbedDetails {
   id: number;
   filePath: string;
   tracks: SubtitleEmbedTrackDetails[];
+  // Spec 119, REQ-5
+  replaceLanguagesIso3: string[];
 }
 
 // Spec 101, REQ-13
@@ -27,12 +29,18 @@ export async function subtitleEmbedDetails(id: number): Promise<SubtitleEmbedDet
         id
         filePath
         tracks { sourcePath languageIso3 trackTitle isDefault isForced offsetMs isSidecar provenance }
+        replaceLanguagesIso3
       }
     }`,
     { id },
   );
+  const replaceLanguagesIso3 = data.subtitleEmbedDetails.replaceLanguagesIso3;
+  if (!Array.isArray(replaceLanguagesIso3)) {
+    console.warn(`[subtitle-embed] ${id} details carry no replaceLanguagesIso3, dropping nothing`);
+  }
   return {
     ...data.subtitleEmbedDetails,
+    replaceLanguagesIso3: Array.isArray(replaceLanguagesIso3) ? replaceLanguagesIso3 : [],
     tracks: data.subtitleEmbedDetails.tracks.map((track) => ({
       ...track,
       isSidecar: track.isSidecar ?? true,

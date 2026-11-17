@@ -2,6 +2,8 @@ import { Resolver, Query, Mutation, ResolveField, Parent, Args, Int } from '@nes
 import { LanguageTrackKind as PrismaLanguageTrackKind } from '@prisma/client';
 import { ShowsService } from './shows.service';
 import { Show } from './entities/show.entity';
+import { ShowPage } from './entities/show-page.entity';
+import { LibraryPossession } from '@/media/entities/library-possession.enum';
 import { TitleRefresh } from '@/media/entities/title-refresh.entity';
 import { TitleRemoval } from '@/media/entities/title-removal.entity';
 import { Language } from '@/languages/entities/language.entity';
@@ -42,6 +44,22 @@ export class ShowsResolver {
   async getShows(@CurrentUser() principal: AuthPrincipal) {
     const userId = principal.type === 'user' ? principal.id : '';
     return this.showsService.findAll(userId);
+  }
+
+  // Spec 117, REQ-8
+  @Query(() => ShowPage, {
+    name: 'showPage',
+    description: "One page of the caller's series, newest registration first (117 REQ-8).",
+  })
+  async getShowPage(
+    @Args('possession', { type: () => LibraryPossession, defaultValue: LibraryPossession.ALL })
+    possession: LibraryPossession,
+    @Args('page', { type: () => Int, defaultValue: 1 }) page: number,
+    @Args('pageSize', { type: () => Int, defaultValue: 24 }) pageSize: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.showsService.findPage(userId, possession, page, pageSize);
   }
 
   // Single series by internal DB id, scoped to the caller's own library —

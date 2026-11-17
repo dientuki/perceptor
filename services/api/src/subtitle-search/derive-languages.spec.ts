@@ -287,4 +287,61 @@ describe('deriveLanguages', () => {
       });
     });
   });
+
+  // This suite part exists because a replace that found nothing would otherwise read as done: the
+  // file holds the language, so the present short-circuit and 114's file override both say so.
+  describe('replace languages (Spec 119)', () => {
+    const ticked = (over: Partial<SearchRow> = {}) =>
+      search({ presentLanguages: ['eng', 'spa'], replaceLanguages: ['spa'], ...over });
+
+    it('reports a ticked accepted language as REPLACED once the search COMPLETED', () => {
+      const rows = deriveLanguages(
+        ticked(),
+        [attempt({ status: 'ACCEPTED' })],
+        ['eng', 'spa'],
+      );
+      expect(only(rows, 'spa')?.outcome).toBe(Outcome.REPLACED);
+      expect(only(rows, 'eng')?.outcome).toBe(Outcome.ALREADY_PRESENT);
+    });
+
+    it('reports a ticked language with nothing found as NOT_FOUND although the file holds it', () => {
+      const rows = deriveLanguages(ticked(), [], ['eng', 'spa']);
+      expect(only(rows, 'spa')?.outcome).toBe(Outcome.NOT_FOUND);
+    });
+
+    it('reports a ticked accepted language as FAILED when the search FAILED', () => {
+      const rows = deriveLanguages(
+        ticked({ status: 'FAILED', errorKey: 'error.subtitleEmbed.busy' }),
+        [attempt({ status: 'ACCEPTED' })],
+        ['eng', 'spa'],
+      );
+      expect(only(rows, 'spa')).toEqual({
+        languageIso3: 'spa',
+        outcome: Outcome.FAILED,
+        reasonKey: 'error.subtitleEmbed.busy',
+      });
+    });
+
+    it('reports a ticked language with a recorded error as FAILED', () => {
+      const rows = deriveLanguages(
+        ticked({ languageErrors: { spa: 'error.subtitleSearch.quota_exhausted' } }),
+        [],
+        ['eng', 'spa'],
+      );
+      expect(only(rows, 'spa')).toEqual({
+        languageIso3: 'spa',
+        outcome: Outcome.FAILED,
+        reasonKey: 'error.subtitleSearch.quota_exhausted',
+      });
+    });
+
+    it('keeps an unticked present language ALREADY_PRESENT', () => {
+      const rows = deriveLanguages(
+        search({ presentLanguages: ['eng', 'spa'], replaceLanguages: null }),
+        [attempt({ status: 'ACCEPTED' })],
+        ['eng', 'spa'],
+      );
+      expect(only(rows, 'spa')?.outcome).toBe(Outcome.ALREADY_PRESENT);
+    });
+  });
 });

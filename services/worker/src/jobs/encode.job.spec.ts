@@ -1177,3 +1177,60 @@ describe('handleEncode — audioVariantDetection (Spec 110, REQ-5)', () => {
     expect(details.audioVariantDetection).toBe(false);
   });
 });
+
+// Defends the payload seam of 118-subtitle-variant-detection: a dropped field or a missing value
+// read as true would read subtitle text nobody opted into.
+describe('handleEncode — subtitleVariantDetection (Spec 118, REQ-3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob: currentDetails });
+      }
+      if (query.includes('encodeCompleted')) {
+        return Promise.resolve({
+          encodeCompleted: { message: 'ok', removeTorrent: false, deleteInputFile: false, deleteDownloadPath: false },
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    encodeMock.mockResolvedValue({ ffmpegCommand: 'ffmpeg -i ...' });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  let currentDetails: Record<string, unknown> = {};
+
+  async function run(extra: Record<string, unknown>) {
+    currentDetails = { ...PROCESS_JOB_DETAILS, ...extra };
+    await handleEncode(makeJob());
+    return encodeMock.mock.calls[0] as [string, string, Record<string, unknown>] | undefined;
+  }
+
+  it('queries subtitleVariantDetection', async () => {
+    await run({ subtitleVariantDetection: true });
+    expect(fetchGraphQLMock.mock.calls[0][0]).toContain('subtitleVariantDetection');
+  });
+
+  it('a true value reaches the encode() call', async () => {
+    const call = await run({ subtitleVariantDetection: true });
+    expect(call![2].subtitleVariantDetection).toBe(true);
+  });
+
+  it('a missing value normalizes to false and logs', async () => {
+    const call = await run({});
+    expect(call![2].subtitleVariantDetection).toBe(false);
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('subtitleVariantDetection missing or not a boolean'));
+  });
+
+  it('compression off never enables it', async () => {
+    passthroughMock.mockResolvedValue({ ffmpegCommand: '' });
+    await run({ subtitleVariantDetection: true, compressionEnabled: false });
+    expect(encodeMock).not.toHaveBeenCalled();
+    const [, , details] = passthroughMock.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(details.subtitleVariantDetection).toBe(false);
+  });
+});

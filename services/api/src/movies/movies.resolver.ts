@@ -4,6 +4,8 @@ import { MoviesService } from './movies.service';
 import { ContentKind } from '@/media/entities/content-kind.enum';
 import { GrainMode } from '@/media/entities/grain-mode.enum';
 import { Movie } from './entities/movies.entity';
+import { MoviePage } from './entities/movie-page.entity';
+import { LibraryPossession } from '@/media/entities/library-possession.enum';
 import { TitleRefresh } from '@/media/entities/title-refresh.entity';
 import { TitleRemoval } from '@/media/entities/title-removal.entity';
 import { Language } from '@/languages/entities/language.entity';
@@ -82,6 +84,24 @@ export class MoviesResolver {
   ) {
     const userId = principal.type === 'user' ? principal.id : '';
     return this.moviesService.findAll(userId, isShort ?? undefined);
+  }
+
+  // Spec 117, REQ-8
+  @Query(() => MoviePage, {
+    name: 'moviePage',
+    description:
+      "One page of the caller's films, newest registration first (117 REQ-8). isShort behaves exactly as on movies(isShort).",
+  })
+  async getMoviePage(
+    @Args('isShort', { type: () => Boolean, nullable: true }) isShort: boolean | null,
+    @Args('possession', { type: () => LibraryPossession, defaultValue: LibraryPossession.ALL })
+    possession: LibraryPossession,
+    @Args('page', { type: () => Int, defaultValue: 1 }) page: number,
+    @Args('pageSize', { type: () => Int, defaultValue: 24 }) pageSize: number,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    const userId = principal.type === 'user' ? principal.id : '';
+    return this.moviesService.findPage(userId, isShort ?? undefined, possession, page, pageSize);
   }
 
   // Single film by internal DB id, scoped to the caller's own library — see

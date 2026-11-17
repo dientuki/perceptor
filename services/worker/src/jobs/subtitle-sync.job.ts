@@ -10,6 +10,7 @@ import { deliverReport } from '../api/deliver-report';
 import { ERROR_SUBTITLE_SEARCH_SYNC_FAILED } from '../i18n/error-keys';
 import { KeyedError } from '../i18n/keyed-error';
 import { measureSync } from '../subtitles/measure-sync';
+import { detectDownloadedVariant } from '../subtitles/subtitle-variant';
 
 export const SYNC_TIMEOUT_MS = 20 * 60 * 1000;
 const SYNC_NOT_FOUND_KEY = 'error.subtitleSearch.sync_not_found';
@@ -39,6 +40,15 @@ export async function handleSubtitleSync(job: Job<SubtitleSyncJob>): Promise<voi
   const timer = setTimeout(() => timeout.abort(), SYNC_TIMEOUT_MS);
 
   try {
+    let variantTag: string | null = null;
+    if (details.variantDetectionIso3) {
+      try {
+        variantTag = await detectDownloadedVariant(details.candidatePath, details.variantDetectionIso3);
+      } catch (err) {
+        console.warn(`[subtitle-sync] ${id} variant check failed, reporting no variant:`, err);
+      }
+    }
+
     const m = await measureSync(details.filePath, details.candidatePath, timeout.signal);
 
     await deliverReport(`subtitleSyncCompleted(${id})`, () =>
@@ -50,6 +60,7 @@ export async function handleSubtitleSync(job: Job<SubtitleSyncJob>): Promise<voi
         m.score,
         m.mediaDurationMs,
         m.lastChapterStartMs,
+        variantTag,
       ),
     );
   } catch (err) {

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { LanguagesModule } from '@/languages/languages.module';
 import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
 import { MediaRootsModule } from '@/media-roots/media-roots.module';
 import { RedisModule } from '@/redis/redis.module';
@@ -23,6 +24,7 @@ import {
     SubtitleSearchRequestModule,
     SubtitleEmbedModule,
     MediaCapabilitiesModule,
+    LanguagesModule,
     MediaRootsModule,
     SettingsModule,
     QueueModule,

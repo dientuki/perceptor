@@ -77,6 +77,8 @@ export class SubtitleSearchResolver {
   })
   async searchMovieSubtitles(
     @Args('movieId', { type: () => Int }) movieId: number,
+    @Args('replaceLanguages', { type: () => [String], nullable: true })
+    replaceLanguages: string[] | null | undefined,
     @CurrentUser() principal: AuthPrincipal,
   ) {
     const userId = assertUser(principal);
@@ -84,6 +86,7 @@ export class SubtitleSearchResolver {
     await this.requests.requestForCaller(
       { kind: 'movie', id: movieId },
       userId,
+      replaceLanguages ?? [],
     );
     return this.latestOrFail(await this.service.latestForMovie(movieId));
   }
@@ -95,6 +98,8 @@ export class SubtitleSearchResolver {
   })
   async searchEpisodeSubtitles(
     @Args('episodeId', { type: () => Int }) episodeId: number,
+    @Args('replaceLanguages', { type: () => [String], nullable: true })
+    replaceLanguages: string[] | null | undefined,
     @CurrentUser() principal: AuthPrincipal,
   ) {
     const userId = assertUser(principal);
@@ -102,6 +107,7 @@ export class SubtitleSearchResolver {
     await this.requests.requestForCaller(
       { kind: 'episode', id: episodeId },
       userId,
+      replaceLanguages ?? [],
     );
     return this.latestOrFail(await this.service.latestForEpisode(episodeId));
   }
@@ -155,6 +161,13 @@ export class SubtitleSearchResolver {
     @Args('mediaDurationMs', { type: () => Int }) mediaDurationMs: number,
     @Args('lastChapterStartMs', { type: () => Int, nullable: true })
     lastChapterStartMs: number | null | undefined,
+    @Args('variantTag', {
+      type: () => String,
+      nullable: true,
+      description:
+        'Variant tag the check decided (`es-ES`, `es-419`); null when undecided, failed or not run (118 REQ-14 REQ-17).',
+    })
+    variantTag: string | null | undefined,
     @CurrentUser() principal: AuthPrincipal,
   ) {
     assertService(principal);
@@ -165,7 +178,7 @@ export class SubtitleSearchResolver {
       framerateRatio,
       reference,
       score,
-    });
+    }, variantTag ?? null);
   }
 
   @AllowService()

@@ -2,7 +2,10 @@
 // Chinese have two provider variants; searching only one silently misses the
 // other's subtitles.
 
-import { providerLanguageCodes } from './provider-languages';
+import {
+  providerLanguageCodes,
+  providerVariantCode,
+} from './provider-languages';
 
 const LANGS = [
   { tag: 'es', iso2: 'es', iso3: 'spa' },
@@ -23,5 +26,18 @@ describe('providerLanguageCodes', () => {
 
   it('returns nothing for an unknown language', () => {
     expect(providerLanguageCodes('xxx', LANGS)).toEqual([]);
+  });
+});
+
+// Spec 118, REQ-13. A wrong or missing provider code sends the variant query to the wrong
+// language, or to none, with no error anywhere.
+describe('providerVariantCode', () => {
+  it('maps Latin American Spanish to the provider code OpenSubtitles lists for it', () => {
+    expect(providerVariantCode('es-419')).toBe('ea');
+  });
+
+  it('returns null for European Spanish and any unmapped tag, which use the plain query', () => {
+    expect(providerVariantCode('es-ES')).toBeNull();
+    expect(providerVariantCode('xx-YY')).toBeNull();
   });
 });

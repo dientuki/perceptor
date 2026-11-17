@@ -25,6 +25,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MediaServerReconcileService } from './media-server-reconcile.service';
 import { Prisma } from '@prisma/client';
+import { ShowTrackLanguagesService } from '@/show-track-languages/show-track-languages.service';
 import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SettingsService } from '@/settings/settings.service';
@@ -41,6 +42,7 @@ describe('MediaServerReconcileService', () => {
   let indexLookup: jest.Mock;
   let refreshAndWait: jest.Mock;
   let probeRequest: jest.Mock;
+  let recompute: jest.Mock;
 
   beforeEach(async () => {
     getMap = jest.fn().mockResolvedValue({
@@ -55,6 +57,7 @@ describe('MediaServerReconcileService', () => {
     indexLookup = jest.fn().mockResolvedValue(null);
     refreshAndWait = jest.fn().mockResolvedValue('ready');
     probeRequest = jest.fn().mockResolvedValue(undefined);
+    recompute = jest.fn().mockResolvedValue(undefined);
 
     const prisma = {
       movie: { updateMany: movieUpdateMany },
@@ -68,6 +71,7 @@ describe('MediaServerReconcileService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: SettingsService, useValue: { getMap } },
         { provide: LibraryProbeQueueService, useValue: { request: probeRequest } },
+        { provide: ShowTrackLanguagesService, useValue: { recompute } },
         {
           provide: MediaServerIndexService,
           useValue: { lookup: indexLookup, refreshAndWait },
@@ -401,6 +405,21 @@ describe('MediaServerReconcileService', () => {
       const r = await service.syncShow(7, 9);
       expect(r).toEqual({ outcome: 'FAILED', promoted: 0, demoted: 0 });
       expect(episodeUpdateMany).not.toHaveBeenCalled();
+    });
+
+    // A demotion clears episode languages; without the recompute the series keeps showing them.
+    it('recomputes the series languages when episodes were demoted, not when none were', async () => {
+      mockClient({
+        findByTmdbId: jest.fn().mockResolvedValue('ext'),
+        listPresentEpisodes: jest.fn().mockResolvedValue([]),
+      });
+      seasonFindMany.mockResolvedValue(seasons);
+      await service.syncShow(7, 9);
+      expect(recompute).toHaveBeenCalledWith(7);
+      recompute.mockClear();
+      episodeUpdateMany.mockResolvedValue({ count: 0 });
+      await service.syncShow(7, 9);
+      expect(recompute).not.toHaveBeenCalled();
     });
 
     it('is FAILED with zero writes when the show sync index failed', async () => {

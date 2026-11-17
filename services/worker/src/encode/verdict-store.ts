@@ -18,6 +18,8 @@ export const VERDICT_KINDS = [
   'assembly',
   // Spec 110, REQ-8
   'audio-variant',
+  // Spec 118, REQ-8
+  'subtitle-variant',
 ] as const;
 
 export type VerdictKind = (typeof VERDICT_KINDS)[number];

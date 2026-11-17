@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getMediaCapabilities } from "@/actions/media";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import Shows from "@/components/shows/Shows";
+import type { RawSearchParams } from "@/lib/library-params";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("pages.shows");
@@ -14,7 +15,11 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function ShowsPage() {
+export default async function ShowsPage({
+  searchParams,
+}: {
+  searchParams: Promise<RawSearchParams>;
+}) {
   const t = await getTranslations("pages.shows");
   const capabilities = await getMediaCapabilities();
 
@@ -27,7 +32,7 @@ export default async function ShowsPage() {
       <PageBreadcrumb pageTitle={t("title")} />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
-          <Shows />
+          <Shows pathname="/shows" searchParams={await searchParams} />
         </div>
       </div>
     </div>

@@ -17,7 +17,7 @@ interface Cue {
   text: string[];
 }
 
-function decode(bytes: Uint8Array, fileName: string): string {
+export function decodeSubtitleBytes(bytes: Uint8Array, fileName: string): string {
   const buf = Buffer.from(bytes);
 
   if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
@@ -82,7 +82,7 @@ function format(ms: number): string {
 
 // Spec 101, REQ-7 REQ-8
 export function normalizeSrt(bytes: Uint8Array, offsetMs: number, fileName: string): string {
-  const text = decode(bytes, fileName).replace(/^﻿/, '');
+  const text = decodeSubtitleBytes(bytes, fileName).replace(/^﻿/, '');
 
   const shifted: Cue[] = [];
   for (const cue of parseCues(text)) {

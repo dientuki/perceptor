@@ -13,7 +13,8 @@
 import { NO_AUDIO_VARIANTS } from './variants';
 import { describe, expect, it, vi } from 'vitest';
 import type { SubtitleFormat } from '../encode/subtitle-formats';
-import { getAudioParams, getSubtitleParams, getVideoParams, selectAudioStreams } from './params';
+import { getAudioParams, getSubtitleParams, getVideoParams, selectAudioStreams, selectSubtitleStreams } from './params';
+import { detectWithTags } from './variants';
 
 function audioStream(overrides: Record<string, any>) {
   return {
@@ -1088,5 +1089,48 @@ describe('getSubtitleParams', () => {
       expect(mapArgCount(params)).toBe(1);
       expect(params).toContain('0:5');
     });
+  });
+});
+
+describe('getSubtitleParams — detected subtitle variants (Spec 118, REQ-8)', () => {
+  const streams = [
+    subtitleStream({ index: 4, tags: { language: 'spa' } }),
+    subtitleStream({ index: 5, tags: { language: 'spa' } }),
+  ];
+  const detect = detectWithTags(new Map([[4, 'es-ES'], [5, 'es-419']]));
+
+  it('keeps only the detected es-419 stream, titled Latino, when es-419 is requested', () => {
+    const params = getSubtitleParams(streams, ['srt'], ['spa'], ['es-419'], TRACK_TITLES, new Set(), detect);
+
+    expect(mapArgCount(params)).toBe(1);
+    expect(params).toContain('0:5');
+    expect(params).toContain('title=Latino');
+  });
+
+  it('keeps both and titles each by its detected variant when plain es is requested', () => {
+    const params = getSubtitleParams(streams, ['srt'], ['spa'], ['es'], TRACK_TITLES, new Set(), detect);
+
+    expect(mapArgCount(params)).toBe(2);
+    expect(params).toContain('title=Español (España)');
+    expect(params).toContain('title=Latino');
+  });
+
+  it('keeps every stream when the requested variant matches none of the detected ones', () => {
+    const onlyCastilian = detectWithTags(new Map([[4, 'es-ES'], [5, 'es-ES']]));
+    const params = getSubtitleParams(streams, ['srt'], ['spa'], ['es-419'], TRACK_TITLES, new Set(), onlyCastilian);
+
+    expect(mapArgCount(params)).toBe(2);
+  });
+
+  it('is unchanged with an empty map', () => {
+    const withEmpty = getSubtitleParams(streams, ['srt'], ['spa'], ['es-419'], TRACK_TITLES, new Set(), detectWithTags(new Map()));
+    const withDefault = getSubtitleParams(streams, ['srt'], ['spa'], ['es-419'], TRACK_TITLES, new Set());
+
+    expect(withEmpty).toEqual(withDefault);
+    expect(mapArgCount(withEmpty)).toBe(2);
+  });
+
+  it('still hands both streams to the default selection, so content rules see them', () => {
+    expect(selectSubtitleStreams(streams, ['srt'], ['spa'], ['es-419']).selected.map((s) => s.index)).toEqual([4, 5]);
   });
 });

@@ -84,4 +84,36 @@ describe('verifyEmbed', () => {
       ok: true,
     });
   });
+
+  describe('with dropped tracks', () => {
+    const withTwo = meta([video, audio('eng'), sub('spa'), sub('eng', { default: 1 })]);
+
+    it('accepts a replace: one dropped, one added', () => {
+      const result = meta([video, audio('eng'), sub('eng', { default: 1 }), sub('spa')]);
+      expect(verifyEmbed(withTwo, result, requested, [2])).toEqual({ ok: true });
+    });
+
+    it('rejects a remux that kept the dropped track', () => {
+      const result = meta([video, audio('eng'), sub('spa'), sub('eng', { default: 1 }), sub('spa')]);
+      expect(verifyEmbed(withTwo, result, requested, [2]).ok).toBe(false);
+    });
+
+    it('rejects a remux that dropped a track that was not listed', () => {
+      const result = meta([video, audio('eng'), sub('spa')]);
+      expect(verifyEmbed(withTwo, result, requested, [2]).ok).toBe(false);
+    });
+
+    it('rejects an original stream that changed besides the dropped one', () => {
+      const result = meta([video, audio('fra'), sub('eng', { default: 1 }), sub('spa')]);
+      expect(verifyEmbed(withTwo, result, requested, [2]).ok).toBe(false);
+    });
+
+    it('checks the default flag against the filtered length', () => {
+      const wantDefault = [{ languageIso3: 'spa', isDefault: true, isForced: false }];
+      const good = meta([video, audio('eng'), sub('eng'), sub('spa', { default: 1 })]);
+      const wrong = meta([video, audio('eng'), sub('eng', { default: 1 }), sub('spa')]);
+      expect(verifyEmbed(withTwo, good, wantDefault, [2])).toEqual({ ok: true });
+      expect(verifyEmbed(withTwo, wrong, wantDefault, [2]).ok).toBe(false);
+    });
+  });
 });

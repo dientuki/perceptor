@@ -28,6 +28,7 @@ import { SchedulerModule } from './scheduler/scheduler.module';
 import { SubtitleEmbedModule } from './subtitle-embed/subtitle-embed.module';
 import { SubtitleSearchModule } from './subtitle-search/subtitle-search.module';
 import { LibraryProbeModule } from './library-probe/library-probe.module';
+import { ShowTrackLanguagesModule } from './show-track-languages/show-track-languages.module';
 import { EnvironmentModule } from './environment/environment.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { TmdbListsModule } from './tmdb-lists/tmdb-lists.module';
@@ -73,6 +74,7 @@ import { formatGraphQLError } from './i18n/graphql-error.formatter';
     SubtitleEmbedModule,
     SubtitleSearchModule,
     LibraryProbeModule,
+    ShowTrackLanguagesModule,
   ],
   providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })

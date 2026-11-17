@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getMediaCapabilities } from "@/actions/media";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import Shorts from "@/components/movies/Shorts";
+import type { RawSearchParams } from "@/lib/library-params";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("pages.shorts");
@@ -14,7 +15,11 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function ShortsPage() {
+export default async function ShortsPage({
+  searchParams,
+}: {
+  searchParams: Promise<RawSearchParams>;
+}) {
   const t = await getTranslations("pages.shorts");
   const capabilities = await getMediaCapabilities();
 
@@ -27,7 +32,7 @@ export default async function ShortsPage() {
       <PageBreadcrumb pageTitle={t("title")} />
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <div className="space-y-6">
-          <Shorts />
+          <Shorts pathname="/shorts" searchParams={await searchParams} />
         </div>
       </div>
     </div>

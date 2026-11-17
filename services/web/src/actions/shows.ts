@@ -58,49 +58,18 @@ export interface Show {
   autoAcquire?: boolean;
   status: string;
   seasonsSyncedAt?: string;
-  // Only present when fetched via getShowById — getShows() doesn't request it
+  // Only present when fetched via getShowById — a listing doesn't request it
   seasons?: Season[];
-  // Only present when fetched via getShowById — getShows() must not select
+  // Only present when fetched via getShowById — a listing must not select
   // these field resolvers, or a library listing turns into one query per row
   audioLanguages?: Language[];
   subtitleLanguages?: Language[];
   audioMandatory?: boolean;
+  // Spec 117, REQ-7
+  fileAudioLanguages?: string[] | null;
+  fileSubtitleLanguages?: string[] | null;
   // Only present when fetched via getShowById — never selected by a listing
   otherOwners?: number;
-}
-
-const GET_SHOWS_QUERY = `
-  query GetStoredShows {
-    shows {
-      id
-      overview
-      title
-      posterUrl
-      releaseDate
-    }
-  }
-`;
-
-export async function getShows(): Promise<Show[]> {
-  const { data, errors } = await fetchGraphQL<{ shows: Show[] }>(
-    GET_SHOWS_QUERY,
-  );
-
-  // GraphQL answers 200 with `errors` populated: without this check `data` is undefined
-  if (errors && errors.length > 0) {
-    // Called directly from ShowsPage's Server Component render — cookie
-    // mutation is illegal there, so hand off to the Route Handler instead of
-    // redirectIfUnauthenticated (which throws by mutating cookies).
-    redirectToClearSession(errors);
-    // Any other error: log it server-side and fall back to an empty list,
-    // matching what the client component's try/catch used to do silently —
-    // there is no app/(dashboard)/error.tsx, so letting this throw would
-    // surface Next's default error screen instead of the empty state.
-    console.error("Error al obtener series:", errors[0]?.message);
-    return [];
-  }
-
-  return data?.shows ?? [];
 }
 
 const GET_SHOW_QUERY = `
@@ -519,8 +488,8 @@ export async function embedEpisodeSubtitlesAction(
 }
 
 const SEARCH_EPISODE_SUBTITLES_MUTATION = `
-  mutation SearchEpisodeSubtitles($episodeId: Int!) {
-    searchEpisodeSubtitles(episodeId: $episodeId) {
+  mutation SearchEpisodeSubtitles($episodeId: Int!, $replaceLanguages: [String!]) {
+    searchEpisodeSubtitles(episodeId: $episodeId, replaceLanguages: $replaceLanguages) {
       id
       status
       errorKey
@@ -538,12 +507,15 @@ const SEARCH_EPISODE_SUBTITLES_MUTATION = `
 // Spec 106, REQ-9
 export async function searchEpisodeSubtitlesAction(
   episodeId: string,
+  replaceLanguages: string[] = [],
 ): Promise<SubtitleSearchResult> {
   type Payload = { searchEpisodeSubtitles: SubtitleSearch | null };
   let result: Awaited<ReturnType<typeof fetchGraphQL<Payload>>>;
   try {
     result = await fetchGraphQL<Payload>(SEARCH_EPISODE_SUBTITLES_MUTATION, {
       episodeId: Number(episodeId),
+      // Spec 119, T007
+      ...(replaceLanguages.length > 0 ? { replaceLanguages } : {}),
     });
   } catch (_err) {
     const t = await getTranslations("errors");

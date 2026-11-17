@@ -145,6 +145,38 @@ describe('handleSubtitleEmbed', () => {
     expect(await exists(sidecar)).toBe(true);
   });
 
+  it('excludes the existing text track of a listed language from the remux and verifies the replace', async () => {
+    const original = {
+      streams: [...ORIGINAL.streams, stream('subtitle', 'subrip', 'spa'), stream('subtitle', 'subrip', 'eng')],
+      format: { duration: '100' },
+    };
+    const result = {
+      streams: [...ORIGINAL.streams, stream('subtitle', 'subrip', 'eng'), stream('subtitle', 'subrip', 'spa')],
+      format: { duration: '100.2' },
+    };
+    h.metadata.mockImplementation(async (path: string) => ({
+      metadata: path === mkv ? original : result,
+      raw: '',
+    }));
+    h.details.mockResolvedValue({
+      id: 7,
+      filePath: mkv,
+      replaceLanguagesIso3: ['spa'],
+      tracks: [
+        { sourcePath: sidecar, languageIso3: 'spa', trackTitle: 'Español', isDefault: false, isForced: false, offsetMs: 0 },
+      ],
+    });
+
+    await handleSubtitleEmbed(job);
+
+    const args = h.capture.mock.calls[0][0] as string[];
+    expect(args.slice(args.indexOf('--subtitle-tracks'), args.indexOf(mkv) + 1)).toEqual([
+      '--subtitle-tracks', '!2', mkv,
+    ]);
+    expect(h.failed).not.toHaveBeenCalled();
+    expect(h.completed).toHaveBeenCalledWith(7, null);
+  });
+
   it('treats mkvmerge exit 1 (warnings) with an output as success', async () => {
     h.capture.mockImplementation(async () => {
       await writeFile(part, 'EMBEDDED');

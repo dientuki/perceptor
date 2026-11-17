@@ -295,6 +295,7 @@ describe('ffmpeg cases', () => {
         null,
         new Set(),
         resolveAudioVariants(input),
+        new Map(),
       );
 
     if (parsed.throws !== undefined) {

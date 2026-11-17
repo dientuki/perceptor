@@ -17,4 +17,12 @@ export class SubtitleSyncDetails {
       'Absolute container path of the staged candidate, under the downloads root.',
   })
   candidatePath: string;
+
+  // Spec 118, REQ-12
+  @Field(() => String, {
+    nullable: true,
+    description:
+      "iso3 of the candidate's language when the variant check must run (118 REQ-12); null means do not run it.",
+  })
+  variantDetectionIso3: string | null;
 }

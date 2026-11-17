@@ -590,6 +590,7 @@ export function selectSubtitleStreams(
   allowedFormats: SubtitleFormat[],
   allowedLanguagesIso3: string[],
   allowedLanguageTags: string[],
+  detect: (stream: any) => string | undefined = detectVariant,
 ): { selected: any[]; commentary: any[] } {
   const allowedLangs = Array.from(
     new Set(allowedLanguagesIso3.map((lang) => normalizeIso3(lang))),
@@ -616,7 +617,7 @@ export function selectSubtitleStreams(
 
     const requestedForLang = requestedVariants(langCode, allowedLanguageTags);
     if (requestedForLang.length > 0) {
-      const narrowed = narrowToVariants(langStreams, requestedForLang);
+      const narrowed = narrowToVariants(langStreams, requestedForLang, detect);
       langStreams = narrowed.matched
         ? narrowed.groups.flatMap((group) => group.streams)
         : narrowed.streams;
@@ -635,6 +636,7 @@ export function getSubtitleParams(
   allowedLanguageTags: string[],
   trackTitles: Record<string, string>,
   contentDrops: ReadonlySet<number>,
+  detect: (stream: any) => string | undefined = detectVariant,
 ) {
   if (allowedFormats.length === 0) {
     console.log('[ffmpeg] subtitles disabled by settings (allowedSubtitleFormats empty).');
@@ -646,6 +648,7 @@ export function getSubtitleParams(
     allowedFormats,
     allowedLanguagesIso3,
     allowedLanguageTags,
+    detect,
   );
 
   commentary.forEach((s) => console.log(`[subs] ${s.index} drop (commentary)`));
@@ -662,7 +665,7 @@ export function getSubtitleParams(
   selected.forEach((s, index) => {
     params.push('-map', `0:${s.index}`);
     params.push(`-c:s:${index}`, isImageSubtitle(s) ? 'copy' : 'srt');
-    params.push(`-metadata:s:s:${index}`, `title=${trackLanguageTitle(s, trackTitles)}`);
+    params.push(`-metadata:s:s:${index}`, `title=${trackLanguageTitle(s, trackTitles, detect)}`);
   });
 
   return params;

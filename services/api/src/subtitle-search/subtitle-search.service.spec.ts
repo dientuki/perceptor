@@ -15,6 +15,9 @@ type Row = {
   offsetMs: number | null;
   score: number | null;
   stagedPath: string | null;
+  languageIso3: string;
+  variantTag: string | null;
+  search: { wantedVariants: Record<string, string> | null };
 };
 
 type Where = { id: number; status?: string | { in: string[] } };
@@ -54,11 +57,25 @@ describe('SubtitleSearchService worker reports', () => {
           offsetMs: null,
           score: null,
           stagedPath: staged,
+          languageIso3: 'spa',
+          variantTag: null,
+          search: { wantedVariants: null },
         },
       ],
     ]);
     wake = jest.fn().mockResolvedValue(undefined);
     const prisma = {
+      language: {
+        findFirst: jest.fn(({ where }: { where: { tag: string; iso3: string } }) =>
+          Promise.resolve(
+            [
+              { tag: 'es-419', iso3: 'spa' },
+              { tag: 'es-ES', iso3: 'spa' },
+              { tag: 'pt-BR', iso3: 'por' },
+            ].find((l) => l.tag === where.tag && l.iso3 === where.iso3) ?? null,
+          ),
+        ),
+      },
       subtitleSearchAttempt: {
         findUnique: jest.fn(({ where }: { where: { id: number } }) =>
           Promise.resolve(rows.get(where.id) ?? null),
@@ -74,7 +91,7 @@ describe('SubtitleSearchService worker reports', () => {
         ),
       },
     };
-    service = new SubtitleSearchService(prisma as never, { wake } as never);
+    service = new SubtitleSearchService(prisma as never, { wake } as never, {} as never);
   });
 
   const measurement = (over: Record<string, unknown> = {}) => ({
@@ -147,6 +164,77 @@ describe('SubtitleSearchService worker reports', () => {
     expect(rows.get(1)?.status).toBe('REJECTED');
   });
 
+  // This block exists because a wrong-variant subtitle that is accepted, or a
+  // good one rejected, is embedded or dropped with no error anywhere
+  // (Article IX, Spec 118, REQ-15).
+  describe('variant rule', () => {
+    const good = () => measurement({ score: 200_000 });
+    const wanting = (tag: string | null = 'es-419') => {
+      rows.get(1)!.search.wantedVariants = tag === null ? null : { spa: tag };
+    };
+
+    it('rejects a candidate of the other variant even with a perfect measurement and stores the tag', async () => {
+      wanting();
+      await service.completed(1, good(), 'es-ES');
+      expect(rows.get(1)).toMatchObject({
+        status: 'REJECTED',
+        reasonKey: ERROR_KEYS.SUBTITLE_SEARCH_WRONG_VARIANT,
+        variantTag: 'es-ES',
+      });
+    });
+
+    it('lets accept() decide when the reported variant is the wanted one', async () => {
+      wanting();
+      await service.completed(1, good(), 'es-419');
+      expect(rows.get(1)).toMatchObject({
+        status: 'ACCEPTED',
+        variantTag: 'es-419',
+      });
+    });
+
+    it('lets accept() decide when nothing was decided', async () => {
+      wanting();
+      await service.completed(1, good(), null);
+      expect(rows.get(1)).toMatchObject({ status: 'ACCEPTED', variantTag: null });
+    });
+
+    it('treats an invalid tag as null and logs it', async () => {
+      wanting();
+      const warn = jest
+        .spyOn(
+          (service as unknown as { logger: { warn: () => void } }).logger,
+          'warn',
+        )
+        .mockImplementation(() => undefined);
+      await service.completed(1, good(), 'pt-BR');
+      expect(rows.get(1)).toMatchObject({ status: 'ACCEPTED', variantTag: null });
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('never rejects for variant when the search has no snapshot', async () => {
+      wanting(null);
+      await service.completed(1, good(), 'es-ES');
+      expect(rows.get(1)).toMatchObject({
+        status: 'ACCEPTED',
+        variantTag: 'es-ES',
+      });
+    });
+
+    it('shows wrong_variant for a candidate that fails both rules', async () => {
+      wanting();
+      await service.completed(
+        1,
+        measurement({ framerateRatio: 1.0427 }),
+        'es-ES',
+      );
+      expect(rows.get(1)).toMatchObject({
+        status: 'REJECTED',
+        reasonKey: ERROR_KEYS.SUBTITLE_SEARCH_WRONG_VARIANT,
+        variantTag: 'es-ES',
+      });
+    });
+  });
+
   it('moves QUEUED to RUNNING once and answers false afterwards', async () => {
     rows.get(1)!.status = 'QUEUED';
     expect(await service.started(1)).toBe(true);
@@ -159,17 +247,30 @@ describe('SubtitleSearchService worker reports', () => {
 // libraryPath fallback the search is reported "not found" to the worker with no
 // error anywhere, and the subtitle is never measured (Article IX, Spec 106, REQ-7).
 describe('SubtitleSearchService details', () => {
-  const detailsFor = (search: Record<string, unknown>) => {
+  const languages = {
+    regionalVariantIso3s: jest.fn().mockResolvedValue(new Set(['spa'])),
+  };
+  const detailsFor = (
+    search: Record<string, unknown>,
+    iso3 = 'spa',
+  ) => {
     const prisma = {
       subtitleSearchAttempt: {
         findUnique: jest.fn().mockResolvedValue({
           id: 1,
+          languageIso3: iso3,
           stagedPath: '/downloads/.perceptor/1.srt',
-          search: { movie: null, episode: null, libraryPath: null, ...search },
+          search: {
+            movie: null,
+            episode: null,
+            libraryPath: null,
+            wantedVariants: null,
+            ...search,
+          },
         }),
       },
     };
-    return new SubtitleSearchService(prisma as never, {} as never).details(1);
+    return new SubtitleSearchService(prisma as never, {} as never, languages as never).details(1);
   };
 
   it('prefers the delivered filePath', async () => {
@@ -188,6 +289,20 @@ describe('SubtitleSearchService details', () => {
         libraryPath: '/lib/B.mkv',
       }),
     ).resolves.toMatchObject({ filePath: '/lib/B.mkv' });
+  });
+
+  // Spec 118, REQ-12
+  it('asks for the variant check only with a snapshot and a language that has variants', async () => {
+    const movie = { movie: { filePath: '/lib/A.mkv' } };
+    await expect(
+      detailsFor({ ...movie, wantedVariants: { spa: 'es-419' } }),
+    ).resolves.toMatchObject({ variantDetectionIso3: 'spa' });
+    await expect(detailsFor(movie)).resolves.toMatchObject({
+      variantDetectionIso3: null,
+    });
+    await expect(
+      detailsFor({ ...movie, wantedVariants: { spa: 'es-419' } }, 'eng'),
+    ).resolves.toMatchObject({ variantDetectionIso3: null });
   });
 
   it('is not found when neither path exists', async () => {
@@ -233,6 +348,7 @@ describe('SubtitleSearchResolver service-only surface', () => {
         SubtitleSyncReference.AUDIO,
         5,
         6000,
+        null,
         null,
         user,
       ),
@@ -325,7 +441,7 @@ describe('SubtitleSearchService probe', () => {
         ),
       },
     };
-    service = new SubtitleSearchService(prisma as never, { wake } as never);
+    service = new SubtitleSearchService(prisma as never, { wake } as never, {} as never);
   });
 
   const report = () => ({
@@ -397,7 +513,7 @@ describe('SubtitleSearchService probe', () => {
         findUnique: jest.fn(() => Promise.resolve(withPath)),
       },
     };
-    const svc = new SubtitleSearchService(prisma as never, { wake } as never);
+    const svc = new SubtitleSearchService(prisma as never, { wake } as never, {} as never);
     await expect(svc.probeDetails(5)).resolves.toEqual({
       id: 5,
       filePath: '/a.mkv',

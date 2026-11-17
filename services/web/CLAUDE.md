@@ -734,14 +734,16 @@ gated it. The header menu's *Ajustes* item was never admin-gated before this fea
 
 ## Library listings: two parallel screens, not one parameterized one
 
-`/movies` and `/shows` are deliberately **separate** implementations (`getMovies()` +
-`components/movies/Movies.tsx`, `getShows()` + `components/shows/Shows.tsx`). This is the opposite of
+`/movies` and `/shows` are deliberately **separate** implementations (`getMoviePage()` +
+`components/movies/Movies.tsx`, `getShowPage()` + `components/shows/Shows.tsx`). This is the opposite of
 `SearchContainer` above and is not an oversight: `api` exposes `movies` and `shows` as two sibling
 queries with two independent types. Do not merge them; the duplication is cheaper than the parameter.
 
 What *is* shared is the rendering: both pass rows to `src/components/media/MediaList.tsx`, which takes
 a `mediaType` prop and already produces the right Spanish empty state for each. Never pass a custom
-`emptyMessage`, never fork `MediaList`/`MediaCard`.
+`emptyMessage` (the one exception, `117`: `media.library.emptyFilter` when the possession filter is not All), never fork `MediaList`/`MediaCard`.
+
+**Paging, filter and view (`117`).** The pages read `moviePage`/`showPage` through `src/actions/library.ts`; the state is `page`/`pageSize`/`filter`/`view` in the URL, parsed by the pure `src/lib/library-params.ts` (`normalize`, `libraryHref`, which is idempotent so a correction never loops). A bad value redirects server-side to the canonical URL, as does a page `api` clamped. View and page size are also kept in the `perceptor_library_display` cookie (`"<view>:<pageSize>"`, written by the `setLibraryDisplay` server action, never from a render). `LibraryToolbar` (client, props only), `LibraryPager` (links) and `MediaTable` (list view) live in `components/media/`; `LanguageChips` is the one chip rendering, shared with `FileTrackLanguages`. A listing selects no per-row field resolver.
 
 **Both list components are Server Components, not client fetches** — `async function` components that
 `await` their action during render, no `"use client"`, no `useEffect`. An earlier client-fetching
@@ -852,11 +854,11 @@ manual, never polled.
 (`web` has no possession field, so `COMPLETED` stands in for "holds a file"). It is disabled while the
 latest search is non-terminal. The actions `searchMovieSubtitlesAction`/`searchEpisodeSubtitlesAction`
 return `{ search } | { error, errorKey? }`; `in_progress` also refreshes the page. There is no season or
-series button: the provider's free quota is about 20 downloads a day.
+series button: the provider's free quota is about 20 downloads a day. Since `119-subtitle-search-replace` the dialog is "Buscar y reemplazar subtítulos": the optional `replaceableLanguages` prop (computed by `lib/replaceable-subtitle-languages.ts` from `fileSubtitleLanguages` and the caller's effective subtitle languages — on a film `effective.subtitleLanguages`, on an episode the show page computes it and passes it to `SeasonAccordion` as `subtitleLanguages`) renders one `Checkbox` per language, unticked on every open, and `onSearch(replaceLanguages)` sends the ticked ones as lower-case ISO 3 only when non-empty. `REPLACED` renders as "Reemplazado"; the two `replace_language_*` error keys are a stale-page case and show inline.
 
 ## Audio variant detection preference (`110-audio-variant-detection`)
 
-One opt-in checkbox in `/preferences` (`PreferencesForm.tsx`), `audioVariantDetection`, saved in the
+One opt-in checkbox in `/preferences` (`PreferencesForm.tsx`), `audioVariantDetection` (since `118` also enabled by a subtitle language with variants, and its copy covers subtitles), saved in the
 same batch as the rest of the form through `setAudioVariantDetectionAction` and reverted with the
 translated error key on failure, like `subtitleSearch`. It is always shown but **enabled** only while
 the live audio language selection (`audioTags`, before saving) includes a language whose

@@ -6,11 +6,19 @@ function word(pattern: string): RegExp {
   return new RegExp(`${START}(?:${pattern})${END}`, 'gu');
 }
 
+// Spec 118, REQ-4b
+const IMPERATIVE_ID = new RegExp(
+  `(?:^[-\\u2013\\u2014\\s\\u00bf\\u00a1"]*Id|${START}id)${END}`,
+  'gmu',
+);
+
 export interface AudioVariantMarkers {
   strongA: RegExp[];
   weakA: RegExp[];
   presentPerfect: RegExp[];
   b: RegExp[];
+  casedStrongA?: RegExp[];
+  weakB?: RegExp[];
 }
 
 export interface AudioVariantDetector {
@@ -34,6 +42,11 @@ export const AUDIO_VARIANT_DETECTORS: readonly AudioVariantDetector[] = [
         word('vale'),
         word('jod(?:er|an|e)'),
         word('tí[oa]'),
+        word('curr(?:o|ar|as|a|amos)'),
+        word('guay'),
+        word('chaval(?:es)?'),
+        word('gilipollas'),
+        word('hostias?'),
       ],
       weakA: [
         word('coche'),
@@ -43,6 +56,11 @@ export const AUDIO_VARIANT_DETECTORS: readonly AudioVariantDetector[] = [
         word('zumo'),
         word('gafas'),
         word('valeroso'),
+        word('mola'),
+        word('flip(?:ar|a|as|o|an|ado|ante)'),
+        word('venga'),
+        word('piso'),
+        word('pasta'),
       ],
       presentPerfect: [word(`(?:he|has|ha|hemos|habéis|han)\\s+${WORD}+(?:ado|ido|to|cho|sto)`)],
       b: [
@@ -58,7 +76,15 @@ export const AUDIO_VARIANT_DETECTORS: readonly AudioVariantDetector[] = [
         word('lentes'),
         word('qué pasó'),
         word('okey'),
+        word('rentar'),
+        word('enojad[oa]s?'),
+        word('apúrate'),
+        word('chamac[oa]s?'),
+        word('güey'),
+        word('chid[oa]'),
       ],
+      weakB: [word('departamento')],
+      casedStrongA: [IMPERATIVE_ID],
     },
   },
 ];

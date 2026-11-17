@@ -445,6 +445,9 @@ model Show {
   releaseDate      DateTime?
   seasonsSyncedAt  DateTime?
   tmdbStatus       String?
+  // Spec 117, REQ-7: intersection of the series' episodes' stored languages.
+  fileAudioLanguages    Json?
+  fileSubtitleLanguages Json?
 
   seasons   Season[]
   users     UserShow[]
@@ -533,6 +536,9 @@ model SubtitleEmbed {
   errorKey   String?             @db.VarChar(100)
   warningKey String?             @db.VarChar(100)
 
+  // Spec 119, REQ-5
+  replaceLanguages Json?
+
   createdAt  DateTime  @default(now())
   finishedAt DateTime?
 
@@ -588,6 +594,12 @@ model SubtitleSearch {
   probeCount     Int     @default(0)
   languageErrors Json?
 
+  // Spec 118
+  wantedVariants Json?
+
+  // Spec 119, REQ-3
+  replaceLanguages Json?
+
   subtitleEmbedId Int?
   subtitleEmbed   SubtitleEmbed? @relation(fields: [subtitleEmbedId], references: [id], onDelete: SetNull)
 
@@ -616,6 +628,7 @@ model SubtitleSearchAttempt {
   rank               Int
   stagedPath         String? @db.VarChar(500)
   providerFileName   String? @db.VarChar(500)
+  variantTag         String? @db.VarChar(10)
 
   status         SubtitleSearchAttemptStatus @default(QUEUED)
   offsetMs       Int?

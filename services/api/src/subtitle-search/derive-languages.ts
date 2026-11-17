@@ -22,6 +22,7 @@ export type SearchRow = {
   wantedLanguages: unknown;
   presentLanguages: unknown;
   languageErrors?: unknown;
+  replaceLanguages?: unknown;
 };
 
 function asStrings(value: unknown): string[] {
@@ -55,11 +56,13 @@ export function deriveLanguages(
   const terminal = search.status === 'COMPLETED' || search.status === 'FAILED';
   const present = new Set(asStrings(search.presentLanguages));
   const languageErrors = errorKeys(search.languageErrors);
+  // Spec 119, REQ-8
+  const ticked = new Set(asStrings(search.replaceLanguages));
 
   return asStrings(search.wantedLanguages).map((languageIso3) => {
     const derived = deriveLanguage(languageIso3);
     // Spec 114, REQ-1
-    if (inFile === null || !terminal) return derived;
+    if (inFile === null || !terminal || ticked.has(languageIso3)) return derived;
     if (inFile.has(languageIso3)) {
       return {
         languageIso3,
@@ -85,7 +88,9 @@ export function deriveLanguages(
       reasonKey,
     });
 
-    if (present.has(languageIso3)) return result(Outcome.ALREADY_PRESENT);
+    if (present.has(languageIso3) && !ticked.has(languageIso3)) {
+      return result(Outcome.ALREADY_PRESENT);
+    }
 
     const own = attempts
       .filter((attempt) => attempt.languageIso3 === languageIso3)
@@ -101,6 +106,11 @@ export function deriveLanguages(
     }
 
     const derived = deriveOne(search, own, result);
+
+    // Spec 119, REQ-8
+    if (ticked.has(languageIso3) && derived.outcome === Outcome.RESOLVED) {
+      return result(Outcome.REPLACED);
+    }
 
     // A terminal search never leaves a language reading PENDING forever.
     if (derived.outcome === Outcome.PENDING && search.status === 'FAILED') {

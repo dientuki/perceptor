@@ -57,10 +57,10 @@ who isn't on your own machine.
 register, find a release, download, scan, transcode, file, notify and browse. Bug reports are
 welcome. It has no production deployment and no users besides its author.
 
-The published images are release candidates (`v0.1.0-rc1` through `v0.6.0-rc1`); there is no stable
+The published images are release candidates (`v0.1.0-rc1` through `v0.6.0-rc2`); there is no stable
 release yet, so `latest` resolves to the newest release candidate rather than to a final version.
 
-One hundred and thirteen feature specs (`001` through `113`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
+One hundred and nineteen feature specs (`001` through `119`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
 stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -159,10 +159,15 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   login through Traefik.
 
 ### Process
-- 🎞️ **Everything to AV1** via `libsvtav1` — H.264, HEVC, VC-1 and oversized AV1 alike — audio to
-  Opus. The administrator picks a **resolution ceiling** (4K, 1080p, 720p, 480p or 360p): anything
+- 🎞️ **Everything to AV1** via `libsvtav1` — H.264, HEVC, VC-1, MPEG-2 and oversized AV1 alike —
+  audio to Opus, and an audio track that is already Opus is copied rather than encoded twice. The
+  administrator picks a **resolution ceiling** (4K, 1080p, 720p, 480p or 360p): anything
   above it is downscaled to fit, nothing is ever upscaled, and only AV1 that already fits is copied
   untouched.
+- 📀 **DVDs come out right.** An interlaced source is deinterlaced (only the frames flagged as
+  interlaced) before it is scaled, an SD source keeps its PAL or NTSC colour tags instead of being
+  relabelled as HD, and an anamorphic picture keeps its display shape — so a MakeMKV rip ends up a
+  fraction of its size, without combing or a squashed frame.
 - 🌈 **HDR survives.** HDR10, Dolby Vision and HLG keep their colour tags through the encode, scaled
   or not — never flattened to SDR.
 - 🗣️ **Language preferences you choose**, at three levels that merge rather than override: the
@@ -177,7 +182,9 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   tracks with nothing in their metadata to say which is which. Opt in from `/preferences` and the
   worker transcribes three short stretches of each track with whisper.cpp, offline, and scores
   dialect markers: a clear answer picks and labels the right track, the same dub twice keeps one,
-  and anything undecided keeps both as plain `Español`.
+  and anything undecided keeps both as plain `Español`. The same opt-in covers subtitles, where the
+  dialogue is already text: a Spanish subtitle track whose tags don't say which variant it is gets
+  scored on its own words, with no transcription, and is labelled `Latino` or `Español (España)`.
 - 🧠 **Decisions made from the container, not the filename.** Remux vs. web-grade quality comes from
   `ffprobe` metadata, so a badly named release still gets the right treatment.
 - 📦 **Season packs fan out correctly**: every file is enumerated, matched to its episode by
@@ -228,6 +235,12 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   to what your media server actually sees, plus a local index you can re-sync on demand.
 - 🖥️ **Library browsing** for films and series, with a billboard home, a per-series season accordion
   and actions per episode and per season (search, import, add a torrent or a magnet).
+- 📚 **Large libraries stay browsable.** `/movies`, `/shorts` and `/shows` load one page at a time,
+  with a pager, a page size of 12 to 96, an all / downloaded / added filter and a switch between the
+  poster grid and a list. The list shows each title's year, overview, status and the audio and
+  subtitle languages on disk — for a series, only the languages every downloaded episode has, so a
+  gap in three episodes out of 28 is visible. Page, filter and view live in the URL, and the view
+  and page size are remembered.
 - 🪟 **A title page laid out by intent.** Poster, then what you can add to it and what it's about,
   then how it's managed — refresh, remove, how it's classified and which languages apply. The
   language form opens in a modal when you want it instead of taking up the page when you don't.
@@ -253,7 +266,14 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   downloaded per language, multi-CD uploads are discarded before spending a download, and each
   candidate's timing is checked against the file with `ffsubsync` — framerate, offset, how much of
   the film it covers and the alignment score — before the first one that passes is embedded. A
-  candidate that fails is deleted, and the title page shows the outcome of the last search.
+  candidate that fails is deleted, and the title page shows the outcome of the last search. If you
+  asked for Latin American Spanish, OpenSubtitles is asked for that variant first, and a candidate
+  that turns out to be the other one is rejected and the next one tried.
+- 🔁 **Replace a subtitle that's there but wrong.** The manual search dialog, **Buscar y reemplazar
+  subtítulos**, lists every language you want that the file already holds, each unticked. Tick
+  one and it is searched as if it were missing; only if a candidate passes are the old tracks of
+  that language swapped for it, in the same remux. If nothing passes, the file is left exactly as it
+  was. Forced and image subtitles are never touched, and the automatic search never replaces.
 - 🎧 **See what a file actually carries.** A film's page shows its audio and subtitle languages
   under the poster, and a season's episode table has a column with the same for each episode. They
   are read from the library file itself whenever it changes, including titles your media server
@@ -466,7 +486,8 @@ A one-shot `backup` service dumps the database before `api` starts, and, with HT
    `api` notifies your media server with the host-side path.
 10. **Fill subtitle gaps (optional).** With subtitle search set up, `api` works out which wanted
     subtitle languages the file lacks, fetches candidates from OpenSubtitles, the worker checks
-    each one's timing, and the first that passes is embedded into the library file.
+    each one's timing (and, for Spanish, its variant), and the first that passes is embedded into
+    the library file — replacing that language's existing tracks only when you asked for it.
 
 The two decisions stay with a person on purpose:
 

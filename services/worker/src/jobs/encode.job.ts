@@ -49,6 +49,8 @@ export type EncodeJobDetails = {
   streamEndTrimEnabled: boolean;
   // Spec 110, REQ-5
   audioVariantDetection?: boolean;
+  // Spec 118, REQ-3
+  subtitleVariantDetection?: boolean;
   libraryLayout: string;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -87,7 +89,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
   const { processJob: details } = await fetchGraphQL<ProcessJobQueryResult>(
     `query ($id: Int!) {
       processJob(id: $id) {
-        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags allowedSubtitleFormats contentKind compressionResolution grainMode isShort dubTrimEnabled streamEndTrimEnabled audioVariantDetection libraryLayout
+        id status inputFilePath kind tmdbId title year originalLanguage originalLanguageIso3 allowedAudioLanguagesIso3 allowedAudioLanguageTags allowedSubtitleLanguagesIso3 allowedSubtitleLanguageTags allowedSubtitleFormats contentKind compressionResolution grainMode isShort dubTrimEnabled streamEndTrimEnabled audioVariantDetection subtitleVariantDetection libraryLayout
         seasonNumber episodeNumber episodeTitle
         mediaSourceId sourceKind infoHash downloadPath outputRoot downloadsRoot
         compressionEnabled
@@ -119,8 +121,13 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
     console.log(`[encode] ${processJobId}: audioVariantDetection missing or not a boolean, treating as false`);
   }
   const audioVariantDetection = compressing && details.audioVariantDetection === true;
+  // Spec 118, REQ-3
+  if (typeof details.subtitleVariantDetection !== 'boolean') {
+    console.log(`[encode] ${processJobId}: subtitleVariantDetection missing or not a boolean, treating as false`);
+  }
+  const subtitleVariantDetection = compressing && details.subtitleVariantDetection === true;
   console.log(
-    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution} grainMode=${grainMode} libraryLayout=${libraryLayout} allowedSubtitleFormats=${JSON.stringify(allowedSubtitleFormats)} isShort=${isShort} dubTrimEnabled=${dubTrimEnabled} streamEndTrimEnabled=${streamEndTrimEnabled} audioVariantDetection=${audioVariantDetection}`,
+    `[encode] ${processJobId}: compressing=${compressing} allowedAudioLanguagesIso3=${JSON.stringify(details.allowedAudioLanguagesIso3)} allowedAudioLanguageTags=${JSON.stringify(details.allowedAudioLanguageTags)} allowedSubtitleLanguagesIso3=${JSON.stringify(details.allowedSubtitleLanguagesIso3)} allowedSubtitleLanguageTags=${JSON.stringify(details.allowedSubtitleLanguageTags)} originalLanguageIso3=${details.originalLanguageIso3} contentKind=${contentKind} compressionResolution=${compressionResolution} grainMode=${grainMode} libraryLayout=${libraryLayout} allowedSubtitleFormats=${JSON.stringify(allowedSubtitleFormats)} isShort=${isShort} dubTrimEnabled=${dubTrimEnabled} streamEndTrimEnabled=${streamEndTrimEnabled} audioVariantDetection=${audioVariantDetection} subtitleVariantDetection=${subtitleVariantDetection}`,
   );
 
   const trackTitles = await fetchTrackTitles();
@@ -214,6 +221,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             dubTrimEnabled,
             streamEndTrimEnabled,
             audioVariantDetection,
+            subtitleVariantDetection,
             mediaSourceId: details.mediaSourceId,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
@@ -245,6 +253,7 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
             dubTrimEnabled,
             streamEndTrimEnabled,
             audioVariantDetection,
+            subtitleVariantDetection,
             mediaSourceId: details.mediaSourceId,
             containerTitle: buildContainerTitle(details),
             sourceTag: buildSourceTag(details.downloadsRoot, details.inputFilePath, details.downloadPath),
