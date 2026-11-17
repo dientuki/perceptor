@@ -1042,6 +1042,10 @@ None currently recorded for this service.
   only when the source delivered something. `handleTorrentCompleted` stops the torrent after
   `addSourceReady`, logging a failure instead of throwing.
 
+## A language's outcome follows the current file (`114-subtitle-search-current-file`)
+
+`deriveLanguages(row, attempts, fileLanguages = null)` (`subtitle-search/derive-languages.ts`) takes the title's `fileSubtitleLanguages` as a third input. The two `latestSubtitleSearch` field resolvers pass the `@Parent()` row's value (coerced to `string[] | null`, no extra query) through `SubtitleSearchService.latestForMovie`/`latestForEpisode`. Only a `COMPLETED`/`FAILED` search with a non-null list is overridden: held → `ALREADY_PRESENT` if it was in `presentLanguages`, else `RESOLVED` (the renamed `EMBEDDED`); not held → `MISSING` when the search's own outcome was `RESOLVED`/`ALREADY_PRESENT`, unchanged otherwise. Nothing is written; the mutation paths call `deriveLanguages` without the list.
+
 ## Subtitle variant detection (`118-subtitle-variant-detection`)
 
 `languages/variant-opt-in.ts` holds the opt-in predicate (`wantsVariantDetection`, lifted from `110`'s inline rule and now taking the track kind), `wantedVariants` (owners' subtitle tags → one region tag per iso3, `null` when nobody opted in, `{}` when opted in with only plain tags) and `VARIANT_TRACK_TITLES`. `EncodeJobDetails.subtitleVariantDetection` is computed in `collectAllowedLanguages`. `SubtitleSearchRequestService` stores `SubtitleSearch.wantedVariants` once, at creation, over every owner. The driver asks the provider for the variant code first (`PROVIDER_VARIANT_CODES`: `es-419` → `ea`, `es-ES` unmapped), fills from plain `es`, dedupes and caps at three. `SubtitleSearchService.completed` takes the worker's `variantTag`, validates it against `Language` rows and applies the wrong-variant rejection **before** `accept()`; the decided tag is stored on `SubtitleSearchAttempt.variantTag` and titles the embedded track.

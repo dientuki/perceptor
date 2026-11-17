@@ -2,7 +2,7 @@
 title: Subtitle search outcome follows the current file — web slice
 service: web
 last_updated: 2026-10-30
-status: Approved         # Draft | Approved | Implemented
+status: Implemented         # Draft | Approved | Implemented
 ---
 
 # PLAN: Subtitle search outcome follows the current file — `web` (`web/plan.md`)

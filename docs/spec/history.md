@@ -23,6 +23,14 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-11-17 — `114-subtitle-search-current-file` (docs close-out)
+
+`api` and `web`; no Prisma migration; GraphQL contract: `docs/spec/graphql-contract.md` gained the `114` section and a "Superseded by 114" note on `103`'s enum line; `schema.gql` already carried `SubtitleSearchLanguageOutcome.RESOLVED` and `MISSING` in place of `EMBEDDED` (regenerated before `119` added `REPLACED`). The code shipped in `d440efc`; this entry closes T003, T005, T006 and T008.
+
+- `api` typecheck: 0 errors. Suite: 102 suites, 1742 tests, all pass (throwaway container, uid 1000, throwaway Redis). Comments gate: PASS (1404 locators).
+- `web` typecheck: 0 errors; `check-messages`: `OK: en.json and es.json match exactly (827 keys)`; comments gate: PASS (165 locators); no `"EMBEDDED"` left in `src` or `messages`.
+- Live pass (T007): not run. AC-3, AC-5, AC-6, AC-8 and AC-10 ticked from `derive-languages.spec.ts`; AC-1, AC-2, AC-4, AC-7 and AC-9 wait for a manual pass on film 73 with this build.
+
 ## 2026-11-17 — `119-subtitle-search-replace`
 
 `api`, `web` and `worker`; one Prisma migration (`20261115130000_subtitle_search_replace`: `subtitle_searches.replaceLanguages` and `subtitle_embeds.replaceLanguages`, both nullable JSON; `prisma migrate status` reports the schema up to date); GraphQL contract: `docs/spec/graphql-contract.md` gained the `119` section, and `schema.gql` carries `replaceLanguages: [String!]` on `searchMovieSubtitles` and `searchEpisodeSubtitles`, `SubtitleSearchLanguageOutcome.REPLACED` and `SubtitleEmbedDetails.replaceLanguagesIso3` (compared by those four items; the diff also holds other specs' uncommitted changes).

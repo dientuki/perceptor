@@ -1,7 +1,7 @@
 ---
 title: Season scan write conflict — Tasks
 last_updated: 2026-11-07
-status: In Progress      # Draft | In Progress | Done
+status: Done             # Draft | In Progress | Done
 ---
 
 # TASKS: Season scan write conflict (`tasks.md`)

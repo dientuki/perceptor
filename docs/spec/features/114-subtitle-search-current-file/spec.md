@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-10-30
 last_updated: 2026-10-30
-status: Approved         # Draft | Approved | Implemented | Superseded
+status: Implemented         # Draft | Approved | Implemented | Superseded
 services: [api, web]
 ---
 
@@ -117,23 +117,23 @@ None. `fileSubtitleLanguages` (`108`) and every `subtitle_searches` column alrea
       green and no red line remains.
 - [ ] **AC-2**: Given a completed search that embedded Spanish itself, when the page is opened after
       `108`'s read, then Spanish reads "Resuelto" in green (previously "Incrustado").
-- [ ] **AC-3**: Given a film whose search embedded Spanish, when its file is replaced by a delivery
+- [x] **AC-3**: Given a film whose search embedded Spanish, when its file is replaced by a delivery
       with no Spanish subtitle and `108`'s read stores a `fileSubtitleLanguages` without `spa`,
       then Spanish reads "Falta en el archivo" in red.
 - [ ] **AC-4**: Given a completed search with Spanish `NOT_FOUND` and a file without Spanish, when
       the page is opened, then Spanish still reads "No encontrado" (failure path: no false green).
-- [ ] **AC-5**: Given a search with Spanish `REJECTED` and a file that holds Spanish only as a
+- [x] **AC-5**: Given a search with Spanish `REJECTED` and a file that holds Spanish only as a
       forced track, when the page is opened, then Spanish still reads "Rechazado" with its reason
       (failure path: a forced track does not resolve a language).
-- [ ] **AC-6**: Given a title whose `fileSubtitleLanguages` is `null`, when the page is opened, then
+- [x] **AC-6**: Given a title whose `fileSubtitleLanguages` is `null`, when the page is opened, then
       every language reads exactly the search's own outcome.
 - [ ] **AC-7**: Given an episode whose search rejected Spanish and that was later embedded by hand,
       when its season is expanded, then the episode row reads "Español: Resuelto" in green.
-- [ ] **AC-8**: Given a search still `SEARCHING` while the file already holds a wanted language,
+- [x] **AC-8**: Given a search still `SEARCHING` while the file already holds a wanted language,
       when the page is opened, then that language reads `PENDING`, not `RESOLVED`.
 - [ ] **AC-9**: After any of the above, `subtitle_searches` and `subtitle_search_attempts` rows for
       the title are byte-identical to before the page was opened (NFR-1).
-- [ ] **AC-10**: `api`'s unit tests cover each branch of REQ-1 to REQ-4 for the derivation
+- [x] **AC-10**: `api`'s unit tests cover each branch of REQ-1 to REQ-4 for the derivation
       (Article IX: a wrong colour here is a silent failure).
 
 ## Out of Scope

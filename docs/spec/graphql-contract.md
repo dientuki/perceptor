@@ -2586,7 +2586,7 @@ type SubtitleSearch { id: Int!, status: SubtitleSearchStatus!, errorKey: String,
                       languages: [SubtitleSearchLanguage!]!, createdAt: DateTime!, finishedAt: DateTime }
 type SubtitleSearchLanguage { languageIso3: String!, outcome: SubtitleSearchLanguageOutcome!, reasonKey: String }
 enum SubtitleSearchStatus { WAITING SEARCHING VALIDATING EMBEDDING COMPLETED FAILED }
-enum SubtitleSearchLanguageOutcome { PENDING ALREADY_PRESENT EMBEDDED NOT_FOUND REJECTED FAILED }
+enum SubtitleSearchLanguageOutcome { PENDING ALREADY_PRESENT EMBEDDED NOT_FOUND REJECTED FAILED }  # Superseded by 114: EMBEDDED → RESOLVED, + MISSING
 enum SubtitleSyncReference { SUBTITLE AUDIO }
 type SubtitleSyncDetails { id: Int!, filePath: String!, candidatePath: String! }
 type SubtitleEmbedTrack { isSidecar: Boolean! }                      # 101 delta
@@ -3027,6 +3027,32 @@ type Mutation {
 
 `busy`, `offset_out_of_range` (manual rows only) and `interrupted` (also raised for a `SYNCING` embed
 when the worker restarts) are the existing keys.
+
+### A language's outcome follows the current file (`114-subtitle-search-current-file`)
+
+```graphql
+enum SubtitleSearchLanguageOutcome {
+  PENDING
+  ALREADY_PRESENT
+  RESOLVED   # replaces EMBEDDED: the wanted language is in the file, by the search or any other way
+  MISSING    # the search had it (resolved or already present) and the current file does not
+  NOT_FOUND
+  REJECTED
+  FAILED
+}
+```
+
+`EMBEDDED` is removed, not deprecated: `web` is the only consumer and ships in the same release.
+The outcome is still derived at read time and never stored. While a search is `WAITING`,
+`SEARCHING`, `VALIDATING` or `EMBEDDING` its languages are derived from its own rows, as `103` set
+it. Once it is `COMPLETED` or `FAILED`, and the title's `fileSubtitleLanguages` (`108`) is not
+`null`, the current file decides first: a wanted language the file holds reads `ALREADY_PRESENT` if
+the search found it present, otherwise `RESOLVED`; one the file lacks reads `MISSING` when the
+search's own outcome was `RESOLVED` or `ALREADY_PRESENT`, and that outcome unchanged otherwise.
+`fileSubtitleLanguages` `null` means no override. `Movie.latestSubtitleSearch` and
+`Episode.latestSubtitleSearch` each read their own parent row, with no extra query. `reasonKey` is
+non-null only for `FAILED` and `REJECTED`; it is `null` for `RESOLVED` and `MISSING`. No new error
+key.
 
 ### Library lists are read one page at a time (`117-library-list-paging-views`)
 

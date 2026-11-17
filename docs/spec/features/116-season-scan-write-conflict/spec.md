@@ -4,7 +4,7 @@ spec_version: 0.1.0
 author: Juan "Dientuki" Farias
 created_at: 2026-11-07
 last_updated: 2026-11-07
-status: Approved            # Draft | Approved | Implemented | Superseded
+status: Implemented         # Draft | Approved | Implemented | Superseded
 services: [api]
 ---
 

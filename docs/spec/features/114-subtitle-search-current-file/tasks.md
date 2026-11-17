@@ -1,7 +1,7 @@
 ---
 title: Subtitle search outcome follows the current file — Tasks
 last_updated: 2026-10-30
-status: In Progress      # Draft | In Progress | Done
+status: Done             # Draft | In Progress | Done
 ---
 
 # TASKS: Subtitle search outcome follows the current file (`tasks.md`)
@@ -50,7 +50,7 @@ file and can run together. T004 depends only on the frozen spec, not on T001 to 
       `RESOLVED` from `REJECTED`, `MISSING` from `RESOLVED`, `MISSING` from `ALREADY_PRESENT`,
       unchanged `NOT_FOUND` with the file lacking the language, `null` file languages, a
       `SEARCHING` search, and a `FAILED` search.
-- [ ] **T003** `[api]` Thread the file languages through:
+- [x] **T003** `[api]` Thread the file languages through:
       - `subtitle-search.service.ts`: `latestForMovie`/`latestForEpisode`/`latest` take an optional
         `fileLanguages` and forward it;
       - `subtitle-search.resolver.ts`: both `latestSubtitleSearch` field resolvers pass the
@@ -78,21 +78,21 @@ file and can run together. T004 depends only on the frozen spec, not on T001 to 
 
 ### Group 2 — verification and docs
 
-- [ ] **T005** `[docs]` In `docs/spec/graphql-contract.md`:
+- [x] **T005** `[docs]` In `docs/spec/graphql-contract.md`:
       - add a `114-subtitle-search-current-file` section with the new enum, the `reasonKey`-null
         rule for `RESOLVED`/`MISSING`, and the rule that the outcome follows `fileSubtitleLanguages`
         once the search is terminal;
       - add a "Superseded by `114`" note on `103`'s `SubtitleSearchLanguageOutcome` line.
       → T003
       *Done when:* `grep -n "114" docs/spec/graphql-contract.md` shows the new section and the note.
-- [ ] **T006** `[docs]` Update the root `CLAUDE.md` "Notify media server" row with a "Since `114`"
+- [x] **T006** `[docs]` Update the root `CLAUDE.md` "Notify media server" row with a "Since `114`"
       sentence: the per-language outcome follows the current file's `fileSubtitleLanguages` once a
       search ends, with `RESOLVED` replacing `EMBEDDED` and a new `MISSING`. Add `114` to that row's
       spec list. Update `services/api/CLAUDE.md`'s `subtitle-search/` entry if it describes
       `deriveLanguages`' inputs. Append a `docs/spec/history.md` entry with the re-measured counts.
       → T003, T004
       *Done when:* `grep -n "114" CLAUDE.md docs/spec/history.md` matches both files.
-- [ ] **T007** `[docs]` Manual pass on an install running this build (`plan.md` § Verification):
+- [~] **T007** `[docs]` Manual pass on an install running this build (`plan.md` § Verification):
       - film 73 reads "Español: Resuelto" in green (AC-1);
       - a search-embedded language reads "Resuelto" (AC-2);
       - an episode with a manual embed reads "Resuelto" (AC-7);
@@ -103,7 +103,7 @@ file and can run together. T004 depends only on the frozen spec, not on T001 to 
       → T003, T004
       *Done when:* each AC in `spec.md` is `[x]`, or `[~]` with the blocker named in
       `docs/spec/pending-acs.md`.
-- [ ] **T008** `[docs]` Set `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md` and
+- [x] **T008** `[docs]` Set `status: Implemented` on `spec.md`, `plan.md`, `api/plan.md` and
       `web/plan.md`, set `status: Done` here, and run `/pending-acs`. → T005, T006, T007
       *Done when:* `grep -n "^status" docs/spec/features/114-*/**/*.md docs/spec/features/114-*/*.md`
       shows `Implemented`/`Done` everywhere, and `bin/pending-acs --check` exits 0.
@@ -112,4 +112,4 @@ file and can run together. T004 depends only on the frozen spec, not on T001 to 
 
 | Task | Service | What blocked it | Needs |
 | :-- | :-- | :-- | :-- |
-| T003 | api | `schema.gql` is generated only when `api` boots; no `api` container runs on this host and the agent could not read `.env` | The maintainer boots `api` (e.g. `bin/dev -d`) so `schema.gql` regenerates; the code half of T003 is done |
+| T007 | docs | Needs an install running this build and film 73 | The maintainer runs the manual pass |

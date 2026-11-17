@@ -2,7 +2,7 @@
 title: Season scan write conflict — api slice
 service: api
 last_updated: 2026-11-07
-status: Approved            # Draft | Approved | Implemented
+status: Implemented         # Draft | Approved | Implemented
 ---
 
 # PLAN: Season scan write conflict — `api` (`api/plan.md`)

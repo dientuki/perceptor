@@ -266,7 +266,9 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   downloaded per language, multi-CD uploads are discarded before spending a download, and each
   candidate's timing is checked against the file with `ffsubsync` — framerate, offset, how much of
   the film it covers and the alignment score — before the first one that passes is embedded. A
-  candidate that fails is deleted, and the title page shows the outcome of the last search. If you
+  candidate that fails is deleted, and the title page shows the outcome of the last search, checked
+  against the file as it is now: a language you embedded by hand later reads as resolved, and one a
+  replacement file lost reads as missing. If you
   asked for Latin American Spanish, OpenSubtitles is asked for that variant first, and a candidate
   that turns out to be the other one is rejected and the next one tried.
 - 🔁 **Replace a subtitle that's there but wrong.** The manual search dialog, **Buscar y reemplazar
