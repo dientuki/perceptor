@@ -3226,6 +3226,67 @@ New catalog entries in `web/messages/{en,es}.json`:
 | `error.subtitleSearch.replace_language_not_wanted` | `Ese idioma no está entre los que se buscan en este título.` | `That language is not one of the languages searched for this title.` |
 | `error.subtitleSearch.replace_language_not_present` | `El archivo no tiene subtítulos en ese idioma para reemplazar.` | `The file has no subtitle in that language to replace.` |
 
+### Subtitle providers, languages and the Subtitles tab (`121-subtitle-providers`)
+
+```graphql
+enum SubtitleProviderKind { OPENSUBTITLES SUBDIVX }
+
+type SubtitleProvider {
+  kind: SubtitleProviderKind!
+  configured: Boolean!
+  isDefault: Boolean!
+  username: String
+  secretSet: Boolean!
+  languageTags: [String!]
+}
+
+type SubtitleProviderLanguage { languageTag: String!, provider: SubtitleProviderKind! }
+type SubtitleProviderSettings { providers: [SubtitleProvider!]!, languages: [SubtitleProviderLanguage!]! }
+
+input SubtitleProviderInput { kind: SubtitleProviderKind!, username: String, secret: String }
+input SubtitleProviderLanguageInput { languageTag: String!, provider: SubtitleProviderKind! }
+
+type Query {
+  subtitleProviders: SubtitleProviderSettings!
+}
+
+type Mutation {
+  saveSubtitleProvider(input: SubtitleProviderInput!): SubtitleProviderSettings!
+  removeSubtitleProvider(kind: SubtitleProviderKind!): SubtitleProviderSettings!
+  setSubtitleProviderLanguages(defaultProvider: SubtitleProviderKind!, languages: [SubtitleProviderLanguageInput!]!): SubtitleProviderSettings!
+}
+
+type SubtitleSearchLanguage {
+  provider: SubtitleProviderKind
+}
+```
+
+All four operations are admin-only. Credentials no longer travel through `settings` /
+`updateSettings`: this supersedes `107`'s note that `opensubtitles_username` and
+`opensubtitles_password` do. `updateSettings` now refuses `opensubtitles_username`,
+`opensubtitles_password` and `subdivx_api_key` with `error.setting.not_editable`, and the `settings`
+query omits both secrets. The three stored rows are `subdivx_api_key`, `subtitle_provider_default`
+and `subtitle_provider_languages`. `MediaCapabilities.subtitleSearchAvailable` is now true while at
+least one provider is configured. `SubtitleSearchLanguage.provider` is non-null only on `RESOLVED`
+and `REPLACED`. A blank `secret` keeps the stored one. Because an older `web` would still send
+`opensubtitles_*` through `updateSettings`, `api` and `web` ship together.
+
+| Condition | Error |
+| :-- | :-- |
+| `saveSubtitleProvider` leaves the provider incomplete | `BadRequest` `error.subtitleProvider.incomplete` |
+| `username` sent for `SUBDIVX` | `BadRequest` `error.subtitleProvider.field_not_allowed` |
+| `saveSubtitleProvider(OPENSUBTITLES)` with no application key | `BadRequest` `error.subtitleProvider.app_key_missing` |
+| `removeSubtitleProvider` of an unconfigured kind, or a default that is not configured | `NotFound` / `BadRequest` `error.subtitleProvider.not_configured` |
+| A language entry to a provider that does not serve its language | `BadRequest` `error.subtitleProvider.language_unsupported` |
+| A language entry to the default or to an unconfigured provider | `BadRequest` `error.subtitleProvider.language_invalid` |
+| Two languages for one tag | `BadRequest` `error.subtitleProvider.language_duplicate` |
+| An unknown language tag | `error.language.unavailable` |
+| A key moved out of the catalog sent to `updateSettings` | `error.setting.not_editable` |
+
+Search outcome keys (never thrown): `error.subtitleSearch.no_provider` and
+`error.subtitleSearch.archive_unusable`. Subdivx is reached through the SubX API
+(`https://subx-api.duckdns.org/`); `web` and `worker` never call it.
+
 ## Known debt
 
 - **No codegen.** The whole "gap" section above exists because of this. Fixing it means adding

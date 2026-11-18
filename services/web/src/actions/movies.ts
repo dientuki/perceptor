@@ -112,6 +112,7 @@ const GET_MOVIE_QUERY = `
           languageIso3
           outcome
           reasonKey
+          provider
         }
         createdAt
         finishedAt
@@ -395,6 +396,7 @@ const SEARCH_MOVIE_SUBTITLES_MUTATION = `
         languageIso3
         outcome
         reasonKey
+        provider
       }
       createdAt
       finishedAt

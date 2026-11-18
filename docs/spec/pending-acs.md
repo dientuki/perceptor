@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **68** de 119 |
-| ACs pendientes | **544** |
-| ACs totales del proyecto | 1453 |
-| ACs verificados | 909 (63%) |
+| Specs con ACs pendientes | **70** de 121 |
+| ACs pendientes | **562** |
+| ACs totales del proyecto | 1477 |
+| ACs verificados | 915 (62%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,6 +28,8 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 121 | subtitle-providers | Approved | 14/20 | 1, 2, 5, 6, 7, 11, 16, 12, 13, 14, 15, 17, 18, 19 | Implemented in `api` and `web` with unit/fault-injection coverage (api 1874 tests); no AC was observed holding live. Needs a real OpenSubtitles account, a SubX API key and an admin session on the dev stack (T017) to walk the Subtitles tab (AC-1, 2, 8, 12) and a real search chain (AC-3…7, 9…11, 14…17). |
+| 120 | subtitle-embed-trailing-cues | Draft | 4/4 | 1, 2, 3, 4 | **[OBS PENDIENTE DE ESCRIBIR]** |
 | 119 | subtitle-search-replace | Implemented | 12/12 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 | **Sesion admin en un browser.** Los doce piden un stack dev de este checkout con una sesion de usuario y un archivo real: AC-1 y AC-2 ven el dialogo, AC-3 a AC-6, AC-9 y AC-12 reemplazan pistas con `ffprobe` antes y despues y gastan descargas de OpenSubtitles (cuota de unas 20 por dia, con respaldo del archivo), AC-7 y AC-10 piden la fila `SubtitleSearch` de una busqueda manual y una automatica, AC-8 y AC-11 dos mutations a mano con un token de GraphQL. Ya probado debajo: `api` (`requestForCaller` con las dos negativas y sin fila, `missingLanguages`, el driver pasando solo los idiomas aceptados, `deriveLanguages` con `REPLACED` y sin el override de `114`, `replaceLanguagesIso3` con `[]` para `NULL`), `worker` (`tracksToDrop`, `--subtitle-tracks !`, `verifyEmbed` con las pistas quitadas, el reporte sin la lista) y el contrato generado contra la spec; `web` sin runner de tests, solo typecheck y `check-messages`. |
 | 118 | subtitle-variant-detection | Implemented | 13/24 | 6, 7, 8, 9, 10, 12, 14, 15, 16, 16b, 16c, 16d, 17 | **Una corrida de pipeline.** Los once ACs de busqueda y de encode sin ticar piden la corrida completa por cola y `api`; el 2026-11-15 solo se observaron el driver de encode sobre archivos armados con subtitulos de OpenSubtitles (AC-1 a AC-5, AC-4b, AC-11) y una busqueda real en Reacher S02E05 (AC-13, AC-18). AC-9, AC-10 y AC-12 tienen su mitad unitaria en verde (`encode.job.spec.ts`, `subtitle-prune.spec.ts`) sin corrida viva; AC-8 vio el veredicto reutilizado entre dos procesos pero no mato el contenedor del worker. AC-14 a AC-17 necesitan descargas de OpenSubtitles (quedaban 3 el 2026-11-15, 16b ademas un episodio cuyo codigo latino devuelva exactamente un candidato: el de Reacher devolvio 0). AC-6 y AC-7 necesitan una **sesion admin en un browser** sobre `/preferences`. |
 | 116 | season-scan-write-conflict | Implemented | 4/7 | 2, 3, 4, 7 | **Un stack corriendo este checkout.** La mitad unitaria esta probada: los tests (a)-(e) fallaron antes del arreglo y pasan despues, la inyeccion de fallas puso en rojo cada uno, tsc da 0 errores y `bin/comments api` pasa. AC-2 sigue abierto porque la suite completa da 98 suites con 2 en rojo (`session.service` y `upload-tickets.service`, 20 tests) por falta de Redis en el contenedor descartable, los mismos dos de la 113. AC-3 y AC-7 piden subir una temporada real; AC-4 pide apretar Play sobre la fuente 422 de produccion despues de desplegar. Este host solo corre la instalacion de produccion y el 1020 depende de tiempos reales, asi que los mocks no lo reproducen. |
@@ -101,12 +103,12 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 544 ACs pendientes no son 544 problemas distintos. Se reducen a 30 destrabes, y los dos primeros se llevan el 50%:
+Los 562 ACs pendientes no son 562 problemas distintos. Se reducen a 30 destrabes, y los dos primeros se llevan el 52%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
+| Sin clasificar | 151 | 094, 095, 096, 097, 099, 100, 102, 103, 105, 110, 120, 121 |
 | Una corrida de pipeline | 139 | 002, 012, 013, 023, 032, 038, 052, 054, 058, 060, 065, 067, 070, 087, 091, 098, 101, 118 |
-| Sin clasificar | 133 | 094, 095, 096, 097, 099, 100, 102, 103, 105, 110 |
 | Sesion admin en un browser | 37 | 112, 113, 114, 119 |
 | Una instalacion fresca | 33 | 015, 049, 061, 066, 104 |
 | Stack vivo con servidor de medios | 31 | 107, 108 |

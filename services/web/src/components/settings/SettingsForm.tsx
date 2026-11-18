@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Captions,
   Cast,
   Clock,
   Cloud,
@@ -21,9 +22,11 @@ import MediaManagerPanel from "@/components/settings/MediaManagerPanel";
 import MediaServerFields from "@/components/settings/MediaServerFields";
 import SchedulingPanel from "@/components/settings/SchedulingPanel";
 import TorrentManagerPanel from "@/components/settings/TorrentManagerPanel";
+import SubtitleProvidersPanel from "@/components/subtitle-providers/SubtitleProvidersPanel";
 import Button from "@/components/ui/button/Button";
 import TabNav, { type TabNavItem } from "@/components/ui/tabs/TabNav";
 import type { EnvironmentInfo } from "@/types/environment";
+import type { Language } from "@/types/languages";
 import type { MediaRoot } from "@/types/media-roots";
 import type {
   MediaServerIndexStatus,
@@ -32,6 +35,7 @@ import type {
 import type { TorrentGroup } from "@/types/preferences";
 import type { ScheduledTask } from "@/types/scheduler";
 import type { Setting } from "@/types/settings";
+import type { SubtitleProviderSettings } from "@/types/subtitle-providers";
 
 interface SettingsFormProps {
   settings: Setting[];
@@ -41,6 +45,8 @@ interface SettingsFormProps {
   scheduledTasks: ScheduledTask[];
   torrentGroups: TorrentGroup[];
   environment: EnvironmentInfo;
+  subtitleProviders: SubtitleProviderSettings;
+  languages: Language[];
   uploadEndpoint: string | null;
   webDomain: string | null;
 }
@@ -50,6 +56,7 @@ const TABS = [
   "mediaManager",
   "mediaServer",
   "torrentManager",
+  "subtitles",
   "compression",
   "scheduling",
   "environment",
@@ -65,6 +72,8 @@ export default function SettingsForm({
   scheduledTasks,
   torrentGroups,
   environment,
+  subtitleProviders,
+  languages,
   uploadEndpoint,
   webDomain,
 }: SettingsFormProps) {
@@ -113,6 +122,7 @@ export default function SettingsForm({
     { key: "mediaManager", label: tTabs("mediaManager"), icon: Library },
     { key: "mediaServer", label: tTabs("mediaServer"), icon: Cast },
     { key: "torrentManager", label: tTabs("torrentManager"), icon: Cloud },
+    { key: "subtitles", label: tTabs("subtitles"), icon: Captions },
     {
       key: "compression",
       label: tTabs("compression"),
@@ -142,17 +152,27 @@ export default function SettingsForm({
         />
       </div>
 
+      {/* Spec 121, REQ-3 */}
+      <div className={activeTab === "subtitles" ? "mt-6" : "hidden"}>
+        <SubtitleProvidersPanel
+          initial={subtitleProviders}
+          languages={languages}
+        />
+      </div>
+
       <StatefulForm
         action={formAction}
-        className={activeTab === "environment" ? "hidden" : ""}
+        className={
+          activeTab === "environment" || activeTab === "subtitles"
+            ? "hidden"
+            : ""
+        }
       >
         <div className="mt-6 space-y-6">
           <div className={panelClass("general")}>
             <GeneralPanel
               uiLocale={getSettingValue("ui_locale")}
               dateMonthFirst={getSettingValue("date_month_first")}
-              openSubtitlesUsername={getSettingValue("opensubtitles_username")}
-              openSubtitlesPassword={getSettingValue("opensubtitles_password")}
             />
           </div>
 

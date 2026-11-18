@@ -1,3 +1,5 @@
+import { filmRateRatio } from './film-rate';
+
 // Spec 103, REQ-10
 export const SUBTITLE_REFERENCE_MIN_SCORE = 100_000;
 
@@ -31,6 +33,8 @@ export type RejectionKey =
 
 export type Thresholds = { subtitle: number; audio: number };
 
+export type AcceptOptions = { filmRate?: boolean };
+
 // Spec 103, REQ-10
 export function accept(
   measurement: SyncMeasurement,
@@ -38,16 +42,23 @@ export function accept(
     subtitle: SUBTITLE_REFERENCE_MIN_SCORE,
     audio: AUDIO_REFERENCE_MIN_SCORE,
   },
+  options: AcceptOptions = {},
 ): RejectionKey | null {
+  let scale = 1;
   if (Math.abs(measurement.framerateRatio - 1) > FRAMERATE_TOLERANCE) {
-    return 'error.subtitleSearch.framerate_mismatch';
+    // Spec 121, REQ-18
+    const filmRate = options.filmRate
+      ? filmRateRatio(measurement.framerateRatio)
+      : null;
+    if (filmRate === null) return 'error.subtitleSearch.framerate_mismatch';
+    scale = filmRate;
   }
 
   if (Math.abs(measurement.offsetMs) > MAX_ABS_OFFSET_MS) {
     return 'error.subtitleSearch.offset_too_large';
   }
 
-  if (!coversMedia(measurement)) {
+  if (!coversMedia(measurement, scale)) {
     return 'error.subtitleSearch.incomplete';
   }
 
@@ -64,9 +75,9 @@ export function accept(
 }
 
 // Spec 103, REQ-10
-function coversMedia(m: SyncMeasurement): boolean {
+function coversMedia(m: SyncMeasurement, scale: number): boolean {
   if (m.lastCueEndMs === null) return false;
-  const end = m.lastCueEndMs + m.offsetMs;
+  const end = m.lastCueEndMs * scale + m.offsetMs;
   if (
     m.lastChapterStartMs !== null &&
     m.lastChapterStartMs > CHAPTER_GATE * m.mediaDurationMs

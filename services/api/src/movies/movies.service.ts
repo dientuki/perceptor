@@ -33,6 +33,7 @@ import { MediaServerReconcileService } from '@/media-server/media-server-reconci
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { TitleStatusService } from '@/title-status/title-status.service';
+import { ImdbIdsService } from '@/imdb-ids/imdb-ids.service';
 import { AttachSourceService } from '@/acquisition/attach-source.service';
 import { AttachTarget } from '@/acquisition/attach-target';
 import { CatalogSearchService } from '@/media/catalog-search.service';
@@ -89,6 +90,7 @@ export class MoviesService implements MediaTypeService {
     private readonly titleStatus: TitleStatusService,
     private readonly attachSource: AttachSourceService,
     private readonly catalogSearch: CatalogSearchService,
+    private readonly imdbIds: ImdbIdsService,
   ) {}
 
   async create(createMovieDto: CreateMovieDto) {
@@ -212,7 +214,7 @@ export class MoviesService implements MediaTypeService {
     // 057-content-kind-classification: the single shared top-up — one
     // `tmdb.details()` call, at most, feeds both derivations below, so a
     // cold registration never pays for two (plan.md § Risks).
-    const topped = await this.topUpCatalogFacts(cached);
+    const { topped, imdbId, detailsRead } = await this.topUpCatalogFacts(cached);
     const isShort = await this.deriveIsShort(topped);
     const contentKind = await this.deriveContentKind(topped);
 
@@ -241,6 +243,10 @@ export class MoviesService implements MediaTypeService {
             ? new Date(topped.physicalReleaseDate)
             : undefined,
           tmdbStatus: topped.tmdbStatus || undefined,
+          // Spec 121, REQ-11
+          ...(detailsRead
+            ? { imdbId, imdbIdCheckedAt: new Date() }
+            : {}),
           isShort,
           contentKind,
         },
@@ -255,10 +261,21 @@ export class MoviesService implements MediaTypeService {
       }
       const raced = await this.prisma.movie.findUnique({ where: { tmdbId } });
       if (!raced) throw error;
+      // Spec 121, REQ-11
+      if (raced.imdbIdCheckedAt === null) this.resolveImdbIdDetached(raced.id);
       return this.joinRegisteredMovie(raced.id, tmdbId, userId);
     }
 
+    // Spec 121, REQ-11
+    if (!detailsRead) this.resolveImdbIdDetached(movie.id);
+
     return this.joinRegisteredMovie(movie.id, tmdbId, userId);
+  }
+
+  private resolveImdbIdDetached(movieId: number): void {
+    this.imdbIds.resolve('movie', movieId).catch((err: unknown) => {
+      console.error(`IMDb id lookup failed for movie ${movieId}:`, err);
+    });
   }
 
   private async joinRegisteredMovie(
@@ -420,6 +437,9 @@ export class MoviesService implements MediaTypeService {
             ? new Date(windows.physical)
             : undefined,
           tmdbStatus: detail.status || undefined,
+          // Spec 121, REQ-11
+          imdbId: detail.imdbId,
+          imdbIdCheckedAt: now,
           catalogClosedAt: isReleaseWindowClosed({
             earliestReleaseDate: earliestReleaseDate || null,
             theatricalReleaseDate: windows.theatrical,
@@ -535,13 +555,18 @@ export class MoviesService implements MediaTypeService {
   }
 
   // Spec 057, NFR-2
-  private async topUpCatalogFacts(
-    cached: MediaSearchResult,
-  ): Promise<MediaSearchResult> {
+  private async topUpCatalogFacts(cached: MediaSearchResult): Promise<{
+    topped: MediaSearchResult;
+    imdbId: string | null;
+    detailsRead: boolean;
+  }> {
+    let imdbId: string | null = null;
+    let detailsRead = false;
     const needsDetails =
       typeof cached.runtime !== 'number' || !Array.isArray(cached.genreIds);
     const needsRelease = cached.earliestReleaseDate === undefined;
-    if (!needsDetails && !needsRelease) return cached;
+    if (!needsDetails && !needsRelease)
+      return { topped: cached, imdbId, detailsRead };
 
     let topped = cached;
     if (needsDetails) {
@@ -556,6 +581,8 @@ export class MoviesService implements MediaTypeService {
           genreIds: detail.genreIds ?? [],
           tmdbStatus: detail.status || null,
         };
+        imdbId = detail.imdbId ?? null;
+        detailsRead = true;
       } catch {
       }
     }
@@ -573,7 +600,7 @@ export class MoviesService implements MediaTypeService {
       }
     }
     if (topped !== cached) void this.cacheMovies([topped]);
-    return topped;
+    return { topped, imdbId, detailsRead };
   }
 
   // Spec 056, REQ-4 REQ-7 REQ-8

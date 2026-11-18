@@ -23,6 +23,15 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-11-17 — `121-subtitle-providers` (implementation measured; live pass pending)
+
+`api` and `web`; two Prisma migrations (`20261117180921_subtitle_providers` and `20261117200000_subtitle_provider_languages_key`, which renames the stored `subtitle_provider_routes` Setting key to `subtitle_provider_languages`; 61 migrations, database up to date); GraphQL contract: `schema.gql` gained exactly the spec's delta (`SubtitleProviderKind`, three types, two inputs, `subtitleProviders` and three mutations, `SubtitleSearchLanguage.provider`, the new `subtitleSearchAvailable` description) and `docs/spec/graphql-contract.md` the `121` section. No `worker` or `infra` change.
+
+- `api` typecheck: 0 errors. Suite: 111 suites, 1877 tests, all pass. Comments gate: PASS (1467 locators).
+- `web` typecheck: 0 errors. Catalog parity: 873 keys. Comments gate: PASS (180 locators). Biome clean on the touched files.
+- `bin/audit api`: FAIL on five advisories that were already open (`@nestjs/apollo`, `@nestjs/graphql`, `fdir`, `picomatch`, `tinyglobby`); their locked versions are unchanged from HEAD and neither new dependency (`fflate`, `node-unrar-js`) is involved.
+- Not measured: the live pass (AC-1…AC-17) needs a real OpenSubtitles account, a SubX API key and an admin login in the browser; the Subtitles tab and the provider label in the status were checked by typecheck only.
+
 ## 2026-11-17 — `114-subtitle-search-current-file` (docs close-out)
 
 `api` and `web`; no Prisma migration; GraphQL contract: `docs/spec/graphql-contract.md` gained the `114` section and a "Superseded by 114" note on `103`'s enum line; `schema.gql` already carried `SubtitleSearchLanguageOutcome.RESOLVED` and `MISSING` in place of `EMBEDDED` (regenerated before `119` added `REPLACED`). The code shipped in `d440efc`; this entry closes T003, T005, T006 and T008.

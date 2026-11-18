@@ -273,6 +273,35 @@ describe('SettingsService — enum_list kind', () => {
 // catalog entry, so the not-editable refusal is the only guard; the case
 // fails if an `opensubtitles_api_key` entry is ever added to the catalog.
 describe('SettingsService — OpenSubtitles application key', () => {
+  // Spec 121, AC-13
+  it.each(['opensubtitles_username', 'opensubtitles_password', 'subdivx_api_key'])(
+    'refuses %s as not editable and writes nothing',
+    async (key) => {
+      const upsert = jest.fn().mockResolvedValue({});
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          SettingsService,
+          { provide: PrismaService, useValue: { setting: { upsert, findMany: jest.fn().mockResolvedValue([]) } } },
+          { provide: MediaRootsService, useValue: { resolveFromRoot: jest.fn() } },
+          { provide: LanguagesService, useValue: { validateAndResolveLanguageIds: jest.fn() } },
+        ],
+      }).compile();
+
+      let caught: unknown;
+      try {
+        await module.get(SettingsService).updateMany([{ key, value: 'x' }]);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(BadRequestException);
+      expect((caught as BadRequestException).getResponse()).toMatchObject({
+        i18n: { key: 'error.setting.not_editable', params: { key } },
+      });
+      expect(upsert).not.toHaveBeenCalled();
+    },
+  );
+
   it('refuses an opensubtitles_api_key entry as not editable and writes nothing', async () => {
     const upsert = jest.fn().mockResolvedValue({});
     const module: TestingModule = await Test.createTestingModule({
@@ -287,10 +316,7 @@ describe('SettingsService — OpenSubtitles application key', () => {
 
     let caught: unknown;
     try {
-      await service.updateMany([
-        { key: 'opensubtitles_username', value: 'fake-user' },
-        { key: 'opensubtitles_api_key', value: 'fake-key' },
-      ]);
+      await service.updateMany([{ key: 'opensubtitles_api_key', value: 'fake-key' }]);
     } catch (error) {
       caught = error;
     }

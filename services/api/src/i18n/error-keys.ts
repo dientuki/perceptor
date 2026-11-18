@@ -207,6 +207,17 @@ export const ERROR_KEYS = {
   SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_PRESENT:
     'error.subtitleSearch.replace_language_not_present',
 
+  // Spec 121
+  SUBTITLE_SEARCH_NO_PROVIDER: 'error.subtitleSearch.no_provider',
+  SUBTITLE_SEARCH_ARCHIVE_UNUSABLE: 'error.subtitleSearch.archive_unusable',
+  SUBTITLE_PROVIDER_INCOMPLETE: 'error.subtitleProvider.incomplete',
+  SUBTITLE_PROVIDER_FIELD_NOT_ALLOWED: 'error.subtitleProvider.field_not_allowed',
+  SUBTITLE_PROVIDER_APP_KEY_MISSING: 'error.subtitleProvider.app_key_missing',
+  SUBTITLE_PROVIDER_NOT_CONFIGURED: 'error.subtitleProvider.not_configured',
+  SUBTITLE_PROVIDER_LANGUAGE_UNSUPPORTED: 'error.subtitleProvider.language_unsupported',
+  SUBTITLE_PROVIDER_LANGUAGE_INVALID: 'error.subtitleProvider.language_invalid',
+  SUBTITLE_PROVIDER_LANGUAGE_DUPLICATE: 'error.subtitleProvider.language_duplicate',
+
   CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
   CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',
 

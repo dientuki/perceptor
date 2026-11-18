@@ -2,9 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { accept, SyncMeasurement } from './acceptance';
 import { lastCueEndMs } from './last-cue';
+import { filmRateRatio, rescaleSrt } from './film-rate';
 import { deriveLanguages } from './derive-languages';
 import {
   SubtitleSearch,
@@ -143,10 +144,16 @@ export class SubtitleSearchService {
       string
     > | null;
     const wanted = wantedMap?.[row.languageIso3];
-    const reasonKey =
+    let reasonKey: string | null =
       wanted !== undefined && validTag !== null && validTag !== wanted
         ? ERROR_KEYS.SUBTITLE_SEARCH_WRONG_VARIANT
-        : accept(measurement);
+        : accept(measurement, undefined, { filmRate: true });
+    // Spec 121, REQ-18
+    const ratio = filmRateRatio(measurement.framerateRatio);
+    if (reasonKey === null && ratio !== null) {
+      const rewritten = await this.rescaleStaged(row.stagedPath, ratio);
+      if (!rewritten) reasonKey = ERROR_KEYS.SUBTITLE_SEARCH_INCOMPLETE;
+    }
     const claimed = await this.prisma.subtitleSearchAttempt.updateMany({
       where: { id, status: 'RUNNING' },
       data: {
@@ -162,6 +169,22 @@ export class SubtitleSearchService {
     });
     if (claimed.count === 1) await this.wake(row.searchId);
     return true;
+  }
+
+  // Spec 121, REQ-18
+  private async rescaleStaged(
+    stagedPath: string | null,
+    ratio: number,
+  ): Promise<boolean> {
+    if (!stagedPath) return false;
+    try {
+      const scaled = rescaleSrt(await readFile(stagedPath, 'utf8'), ratio);
+      if (scaled === null) return false;
+      await writeFile(stagedPath, scaled, 'utf8');
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // Spec 118, REQ-14

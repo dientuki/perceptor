@@ -391,6 +391,9 @@ model Movie {
   isShort          Boolean   @default(false)
   // Spec 092, NFR-2: default covers every existing row, no backfill needed.
   grainMode        GrainMode @default(INHERIT)
+  // Spec 121, REQ-11
+  imdbId          String?   @db.VarChar(20)
+  imdbIdCheckedAt DateTime?
 
   theatricalReleaseDate DateTime?
   digitalReleaseDate    DateTime?
@@ -441,6 +444,9 @@ model Show {
   contentKind      ContentKind @default(LIVE_ACTION)
   // Spec 092, NFR-2: default covers every existing row, no backfill needed.
   grainMode        GrainMode   @default(INHERIT)
+  // Spec 121, REQ-11
+  imdbId          String?     @db.VarChar(20)
+  imdbIdCheckedAt DateTime?
   originalLanguage String
   releaseDate      DateTime?
   seasonsSyncedAt  DateTime?
@@ -567,6 +573,12 @@ enum SubtitleSearchAttemptStatus {
   FAILED
 }
 
+// Spec 121, REQ-1
+enum SubtitleProviderKind {
+  OPENSUBTITLES
+  SUBDIVX
+}
+
 enum SubtitleSyncReference {
   SUBTITLE
   AUDIO
@@ -600,6 +612,9 @@ model SubtitleSearch {
   // Spec 119, REQ-3
   replaceLanguages Json?
 
+  // Spec 121, REQ-8
+  providerProgress Json?
+
   subtitleEmbedId Int?
   subtitleEmbed   SubtitleEmbed? @relation(fields: [subtitleEmbedId], references: [id], onDelete: SetNull)
 
@@ -629,6 +644,9 @@ model SubtitleSearchAttempt {
   stagedPath         String? @db.VarChar(500)
   providerFileName   String? @db.VarChar(500)
   variantTag         String? @db.VarChar(10)
+
+  // Spec 121, REQ-15
+  provider SubtitleProviderKind @default(OPENSUBTITLES)
 
   status         SubtitleSearchAttemptStatus @default(QUEUED)
   offsetMs       Int?

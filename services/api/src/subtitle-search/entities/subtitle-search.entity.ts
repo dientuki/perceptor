@@ -1,4 +1,6 @@
 import { ObjectType, Field, Int, registerEnumType } from '@nestjs/graphql';
+import { SubtitleProviderKind } from '@prisma/client';
+import '@/subtitle-providers/entities/subtitle-provider-kind.enum';
 
 // Spec 103, REQ-13
 export enum SubtitleSearchStatus {
@@ -49,6 +51,13 @@ export class SubtitleSearchLanguage {
     description: 'i18n key when outcome is FAILED or REJECTED, else null.',
   })
   reasonKey: string | null;
+
+  @Field(() => SubtitleProviderKind, {
+    nullable: true,
+    description:
+      'Provider of the accepted subtitle when outcome is RESOLVED or REPLACED, else null.',
+  })
+  provider?: SubtitleProviderKind | null;
 }
 
 @ObjectType()

@@ -137,11 +137,6 @@ const LIST_KEYS = [
   "subtitles_image_formats",
 ] as const;
 
-const CLEARABLE_KEYS = [
-  "opensubtitles_username",
-  "opensubtitles_password",
-] as const;
-
 export async function updateSettingsAction(
   prevState: any,
   formData: FormData,
@@ -164,13 +159,6 @@ export async function updateSettingsAction(
     const value = formData.get(key);
     if (typeof value === "string") {
       entries.push({ key, value });
-    }
-  }
-
-  for (const key of CLEARABLE_KEYS) {
-    const value = formData.get(key);
-    if (typeof value === "string") {
-      entries.push({ key, value: value.trim() });
     }
   }
 

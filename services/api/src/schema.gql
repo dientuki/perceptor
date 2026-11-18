@@ -631,6 +631,11 @@ type SubtitleSearchLanguage {
 
   """i18n key when outcome is FAILED or REJECTED, else null."""
   reasonKey: String
+
+  """
+  Provider of the accepted subtitle when outcome is RESOLVED or REPLACED, else null.
+  """
+  provider: SubtitleProviderKind
 }
 
 enum SubtitleSearchLanguageOutcome {
@@ -642,6 +647,11 @@ enum SubtitleSearchLanguageOutcome {
   NOT_FOUND
   REJECTED
   FAILED
+}
+
+enum SubtitleProviderKind {
+  OPENSUBTITLES
+  SUBDIVX
 }
 
 type SubtitleSearch {
@@ -736,7 +746,7 @@ type MediaCapabilities {
   catalogKeyConfigured: Boolean!
 
   """
-  True while Perceptor's OpenSubtitles application key is present and the OpenSubtitles username and password Settings are set (107 REQ-2). Never exposes any of them.
+  True while at least one subtitle provider is configured (121 REQ-16). Never exposes any credential.
   """
   subtitleSearchAvailable: Boolean!
 
@@ -774,6 +784,36 @@ type TmdbList {
   Series of this list the caller owns today (seen by the list), ordered by title.
   """
   shows: [Show!]!
+}
+
+type SubtitleProvider {
+  kind: SubtitleProviderKind!
+
+  """True when this provider's credentials are complete (121 REQ-2)."""
+  configured: Boolean!
+  isDefault: Boolean!
+
+  """OpenSubtitles only; null for SUBDIVX."""
+  username: String
+
+  """
+  True when the password (OPENSUBTITLES) or API key (SUBDIVX) is stored. Never the value.
+  """
+  secretSet: Boolean!
+
+  """ISO 639 tags this kind can serve; null means every language."""
+  languageTags: [String!]
+}
+
+type SubtitleProviderLanguage {
+  languageTag: String!
+  provider: SubtitleProviderKind!
+}
+
+type SubtitleProviderSettings {
+  """Every kind, configured or not, in enum order."""
+  providers: [SubtitleProvider!]!
+  languages: [SubtitleProviderLanguage!]!
 }
 
 type SubtitleProbeDetails {
@@ -999,6 +1039,9 @@ type Query {
 
   """Service-only (worker). Same standing as SubtitleSyncDetails."""
   subtitleProbeDetails(id: Int!): SubtitleProbeDetails!
+
+  """Admin only."""
+  subtitleProviders: SubtitleProviderSettings!
 
   """Service-only (worker). Exactly one of movieId/episodeId is set."""
   libraryProbeDetails(target: LibraryProbeTarget!): LibraryProbeDetails!
@@ -1317,6 +1360,17 @@ type Mutation {
   """Service-only (worker). Safe to receive more than once."""
   subtitleProbeFailed(id: Int!, errorKey: String!): Boolean!
 
+  """Admin only. Adds or edits one provider."""
+  saveSubtitleProvider(input: SubtitleProviderInput!): SubtitleProviderSettings!
+
+  """
+  Admin only. Clears the provider's credentials and drops its languages (REQ-5, REQ-6).
+  """
+  removeSubtitleProvider(kind: SubtitleProviderKind!): SubtitleProviderSettings!
+
+  """Admin only. Replaces the default and the whole entry set at once."""
+  setSubtitleProviderLanguages(defaultProvider: SubtitleProviderKind!, languages: [SubtitleProviderLanguageInput!]!): SubtitleProviderSettings!
+
   """
   Service-only (worker). Safe to receive more than once; false when filePath is no longer the title's file and the report was discarded (108 REQ-5).
   """
@@ -1410,4 +1464,21 @@ input SubtitleEmbedInput {
 enum SubtitleSyncReference {
   SUBTITLE
   AUDIO
+}
+
+input SubtitleProviderInput {
+  kind: SubtitleProviderKind!
+
+  """OPENSUBTITLES only."""
+  username: String
+
+  """
+  Password (OPENSUBTITLES) or API key (SUBDIVX). Null or empty keeps the stored value.
+  """
+  secret: String
+}
+
+input SubtitleProviderLanguageInput {
+  languageTag: String!
+  provider: SubtitleProviderKind!
 }

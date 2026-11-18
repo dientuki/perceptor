@@ -259,17 +259,17 @@ export const MESSAGES_EN: Record<string, string> = {
 
   // Spec 107
   [ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_NOT_CONFIGURED]:
-    'Subtitle search requires an OpenSubtitles account in Settings → General.',
+    'Subtitle search requires a configured subtitle provider in Settings → Subtitles.',
   [ERROR_KEYS.SUBTITLE_SEARCH_NO_LIBRARY_PATH]:
     "Perceptor doesn't know where this title's file is.",
   [ERROR_KEYS.SUBTITLE_SEARCH_PROBE_NOT_FOUND]:
     'Subtitle probe {id} does not exist or is not waiting',
   [ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED]:
-    'OpenSubtitles rejected the username or password.',
+    'The subtitle provider rejected the credentials.',
   [ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAVAILABLE]:
-    'Could not reach OpenSubtitles.',
+    'Could not reach the subtitle provider.',
   [ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED]:
-    'The OpenSubtitles daily downloads are exhausted.',
+    'The subtitle provider daily downloads are exhausted.',
   [ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED]:
     'The file could not be read to see which subtitles it has.',
   [ERROR_KEYS.SUBTITLE_SEARCH_WRONG_VARIANT]:
@@ -278,6 +278,26 @@ export const MESSAGES_EN: Record<string, string> = {
     'That language is not one of the languages searched for this title.',
   [ERROR_KEYS.SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_PRESENT]:
     'The file has no subtitle in that language to replace.',
+
+  // Spec 121
+  [ERROR_KEYS.SUBTITLE_SEARCH_NO_PROVIDER]:
+    'No configured provider has subtitles in this language.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_ARCHIVE_UNUSABLE]:
+    'The downloaded archive does not hold a single usable .srt subtitle.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_INCOMPLETE]:
+    'Fill in every field of the provider.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_FIELD_NOT_ALLOWED]:
+    'That field does not apply to this provider.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_APP_KEY_MISSING]:
+    "This installation has no OpenSubtitles application key.",
+  [ERROR_KEYS.SUBTITLE_PROVIDER_NOT_CONFIGURED]:
+    'That provider is not configured.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_LANGUAGE_UNSUPPORTED]:
+    '{provider} has no subtitles in {languageTag}.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_LANGUAGE_INVALID]:
+    'That language entry is not valid: the provider must be configured and not be the default.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_LANGUAGE_DUPLICATE]:
+    'There are two entries for the same language.',
 
   // scheduler
   [ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND]: 'Scheduled task not found',

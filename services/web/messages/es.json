@@ -214,19 +214,30 @@
       "superseded": "Una entrega más nueva reemplazó esta búsqueda.",
       "in_progress": "Ya hay una búsqueda de subtítulos en curso para este título.",
       "no_languages": "No hay idiomas de subtítulos elegidos para este título.",
-      "provider_not_configured": "La búsqueda de subtítulos requiere una cuenta de OpenSubtitles en Ajustes → General.",
+      "provider_not_configured": "La búsqueda de subtítulos requiere un proveedor configurado en Ajustes → Subtítulos.",
       "no_library_path": "Perceptor no sabe dónde está el archivo de este título.",
-      "provider_unauthorized": "OpenSubtitles rechazó el usuario o la contraseña.",
-      "provider_unavailable": "No se pudo contactar a OpenSubtitles.",
-      "quota_exhausted": "Se agotaron las descargas diarias de OpenSubtitles.",
+      "provider_unauthorized": "El proveedor rechazó las credenciales.",
+      "provider_unavailable": "No se pudo contactar al proveedor de subtítulos.",
+      "quota_exhausted": "Se agotaron las descargas diarias del proveedor.",
       "probe_failed": "No se pudo leer el archivo para ver qué subtítulos tiene.",
-      "probe_not_found": "No se encontró la búsqueda de subtítulos."
+      "probe_not_found": "No se encontró la búsqueda de subtítulos.",
+      "no_provider": "Ningún proveedor configurado tiene subtítulos en este idioma.",
+      "archive_unusable": "El archivo descargado no contiene un único subtítulo .srt utilizable."
     },
     "tmdbList": {
       "invalid_reference": "No es un ID ni un enlace de lista de TMDB.",
       "unreadable": "TMDB no encontró la lista, o no es pública.",
       "already_attached": "Ya tenés esta lista vinculada.",
       "not_found": "La lista no existe."
+    },
+    "subtitleProvider": {
+      "incomplete": "Completá todos los datos del proveedor.",
+      "field_not_allowed": "Ese dato no aplica a este proveedor.",
+      "app_key_missing": "Esta instalación no tiene la clave de aplicación de OpenSubtitles.",
+      "not_configured": "Ese proveedor no está configurado.",
+      "language_unsupported": "{provider} no tiene subtítulos en {languageTag}.",
+      "language_invalid": "Ese idioma no es válido: el proveedor debe estar configurado y no ser el predeterminado.",
+      "language_duplicate": "Hay dos entradas para el mismo idioma."
     }
   },
   "landing": {
@@ -734,6 +745,7 @@
       "download": "Descarga",
       "compression": "Compresión",
       "scheduling": "Programación",
+      "subtitles": "Subtítulos",
       "environment": "Entorno"
     },
     "environment": {
@@ -773,12 +785,7 @@
     },
     "general": {
       "uiLocaleLabel": "Idioma de la aplicación",
-      "dateFormatLabel": "Formato de fecha",
-      "openSubtitlesHeading": "OpenSubtitles",
-      "openSubtitlesUsernameLabel": "Usuario de OpenSubtitles",
-      "openSubtitlesPasswordLabel": "Contraseña de OpenSubtitles",
-      "openSubtitlesHelp": "Es una cuenta de opensubtitles.com (una cuenta de opensubtitles.org no sirve). Hacen falta los dos campos. El límite diario de descargas de esa cuenta es el que limita la búsqueda de subtítulos.",
-      "openSubtitlesSignUp": "Crear una cuenta en opensubtitles.com"
+      "dateFormatLabel": "Formato de fecha"
     },
     "scheduling": {
       "timezoneNote": "Los horarios se evalúan en la zona horaria del contenedor de la API (UTC salvo que el host configure TZ). \"03:00\" se refiere a esa zona, no a la tuya.",
@@ -926,7 +933,7 @@
       "save": "Guardar",
       "saving": "Guardando...",
       "subtitleSearchLabel": "Buscar subtítulos en internet en cada título que se entregue de ahora en adelante",
-      "subtitleSearchRequiresProvider": "Un administrador tiene que cargar una cuenta de OpenSubtitles en Ajustes → General."
+      "subtitleSearchRequiresProvider": "Un administrador tiene que configurar un proveedor de subtítulos en Ajustes → Subtítulos."
     },
     "torrentGroups": {
       "chosenLabel": "Grupos elegidos",
@@ -1112,6 +1119,59 @@
       "confirm": "Quitar",
       "cancel": "Cancelar",
       "removing": "Quitando..."
+    }
+  },
+  "subtitleProviders": {
+    "title": "Proveedores de subtítulos",
+    "add": "Agregar proveedor",
+    "edit": "Editar",
+    "remove": "Quitar",
+    "configured": "Configurado",
+    "default": "Predeterminado",
+    "empty": "No hay ningún proveedor de subtítulos configurado. La búsqueda de subtítulos no estará disponible hasta que agregues uno.",
+    "row": {
+      "username": "Usuario: {username}",
+      "secretSet": "Credenciales guardadas"
+    },
+    "modal": {
+      "addTitle": "Agregar un proveedor",
+      "editTitle": "Editar {name}",
+      "kindLabel": "Proveedor",
+      "usernameLabel": "Usuario de OpenSubtitles",
+      "passwordLabel": "Contraseña de OpenSubtitles",
+      "apiKeyLabel": "API key de Subdivx",
+      "secretKeepHint": "Dejalo en blanco para mantener el valor guardado.",
+      "openSubtitlesHelp": "Es una cuenta de opensubtitles.com (una cuenta de opensubtitles.org no sirve). Hacen falta los dos campos. El límite diario de descargas de esa cuenta es el que limita la búsqueda de subtítulos.",
+      "openSubtitlesSignUp": "Crear una cuenta en opensubtitles.com",
+      "subdivxHelp": "A Subdivx se llega a través de SubX API con una API key personal. Solo tiene subtítulos en español.",
+      "subdivxQuickstart": "Cómo conseguir una key",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando..."
+    },
+    "removeModal": {
+      "title": "Quitar proveedor",
+      "message": "{name} va a perder sus credenciales guardadas y también se van a quitar todos los idiomas configurados que apuntan a él.",
+      "cancel": "Cancelar",
+      "confirm": "Quitar",
+      "removing": "Quitando..."
+    },
+    "languages": {
+      "title": "Configuración de idiomas de subtítulos",
+      "description": "Al proveedor predeterminado se le pregunta por todos los idiomas. Un idioma configurado manda un idioma, o una variante regional como es-419, primero a otro proveedor; el predeterminado queda como respaldo.",
+      "defaultLabel": "Proveedor predeterminado",
+      "empty": "Sin idiomas configurados: todos los idiomas van al proveedor predeterminado.",
+      "languageLabel": "Idioma",
+      "providerLabel": "Proveedor",
+      "removeRow": "Quitar idioma",
+      "add": "Agregar idioma",
+      "save": "Guardar idiomas",
+      "saving": "Guardando...",
+      "saved": "Idiomas guardados."
+    },
+    "name": {
+      "OPENSUBTITLES": "OpenSubtitles",
+      "SUBDIVX": "Subdivx"
     }
   }
 }

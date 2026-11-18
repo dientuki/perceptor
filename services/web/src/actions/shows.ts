@@ -138,6 +138,7 @@ const GET_SHOW_QUERY = `
               languageIso3
               outcome
               reasonKey
+              provider
             }
             createdAt
             finishedAt
@@ -497,6 +498,7 @@ const SEARCH_EPISODE_SUBTITLES_MUTATION = `
         languageIso3
         outcome
         reasonKey
+        provider
       }
       createdAt
       finishedAt

@@ -1018,3 +1018,8 @@ afterthought). `services/settings/EnvironmentPanel.tsx`'s installability row is 
 `isSecureContext && "serviceWorker" in navigator` detection — it has no GraphQL field of its own
 and reuses the tab's existing `EnvironmentInfo.useHttps` fetch only for phrasing the "why not"
 reason.
+
+## Settings → Subtítulos (`121-subtitle-providers`)
+
+The `subtitles` tab of `SettingsForm.tsx` renders `components/subtitle-providers/` (`SubtitleProvidersPanel` owning the returned `SubtitleProviderSettings` state, a row per configured provider, an add/edit modal per kind, a remove confirmation and the language editor) as a **sibling** of the `<form>`, like `environment`: its inputs must never be submitted by the shared *Guardar*. Every write goes through `actions/subtitle-providers.ts` (`saveSubtitleProviderAction`, `removeSubtitleProviderAction`, `setSubtitleProviderLanguagesAction`, result-union shape) and the panel calls `router.refresh()` afterwards so the layout re-reads `subtitleSearchAvailable`. `web` decides no chain or validity: a refusal (`language_unsupported`, `language_invalid`, `language_duplicate`, …) renders inline with the edits kept. A blank secret on edit is sent as `null` (keep the stored one). Settings → General no longer holds the OpenSubtitles fields and `actions/settings.ts` no longer has `CLEARABLE_KEYS`, since `api` refuses those keys in `updateSettings`; `103`'s `subtitleSearchAvailable` now means "any provider configured". `SubtitleSearchStatus` shows the provider name beside a `RESOLVED`/`REPLACED` language (`SubtitleSearchLanguage.provider`).
+

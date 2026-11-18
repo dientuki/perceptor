@@ -9,6 +9,7 @@ import { MediaSearchResult as MediaSearchResultEntity } from '@/media/entities/m
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { TmdbShow } from '@/clients/tmdb/types';
 import { MEDIA_TYPE } from '@/types/media';
+import { ImdbIdsService } from '@/imdb-ids/imdb-ids.service';
 import { MediaTypeService } from '@/media/media-type.interface';
 import { LibraryPossession } from '@/media/entities/library-possession.enum';
 import {
@@ -63,6 +64,7 @@ export class ShowsService implements MediaTypeService {
     private readonly downloadsService: DownloadsService,
     private readonly catalogSearch: CatalogSearchService,
     private readonly mediaCapabilities: MediaCapabilitiesService,
+    private readonly imdbIds: ImdbIdsService,
   ) {}
 
   // The library belongs to the user: only returns series this userId has
@@ -329,6 +331,8 @@ export class ShowsService implements MediaTypeService {
         where: { id: showId },
         data: { seasonsSyncedAt: new Date(), tmdbStatus: detail.status },
       });
+      // Spec 121, REQ-11
+      await this.imdbIds.record('show', showId, detail.imdbId);
 
       // Spec 034, REQ-19
       await this.mediaServerReconcile.reconcileShow(showId, tmdbId);
@@ -356,6 +360,9 @@ export class ShowsService implements MediaTypeService {
         releaseDate: releaseDate ? new Date(releaseDate) : undefined,
         originalLanguage: detail.originalLanguage,
         tmdbStatus: detail.status,
+        // Spec 121, REQ-11
+        imdbId: detail.imdbId,
+        imdbIdCheckedAt: new Date(),
       },
     });
 

@@ -20,7 +20,7 @@ export class MediaCapabilities {
 
   @Field({
     description:
-      "True while Perceptor's OpenSubtitles application key is present and the OpenSubtitles username and password Settings are set (107 REQ-2). Never exposes any of them.",
+      'True while at least one subtitle provider is configured (121 REQ-16). Never exposes any credential.',
   })
   subtitleSearchAvailable: boolean;
 

@@ -8,6 +8,7 @@ import { MediaServerModule } from '@/media-server/media-server.module';
 import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
 import { DownloadsModule } from '@/downloads/downloads.module';
 import { CatalogSearchModule } from '@/media/catalog-search.module';
+import { ImdbIdsModule } from '@/imdb-ids/imdb-ids.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CatalogSearchModule } from '@/media/catalog-search.module';
     MediaCapabilitiesModule,
     DownloadsModule,
     CatalogSearchModule,
+    ImdbIdsModule,
   ],
   providers: [ShowsResolver, ShowsService],
   exports: [ShowsService],

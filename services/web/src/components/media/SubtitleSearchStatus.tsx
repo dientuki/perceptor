@@ -10,6 +10,7 @@ import type {
   SubtitleSearchLanguageOutcome,
   SubtitleSearchStatus as SubtitleSearchStatusValue,
 } from "@/types/media";
+import type { SubtitleProviderKind } from "@/types/subtitle-providers";
 
 const STATUS_TO_BADGE_STATUS: Record<SubtitleSearchStatusValue, string> = {
   WAITING: "QUEUED",
@@ -67,6 +68,10 @@ export default function SubtitleSearchStatus({
     }
   };
 
+  const tProviders = useTranslations("subtitleProviders");
+  const providerName = (kind: SubtitleProviderKind) =>
+    tProviders.has(`name.${kind}`) ? tProviders(`name.${kind}`) : kind;
+
   const tone = statusTone(STATUS_TO_BADGE_STATUS[search.status] ?? "");
 
   return (
@@ -111,6 +116,13 @@ export default function SubtitleSearchStatus({
                     language: languageName(language.languageIso3),
                     outcome: label("outcome", language.outcome),
                   })}
+              {language.provider &&
+                (language.outcome === "RESOLVED" ||
+                  language.outcome === "REPLACED") && (
+                  <span className="ml-2 text-gray-500 dark:text-gray-400">
+                    {providerName(language.provider)}
+                  </span>
+                )}
             </li>
           ))}
         </ul>

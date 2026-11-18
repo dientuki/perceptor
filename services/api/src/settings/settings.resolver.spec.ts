@@ -217,3 +217,43 @@ describe('SettingsResolver updateSettings acquire_episodes cutoff stamp', () => 
     expect(schedulerService.stampAcquireEpisodesCutoff).not.toHaveBeenCalled();
   });
 });
+
+// This suite exists because otherwise the OpenSubtitles password or the
+// Subdivx API key would reach `web` in the `settings` query (and in the
+// `updateSettings` result) with no error anywhere: both are plain Setting rows
+// and `findAll()` returns every row. The filter lives in the resolver because
+// `getMap()` still needs the rows. Spec 121, NFR-4.
+describe('SettingsResolver secret filtering', () => {
+  const rows = [
+    { key: 'opensubtitles_username', value: 'user' },
+    { key: 'opensubtitles_password', value: 'hunter2' },
+    { key: 'subdivx_api_key', value: 'subdivx-secret' },
+    { key: 'movies_enabled', value: 'true' },
+  ];
+
+  const build = () => {
+    const settingsService = {
+      findAll: jest.fn().mockResolvedValue(rows),
+      getMap: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue(rows),
+    } as unknown as SettingsService;
+    return new SettingsResolver(
+      settingsService,
+      {} as QbittorrentClient,
+      {} as MediaRootsService,
+      {} as MediaServerIndexService,
+      { get: jest.fn() } as unknown as ModuleRef,
+    );
+  };
+
+  it('omits both secrets from the settings query and keeps the rest', async () => {
+    const keys = (await build().settings()).map((row) => row.key);
+    expect(keys).toEqual(['opensubtitles_username', 'movies_enabled']);
+  });
+
+  it('omits both secrets from the updateSettings result', async () => {
+    const result = await build().updateSettings([{ key: 'ui_locale', value: 'en' }]);
+    expect(JSON.stringify(result)).not.toContain('hunter2');
+    expect(JSON.stringify(result)).not.toContain('subdivx-secret');
+  });
+});

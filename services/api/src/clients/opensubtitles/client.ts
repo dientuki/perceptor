@@ -6,7 +6,11 @@ import { RedisService } from '@/redis/redis.service';
 import { SettingsService } from '@/settings/settings.service';
 import type { SubtitleCandidate } from '@/subtitle-search/candidates';
 import { HTTP_METHOD } from '@/types/http';
-import { OpenSubtitlesHttpError } from './errors';
+import { boundedRetryAfterMs } from '../retry-after';
+import {
+  SubtitleProviderErrorKind,
+  SubtitleProviderHttpError,
+} from '../subtitle-provider-error';
 import { openSubtitlesApiKey } from './key';
 import {
   OsDownloadResponse,
@@ -21,6 +25,15 @@ const API_PREFIX = '/api/v1';
 const TOKEN_TTL_SECONDS = 23 * 60 * 60;
 const MAX_RATE_LIMIT_WAIT_MS = 10_000;
 const DEFAULT_RATE_LIMIT_WAIT_MS = 1_000;
+
+function osHttpError(
+  kind: SubtitleProviderErrorKind,
+  method: string,
+  path: string,
+  status: number,
+): SubtitleProviderHttpError {
+  return new SubtitleProviderHttpError('opensubtitles', kind, method, path, status);
+}
 
 function packageVersion(): string {
   try {
@@ -97,8 +110,7 @@ export class OpenSubtitlesClient {
       { file_id: Number(fileId), sub_format: 'srt' },
     );
     if (!meta.link) {
-      throw new OpenSubtitlesHttpError(
-        'unavailable',
+      throw osHttpError('unavailable',
         HTTP_METHOD.POST,
         '/download',
         200,
@@ -120,8 +132,7 @@ export class OpenSubtitlesClient {
   private requireKey(): string {
     const key = openSubtitlesApiKey();
     if (key === null) {
-      throw new OpenSubtitlesHttpError(
-        'unauthorized',
+      throw osHttpError('unauthorized',
         HTTP_METHOD.POST,
         '/login',
         0,
@@ -155,7 +166,7 @@ export class OpenSubtitlesClient {
       try {
         return (await res.json()) as T;
       } catch {
-        throw new OpenSubtitlesHttpError('unavailable', method, path, res.status);
+        throw osHttpError('unavailable', method, path, res.status);
       }
     }
   }
@@ -201,16 +212,14 @@ export class OpenSubtitlesClient {
     try {
       parsed = (await res.json()) as OsLoginResponse;
     } catch {
-      throw new OpenSubtitlesHttpError(
-        'unavailable',
+      throw osHttpError('unavailable',
         HTTP_METHOD.POST,
         '/login',
         res.status,
       );
     }
     if (!parsed.token) {
-      throw new OpenSubtitlesHttpError(
-        'unavailable',
+      throw osHttpError('unavailable',
         HTTP_METHOD.POST,
         '/login',
         res.status,
@@ -262,23 +271,17 @@ export class OpenSubtitlesClient {
           body: body === undefined ? undefined : JSON.stringify(body),
         });
       } catch {
-        throw new OpenSubtitlesHttpError('unavailable', method, label, 0);
+        throw osHttpError('unavailable', method, label, 0);
       }
     };
     const first = await attempt();
     if (first.status !== 429) return first;
-    await this.sleep(this.rateLimitWaitMs(first));
+    await this.sleep(boundedRetryAfterMs(
+        first,
+        MAX_RATE_LIMIT_WAIT_MS,
+        DEFAULT_RATE_LIMIT_WAIT_MS,
+      ));
     return attempt();
-  }
-
-  private rateLimitWaitMs(res: Response): number {
-    const raw =
-      res.headers?.get('retry-after') ?? res.headers?.get('ratelimit-reset');
-    const seconds = raw === null || raw === undefined ? NaN : Number(raw);
-    const ms = Number.isFinite(seconds)
-      ? seconds * 1000
-      : DEFAULT_RATE_LIMIT_WAIT_MS;
-    return Math.max(0, Math.min(ms, MAX_RATE_LIMIT_WAIT_MS));
   }
 
   private fail(
@@ -287,10 +290,10 @@ export class OpenSubtitlesClient {
     path: string,
     isDownload = false,
   ): never {
-    let kind: OpenSubtitlesHttpError['kind'] = 'unavailable';
+    let kind: SubtitleProviderErrorKind = 'unavailable';
     if (status === 401) kind = 'unauthorized';
     else if (status === 406 && isDownload) kind = 'quota';
     else if (status === 429) kind = 'rate_limited';
-    throw new OpenSubtitlesHttpError(kind, method, path, status);
+    throw osHttpError(kind, method, path, status);
   }
 }

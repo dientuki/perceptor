@@ -1,6 +1,7 @@
 import type { Movie } from "@/actions/movies";
 import type { Episode, Season } from "@/actions/shows";
 import type { Language } from "@/types/languages";
+import type { SubtitleProviderKind } from "@/types/subtitle-providers";
 
 export const MEDIA_TYPE = {
   MOVIE: "movie",
@@ -172,6 +173,7 @@ export interface SubtitleSearchLanguage {
   languageIso3: string;
   outcome: SubtitleSearchLanguageOutcome;
   reasonKey: string | null;
+  provider: SubtitleProviderKind | null;
 }
 
 /** The latest subtitle search of a film or episode. */

@@ -80,15 +80,24 @@ function format(ms: number): string {
   return `${pad(h, 2)}:${pad(m, 2)}:${pad(s, 2)},${pad(milli, 3)}`;
 }
 
-// Spec 101, REQ-7 REQ-8
-export function normalizeSrt(bytes: Uint8Array, offsetMs: number, fileName: string): string {
+// Spec 101, REQ-7 REQ-8; Spec 120, REQ-1 REQ-2 REQ-3
+export function normalizeSrt(
+  bytes: Uint8Array,
+  offsetMs: number,
+  fileName: string,
+  maxEndMs?: number,
+): string {
   const text = decodeSubtitleBytes(bytes, fileName).replace(/^﻿/, '');
+  const limit = maxEndMs !== undefined && Number.isFinite(maxEndMs) && maxEndMs > 0 ? Math.floor(maxEndMs) : Infinity;
 
   const shifted: Cue[] = [];
   for (const cue of parseCues(text)) {
     const end = cue.end + offsetMs;
+    const start = Math.max(0, cue.start + offsetMs);
     if (end <= 0) continue;
-    shifted.push({ start: Math.max(0, cue.start + offsetMs), end, text: cue.text });
+    // Spec 120, REQ-1 REQ-2
+    if (start >= limit) continue;
+    shifted.push({ start, end: Math.min(end, limit), text: cue.text });
   }
 
   if (shifted.length === 0) {

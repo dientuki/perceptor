@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { ShowsService } from './shows.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
+import { ImdbIdsService } from '@/imdb-ids/imdb-ids.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { MediaServerReconcileService } from '@/media-server/media-server-reconcile.service';
 import { MEDIA_TYPE } from '@/types/media';
@@ -76,6 +77,7 @@ describe('ShowsService', () => {
     seasonDetails: jest.Mock;
     keywords: jest.Mock;
   };
+  let imdbIds: { resolve: jest.Mock; record: jest.Mock };
   let mediaServerReconcile: {
     reconcileShow: jest.Mock;
   };
@@ -108,6 +110,10 @@ describe('ShowsService', () => {
       seasonDetails: jest.fn(),
       keywords: jest.fn(),
     };
+    imdbIds = {
+      resolve: jest.fn().mockResolvedValue(null),
+      record: jest.fn().mockResolvedValue(undefined),
+    };
     mediaServerReconcile = {
       reconcileShow: jest.fn().mockResolvedValue(undefined),
     };
@@ -120,6 +126,7 @@ describe('ShowsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
         { provide: TmdbClient, useValue: tmdb },
+        { provide: ImdbIdsService, useValue: imdbIds },
         {
           provide: MediaServerReconcileService,
           useValue: mediaServerReconcile,

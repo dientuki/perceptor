@@ -4,6 +4,9 @@ import { MediaCapabilitiesModule } from '@/media/media-capabilities.module';
 import { MediaRootsModule } from '@/media-roots/media-roots.module';
 import { RedisModule } from '@/redis/redis.module';
 import { OpenSubtitlesClient } from '@/clients/opensubtitles/client';
+import { SubdivxClient } from '@/clients/subdivx/client';
+import { ImdbIdsModule } from '@/imdb-ids/imdb-ids.module';
+import { SubtitleProvidersModule } from '@/subtitle-providers/subtitle-providers.module';
 import { QueueModule } from '@/queue/queue.module';
 import { SettingsModule } from '@/settings/settings.module';
 import { SubtitleEmbedModule } from '@/subtitle-embed/subtitle-embed.module';
@@ -29,12 +32,15 @@ import {
     SettingsModule,
     QueueModule,
     RedisModule,
+    SubtitleProvidersModule,
+    ImdbIdsModule,
   ],
   providers: [
     SubtitleSearchService,
     SubtitleSearchDriver,
     SubtitleSearchStaging,
     OpenSubtitlesClient,
+    SubdivxClient,
     SubtitleSearchResolver,
     MovieSubtitleSearchFieldsResolver,
     EpisodeSubtitleSearchFieldsResolver,

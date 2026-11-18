@@ -164,6 +164,8 @@ export async function handleSubtitleEmbed(job: Job<SubtitleEmbedJob>): Promise<v
       details.replaceLanguagesIso3 ?? [],
     );
 
+    const videoEndMs = Number(originalMetadata.format?.duration) * 1000;
+
     tempDir = await mkdtemp(join(tmpdir(), 'perceptor-subtitle-embed-'));
     const embedTracks: EmbedTrack[] = [];
     for (const [n, track] of details.tracks.entries()) {
@@ -177,7 +179,7 @@ export async function handleSubtitleEmbed(job: Job<SubtitleEmbedJob>): Promise<v
         });
       }
       const normalizedPath = join(tempDir, `${n}.srt`);
-      await writeFile(normalizedPath, normalizeSrt(bytes, track.offsetMs, basename(track.sourcePath)));
+      await writeFile(normalizedPath, normalizeSrt(bytes, track.offsetMs, basename(track.sourcePath), videoEndMs));
       // Spec 107, REQ-14
       let tagsPath: string | undefined;
       if (track.provenance && track.provenance.trim() !== '') {

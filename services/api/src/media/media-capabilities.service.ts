@@ -4,7 +4,7 @@ import { MediaCapabilities } from './entities/media-capabilities.entity';
 import { MEDIA_TYPE, MediaType } from '@/types/media';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
-import { openSubtitlesApiKey } from '@/clients/opensubtitles/key';
+import { anyProviderConfigured } from '@/subtitle-providers/registry';
 
 // Spec 045, REQ-11; Spec 045, REQ-10
 @Injectable()
@@ -20,11 +20,8 @@ export class MediaCapabilitiesService {
       showsEnabled: this.isEnabledInMap(map, MEDIA_TYPE.SHOW),
       shortsEnabled: moviesEnabled && map['shorts_enabled'] === 'true',
       catalogKeyConfigured: (map['movie_db_api_key'] ?? '').trim() !== '',
-      // Spec 107, REQ-2
-      subtitleSearchAvailable:
-        openSubtitlesApiKey() !== null &&
-        (map['opensubtitles_username'] ?? '').trim() !== '' &&
-        (map['opensubtitles_password'] ?? '').trim() !== '',
+      // Spec 121, REQ-16
+      subtitleSearchAvailable: anyProviderConfigured(map),
       // Spec 109, REQ-12
       listImportEnabled: map['schedule_import_lists_enabled'] === 'true',
     };

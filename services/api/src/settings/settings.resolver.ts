@@ -47,6 +47,9 @@ const MEDIA_SERVER_CONFIG_KEYS = [
   'media_server_api_key',
 ];
 
+// Spec 121, NFR-4
+const HIDDEN_SETTING_KEYS = new Set(['opensubtitles_password', 'subdivx_api_key']);
+
 // Guards are applied per method, never at class level: `defaultUiLocale`
 // must answer an unauthenticated request (it is read while rendering
 // `/login`, before `web` knows who is asking). A class-level `AdminGuard`
@@ -98,7 +101,8 @@ export class SettingsResolver {
   @UseGuards(AdminGuard)
   @Query(() => [Setting], { name: 'settings' })
   async settings() {
-    return this.settingsService.findAll();
+    const rows = await this.settingsService.findAll();
+    return rows.filter((row) => !HIDDEN_SETTING_KEYS.has(row.key));
   }
 
   @UseGuards(AdminGuard)
@@ -110,7 +114,9 @@ export class SettingsResolver {
     // actually stored, not against this submission's own values.
     const before = await this.settingsService.getMap();
 
-    const result = await this.settingsService.updateMany(entries);
+    const result = (await this.settingsService.updateMany(entries)).filter(
+      (row) => !HIDDEN_SETTING_KEYS.has(row.key),
+    );
 
     const changedDownloadsPath = entries.find(
       (entry) => entry.key === 'path_downloads',

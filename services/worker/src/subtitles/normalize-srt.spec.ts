@@ -74,6 +74,28 @@ describe('normalizeSrt — offset', () => {
   });
 });
 
+describe('normalizeSrt — end of video', () => {
+  const tail =
+    '1\n00:00:01,000 --> 00:00:03,000\nfirst\n\n2\n00:00:58,000 --> 00:00:58,900\nlast\n\n3\n00:01:05,000 --> 00:01:06,000\npast\n';
+
+  it('drops a cue that starts at or after the end of the video', () => {
+    const out = normalizeSrt(srt(tail), 0, 'x.srt', 60_000);
+    expect(out).not.toContain('past');
+    expect(out).toContain('last');
+  });
+
+  it('clamps a cue that crosses the end of the video to that end', () => {
+    const out = normalizeSrt(srt(tail), 1500, 'x.srt', 60_000);
+    expect(out).toContain('2\n00:00:59,500 --> 00:01:00,000\nlast');
+    expect(out).not.toContain('past');
+  });
+
+  it('keeps every cue when the duration is unknown', () => {
+    const out = normalizeSrt(srt(tail), 3000, 'x.srt', Number.NaN);
+    expect(out).toContain('00:01:08,000 --> 00:01:09,000');
+  });
+});
+
 describe('normalizeSrt — parsing', () => {
   it('parses CRLF, dot separators and a missing trailing blank line, emitting LF', () => {
     const out = normalizeSrt(
