@@ -1,7 +1,7 @@
 # Specs con Acceptance Criteria pendientes
 
 <!-- pending-acs:begin intro -->
-Medido el **2026-11-17**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
+Medido el **2026-11-20**. Una fila por spec que todavia tiene al menos un `- [ ]` bajo
 `## Acceptance Criteria`; las 51 specs que no aparecen estan en 100%.
 <!-- pending-acs:end intro -->
 
@@ -17,10 +17,10 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin stats -->
 | | |
 | :-- | --: |
-| Specs con ACs pendientes | **70** de 121 |
-| ACs pendientes | **562** |
-| ACs totales del proyecto | 1477 |
-| ACs verificados | 915 (62%) |
+| Specs con ACs pendientes | **71** de 122 |
+| ACs pendientes | **567** |
+| ACs totales del proyecto | 1486 |
+| ACs verificados | 919 (62%) |
 <!-- pending-acs:end stats -->
 
 ## Por spec
@@ -28,6 +28,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 <!-- pending-acs:begin specs -->
 | spec | titulo | status | AC pendientes | detalle AC | obs |
 | :-- | :-- | :-- | :-- | :-- | :-- |
+| 122 | audio-language-detection | Implemented | 5/9 | 1, 2, 4, 6, 8 | **Un stack corriendo este checkout.** AC-3, AC-5, AC-7 y AC-9 se observaron en un pase a nivel de driver (`encodeFfmpeg` desde el `dist` de la imagen `local-prod`, Redis descartable, fixtures de audio real). Los cinco abiertos esperan un `ptor` con un release que lleve este cambio, porque `ptor` es una instalacion de imagenes publicadas y estaba detenida en este host: AC-1 y AC-2 son el job 653 real (Play, luego Retry, `redis-cli --scan`), AC-4 el texto en espanol en `/downloads`, AC-6 un archivo real de la biblioteca (a nivel de driver solo con fixtures), AC-8 el movimiento sin recomprimir, que es del job handler y no se ejercito. |
 | 121 | subtitle-providers | Approved | 14/20 | 1, 2, 5, 6, 7, 11, 16, 12, 13, 14, 15, 17, 18, 19 | Implemented in `api` and `web` with unit/fault-injection coverage (api 1874 tests); no AC was observed holding live. Needs a real OpenSubtitles account, a SubX API key and an admin session on the dev stack (T017) to walk the Subtitles tab (AC-1, 2, 8, 12) and a real search chain (AC-3…7, 9…11, 14…17). |
 | 120 | subtitle-embed-trailing-cues | Draft | 4/4 | 1, 2, 3, 4 | **[OBS PENDIENTE DE ESCRIBIR]** |
 | 119 | subtitle-search-replace | Implemented | 12/12 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 | **Sesion admin en un browser.** Los doce piden un stack dev de este checkout con una sesion de usuario y un archivo real: AC-1 y AC-2 ven el dialogo, AC-3 a AC-6, AC-9 y AC-12 reemplazan pistas con `ffprobe` antes y despues y gastan descargas de OpenSubtitles (cuota de unas 20 por dia, con respaldo del archivo), AC-7 y AC-10 piden la fila `SubtitleSearch` de una busqueda manual y una automatica, AC-8 y AC-11 dos mutations a mano con un token de GraphQL. Ya probado debajo: `api` (`requestForCaller` con las dos negativas y sin fila, `missingLanguages`, el driver pasando solo los idiomas aceptados, `deriveLanguages` con `REPLACED` y sin el override de `114`, `replaceLanguagesIso3` con `[]` para `NULL`), `worker` (`tracksToDrop`, `--subtitle-tracks !`, `verifyEmbed` con las pistas quitadas, el reporte sin la lista) y el contrato generado contra la spec; `web` sin runner de tests, solo typecheck y `check-messages`. |
@@ -103,7 +104,7 @@ blocker, y es la clave con la que se agrupa la tabla "Por blocker" — cambiarla
 ## Por blocker
 
 <!-- pending-acs:begin blockers -->
-Los 562 ACs pendientes no son 562 problemas distintos. Se reducen a 30 destrabes, y los dos primeros se llevan el 52%:
+Los 567 ACs pendientes no son 567 problemas distintos. Se reducen a 30 destrabes, y los dos primeros se llevan el 51%:
 
 | blocker | ACs | specs |
 | :-- | --: | :-- |
@@ -120,6 +121,7 @@ Los 562 ACs pendientes no son 562 problemas distintos. Se reducen a 30 destrabes
 | Fuentes en vuelo, y un segundo usuario | 10 | 064 |
 | Jellyfin con el plugin de OpenSubtitles logueado y cupo | 10 | 106 |
 | Un browser que registre service workers | 9 | 080 |
+| Un stack corriendo este checkout | 9 | 116, 122 |
 | Fuentes en vuelo | 8 | 063 |
 | Un media server configurado | 8 | 069 |
 | Un encode real con Stop/Play, un reinicio del worker y una fuente Blu-ray | 8 | 111 |
@@ -128,7 +130,6 @@ Los 562 ACs pendientes no son 562 problemas distintos. Se reducen a 30 destrabes
 | Un reemplazo forzado (`force`) en una instalacion real | 5 | 089 |
 | Tres cosas distintas, ninguna la sesion | 4 | 062 |
 | Un segundo usuario, y decisiones del duenio | 4 | 078 |
-| Un stack corriendo este checkout | 4 | 116 |
 | Sujetos que el indexer no devuelve | 3 | 036 |
 | La UI de GitHub | 3 | 085 |
 | Un segundo usuario | 2 | 042, 071 |

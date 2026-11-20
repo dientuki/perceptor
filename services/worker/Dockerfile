@@ -6,19 +6,24 @@ RUN apk add --no-cache build-base cmake git curl
 ARG WHISPER_CPP_TAG=v1.9.5
 ARG WHISPER_MODEL_REV=5359861c739e955e79d9a303bcbc70fb988958b1
 ARG WHISPER_MODEL_SHA256=ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb
+ARG WHISPER_VAD_REV=9ffd54a1e1ee413ddf265af9913beaf518d1639b
+ARG WHISPER_VAD_SHA256=29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf
 # GGML_NATIVE=OFF: no -march=native, so the binary runs on any amd64 or arm64 host.
 RUN git clone --depth 1 --branch "${WHISPER_CPP_TAG}" https://github.com/ggml-org/whisper.cpp /src && \
     cd /src && \
     cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
       -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON \
       -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_INSTALL_RPATH='$ORIGIN' && \
-    cmake --build build --target whisper-cli -j"$(nproc)" && \
+    cmake --build build --target whisper-cli --target whisper-vad-speech-segments -j"$(nproc)" && \
     mkdir -p /out && \
-    cp build/bin/whisper-cli /out/ && \
+    cp build/bin/whisper-cli build/bin/whisper-vad-speech-segments /out/ && \
     find build -name '*.so*' -exec cp -a {} /out/ \;
 RUN curl -fsSL -o /out/ggml-small-q5_1.bin \
       "https://huggingface.co/ggerganov/whisper.cpp/resolve/${WHISPER_MODEL_REV}/ggml-small-q5_1.bin" && \
     echo "${WHISPER_MODEL_SHA256}  /out/ggml-small-q5_1.bin" | sha256sum -c -
+RUN curl -fsSL -o /out/ggml-silero-v5.1.2.bin \
+      "https://huggingface.co/ggml-org/whisper-vad/resolve/${WHISPER_VAD_REV}/ggml-silero-v5.1.2.bin" && \
+    echo "${WHISPER_VAD_SHA256}  /out/ggml-silero-v5.1.2.bin" | sha256sum -c -
 
 # ==========================================
 # 1. BASE: shared environment (Alpine + FFmpeg + libc6)

@@ -22,7 +22,7 @@ export interface AudioVariantDetails {
 
 type Pair = [any, any];
 
-function hasCentreChannel(stream: any): boolean {
+export function hasCentreChannel(stream: any): boolean {
   const layout: string = stream?.channel_layout ?? '';
   if (layout.includes('FC')) return true;
   return /^[3-9]\.[01]/.test(layout) && layout !== '3.0(back)';

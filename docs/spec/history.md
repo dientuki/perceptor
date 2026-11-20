@@ -23,6 +23,17 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-11-20 — `122-audio-language-detection` (implementation measured; live pass pending a release)
+
+`worker` and `web`, plus the worker `Dockerfile`; no Prisma migration; `api` untouched. GraphQL contract: no schema change; `docs/spec/graphql-contract.md` § "UI internationalization" gained `error.encode.original_audio_undetermined` (`{iso3}`).
+
+- `worker` typecheck: 0 errors. Suite: 68 files, 946 tests, all pass (throwaway container, uid 1000). The only new tests are `audio-language-score.spec.ts` (21), `audio-language.spec.ts` (15), `iso639.spec.ts` (3), a driver test in `encode.ffmpeg.spec.ts` and two in `buildCommand.spec.ts` (a re-labelled track yields `language=eng`; the same untagged track throws `no_original_audio`). Comments gate: PASS (2168 locators tree-wide).
+- `web` catalog parity: `OK: en.json and es.json match exactly (874 keys)`. No `web` typecheck run (messages only).
+- Image: `perceptor-worker:local-prod` 1122716346 to 1125414397 bytes (+2.6 MiB) with `whisper-vad-speech-segments` and the Silero model, pinned by revision and SHA-256.
+- Calibration (`122/worker/calibration.md`): `VOTE_THRESHOLD = 0.8`, `MIN_VOTES = 2`, unchanged. Job 653's main track votes en 0.978 / 0.995 / 0.763; silence answers en 0.37, music 0.26 to 0.36. Attempt 1 about 30 s per candidate, attempt 2 about 3.5 min on a 6329 s film (202 MB temporary WAV).
+- Driver-level pass on fixtures in a throwaway container of the built image, with a throwaway Redis: AC-3, AC-4, AC-5, AC-7 and AC-9 observed holding and AC-2's reuse behaviour (`(reused)`, TTL about 30 days); AC-6 and AC-8 observed on fixtures only.
+- Not measured: the live pass on `ptor` (AC-1 on job 653, AC-2 on the real job, AC-4's Spanish line in `/downloads`, AC-6 on a real library file, AC-8's move-as-is), which needs a release carrying this change. The `ptor` stack was down on this host and is a published-image install, not this checkout.
+
 ## 2026-11-17 — `121-subtitle-providers` (implementation measured; live pass pending)
 
 `api` and `web`; two Prisma migrations (`20261117180921_subtitle_providers` and `20261117200000_subtitle_provider_languages_key`, which renames the stored `subtitle_provider_routes` Setting key to `subtitle_provider_languages`; 61 migrations, database up to date); GraphQL contract: `schema.gql` gained exactly the spec's delta (`SubtitleProviderKind`, three types, two inputs, `subtitleProviders` and three mutations, `SubtitleSearchLanguage.provider`, the new `subtitleSearchAvailable` description) and `docs/spec/graphql-contract.md` the `121` section. No `worker` or `infra` change.

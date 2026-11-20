@@ -1,6 +1,7 @@
 import { dirname, join, basename, extname } from 'node:path';
 import type { EncodeFn } from './types';
 import { getMetadata } from '../ffmpeg/metadata';
+import { resolveAudioLanguages } from './audio-language';
 import { resolveFilmGrain } from './grain-mode';
 import { resolveDubTrim } from './dub-trim';
 import { resolveAudioVariants } from './audio-variant';
@@ -22,10 +23,12 @@ export const encodeFfmpeg: EncodeFn = async (input, output, details, onProgress,
   const workingPath = toWorkingPath(input);
   const partPath = toPartPath(output);
 
-  const { metadata, raw } = await getMetadata(input);
+  const { metadata: probed, raw } = await getMetadata(input);
 
   // Spec 023, REQ-1
   await onProbe(input, raw);
+  // Spec 122, REQ-5 REQ-6 REQ-10
+  const { metadata } = await resolveAudioLanguages(details, input, probed, signal);
 
   const sampleSeconds = process.env.ENCODE_SAMPLE_SECONDS;
   const sourceDuration = Number(metadata.format?.duration ?? 0);

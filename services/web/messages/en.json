@@ -156,6 +156,7 @@
     "encode": {
       "no_video_stream": "The input file has no video stream",
       "no_original_audio": "The file has no audio track in the original language ({iso3})",
+      "original_audio_undetermined": "No audio track is tagged with the original language ({iso3}) and the language of the untagged tracks could not be detected",
       "probe_failed": "Could not analyse the video file ({filePath}): {detail}",
       "ffmpeg_failed": "ffmpeg exited with code {code}: {stderr}",
       "no_output": "ffmpeg exited 0 but produced no {path}",

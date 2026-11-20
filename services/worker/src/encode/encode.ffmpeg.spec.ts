@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
   getMetadata: vi.fn(),
+  resolveAudioLanguages: vi.fn(),
   resolveAudioVariants: vi.fn(),
   resolveStreamEndTrim: vi.fn(),
   resolveSubtitlePruning: vi.fn(),
@@ -14,6 +15,7 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock('../ffmpeg/metadata', () => ({ getMetadata: m.getMetadata }));
+vi.mock('./audio-language', () => ({ resolveAudioLanguages: m.resolveAudioLanguages }));
 vi.mock('./grain-mode', () => ({ resolveFilmGrain: vi.fn().mockResolvedValue(false) }));
 vi.mock('./dub-trim', () => ({ resolveDubTrim: vi.fn().mockResolvedValue(null) }));
 vi.mock('./subtitle-prune', () => ({ resolveSubtitlePruning: m.resolveSubtitlePruning }));
@@ -28,6 +30,7 @@ describe('encodeFfmpeg audio variants', () => {
   beforeEach(() => {
     Object.values(m).forEach((fn) => fn.mockReset());
     m.getMetadata.mockResolvedValue({ metadata: { format: { duration: '100' }, streams: [] }, raw: '{}' });
+    m.resolveAudioLanguages.mockImplementation(async (_d: any, _i: string, metadata: any) => ({ metadata, undetermined: [] }));
     m.resolveStreamEndTrim.mockResolvedValue(null);
     m.resolveSubtitlePruning.mockResolvedValue({ drops: new Set<number>(), variants: new Map<number, string>() });
     m.buildFfmpegCommand.mockReturnValue(['-i', 'x']);
@@ -60,5 +63,26 @@ describe('encodeFfmpeg audio variants', () => {
     expect(m.resolveSubtitlePruning.mock.calls[0][0]).toBe(details);
     expect(m.buildFfmpegCommand.mock.calls[0][6]).toBe(drops);
     expect(m.buildFfmpegCommand.mock.calls[0][8]).toBe(variants);
+  });
+
+  // Spec 122, REQ-5 REQ-6 REQ-10
+  it('hands onProbe the raw probe and every later read the re-labelled metadata', async () => {
+    const probed = { format: { duration: '100' }, streams: [{ index: 1, codec_type: 'audio', tags: {} }] };
+    const labelled = { format: { duration: '100' }, streams: [{ index: 1, codec_type: 'audio', tags: { language: 'eng' } }] };
+    m.getMetadata.mockResolvedValue({ metadata: probed, raw: '{"raw":true}' });
+    m.resolveAudioLanguages.mockResolvedValue({ metadata: labelled, undetermined: [] });
+    m.resolveAudioVariants.mockResolvedValue({ tags: new Map(), duplicates: new Set<number>() });
+    const details = { compressionEnabled: true } as any;
+    const signal = new AbortController().signal;
+    const onProbe = vi.fn().mockResolvedValue(undefined);
+
+    await encodeFfmpeg('/d/a.mkv', '/o/a.mkv', details, async () => {}, onProbe, signal);
+
+    expect(m.resolveAudioLanguages).toHaveBeenCalledWith(details, '/d/a.mkv', probed, signal);
+    expect(onProbe).toHaveBeenCalledWith('/d/a.mkv', '{"raw":true}');
+    expect(m.resolveAudioVariants.mock.calls[0][2]).toBe(labelled);
+    expect(m.resolveStreamEndTrim.mock.calls[0][2]).toBe(labelled);
+    expect(m.resolveSubtitlePruning.mock.calls[0][2]).toBe(labelled);
+    expect(m.buildFfmpegCommand.mock.calls[0][2]).toBe(labelled);
   });
 });

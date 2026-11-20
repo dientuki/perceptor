@@ -338,6 +338,35 @@ export interface AudioSelection {
   missingLanguages: string[];
 }
 
+export interface AudioCandidates {
+  candidates: any[];
+  hasOriginal: boolean;
+}
+
+// Spec 122, REQ-2
+export function findAudioCandidates(
+  audioStreams: any[],
+  allowedLanguagesIso3: string[],
+  originalLanguageIso3: string,
+  audioVariants: AudioVariantResolution,
+): AudioCandidates {
+  const allowedLangs = Array.from(
+    new Set(allowedLanguagesIso3.map((lang) => normalizeIso3(lang))),
+  );
+  const originalLang = normalizeIso3(originalLanguageIso3);
+  const blacklistWords = ['commentary', 'description', 'visual', 'sdh'];
+
+  const candidates = audioStreams.filter(s => {
+    if (audioVariants.duplicates.has(s.index)) return false;
+    const lang = normalizeIso3(s.tags?.language || "");
+    const title = (s.tags?.title || "").toLowerCase();
+    return allowedLangs.includes(lang) && !blacklistWords.some(word => title.includes(word));
+  });
+
+  const hasOriginal = candidates.some(s => normalizeIso3(s.tags?.language || "") === originalLang);
+  return { candidates, hasOriginal };
+}
+
 // Spec 011, REQ-3 REQ-4 REQ-6 REQ-7; Spec 099, REQ-7
 export function selectAudioStreams(
   audioStreams: any[],
@@ -356,19 +385,16 @@ export function selectAudioStreams(
   );
   const originalLang = normalizeIso3(originalLanguageIso3);
 
-  const blacklistWords = ['commentary', 'description', 'visual', 'sdh'];
   const priority = ['truehd', 'dts', 'eac3', 'ac3'];
 
-  const candidates = audioStreams.filter(s => {
-    if (audioVariants.duplicates.has(s.index)) return false;
-    const lang = normalizeIso3(s.tags?.language || "");
-    const title = (s.tags?.title || "").toLowerCase();
-    return allowedLangs.includes(lang) && !blacklistWords.some(word => title.includes(word));
-  });
+  const { candidates, hasOriginal } = findAudioCandidates(
+    audioStreams,
+    allowedLanguagesIso3,
+    originalLanguageIso3,
+    audioVariants,
+  );
 
   // Spec 011, REQ-6
-  const hasOriginal = candidates.some(s => normalizeIso3(s.tags?.language || "") === originalLang);
-
   if (!hasOriginal) {
     const params = { iso3: originalLanguageIso3 };
     throw new KeyedError(

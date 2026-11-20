@@ -1,0 +1,32 @@
+read_audio_data: reading audio data from '/w/speech.wav' ...
+read_audio_data: trying to decode with miniaudio
+whisper_vad_init_from_file_with_params: loading VAD model from '/opt/whisper/ggml-silero-v5.1.2.bin'
+whisper_vad_init_with_params: model type: silero-16k
+whisper_vad_init_with_params: model version: 5.1.2
+whisper_vad_init_with_params: n_encoder_layers = 4
+whisper_vad_init_with_params: encoder_in_channels[0] = 129
+whisper_vad_init_with_params: encoder_in_channels[1] = 128
+whisper_vad_init_with_params: encoder_in_channels[2] = 64
+whisper_vad_init_with_params: encoder_in_channels[3] = 64
+whisper_vad_init_with_params: encoder_out_channels[0] = 128
+whisper_vad_init_with_params: encoder_out_channels[1] = 64
+whisper_vad_init_with_params: encoder_out_channels[2] = 64
+whisper_vad_init_with_params: encoder_out_channels[3] = 128
+whisper_vad_init_with_params: lstm_input_size = 128
+whisper_vad_init_with_params: lstm_hidden_size = 128
+whisper_vad_init_with_params: final_conv_in = 128
+whisper_vad_init_with_params: final_conv_out = 1
+whisper_vad_init_with_params:          CPU total size =     0.88 MB
+whisper_vad_init_with_params: model size    =    0.88 MB
+whisper_backend_init_gpu: no GPU found
+whisper_vad_init_context: compute buffer (VAD)   =    1.60 MB
+whisper_vad_detect_speech_no_reset: detecting speech in 129592 samples
+whisper_vad_detect_speech_no_reset: n_chunks: 254
+whisper_vad_detect_speech_no_reset: props size: 254
+whisper_vad_detect_speech_no_reset: chunk_len: 56 < n_window: 512
+whisper_vad_detect_speech_no_reset: vad time = 48.23 ms processing 129592 samples
+whisper_vad_segments_from_probs: detecting speech timestamps using 254 probabilities
+whisper_vad_segments_from_probs: Merged 1 adjacent segments, now have 2 segments
+whisper_vad_segments_from_probs: Final speech segments after filtering: 2
+whisper_vad_segments_from_probs: VAD segment 0: start = 0.03, end = 2.43 (duration: 2.40)
+whisper_vad_segments_from_probs: VAD segment 1: start = 2.75, end = 7.74 (duration: 4.99)

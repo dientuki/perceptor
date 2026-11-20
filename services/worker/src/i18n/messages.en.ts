@@ -10,6 +10,7 @@ import {
   ERROR_ENCODE_MKVMERGE_FAILED,
   ERROR_ENCODE_MOVE_FAILED,
   ERROR_ENCODE_NO_ORIGINAL_AUDIO,
+  ERROR_ENCODE_ORIGINAL_AUDIO_UNDETERMINED,
   ERROR_ENCODE_NO_OUTPUT,
   ERROR_ENCODE_NO_VIDEO_STREAM,
   ERROR_ENCODE_PROBE_FAILED,
@@ -35,6 +36,8 @@ export const messagesEn: Record<string, string> = {
   [ERROR_ENCODE_NO_VIDEO_STREAM]: 'The input file has no video stream',
   [ERROR_ENCODE_NO_ORIGINAL_AUDIO]:
     'The file has no audio track in the original language ({iso3})',
+  [ERROR_ENCODE_ORIGINAL_AUDIO_UNDETERMINED]:
+    'No audio track is tagged with the original language ({iso3}) and the language of the untagged tracks could not be detected',
   [ERROR_ENCODE_PROBE_FAILED]: 'Could not analyse the video file ({filePath}): {detail}',
   [ERROR_ENCODE_FFMPEG_FAILED]: 'ffmpeg exited with code {code}: {stderr}',
   [ERROR_ENCODE_NO_OUTPUT]: 'ffmpeg exited 0 but produced no {path}',

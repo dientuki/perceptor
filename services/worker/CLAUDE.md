@@ -45,7 +45,7 @@ src/scan/parse-episode.ts    SxxEyy over a base file name, null unless exactly o
 src/scan/mark-downloaded.ts  flags each enumerated file isDownloaded against api's torrent-client answer (052)
 src/scan/select-matches.ts   picks which files matter: single-winner or one-per-episode, over InventoriedFile[] (052) — isDownloaded: false is excluded before either rule runs
 src/disc/                Blu-ray disc recognition, playlist choice and MKV assembly (see below, `100`)
-src/encode/              the driver seam (see below) · subtitle-prune (the content-pruning resolver, `102`) · verdict-store (the Redis store every pre-encode verdict goes through, `111`) · audio-variant, audio-variant-detectors, audio-variant-score (the dub-variant resolver, its per-language registry and its pure scoring, `110`)
+src/encode/              the driver seam (see below) · subtitle-prune (the content-pruning resolver, `102`) · verdict-store (the Redis store every pre-encode verdict goes through, `111`) · audio-variant, audio-variant-detectors, audio-variant-score (the dub-variant resolver, its per-language registry and its pure scoring, `110`) · audio-language, audio-language-score (the untagged-audio language resolver and its pure parsers/vote rule, `122`)
 src/ffmpeg/              buildCommand · params · variants · metadata · runner · remux-detection · iso639 · subtitle-content (pure C1–C3 rules, `102`)
 src/paths/build-output-path.ts   composes the final library path, one branch per `libraryLayout` (`072`)
 src/paths/library-layout.ts      `normalizeLibraryLayout`: unknown value warns, defaults to `jellyfin`
@@ -385,6 +385,37 @@ with `(reused)`. A failure logs `[variant] detection failed: …`, stores nothin
 feature were off; only `EncodeCancelledError` propagates. Progress stays at 0 while it runs, and one
 `[variant] … detecting` line marks the start. The window count, weights and margin are provisional
 until the live tuning on the three-film corpus (`110` T012). Fixtures: `fixtures/audio-variant/`.
+
+## Untagged audio is identified before anything else reads it (`122-audio-language-detection`)
+
+`selectAudioStreams` drops a track with no `language` tag (or `und`) before `011`'s original-language
+check, so a release whose only English track is untagged failed with `error.encode.no_original_audio`.
+`resolveAudioLanguages` (`src/encode/audio-language.ts`) runs **first** in `encode.ffmpeg.ts`, right after
+`onProbe` (which still gets the raw probe), and returns `{ metadata, undetermined }`: a deep copy of the
+ffprobe metadata with each decided candidate's `tags.language` set to its ISO 639-2/B code. The driver
+binds that copy to `metadata`, so every later rule (`031`, `099`, `110`, `102`, `buildFfmpegCommand`, the
+output `language=` tag and the track title) sees the track exactly as if it had been tagged. Never pass the
+raw probe onward.
+
+- **Gate.** Only with compression on, when `findAudioCandidates` (`src/ffmpeg/params.ts`, the one
+  definition of "an original-language track is present", shared with `selectAudioStreams`) finds none, and
+  for streams with an empty or `und` tag whose title is not a commentary and whose `disposition.comment` is
+  not 1. A tagged track is never second-guessed.
+- **Attempt 1:** three 30 s windows at 25/50/75 % of the duration, one WAV each (centre channel when 5.1),
+  `whisper-cli -l auto --detect-language`. The verdict line is on **stderr** and silence still prints one
+  (`en`, p about 0.37), so only `VOTE_THRESHOLD` (0.8) rejects non-speech; `MIN_VOTES` (2) windows must
+  agree. **Attempt 2**, only if attempt 1 is not valid: the whole stream to one WAV (about 200 MB for a
+  film), `whisper-vad-speech-segments` (Silero, stdout in centiseconds), the three non-overlapping 30 s
+  windows with the most speech, the same vote. Under 30 s of speech is not valid. No third attempt.
+- **Outcome.** Still no original after re-labelling plus an undecided candidate throws
+  `error.encode.original_audio_undetermined {iso3}`; all decided with none original leaves the later
+  `no_original_audio` throw alone. A detection failure (non-zero exit, unparseable output) is logged and
+  treated as not run: nothing stored, today's behaviour. Only `EncodeCancelledError` propagates.
+- **Verdict.** `111`'s `audio-language` kind, identity file + stream index + `DETECTOR_REVISION`; bump the
+  revision when `VOTE_THRESHOLD`/`MIN_VOTES` change, or stale "undecided" verdicts live 30 days. The
+  constants were measured in `docs/spec/features/122-audio-language-detection/worker/calibration.md`.
+- The ISO 639-1 to 639-2/B table is `iso1ToIso3` in `src/ffmpeg/iso639.ts`; a code it does not map is
+  undecided. Fixtures: `fixtures/audio-language/` (real captured output of both binaries).
 
 ## Blu-ray disc releases are assembled before the encode (`100-bluray-disc-remux`)
 

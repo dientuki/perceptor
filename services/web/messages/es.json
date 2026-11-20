@@ -156,6 +156,7 @@
     "encode": {
       "no_video_stream": "El archivo de entrada no tiene pista de video",
       "no_original_audio": "El archivo no tiene pista de audio en el idioma original ({iso3})",
+      "original_audio_undetermined": "Ninguna pista de audio está marcada en el idioma original ({iso3}) y no se pudo detectar el idioma de las pistas sin marcar",
       "probe_failed": "No se pudo analizar el archivo de video ({filePath}): {detail}",
       "ffmpeg_failed": "ffmpeg terminó con código {code}: {stderr}",
       "no_output": "ffmpeg terminó en 0 pero no generó {path}",
