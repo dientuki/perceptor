@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
 import { getEnvironmentInfo } from "@/actions/environment";
 import { getLanguages } from "@/actions/languages";
+import { getLibraryTagMigration } from "@/actions/library-tags";
 import { getMediaRoots } from "@/actions/media-roots";
 import {
   getMediaServerIndexStatus,
@@ -48,6 +49,7 @@ export default async function SettingsPage() {
     environment,
     subtitleProviders,
     languages,
+    libraryTagMigration,
   ] = await Promise.all([
     getSettings(),
     getMediaRoots(),
@@ -58,6 +60,7 @@ export default async function SettingsPage() {
     getEnvironmentInfo(),
     getSubtitleProviders(),
     getLanguages(),
+    getLibraryTagMigration(),
   ]);
 
   // web's own values, never fetched from api — see 055-environment-panel's
@@ -84,6 +87,7 @@ export default async function SettingsPage() {
               languages={languages}
               uploadEndpoint={uploadEndpoint}
               webDomain={webDomain}
+              libraryTagMigration={libraryTagMigration}
             />
           </div>
         </div>

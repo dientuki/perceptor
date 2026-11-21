@@ -10,6 +10,7 @@ import { TitleStatusModule } from '@/title-status/title-status.module';
 import { DownloadsModule } from '@/downloads/downloads.module';
 import { LanguagesModule } from '@/languages/languages.module';
 import { SubtitleSearchRequestModule } from '@/subtitle-search/subtitle-search-request.module';
+import { LibraryTagsModule } from '@/library-tags/library-tags.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SubtitleSearchRequestModule } from '@/subtitle-search/subtitle-search-r
     DownloadsModule,
     SubtitleSearchRequestModule,
     LanguagesModule,
+    LibraryTagsModule,
   ],
   providers: [ProcessJobsResolver, ProcessJobsService],
 })

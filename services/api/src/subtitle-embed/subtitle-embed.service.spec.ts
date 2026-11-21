@@ -730,6 +730,7 @@ describe('SubtitleEmbedService', () => {
           isForced: true,
           offsetMs: 1200,
           provenance: 'user',
+          provider: 'user',
         },
         {
           fileName: 'Movie (2020).eng.srt',
@@ -739,6 +740,7 @@ describe('SubtitleEmbedService', () => {
           isForced: false,
           offsetMs: 0,
           provenance: 'user',
+          provider: 'user',
         },
       ]);
       expect(queue.addEmbed).toHaveBeenCalledWith({ subtitleEmbedId: 5 });
@@ -1112,6 +1114,9 @@ describe('SubtitleEmbedService', () => {
               offsetMs: 1200,
               isSidecar: true,
               provenance: 'user',
+              provider: 'user',
+              syncScore: null,
+              framerateRatio: null,
             },
           ],
         });
@@ -1186,6 +1191,87 @@ describe('SubtitleEmbedService', () => {
         );
       });
 
+      // This test exists because otherwise a track's provider and sync metrics never reach the worker,
+      // and the PERCEPTOR tag group is written without them with no error anywhere (Spec 123, REQ-9 REQ-10).
+      describe('track facts (Spec 123)', () => {
+        const base = {
+          languageIso3: 'spa',
+          trackTitle: 'Español',
+          isDefault: false,
+          isForced: false,
+          offsetMs: 0,
+        };
+        const facts = async (track: Record<string, unknown>) => {
+          prisma.subtitleEmbed.findUnique.mockResolvedValue(
+            row({ tracks: [{ ...base, ...track }] }),
+          );
+          const { provider, syncScore, framerateRatio } = (
+            await service.details(5)
+          ).tracks[0];
+          return { provider, syncScore, framerateRatio };
+        };
+
+        it('serves the stored provider and sync metrics of a staged track verbatim', async () => {
+          expect(
+            await facts({
+              fileName: '1.srt',
+              stagedPath: '/x/1.srt',
+              provenance: 'Film.es.srt',
+              provider: 'subdivx',
+              syncScore: 87.5,
+              framerateRatio: 1.0004,
+            }),
+          ).toEqual({
+            provider: 'subdivx',
+            syncScore: 87.5,
+            framerateRatio: 1.0004,
+          });
+        });
+
+        it('serves a manually embedded sidecar as `user` with no sync metrics', async () => {
+          expect(
+            await facts({
+              fileName: 'Movie (2020).spa.srt',
+              provenance: 'user',
+              provider: 'user',
+              offsetMs: 1200,
+            }),
+          ).toEqual({ provider: 'user', syncScore: null, framerateRatio: null });
+        });
+
+        it('reads the sync metrics of an auto-offset sidecar from its measurement', async () => {
+          expect(
+            await facts({
+              fileName: 'Movie (2020).spa.srt',
+              provenance: 'user',
+              provider: 'user',
+              autoOffset: true,
+              measurement: {
+                offsetMs: -900,
+                framerateRatio: 0.9996,
+                reference: 'AUDIO',
+                score: 42,
+              },
+            }),
+          ).toEqual({ provider: 'user', syncScore: 42, framerateRatio: 0.9996 });
+        });
+
+        it('falls back for a row written before the feature', async () => {
+          expect(
+            await facts({ fileName: '1.srt', stagedPath: '/x/1.srt' }),
+          ).toEqual({
+            provider: 'opensubtitles',
+            syncScore: null,
+            framerateRatio: null,
+          });
+          expect(await facts({ fileName: 'a.srt' })).toEqual({
+            provider: 'user',
+            syncScore: null,
+            framerateRatio: null,
+          });
+        });
+      });
+
       it('refuses an unknown id', async () => {
         prisma.subtitleEmbed.findUnique.mockResolvedValue(null);
         await expect(service.details(404)).rejects.toThrow('404');
@@ -1238,6 +1324,9 @@ describe('SubtitleEmbedService', () => {
           isForced: false,
           offsetMs: -2000,
           provenance: 'Film.2020.es.srt',
+          provider: 'opensubtitles',
+          syncScore: null,
+          framerateRatio: null,
         },
       ]);
       expect(queue.addEmbed).toHaveBeenCalledWith({ subtitleEmbedId: 5 });

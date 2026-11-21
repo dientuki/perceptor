@@ -27,6 +27,7 @@ import {
   SubdivxCandidateFetchError,
   SubdivxClient,
 } from '@/clients/subdivx/client';
+import { provenanceOf } from './provenance';
 import { ImdbIdsService } from '@/imdb-ids/imdb-ids.service';
 import { SubtitleProvidersService } from '@/subtitle-providers/subtitle-providers.service';
 import { extractSrt } from './archive';
@@ -693,9 +694,11 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
           // Spec 118, REQ-16
           variantTag: attempt.variantTag,
           // Spec 121, REQ-15
-          provenance:
-            attempt.providerFileName ??
-            `${kindOf(attempt).toLowerCase()}:${attempt.providerSubtitleId}`,
+          provenance: provenanceOf(attempt),
+          // Spec 123, REQ-9
+          provider: kindOf(attempt).toLowerCase(),
+          syncScore: attempt.score,
+          framerateRatio: attempt.framerateRatio,
         }));
 
       if (tracks.length === 0) {
@@ -785,7 +788,7 @@ export class SubtitleSearchDriver implements OnApplicationBootstrap {
           }
           bytes = toUtf8(extracted.srt);
           const named = extracted.entryName || downloaded.fileName;
-          provenance = named ? `subdivx:${named}`.slice(0, 500) : null;
+          provenance = named ? named.slice(0, 500) : null;
         } else {
           const downloaded = await this.openSubtitles.download(
             attempt.providerSubtitleId,

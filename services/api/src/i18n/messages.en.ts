@@ -196,6 +196,18 @@ export const MESSAGES_EN: Record<string, string> = {
     'The media server is unavailable.',
   [ERROR_KEYS.SUBTITLE_EMBED_BUSY]:
     'This title has a download, encode or subtitle embed in progress.',
+  [ERROR_KEYS.LIBRARY_TAGS_MIGRATION_RUNNING]:
+    'A tag migration is already running.',
+  [ERROR_KEYS.LIBRARY_TAGS_BUSY]:
+    "This file's tags are being rewritten; try again in a moment.",
+  [ERROR_KEYS.LIBRARY_TAGS_ITEM_NOT_FOUND]:
+    'The migration item does not exist.',
+  [ERROR_KEYS.LIBRARY_TAGS_ITEM_SETTLED]:
+    'The migration item was already settled.',
+  [ERROR_KEYS.LIBRARY_TAGS_FILE_MISSING]: 'The file was not found.',
+  [ERROR_KEYS.LIBRARY_TAGS_WRITE_FAILED]: 'The file could not be written.',
+  [ERROR_KEYS.LIBRARY_TAGS_VERIFY_FAILED]:
+    'The rewritten file does not match the original; it was left unchanged.',
   [ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE]:
     'One of the subtitles could not be read. The original file was not touched.',
   [ERROR_KEYS.SUBTITLE_EMBED_CHARSET_UNDETECTED]:

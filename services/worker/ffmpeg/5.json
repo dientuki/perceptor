@@ -294,7 +294,6 @@
       "probe_score": 100,
       "tags": {
         "title": "Jurassic Park III",
-        "PERCEPTOR_SOURCE": "Jurassic.Park.III.2001.2160p.UHD.BluRay.Remux.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Jurassic.Park.III.2001.2160p.UHD.BluRay.Remux.DV.P7.HDR[Ben The Men].mkv",
         "creation_time": "2026-10-13T04:41:16.000000Z",
         "ENCODER": "Lavf62.12.102"
       }
@@ -336,8 +335,6 @@
     "-1",
     "-metadata",
     "title=Jurassic Park III (2001)",
-    "-metadata",
-    "PERCEPTOR_SOURCE=Jurassic.Park.III.2001.mkv",
     "-y",
     "/output/Jurassic Park III (2001).mkv"
   ]

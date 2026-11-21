@@ -23,6 +23,18 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-11-20 — `123-grouped-provenance-tags` (implementation measured; live pass pending)
+
+`api`, `web`, `worker` and `infra`; one Prisma migration (`20261120120000_123_library_tag_migration`: `library_tag_migrations`, `library_tag_migration_items`). Constitution 1.8.0 (Article XII exception 3). GraphQL contract: `SubtitleEmbedTrack` gains `provider`, `syncScore`, `framerateRatio`; new `LibraryTagMigration*` types, two queries and two mutations. `spec.md` was amended 0.3.0 to 0.3.1 during implementation (`LibraryTagMigrationItemDetails` gained `grainApplied` and `deinterlaced`, which REQ-15 needed and the frozen SDL could not carry).
+
+- `api` typecheck: 0 errors. Full suite (throwaway Redis): 115 suites, 1928 tests, all pass (measured before the amendment; `src/library-tags` re-run after it: 2 suites, 31 tests). Comments gate: PASS (1531 locators).
+- `worker` typecheck: 0 errors. Suite: 71 files, 1003 tests, all pass (re-run by the orchestrator). Comments gate: PASS (560 locators).
+- `web` typecheck: 0 errors. Catalog parity: `OK: en.json and es.json match exactly (899 keys)`. Comments gate: PASS (186 locators). `web` has no test runner, so the migration block is checked by typecheck only.
+- `infra`: `bin/build prod worker` and `bin/build dev worker` succeed; the image carries `mkvpropedit`, `mkvextract` and `mkvmerge` and `PERCEPTOR_VERSION` reads `dev`. The `release.yml` build-arg was checked only as valid YAML.
+- Migration: `prisma migrate diff` against a throwaway MariaDB 11 shows only the two `CREATE TABLE`s and their foreign keys for this change; the remaining `MODIFY ... JSON` lines are the pre-existing MariaDB JSON quirk on earlier migrations.
+- Live findings, 2026-11-20, on the dev library (run 1 migrated 81 files): the first press enqueued nothing, because BullMQ rejects `:` in a job id (`library-tags:<id>` became `library-tags-<id>`; a spec now runs BullMQ's own validator). A migrated file carried `VERSION: dev` (the migration passed its own worker's version; REQ-15 says never). Reading a migrated file showed the encode parameters at tree depth 3, which MediaInfo does not display, and a `subdivx:` prefix on a track `SOURCE`. Spec 0.4.0 flattens the layout to two levels (global `SOURCE`/`VERSION`/`ENCODED_AT`; the rest on the video track), drops the prefix, and adds REQ-20 (convert the 0.3 layout) and AC-7d. `mkvmerge -J` track UIDs are 64-bit and were rounded when parsed as numbers; they are now strings end to end. After 0.4.0: `api` and `worker` typecheck 0 errors; `worker` 71 files, 1021 tests; comments gates pass in all three; the conversion was checked on a generated mkv with the real tools (second pass `unchanged`). Writing the video-track tag makes `mkvmerge` drop that track's own `ENCODER` tag; statistics tags are regenerated.
+- Not measured: the live pass (AC-1 to AC-12, including AC-7b and AC-7c). It needs a dev stack with a real library, an encode, a Subdivx or OpenSubtitles embed and a media server, and the `ptor` stack on this host is a different install. The migration block and its confirmation modal were not opened in a browser.
+
 ## 2026-11-20 — `122-audio-language-detection` (implementation measured; live pass pending a release)
 
 `worker` and `web`, plus the worker `Dockerfile`; no Prisma migration; `api` untouched. GraphQL contract: no schema change; `docs/spec/graphql-contract.md` § "UI internationalization" gained `error.encode.original_audio_undetermined` (`{iso3}`).

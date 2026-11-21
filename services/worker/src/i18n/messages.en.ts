@@ -1,6 +1,11 @@
 // Spec 018, REQ-11
 
 import {
+  ERROR_LIBRARY_TAGS_FILE_MISSING,
+  ERROR_LIBRARY_TAGS_ITEM_NOT_FOUND,
+  ERROR_LIBRARY_TAGS_ITEM_SETTLED,
+  ERROR_LIBRARY_TAGS_VERIFY_FAILED,
+  ERROR_LIBRARY_TAGS_WRITE_FAILED,
   ERROR_ENCODE_DISC_REMUX_FAILED,
   ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS,
   ERROR_ENCODE_DISCARDED,
@@ -72,6 +77,11 @@ export const messagesEn: Record<string, string> = {
     "The subtitle's synchronization could not be validated.",
   [ERROR_SUBTITLE_SEARCH_INTERRUPTED]: 'The search was interrupted.',
   [ERROR_SUBTITLE_SEARCH_PROBE_FAILED]: 'The library file could not be inspected.',
+  [ERROR_LIBRARY_TAGS_FILE_MISSING]: 'The library file no longer exists.',
+  [ERROR_LIBRARY_TAGS_WRITE_FAILED]: 'The library file tags could not be rewritten: {detail}',
+  [ERROR_LIBRARY_TAGS_VERIFY_FAILED]: 'The library file failed verification after the tag rewrite.',
+  [ERROR_LIBRARY_TAGS_ITEM_NOT_FOUND]: 'The tag migration item does not exist.',
+  [ERROR_LIBRARY_TAGS_ITEM_SETTLED]: 'The tag migration item is already settled.',
 };
 
 // Fills `{param}` placeholders in a message template with the corresponding

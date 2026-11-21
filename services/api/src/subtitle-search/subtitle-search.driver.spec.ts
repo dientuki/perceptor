@@ -798,7 +798,12 @@ describe('SubtitleSearchDriver', () => {
       seedSearch();
       await driver.advance(1);
       const rows = attempts.filter((row) => row.searchId === 1);
-      Object.assign(rows[0], { status: 'ACCEPTED', offsetMs: 250 });
+      Object.assign(rows[0], {
+        status: 'ACCEPTED',
+        offsetMs: 250,
+        score: 91.5,
+        framerateRatio: 1.0002,
+      });
       await driver.advance(1);
       await driver.advance(1);
       return rows[0];
@@ -818,6 +823,10 @@ describe('SubtitleSearchDriver', () => {
             stagedPath: accepted.stagedPath,
             offsetMs: 250,
             provenance: 'opensubtitles:a',
+            // Spec 123, REQ-9
+            provider: 'opensubtitles',
+            syncScore: 91.5,
+            framerateRatio: 1.0002,
           },
         ],
         movieFile,
@@ -1555,7 +1564,7 @@ describe('SubtitleSearchDriver', () => {
         .mockResolvedValue({ bytes: SRT, fileName: null });
 
       await driver.advance(1);
-      expect(attempts[0].providerFileName).toBe('subdivx:Movie.es.srt');
+      expect(attempts[0].providerFileName).toBe('Movie.es.srt');
       Object.assign(attempts[0], { status: 'ACCEPTED', offsetMs: 0 });
       await driver.advance(1);
       await driver.advance(1);
@@ -1563,7 +1572,7 @@ describe('SubtitleSearchDriver', () => {
 
       expect(embedStaged).toHaveBeenCalledWith(
         expect.anything(),
-        [expect.objectContaining({ provenance: 'subdivx:Movie.es.srt' })],
+        [expect.objectContaining({ provenance: 'Movie.es.srt' })],
         expect.anything(),
         expect.anything(),
       );

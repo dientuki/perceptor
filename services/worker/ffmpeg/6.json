@@ -344,8 +344,6 @@
     "-1",
     "-metadata",
     "title=A1 (2001)",
-    "-metadata",
-    "PERCEPTOR_SOURCE=A1_t00.mkv",
     "-y",
     "/media/Movies/A1 (2001)/A1 (2001).mkv"
   ]

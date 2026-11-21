@@ -13,6 +13,8 @@ import {
   SUBTITLE_PROBE_JOB,
   LIBRARY_PROBE_QUEUE,
   LIBRARY_PROBE_JOB,
+  LIBRARY_TAGS_QUEUE,
+  LIBRARY_TAGS_JOB,
   SUBTITLE_SYNC_JOB,
   SUBTITLE_EMBED_SYNC_JOB,
 } from './queue/types';
@@ -25,6 +27,7 @@ import type {
   SubtitleEmbedSyncJob,
   SubtitleProbeJob,
   LibraryProbeJob,
+  LibraryTagsJob,
 } from './queue/types';
 import { handleSourceReady } from './jobs/source-ready.job';
 import { handleEncode } from './jobs/encode.job';
@@ -33,6 +36,7 @@ import { handleSubtitleSync } from './jobs/subtitle-sync.job';
 import { handleSubtitleEmbedSync } from './jobs/subtitle-embed-sync.job';
 import { handleSubtitleProbe } from './jobs/subtitle-probe.job';
 import { handleLibraryProbe } from './jobs/library-probe.job';
+import { handleLibraryTags } from './jobs/library-tags.job';
 import { cancelEncode } from './encode/cancellation';
 import { VERDICT_CALL_TIMEOUT_MS, installVerdictStore } from './encode/verdict-store';
 import {
@@ -247,6 +251,23 @@ async function main() {
     },
   );
 
+  // Spec 123, REQ-17
+  const libraryTagsWorker = new Worker<LibraryTagsJob>(
+    LIBRARY_TAGS_QUEUE,
+    async (job) => {
+      if (job.name !== LIBRARY_TAGS_JOB) {
+        console.log(`[worker] unknown job ${job.name}, ignoring`);
+        return;
+      }
+
+      await handleLibraryTags(job);
+    },
+    {
+      connection,
+      concurrency: 1,
+    },
+  );
+
   scanWorker.on('failed', (job, err) => {
     console.error(`[worker] failed ${job?.id}:`, err);
   });
@@ -265,6 +286,10 @@ async function main() {
 
   libraryProbeWorker.on('failed', (job, err) => {
     console.error(`[worker] library probe failed ${job?.id}:`, err);
+  });
+
+  libraryTagsWorker.on('failed', (job, err) => {
+    console.error(`[worker] library tags failed ${job?.id}:`, err);
   });
 
   encodeWorker.on('completed', (job) => {
@@ -312,6 +337,7 @@ async function main() {
     void subtitleSyncWorker.close();
     void subtitleProbeWorker.close();
     void libraryProbeWorker.close();
+    void libraryTagsWorker.close();
     void cancelSubscriber.quit();
     // Spec 111, NFR-3
     installVerdictStore(null);
@@ -331,6 +357,7 @@ async function main() {
   console.log('[worker] listening on queue', SUBTITLE_SYNC_QUEUE);
   console.log('[worker] listening on queue', SUBTITLE_PROBE_QUEUE);
   console.log('[worker] listening on queue', LIBRARY_PROBE_QUEUE);
+  console.log('[worker] listening on queue', LIBRARY_TAGS_QUEUE);
   console.log('[worker] listening on channel', ENCODE_CANCEL_CHANNEL);
 }
 

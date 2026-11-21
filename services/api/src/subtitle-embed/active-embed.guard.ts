@@ -29,6 +29,24 @@ export class ActiveEmbedGuard {
     if (await this.hasActiveEmbed(target)) {
       throw i18nError.conflict(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
     }
+    // Spec 123, REQ-17
+    if (await this.hasClaimedTagItem(target)) {
+      throw i18nError.conflict(ERROR_KEYS.LIBRARY_TAGS_BUSY);
+    }
+  }
+
+  // Spec 123, REQ-17
+  private async hasClaimedTagItem(target: EmbedTarget): Promise<boolean> {
+    const where =
+      'movieId' in target
+        ? { movieId: target.movieId }
+        : 'episodeId' in target
+          ? { episodeId: target.episodeId }
+          : { episode: { seasonId: target.seasonId } };
+    const count = await this.prisma.libraryTagMigrationItem.count({
+      where: { claimedAt: { not: null }, outcome: null, ...where },
+    });
+    return count > 0;
   }
 
   private targetWhere(target: EmbedTarget) {

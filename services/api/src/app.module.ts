@@ -29,6 +29,7 @@ import { SubtitleEmbedModule } from './subtitle-embed/subtitle-embed.module';
 import { SubtitleSearchModule } from './subtitle-search/subtitle-search.module';
 import { SubtitleProvidersModule } from './subtitle-providers/subtitle-providers.module';
 import { LibraryProbeModule } from './library-probe/library-probe.module';
+import { LibraryTagsModule } from './library-tags/library-tags.module';
 import { ShowTrackLanguagesModule } from './show-track-languages/show-track-languages.module';
 import { EnvironmentModule } from './environment/environment.module';
 import { CalendarModule } from './calendar/calendar.module';
@@ -76,6 +77,7 @@ import { formatGraphQLError } from './i18n/graphql-error.formatter';
     SubtitleSearchModule,
     SubtitleProvidersModule,
     LibraryProbeModule,
+    LibraryTagsModule,
     ShowTrackLanguagesModule,
   ],
   providers: [AppResolver, { provide: APP_GUARD, useClass: JwtAuthGuard }],

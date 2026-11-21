@@ -702,9 +702,24 @@ type SubtitleEmbedTrack {
   isSidecar: Boolean!
 
   """
-  Value of the PERCEPTOR_SOURCE track tag (107 REQ-14): the OpenSubtitles file name for a searched track, `user` for a sidecar embedded by hand. Written verbatim after sanitizing; never empty.
+  Value of the PERCEPTOR → SOURCE track tag (107 REQ-14, 123 REQ-9): the OpenSubtitles file name for a searched track, `user` for a sidecar embedded by hand. Written verbatim after sanitizing; never empty.
   """
   provenance: String!
+
+  """
+  Lower-case provider id written verbatim as PERCEPTOR → PROVIDER: opensubtitles, subdivx, …, or `user` for a hand embed (123 REQ-9/10).
+  """
+  provider: String!
+
+  """
+  ffsubsync score of the accepted measurement; null when none ran (manual offset).
+  """
+  syncScore: Float
+
+  """
+  Measured framerate ratio of the accepted measurement; null when none ran.
+  """
+  framerateRatio: Float
 }
 
 type SubtitleEmbedDetails {
@@ -718,6 +733,67 @@ type SubtitleEmbedDetails {
   ISO 639-2 codes whose existing non-forced text subtitle tracks the worker drops in the same remux (119 REQ-5); empty means append only.
   """
   replaceLanguagesIso3: [String!]!
+}
+
+type LibraryTagMigrationFailure {
+  """Host-side path, never the container path."""
+  path: String!
+
+  """i18n key."""
+  reasonKey: String!
+}
+
+type LibraryTagMigration {
+  id: Int!
+  status: LibraryTagMigrationStatus!
+  total: Int!
+  processed: Int!
+  migrated: Int!
+  unchanged: Int!
+  busy: Int!
+  missing: Int!
+  failed: Int!
+  failures: [LibraryTagMigrationFailure!]!
+  startedAt: DateTime!
+  finishedAt: DateTime
+}
+
+enum LibraryTagMigrationStatus {
+  RUNNING
+  COMPLETED
+}
+
+type LibraryTagMigrationTrack {
+  source: String!
+  provider: String
+  syncScore: Float
+  framerateRatio: Float
+  embeddedAt: DateTime
+}
+
+type LibraryTagMigrationItemDetails {
+  id: Int!
+
+  """Absolute container path of the library .mkv."""
+  filePath: String!
+
+  """
+  Database-derived children for the global group (REQ-14/15); every field nullable, null = omit.
+  """
+  encodedAt: DateTime
+  videoCodec: String
+  crf: Int
+  preset: Int
+  contentKind: String
+  resolutionCeiling: String
+  outputResolution: String
+  grainApplied: Boolean
+  deinterlaced: Boolean
+  dubTrimSeconds: Float
+  streamEndTrimSeconds: Float
+
+  """Track children keyed by the track's existing PERCEPTOR_SOURCE value."""
+  tracks: [LibraryTagMigrationTrack!]!
 }
 
 type MediaSearchResult {
@@ -1002,6 +1078,16 @@ type Query {
   Service-only (worker). Refused with error.subtitleEmbed.sync_not_found unless the embed is SYNCING and fileName is one of its automatic tracks.
   """
   subtitleEmbedSyncDetails(subtitleEmbedId: Int!, fileName: String!): SubtitleEmbedSyncDetails!
+
+  """
+  Latest migration, running or finished; null if none ever ran. Admin only.
+  """
+  libraryTagMigration: LibraryTagMigration
+
+  """
+  Worker only (service token). Claims the item: from this call until its outcome is reported, the title reads busy (REQ-17).
+  """
+  libraryTagMigrationItem(id: Int!): LibraryTagMigrationItemDetails!
   mediaCapabilities: MediaCapabilities!
   searchMedia(query: String!, type: String!): [MediaSearchResult!]!
   searchAllMedia(query: String!): [MediaSearchResult!]!
@@ -1280,6 +1366,14 @@ type Mutation {
   Service-only (worker). Safe to receive more than once; false when the embed is no longer SYNCING.
   """
   subtitleEmbedSyncFailed(subtitleEmbedId: Int!, fileName: String!, errorKey: String!): Boolean!
+
+  """Admin only. Starts a walk over every known library file (REQ-12/13)."""
+  startLibraryTagMigration: LibraryTagMigration!
+
+  """
+  Worker only. Idempotent: a repeated report for the same item is acknowledged and ignored.
+  """
+  libraryTagMigrationItemFinished(id: Int!, outcome: LibraryTagOutcome!, reasonKey: String): Boolean!
   addMedia(tmdbId: Int!, type: String!): MediaRef!
 
   """The worker reports one raw ffprobe payload before an encode starts"""
@@ -1464,6 +1558,14 @@ input SubtitleEmbedInput {
 enum SubtitleSyncReference {
   SUBTITLE
   AUDIO
+}
+
+enum LibraryTagOutcome {
+  MIGRATED
+  UNCHANGED
+  BUSY
+  MISSING
+  FAILED
 }
 
 input SubtitleProviderInput {

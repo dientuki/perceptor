@@ -42,6 +42,9 @@ RUN apk add --no-cache python3 py3-pip py3-numpy && \
 RUN apk add --no-cache libstdc++ libgomp
 COPY --from=whisper /out/ /opt/whisper/
 ENV PATH="/opt/whisper:${PATH}"
+# Spec 123, REQ-4: the release this image was built as; a source build reads dev.
+ARG PERCEPTOR_VERSION=dev
+ENV PERCEPTOR_VERSION=$PERCEPTOR_VERSION
 WORKDIR /app
 
 # ==========================================

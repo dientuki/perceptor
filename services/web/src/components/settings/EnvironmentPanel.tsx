@@ -3,13 +3,16 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import Label from "@/components/form/Label";
+import LibraryTagMigrationBlock from "@/components/settings/LibraryTagMigrationBlock";
 import Badge from "@/components/ui/badge/Badge";
 import type { EnvironmentInfo } from "@/types/environment";
+import type { LibraryTagMigration } from "@/types/library-tags";
 
 interface EnvironmentPanelProps {
   environment: EnvironmentInfo;
   uploadEndpoint: string | null;
   webDomain: string | null;
+  libraryTagMigration: LibraryTagMigration | null;
 }
 
 const EM_DASH = "—";
@@ -28,6 +31,7 @@ export default function EnvironmentPanel({
   environment,
   uploadEndpoint,
   webDomain,
+  libraryTagMigration,
 }: EnvironmentPanelProps) {
   const t = useTranslations("settings.environment");
   const { useTraefik, useHttps, domain, endpoints, expectedUploadEndpoint } =
@@ -183,6 +187,9 @@ export default function EnvironmentPanel({
           </p>
         </div>
       )}
+
+      {/* Spec 123, REQ-12 */}
+      <LibraryTagMigrationBlock migration={libraryTagMigration} />
     </div>
   );
 }

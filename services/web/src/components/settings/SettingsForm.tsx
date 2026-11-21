@@ -27,6 +27,7 @@ import Button from "@/components/ui/button/Button";
 import TabNav, { type TabNavItem } from "@/components/ui/tabs/TabNav";
 import type { EnvironmentInfo } from "@/types/environment";
 import type { Language } from "@/types/languages";
+import type { LibraryTagMigration } from "@/types/library-tags";
 import type { MediaRoot } from "@/types/media-roots";
 import type {
   MediaServerIndexStatus,
@@ -49,6 +50,7 @@ interface SettingsFormProps {
   languages: Language[];
   uploadEndpoint: string | null;
   webDomain: string | null;
+  libraryTagMigration: LibraryTagMigration | null;
 }
 
 const TABS = [
@@ -76,6 +78,7 @@ export default function SettingsForm({
   languages,
   uploadEndpoint,
   webDomain,
+  libraryTagMigration,
 }: SettingsFormProps) {
   const t = useTranslations("settings.form");
   const tTabs = useTranslations("settings.tabs");
@@ -149,6 +152,7 @@ export default function SettingsForm({
           environment={environment}
           uploadEndpoint={uploadEndpoint}
           webDomain={webDomain}
+          libraryTagMigration={libraryTagMigration}
         />
       </div>
 

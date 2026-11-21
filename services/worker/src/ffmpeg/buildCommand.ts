@@ -69,8 +69,6 @@ export function buildFfmpegCommand(
     "-1",
     "-metadata",
     `title=${details.containerTitle}`,
-    "-metadata",
-    `PERCEPTOR_SOURCE=${details.sourceTag}`,
   ];
 
   // Spec 098, REQ-8

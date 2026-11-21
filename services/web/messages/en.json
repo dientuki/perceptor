@@ -239,6 +239,13 @@
       "language_unsupported": "{provider} has no subtitles in {languageTag}.",
       "language_invalid": "That language entry is not valid: the provider must be configured and not be the default.",
       "language_duplicate": "There are two entries for the same language."
+    },
+    "libraryTags": {
+      "migration_running": "A tag migration is already in progress.",
+      "busy": "This file's tags are being rewritten; try again in a moment.",
+      "file_missing": "The file was not found.",
+      "write_failed": "The file could not be written.",
+      "verify_failed": "The rewritten file does not match the original; it was left unchanged."
     }
   },
   "landing": {
@@ -782,7 +789,31 @@
       "hostGuidanceDescription": "The upload endpoint must carry an address the browser itself can reach — the host's own LAN address, never \"localhost\", since the browser opening this app may be a different machine than the one running the stack. No container can determine that address on its own, so PUBLIC_UPLOAD_URL is set by hand in .env.",
       "installableLabel": "Installable as an app",
       "installableAvailable": "Available",
-      "installableUnavailable": "Unavailable — requires HTTPS"
+      "installableUnavailable": "Unavailable — requires HTTPS",
+      "libraryTags": {
+        "label": "Library tags",
+        "description": "Rewrites the provenance tags of every file already in the library into the grouped format. Files already migrated are left untouched.",
+        "start": "Migrate library tags",
+        "confirmTitle": "Migrate library tags",
+        "confirmMessage": "Every file in the library will be rewritten in place. This can take a while; while a file is rewritten its title cannot be downloaded or embedded.",
+        "confirm": "Migrate",
+        "starting": "Starting…",
+        "cancel": "Cancel",
+        "running": "Migration in progress",
+        "progress": "{processed} / {total} files",
+        "refresh": "Refresh",
+        "startedAt": "Started: {date}",
+        "finishedAt": "Finished: {date}",
+        "counts": {
+          "migrated": "Migrated: {count}",
+          "unchanged": "Unchanged: {count}",
+          "busy": "Busy: {count}",
+          "missing": "Missing: {count}",
+          "failed": "Failed: {count}"
+        },
+        "failuresTitle": "Files with problems",
+        "failureGeneric": "The file could not be migrated."
+      }
     },
     "scheduling": {
       "timezoneNote": "Schedules are evaluated in the API container's timezone (UTC unless the host sets TZ). \"03:00\" refers to that timezone, not yours.",

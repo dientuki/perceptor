@@ -239,6 +239,13 @@
       "language_unsupported": "{provider} no tiene subtítulos en {languageTag}.",
       "language_invalid": "Ese idioma no es válido: el proveedor debe estar configurado y no ser el predeterminado.",
       "language_duplicate": "Hay dos entradas para el mismo idioma."
+    },
+    "libraryTags": {
+      "migration_running": "Ya hay una migración de etiquetas en curso.",
+      "busy": "Se están reescribiendo las etiquetas de este archivo; probá de nuevo en un momento.",
+      "file_missing": "No se encontró el archivo.",
+      "write_failed": "No se pudo escribir el archivo.",
+      "verify_failed": "El archivo reescrito no coincide con el original; se dejó sin cambios."
     }
   },
   "landing": {
@@ -782,7 +789,31 @@
       "hostGuidanceDescription": "El endpoint de subida tiene que llevar una dirección a la que el navegador pueda llegar — la dirección LAN del host, nunca \"localhost\", ya que el navegador que abre esta app puede ser otra máquina distinta a la que corre el stack. Ningún contenedor puede determinar esa dirección por sí solo, así que PUBLIC_UPLOAD_URL se configura a mano en el .env.",
       "installableLabel": "Instalable como app",
       "installableAvailable": "Disponible",
-      "installableUnavailable": "No disponible — requiere HTTPS"
+      "installableUnavailable": "No disponible — requiere HTTPS",
+      "libraryTags": {
+        "label": "Etiquetas de la biblioteca",
+        "description": "Reescribe las etiquetas de procedencia de todos los archivos que ya están en la biblioteca al formato agrupado. Los archivos ya migrados no se tocan.",
+        "start": "Migrar etiquetas de la biblioteca",
+        "confirmTitle": "Migrar etiquetas de la biblioteca",
+        "confirmMessage": "Se va a reescribir cada archivo de la biblioteca. Puede tardar un rato; mientras se reescribe un archivo, su título no admite descargas ni incrustaciones.",
+        "confirm": "Migrar",
+        "starting": "Iniciando…",
+        "cancel": "Cancelar",
+        "running": "Migración en curso",
+        "progress": "{processed} / {total} archivos",
+        "refresh": "Actualizar",
+        "startedAt": "Inicio: {date}",
+        "finishedAt": "Fin: {date}",
+        "counts": {
+          "migrated": "Migrados: {count}",
+          "unchanged": "Sin cambios: {count}",
+          "busy": "Ocupados: {count}",
+          "missing": "No encontrados: {count}",
+          "failed": "Fallidos: {count}"
+        },
+        "failuresTitle": "Archivos con problemas",
+        "failureGeneric": "No se pudo migrar el archivo."
+      }
     },
     "general": {
       "uiLocaleLabel": "Idioma de la aplicación",

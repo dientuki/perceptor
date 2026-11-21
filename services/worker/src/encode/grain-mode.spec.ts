@@ -24,7 +24,7 @@ import {
 } from './grain-mode';
 import { probeGrainSaving } from './grain-probe';
 import type { EncodeInput } from './types';
-import { installVerdictStore, type VerdictRedis } from './verdict-store';
+import { installVerdictStore, type VerdictRedis, writeVerdict } from './verdict-store';
 
 vi.mock('./grain-gate', () => ({ scoreGrainGate: vi.fn() }));
 vi.mock('./grain-probe', () => ({
@@ -88,6 +88,10 @@ function fakeStore() {
   return { data, redis };
 }
 
+async function installedWrite(mediaSourceId: number, value: unknown) {
+  await writeVerdict('grain', { mediaSourceId }, value);
+}
+
 describe('resolveFilmGrain', () => {
   let store: ReturnType<typeof fakeStore>;
   const gateMock = vi.mocked(scoreGrainGate);
@@ -120,32 +124,34 @@ describe('resolveFilmGrain', () => {
     logSpy.mockRestore();
   });
 
-  it('returns true for ON without calling gate or probe', async () => {
-    await expect(resolveFilmGrain(details({ grainMode: 'ON' }), 'a.mkv', {}, signal)).resolves.toBe(true);
+  it('returns true decided by title for ON without calling gate or probe', async () => {
+    await expect(resolveFilmGrain(details({ grainMode: 'ON' }), 'a.mkv', {}, signal)).resolves.toEqual({ filmGrain: true, decidedBy: 'title' });
     expect(gateMock).not.toHaveBeenCalled();
     expect(probeMock).not.toHaveBeenCalled();
   });
 
-  it('returns false for OFF without calling gate or probe', async () => {
-    await expect(resolveFilmGrain(details({ grainMode: 'OFF' }), 'a.mkv', {}, signal)).resolves.toBe(false);
+  it('returns false with no stage for OFF without calling gate or probe', async () => {
+    const result = await resolveFilmGrain(details({ grainMode: 'OFF' }), 'a.mkv', {}, signal);
+    expect(result).toEqual({ filmGrain: false });
+    expect(result.decidedBy).toBeUndefined();
     expect(gateMock).not.toHaveBeenCalled();
     expect(probeMock).not.toHaveBeenCalled();
   });
 
   it('never calls the probe when the gate refuses', async () => {
     gateMock.mockReturnValue({ score: 0, passed: false, reasons: [] });
-    await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).resolves.toBe(false);
+    await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).resolves.toEqual({ filmGrain: false, decidedBy: 'gate' });
     expect(probeMock).not.toHaveBeenCalled();
   });
 
   it('never calls the probe for a short even when the gate passes', async () => {
-    await expect(resolveFilmGrain(details({ isShort: true }), 'a.mkv', {}, signal)).resolves.toBe(false);
+    await expect(resolveFilmGrain(details({ isShort: true }), 'a.mkv', {}, signal)).resolves.toEqual({ filmGrain: false, decidedBy: 'short' });
     expect(gateMock).toHaveBeenCalledTimes(1);
     expect(probeMock).not.toHaveBeenCalled();
   });
 
   it('returns the probe verdict and logs a probe-start line and one result line', async () => {
-    await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).resolves.toBe(true);
+    await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).resolves.toEqual({ filmGrain: true, decidedBy: 'probe' });
     expect(probeMock).toHaveBeenCalledTimes(1);
     const lines = logSpy.mock.calls.map((c) => String(c[0]));
     expect(lines.filter((l) => l.includes('probe starting'))).toHaveLength(1);
@@ -154,7 +160,7 @@ describe('resolveFilmGrain', () => {
 
   it('probes once for two calls with the same mediaSourceId', async () => {
     await resolveFilmGrain(details({ mediaSourceId: 7 }), 'a.mkv', {}, signal);
-    await expect(resolveFilmGrain(details({ mediaSourceId: 7 }), 'a.mkv', {}, signal)).resolves.toBe(true);
+    await expect(resolveFilmGrain(details({ mediaSourceId: 7 }), 'a.mkv', {}, signal)).resolves.toEqual({ filmGrain: true, decidedBy: 'probe' });
     expect(probeMock).toHaveBeenCalledTimes(1);
   });
 
@@ -163,7 +169,7 @@ describe('resolveFilmGrain', () => {
     gateMock.mockClear();
     probeMock.mockClear();
     logSpy.mockClear();
-    await expect(resolveFilmGrain(details({ mediaSourceId: 9 }), 'a.mkv', {}, signal)).resolves.toBe(true);
+    await expect(resolveFilmGrain(details({ mediaSourceId: 9 }), 'a.mkv', {}, signal)).resolves.toEqual({ filmGrain: true, decidedBy: 'probe' });
     expect(gateMock).not.toHaveBeenCalled();
     expect(probeMock).not.toHaveBeenCalled();
     expect(logSpy.mock.calls.map((c) => String(c[0])).some((l) => l.includes('stage=cache') && l.includes('(reused)'))).toBe(true);
@@ -183,13 +189,34 @@ describe('resolveFilmGrain', () => {
 
   it('returns false with one warning when the probe throws, and does not cache it', async () => {
     probeMock.mockRejectedValueOnce(new Error('boom'));
-    await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).resolves.toBe(false);
+    const failed = await resolveFilmGrain(details(), 'a.mkv', {}, signal);
+    expect(failed).toEqual({ filmGrain: false });
+    expect(failed.decidedBy).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls[0]?.[0]).toContain('boom');
     expect(store.data.size).toBe(0);
 
-    await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).resolves.toBe(true);
+    await expect(resolveFilmGrain(details(), 'a.mkv', {}, signal)).resolves.toEqual({ filmGrain: true, decidedBy: 'probe' });
     expect(probeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses the stored stage for every cached branch', async () => {
+    gateMock.mockReturnValue({ score: 0, passed: false, reasons: [] });
+    await resolveFilmGrain(details({ mediaSourceId: 21 }), 'a.mkv', {}, signal);
+    await expect(resolveFilmGrain(details({ mediaSourceId: 21 }), 'a.mkv', {}, signal)).resolves.toEqual({ filmGrain: false, decidedBy: 'gate' });
+
+    gateMock.mockReturnValue(passingGate);
+    await resolveFilmGrain(details({ mediaSourceId: 22, isShort: true }), 'a.mkv', {}, signal);
+    await expect(resolveFilmGrain(details({ mediaSourceId: 22, isShort: true }), 'a.mkv', {}, signal)).resolves.toEqual({ filmGrain: false, decidedBy: 'short' });
+  });
+
+  it.each([true, false])('reads an old boolean cache entry (%s) with no stage', async (old) => {
+    await installedWrite(31, old);
+    const result = await resolveFilmGrain(details({ mediaSourceId: 31 }), 'a.mkv', {}, signal);
+    expect(result).toEqual({ filmGrain: old });
+    expect(result.decidedBy).toBeUndefined();
+    expect(gateMock).not.toHaveBeenCalled();
+    expect(probeMock).not.toHaveBeenCalled();
   });
 
   it('propagates EncodeCancelledError without a warning and does not cache it', async () => {

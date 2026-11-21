@@ -420,6 +420,7 @@ describe('AttachSourceService — refused while a subtitle embed is active (Spec
       update: jest.Mock;
     };
     subtitleEmbed: { count: jest.Mock };
+    libraryTagMigrationItem: { count: jest.Mock };
   };
   let qbittorrent: { add: jest.Mock; info: jest.Mock; start: jest.Mock };
   let downloads: {
@@ -436,6 +437,7 @@ describe('AttachSourceService — refused while a subtitle embed is active (Spec
         update: jest.fn(),
       },
       subtitleEmbed: { count: jest.fn().mockResolvedValue(1) },
+      libraryTagMigrationItem: { count: jest.fn().mockResolvedValue(0) },
     };
     qbittorrent = { add: jest.fn(), info: jest.fn(), start: jest.fn() };
     downloads = {

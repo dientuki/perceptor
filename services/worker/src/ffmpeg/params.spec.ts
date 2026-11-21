@@ -13,7 +13,7 @@
 import { NO_AUDIO_VARIANTS } from './variants';
 import { describe, expect, it, vi } from 'vitest';
 import type { SubtitleFormat } from '../encode/subtitle-formats';
-import { getAudioParams, getSubtitleParams, getVideoParams, selectAudioStreams, selectSubtitleStreams } from './params';
+import { getAudioParams, getSubtitleParams, getVideoParams, videoEncodeFacts, selectAudioStreams, selectSubtitleStreams } from './params';
 import { detectWithTags } from './variants';
 
 function audioStream(overrides: Record<string, any>) {
@@ -1132,5 +1132,45 @@ describe('getSubtitleParams — detected subtitle variants (Spec 118, REQ-8)', (
 
   it('still hands both streams to the default selection, so content rules see them', () => {
     expect(selectSubtitleStreams(streams, ['srt'], ['spa'], ['es-419']).selected.map((s) => s.index)).toEqual([4, 5]);
+  });
+});
+
+describe('videoEncodeFacts', () => {
+  it('reports copy with null crf and preset for an AV1 source that fits', () => {
+    expect(videoEncodeFacts(videoStream({ codec_name: 'av1', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p'))
+      .toEqual({ videoCodec: 'copy', crf: null, preset: null });
+  });
+
+  it('reports copy with null crf and preset for an unrecognized codec', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(videoEncodeFacts(videoStream({ codec_name: 'mpeg4', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p'))
+      .toEqual({ videoCodec: 'copy', crf: null, preset: null });
+  });
+
+  it('reports av1 with CRF 24 and preset 4 for a web encode', () => {
+    expect(videoEncodeFacts(videoStream({ codec_name: 'h264', width: 1920, height: 1080 }), 'LIVE_ACTION', '1080p', 'web'))
+      .toEqual({ videoCodec: 'av1', crf: 24, preset: 4 });
+  });
+
+  it('reports av1 with CRF 22 and preset 4 for a remux encode', () => {
+    expect(videoEncodeFacts(videoStream({ codec_name: 'hevc', width: 3840, height: 2160 }), 'LIVE_ACTION', '1080p', 'remux'))
+      .toEqual({ videoCodec: 'av1', crf: 22, preset: 4 });
+  });
+
+  it('reports av1 for an AV1 source above the box', () => {
+    expect(videoEncodeFacts(videoStream({ codec_name: 'av1', width: 3840, height: 2160 }), 'LIVE_ACTION', '1080p').videoCodec)
+      .toBe('av1');
+  });
+
+  it('matches the argv getVideoParams writes', () => {
+    const stream = videoStream({ codec_name: 'h264', width: 1920, height: 1080 });
+    const args = getVideoParams(stream, 'ANIME', '1080p', 'remux');
+    const facts = videoEncodeFacts(stream, 'ANIME', '1080p', 'remux');
+    expect(args[args.indexOf('-crf') + 1]).toBe(String(facts.crf));
+    expect(args[args.indexOf('-preset') + 1]).toBe(String(facts.preset));
+  });
+
+  it('throws without a video stream', () => {
+    expect(() => videoEncodeFacts(undefined, 'LIVE_ACTION', '1080p')).toThrow();
   });
 });

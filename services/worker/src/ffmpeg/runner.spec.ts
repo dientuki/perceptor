@@ -16,7 +16,7 @@ vi.mock('node:fs/promises', () => ({
   stat: vi.fn().mockResolvedValue({}),
 }));
 
-import { runFfmpeg } from './runner';
+import { buildMergeArgs, parseFirstVideoTrackId, runFfmpeg } from './runner';
 
 class FakeChild extends EventEmitter {
   killed = false;
@@ -85,5 +85,25 @@ describe('runFfmpeg — shutdown signal handling', () => {
     process.emit('SIGINT' as any);
 
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+});
+
+// Spec 123, REQ-4 REQ-5
+describe('mkvmerge tag arguments', () => {
+  it('writes global and video tags with the video track id', () => {
+    expect(buildMergeArgs('/o.part', '/w.mkv', '/g.xml', { tid: 2, path: '/v.xml' })).toEqual([
+      '-o', '/o.part', '--no-global-tags', '--global-tags', '/g.xml', '--tags', '2:/v.xml', '/w.mkv',
+    ]);
+  });
+
+  it('omits each part independently', () => {
+    expect(buildMergeArgs('/o.part', '/w.mkv', null, null)).toEqual(['-o', '/o.part', '--no-global-tags', '/w.mkv']);
+    expect(buildMergeArgs('/o.part', '/w.mkv', null, { tid: 0, path: '/v.xml' })).toContain('0:/v.xml');
+  });
+
+  it('picks the first video track, not track 0', () => {
+    const json = JSON.stringify({ tracks: [{ id: 0, type: 'audio' }, { id: 1, type: 'video' }, { id: 2, type: 'video' }] });
+    expect(parseFirstVideoTrackId(json)).toBe(1);
+    expect(parseFirstVideoTrackId(JSON.stringify({ tracks: [{ id: 0, type: 'audio' }] }))).toBeNull();
   });
 });

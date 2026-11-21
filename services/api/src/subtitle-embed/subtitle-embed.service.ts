@@ -5,6 +5,7 @@ import { stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { PrismaService } from '@/prisma/prisma.service';
 import { MediaServerService } from '@/media-server/media-server.service';
+import { notifyMediaServerModified } from '@/media-server/notify-modified';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
 import { SubtitleEmbedQueueService } from '@/queue/subtitle-embed-queue.service';
@@ -61,6 +62,10 @@ export type StagedTrackInput = {
   provenance: string;
   // Spec 118, REQ-16
   variantTag?: string | null;
+  // Spec 123, REQ-9
+  provider?: string;
+  syncScore?: number | null;
+  framerateRatio?: number | null;
 };
 
 // Spec 107, REQ-14
@@ -85,6 +90,11 @@ type StoredTrack = {
   provenance?: string;
   // Spec 113, REQ-2
   autoOffset?: boolean;
+  // Spec 123, REQ-9
+  provider?: string;
+  syncScore?: number | null;
+  framerateRatio?: number | null;
+  measurement?: { score?: number; framerateRatio?: number };
 };
 
 function toExternalSubtitle(
@@ -343,6 +353,8 @@ export class SubtitleEmbedService {
       isForced: listedByName.get(subtitle.fileName)!.isForced,
       offsetMs: subtitle.autoOffset ? 0 : subtitle.offsetMs,
       provenance: USER_PROVENANCE,
+      // Spec 123, REQ-9
+      provider: USER_PROVENANCE,
       ...(subtitle.autoOffset ? { autoOffset: true } : {}),
     }));
 
@@ -397,6 +409,10 @@ export class SubtitleEmbedService {
       isForced: false,
       offsetMs: track.offsetMs,
       provenance: track.provenance,
+      // Spec 123, REQ-9
+      provider: track.provider ?? STAGED_PROVENANCE,
+      syncScore: track.syncScore ?? null,
+      framerateRatio: track.framerateRatio ?? null,
     }));
 
     return this.queueEmbed(ref, mkvPath, tracks, replaceLanguages);
@@ -833,32 +849,13 @@ export class SubtitleEmbedService {
   }
 
   // Spec 101, REQ-12; Spec 107, REQ-4
-  private async notifyMediaServer(containerFilePath: string): Promise<boolean> {
-    try {
-      const client = await this.mediaServer.createClient();
-      if (!client) return true;
-      if (!client.modifiedMedia) {
-        this.logger.warn(
-          'Media server refresh skipped: the client cannot be notified',
-        );
-        return true;
-      }
-      const hostPath = this.mediaRoots.containerToHostPath(
-        'library',
-        containerFilePath,
-      );
-      if (!hostPath) {
-        this.logger.warn(
-          `Media server refresh skipped: ${containerFilePath} has no host path`,
-        );
-        return false;
-      }
-      await client.modifiedMedia(hostPath);
-      return true;
-    } catch (error) {
-      this.logger.warn(`Media server refresh failed: ${String(error)}`);
-      return false;
-    }
+  private notifyMediaServer(containerFilePath: string): Promise<boolean> {
+    return notifyMediaServerModified(
+      this.mediaServer,
+      this.mediaRoots,
+      this.logger,
+      containerFilePath,
+    );
   }
 
   // Spec 101, REQ-14
@@ -878,6 +875,13 @@ export class SubtitleEmbedService {
       provenance:
         track.provenance ??
         (track.stagedPath == null ? USER_PROVENANCE : STAGED_PROVENANCE),
+      // Spec 123, REQ-9 REQ-10
+      provider:
+        track.provider ??
+        (track.stagedPath == null ? USER_PROVENANCE : STAGED_PROVENANCE),
+      syncScore: track.syncScore ?? track.measurement?.score ?? null,
+      framerateRatio:
+        track.framerateRatio ?? track.measurement?.framerateRatio ?? null,
     }));
 
     // Spec 119, REQ-5

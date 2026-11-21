@@ -1,8 +1,8 @@
 ---
 title: Perceptor Constitution
-version: 1.7.0
+version: 1.8.0
 ratified_at: 2026-08-09
-last_amended: 2026-10-26
+last_amended: 2026-11-20
 ---
 
 # Perceptor Constitution
@@ -240,6 +240,22 @@ The second exception applies only to the administrator's request. An embed start
 search, however it was requested, reads its subtitles from the downloads root, so it has no sidecar
 to delete and removes nothing under the destinations root.
 
+A third, also narrow, and the only write that changes a library file without replacing it:
+
+3. **A library `.mkv` may have its Matroska `Tags` element edited in place**
+   (`123-grouped-provenance-tags`), only through the library tag migration an administrator starts
+   by hand from Settings → Environment. The edit (`mkvpropedit`) rewrites Perceptor's own tags and
+   nothing else. Every stream, every track header and every other element stays as it was. There
+   is no copy, no `.part` file and no `rename`, and nothing is deleted.
+
+   This exception accepts a risk the other two do not: the edit is **not atomic**. A crash in the
+   middle of the tag write can damage that one file's header, and there is no copy to fall back to.
+   The worker narrows the risk. Before writing anything, it checks that the file is readable,
+   writable and probeable. After the edit, it probes the file again and compares streams, codecs,
+   durations and track languages/titles with the first probe. A file that fails a check before the
+   edit is left untouched. A mismatch after the edit is reported and logged with its path for the
+   administrator to inspect, and is never "fixed" by a further write.
+
 Everything else in the library stays write-only: no other file, folder or sidecar is ever removed.
 
 This is why every deletion path resolves its target against a media root before touching disk
@@ -265,6 +281,13 @@ tracks) is called only from `services/api/src/subtitle-search/`, and a search is
 mutations. `grep -rn "embedStaged\|requestFor" services/api/src --include=*.ts` shows no other
 caller outside tests.
 
+The third exception has two checks:
+
+- `grep -rn "mkvpropedit" services/*/src --include=*.ts` finds spawns only in the worker's library
+  tag migration job, and none outside tests;
+- the only `api` operation that creates migration work, `startLibraryTagMigration`, is guarded by
+  `AdminGuard`.
+
 
 ---
 
@@ -280,3 +303,4 @@ caller outside tests.
 | 1.5.0 | 2026-10-23 | Article XII gains two narrow exceptions, ratified alongside `101-jellyfin-subtitle-embed`, both only at an administrator's explicit request. First, a library `.mkv` may be replaced, by one atomic rename, with its verified remux that appends subtitle tracks. Second, after that rename, the worker deletes exactly the sidecar `.srt` files the remux embedded: guarded paths in the same directory, never on failure. The Check line now names both sites and states that `api` holds no removal under the destinations root. The article's core — no feature, cleanup path or user action deletes a finished file, a title's folder or anything else in the library — is unchanged. |
 | 1.6.0 | 2026-10-24 | Article XII's first `101` exception (replacing a library `.mkv` with its verified remux) now also applies when `103-subtitle-search` embeds the subtitles it validated for a title an owner opted into, not only at an administrator's request. The second exception (deleting embedded sidecars) stays administrator-only, since `103` stages its subtitles in the downloads root. The scratch-file exception and the Check line now name every scratch file the worker creates beside a destination: `passthrough.ts`'s `.part.<ext>` and the embed's `.perceptor-probe`, both already in the code and flagged by the audit of that date as uncovered by the Check's wording. |
 | 1.7.0 | 2026-10-26 | Article XII's first exception (replacing a library `.mkv` with its verified remux) now also applies when a `103` search that an owner requested by hand through `106-manual-subtitle-search` embeds what it validated, even with that owner's `subtitleSearch` preference off: the press is consent for that one film or episode. The second exception (deleting embedded sidecars) stays administrator-only, since such a search stages in the downloads root like any `103` search. The article gains a Check that the staged-track embed and search creation have no callers beyond a delivery and `106`'s mutations. |
+| 1.8.0 | 2026-11-20 | Article XII gains a third exception, ratified alongside `123-grouped-provenance-tags`: an administrator-started library tag migration may edit only the Matroska `Tags` element of a library `.mkv` in place (`mkvpropedit`), with no copy, no `.part`, no `rename` and nothing deleted. Unlike the first exception, this write is not atomic. The article states that risk and what bounds it: the worker checks the file before writing, re-probes it after, and never retries a mismatch with a further write. The Check gains two lines: `mkvpropedit` is spawned only from the migration job, and `startLibraryTagMigration` is admin-guarded. Articles I–XI and the article's core (nothing in the library is ever deleted) are unchanged. |

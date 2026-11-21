@@ -13,6 +13,8 @@ import {
 
 type quality = 'remux' | 'web';
 
+const VIDEO_PRESET = 4;
+
 function getQuality(contentKind: ContentKind, quality: quality) {
   if (quality === "remux") return "22";
 
@@ -68,7 +70,7 @@ function buildAv1EncodeArgs(
   args.push(
     "-c:v", "libsvtav1",
     "-crf", getQuality(contentKind, quality),
-    "-preset", "4",
+    "-preset", String(VIDEO_PRESET),
     "-pix_fmt", "yuv420p10le",
   );
 
@@ -279,12 +281,9 @@ function copyVideoArgs(): string[] {
   ];
 }
 
-export function getVideoParams(
+function decideVideo(
   videoStream: any,
-  contentKind: ContentKind,
   compressionResolution: CompressionResolution,
-  quality: quality = 'web',
-  filmGrain: boolean = false,
 ) {
   if (!videoStream) {
     throw new KeyedError(
@@ -298,19 +297,55 @@ export function getVideoParams(
   const height = Number(videoStream.height ?? 0);
   const box = RESOLUTION_BOXES[compressionResolution] ?? null;
   const exceeds = exceedsBox(width, height, box);
+  const recognized = RECOGNIZED_VIDEO_CODECS.includes(codec);
+  const copy = !recognized || (codec === 'av1' && !exceeds);
+
+  return { codec, width, height, box, exceeds, recognized, copy };
+}
+
+export type VideoEncodeFacts = {
+  videoCodec: 'av1' | 'copy';
+  crf: number | null;
+  preset: number | null;
+};
+
+export function videoEncodeFacts(
+  videoStream: any,
+  contentKind: ContentKind,
+  compressionResolution: CompressionResolution,
+  quality: quality = 'web',
+): VideoEncodeFacts {
+  if (decideVideo(videoStream, compressionResolution).copy) {
+    return { videoCodec: 'copy', crf: null, preset: null };
+  }
+
+  return {
+    videoCodec: 'av1',
+    crf: Number(getQuality(contentKind, quality)),
+    preset: VIDEO_PRESET,
+  };
+}
+
+export function getVideoParams(
+  videoStream: any,
+  contentKind: ContentKind,
+  compressionResolution: CompressionResolution,
+  quality: quality = 'web',
+  filmGrain: boolean = false,
+) {
+  const { codec, width, height, box, exceeds, recognized, copy } = decideVideo(videoStream, compressionResolution);
 
   // Spec 058, REQ-12
-  if (!RECOGNIZED_VIDEO_CODECS.includes(codec)) {
+  if (!recognized) {
     console.warn(
       exceeds
         ? `[ffmpeg] unrecognized video codec "${codec}"; copying at its own resolution, compression ceiling "${compressionResolution}" not applied.`
         : `[ffmpeg] unrecognized video codec "${codec}"; copying at its own resolution.`,
     );
-    return copyVideoArgs();
   }
 
   // Spec 058, REQ-11
-  if (codec === 'av1' && !exceeds) {
+  if (copy) {
     return copyVideoArgs();
   }
 

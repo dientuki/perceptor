@@ -7,6 +7,7 @@ import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { MediaServerService } from '@/media-server/media-server.service';
 import { MediaCapabilitiesService } from '@/media/media-capabilities.service';
 import { EncodeQueueService } from '@/queue/encode-queue.service';
+import { LibraryTagsService } from '@/library-tags/library-tags.service';
 import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
 import { SubtitleProbeQueueService } from '@/queue/subtitle-probe-queue.service';
 import { TitleStatusService } from '@/title-status/title-status.service';
@@ -47,6 +48,7 @@ describe('ProcessJobsService', () => {
   let downloads: { unwindLosingSiblings: jest.Mock };
   let subtitleSearchRequest: { requestFor: jest.Mock };
   let libraryProbeQueue: { request: jest.Mock };
+  let libraryTags: { requeueAfterWorkerBoot: jest.Mock };
   let probeQueue: { addProbe: jest.Mock; removeProbe: jest.Mock };
   let languagesService: { regionalVariantIso3s: jest.Mock };
 
@@ -86,6 +88,7 @@ describe('ProcessJobsService', () => {
     downloads = { unwindLosingSiblings: jest.fn().mockResolvedValue(undefined) };
     subtitleSearchRequest = { requestFor: jest.fn().mockResolvedValue(undefined) };
     libraryProbeQueue = { request: jest.fn().mockResolvedValue(undefined) };
+    libraryTags = { requeueAfterWorkerBoot: jest.fn().mockResolvedValue(undefined) };
     probeQueue = { addProbe: jest.fn().mockResolvedValue(undefined), removeProbe: jest.fn().mockResolvedValue(undefined) };
 
     languagesService = { regionalVariantIso3s: jest.fn().mockResolvedValue(new Set(['spa'])) };
@@ -106,6 +109,7 @@ describe('ProcessJobsService', () => {
         { provide: SubtitleSearchRequestService, useValue: subtitleSearchRequest },
         { provide: SubtitleProbeQueueService, useValue: probeQueue },
         { provide: LibraryProbeQueueService, useValue: libraryProbeQueue },
+        { provide: LibraryTagsService, useValue: libraryTags },
       ],
     }).compile();
 
@@ -1682,6 +1686,15 @@ describe('ProcessJobsService', () => {
       episode: null,
       sourceFile: { mediaSource: { status: 'DOWNLOADING' } },
       ...overrides,
+    });
+
+    // Spec 123, NFR-4
+    it('re-enqueues library tag items on worker boot even with no orphaned encode', async () => {
+      prisma.processJob.findMany.mockResolvedValue([]);
+
+      await service.reconcileOrphanedEncodes();
+
+      expect(libraryTags.requeueAfterWorkerBoot).toHaveBeenCalledTimes(1);
     });
 
     // Spec 107, NFR-2: BullMQ ignores an add whose jobId still exists, so a probe
