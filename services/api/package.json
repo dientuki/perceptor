@@ -59,7 +59,8 @@
   },
   "overrides": {
     "@graphql-tools/utils": "12.1.0",
-    "multer": "2.5.0"
+    "multer": "2.5.0",
+    "effect": "3.22.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
