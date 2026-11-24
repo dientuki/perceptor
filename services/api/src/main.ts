@@ -45,6 +45,8 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
 
+  // Spec 124, NFR-2
+  app.use('/graphql', json({ limit: '32mb' }));
   app.use(skipUploads(json({ limit: '2mb' })));
   app.use(skipUploads(urlencoded({ extended: true, limit: '2mb' })));
 

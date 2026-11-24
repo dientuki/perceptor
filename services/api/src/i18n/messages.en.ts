@@ -194,8 +194,30 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.LIBRARY_PROBE_NOT_FOUND]: 'The title was not found.',
   [ERROR_KEYS.LIBRARY_PROBE_MEDIA_SERVER_UNAVAILABLE]:
     'The media server is unavailable.',
+  [ERROR_KEYS.SUBTITLE_EMBED_UPLOAD_TOO_MANY]:
+    'You can upload up to 8 subtitles at a time.',
+  [ERROR_KEYS.SUBTITLE_EMBED_UPLOAD_NOT_SRT]:
+    'Only .srt files can be uploaded.',
+  [ERROR_KEYS.SUBTITLE_EMBED_UPLOAD_TOO_LARGE]:
+    'Each subtitle can be up to 2 MB.',
+  [ERROR_KEYS.SUBTITLE_EMBED_REPLACE_FORCED]:
+    'A forced subtitle cannot replace the others.',
+  [ERROR_KEYS.SUBTITLE_EMBED_UPLOAD_STAGING_FAILED]:
+    'The uploaded subtitle could not be saved. Try again.',
   [ERROR_KEYS.SUBTITLE_EMBED_BUSY]:
     'This title has a download, encode or subtitle embed in progress.',
+  [ERROR_KEYS.LIBRARY_TAGS_MIGRATION_RUNNING]:
+    'A tag migration is already running.',
+  [ERROR_KEYS.LIBRARY_TAGS_BUSY]:
+    "This file's tags are being rewritten; try again in a moment.",
+  [ERROR_KEYS.LIBRARY_TAGS_ITEM_NOT_FOUND]:
+    'The migration item does not exist.',
+  [ERROR_KEYS.LIBRARY_TAGS_ITEM_SETTLED]:
+    'The migration item was already settled.',
+  [ERROR_KEYS.LIBRARY_TAGS_FILE_MISSING]: 'The file was not found.',
+  [ERROR_KEYS.LIBRARY_TAGS_WRITE_FAILED]: 'The file could not be written.',
+  [ERROR_KEYS.LIBRARY_TAGS_VERIFY_FAILED]:
+    'The rewritten file does not match the original; it was left unchanged.',
   [ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE]:
     'One of the subtitles could not be read. The original file was not touched.',
   [ERROR_KEYS.SUBTITLE_EMBED_CHARSET_UNDETECTED]:
@@ -259,17 +281,17 @@ export const MESSAGES_EN: Record<string, string> = {
 
   // Spec 107
   [ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_NOT_CONFIGURED]:
-    'Subtitle search requires an OpenSubtitles account in Settings → General.',
+    'Subtitle search requires a configured subtitle provider in Settings → Subtitles.',
   [ERROR_KEYS.SUBTITLE_SEARCH_NO_LIBRARY_PATH]:
     "Perceptor doesn't know where this title's file is.",
   [ERROR_KEYS.SUBTITLE_SEARCH_PROBE_NOT_FOUND]:
     'Subtitle probe {id} does not exist or is not waiting',
   [ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED]:
-    'OpenSubtitles rejected the username or password.',
+    'The subtitle provider rejected the credentials.',
   [ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAVAILABLE]:
-    'Could not reach OpenSubtitles.',
+    'Could not reach the subtitle provider.',
   [ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED]:
-    'The OpenSubtitles daily downloads are exhausted.',
+    'The subtitle provider daily downloads are exhausted.',
   [ERROR_KEYS.SUBTITLE_SEARCH_PROBE_FAILED]:
     'The file could not be read to see which subtitles it has.',
   [ERROR_KEYS.SUBTITLE_SEARCH_WRONG_VARIANT]:
@@ -278,6 +300,26 @@ export const MESSAGES_EN: Record<string, string> = {
     'That language is not one of the languages searched for this title.',
   [ERROR_KEYS.SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_PRESENT]:
     'The file has no subtitle in that language to replace.',
+
+  // Spec 121
+  [ERROR_KEYS.SUBTITLE_SEARCH_NO_PROVIDER]:
+    'No configured provider has subtitles in this language.',
+  [ERROR_KEYS.SUBTITLE_SEARCH_ARCHIVE_UNUSABLE]:
+    'The downloaded archive does not hold a single usable .srt subtitle.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_INCOMPLETE]:
+    'Fill in every field of the provider.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_FIELD_NOT_ALLOWED]:
+    'That field does not apply to this provider.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_APP_KEY_MISSING]:
+    "This installation has no OpenSubtitles application key.",
+  [ERROR_KEYS.SUBTITLE_PROVIDER_NOT_CONFIGURED]:
+    'That provider is not configured.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_LANGUAGE_UNSUPPORTED]:
+    '{provider} has no subtitles in {languageTag}.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_LANGUAGE_INVALID]:
+    'That language entry is not valid: the provider must be configured and not be the default.',
+  [ERROR_KEYS.SUBTITLE_PROVIDER_LANGUAGE_DUPLICATE]:
+    'There are two entries for the same language.',
 
   // scheduler
   [ERROR_KEYS.SCHEDULE_TASK_NOT_FOUND]: 'Scheduled task not found',

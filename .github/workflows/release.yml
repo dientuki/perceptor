@@ -85,6 +85,8 @@ jobs:
           # Spec 107: only the api leg receives the key, as a BuildKit secret mount — never a
           # build-arg, so it is not recorded in the image history.
           secrets: ${{ matrix.service == 'api' && format('opensubtitles_api_key={0}', secrets.OPENSUBTITLES_API_KEY) || '' }}
+          # Spec 123, REQ-4: the worker image records which release it is; public, so a build-arg.
+          build-args: ${{ matrix.service == 'worker' && format('PERCEPTOR_VERSION={0}', github.ref_name) || '' }}
           target: ${{ matrix.target }}
           platforms: ${{ matrix.platform }}
           # No tag is set here on purpose — applying one is `merge`'s job, once both

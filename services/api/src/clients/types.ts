@@ -33,6 +33,8 @@ export interface BaseMediaDetail {
   originalLanguage: string;
   voteAverage: number;
   status: string;
+  // Spec 121, REQ-11
+  imdbId: string | null;
 }
 
 export interface MovieDetail extends BaseMediaDetail {

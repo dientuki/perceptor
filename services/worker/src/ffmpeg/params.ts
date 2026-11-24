@@ -13,6 +13,8 @@ import {
 
 type quality = 'remux' | 'web';
 
+const VIDEO_PRESET = 4;
+
 function getQuality(contentKind: ContentKind, quality: quality) {
   if (quality === "remux") return "22";
 
@@ -68,7 +70,7 @@ function buildAv1EncodeArgs(
   args.push(
     "-c:v", "libsvtav1",
     "-crf", getQuality(contentKind, quality),
-    "-preset", "4",
+    "-preset", String(VIDEO_PRESET),
     "-pix_fmt", "yuv420p10le",
   );
 
@@ -279,12 +281,9 @@ function copyVideoArgs(): string[] {
   ];
 }
 
-export function getVideoParams(
+function decideVideo(
   videoStream: any,
-  contentKind: ContentKind,
   compressionResolution: CompressionResolution,
-  quality: quality = 'web',
-  filmGrain: boolean = false,
 ) {
   if (!videoStream) {
     throw new KeyedError(
@@ -298,19 +297,55 @@ export function getVideoParams(
   const height = Number(videoStream.height ?? 0);
   const box = RESOLUTION_BOXES[compressionResolution] ?? null;
   const exceeds = exceedsBox(width, height, box);
+  const recognized = RECOGNIZED_VIDEO_CODECS.includes(codec);
+  const copy = !recognized || (codec === 'av1' && !exceeds);
+
+  return { codec, width, height, box, exceeds, recognized, copy };
+}
+
+export type VideoEncodeFacts = {
+  videoCodec: 'av1' | 'copy';
+  crf: number | null;
+  preset: number | null;
+};
+
+export function videoEncodeFacts(
+  videoStream: any,
+  contentKind: ContentKind,
+  compressionResolution: CompressionResolution,
+  quality: quality = 'web',
+): VideoEncodeFacts {
+  if (decideVideo(videoStream, compressionResolution).copy) {
+    return { videoCodec: 'copy', crf: null, preset: null };
+  }
+
+  return {
+    videoCodec: 'av1',
+    crf: Number(getQuality(contentKind, quality)),
+    preset: VIDEO_PRESET,
+  };
+}
+
+export function getVideoParams(
+  videoStream: any,
+  contentKind: ContentKind,
+  compressionResolution: CompressionResolution,
+  quality: quality = 'web',
+  filmGrain: boolean = false,
+) {
+  const { codec, width, height, box, exceeds, recognized, copy } = decideVideo(videoStream, compressionResolution);
 
   // Spec 058, REQ-12
-  if (!RECOGNIZED_VIDEO_CODECS.includes(codec)) {
+  if (!recognized) {
     console.warn(
       exceeds
         ? `[ffmpeg] unrecognized video codec "${codec}"; copying at its own resolution, compression ceiling "${compressionResolution}" not applied.`
         : `[ffmpeg] unrecognized video codec "${codec}"; copying at its own resolution.`,
     );
-    return copyVideoArgs();
   }
 
   // Spec 058, REQ-11
-  if (codec === 'av1' && !exceeds) {
+  if (copy) {
     return copyVideoArgs();
   }
 
@@ -338,6 +373,35 @@ export interface AudioSelection {
   missingLanguages: string[];
 }
 
+export interface AudioCandidates {
+  candidates: any[];
+  hasOriginal: boolean;
+}
+
+// Spec 122, REQ-2
+export function findAudioCandidates(
+  audioStreams: any[],
+  allowedLanguagesIso3: string[],
+  originalLanguageIso3: string,
+  audioVariants: AudioVariantResolution,
+): AudioCandidates {
+  const allowedLangs = Array.from(
+    new Set(allowedLanguagesIso3.map((lang) => normalizeIso3(lang))),
+  );
+  const originalLang = normalizeIso3(originalLanguageIso3);
+  const blacklistWords = ['commentary', 'description', 'visual', 'sdh'];
+
+  const candidates = audioStreams.filter(s => {
+    if (audioVariants.duplicates.has(s.index)) return false;
+    const lang = normalizeIso3(s.tags?.language || "");
+    const title = (s.tags?.title || "").toLowerCase();
+    return allowedLangs.includes(lang) && !blacklistWords.some(word => title.includes(word));
+  });
+
+  const hasOriginal = candidates.some(s => normalizeIso3(s.tags?.language || "") === originalLang);
+  return { candidates, hasOriginal };
+}
+
 // Spec 011, REQ-3 REQ-4 REQ-6 REQ-7; Spec 099, REQ-7
 export function selectAudioStreams(
   audioStreams: any[],
@@ -356,19 +420,16 @@ export function selectAudioStreams(
   );
   const originalLang = normalizeIso3(originalLanguageIso3);
 
-  const blacklistWords = ['commentary', 'description', 'visual', 'sdh'];
   const priority = ['truehd', 'dts', 'eac3', 'ac3'];
 
-  const candidates = audioStreams.filter(s => {
-    if (audioVariants.duplicates.has(s.index)) return false;
-    const lang = normalizeIso3(s.tags?.language || "");
-    const title = (s.tags?.title || "").toLowerCase();
-    return allowedLangs.includes(lang) && !blacklistWords.some(word => title.includes(word));
-  });
+  const { candidates, hasOriginal } = findAudioCandidates(
+    audioStreams,
+    allowedLanguagesIso3,
+    originalLanguageIso3,
+    audioVariants,
+  );
 
   // Spec 011, REQ-6
-  const hasOriginal = candidates.some(s => normalizeIso3(s.tags?.language || "") === originalLang);
-
   if (!hasOriginal) {
     const params = { iso3: originalLanguageIso3 };
     throw new KeyedError(

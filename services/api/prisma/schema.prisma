@@ -391,6 +391,9 @@ model Movie {
   isShort          Boolean   @default(false)
   // Spec 092, NFR-2: default covers every existing row, no backfill needed.
   grainMode        GrainMode @default(INHERIT)
+  // Spec 121, REQ-11
+  imdbId          String?   @db.VarChar(20)
+  imdbIdCheckedAt DateTime?
 
   theatricalReleaseDate DateTime?
   digitalReleaseDate    DateTime?
@@ -417,6 +420,9 @@ model Movie {
   // Spec 101, REQ-17
   subtitleEmbeds SubtitleEmbed[]
 
+  // Spec 123, REQ-13
+  libraryTagMigrationItems LibraryTagMigrationItem[]
+
   // Spec 103, REQ-13
   subtitleSearches SubtitleSearch[]
 
@@ -441,6 +447,9 @@ model Show {
   contentKind      ContentKind @default(LIVE_ACTION)
   // Spec 092, NFR-2: default covers every existing row, no backfill needed.
   grainMode        GrainMode   @default(INHERIT)
+  // Spec 121, REQ-11
+  imdbId          String?     @db.VarChar(20)
+  imdbIdCheckedAt DateTime?
   originalLanguage String
   releaseDate      DateTime?
   seasonsSyncedAt  DateTime?
@@ -496,6 +505,9 @@ model Episode {
 
   // Spec 101, REQ-17
   subtitleEmbeds SubtitleEmbed[]
+
+  // Spec 123, REQ-13
+  libraryTagMigrationItems LibraryTagMigrationItem[]
 
   // Spec 103, REQ-13
   subtitleSearches SubtitleSearch[]
@@ -567,6 +579,12 @@ enum SubtitleSearchAttemptStatus {
   FAILED
 }
 
+// Spec 121, REQ-1
+enum SubtitleProviderKind {
+  OPENSUBTITLES
+  SUBDIVX
+}
+
 enum SubtitleSyncReference {
   SUBTITLE
   AUDIO
@@ -600,6 +618,9 @@ model SubtitleSearch {
   // Spec 119, REQ-3
   replaceLanguages Json?
 
+  // Spec 121, REQ-8
+  providerProgress Json?
+
   subtitleEmbedId Int?
   subtitleEmbed   SubtitleEmbed? @relation(fields: [subtitleEmbedId], references: [id], onDelete: SetNull)
 
@@ -629,6 +650,9 @@ model SubtitleSearchAttempt {
   stagedPath         String? @db.VarChar(500)
   providerFileName   String? @db.VarChar(500)
   variantTag         String? @db.VarChar(10)
+
+  // Spec 121, REQ-15
+  provider SubtitleProviderKind @default(OPENSUBTITLES)
 
   status         SubtitleSearchAttemptStatus @default(QUEUED)
   offsetMs       Int?
@@ -719,4 +743,64 @@ model UserTmdbListItem {
 
   @@id([listId, tmdbId, mediaType])
   @@map("user_tmdb_list_items")
+}
+
+// Spec 123, REQ-12 REQ-18
+enum LibraryTagMigrationStatus {
+  RUNNING
+  COMPLETED
+}
+
+// Spec 123, REQ-18
+enum LibraryTagOutcome {
+  MIGRATED
+  UNCHANGED
+  BUSY
+  MISSING
+  FAILED
+}
+
+// Spec 123, REQ-12 REQ-19
+model LibraryTagMigration {
+  id Int @id @default(autoincrement())
+
+  status    LibraryTagMigrationStatus @default(RUNNING)
+  total     Int                       @default(0)
+  processed Int                       @default(0)
+  migrated  Int                       @default(0)
+  unchanged Int                       @default(0)
+  busy      Int                       @default(0)
+  missing   Int                       @default(0)
+  failed    Int                       @default(0)
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  items LibraryTagMigrationItem[]
+
+  @@map("library_tag_migrations")
+}
+
+// Spec 123, REQ-13 REQ-17
+model LibraryTagMigrationItem {
+  id Int @id @default(autoincrement())
+
+  migrationId Int
+  migration   LibraryTagMigration @relation(fields: [migrationId], references: [id], onDelete: Cascade)
+
+  movieId   Int?
+  movie     Movie?   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  episodeId Int?
+  episode   Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  claimedAt DateTime?
+  outcome   LibraryTagOutcome?
+  reasonKey String?            @db.VarChar(100)
+  hostPath  String?            @db.VarChar(500)
+  settledAt DateTime?
+
+  @@index([migrationId, outcome])
+  @@index([movieId])
+  @@index([episodeId])
+  @@map("library_tag_migration_items")
 }

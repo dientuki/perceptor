@@ -7,7 +7,6 @@ import { useState } from "react";
 import EmbedSubtitlesModal from "@/components/media/EmbedSubtitlesModal";
 import Button from "@/components/ui/button/Button";
 import { useModal } from "@/hooks/useModal";
-import { type ErrorTranslator, translateErrorKey } from "@/lib/graphql-error";
 import type {
   ExternalSubtitle,
   SubtitleEmbed,
@@ -32,7 +31,6 @@ export default function EmbedSubtitlesButton({
   fullWidth = false,
 }: EmbedSubtitlesButtonProps) {
   const t = useTranslations("media.embedSubtitles");
-  const tErrors = useTranslations("errors");
   const router = useRouter();
   const { isOpen, openModal, closeModal } = useModal();
   const [staleMessage, setStaleMessage] = useState<string | null>(null);
@@ -42,14 +40,6 @@ export default function EmbedSubtitlesButton({
     embed != null && embed.status !== "COMPLETED" && embed.status !== "FAILED";
   const inFlightLabel =
     embed?.status === "SYNCING" ? t("syncing") : t("embedding");
-  const fallback = tErrors("network.connectionFailed");
-  const reasonOf = (key: string | null | undefined) =>
-    translateErrorKey(
-      tErrors as ErrorTranslator,
-      key ?? undefined,
-      undefined,
-      fallback,
-    );
 
   if (subtitles.length === 0 && !inFlight) return null;
 
@@ -69,15 +59,6 @@ export default function EmbedSubtitlesButton({
     setStaleMessage(null);
     openModal();
   };
-
-  const failure =
-    embed?.status === "FAILED"
-      ? t("failed", { reason: reasonOf(embed.errorKey) })
-      : null;
-  const warning =
-    embed?.status === "COMPLETED" && embed.warningKey
-      ? t("warning", { reason: reasonOf(embed.warningKey) })
-      : null;
 
   return (
     <>
@@ -113,14 +94,6 @@ export default function EmbedSubtitlesButton({
         <p role="alert" className="w-full text-base text-error-500">
           {staleMessage}
         </p>
-      )}
-      {failure && !inFlight && (
-        <p role="alert" className="w-full text-base text-error-500">
-          {failure}
-        </p>
-      )}
-      {warning && !inFlight && (
-        <p className="w-full text-base text-warning-500">{warning}</p>
       )}
       {!inFlight && (
         <EmbedSubtitlesModal

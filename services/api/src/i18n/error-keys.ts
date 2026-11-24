@@ -156,6 +156,14 @@ export const ERROR_KEYS = {
   LIBRARY_PROBE_NOT_FOUND: 'error.libraryProbe.not_found',
   LIBRARY_PROBE_MEDIA_SERVER_UNAVAILABLE: 'error.libraryProbe.media_server_unavailable',
   SUBTITLE_EMBED_BUSY: 'error.subtitleEmbed.busy',
+  // Spec 123, REQ-17 REQ-19
+  LIBRARY_TAGS_MIGRATION_RUNNING: 'error.libraryTags.migration_running',
+  LIBRARY_TAGS_BUSY: 'error.libraryTags.busy',
+  LIBRARY_TAGS_ITEM_NOT_FOUND: 'error.libraryTags.item_not_found',
+  LIBRARY_TAGS_ITEM_SETTLED: 'error.libraryTags.item_settled',
+  LIBRARY_TAGS_FILE_MISSING: 'error.libraryTags.file_missing',
+  LIBRARY_TAGS_WRITE_FAILED: 'error.libraryTags.write_failed',
+  LIBRARY_TAGS_VERIFY_FAILED: 'error.libraryTags.verify_failed',
   SUBTITLE_EMBED_SUBTITLE_UNREADABLE: 'error.subtitleEmbed.subtitle_unreadable',
   SUBTITLE_EMBED_CHARSET_UNDETECTED: 'error.subtitleEmbed.charset_undetected',
   SUBTITLE_EMBED_REMUX_FAILED: 'error.subtitleEmbed.remux_failed',
@@ -172,6 +180,14 @@ export const ERROR_KEYS = {
   SUBTITLE_EMBED_SYNC_INCOMPLETE: 'error.subtitleEmbed.sync_incomplete',
   SUBTITLE_EMBED_SYNC_LOW_SCORE: 'error.subtitleEmbed.sync_low_score',
   SUBTITLE_EMBED_SYNC_NOT_FOUND: 'error.subtitleEmbed.sync_not_found',
+
+  // Spec 124, REQ-4 REQ-9 REQ-12
+  SUBTITLE_EMBED_UPLOAD_TOO_MANY: 'error.subtitleEmbed.upload_too_many',
+  SUBTITLE_EMBED_UPLOAD_NOT_SRT: 'error.subtitleEmbed.upload_not_srt',
+  SUBTITLE_EMBED_UPLOAD_TOO_LARGE: 'error.subtitleEmbed.upload_too_large',
+  SUBTITLE_EMBED_REPLACE_FORCED: 'error.subtitleEmbed.replace_forced',
+  SUBTITLE_EMBED_UPLOAD_STAGING_FAILED:
+    'error.subtitleEmbed.upload_staging_failed',
 
   // Spec 103
   SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER: 'error.subtitleSearch.unsupported_media_server',
@@ -206,6 +222,17 @@ export const ERROR_KEYS = {
     'error.subtitleSearch.replace_language_not_wanted',
   SUBTITLE_SEARCH_REPLACE_LANGUAGE_NOT_PRESENT:
     'error.subtitleSearch.replace_language_not_present',
+
+  // Spec 121
+  SUBTITLE_SEARCH_NO_PROVIDER: 'error.subtitleSearch.no_provider',
+  SUBTITLE_SEARCH_ARCHIVE_UNUSABLE: 'error.subtitleSearch.archive_unusable',
+  SUBTITLE_PROVIDER_INCOMPLETE: 'error.subtitleProvider.incomplete',
+  SUBTITLE_PROVIDER_FIELD_NOT_ALLOWED: 'error.subtitleProvider.field_not_allowed',
+  SUBTITLE_PROVIDER_APP_KEY_MISSING: 'error.subtitleProvider.app_key_missing',
+  SUBTITLE_PROVIDER_NOT_CONFIGURED: 'error.subtitleProvider.not_configured',
+  SUBTITLE_PROVIDER_LANGUAGE_UNSUPPORTED: 'error.subtitleProvider.language_unsupported',
+  SUBTITLE_PROVIDER_LANGUAGE_INVALID: 'error.subtitleProvider.language_invalid',
+  SUBTITLE_PROVIDER_LANGUAGE_DUPLICATE: 'error.subtitleProvider.language_duplicate',
 
   CALENDAR_INVALID_DATE: 'error.calendar.invalid_date',
   CALENDAR_INVALID_RANGE: 'error.calendar.invalid_range',

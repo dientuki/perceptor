@@ -1,3 +1,4 @@
+import { SubtitleProviderKind } from '@prisma/client';
 import {
   SubtitleSearchLanguage,
   SubtitleSearchLanguageOutcome as Outcome,
@@ -8,6 +9,7 @@ export type AttemptRow = {
   rank: number;
   status: 'QUEUED' | 'RUNNING' | 'ACCEPTED' | 'REJECTED' | 'FAILED';
   reasonKey: string | null;
+  provider?: SubtitleProviderKind;
 };
 
 export type SearchRow = {
@@ -23,6 +25,7 @@ export type SearchRow = {
   presentLanguages: unknown;
   languageErrors?: unknown;
   replaceLanguages?: unknown;
+  providerProgress?: unknown;
 };
 
 function asStrings(value: unknown): string[] {
@@ -43,6 +46,43 @@ function errorKeys(value: unknown): Record<string, string> {
   );
 }
 
+// Spec 121, REQ-8
+function progressOf(value: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return out;
+  }
+  for (const [language, markers] of Object.entries(value)) {
+    if (
+      typeof markers === 'object' &&
+      markers !== null &&
+      !Array.isArray(markers)
+    ) {
+      out[language] = Object.keys(markers);
+    }
+  }
+  return out;
+}
+
+// Spec 121, REQ-8
+function ownAttempts(
+  attempts: AttemptRow[],
+  language: string,
+  markedProviders: string[] | undefined,
+): AttemptRow[] {
+  const all = attempts
+    .filter((attempt) => attempt.languageIso3 === language)
+    .sort((a, b) => a.rank - b.rank);
+  if (markedProviders === undefined || markedProviders.length === 0) return all;
+  const kindOf = (attempt: AttemptRow) => attempt.provider ?? 'OPENSUBTITLES';
+  const active = all.filter(
+    (attempt) => !markedProviders.includes(kindOf(attempt)),
+  );
+  if (active.length > 0) return active;
+  const last = markedProviders[markedProviders.length - 1];
+  return all.filter((attempt) => kindOf(attempt) === last);
+}
+
 const PAST_SEARCHING = ['VALIDATING', 'EMBEDDING', 'COMPLETED'];
 
 // Spec 103, REQ-13
@@ -58,28 +98,49 @@ export function deriveLanguages(
   const languageErrors = errorKeys(search.languageErrors);
   // Spec 119, REQ-8
   const ticked = new Set(asStrings(search.replaceLanguages));
+  const progress = progressOf(search.providerProgress);
 
   return asStrings(search.wantedLanguages).map((languageIso3) => {
-    const derived = deriveLanguage(languageIso3);
+    const derived = withProvider(deriveLanguage(languageIso3));
     // Spec 114, REQ-1
     if (inFile === null || !terminal || ticked.has(languageIso3)) return derived;
     if (inFile.has(languageIso3)) {
+      const resolved = !present.has(languageIso3);
       return {
         languageIso3,
-        outcome: present.has(languageIso3)
-          ? Outcome.ALREADY_PRESENT
-          : Outcome.RESOLVED,
+        outcome: resolved ? Outcome.RESOLVED : Outcome.ALREADY_PRESENT,
         reasonKey: null,
+        provider: resolved ? derived.provider : undefined,
       };
     }
     if (
       derived.outcome === Outcome.RESOLVED ||
       derived.outcome === Outcome.ALREADY_PRESENT
     ) {
-      return { languageIso3, outcome: Outcome.MISSING, reasonKey: null };
+      return {
+        languageIso3,
+        outcome: Outcome.MISSING,
+        reasonKey: null,
+      };
     }
     return derived;
   });
+
+  // Spec 121, REQ-15
+  function withProvider(language: SubtitleSearchLanguage): SubtitleSearchLanguage {
+    if (
+      language.outcome !== Outcome.RESOLVED &&
+      language.outcome !== Outcome.REPLACED
+    ) {
+      return { ...language, provider: undefined };
+    }
+    const accepted = attempts.find(
+      (attempt) =>
+        attempt.languageIso3 === language.languageIso3 &&
+        attempt.status === 'ACCEPTED',
+    );
+    return { ...language, provider: accepted?.provider };
+  }
 
   function deriveLanguage(languageIso3: string): SubtitleSearchLanguage {
     const result = (outcome: Outcome, reasonKey: string | null = null) => ({
@@ -92,9 +153,16 @@ export function deriveLanguages(
       return result(Outcome.ALREADY_PRESENT);
     }
 
-    const own = attempts
-      .filter((attempt) => attempt.languageIso3 === languageIso3)
-      .sort((a, b) => a.rank - b.rank);
+    // Spec 121, REQ-8
+    const accepted = attempts.some(
+      (attempt) =>
+        attempt.languageIso3 === languageIso3 && attempt.status === 'ACCEPTED',
+    );
+    const own = accepted
+      ? attempts
+          .filter((attempt) => attempt.languageIso3 === languageIso3)
+          .sort((a, b) => a.rank - b.rank)
+      : ownAttempts(attempts, languageIso3, progress[languageIso3]);
 
     // Spec 107, REQ-5 REQ-8 REQ-9
     const failedKey = languageErrors[languageIso3];

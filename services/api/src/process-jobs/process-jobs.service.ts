@@ -22,6 +22,7 @@ import { TitleStatusService } from '@/title-status/title-status.service';
 import { DownloadsService } from '@/downloads/downloads.service';
 import { wantsVariantDetection } from '@/languages/variant-opt-in';
 import { LanguagesService } from '@/languages/languages.service';
+import { LibraryTagsService } from '@/library-tags/library-tags.service';
 import { SubtitleSearchRequestService } from '@/subtitle-search/subtitle-search-request.service';
 
 // Spec 054, REQ-4
@@ -61,6 +62,8 @@ export class ProcessJobsService {
     private readonly libraryProbeQueue: LibraryProbeQueueService,
     // Spec 110, REQ-3 REQ-4
     private readonly languages: LanguagesService,
+    // Spec 123, NFR-4
+    private readonly libraryTags: LibraryTagsService,
   ) {}
 
   async getEncodeJobDetails(id: number): Promise<EncodeJobDetails> {
@@ -533,6 +536,13 @@ export class ProcessJobsService {
 
     // Spec 107, NFR-2
     await this.recoverInterruptedProbes();
+
+    // Spec 123, NFR-4
+    try {
+      await this.libraryTags.requeueAfterWorkerBoot();
+    } catch (err) {
+      console.error('[reconcileOrphanedEncodes] failed to re-enqueue library tag items:', err);
+    }
 
     const orphaned = await this.prisma.processJob.findMany({
       where: { status: 'ENCODING' },

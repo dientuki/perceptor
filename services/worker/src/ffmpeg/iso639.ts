@@ -33,3 +33,29 @@ export function normalizeIso3(code: string): string {
   const lower = (code || '').trim().toLowerCase();
   return T_TO_B[lower] ?? lower;
 }
+
+// Spec 122, REQ-3
+const ISO1_TO_ISO3: Record<string, string> = {
+  en: 'eng', zh: 'chi', de: 'ger', es: 'spa', ru: 'rus', ko: 'kor', fr: 'fre', ja: 'jpn',
+  pt: 'por', tr: 'tur', pl: 'pol', ca: 'cat', nl: 'dut', ar: 'ara', sv: 'swe', it: 'ita',
+  id: 'ind', hi: 'hin', fi: 'fin', vi: 'vie', he: 'heb', uk: 'ukr', el: 'gre', ms: 'may',
+  cs: 'cze', ro: 'rum', da: 'dan', hu: 'hun', ta: 'tam', no: 'nor', th: 'tha', ur: 'urd',
+  hr: 'hrv', bg: 'bul', lt: 'lit', la: 'lat', mi: 'mao', ml: 'mal', cy: 'wel', sk: 'slo',
+  te: 'tel', fa: 'per', lv: 'lav', bn: 'ben', sr: 'srp', az: 'aze', sl: 'slv', kn: 'kan',
+  et: 'est', mk: 'mac', br: 'bre', eu: 'baq', is: 'ice', hy: 'arm', ne: 'nep', mn: 'mon',
+  bs: 'bos', kk: 'kaz', sq: 'alb', sw: 'swa', gl: 'glg', mr: 'mar', pa: 'pan', si: 'sin',
+  km: 'khm', sn: 'sna', yo: 'yor', so: 'som', af: 'afr', oc: 'oci', ka: 'geo', be: 'bel',
+  tg: 'tgk', sd: 'snd', gu: 'guj', am: 'amh', yi: 'yid', lo: 'lao', uz: 'uzb', fo: 'fao',
+  ht: 'hat', ps: 'pus', tk: 'tuk', nn: 'nno', mt: 'mlt', sa: 'san', lb: 'ltz', my: 'bur',
+  bo: 'tib', tl: 'tgl', mg: 'mlg', as: 'asm', tt: 'tat', haw: 'haw', ln: 'lin', ha: 'hau',
+  ba: 'bak', jw: 'jav', su: 'sun', yue: 'yue',
+};
+
+export function iso1ToIso3(code: string): string | undefined {
+  const lower = (code || '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(ISO1_TO_ISO3, lower)
+    ? ISO1_TO_ISO3[lower]
+    : undefined;
+}
+
+export const WHISPER_ISO1_CODES: readonly string[] = Object.keys(ISO1_TO_ISO3);

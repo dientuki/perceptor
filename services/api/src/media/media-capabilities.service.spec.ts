@@ -197,4 +197,41 @@ describe('MediaCapabilitiesService', () => {
       await expect(service.enabledTypes()).resolves.toEqual([]);
     });
   });
+
+  // Spec 121, REQ-16: before this feature the flag meant "OpenSubtitles is
+  // configured", so an installation that only holds a Subdivx key read false
+  // and the "Buscar subtítulos" button stayed disabled with no error anywhere.
+  describe('subtitleSearchAvailable', () => {
+    const originalKey = process.env.OPENSUBTITLES_API_KEY;
+
+    beforeEach(() => {
+      process.env.OPENSUBTITLES_API_KEY = 'app-key';
+    });
+
+    afterAll(() => {
+      if (originalKey === undefined) delete process.env.OPENSUBTITLES_API_KEY;
+      else process.env.OPENSUBTITLES_API_KEY = originalKey;
+    });
+
+    it('is true when only Subdivx is configured', async () => {
+      await build({ subdivx_api_key: 'key' });
+      expect((await service.read()).subtitleSearchAvailable).toBe(true);
+    });
+
+    it('is true when only OpenSubtitles is configured', async () => {
+      await build({ opensubtitles_username: 'user', opensubtitles_password: 'pw' });
+      expect((await service.read()).subtitleSearchAvailable).toBe(true);
+    });
+
+    it('is false when nothing is configured', async () => {
+      await build({ opensubtitles_username: 'user', subdivx_api_key: '  ' });
+      expect((await service.read()).subtitleSearchAvailable).toBe(false);
+    });
+
+    it('is false for OpenSubtitles credentials without the application key', async () => {
+      delete process.env.OPENSUBTITLES_API_KEY;
+      await build({ opensubtitles_username: 'user', opensubtitles_password: 'pw' });
+      expect((await service.read()).subtitleSearchAvailable).toBe(false);
+    });
+  });
 });

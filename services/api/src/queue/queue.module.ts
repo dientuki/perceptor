@@ -5,6 +5,7 @@ import { SubtitleEmbedQueueService } from '@/queue/subtitle-embed-queue.service'
 import { SubtitleSyncQueueService } from '@/queue/subtitle-sync-queue.service';
 import { SubtitleProbeQueueService } from '@/queue/subtitle-probe-queue.service';
 import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
+import { LibraryTagsQueueService } from '@/queue/library-tags-queue.service';
 import { RedisModule } from '@/redis/redis.module';
 
 @Module({
@@ -16,6 +17,7 @@ import { RedisModule } from '@/redis/redis.module';
     SubtitleSyncQueueService,
     SubtitleProbeQueueService,
     LibraryProbeQueueService,
+    LibraryTagsQueueService,
   ],
   exports: [
     ProcessQueueService,
@@ -24,6 +26,7 @@ import { RedisModule } from '@/redis/redis.module';
     SubtitleSyncQueueService,
     SubtitleProbeQueueService,
     LibraryProbeQueueService,
+    LibraryTagsQueueService,
   ],
 })
 export class QueueModule {}

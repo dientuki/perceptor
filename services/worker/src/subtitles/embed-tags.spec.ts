@@ -23,16 +23,42 @@ describe('sanitizeTagValue', () => {
 });
 
 describe('buildTrackTagsXml', () => {
-  it('writes empty Targets and the two exact Simple names', () => {
-    const xml = buildTrackTagsXml('OpenSubtitles file 42 & more', 1500);
+  it('writes empty Targets and one nested PERCEPTOR group', () => {
+    const xml = buildTrackTagsXml({
+      source: 'OpenSubtitles file 42 & more',
+      offsetMs: 1500,
+      provider: 'opensubtitles',
+      syncScore: 31.25,
+      framerateRatio: 1,
+      embeddedAt: new Date('2026-11-20T10:20:30.456Z'),
+    });
     expect(xml).toContain('<Targets/>');
-    expect(xml).toContain('<Name>PERCEPTOR_SOURCE</Name>');
+    expect(xml).toContain('<Name>PERCEPTOR</Name>');
+    for (const name of ['SOURCE', 'OFFSET', 'PROVIDER', 'SYNC_SCORE', 'FRAMERATE_RATIO', 'EMBEDDED_AT']) {
+      expect(xml).toContain(`<Name>${name}</Name>`);
+    }
     expect(xml).toContain('<String>OpenSubtitles file 42 &amp; more</String>');
-    expect(xml).toContain('<Name>PERCEPTOR_OFFSET</Name>');
     expect(xml).toContain('<String>1500</String>');
+    expect(xml).toContain('<String>2026-11-20T10:20:30Z</String>');
   });
 
-  it('writes a negative offset with its sign', () => {
-    expect(buildTrackTagsXml('src', -2000)).toContain('<String>-2000</String>');
+  it('leaves no flat PERCEPTOR_SOURCE or PERCEPTOR_OFFSET behind', () => {
+    const xml = buildTrackTagsXml({ source: 'src', offsetMs: 10, provider: 'user' });
+    expect(xml).not.toContain('PERCEPTOR_SOURCE');
+    expect(xml).not.toContain('PERCEPTOR_OFFSET');
+  });
+
+  it('writes an unknown provider string verbatim', () => {
+    expect(buildTrackTagsXml({ provider: 'some-new-provider' })).toContain('<String>some-new-provider</String>');
+  });
+
+  it('writes a negative offset with its sign and omits an absent provider', () => {
+    const xml = buildTrackTagsXml({ source: 'src', offsetMs: -2000 })!;
+    expect(xml).toContain('<String>-2000</String>');
+    expect(xml).not.toContain('<Name>PROVIDER</Name>');
+  });
+
+  it('returns null when there is nothing to write', () => {
+    expect(buildTrackTagsXml({})).toBeNull();
   });
 });

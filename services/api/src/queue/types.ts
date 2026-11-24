@@ -60,3 +60,11 @@ export type SubtitleEmbedSyncJob = {
   subtitleEmbedId: number;
   fileName: string;
 };
+
+// Spec 123, REQ-17
+export const LIBRARY_TAGS_QUEUE = 'library-tags';
+export const LIBRARY_TAGS_JOB = 'library-tags';
+
+export type LibraryTagsJob = {
+  itemId: number;
+};

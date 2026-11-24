@@ -18,6 +18,7 @@
 
 export const ERROR_ENCODE_NO_VIDEO_STREAM = 'error.encode.no_video_stream';
 export const ERROR_ENCODE_NO_ORIGINAL_AUDIO = 'error.encode.no_original_audio';
+export const ERROR_ENCODE_ORIGINAL_AUDIO_UNDETERMINED = 'error.encode.original_audio_undetermined';
 export const ERROR_ENCODE_PROBE_FAILED = 'error.encode.probe_failed';
 export const ERROR_ENCODE_FFMPEG_FAILED = 'error.encode.ffmpeg_failed';
 export const ERROR_ENCODE_NO_OUTPUT = 'error.encode.no_output';
@@ -66,3 +67,10 @@ export const ERROR_SUBTITLE_SEARCH_INTERRUPTED = 'error.subtitleSearch.interrupt
 
 // Spec 107, T012
 export const ERROR_SUBTITLE_SEARCH_PROBE_FAILED = 'error.subtitleSearch.probe_failed';
+
+// Spec 123, REQ-14 REQ-16 NFR-4
+export const ERROR_LIBRARY_TAGS_FILE_MISSING = 'error.libraryTags.file_missing';
+export const ERROR_LIBRARY_TAGS_WRITE_FAILED = 'error.libraryTags.write_failed';
+export const ERROR_LIBRARY_TAGS_VERIFY_FAILED = 'error.libraryTags.verify_failed';
+export const ERROR_LIBRARY_TAGS_ITEM_NOT_FOUND = 'error.libraryTags.item_not_found';
+export const ERROR_LIBRARY_TAGS_ITEM_SETTLED = 'error.libraryTags.item_settled';

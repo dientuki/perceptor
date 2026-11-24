@@ -344,4 +344,109 @@ describe('deriveLanguages', () => {
       expect(only(rows, 'spa')?.outcome).toBe(Outcome.ALREADY_PRESENT);
     });
   });
+  // This block exists because a language that two providers touched reads the wrong
+  // outcome with no error anywhere: the first provider's rejections reported after a
+  // second one found nothing, or a provider label shown on a language that did not resolve
+  // (Article IX, Spec 121, REQ-8 REQ-15).
+  describe('provider chain (Spec 121)', () => {
+    const progress = {
+      spa: { SUBDIVX: 'exhausted', OPENSUBTITLES: 'empty' },
+    };
+
+    it('reads the outcome of the last provider in the progress record', () => {
+      const rows = deriveLanguages(
+        search({ wantedLanguages: ['spa'], providerProgress: progress }),
+        [attempt({ status: 'REJECTED', provider: 'SUBDIVX' })],
+      );
+      expect(only(rows, 'spa')?.outcome).toBe(Outcome.NOT_FOUND);
+    });
+
+    it('keeps the reason of the last provider when it also had attempts', () => {
+      const rows = deriveLanguages(
+        search({
+          wantedLanguages: ['spa'],
+          providerProgress: {
+            spa: { SUBDIVX: 'exhausted', OPENSUBTITLES: 'exhausted' },
+          },
+        }),
+        [
+          attempt({ status: 'FAILED', provider: 'SUBDIVX', reasonKey: 'a' }),
+          attempt({ status: 'REJECTED', provider: 'OPENSUBTITLES', reasonKey: 'b' }),
+        ],
+      );
+      expect(only(rows, 'spa')).toMatchObject({
+        outcome: Outcome.REJECTED,
+        reasonKey: 'b',
+      });
+    });
+
+    it('lets an accepted attempt of an earlier provider win and reports that provider', () => {
+      const rows = deriveLanguages(
+        search({ wantedLanguages: ['spa'], providerProgress: progress }),
+        [attempt({ status: 'ACCEPTED', provider: 'SUBDIVX' })],
+      );
+      expect(only(rows, 'spa')).toMatchObject({
+        outcome: Outcome.RESOLVED,
+        provider: 'SUBDIVX',
+      });
+    });
+
+    it('reports the provider on REPLACED', () => {
+      const rows = deriveLanguages(
+        search({
+          wantedLanguages: ['spa'],
+          presentLanguages: ['spa'],
+          replaceLanguages: ['spa'],
+        }),
+        [attempt({ status: 'ACCEPTED', provider: 'OPENSUBTITLES' })],
+      );
+      expect(only(rows, 'spa')).toMatchObject({
+        outcome: Outcome.REPLACED,
+        provider: 'OPENSUBTITLES',
+      });
+    });
+
+    it('reports no provider on any outcome but RESOLVED or REPLACED', () => {
+      const rejected = deriveLanguages(
+        search({
+          wantedLanguages: ['spa'],
+          providerProgress: { spa: { SUBDIVX: 'exhausted' } },
+        }),
+        [attempt({ status: 'REJECTED', provider: 'SUBDIVX' })],
+      );
+      expect(only(rejected, 'spa')?.provider ?? null).toBeNull();
+      const present = deriveLanguages(
+        search({ wantedLanguages: ['spa'], presentLanguages: ['spa'] }),
+        [attempt({ status: 'ACCEPTED', provider: 'SUBDIVX' })],
+      );
+      expect(only(present, 'spa')?.provider ?? null).toBeNull();
+    });
+
+    it('keeps the provider when the current file confirms a resolved language and drops it when the file lost it', () => {
+      const attempts = [attempt({ status: 'ACCEPTED', provider: 'SUBDIVX' })];
+      const held = deriveLanguages(search({ wantedLanguages: ['spa'] }), attempts, ['spa']);
+      expect(only(held, 'spa')).toMatchObject({
+        outcome: Outcome.RESOLVED,
+        provider: 'SUBDIVX',
+      });
+      const lost = deriveLanguages(search({ wantedLanguages: ['spa'] }), attempts, []);
+      expect(only(lost, 'spa')?.outcome).toBe(Outcome.MISSING);
+      expect(only(lost, 'spa')?.provider ?? null).toBeNull();
+    });
+
+    it('reads the provider still working while an earlier one is marked', () => {
+      const rows = deriveLanguages(
+        search({
+          status: 'VALIDATING',
+          wantedLanguages: ['spa'],
+          providerProgress: { spa: { SUBDIVX: 'exhausted' } },
+        }),
+        [
+          attempt({ status: 'REJECTED', provider: 'SUBDIVX' }),
+          attempt({ status: 'QUEUED', provider: 'OPENSUBTITLES' }),
+        ],
+      );
+      expect(only(rows, 'spa')?.outcome).toBe(Outcome.PENDING);
+    });
+  });
 });

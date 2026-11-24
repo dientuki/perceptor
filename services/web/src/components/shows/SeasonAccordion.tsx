@@ -7,6 +7,7 @@ import type { Episode, Season } from "@/actions/shows";
 import {
   embedEpisodeSubtitlesAction,
   searchEpisodeSubtitlesAction,
+  uploadEpisodeSubtitlesAction,
 } from "@/actions/shows";
 import ImportSeasonFilesModal from "@/components/import/ImportSeasonFilesModal";
 import ImportFileModal from "@/components/import/importFileModal";
@@ -14,7 +15,9 @@ import ImportMagnetModal from "@/components/import/importMagnetModal";
 import EmbedSubtitlesButton from "@/components/media/EmbedSubtitlesButton";
 import FileTrackLanguages from "@/components/media/FileTrackLanguages";
 import SearchSubtitlesButton from "@/components/media/SearchSubtitlesButton";
+import SubtitleEmbedOutcome from "@/components/media/SubtitleEmbedOutcome";
 import SubtitleSearchStatus from "@/components/media/SubtitleSearchStatus";
+import UploadSubtitlesButton from "@/components/media/UploadSubtitlesButton";
 import SearchTorrentModal from "@/components/search/SearchTorrentModal";
 import SeasonAcquisitionButtons from "@/components/shows/SeasonAcquisitionButtons";
 import StatusBadge from "@/components/status/StatusBadge";
@@ -85,18 +88,36 @@ function EpisodeRow({
             audio={null}
             subtitles={episode.fileSubtitleLanguages}
           />
-          {/* Spec 106, REQ-9 */}
-          {subtitleSearchAvailable && episode.status === "COMPLETED" && (
-            <SearchSubtitlesButton
-              compact
-              fullWidth
-              search={episode.latestSubtitleSearch}
-              onSearch={searchEpisodeSubtitlesAction.bind(null, episode.id)}
-              replaceableLanguages={replaceableSubtitleLanguages(
-                episode.fileSubtitleLanguages,
-                subtitleLanguages,
-              )}
-            />
+          {episode.status === "COMPLETED" && (
+            <>
+              {/* Spec 106, REQ-9; Spec 124, REQ-1 */}
+              <div className="flex items-center gap-2">
+                {subtitleSearchAvailable && (
+                  <SearchSubtitlesButton
+                    compact
+                    fullWidth
+                    search={episode.latestSubtitleSearch}
+                    onSearch={searchEpisodeSubtitlesAction.bind(
+                      null,
+                      episode.id,
+                    )}
+                    replaceableLanguages={replaceableSubtitleLanguages(
+                      episode.fileSubtitleLanguages,
+                      subtitleLanguages,
+                    )}
+                  />
+                )}
+                <UploadSubtitlesButton
+                  compact
+                  embed={episode.subtitleEmbed}
+                  search={episode.latestSubtitleSearch}
+                  fileSubtitleLanguages={episode.fileSubtitleLanguages}
+                  onUpload={uploadEpisodeSubtitlesAction.bind(null, episode.id)}
+                />
+              </div>
+              {/* Spec 124, REQ-15 */}
+              <SubtitleEmbedOutcome embed={episode.subtitleEmbed} />
+            </>
           )}
         </div>
       </td>

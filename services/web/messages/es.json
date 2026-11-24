@@ -156,6 +156,7 @@
     "encode": {
       "no_video_stream": "El archivo de entrada no tiene pista de video",
       "no_original_audio": "El archivo no tiene pista de audio en el idioma original ({iso3})",
+      "original_audio_undetermined": "Ninguna pista de audio está marcada en el idioma original ({iso3}) y no se pudo detectar el idioma de las pistas sin marcar",
       "probe_failed": "No se pudo analizar el archivo de video ({filePath}): {detail}",
       "ffmpeg_failed": "ffmpeg terminó con código {code}: {stderr}",
       "no_output": "ffmpeg terminó en 0 pero no generó {path}",
@@ -194,7 +195,12 @@
       "sync_incomplete": "Un subtítulo solo cubre parte del archivo. El archivo no se tocó.",
       "sync_low_score": "Un subtítulo no coincide con este archivo. Probá con el desfase manual. El archivo no se tocó.",
       "sidecar_delete_failed": "Subtítulos incrustados, pero no se pudo borrar el .srt externo. Borralo a mano o desde Jellyfin.",
-      "jellyfin_refresh_failed": "Subtítulos incrustados, pero no se pudo avisar al servidor de medios. Aparecerán en su próximo escaneo."
+      "jellyfin_refresh_failed": "Subtítulos incrustados, pero no se pudo avisar al servidor de medios. Aparecerán en su próximo escaneo.",
+      "upload_too_many": "Podés subir hasta 8 subtítulos a la vez.",
+      "upload_not_srt": "Solo se pueden subir archivos .srt.",
+      "upload_too_large": "Cada subtítulo puede pesar hasta 2 MB.",
+      "replace_forced": "Un subtítulo forzado no puede reemplazar a los demás.",
+      "upload_staging_failed": "No se pudo guardar el subtítulo subido. Probá de nuevo."
     },
     "subtitleSearch": {
       "replace_language_not_wanted": "Ese idioma no está entre los que se buscan en este título.",
@@ -214,19 +220,37 @@
       "superseded": "Una entrega más nueva reemplazó esta búsqueda.",
       "in_progress": "Ya hay una búsqueda de subtítulos en curso para este título.",
       "no_languages": "No hay idiomas de subtítulos elegidos para este título.",
-      "provider_not_configured": "La búsqueda de subtítulos requiere una cuenta de OpenSubtitles en Ajustes → General.",
+      "provider_not_configured": "La búsqueda de subtítulos requiere un proveedor configurado en Ajustes → Subtítulos.",
       "no_library_path": "Perceptor no sabe dónde está el archivo de este título.",
-      "provider_unauthorized": "OpenSubtitles rechazó el usuario o la contraseña.",
-      "provider_unavailable": "No se pudo contactar a OpenSubtitles.",
-      "quota_exhausted": "Se agotaron las descargas diarias de OpenSubtitles.",
+      "provider_unauthorized": "El proveedor rechazó las credenciales.",
+      "provider_unavailable": "No se pudo contactar al proveedor de subtítulos.",
+      "quota_exhausted": "Se agotaron las descargas diarias del proveedor.",
       "probe_failed": "No se pudo leer el archivo para ver qué subtítulos tiene.",
-      "probe_not_found": "No se encontró la búsqueda de subtítulos."
+      "probe_not_found": "No se encontró la búsqueda de subtítulos.",
+      "no_provider": "Ningún proveedor configurado tiene subtítulos en este idioma.",
+      "archive_unusable": "El archivo descargado no contiene un único subtítulo .srt utilizable."
     },
     "tmdbList": {
       "invalid_reference": "No es un ID ni un enlace de lista de TMDB.",
       "unreadable": "TMDB no encontró la lista, o no es pública.",
       "already_attached": "Ya tenés esta lista vinculada.",
       "not_found": "La lista no existe."
+    },
+    "subtitleProvider": {
+      "incomplete": "Completá todos los datos del proveedor.",
+      "field_not_allowed": "Ese dato no aplica a este proveedor.",
+      "app_key_missing": "Esta instalación no tiene la clave de aplicación de OpenSubtitles.",
+      "not_configured": "Ese proveedor no está configurado.",
+      "language_unsupported": "{provider} no tiene subtítulos en {languageTag}.",
+      "language_invalid": "Ese idioma no es válido: el proveedor debe estar configurado y no ser el predeterminado.",
+      "language_duplicate": "Hay dos entradas para el mismo idioma."
+    },
+    "libraryTags": {
+      "migration_running": "Ya hay una migración de etiquetas en curso.",
+      "busy": "Se están reescribiendo las etiquetas de este archivo; probá de nuevo en un momento.",
+      "file_missing": "No se encontró el archivo.",
+      "write_failed": "No se pudo escribir el archivo.",
+      "verify_failed": "El archivo reescrito no coincide con el original; se dejó sin cambios."
     }
   },
   "landing": {
@@ -594,6 +618,27 @@
       "failed": "La última incrustación falló: {reason}",
       "warning": "{reason}"
     },
+    "uploadSubtitles": {
+      "button": "Subir subtítulos",
+      "busyEmbed": "Hay una incrustación en curso",
+      "busySearch": "Hay una búsqueda de subtítulos en curso",
+      "title": "Subir subtítulos",
+      "intro": "Elegí uno o más archivos .srt de tu computadora. Se incrustan en el archivo de la biblioteca.",
+      "addFiles": "Elegir archivos .srt",
+      "duplicateReplaced": "{name} ya estaba en la lista; se reemplazó.",
+      "language": "Idioma",
+      "noLanguage": "Elegí un idioma",
+      "forced": "Forzado",
+      "default": "Predeterminado",
+      "replace": "Reemplazar los existentes",
+      "replaceHint": "Reemplazar funciona por idioma: también se quitan los subtítulos no forzados de las otras variantes (por ejemplo, Latino y España).",
+      "offset": "Desfase (ms)",
+      "auto": "Automático",
+      "remove": "Quitar",
+      "confirm": "Subir",
+      "cancel": "Cancelar",
+      "submitting": "Subiendo…"
+    },
     "subtitleSearch": {
       "title": "Búsqueda de subtítulos",
       "failed": "Falló: {reason}",
@@ -734,6 +779,7 @@
       "download": "Descarga",
       "compression": "Compresión",
       "scheduling": "Programación",
+      "subtitles": "Subtítulos",
       "environment": "Entorno"
     },
     "environment": {
@@ -769,16 +815,35 @@
       "hostGuidanceDescription": "El endpoint de subida tiene que llevar una dirección a la que el navegador pueda llegar — la dirección LAN del host, nunca \"localhost\", ya que el navegador que abre esta app puede ser otra máquina distinta a la que corre el stack. Ningún contenedor puede determinar esa dirección por sí solo, así que PUBLIC_UPLOAD_URL se configura a mano en el .env.",
       "installableLabel": "Instalable como app",
       "installableAvailable": "Disponible",
-      "installableUnavailable": "No disponible — requiere HTTPS"
+      "installableUnavailable": "No disponible — requiere HTTPS",
+      "libraryTags": {
+        "label": "Etiquetas de la biblioteca",
+        "description": "Reescribe las etiquetas de procedencia de todos los archivos que ya están en la biblioteca al formato agrupado. Los archivos ya migrados no se tocan.",
+        "start": "Migrar etiquetas de la biblioteca",
+        "confirmTitle": "Migrar etiquetas de la biblioteca",
+        "confirmMessage": "Se va a reescribir cada archivo de la biblioteca. Puede tardar un rato; mientras se reescribe un archivo, su título no admite descargas ni incrustaciones.",
+        "confirm": "Migrar",
+        "starting": "Iniciando…",
+        "cancel": "Cancelar",
+        "running": "Migración en curso",
+        "progress": "{processed} / {total} archivos",
+        "refresh": "Actualizar",
+        "startedAt": "Inicio: {date}",
+        "finishedAt": "Fin: {date}",
+        "counts": {
+          "migrated": "Migrados: {count}",
+          "unchanged": "Sin cambios: {count}",
+          "busy": "Ocupados: {count}",
+          "missing": "No encontrados: {count}",
+          "failed": "Fallidos: {count}"
+        },
+        "failuresTitle": "Archivos con problemas",
+        "failureGeneric": "No se pudo migrar el archivo."
+      }
     },
     "general": {
       "uiLocaleLabel": "Idioma de la aplicación",
-      "dateFormatLabel": "Formato de fecha",
-      "openSubtitlesHeading": "OpenSubtitles",
-      "openSubtitlesUsernameLabel": "Usuario de OpenSubtitles",
-      "openSubtitlesPasswordLabel": "Contraseña de OpenSubtitles",
-      "openSubtitlesHelp": "Es una cuenta de opensubtitles.com (una cuenta de opensubtitles.org no sirve). Hacen falta los dos campos. El límite diario de descargas de esa cuenta es el que limita la búsqueda de subtítulos.",
-      "openSubtitlesSignUp": "Crear una cuenta en opensubtitles.com"
+      "dateFormatLabel": "Formato de fecha"
     },
     "scheduling": {
       "timezoneNote": "Los horarios se evalúan en la zona horaria del contenedor de la API (UTC salvo que el host configure TZ). \"03:00\" se refiere a esa zona, no a la tuya.",
@@ -926,7 +991,7 @@
       "save": "Guardar",
       "saving": "Guardando...",
       "subtitleSearchLabel": "Buscar subtítulos en internet en cada título que se entregue de ahora en adelante",
-      "subtitleSearchRequiresProvider": "Un administrador tiene que cargar una cuenta de OpenSubtitles en Ajustes → General."
+      "subtitleSearchRequiresProvider": "Un administrador tiene que configurar un proveedor de subtítulos en Ajustes → Subtítulos."
     },
     "torrentGroups": {
       "chosenLabel": "Grupos elegidos",
@@ -1112,6 +1177,59 @@
       "confirm": "Quitar",
       "cancel": "Cancelar",
       "removing": "Quitando..."
+    }
+  },
+  "subtitleProviders": {
+    "title": "Proveedores de subtítulos",
+    "add": "Agregar proveedor",
+    "edit": "Editar",
+    "remove": "Quitar",
+    "configured": "Configurado",
+    "default": "Predeterminado",
+    "empty": "No hay ningún proveedor de subtítulos configurado. La búsqueda de subtítulos no estará disponible hasta que agregues uno.",
+    "row": {
+      "username": "Usuario: {username}",
+      "secretSet": "Credenciales guardadas"
+    },
+    "modal": {
+      "addTitle": "Agregar un proveedor",
+      "editTitle": "Editar {name}",
+      "kindLabel": "Proveedor",
+      "usernameLabel": "Usuario de OpenSubtitles",
+      "passwordLabel": "Contraseña de OpenSubtitles",
+      "apiKeyLabel": "API key de Subdivx",
+      "secretKeepHint": "Dejalo en blanco para mantener el valor guardado.",
+      "openSubtitlesHelp": "Es una cuenta de opensubtitles.com (una cuenta de opensubtitles.org no sirve). Hacen falta los dos campos. El límite diario de descargas de esa cuenta es el que limita la búsqueda de subtítulos.",
+      "openSubtitlesSignUp": "Crear una cuenta en opensubtitles.com",
+      "subdivxHelp": "A Subdivx se llega a través de SubX API con una API key personal. Solo tiene subtítulos en español.",
+      "subdivxQuickstart": "Cómo conseguir una key",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando..."
+    },
+    "removeModal": {
+      "title": "Quitar proveedor",
+      "message": "{name} va a perder sus credenciales guardadas y también se van a quitar todos los idiomas configurados que apuntan a él.",
+      "cancel": "Cancelar",
+      "confirm": "Quitar",
+      "removing": "Quitando..."
+    },
+    "languages": {
+      "title": "Configuración de idiomas de subtítulos",
+      "description": "Al proveedor predeterminado se le pregunta por todos los idiomas. Un idioma configurado manda un idioma, o una variante regional como es-419, primero a otro proveedor; el predeterminado queda como respaldo.",
+      "defaultLabel": "Proveedor predeterminado",
+      "empty": "Sin idiomas configurados: todos los idiomas van al proveedor predeterminado.",
+      "languageLabel": "Idioma",
+      "providerLabel": "Proveedor",
+      "removeRow": "Quitar idioma",
+      "add": "Agregar idioma",
+      "save": "Guardar idiomas",
+      "saving": "Guardando...",
+      "saved": "Idiomas guardados."
+    },
+    "name": {
+      "OPENSUBTITLES": "OpenSubtitles",
+      "SUBDIVX": "Subdivx"
     }
   }
 }

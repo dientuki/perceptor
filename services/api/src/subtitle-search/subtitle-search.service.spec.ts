@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SubtitleSearchService } from './subtitle-search.service';
@@ -13,6 +13,7 @@ type Row = {
   status: 'QUEUED' | 'RUNNING' | 'ACCEPTED' | 'REJECTED' | 'FAILED';
   reasonKey: string | null;
   offsetMs: number | null;
+  framerateRatio?: number | null;
   score: number | null;
   stagedPath: string | null;
   languageIso3: string;
@@ -117,6 +118,36 @@ describe('SubtitleSearchService worker reports', () => {
     });
     expect(wake).toHaveBeenCalledTimes(1);
     expect(wake).toHaveBeenCalledWith(77);
+  });
+
+  describe('film-rate rescale (Spec 121, REQ-18)', () => {
+    const read = () => readFileSync(rows.get(1)!.stagedPath!, 'utf8');
+
+    it('rewrites the staged file before ACCEPTED and keeps the reported ratio', async () => {
+      await service.completed(1, measurement({ framerateRatio: 1.001, score: 200_000 }));
+      expect(rows.get(1)).toMatchObject({
+        status: 'ACCEPTED',
+        framerateRatio: 1.001,
+      });
+      expect(read()).toBe('1\n00:00:01,001 --> 01:40:06,006\nx\n');
+    });
+
+    it('leaves the file untouched for a PAL ratio', async () => {
+      await service.completed(1, measurement({ framerateRatio: 1.043, score: 200_000 }));
+      expect(rows.get(1)?.reasonKey).toBe(
+        ERROR_KEYS.SUBTITLE_SEARCH_FRAMERATE_MISMATCH,
+      );
+      expect(read()).toBe('1\n00:00:01,000 --> 01:40:00,000\nx\n');
+    });
+
+    it('rejects as incomplete when the file cannot be rescaled', async () => {
+      writeFileSync(rows.get(1)!.stagedPath!, '1\n00:00:01,000 --> 01:40:00,000\nx\n2\n00:00:02,000 --> oops\ny\n');
+      await service.completed(1, measurement({ framerateRatio: 0.999, score: 200_000 }));
+      expect(rows.get(1)).toMatchObject({
+        status: 'REJECTED',
+        reasonKey: ERROR_KEYS.SUBTITLE_SEARCH_INCOMPLETE,
+      });
+    });
   });
 
   it('writes a repeat report nothing, keeping the first verdict and not waking again', async () => {

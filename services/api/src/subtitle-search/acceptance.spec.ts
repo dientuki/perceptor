@@ -191,4 +191,37 @@ describe('accept', () => {
       );
     });
   });
+
+  describe('film rate (Spec 121, REQ-18)', () => {
+    it('rejects a 0.999 ratio without filmRate and accepts it with it', () => {
+      const m = good({ framerateRatio: 0.999 });
+      expect(accept(m, thresholds)).toBe(
+        'error.subtitleSearch.framerate_mismatch',
+      );
+      expect(accept(m, thresholds, { filmRate: true })).toBeNull();
+    });
+
+    it('rejects a PAL ratio either way', () => {
+      const m = good({ framerateRatio: 1.043 });
+      expect(accept(m, thresholds)).toBe(
+        'error.subtitleSearch.framerate_mismatch',
+      );
+      expect(accept(m, thresholds, { filmRate: true })).toBe(
+        'error.subtitleSearch.framerate_mismatch',
+      );
+    });
+
+    it('measures coverage on the scaled last cue', () => {
+      const m = good({
+        framerateRatio: 0.999,
+        mediaDurationMs: 100_000,
+        offsetMs: 0,
+        lastCueEndMs: 60_500,
+      });
+      expect(accept(m, thresholds, { filmRate: true })).toBeNull();
+      expect(
+        accept({ ...m, lastCueEndMs: 59_000 }, thresholds, { filmRate: true }),
+      ).toBe('error.subtitleSearch.incomplete');
+    });
+  });
 });

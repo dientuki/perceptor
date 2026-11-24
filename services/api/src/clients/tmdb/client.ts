@@ -46,6 +46,11 @@ export function posterUrl(posterPath: string | null | undefined): string | null 
   return posterPath ? `https://image.tmdb.org/t/p/${TMDB_POSTER_SIZE}${posterPath}` : null;
 }
 
+// Spec 121, REQ-11
+function mapImdbId(value: string | null | undefined): string | null {
+  return typeof value === 'string' && /^tt\d+$/.test(value) ? value : null;
+}
+
 const mappers = {
   [MEDIA_TYPE.MOVIE]: (data: TmdbMovieDetails): MovieDetail => ({
     type: MEDIA_TYPE.MOVIE,
@@ -61,6 +66,7 @@ const mappers = {
     runtime: data.runtime,
     genreIds: data.genres?.map((g) => g.id) ?? [],
     status: data.status,
+    imdbId: mapImdbId(data.imdb_id),
   }),
   [MEDIA_TYPE.SHOW]: (data: TmdbShowDetails): ShowDetail => ({
     type: MEDIA_TYPE.SHOW,
@@ -86,6 +92,7 @@ const mappers = {
     })) || [],
     genreIds: data.genres?.map((g) => g.id) ?? [],
     status: data.status,
+    imdbId: mapImdbId(data.external_ids?.imdb_id),
   }),
 };
 
@@ -175,7 +182,11 @@ export class TmdbClient implements MovieDBClient {
   async details(thing: MediaType, id: number): Promise<MediaDetail> {
     const endpoint = TMDB_ENDPOINT[thing];
 
-    const data = await this.fetchOne<TmdbMovieDetails | TmdbShowDetails>(`${endpoint}/${id}`);
+    const data = await this.fetchOne<TmdbMovieDetails | TmdbShowDetails>(
+      thing === MEDIA_TYPE.SHOW
+        ? `${endpoint}/${id}?append_to_response=external_ids`
+        : `${endpoint}/${id}`,
+    );
 
     const transform = mappers[thing];
 

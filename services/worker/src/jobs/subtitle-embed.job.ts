@@ -164,8 +164,12 @@ export async function handleSubtitleEmbed(job: Job<SubtitleEmbedJob>): Promise<v
       details.replaceLanguagesIso3 ?? [],
     );
 
+    const videoEndMs = Number(originalMetadata.format?.duration) * 1000;
+
     tempDir = await mkdtemp(join(tmpdir(), 'perceptor-subtitle-embed-'));
     const embedTracks: EmbedTrack[] = [];
+    // Spec 123, REQ-9
+    const embeddedAt = new Date();
     for (const [n, track] of details.tracks.entries()) {
       let bytes: Buffer;
       try {
@@ -177,12 +181,23 @@ export async function handleSubtitleEmbed(job: Job<SubtitleEmbedJob>): Promise<v
         });
       }
       const normalizedPath = join(tempDir, `${n}.srt`);
-      await writeFile(normalizedPath, normalizeSrt(bytes, track.offsetMs, basename(track.sourcePath)));
-      // Spec 107, REQ-14
+      await writeFile(normalizedPath, normalizeSrt(bytes, track.offsetMs, basename(track.sourcePath), videoEndMs));
+      // Spec 107, REQ-14; Spec 123, REQ-9
       let tagsPath: string | undefined;
-      if (track.provenance && track.provenance.trim() !== '') {
+      if (!track.provider || track.provider.trim() === '') {
+        console.warn(`[subtitle-embed] ${id} track ${n} carries no provider, omitting PROVIDER`);
+      }
+      const trackTags = buildTrackTagsXml({
+        source: track.provenance,
+        offsetMs: track.offsetMs,
+        provider: track.provider,
+        syncScore: track.syncScore,
+        framerateRatio: track.framerateRatio,
+        embeddedAt,
+      });
+      if (trackTags !== null) {
         tagsPath = join(tempDir, `${n}.tags.xml`);
-        await writeFile(tagsPath, buildTrackTagsXml(track.provenance, track.offsetMs));
+        await writeFile(tagsPath, trackTags);
       }
       embedTracks.push({
         normalizedPath,

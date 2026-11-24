@@ -1,6 +1,7 @@
 import type { Movie } from "@/actions/movies";
 import type { Episode, Season } from "@/actions/shows";
 import type { Language } from "@/types/languages";
+import type { SubtitleProviderKind } from "@/types/subtitle-providers";
 
 export const MEDIA_TYPE = {
   MOVIE: "movie",
@@ -139,6 +140,18 @@ export interface SubtitleEmbedInput {
   autoOffset: boolean;
 }
 
+// Spec 124, REQ-6
+export interface SubtitleUploadInput {
+  fileName: string;
+  contentBase64: string;
+  languageTag: string;
+  isForced: boolean;
+  isDefault: boolean;
+  replace: boolean;
+  offsetMs: number;
+  autoOffset: boolean;
+}
+
 /** Outcome of embedMovieSubtitles/embedEpisodeSubtitles; `errorKey` lets the caller react to stale_listing. */
 export type SubtitleEmbedResult =
   | { success: true }
@@ -172,6 +185,7 @@ export interface SubtitleSearchLanguage {
   languageIso3: string;
   outcome: SubtitleSearchLanguageOutcome;
   reasonKey: string | null;
+  provider: SubtitleProviderKind | null;
 }
 
 /** The latest subtitle search of a film or episode. */

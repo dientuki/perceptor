@@ -339,7 +339,6 @@
       "probe_score": 100,
       "tags": {
         "title": "It Chapter Two",
-        "PERCEPTOR_SOURCE": "It.Chapter.Two.2019.PROPER.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT/It.Chapter.Two.2019.PROPER.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.mkv",
         "creation_time": "2026-10-29T11:57:19.000000Z",
         "ENCODER": "Lavf62.12.103"
       }
@@ -387,8 +386,6 @@
     "-1",
     "-metadata",
     "title=It Chapter Two (2019)",
-    "-metadata",
-    "PERCEPTOR_SOURCE=It.Chapter.Two.2019.mkv",
     "-y",
     "/output/It Chapter Two (2019).mkv"
   ]

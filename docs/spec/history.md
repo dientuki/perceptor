@@ -23,6 +23,38 @@ git diff --stat -- docs/spec/graphql-contract.md services/api/schema.gql 2>/dev/
 **Re-run the checks rather than trusting these numbers** — they exist so an agent can prove a
 change added nothing, not as a fact to cite.
 
+## 2026-11-20 — `123-grouped-provenance-tags` (implementation measured; live pass pending)
+
+`api`, `web`, `worker` and `infra`; one Prisma migration (`20261120120000_123_library_tag_migration`: `library_tag_migrations`, `library_tag_migration_items`). Constitution 1.8.0 (Article XII exception 3). GraphQL contract: `SubtitleEmbedTrack` gains `provider`, `syncScore`, `framerateRatio`; new `LibraryTagMigration*` types, two queries and two mutations. `spec.md` was amended 0.3.0 to 0.3.1 during implementation (`LibraryTagMigrationItemDetails` gained `grainApplied` and `deinterlaced`, which REQ-15 needed and the frozen SDL could not carry).
+
+- `api` typecheck: 0 errors. Full suite (throwaway Redis): 115 suites, 1928 tests, all pass (measured before the amendment; `src/library-tags` re-run after it: 2 suites, 31 tests). Comments gate: PASS (1531 locators).
+- `worker` typecheck: 0 errors. Suite: 71 files, 1003 tests, all pass (re-run by the orchestrator). Comments gate: PASS (560 locators).
+- `web` typecheck: 0 errors. Catalog parity: `OK: en.json and es.json match exactly (899 keys)`. Comments gate: PASS (186 locators). `web` has no test runner, so the migration block is checked by typecheck only.
+- `infra`: `bin/build prod worker` and `bin/build dev worker` succeed; the image carries `mkvpropedit`, `mkvextract` and `mkvmerge` and `PERCEPTOR_VERSION` reads `dev`. The `release.yml` build-arg was checked only as valid YAML.
+- Migration: `prisma migrate diff` against a throwaway MariaDB 11 shows only the two `CREATE TABLE`s and their foreign keys for this change; the remaining `MODIFY ... JSON` lines are the pre-existing MariaDB JSON quirk on earlier migrations.
+- Live findings, 2026-11-20, on the dev library (run 1 migrated 81 files): the first press enqueued nothing, because BullMQ rejects `:` in a job id (`library-tags:<id>` became `library-tags-<id>`; a spec now runs BullMQ's own validator). A migrated file carried `VERSION: dev` (the migration passed its own worker's version; REQ-15 says never). Reading a migrated file showed the encode parameters at tree depth 3, which MediaInfo does not display, and a `subdivx:` prefix on a track `SOURCE`. Spec 0.4.0 flattens the layout to two levels (global `SOURCE`/`VERSION`/`ENCODED_AT`; the rest on the video track), drops the prefix, and adds REQ-20 (convert the 0.3 layout) and AC-7d. `mkvmerge -J` track UIDs are 64-bit and were rounded when parsed as numbers; they are now strings end to end. After 0.4.0: `api` and `worker` typecheck 0 errors; `worker` 71 files, 1021 tests; comments gates pass in all three; the conversion was checked on a generated mkv with the real tools (second pass `unchanged`). Writing the video-track tag makes `mkvmerge` drop that track's own `ENCODER` tag; statistics tags are regenerated.
+- Not measured: the live pass (AC-1 to AC-12, including AC-7b and AC-7c). It needs a dev stack with a real library, an encode, a Subdivx or OpenSubtitles embed and a media server, and the `ptor` stack on this host is a different install. The migration block and its confirmation modal were not opened in a browser.
+
+## 2026-11-20 — `122-audio-language-detection` (implementation measured; live pass pending a release)
+
+`worker` and `web`, plus the worker `Dockerfile`; no Prisma migration; `api` untouched. GraphQL contract: no schema change; `docs/spec/graphql-contract.md` § "UI internationalization" gained `error.encode.original_audio_undetermined` (`{iso3}`).
+
+- `worker` typecheck: 0 errors. Suite: 68 files, 946 tests, all pass (throwaway container, uid 1000). The only new tests are `audio-language-score.spec.ts` (21), `audio-language.spec.ts` (15), `iso639.spec.ts` (3), a driver test in `encode.ffmpeg.spec.ts` and two in `buildCommand.spec.ts` (a re-labelled track yields `language=eng`; the same untagged track throws `no_original_audio`). Comments gate: PASS (2168 locators tree-wide).
+- `web` catalog parity: `OK: en.json and es.json match exactly (874 keys)`. No `web` typecheck run (messages only).
+- Image: `perceptor-worker:local-prod` 1122716346 to 1125414397 bytes (+2.6 MiB) with `whisper-vad-speech-segments` and the Silero model, pinned by revision and SHA-256.
+- Calibration (`122/worker/calibration.md`): `VOTE_THRESHOLD = 0.8`, `MIN_VOTES = 2`, unchanged. Job 653's main track votes en 0.978 / 0.995 / 0.763; silence answers en 0.37, music 0.26 to 0.36. Attempt 1 about 30 s per candidate, attempt 2 about 3.5 min on a 6329 s film (202 MB temporary WAV).
+- Driver-level pass on fixtures in a throwaway container of the built image, with a throwaway Redis: AC-3, AC-4, AC-5, AC-7 and AC-9 observed holding and AC-2's reuse behaviour (`(reused)`, TTL about 30 days); AC-6 and AC-8 observed on fixtures only.
+- Not measured: the live pass on `ptor` (AC-1 on job 653, AC-2 on the real job, AC-4's Spanish line in `/downloads`, AC-6 on a real library file, AC-8's move-as-is), which needs a release carrying this change. The `ptor` stack was down on this host and is a published-image install, not this checkout.
+
+## 2026-11-17 — `121-subtitle-providers` (implementation measured; live pass pending)
+
+`api` and `web`; two Prisma migrations (`20261117180921_subtitle_providers` and `20261117200000_subtitle_provider_languages_key`, which renames the stored `subtitle_provider_routes` Setting key to `subtitle_provider_languages`; 61 migrations, database up to date); GraphQL contract: `schema.gql` gained exactly the spec's delta (`SubtitleProviderKind`, three types, two inputs, `subtitleProviders` and three mutations, `SubtitleSearchLanguage.provider`, the new `subtitleSearchAvailable` description) and `docs/spec/graphql-contract.md` the `121` section. No `worker` or `infra` change.
+
+- `api` typecheck: 0 errors. Suite: 111 suites, 1877 tests, all pass. Comments gate: PASS (1467 locators).
+- `web` typecheck: 0 errors. Catalog parity: 873 keys. Comments gate: PASS (180 locators). Biome clean on the touched files.
+- `bin/audit api`: FAIL on five advisories that were already open (`@nestjs/apollo`, `@nestjs/graphql`, `fdir`, `picomatch`, `tinyglobby`); their locked versions are unchanged from HEAD and neither new dependency (`fflate`, `node-unrar-js`) is involved.
+- Not measured: the live pass (AC-1…AC-17) needs a real OpenSubtitles account, a SubX API key and an admin login in the browser; the Subtitles tab and the provider label in the status were checked by typecheck only.
+
 ## 2026-11-17 — `114-subtitle-search-current-file` (docs close-out)
 
 `api` and `web`; no Prisma migration; GraphQL contract: `docs/spec/graphql-contract.md` gained the `114` section and a "Superseded by 114" note on `103`'s enum line; `schema.gql` already carried `SubtitleSearchLanguageOutcome.RESOLVED` and `MISSING` in place of `EMBEDDED` (regenerated before `119` added `REPLACED`). The code shipped in `d440efc`; this entry closes T003, T005, T006 and T008.

@@ -38,6 +38,11 @@ export async function seedSettings(prisma: PrismaClient) {
     { key: 'opensubtitles_username', value: '' },
     { key: 'opensubtitles_password', value: '' },
 
+    // Spec 121, REQ-1, REQ-5: outside the catalog, written by the subtitle-providers module only.
+    { key: 'subdivx_api_key', value: '' },
+    { key: 'subtitle_provider_default', value: '' },
+    { key: 'subtitle_provider_languages', value: '[]', backfillEmpty: false },
+
     { key: 'ia_model', value: 'gemini-3-flash-preview' },
     { key: 'ia_key', value: '' },
 

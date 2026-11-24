@@ -391,3 +391,45 @@ describe('buildFfmpegCommand — subtitleVariants (Spec 118, REQ-8)', () => {
     expect(args).toEqual(build(['es-419'], new Map()));
   });
 });
+
+// Defends Spec 122, REQ-5 REQ-6: a main track the resolver decided is English must reach the
+// command builder as a tagged stream. Without the re-labelled copy the builder sees an untagged
+// original, refuses the job, and a decided track would still be dropped.
+describe('buildFfmpegCommand — audio language re-labelling (Spec 122, REQ-5 REQ-6)', () => {
+  const untagged = (): { streams: any[] } => ({
+    streams: [videoStream(), audioStream({ index: 1, codec_name: 'dts', channels: 6, tags: {} })],
+  });
+  const relabelled = () => {
+    return { streams: [videoStream(), audioStream({ index: 1, codec_name: 'dts', channels: 6, tags: { language: 'eng' } })] };
+  };
+  const build = (metadata: any) =>
+    buildFfmpegCommand(
+      'Some.Movie.mkv',
+      '/out/Some.Movie.mkv',
+      metadata,
+      details({ allowedAudioLanguagesIso3: ['eng', 'spa'] }),
+      false,
+      null,
+      new Set(),
+      NO_AUDIO_VARIANTS,
+      new Map(),
+    );
+
+  it('writes language=eng for a track the resolver re-labelled', () => {
+    const args = build(relabelled());
+
+    expect(args).toContain('0:1');
+    expect(args.join(' ')).toContain('-metadata:s:a:0 language=eng');
+  });
+
+  it('refuses the same file without the re-label with no_original_audio', () => {
+    let thrown: any;
+    try {
+      build(untagged());
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown?.i18nKey ?? thrown?.key ?? thrown?.message).toMatch(/no_original_audio|no audio track in the original language \(eng\)/);
+  });
+});

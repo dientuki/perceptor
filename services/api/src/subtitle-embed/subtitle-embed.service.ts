@@ -5,6 +5,7 @@ import { stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { PrismaService } from '@/prisma/prisma.service';
 import { MediaServerService } from '@/media-server/media-server.service';
+import { notifyMediaServerModified } from '@/media-server/notify-modified';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { LibraryProbeQueueService } from '@/queue/library-probe-queue.service';
 import { SubtitleEmbedQueueService } from '@/queue/subtitle-embed-queue.service';
@@ -26,6 +27,7 @@ import { SubtitleEmbedDetails } from './entities/subtitle-embed-details.entity';
 import { SubtitleEmbedInput } from './dto/subtitle-embed.input';
 import { SubtitleEmbedStatus } from './entities/subtitle-embed-status.enum';
 import { SubtitleEmbedSyncService } from './subtitle-embed-sync.service';
+import { SubtitleUploadStaging } from './upload-staging';
 
 // Spec 101, REQ-4
 const MAX_OFFSET_MS = 600_000;
@@ -55,12 +57,21 @@ export type TargetRef =
 // Spec 103, REQ-11
 export type StagedTrackInput = {
   languageIso3: string;
-  stagedPath: string;
+  stagedPath?: string;
   offsetMs: number;
+  // Spec 124, REQ-6 REQ-12 REQ-13
+  fileName?: string;
+  isDefault?: boolean;
+  isForced?: boolean;
+  autoOffset?: boolean;
   // Spec 107, REQ-14
   provenance: string;
   // Spec 118, REQ-16
   variantTag?: string | null;
+  // Spec 123, REQ-9
+  provider?: string;
+  syncScore?: number | null;
+  framerateRatio?: number | null;
 };
 
 // Spec 107, REQ-14
@@ -85,6 +96,11 @@ type StoredTrack = {
   provenance?: string;
   // Spec 113, REQ-2
   autoOffset?: boolean;
+  // Spec 123, REQ-9
+  provider?: string;
+  syncScore?: number | null;
+  framerateRatio?: number | null;
+  measurement?: { score?: number; framerateRatio?: number };
 };
 
 function toExternalSubtitle(
@@ -135,6 +151,8 @@ export class SubtitleEmbedService {
     private readonly libraryProbeQueue: LibraryProbeQueueService,
     // Spec 113, REQ-3
     private readonly embedSync: SubtitleEmbedSyncService,
+    // Spec 124, REQ-12
+    private readonly uploadStaging: SubtitleUploadStaging,
   ) {}
 
   // Spec 101, REQ-2 REQ-3
@@ -343,6 +361,8 @@ export class SubtitleEmbedService {
       isForced: listedByName.get(subtitle.fileName)!.isForced,
       offsetMs: subtitle.autoOffset ? 0 : subtitle.offsetMs,
       provenance: USER_PROVENANCE,
+      // Spec 123, REQ-9
+      provider: USER_PROVENANCE,
       ...(subtitle.autoOffset ? { autoOffset: true } : {}),
     }));
 
@@ -355,20 +375,29 @@ export class SubtitleEmbedService {
     staged: StagedTrackInput[],
     mkvPath: string,
     replaceLanguages: string[] = [],
+    // Spec 124, REQ-12
+    stage?: (embedId: number) => Promise<string[]>,
   ): Promise<SubtitleEmbed> {
     if (staged.length === 0) {
       throw i18nError.badRequest(ERROR_KEYS.SUBTITLE_EMBED_EMPTY_SELECTION);
     }
 
     for (const track of staged) {
+      if (track.stagedPath === undefined && !stage) {
+        throw i18nError.badRequest(
+          ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE,
+        );
+      }
       if (
+        track.stagedPath !== undefined &&
         !(await this.mediaRoots.isInsideRoot('downloads', track.stagedPath))
       ) {
         throw i18nError.badRequest(
           ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE,
         );
       }
-      this.assertOffsetInRange(track.offsetMs);
+      // Spec 124, REQ-6
+      if (!track.autoOffset) this.assertOffsetInRange(track.offsetMs);
     }
 
     const target = await this.resolveTarget(ref, null);
@@ -385,21 +414,28 @@ export class SubtitleEmbedService {
     await this.assertNotBusy(ref, target);
 
     const tracks: StoredTrack[] = staged.map((track) => ({
-      fileName: basename(track.stagedPath),
-      stagedPath: track.stagedPath,
+      fileName: track.fileName ?? basename(track.stagedPath!),
+      ...(track.stagedPath === undefined
+        ? {}
+        : { stagedPath: track.stagedPath }),
       languageIso3: track.languageIso3,
       // Spec 118, REQ-16
       trackTitle:
         (track.variantTag ? VARIANT_TRACK_TITLES[track.variantTag] : undefined) ??
         baseTitles.get(track.languageIso3) ??
         track.languageIso3,
-      isDefault: false,
-      isForced: false,
-      offsetMs: track.offsetMs,
+      isDefault: track.isDefault ?? false,
+      isForced: track.isForced ?? false,
+      offsetMs: track.autoOffset ? 0 : track.offsetMs,
+      ...(track.autoOffset ? { autoOffset: true } : {}),
       provenance: track.provenance,
+      // Spec 123, REQ-9
+      provider: track.provider ?? STAGED_PROVENANCE,
+      syncScore: track.syncScore ?? null,
+      framerateRatio: track.framerateRatio ?? null,
     }));
 
-    return this.queueEmbed(ref, mkvPath, tracks, replaceLanguages);
+    return this.queueEmbed(ref, mkvPath, tracks, replaceLanguages, stage);
   }
 
   // Spec 106, REQ-3
@@ -421,12 +457,13 @@ export class SubtitleEmbedService {
     mkvPath: string,
     tracks: StoredTrack[],
     replaceLanguages: string[] = [],
+    stage?: (embedId: number) => Promise<string[]>,
   ): Promise<SubtitleEmbed> {
     const targetColumn =
       ref.kind === 'movie' ? { movieId: ref.id } : { episodeId: ref.id };
     // Spec 113, REQ-3
     const automatic = tracks.some((track) => track.autoOffset);
-    const row = await this.createGuarded(
+    let row = await this.createGuarded(
       targetColumn,
       mkvPath,
       tracks,
@@ -434,11 +471,42 @@ export class SubtitleEmbedService {
       replaceLanguages,
     );
 
+    // Spec 124, REQ-12
+    if (stage) {
+      try {
+        const paths = await stage(row.id);
+        if (paths.length !== tracks.length) {
+          throw new Error('stage returned the wrong number of paths');
+        }
+        for (const path of paths) {
+          if (!(await this.mediaRoots.isInsideRoot('downloads', path))) {
+            throw i18nError.badRequest(
+              ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE,
+            );
+          }
+        }
+        paths.forEach((path, index) => {
+          tracks[index].stagedPath = path;
+        });
+        const stored = tracks as unknown as Prisma.InputJsonValue;
+        await this.prisma.subtitleEmbed.update({
+          where: { id: row.id },
+          data: { tracks: stored },
+        });
+        row = { ...row, tracks: stored as Prisma.JsonValue };
+      } catch (error) {
+        await this.prisma.subtitleEmbed.delete({ where: { id: row.id } });
+        await this.uploadStaging.removeEmbed(row.id);
+        throw error;
+      }
+    }
+
     try {
       if (automatic) await this.embedSync.enqueue(row);
       else await this.queue.addEmbed({ subtitleEmbedId: row.id });
     } catch (error) {
       await this.prisma.subtitleEmbed.delete({ where: { id: row.id } });
+      await this.uploadStaging.removeEmbed(row.id);
       throw error;
     }
 
@@ -789,6 +857,8 @@ export class SubtitleEmbedService {
       where: { id, status: { in: [...ACTIVE_EMBED_STATUSES] } },
       data: { status: 'FAILED', errorKey: key, finishedAt: new Date() },
     });
+    // Spec 124, REQ-12
+    await this.uploadStaging.removeEmbed(id);
     return true;
   }
 
@@ -819,6 +889,9 @@ export class SubtitleEmbedService {
     });
     if (claimed.count !== 1) return true;
 
+    // Spec 124, REQ-12
+    await this.uploadStaging.removeEmbed(id);
+
     // Spec 108, REQ-3
     if (row.movieId) void this.libraryProbeQueue.request({ movieId: row.movieId });
     else if (row.episodeId) void this.libraryProbeQueue.request({ episodeId: row.episodeId });
@@ -833,32 +906,13 @@ export class SubtitleEmbedService {
   }
 
   // Spec 101, REQ-12; Spec 107, REQ-4
-  private async notifyMediaServer(containerFilePath: string): Promise<boolean> {
-    try {
-      const client = await this.mediaServer.createClient();
-      if (!client) return true;
-      if (!client.modifiedMedia) {
-        this.logger.warn(
-          'Media server refresh skipped: the client cannot be notified',
-        );
-        return true;
-      }
-      const hostPath = this.mediaRoots.containerToHostPath(
-        'library',
-        containerFilePath,
-      );
-      if (!hostPath) {
-        this.logger.warn(
-          `Media server refresh skipped: ${containerFilePath} has no host path`,
-        );
-        return false;
-      }
-      await client.modifiedMedia(hostPath);
-      return true;
-    } catch (error) {
-      this.logger.warn(`Media server refresh failed: ${String(error)}`);
-      return false;
-    }
+  private notifyMediaServer(containerFilePath: string): Promise<boolean> {
+    return notifyMediaServerModified(
+      this.mediaServer,
+      this.mediaRoots,
+      this.logger,
+      containerFilePath,
+    );
   }
 
   // Spec 101, REQ-14
@@ -878,6 +932,13 @@ export class SubtitleEmbedService {
       provenance:
         track.provenance ??
         (track.stagedPath == null ? USER_PROVENANCE : STAGED_PROVENANCE),
+      // Spec 123, REQ-9 REQ-10
+      provider:
+        track.provider ??
+        (track.stagedPath == null ? USER_PROVENANCE : STAGED_PROVENANCE),
+      syncScore: track.syncScore ?? track.measurement?.score ?? null,
+      framerateRatio:
+        track.framerateRatio ?? track.measurement?.framerateRatio ?? null,
     }));
 
     // Spec 119, REQ-5

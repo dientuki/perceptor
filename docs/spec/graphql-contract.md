@@ -831,7 +831,7 @@ The full vocabulary, by owner:
 | `api` — uploads (GraphQL) | `error.upload.target_ambiguous` |
 | `api` — uploads (REST) | `error.upload.ticket_expired`, `error.upload.ticket_wrong_movie`, `error.upload.ticket_wrong_episode`, `error.upload.metadata_incomplete` |
 | `api` — DTO validation | `error.validation.setting_key_required`, `error.validation.setting_value_required`, `error.validation.user_id_required`, `error.validation.login_username_required`, `error.validation.login_password_required`, `error.validation.user_name_required`, `error.validation.username_min_length`, `error.validation.password_min_length` |
-| `worker` — encode pipeline | `error.encode.no_video_stream`, `error.encode.no_original_audio`, `error.encode.probe_failed`, `error.encode.ffmpeg_failed`, `error.encode.no_output`, `error.encode.mkvmerge_failed`, `error.encode.episode_numbers_missing`, `error.encode.unknown_driver`, `error.encode.move_failed` (`032-optional-compression`, the passthrough path used when compression is off), `error.encode.disc_remux_failed` (`{code}`, `{stderr}`; `mkvmerge` could not assemble a Blu-ray playlist into an MKV — `100-bluray-disc-remux`), `error.source.disc_playlist_ambiguous` (`{playlists}`; reported through `sourceScanFailed` when two playlists tie for the main film — `100-bluray-disc-remux`), `error.encode.unexpected` (catch-all for a non-`KeyedError` throw — `encodeFailed`'s `errorKey` is required, so a failure never reports with no key) |
+| `worker` — encode pipeline | `error.encode.no_video_stream`, `error.encode.no_original_audio`, `error.encode.original_audio_undetermined` (`{iso3}`, `122`), `error.encode.probe_failed`, `error.encode.ffmpeg_failed`, `error.encode.no_output`, `error.encode.mkvmerge_failed`, `error.encode.episode_numbers_missing`, `error.encode.unknown_driver`, `error.encode.move_failed` (`032-optional-compression`, the passthrough path used when compression is off), `error.encode.disc_remux_failed` (`{code}`, `{stderr}`; `mkvmerge` could not assemble a Blu-ray playlist into an MKV — `100-bluray-disc-remux`), `error.source.disc_playlist_ambiguous` (`{playlists}`; reported through `sourceScanFailed` when two playlists tie for the main film — `100-bluray-disc-remux`), `error.encode.unexpected` (catch-all for a non-`KeyedError` throw — `encodeFailed`'s `errorKey` is required, so a failure never reports with no key) |
 | `worker` — reused from `api` | `error.processJob.not_found`, `error.source.no_target`, `error.source.no_download_path` |
 
 **Locale resolution never crosses the GraphQL boundary as a header or argument.** `web` resolves
@@ -3225,6 +3225,92 @@ New catalog entries in `web/messages/{en,es}.json`:
 | :-- | :-- | :-- |
 | `error.subtitleSearch.replace_language_not_wanted` | `Ese idioma no está entre los que se buscan en este título.` | `That language is not one of the languages searched for this title.` |
 | `error.subtitleSearch.replace_language_not_present` | `El archivo no tiene subtítulos en ese idioma para reemplazar.` | `The file has no subtitle in that language to replace.` |
+
+### Subtitle providers, languages and the Subtitles tab (`121-subtitle-providers`)
+
+```graphql
+enum SubtitleProviderKind { OPENSUBTITLES SUBDIVX }
+
+type SubtitleProvider {
+  kind: SubtitleProviderKind!
+  configured: Boolean!
+  isDefault: Boolean!
+  username: String
+  secretSet: Boolean!
+  languageTags: [String!]
+}
+
+type SubtitleProviderLanguage { languageTag: String!, provider: SubtitleProviderKind! }
+type SubtitleProviderSettings { providers: [SubtitleProvider!]!, languages: [SubtitleProviderLanguage!]! }
+
+input SubtitleProviderInput { kind: SubtitleProviderKind!, username: String, secret: String }
+input SubtitleProviderLanguageInput { languageTag: String!, provider: SubtitleProviderKind! }
+
+type Query {
+  subtitleProviders: SubtitleProviderSettings!
+}
+
+type Mutation {
+  saveSubtitleProvider(input: SubtitleProviderInput!): SubtitleProviderSettings!
+  removeSubtitleProvider(kind: SubtitleProviderKind!): SubtitleProviderSettings!
+  setSubtitleProviderLanguages(defaultProvider: SubtitleProviderKind!, languages: [SubtitleProviderLanguageInput!]!): SubtitleProviderSettings!
+}
+
+type SubtitleSearchLanguage {
+  provider: SubtitleProviderKind
+}
+```
+
+All four operations are admin-only. Credentials no longer travel through `settings` /
+`updateSettings`: this supersedes `107`'s note that `opensubtitles_username` and
+`opensubtitles_password` do. `updateSettings` now refuses `opensubtitles_username`,
+`opensubtitles_password` and `subdivx_api_key` with `error.setting.not_editable`, and the `settings`
+query omits both secrets. The three stored rows are `subdivx_api_key`, `subtitle_provider_default`
+and `subtitle_provider_languages`. `MediaCapabilities.subtitleSearchAvailable` is now true while at
+least one provider is configured. `SubtitleSearchLanguage.provider` is non-null only on `RESOLVED`
+and `REPLACED`. A blank `secret` keeps the stored one. Because an older `web` would still send
+`opensubtitles_*` through `updateSettings`, `api` and `web` ship together.
+
+| Condition | Error |
+| :-- | :-- |
+| `saveSubtitleProvider` leaves the provider incomplete | `BadRequest` `error.subtitleProvider.incomplete` |
+| `username` sent for `SUBDIVX` | `BadRequest` `error.subtitleProvider.field_not_allowed` |
+| `saveSubtitleProvider(OPENSUBTITLES)` with no application key | `BadRequest` `error.subtitleProvider.app_key_missing` |
+| `removeSubtitleProvider` of an unconfigured kind, or a default that is not configured | `NotFound` / `BadRequest` `error.subtitleProvider.not_configured` |
+| A language entry to a provider that does not serve its language | `BadRequest` `error.subtitleProvider.language_unsupported` |
+| A language entry to the default or to an unconfigured provider | `BadRequest` `error.subtitleProvider.language_invalid` |
+| Two languages for one tag | `BadRequest` `error.subtitleProvider.language_duplicate` |
+| An unknown language tag | `error.language.unavailable` |
+| A key moved out of the catalog sent to `updateSettings` | `error.setting.not_editable` |
+
+Search outcome keys (never thrown): `error.subtitleSearch.no_provider` and
+`error.subtitleSearch.archive_unusable`. Subdivx is reached through the SubX API
+(`https://subx-api.duckdns.org/`); `web` and `worker` never call it.
+
+## 124 — Subtitle upload
+
+An owner of a film or episode uploads `.srt` files to embed in the library `.mkv`. Not admin-only.
+
+```graphql
+input SubtitleUploadInput { fileName contentBase64 languageTag isForced isDefault replace offsetMs autoOffset }
+uploadMovieSubtitles(movieId: Int!, subtitles: [SubtitleUploadInput!]!): SubtitleEmbed!
+uploadEpisodeSubtitles(episodeId: Int!, subtitles: [SubtitleUploadInput!]!): SubtitleEmbed!
+```
+
+- `contentBase64` carries the file's **raw bytes**, never text decoded by `web`: `api` normalizes the
+  charset to UTF-8 (`121`'s `toUtf8`). `languageTag` is a `Language.tag`, not an ISO 3 code. Limits:
+  2 MiB per file, 8 files per request; `/graphql` accepts a 32 MB body, every other route keeps 2 MB.
+- The upload is a staged embed (`embedStaged`): `SYNCING` with any `autoOffset`, else `QUEUED`. Files
+  are staged under `.perceptor/subtitle-upload/<embedId>/` in the downloads root and removed when the
+  embed is `COMPLETED` or `FAILED`.
+- Refusals, in order: not found/owned, `empty_selection`, `upload_too_many`, `upload_not_srt`,
+  `duplicate_subtitle`, `multiple_defaults`, `unknown_language`, `offset_out_of_range`,
+  `replace_forced`, `subtitleSearch.replace_language_not_present`, `upload_too_large`/`upload_not_srt`
+  (body), `charset_undetected`, `no_file`, `media_server_unavailable` (ServiceUnavailable), `not_mkv`,
+  `outside_library`, `busy`, `subtitleSearch.in_progress`, `upload_staging_failed` (InternalServerError).
+  New keys: `error.subtitleEmbed.{upload_too_many,upload_not_srt,upload_too_large,replace_forced,upload_staging_failed}`.
+- The worker surface is unchanged: no new field on `SubtitleEmbedDetails`, `SubtitleEmbedTrack` or
+  `SubtitleEmbedSyncDetails`.
 
 ## Known debt
 

@@ -339,3 +339,55 @@ describe('TmdbClient.list', () => {
     expect(page.itemCount).toBeNull();
   });
 });
+
+// This suite exists because otherwise the IMDb id silently reads null for every
+// series: the id lives under `external_ids` only when the request asks for it,
+// and a film carries it at the top level. A wrong path or a missing
+// append_to_response yields null with no error, and a second request per series
+// would double TMDB traffic with nothing failing.
+describe('TmdbClient.details imdbId', () => {
+  let client: TmdbClient;
+
+  beforeEach(() => {
+    client = new TmdbClient(settingsStub());
+    global.fetch = jest.fn();
+  });
+
+  it('reads a film imdb_id from the top level', async () => {
+    mockFetchOnce({ id: 1, title: 'Dune', imdb_id: 'tt1160419', genres: [] });
+
+    const detail = await client.details(MEDIA_TYPE.MOVIE, 1);
+
+    expect(detail.imdbId).toBe('tt1160419');
+  });
+
+  it('reads a series id from external_ids with exactly one request carrying append_to_response', async () => {
+    mockFetchOnce({
+      id: 2,
+      name: 'Dark',
+      genres: [],
+      seasons: [],
+      external_ids: { imdb_id: 'tt5753856' },
+    });
+
+    const detail = await client.details(MEDIA_TYPE.SHOW, 2);
+
+    expect(detail.imdbId).toBe('tt5753856');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const url = new URL((global.fetch as jest.Mock).mock.calls[0][0] as string);
+    expect(url.searchParams.get('append_to_response')).toBe('external_ids');
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['a non-tt value', 'nm0000001'],
+    ['null', null],
+    ['absent', undefined],
+  ])('reads %s as null', async (_label, value) => {
+    mockFetchOnce({ id: 1, title: 'x', imdb_id: value, genres: [] });
+
+    const detail = await client.details(MEDIA_TYPE.MOVIE, 1);
+
+    expect(detail.imdbId).toBeNull();
+  });
+});

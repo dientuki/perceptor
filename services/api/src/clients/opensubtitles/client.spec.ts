@@ -1,5 +1,5 @@
 import { OpenSubtitlesClient } from './client';
-import { OpenSubtitlesHttpError } from './errors';
+import { SubtitleProviderHttpError } from '../subtitle-provider-error';
 
 // This suite exists because the OpenSubtitles error handling fails silently
 // in four ways: a 401 loop that never stops re-logging in burns the account's
@@ -86,7 +86,7 @@ describe('OpenSubtitlesClient', () => {
     try {
       await call();
     } catch (error) {
-      return error as OpenSubtitlesHttpError;
+      return error as SubtitleProviderHttpError;
     }
     throw new Error('expected a rejection');
   };

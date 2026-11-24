@@ -1,5 +1,6 @@
 import {
   mkdir,
+  readFile,
   mkdtemp,
   readdir,
   rm,
@@ -9,12 +10,14 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { zipSync } from 'fflate';
 import { MediaRootsService } from '@/media-roots/media-roots.service';
 import { ActiveEmbedGuard } from '@/subtitle-embed/active-embed.guard';
 import { SubtitleEmbedService } from '@/subtitle-embed/subtitle-embed.service';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { i18nError } from '@/i18n/i18n-error';
-import { OpenSubtitlesHttpError } from '@/clients/opensubtitles/errors';
+import { SubdivxCandidateFetchError } from '@/clients/subdivx/client';
+import { SubtitleProviderHttpError } from '@/clients/subtitle-provider-error';
 import { SubtitleCandidate } from './candidates';
 import { SubtitleSearchDriver } from './subtitle-search.driver';
 import { SubtitleSearchStaging } from './staging';
@@ -83,6 +86,9 @@ describe('SubtitleSearchDriver', () => {
   let addProbe: jest.Mock;
   let removeProbe: jest.Mock;
   let client: Record<string, jest.Mock>;
+  let subdivx: Record<string, jest.Mock>;
+  let imdbIds: Record<string, jest.Mock>;
+  let chainFor: jest.Mock;
   let remote: Record<string, SubtitleCandidate[]>;
   let available: boolean;
   let driver: SubtitleSearchDriver;
@@ -181,6 +187,9 @@ describe('SubtitleSearchDriver', () => {
         isSubtitleSearchAvailable: jest.fn(() => Promise.resolve(available)),
       } as never,
       new SubtitleSearchStaging(mediaRoots),
+      { chainFor } as never,
+      subdivx as never,
+      imdbIds as never,
     );
   };
 
@@ -202,6 +211,12 @@ describe('SubtitleSearchDriver', () => {
     embedStaged = jest.fn().mockResolvedValue({ id: 500 });
     addProbe = jest.fn().mockResolvedValue(undefined);
     removeProbe = jest.fn().mockResolvedValue(undefined);
+    chainFor = jest.fn().mockResolvedValue(['OPENSUBTITLES']);
+    subdivx = {
+      search: jest.fn().mockResolvedValue([]),
+      download: jest.fn(),
+    };
+    imdbIds = { resolve: jest.fn().mockResolvedValue('tt0133093') };
     client = {
       search: jest.fn((params: { languages: string }) =>
         Promise.resolve(remote[params.languages] ?? []),
@@ -501,7 +516,7 @@ describe('SubtitleSearchDriver', () => {
     it('marks a candidate whose download fails and stages the next rank in the same step', async () => {
       seedSearch();
       client.download.mockRejectedValueOnce(
-        new OpenSubtitlesHttpError('unavailable', 'POST', '/download', 500),
+        new SubtitleProviderHttpError('opensubtitles', 'unavailable', 'POST', '/download', 500),
       );
 
       await driver.advance(1);
@@ -610,7 +625,7 @@ describe('SubtitleSearchDriver', () => {
     describe('provider outcomes (Spec 107 REQ-9)', () => {
       const http = (
         kind: 'unauthorized' | 'quota' | 'rate_limited' | 'unavailable',
-      ) => new OpenSubtitlesHttpError(kind, 'GET', '/x', 0);
+      ) => new SubtitleProviderHttpError('opensubtitles', kind, 'GET', '/x', 0);
 
       it('fails the search with provider_unauthorized and spends no download when the search is refused', async () => {
         seedSearch();
@@ -783,7 +798,12 @@ describe('SubtitleSearchDriver', () => {
       seedSearch();
       await driver.advance(1);
       const rows = attempts.filter((row) => row.searchId === 1);
-      Object.assign(rows[0], { status: 'ACCEPTED', offsetMs: 250 });
+      Object.assign(rows[0], {
+        status: 'ACCEPTED',
+        offsetMs: 250,
+        score: 91.5,
+        framerateRatio: 1.0002,
+      });
       await driver.advance(1);
       await driver.advance(1);
       return rows[0];
@@ -803,6 +823,10 @@ describe('SubtitleSearchDriver', () => {
             stagedPath: accepted.stagedPath,
             offsetMs: 250,
             provenance: 'opensubtitles:a',
+            // Spec 123, REQ-9
+            provider: 'opensubtitles',
+            syncScore: 91.5,
+            framerateRatio: 1.0002,
           },
         ],
         movieFile,
@@ -1004,6 +1028,7 @@ describe('SubtitleSearchDriver', () => {
         new ActiveEmbedGuard(prisma as never),
         { request: jest.fn() } as never,
         {} as never,
+        { removeEmbed: jest.fn() } as never,
       );
       driver = build(real);
 
@@ -1134,6 +1159,449 @@ describe('SubtitleSearchDriver', () => {
         '1',
         'notes',
       ]);
+    });
+  });
+  // This block exists because the provider chain is invisible when it fails: a Subdivx result
+  // that is empty, rejected or refused must fall through to the next provider, or the language
+  // silently reads "not found" while OpenSubtitles was never asked; a provider marker that is
+  // not persisted makes every wake-up search the first provider again and spend its quota; a
+  // quota or authorization answer applied to every provider instead of the one that gave it
+  // blocks a language that another provider could still serve; and a file that is not UTF-8 or
+  // a multi-file archive staged as is reaches the worker as garbage (Article IX, Spec 121,
+  // REQ-7 REQ-8 REQ-9 REQ-13 REQ-14 REQ-15).
+  describe('provider chain (Spec 121)', () => {
+    const SRT = Buffer.from('1\n00:00:01,000 --> 00:00:02,000\nHola\n');
+    const http = (
+      kind: 'unauthorized' | 'quota' | 'rate_limited' | 'unavailable',
+      provider: 'subdivx' | 'opensubtitles' = 'subdivx',
+    ) => new SubtitleProviderHttpError(provider, kind, 'GET', '/x', 0);
+    const items = (...ids: number[]) =>
+      ids.map((id) => ({ id, description: `Movie ${id}`, downloads: 10 }));
+    const progress = () =>
+      search().providerProgress as Record<string, Record<string, string>>;
+
+    beforeEach(() => {
+      chainFor.mockImplementation((iso3: string) =>
+        Promise.resolve(
+          iso3 === 'spa' ? ['SUBDIVX', 'OPENSUBTITLES'] : ['OPENSUBTITLES'],
+        ),
+      );
+      subdivx.download.mockResolvedValue({ bytes: SRT, fileName: null });
+    });
+
+    it('searches Subdivx by the IMDb id first and stamps its attempts', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      subdivx.search.mockResolvedValue(items(1, 2));
+
+      await driver.advance(1);
+
+      expect(subdivx.search).toHaveBeenCalledWith({ imdbId: 'tt0133093' });
+      expect(client.search).not.toHaveBeenCalled();
+      expect(attempts.map((row) => row.provider)).toEqual([
+        'SUBDIVX',
+        'SUBDIVX',
+      ]);
+    });
+
+    it('searches a film by title and year when it has no IMDb id', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      imdbIds.resolve.mockResolvedValue(null);
+      (
+        (prisma.movie as Record<string, jest.Mock>).findUnique
+      ).mockResolvedValue({
+        filePath: movieFile,
+        tmdbId: 603,
+        title: 'The Matrix',
+        releaseDate: new Date('1999-03-31T00:00:00Z'),
+      });
+
+      await driver.advance(1);
+
+      expect(subdivx.search).toHaveBeenCalledWith({
+        title: 'The Matrix',
+        year: 1999,
+      });
+    });
+
+    it('retries a film by title and year without colons when the IMDb id finds nothing', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      (
+        (prisma.movie as Record<string, jest.Mock>).findUnique
+      ).mockResolvedValue({
+        filePath: movieFile,
+        tmdbId: 603,
+        title: 'Star Wars: Episode IV',
+        releaseDate: new Date('1977-05-25T00:00:00Z'),
+      });
+      subdivx.search.mockResolvedValueOnce([]).mockResolvedValueOnce(items(1));
+
+      await driver.advance(1);
+
+      expect(subdivx.search).toHaveBeenNthCalledWith(1, { imdbId: 'tt0133093' });
+      expect(subdivx.search).toHaveBeenNthCalledWith(2, {
+        title: 'Star Wars Episode IV',
+        year: 1977,
+      });
+      expect(attempts.map((row) => row.provider)).toEqual(['SUBDIVX']);
+    });
+
+    it('does not repeat the search when the IMDb id already found candidates', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      subdivx.search.mockResolvedValue(items(1));
+
+      await driver.advance(1);
+
+      expect(subdivx.search).toHaveBeenCalledTimes(1);
+    });
+
+    describe('episodes on Subdivx (Spec 121, REQ-10 REQ-12)', () => {
+      const entry = (
+        id: number,
+        season: number | null,
+        episode: number | null,
+        extra: Record<string, unknown> = {},
+      ) => ({ id, season, episode, description: `Show ${id}`, downloads: 5, ...extra });
+
+      beforeEach(() => {
+        seedSearch({
+          movieId: null,
+          episodeId: 20,
+          wantedLanguages: ['spa'],
+          presentLanguages: [],
+        });
+        (
+          (prisma.episode as Record<string, jest.Mock>).findUnique
+        ).mockResolvedValue({
+          filePath: movieFile,
+          episodeNumber: 2,
+          season: {
+            seasonNumber: 1,
+            show: { id: 77, tmdbId: 1399, title: 'Show' },
+          },
+        });
+      });
+
+      const ids = () => attempts.map((row) => row.providerSubtitleId);
+
+      it('searches by the series IMDb id and keeps the right episode, then the season pack', async () => {
+        imdbIds.resolve.mockResolvedValue('tt0944947');
+        subdivx.search.mockResolvedValue([
+          entry(2, 1, 3),
+          entry(4, 2, 2),
+          entry(3, 1, null),
+          entry(1, 1, 2),
+        ]);
+
+        await driver.advance(1);
+
+        expect(imdbIds.resolve).toHaveBeenCalledWith('show', 77);
+        expect(subdivx.search).toHaveBeenCalledTimes(1);
+        expect(subdivx.search).toHaveBeenCalledWith({ imdbId: 'tt0944947' });
+        expect(ids()).toEqual(['1', '3']);
+      });
+
+      it('matches an item with no season or episode fields by the SxxEyy in its description', async () => {
+        subdivx.search.mockResolvedValue([
+          entry(1, null, null, { description: 'Show.S01E02.720p' }),
+          entry(2, null, null, { description: 'Show.S01E12.720p' }),
+        ]);
+
+        await driver.advance(1);
+
+        expect(ids()).toEqual(['1']);
+      });
+
+      it('resolves the series IMDb id lazily and falls back to the text query when it has none', async () => {
+        imdbIds.resolve.mockResolvedValue(null);
+        subdivx.search.mockResolvedValue([entry(1, 1, 2)]);
+
+        await driver.advance(1);
+
+        expect(imdbIds.resolve).toHaveBeenCalledWith('show', 77);
+        expect(subdivx.search).toHaveBeenCalledTimes(1);
+        expect(subdivx.search).toHaveBeenCalledWith({ query: 'Show S01E02' });
+        expect(ids()).toEqual(['1']);
+      });
+
+      it('falls back once to "<Series> SxxEyy" when the IMDb search holds no match for the episode', async () => {
+        imdbIds.resolve.mockResolvedValue('tt0944947');
+        subdivx.search
+          .mockResolvedValueOnce([entry(9, 1, 5), entry(8, 2, 2)])
+          .mockResolvedValueOnce([entry(1, 1, 2), entry(7, 1, 4)]);
+
+        await driver.advance(1);
+
+        expect(subdivx.search.mock.calls).toEqual([
+          [{ imdbId: 'tt0944947' }],
+          [{ query: 'Show S01E02' }],
+        ]);
+        expect(ids()).toEqual(['1']);
+      });
+
+      it('moves to OpenSubtitles without a second Subdivx call when the fallback also holds no match', async () => {
+        imdbIds.resolve.mockResolvedValue('tt0944947');
+        subdivx.search.mockResolvedValue([entry(9, 1, 5)]);
+
+        await driver.advance(1);
+
+        expect(subdivx.search).toHaveBeenCalledTimes(2);
+        expect(
+          (search().providerProgress as Record<string, Record<string, string>>)
+            .spa.SUBDIVX,
+        ).toBe('empty');
+      });
+    });
+
+    it('moves to OpenSubtitles when all three Subdivx candidates were rejected', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      seedAttempts(1, 'spa', 3);
+      attempts.forEach((row) => {
+        Object.assign(row, { provider: 'SUBDIVX', status: 'REJECTED' });
+      });
+
+      await driver.advance(1);
+
+      expect(subdivx.search).not.toHaveBeenCalled();
+      expect(client.search).toHaveBeenCalledTimes(1);
+      expect(progress().spa.SUBDIVX).toBe('exhausted');
+      const next = attempts.filter((row) => row.provider === 'OPENSUBTITLES');
+      expect(next).toHaveLength(3);
+      expect(next[0].stagedPath).not.toBeNull();
+    });
+
+    it('moves to OpenSubtitles when Subdivx has zero candidates', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      subdivx.search.mockResolvedValue([]);
+
+      await driver.advance(1);
+
+      expect(progress().spa.SUBDIVX).toBe('empty');
+      expect(client.search).toHaveBeenCalledTimes(1);
+      expect(attempts.every((row) => row.provider === 'OPENSUBTITLES')).toBe(
+        true,
+      );
+    });
+
+    it('falls back to OpenSubtitles when Subdivx is unauthorized and does not fail the search', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      subdivx.search.mockRejectedValue(http('unauthorized'));
+
+      await driver.advance(1);
+
+      expect(progress().spa.SUBDIVX).toBe(
+        ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED,
+      );
+      expect(search().status).toBe('VALIDATING');
+      expect(search().languageErrors ?? {}).toEqual({});
+      expect(client.search).toHaveBeenCalledTimes(1);
+    });
+
+    it('records the last provider error when Subdivx is the only provider and refuses the key', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      chainFor.mockResolvedValue(['SUBDIVX']);
+      subdivx.search.mockRejectedValue(http('unauthorized'));
+
+      await driver.advance(1);
+
+      expect(search()).toMatchObject({
+        status: 'FAILED',
+        errorKey: ERROR_KEYS.SUBTITLE_SEARCH_PROVIDER_UNAUTHORIZED,
+      });
+    });
+
+    it('keeps a language still on Subdivx searchable after the OpenSubtitles quota ran out', async () => {
+      seedSearch({ wantedLanguages: ['eng', 'spa'], presentLanguages: [] });
+      remote.en = [candidate('e1')];
+      subdivx.search.mockResolvedValue(items(7));
+      (prisma.language as Record<string, jest.Mock>).findMany.mockResolvedValue(
+        [
+          { tag: 'es', iso2: 'es', iso3: 'spa' },
+          { tag: 'en', iso2: 'en', iso3: 'eng' },
+        ],
+      );
+      client.download.mockResolvedValue({ bytes: SRT, remaining: 0 });
+
+      await driver.advance(1);
+      expect(search().languageErrors ?? {}).toEqual({});
+      expect(
+        (search().providerProgress as Record<string, unknown> | null)?.spa,
+      ).toBeUndefined();
+
+      Object.assign(attempts.find((row) => row.languageIso3 === 'eng')!, {
+        status: 'ACCEPTED',
+        offsetMs: 0,
+      });
+      search().status = 'SEARCHING';
+      await driver.advance(1);
+
+      expect(subdivx.search).toHaveBeenCalledTimes(1);
+      expect(
+        attempts.filter((row) => row.languageIso3 === 'spa')[0],
+      ).toMatchObject({ provider: 'SUBDIVX' });
+      expect(search().languageErrors ?? {}).toEqual({});
+    });
+
+    it('marks a language that only OpenSubtitles serves as quota exhausted when its quota ran out', async () => {
+      seedSearch({ wantedLanguages: ['eng', 'fra'], presentLanguages: [] });
+      remote.en = [candidate('e1')];
+      (prisma.language as Record<string, jest.Mock>).findMany.mockResolvedValue(
+        [
+          { tag: 'en', iso2: 'en', iso3: 'eng' },
+          { tag: 'fr', iso2: 'fr', iso3: 'fra' },
+        ],
+      );
+      client.download.mockResolvedValue({ bytes: SRT, remaining: 0 });
+
+      await driver.advance(1);
+
+      expect(search().languageErrors).toEqual({
+        fra: ERROR_KEYS.SUBTITLE_SEARCH_QUOTA_EXHAUSTED,
+      });
+    });
+
+    it('fails a language whose chain is empty with no_provider and calls no client', async () => {
+      seedSearch({ wantedLanguages: ['eng'], presentLanguages: [] });
+      chainFor.mockResolvedValue([]);
+
+      await driver.advance(1);
+
+      expect(search().languageErrors).toEqual({
+        eng: ERROR_KEYS.SUBTITLE_SEARCH_NO_PROVIDER,
+      });
+      expect(client.search).not.toHaveBeenCalled();
+      expect(client.download).not.toHaveBeenCalled();
+      expect(subdivx.search).not.toHaveBeenCalled();
+      expect(subdivx.download).not.toHaveBeenCalled();
+    });
+
+    it('never calls Subdivx for English', async () => {
+      seedSearch({ wantedLanguages: ['eng'], presentLanguages: [] });
+      remote.en = [candidate('e1')];
+      (prisma.language as Record<string, jest.Mock>).findMany.mockResolvedValue(
+        [{ tag: 'en', iso2: 'en', iso3: 'eng' }],
+      );
+
+      await driver.advance(1);
+
+      expect(subdivx.search).not.toHaveBeenCalled();
+      expect(subdivx.download).not.toHaveBeenCalled();
+      expect(client.search).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not search an exhausted provider again when the search wakes', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      remote.es = [];
+
+      await driver.advance(1);
+      expect(search().status).toBe('COMPLETED');
+      search().status = 'SEARCHING';
+      subdivx.search.mockClear();
+      client.search.mockClear();
+
+      await driver.advance(1);
+
+      expect(subdivx.search).not.toHaveBeenCalled();
+      expect(client.search).not.toHaveBeenCalled();
+    });
+
+    it('rejects an ambiguous archive and stages the next candidate', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      subdivx.search.mockResolvedValue(items(1, 2));
+      subdivx.download
+        .mockResolvedValueOnce({
+          bytes: Buffer.from(
+            zipSync({ 'a.srt': new Uint8Array(SRT), 'b.srt': new Uint8Array(SRT) }),
+          ),
+          fileName: 'pack.zip',
+        })
+        .mockResolvedValueOnce({ bytes: SRT, fileName: 'ok.srt' });
+
+      await driver.advance(1);
+
+      expect(attempts[0]).toMatchObject({
+        status: 'FAILED',
+        reasonKey: ERROR_KEYS.SUBTITLE_SEARCH_ARCHIVE_UNUSABLE,
+      });
+      expect(attempts[1].stagedPath).not.toBeNull();
+      expect(addSync).toHaveBeenCalledWith({ subtitleSyncId: attempts[1].id });
+    });
+
+    it('tries the next candidate when Subdivx has lost one', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      subdivx.search.mockResolvedValue(items(1, 2));
+      subdivx.download
+        .mockRejectedValueOnce(new SubdivxCandidateFetchError(404, '/x'))
+        .mockResolvedValueOnce({ bytes: SRT, fileName: null });
+
+      await driver.advance(1);
+
+      expect(attempts[0]).toMatchObject({
+        status: 'FAILED',
+        reasonKey: ERROR_KEYS.SUBTITLE_SEARCH_FETCH_FAILED,
+      });
+      expect(attempts[1].stagedPath).not.toBeNull();
+      expect(progress() ?? {}).not.toHaveProperty('spa.SUBDIVX');
+    });
+
+    it('stages a Windows-1252 Subdivx subtitle as UTF-8', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      subdivx.search.mockResolvedValue(items(1));
+      subdivx.download.mockResolvedValue({
+        bytes: Buffer.from([0x68, 0x6f, 0x6c, 0xe1]),
+        fileName: null,
+      });
+
+      await driver.advance(1);
+
+      const staged = await readFile(attempts[0].stagedPath as string);
+      expect(staged.toString('utf8')).toBe('holá');
+    });
+
+    it('prefixes the provenance of a Subdivx subtitle with its provider', async () => {
+      seedSearch({ wantedLanguages: ['spa'], presentLanguages: [] });
+      subdivx.search.mockResolvedValue(items(7, 8));
+      subdivx.download
+        .mockResolvedValueOnce({ bytes: SRT, fileName: 'Movie.es.srt' })
+        .mockResolvedValue({ bytes: SRT, fileName: null });
+
+      await driver.advance(1);
+      expect(attempts[0].providerFileName).toBe('Movie.es.srt');
+      Object.assign(attempts[0], { status: 'ACCEPTED', offsetMs: 0 });
+      await driver.advance(1);
+      await driver.advance(1);
+      await driver.advance(1);
+
+      expect(embedStaged).toHaveBeenCalledWith(
+        expect.anything(),
+        [expect.objectContaining({ provenance: 'Movie.es.srt' })],
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('falls back to subdivx:<id> when the download carried no file name', async () => {
+      seedSearch({
+        wantedLanguages: ['spa'],
+        presentLanguages: [],
+        status: 'EMBEDDING',
+      });
+      seedAttempts(1, 'spa', 1);
+      Object.assign(attempts[0], {
+        provider: 'SUBDIVX',
+        providerSubtitleId: '42',
+        status: 'ACCEPTED',
+        offsetMs: 0,
+        stagedPath: join(stagingDir(1), '100.srt'),
+      });
+
+      await driver.advance(1);
+
+      expect(embedStaged).toHaveBeenCalledWith(
+        expect.anything(),
+        [expect.objectContaining({ provenance: 'subdivx:42' })],
+        expect.anything(),
+        expect.anything(),
+      );
     });
   });
 });

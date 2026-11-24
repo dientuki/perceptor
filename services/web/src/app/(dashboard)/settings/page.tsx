@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "@/actions/auth";
 import { getEnvironmentInfo } from "@/actions/environment";
+import { getLanguages } from "@/actions/languages";
+import { getLibraryTagMigration } from "@/actions/library-tags";
 import { getMediaRoots } from "@/actions/media-roots";
 import {
   getMediaServerIndexStatus,
@@ -11,6 +13,7 @@ import {
 import { getTorrentGroups } from "@/actions/preferences";
 import { getScheduledTasks } from "@/actions/scheduler";
 import { getSettings } from "@/actions/settings";
+import { getSubtitleProviders } from "@/actions/subtitle-providers";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import SettingsForm from "@/components/settings/SettingsForm";
 
@@ -44,6 +47,9 @@ export default async function SettingsPage() {
     scheduledTasks,
     torrentGroups,
     environment,
+    subtitleProviders,
+    languages,
+    libraryTagMigration,
   ] = await Promise.all([
     getSettings(),
     getMediaRoots(),
@@ -52,6 +58,9 @@ export default async function SettingsPage() {
     getScheduledTasks(),
     getTorrentGroups(),
     getEnvironmentInfo(),
+    getSubtitleProviders(),
+    getLanguages(),
+    getLibraryTagMigration(),
   ]);
 
   // web's own values, never fetched from api — see 055-environment-panel's
@@ -74,8 +83,11 @@ export default async function SettingsPage() {
               scheduledTasks={scheduledTasks}
               torrentGroups={torrentGroups}
               environment={environment}
+              subtitleProviders={subtitleProviders}
+              languages={languages}
               uploadEndpoint={uploadEndpoint}
               webDomain={webDomain}
+              libraryTagMigration={libraryTagMigration}
             />
           </div>
         </div>

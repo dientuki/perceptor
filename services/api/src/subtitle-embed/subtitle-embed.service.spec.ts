@@ -50,6 +50,7 @@ describe('SubtitleEmbedService', () => {
   let mediaServer: { createClient: jest.Mock };
   let queue: { addEmbed: jest.Mock };
   let syncQueue: { addEmbedSync: jest.Mock };
+  let uploadStaging: { removeEmbed: jest.Mock };
   let service: SubtitleEmbedService;
 
   const admin: AuthPrincipal = {
@@ -218,6 +219,7 @@ describe('SubtitleEmbedService', () => {
     syncQueue = { addEmbedSync: jest.fn().mockResolvedValue(undefined) };
 
     libraryProbeQueue = { request: jest.fn().mockResolvedValue(undefined) };
+    uploadStaging = { removeEmbed: jest.fn().mockResolvedValue(undefined) };
 
     service = new SubtitleEmbedService(
       prisma as never,
@@ -230,7 +232,9 @@ describe('SubtitleEmbedService', () => {
         prisma as never,
         syncQueue as never,
         queue as never,
+        uploadStaging as never,
       ),
+      uploadStaging as never,
     );
   });
 
@@ -730,6 +734,7 @@ describe('SubtitleEmbedService', () => {
           isForced: true,
           offsetMs: 1200,
           provenance: 'user',
+          provider: 'user',
         },
         {
           fileName: 'Movie (2020).eng.srt',
@@ -739,6 +744,7 @@ describe('SubtitleEmbedService', () => {
           isForced: false,
           offsetMs: 0,
           provenance: 'user',
+          provider: 'user',
         },
       ]);
       expect(queue.addEmbed).toHaveBeenCalledWith({ subtitleEmbedId: 5 });
@@ -1112,6 +1118,9 @@ describe('SubtitleEmbedService', () => {
               offsetMs: 1200,
               isSidecar: true,
               provenance: 'user',
+              provider: 'user',
+              syncScore: null,
+              framerateRatio: null,
             },
           ],
         });
@@ -1186,6 +1195,87 @@ describe('SubtitleEmbedService', () => {
         );
       });
 
+      // This test exists because otherwise a track's provider and sync metrics never reach the worker,
+      // and the PERCEPTOR tag group is written without them with no error anywhere (Spec 123, REQ-9 REQ-10).
+      describe('track facts (Spec 123)', () => {
+        const base = {
+          languageIso3: 'spa',
+          trackTitle: 'Español',
+          isDefault: false,
+          isForced: false,
+          offsetMs: 0,
+        };
+        const facts = async (track: Record<string, unknown>) => {
+          prisma.subtitleEmbed.findUnique.mockResolvedValue(
+            row({ tracks: [{ ...base, ...track }] }),
+          );
+          const { provider, syncScore, framerateRatio } = (
+            await service.details(5)
+          ).tracks[0];
+          return { provider, syncScore, framerateRatio };
+        };
+
+        it('serves the stored provider and sync metrics of a staged track verbatim', async () => {
+          expect(
+            await facts({
+              fileName: '1.srt',
+              stagedPath: '/x/1.srt',
+              provenance: 'Film.es.srt',
+              provider: 'subdivx',
+              syncScore: 87.5,
+              framerateRatio: 1.0004,
+            }),
+          ).toEqual({
+            provider: 'subdivx',
+            syncScore: 87.5,
+            framerateRatio: 1.0004,
+          });
+        });
+
+        it('serves a manually embedded sidecar as `user` with no sync metrics', async () => {
+          expect(
+            await facts({
+              fileName: 'Movie (2020).spa.srt',
+              provenance: 'user',
+              provider: 'user',
+              offsetMs: 1200,
+            }),
+          ).toEqual({ provider: 'user', syncScore: null, framerateRatio: null });
+        });
+
+        it('reads the sync metrics of an auto-offset sidecar from its measurement', async () => {
+          expect(
+            await facts({
+              fileName: 'Movie (2020).spa.srt',
+              provenance: 'user',
+              provider: 'user',
+              autoOffset: true,
+              measurement: {
+                offsetMs: -900,
+                framerateRatio: 0.9996,
+                reference: 'AUDIO',
+                score: 42,
+              },
+            }),
+          ).toEqual({ provider: 'user', syncScore: 42, framerateRatio: 0.9996 });
+        });
+
+        it('falls back for a row written before the feature', async () => {
+          expect(
+            await facts({ fileName: '1.srt', stagedPath: '/x/1.srt' }),
+          ).toEqual({
+            provider: 'opensubtitles',
+            syncScore: null,
+            framerateRatio: null,
+          });
+          expect(await facts({ fileName: 'a.srt' })).toEqual({
+            provider: 'user',
+            syncScore: null,
+            framerateRatio: null,
+          });
+        });
+      });
+
       it('refuses an unknown id', async () => {
         prisma.subtitleEmbed.findUnique.mockResolvedValue(null);
         await expect(service.details(404)).rejects.toThrow('404');
@@ -1238,6 +1328,9 @@ describe('SubtitleEmbedService', () => {
           isForced: false,
           offsetMs: -2000,
           provenance: 'Film.2020.es.srt',
+          provider: 'opensubtitles',
+          syncScore: null,
+          framerateRatio: null,
         },
       ]);
       expect(queue.addEmbed).toHaveBeenCalledWith({ subtitleEmbedId: 5 });
@@ -1354,6 +1447,196 @@ describe('SubtitleEmbedService', () => {
         ),
       ).toBe(ERROR_KEYS.SUBTITLE_EMBED_BUSY);
       expect(queue.addEmbed).not.toHaveBeenCalled();
+    });
+
+    describe('an upload (Spec 124, REQ-12 REQ-13)', () => {
+      const upload = (over: Record<string, unknown> = {}) => ({
+        languageIso3: 'spa',
+        variantTag: 'es-419',
+        offsetMs: 0,
+        autoOffset: true,
+        fileName: 'Green Book (2018).es-419.srt',
+        isDefault: true,
+        isForced: false,
+        provenance: 'Green Book (2018).es-419.srt',
+        provider: 'user',
+        ...over,
+      });
+
+      // This test exists because otherwise a stage that runs before the row exists writes files under an id that a busy refusal never creates, and nothing ever removes them.
+      it('runs stage after the row exists and before the enqueue, and stores its paths', async () => {
+        const order: string[] = [];
+        prisma.subtitleEmbed.create.mockImplementationOnce(
+          ({ data }: { data: object }) => {
+            order.push('create');
+            return Promise.resolve({ id: 5, status: 'SYNCING', ...data });
+          },
+        );
+        const stage = jest.fn().mockImplementation((id: number) => {
+          order.push(`stage:${id}`);
+          return Promise.resolve([staged]);
+        });
+        const enqueue = jest
+          .spyOn(SubtitleEmbedSyncService.prototype, 'enqueue')
+          .mockImplementation(() => {
+            order.push('enqueue');
+            return Promise.resolve();
+          });
+
+        await service.embedStaged(
+          { kind: 'movie', id: 1 },
+          [upload()],
+          mkv,
+          [],
+          stage,
+        );
+        enqueue.mockRestore();
+
+        expect(order).toEqual(['create', 'stage:5', 'enqueue']);
+        expect(prisma.subtitleEmbed.update).toHaveBeenCalledWith({
+          where: { id: 5 },
+          data: {
+            tracks: [
+              containing({ stagedPath: staged, autoOffset: true, offsetMs: 0 }),
+            ],
+          },
+        });
+      });
+
+      // This test exists because otherwise a staging failure leaves a SYNCING row that keeps the title busy forever, plus orphaned files, with no error anywhere.
+      it('deletes the row and removes the staging directory when stage throws', async () => {
+        const stage = jest.fn().mockRejectedValue(new Error('disk full'));
+
+        await expect(
+          service.embedStaged(
+            { kind: 'movie', id: 1 },
+            [upload()],
+            mkv,
+            [],
+            stage,
+          ),
+        ).rejects.toThrow('disk full');
+
+        expect(prisma.subtitleEmbed.delete).toHaveBeenCalledWith({
+          where: { id: 5 },
+        });
+        expect(uploadStaging.removeEmbed).toHaveBeenCalledWith(5);
+        expect(queue.addEmbed).not.toHaveBeenCalled();
+        expect(syncQueue.addEmbedSync).not.toHaveBeenCalled();
+      });
+
+      it('refuses a path returned by stage outside the downloads root', async () => {
+        const stage = jest
+          .fn()
+          .mockResolvedValue([join(libDir, 'Movie (2020).spa.srt')]);
+
+        expect(
+          await key(
+            service.embedStaged(
+              { kind: 'movie', id: 1 },
+              [upload({ autoOffset: false })],
+              mkv,
+              [],
+              stage,
+            ),
+          ),
+        ).toBe(ERROR_KEYS.SUBTITLE_EMBED_SUBTITLE_UNREADABLE);
+        expect(prisma.subtitleEmbed.delete).toHaveBeenCalled();
+        expect(queue.addEmbed).not.toHaveBeenCalled();
+      });
+
+      // This test exists because otherwise an upload's default and forced choices are silently dropped to false, and its file name is replaced by the staged name.
+      it('keeps the row fileName, the default and forced flags and skips the offset range check for an automatic track', async () => {
+        await service.embedStaged(
+          { kind: 'movie', id: 1 },
+          [upload({ isForced: true, offsetMs: 9_999_999 })],
+          mkv,
+          [],
+          () => Promise.resolve([staged]),
+        );
+
+        const { data } = firstArg<{
+          data: { tracks: unknown; status: string };
+        }>(prisma.subtitleEmbed.create);
+        expect(data.status).toBe('SYNCING');
+        expect(data.tracks).toEqual([
+          containing({
+            fileName: 'Green Book (2018).es-419.srt',
+            trackTitle: 'Latino',
+            isDefault: true,
+            isForced: true,
+            offsetMs: 0,
+            autoOffset: true,
+            provider: 'user',
+          }),
+        ]);
+      });
+
+      it('serves an upload track to the worker as a non-sidecar at its staged path', async () => {
+        prisma.subtitleEmbed.findUnique.mockResolvedValue({
+          id: 5,
+          status: 'QUEUED',
+          filePath: mkv,
+          replaceLanguages: ['spa'],
+          tracks: [
+            {
+              fileName: 'Green Book (2018).es-419.srt',
+              stagedPath: staged,
+              languageIso3: 'spa',
+              trackTitle: 'Latino',
+              isDefault: true,
+              isForced: true,
+              offsetMs: 1500,
+              provenance: 'Green Book (2018).es-419.srt',
+              provider: 'user',
+            },
+          ],
+        });
+
+        const details = await service.details(5);
+
+        expect(details.replaceLanguagesIso3).toEqual(['spa']);
+        expect(details.tracks[0]).toMatchObject({
+          isSidecar: false,
+          sourcePath: staged,
+          trackTitle: 'Latino',
+          isDefault: true,
+          isForced: true,
+          provenance: 'Green Book (2018).es-419.srt',
+          provider: 'user',
+        });
+      });
+
+      // This test exists because otherwise a finished or failed upload leaves its subtitle copies under the downloads root forever.
+      it('removes the upload staging when the embed completes and when it fails', async () => {
+        prisma.subtitleEmbed.findUnique.mockResolvedValue({
+          id: 5,
+          status: 'RUNNING',
+          filePath: mkv,
+          tracks: [],
+        });
+        await service.completed(5, null);
+        expect(uploadStaging.removeEmbed).toHaveBeenCalledTimes(1);
+        expect(uploadStaging.removeEmbed).toHaveBeenCalledWith(5);
+
+        uploadStaging.removeEmbed.mockClear();
+        await service.failed(5, ERROR_KEYS.SUBTITLE_EMBED_REMUX_FAILED);
+        expect(uploadStaging.removeEmbed).toHaveBeenCalledWith(5);
+      });
+
+      it('removes nothing when completed loses the claim', async () => {
+        prisma.subtitleEmbed.findUnique.mockResolvedValue({
+          id: 5,
+          status: 'RUNNING',
+          filePath: mkv,
+          tracks: [],
+        });
+        prisma.subtitleEmbed.updateMany.mockResolvedValue({ count: 0 });
+
+        await service.completed(5, null);
+
+        expect(uploadStaging.removeEmbed).not.toHaveBeenCalled();
+      });
     });
   });
 });

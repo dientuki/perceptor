@@ -34,62 +34,99 @@ export function normalizeGrainMode(raw: string | null | undefined): GrainMode {
   return 'OFF';
 }
 
-// Spec 092, REQ-9; Spec 094, REQ-2 REQ-9 REQ-10 REQ-11 NFR-1; Spec 111, REQ-1
+export type GrainDecidedBy = 'title' | 'gate' | 'short' | 'probe';
+
+export interface GrainResolution {
+  filmGrain: boolean;
+  decidedBy?: GrainDecidedBy;
+}
+
+const DECIDED_BY_VALUES: readonly string[] = ['title', 'gate', 'short', 'probe'];
+
+interface StoredGrainVerdict {
+  filmGrain: boolean;
+  decidedBy?: GrainDecidedBy;
+}
+
+// Spec 123, REQ-6
+function readStored(cached: unknown): GrainResolution | undefined {
+  if (typeof cached === 'boolean') {
+    return { filmGrain: cached };
+  }
+  if (cached !== null && typeof cached === 'object') {
+    const { filmGrain, decidedBy } = cached as Record<string, unknown>;
+    if (typeof filmGrain === 'boolean') {
+      return typeof decidedBy === 'string' && DECIDED_BY_VALUES.includes(decidedBy)
+        ? { filmGrain, decidedBy: decidedBy as GrainDecidedBy }
+        : { filmGrain };
+    }
+  }
+  return undefined;
+}
+
+// Spec 092, REQ-9; Spec 094, REQ-2 REQ-9 REQ-10 REQ-11 NFR-1; Spec 111, REQ-1; Spec 123, REQ-6
 export async function resolveFilmGrain(
   details: EncodeInput,
   input: string,
   metadata: any,
   signal: AbortSignal,
-): Promise<boolean> {
+): Promise<GrainResolution> {
   const mode = details.grainMode;
   const id = details.mediaSourceId;
 
   if (mode === 'ON' || mode === 'OFF') {
     const filmGrain = mode === 'ON';
     console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=mode -> filmGrain=${filmGrain}`);
-    return filmGrain;
+    return filmGrain ? { filmGrain, decidedBy: 'title' } : { filmGrain };
   }
 
   const identity = { mediaSourceId: id };
-  const cached = await readVerdict<boolean>('grain', identity);
+  const cached = readStored(await readVerdict<unknown>('grain', identity));
   if (cached !== undefined) {
-    console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=cache -> filmGrain=${cached} (reused)`);
+    console.log(
+      `[grain] mediaSourceId=${id} mode=${mode} stage=cache -> filmGrain=${cached.filmGrain} (reused)`,
+    );
     return cached;
   }
+
+  const store = async (verdict: StoredGrainVerdict): Promise<GrainResolution> => {
+    await writeVerdict('grain', identity, verdict);
+    return verdict;
+  };
 
   try {
     const gate = scoreGrainGate(metadata, input, details.year);
     const gateText = `gateScore=${gate.score} reasons=${JSON.stringify(gate.reasons)}`;
 
     if (!gate.passed) {
-      await writeVerdict('grain', identity, false);
+      const verdict = await store({ filmGrain: false, decidedBy: 'gate' });
       console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=gate ${gateText} -> filmGrain=false`);
-      return false;
+      return verdict;
     }
 
     if (details.isShort) {
-      await writeVerdict('grain', identity, false);
+      const verdict = await store({ filmGrain: false, decidedBy: 'short' });
       console.log(`[grain] mediaSourceId=${id} mode=${mode} stage=short ${gateText} -> filmGrain=false`);
-      return false;
+      return verdict;
     }
 
     console.log(`[grain] mediaSourceId=${id} mode=${mode} probe starting ${gateText}`);
     const probe = await probeGrainSaving(input, metadata, details.contentKind, signal);
-    await writeVerdict('grain', identity, probe.passed);
+    const verdict = await store({ filmGrain: probe.passed, decidedBy: 'probe' });
     console.log(
       `[grain] mediaSourceId=${id} mode=${mode} stage=probe ${gateText} ` +
         `mbpsGrain0=${probe.mbpsGrain0.toFixed(3)} savingPct=${probe.savingPct.toFixed(2)} ` +
         `savedMbps=${probe.savedMbps.toFixed(3)} threshold=${GRAIN_PROBE_SAVED_MBPS_THRESHOLD} ` +
         `-> filmGrain=${probe.passed}`,
     );
-    return probe.passed;
+    return verdict;
   } catch (error) {
     if (error instanceof EncodeCancelledError) {
       throw error;
     }
     const detail = error instanceof Error ? error.message : String(error);
     console.warn(`[grain] mediaSourceId=${id} mode=${mode} stage=failure ${detail} -> filmGrain=false`);
-    return false;
+    return { filmGrain: false };
   }
 }
 

@@ -11,16 +11,10 @@ import { SubtitleEmbedService } from '@/subtitle-embed/subtitle-embed.service';
 import { LanguagesService } from '@/languages/languages.service';
 import { wantedVariants } from '@/languages/variant-opt-in';
 import { SubtitleSearchQueueService } from './subtitle-search-queue.service';
+import { NON_TERMINAL_SUBTITLE_SEARCH_STATUSES as NON_TERMINAL } from './non-terminal';
 
 export type SubtitleSearchTarget =
   { kind: 'movie'; id: number } | { kind: 'episode'; id: number };
-
-const NON_TERMINAL = [
-  'WAITING',
-  'SEARCHING',
-  'VALIDATING',
-  'EMBEDDING',
-] as const;
 
 // Spec 103, REQ-3 REQ-4 REQ-5 REQ-12
 @Injectable()

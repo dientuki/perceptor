@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { MoviesService } from './movies.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
+import { ImdbIdsService } from '@/imdb-ids/imdb-ids.service';
 import { TmdbClient, posterUrl } from '@/clients/tmdb/client';
 import { QbittorrentClient, TorrentClientError } from '@/clients/torrent/client';
 import { DownloadsService } from '@/downloads/downloads.service';
@@ -99,6 +100,7 @@ describe('MoviesService', () => {
     hasDeliveredSource: jest.Mock;
     demoteDeliveredSources: jest.Mock;
   };
+  let imdbIds: { resolve: jest.Mock; record: jest.Mock };
   let mediaServerReconcile: {
     reconcileMovie: jest.Mock;
   };
@@ -152,6 +154,10 @@ describe('MoviesService', () => {
       hasDeliveredSource: jest.fn().mockResolvedValue(false),
       demoteDeliveredSources: jest.fn().mockResolvedValue(0),
     };
+    imdbIds = {
+      resolve: jest.fn().mockResolvedValue(null),
+      record: jest.fn().mockResolvedValue(undefined),
+    };
     mediaServerReconcile = {
       reconcileMovie: jest.fn().mockResolvedValue(undefined),
     };
@@ -168,6 +174,7 @@ describe('MoviesService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
         { provide: TmdbClient, useValue: tmdb },
+        { provide: ImdbIdsService, useValue: imdbIds },
         { provide: QbittorrentClient, useValue: qbittorrent },
         {
           provide: MediaServerReconcileService,
@@ -634,6 +641,77 @@ describe('MoviesService', () => {
       expect(mediaCapabilities.isShortsEnabled).not.toHaveBeenCalled();
       expect(tmdb.details).not.toHaveBeenCalled();
       expect(prisma.movie.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // Spec 121, REQ-11 (c). The detached IMDb lookup is the only path that gives
+  // a film registered from a fully warm search-cache entry an IMDb id; if it
+  // fires when the top-up already read details it costs a second TMDB request
+  // per registration, and if it throws into register() a registration fails
+  // over a best-effort lookup. Neither produces an error anywhere visible.
+  describe('register (IMDb id)', () => {
+    function entry(extra: Record<string, unknown>): string {
+      return JSON.stringify({
+        id: 42,
+        title: 'Dune',
+        releaseDate: '2021-10-21',
+        posterUrl: null,
+        originalLanguage: 'en',
+        overview: 'Sand.',
+        type: MEDIA_TYPE.MOVIE,
+        ...extra,
+      });
+    }
+
+    beforeEach(() => {
+      prisma.movie.findUnique.mockResolvedValue(null);
+      prisma.movie.create.mockResolvedValue({ id: 9, tmdbId: 42, title: 'Dune' });
+      prisma.userMovie.upsert.mockResolvedValue({ userId: 'user-1', movieId: 9 });
+      redis.pipeline.mockReturnValue({
+        set: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([[null, 'OK']]),
+      });
+    });
+
+    it('starts the detached resolve when the top-up read no details', async () => {
+      redis.get.mockResolvedValue(entry({ runtime: 155, genreIds: [35] }));
+
+      await service.register(42, 'user-1');
+
+      expect(tmdb.details).not.toHaveBeenCalled();
+      expect(imdbIds.resolve).toHaveBeenCalledTimes(1);
+      expect(imdbIds.resolve).toHaveBeenCalledWith('movie', 9);
+      expect(prisma.movie.create.mock.calls[0][0].data.imdbIdCheckedAt).toBeUndefined();
+    });
+
+    it('carries the id into create and starts no resolve when the top-up read details', async () => {
+      redis.get.mockResolvedValue(entry({}));
+      tmdb.details.mockResolvedValue({
+        id: 42,
+        runtime: 155,
+        genreIds: [35],
+        status: 'Released',
+        imdbId: 'tt1160419',
+      });
+
+      await service.register(42, 'user-1');
+
+      const data = prisma.movie.create.mock.calls[0][0].data;
+      expect(data.imdbId).toBe('tt1160419');
+      expect(data.imdbIdCheckedAt).toBeInstanceOf(Date);
+      expect(imdbIds.resolve).not.toHaveBeenCalled();
+    });
+
+    it('does not fail register() when the detached resolve rejects', async () => {
+      redis.get.mockResolvedValue(entry({ runtime: 155, genreIds: [35] }));
+      imdbIds.resolve.mockRejectedValue(new Error('boom'));
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await expect(service.register(42, 'user-1')).resolves.toEqual({
+        id: 9,
+        type: MEDIA_TYPE.MOVIE,
+      });
+      spy.mockRestore();
     });
   });
 

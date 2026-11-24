@@ -32,6 +32,7 @@ export interface TmdbMovie extends TmdbBase {
 export interface TmdbMovieDetails extends TmdbMovie {
   runtime: number;
   status: string;
+  imdb_id?: string | null;
   genres: { id: number; name: string }[];
 }
 
@@ -59,6 +60,7 @@ export interface TmdbShowDetails extends TmdbShow {
   status: string;
   seasons: TmdbSeason[];
   genres: { id: number; name: string }[];
+  external_ids?: { imdb_id?: string | null };
 }
 
 export interface TmdbEpisode {

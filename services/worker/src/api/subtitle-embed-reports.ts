@@ -11,6 +11,10 @@ export interface SubtitleEmbedTrackDetails {
   isSidecar?: boolean;
   // Spec 107, REQ-14
   provenance?: string;
+  // Spec 123, REQ-9
+  provider?: string;
+  syncScore?: number | null;
+  framerateRatio?: number | null;
 }
 
 export interface SubtitleEmbedDetails {
@@ -28,7 +32,7 @@ export async function subtitleEmbedDetails(id: number): Promise<SubtitleEmbedDet
       subtitleEmbedDetails(id: $id) {
         id
         filePath
-        tracks { sourcePath languageIso3 trackTitle isDefault isForced offsetMs isSidecar provenance }
+        tracks { sourcePath languageIso3 trackTitle isDefault isForced offsetMs isSidecar provenance provider syncScore framerateRatio }
         replaceLanguagesIso3
       }
     }`,

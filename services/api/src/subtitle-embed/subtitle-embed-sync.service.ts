@@ -14,6 +14,7 @@ import { lastCueEndMs } from '@/subtitle-search/last-cue';
 import { i18nError } from '@/i18n/i18n-error';
 import { ERROR_KEYS } from '@/i18n/error-keys';
 import { decodeSidecar } from './sidecar-text';
+import { SubtitleUploadStaging } from './upload-staging';
 import { SubtitleEmbedSyncDetails } from './entities/subtitle-embed-sync-details.entity';
 
 // Spec 113, REQ-4
@@ -30,6 +31,8 @@ type StoredMeasurement = SyncMeasurement;
 
 type SyncTrack = {
   fileName: string;
+  // Spec 124, REQ-13
+  stagedPath?: string;
   offsetMs: number;
   autoOffset?: boolean;
   measurement?: StoredMeasurement;
@@ -47,6 +50,8 @@ export class SubtitleEmbedSyncService {
     private readonly prisma: PrismaService,
     private readonly syncQueue: SubtitleSyncQueueService,
     private readonly embedQueue: SubtitleEmbedQueueService,
+    // Spec 124, REQ-12
+    private readonly uploadStaging: SubtitleUploadStaging,
   ) {}
 
   // Spec 113, REQ-3
@@ -83,7 +88,7 @@ export class SubtitleEmbedSyncService {
       subtitleEmbedId,
       fileName,
       filePath: row.filePath,
-      candidatePath: join(dirname(row.filePath), fileName),
+      candidatePath: track.stagedPath ?? join(dirname(row.filePath), fileName),
     };
   }
 
@@ -106,20 +111,20 @@ export class SubtitleEmbedSyncService {
     const measurement: SyncMeasurement = {
       ...report,
       lastCueEndMs: await this.readLastCueEnd(
-        join(dirname(row.filePath), fileName),
+        known.stagedPath ?? join(dirname(row.filePath), fileName),
       ),
     };
     const rejection = accept(measurement);
 
-    const flipped = await this.prisma.$transaction(
+    const outcome = await this.prisma.$transaction(
       async (tx) => {
         const current = await tx.subtitleEmbed.findUnique({
           where: { id: subtitleEmbedId },
         });
-        if (!current || current.status !== 'SYNCING') return false;
+        if (!current || current.status !== 'SYNCING') return 'none';
         const tracks = current.tracks as unknown as SyncTrack[];
         const target = tracks.find((t) => t.fileName === fileName);
-        if (!target?.autoOffset || target.measurement) return false;
+        if (!target?.autoOffset || target.measurement) return 'none';
 
         target.measurement = measurement;
         if (rejection === null) target.offsetMs = measurement.offsetMs;
@@ -143,12 +148,17 @@ export class SubtitleEmbedSyncService {
           where: { id: subtitleEmbedId, status: 'SYNCING' },
           data,
         });
-        return claimed.count === 1 && data.status === 'QUEUED';
+        if (claimed.count !== 1) return 'none';
+        if (data.status === 'QUEUED') return 'queued';
+        return data.status === 'FAILED' ? 'failed' : 'none';
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    if (flipped) await this.enqueueRemux(subtitleEmbedId);
+    if (outcome === 'queued') await this.enqueueRemux(subtitleEmbedId);
+    // Spec 124, REQ-12
+    if (outcome === 'failed')
+      await this.uploadStaging.removeEmbed(subtitleEmbedId);
     return true;
   }
 
@@ -177,6 +187,8 @@ export class SubtitleEmbedSyncService {
         finishedAt: new Date(),
       },
     });
+    // Spec 124, REQ-12
+    await this.uploadStaging.removeEmbed(subtitleEmbedId);
     return true;
   }
 
@@ -196,6 +208,8 @@ export class SubtitleEmbedSyncService {
           finishedAt: new Date(),
         },
       });
+      // Spec 124, REQ-12
+      await this.uploadStaging.removeEmbed(subtitleEmbedId);
     }
   }
 

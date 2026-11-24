@@ -1,4 +1,4 @@
-import { ObjectType, Field, Int } from '@nestjs/graphql';
+import { ObjectType, Field, Float, Int } from '@nestjs/graphql';
 
 // Spec 101, REQ-14
 @ObjectType()
@@ -33,9 +33,30 @@ export class SubtitleEmbedTrack {
   // Spec 107, REQ-14
   @Field({
     description:
-      'Value of the PERCEPTOR_SOURCE track tag (107 REQ-14): the OpenSubtitles file name for a searched track, `user` for a sidecar embedded by hand. Written verbatim after sanitizing; never empty.',
+      'Value of the PERCEPTOR → SOURCE track tag (107 REQ-14, 123 REQ-9): the OpenSubtitles file name for a searched track, `user` for a sidecar embedded by hand. Written verbatim after sanitizing; never empty.',
   })
   provenance: string;
+
+  // Spec 123, REQ-9
+  @Field({
+    description:
+      'Lower-case provider id written verbatim as PERCEPTOR → PROVIDER: opensubtitles, subdivx, …, or `user` for a hand embed (123 REQ-9/10).',
+  })
+  provider: string;
+
+  @Field(() => Float, {
+    nullable: true,
+    description:
+      'ffsubsync score of the accepted measurement; null when none ran (manual offset).',
+  })
+  syncScore: number | null;
+
+  @Field(() => Float, {
+    nullable: true,
+    description:
+      'Measured framerate ratio of the accepted measurement; null when none ran.',
+  })
+  framerateRatio: number | null;
 }
 
 // Spec 101, REQ-13

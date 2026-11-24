@@ -156,6 +156,7 @@
     "encode": {
       "no_video_stream": "The input file has no video stream",
       "no_original_audio": "The file has no audio track in the original language ({iso3})",
+      "original_audio_undetermined": "No audio track is tagged with the original language ({iso3}) and the language of the untagged tracks could not be detected",
       "probe_failed": "Could not analyse the video file ({filePath}): {detail}",
       "ffmpeg_failed": "ffmpeg exited with code {code}: {stderr}",
       "no_output": "ffmpeg exited 0 but produced no {path}",
@@ -194,7 +195,12 @@
       "sync_incomplete": "A subtitle only covers part of the file. The file was not touched.",
       "sync_low_score": "A subtitle does not match this file. Try the manual offset. The file was not touched.",
       "sidecar_delete_failed": "Subtitles embedded, but the external .srt could not be deleted. Delete it by hand or from Jellyfin.",
-      "jellyfin_refresh_failed": "Subtitles embedded, but the media server could not be notified. They will appear on its next scan."
+      "jellyfin_refresh_failed": "Subtitles embedded, but the media server could not be notified. They will appear on its next scan.",
+      "upload_too_many": "You can upload up to 8 subtitles at once.",
+      "upload_not_srt": "Only .srt files can be uploaded.",
+      "upload_too_large": "Each subtitle can be up to 2 MB.",
+      "replace_forced": "A forced subtitle cannot replace the others.",
+      "upload_staging_failed": "The uploaded subtitle could not be saved. Try again."
     },
     "subtitleSearch": {
       "replace_language_not_wanted": "That language is not among the ones searched for this title.",
@@ -214,19 +220,37 @@
       "superseded": "A newer delivery replaced this search.",
       "in_progress": "A subtitle search is already in progress for this title.",
       "no_languages": "There are no subtitle languages chosen for this title.",
-      "provider_not_configured": "Subtitle search requires an OpenSubtitles account in Settings → General.",
+      "provider_not_configured": "Subtitle search requires a configured provider in Settings → Subtitles.",
       "no_library_path": "Perceptor does not know where this title's file is.",
-      "provider_unauthorized": "OpenSubtitles rejected the username or password.",
-      "provider_unavailable": "Could not reach OpenSubtitles.",
-      "quota_exhausted": "The daily OpenSubtitles download limit has been reached.",
+      "provider_unauthorized": "The provider rejected the credentials.",
+      "provider_unavailable": "Could not reach the subtitle provider.",
+      "quota_exhausted": "The provider's daily download limit has been reached.",
       "probe_failed": "Could not read the file to see which subtitles it has.",
-      "probe_not_found": "Subtitle search not found."
+      "probe_not_found": "Subtitle search not found.",
+      "no_provider": "No configured provider has subtitles in this language.",
+      "archive_unusable": "The downloaded archive does not contain a single usable .srt subtitle."
     },
     "tmdbList": {
       "invalid_reference": "That is not a TMDB list ID or link.",
       "unreadable": "TMDB could not find the list, or it is not public.",
       "already_attached": "You already have this list linked.",
       "not_found": "The list does not exist."
+    },
+    "subtitleProvider": {
+      "incomplete": "Fill in all the provider details.",
+      "field_not_allowed": "That detail does not apply to this provider.",
+      "app_key_missing": "This installation does not have OpenSubtitles' application key.",
+      "not_configured": "That provider is not configured.",
+      "language_unsupported": "{provider} has no subtitles in {languageTag}.",
+      "language_invalid": "That language entry is not valid: the provider must be configured and not be the default.",
+      "language_duplicate": "There are two entries for the same language."
+    },
+    "libraryTags": {
+      "migration_running": "A tag migration is already in progress.",
+      "busy": "This file's tags are being rewritten; try again in a moment.",
+      "file_missing": "The file was not found.",
+      "write_failed": "The file could not be written.",
+      "verify_failed": "The rewritten file does not match the original; it was left unchanged."
     }
   },
   "landing": {
@@ -594,6 +618,27 @@
       "failed": "The last embed failed: {reason}",
       "warning": "{reason}"
     },
+    "uploadSubtitles": {
+      "button": "Upload subtitles",
+      "busyEmbed": "An embed is in progress",
+      "busySearch": "A subtitle search is in progress",
+      "title": "Upload subtitles",
+      "intro": "Choose one or more .srt files from your computer. They are embedded into the library file.",
+      "addFiles": "Choose .srt files",
+      "duplicateReplaced": "{name} was already in the list; it was replaced.",
+      "language": "Language",
+      "noLanguage": "Choose a language",
+      "forced": "Forced",
+      "default": "Default",
+      "replace": "Replace existing",
+      "replaceHint": "Replacing works per language: non-forced subtitles of the other variants are removed too (for example Latino and Spain).",
+      "offset": "Offset (ms)",
+      "auto": "Automatic",
+      "remove": "Remove",
+      "confirm": "Upload",
+      "cancel": "Cancel",
+      "submitting": "Uploading…"
+    },
     "subtitleSearch": {
       "title": "Subtitle search",
       "failed": "Failed: {reason}",
@@ -734,6 +779,7 @@
       "download": "Download",
       "compression": "Compression",
       "scheduling": "Scheduling",
+      "subtitles": "Subtitles",
       "environment": "Environment"
     },
     "environment": {
@@ -769,7 +815,31 @@
       "hostGuidanceDescription": "The upload endpoint must carry an address the browser itself can reach — the host's own LAN address, never \"localhost\", since the browser opening this app may be a different machine than the one running the stack. No container can determine that address on its own, so PUBLIC_UPLOAD_URL is set by hand in .env.",
       "installableLabel": "Installable as an app",
       "installableAvailable": "Available",
-      "installableUnavailable": "Unavailable — requires HTTPS"
+      "installableUnavailable": "Unavailable — requires HTTPS",
+      "libraryTags": {
+        "label": "Library tags",
+        "description": "Rewrites the provenance tags of every file already in the library into the grouped format. Files already migrated are left untouched.",
+        "start": "Migrate library tags",
+        "confirmTitle": "Migrate library tags",
+        "confirmMessage": "Every file in the library will be rewritten in place. This can take a while; while a file is rewritten its title cannot be downloaded or embedded.",
+        "confirm": "Migrate",
+        "starting": "Starting…",
+        "cancel": "Cancel",
+        "running": "Migration in progress",
+        "progress": "{processed} / {total} files",
+        "refresh": "Refresh",
+        "startedAt": "Started: {date}",
+        "finishedAt": "Finished: {date}",
+        "counts": {
+          "migrated": "Migrated: {count}",
+          "unchanged": "Unchanged: {count}",
+          "busy": "Busy: {count}",
+          "missing": "Missing: {count}",
+          "failed": "Failed: {count}"
+        },
+        "failuresTitle": "Files with problems",
+        "failureGeneric": "The file could not be migrated."
+      }
     },
     "scheduling": {
       "timezoneNote": "Schedules are evaluated in the API container's timezone (UTC unless the host sets TZ). \"03:00\" refers to that timezone, not yours.",
@@ -817,12 +887,7 @@
     },
     "general": {
       "uiLocaleLabel": "App language",
-      "dateFormatLabel": "Date format",
-      "openSubtitlesHeading": "OpenSubtitles",
-      "openSubtitlesUsernameLabel": "OpenSubtitles username",
-      "openSubtitlesPasswordLabel": "OpenSubtitles password",
-      "openSubtitlesHelp": "This is an opensubtitles.com account (an opensubtitles.org account does not work). Both fields are required. The account's daily download limit is what limits subtitle search.",
-      "openSubtitlesSignUp": "Create an account on opensubtitles.com"
+      "dateFormatLabel": "Date format"
     },
     "download": {
       "defaultLanguagesLabel": "Default download languages"
@@ -926,7 +991,7 @@
       "save": "Save",
       "saving": "Saving...",
       "subtitleSearchLabel": "Search for subtitles on the internet for every title delivered from now on",
-      "subtitleSearchRequiresProvider": "An administrator has to enter an OpenSubtitles account in Settings → General."
+      "subtitleSearchRequiresProvider": "An administrator has to configure a subtitle provider in Settings → Subtitles."
     },
     "torrentGroups": {
       "chosenLabel": "Chosen groups",
@@ -1112,6 +1177,59 @@
       "confirm": "Remove",
       "cancel": "Cancel",
       "removing": "Removing..."
+    }
+  },
+  "subtitleProviders": {
+    "title": "Subtitle providers",
+    "add": "Add provider",
+    "edit": "Edit",
+    "remove": "Remove",
+    "configured": "Configured",
+    "default": "Default",
+    "empty": "No subtitle provider is configured. Subtitle search stays unavailable until you add one.",
+    "row": {
+      "username": "User: {username}",
+      "secretSet": "Credentials saved"
+    },
+    "modal": {
+      "addTitle": "Add a provider",
+      "editTitle": "Edit {name}",
+      "kindLabel": "Provider",
+      "usernameLabel": "OpenSubtitles username",
+      "passwordLabel": "OpenSubtitles password",
+      "apiKeyLabel": "Subdivx API key",
+      "secretKeepHint": "Leave blank to keep the stored value.",
+      "openSubtitlesHelp": "This is an opensubtitles.com account (an opensubtitles.org account does not work). Both fields are required. The account's daily download limit is what limits subtitle search.",
+      "openSubtitlesSignUp": "Create an account on opensubtitles.com",
+      "subdivxHelp": "Subdivx is reached through SubX API with a personal API key. It only has Spanish subtitles.",
+      "subdivxQuickstart": "How to get a key",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving..."
+    },
+    "removeModal": {
+      "title": "Remove provider",
+      "message": "{name} will lose its saved credentials and every language entry pointing at it will be removed too.",
+      "cancel": "Cancel",
+      "confirm": "Remove",
+      "removing": "Removing..."
+    },
+    "languages": {
+      "title": "Subtitles languages configuration",
+      "description": "The default provider is tried for every language. A language entry sends a language, or a regional variant such as es-419, to another provider first; the default is used as a fallback.",
+      "defaultLabel": "Default provider",
+      "empty": "No language entries: every language goes to the default provider.",
+      "languageLabel": "Language",
+      "providerLabel": "Provider",
+      "removeRow": "Remove language",
+      "add": "Add language",
+      "save": "Save languages",
+      "saving": "Saving...",
+      "saved": "Languages saved."
+    },
+    "name": {
+      "OPENSUBTITLES": "OpenSubtitles",
+      "SUBDIVX": "Subdivx"
     }
   }
 }

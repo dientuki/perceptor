@@ -112,6 +112,7 @@ beforeEach(async () => {
   });
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
 afterEach(async () => {
@@ -174,6 +175,63 @@ describe('handleSubtitleEmbed', () => {
       '--subtitle-tracks', '!2', mkv,
     ]);
     expect(h.failed).not.toHaveBeenCalled();
+    expect(h.completed).toHaveBeenCalledWith(7, null);
+  });
+
+  // Spec 123, REQ-9
+  it('writes the nested PERCEPTOR group with an unknown provider verbatim and no flat tags', async () => {
+    let xml = '';
+    h.capture.mockImplementation(async (args: string[]) => {
+      xml = await readFile(args[args.indexOf('--tags') + 1].slice(2), 'utf8');
+      await writeFile(part, 'EMBEDDED');
+      return { code: 0, stdoutBytes: 0, stderr: '' };
+    });
+    h.details.mockResolvedValue({
+      id: 7,
+      filePath: mkv,
+      replaceLanguagesIso3: [],
+      tracks: [
+        {
+          sourcePath: sidecar, languageIso3: 'spa', trackTitle: 'Español', isDefault: false, isForced: false,
+          offsetMs: 1500, provenance: 'Film.spa.srt', provider: 'newprovider', syncScore: 12.5, framerateRatio: 1,
+        },
+      ],
+    });
+
+    await handleSubtitleEmbed(job);
+
+    expect(xml).toContain('<Name>PERCEPTOR</Name>');
+    expect(xml).toContain('<Name>PROVIDER</Name>');
+    expect(xml).toContain('<String>newprovider</String>');
+    expect(xml).toContain('<Name>SYNC_SCORE</Name>');
+    expect(xml).toContain('<Name>EMBEDDED_AT</Name>');
+    expect(xml).not.toContain('PERCEPTOR_SOURCE');
+    expect(xml).not.toContain('PERCEPTOR_OFFSET');
+    expect(h.completed).toHaveBeenCalledWith(7, null);
+  });
+
+  // Spec 123, REQ-9
+  it('omits PROVIDER and logs when the provider is absent', async () => {
+    let xml = '';
+    h.capture.mockImplementation(async (args: string[]) => {
+      xml = await readFile(args[args.indexOf('--tags') + 1].slice(2), 'utf8');
+      await writeFile(part, 'EMBEDDED');
+      return { code: 0, stdoutBytes: 0, stderr: '' };
+    });
+    h.details.mockResolvedValue({
+      id: 7,
+      filePath: mkv,
+      replaceLanguagesIso3: [],
+      tracks: [
+        { sourcePath: sidecar, languageIso3: 'spa', trackTitle: 'Español', isDefault: false, isForced: false, offsetMs: 0, provenance: 'user' },
+      ],
+    });
+
+    await handleSubtitleEmbed(job);
+
+    expect(xml).not.toContain('<Name>PROVIDER</Name>');
+    expect(xml).toContain('<Name>SOURCE</Name>');
+    expect(console.warn).toHaveBeenCalled();
     expect(h.completed).toHaveBeenCalledWith(7, null);
   });
 

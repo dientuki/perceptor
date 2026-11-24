@@ -31,8 +31,14 @@ describe('messagesEn — every key in error-keys.ts has an English message', () 
 // ../jobs) must satisfy every {placeholder} in that key's template, so
 // renderMessage never leaves a literal "{foo}" in a persisted errorMessage.
 const KNOWN_PARAMS: Record<string, Record<string, string | number>> = {
+  [errorKeys.ERROR_LIBRARY_TAGS_FILE_MISSING]: {},
+  [errorKeys.ERROR_LIBRARY_TAGS_WRITE_FAILED]: { detail: 'mkvpropedit failed' },
+  [errorKeys.ERROR_LIBRARY_TAGS_VERIFY_FAILED]: {},
+  [errorKeys.ERROR_LIBRARY_TAGS_ITEM_NOT_FOUND]: {},
+  [errorKeys.ERROR_LIBRARY_TAGS_ITEM_SETTLED]: {},
   [errorKeys.ERROR_ENCODE_NO_VIDEO_STREAM]: {},
   [errorKeys.ERROR_ENCODE_NO_ORIGINAL_AUDIO]: { iso3: 'eng' },
+  [errorKeys.ERROR_ENCODE_ORIGINAL_AUDIO_UNDETERMINED]: { iso3: 'eng' },
   [errorKeys.ERROR_ENCODE_PROBE_FAILED]: { filePath: '/tmp/movie.mkv', detail: 'ffprobe crashed' },
   [errorKeys.ERROR_ENCODE_FFMPEG_FAILED]: { code: 1, stderr: 'tail of stderr' },
   [errorKeys.ERROR_ENCODE_NO_OUTPUT]: { path: '/library/movies/movie.mkv' },

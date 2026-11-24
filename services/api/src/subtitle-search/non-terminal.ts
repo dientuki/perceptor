@@ -1,0 +1,7 @@
+// Spec 124, REQ-11
+export const NON_TERMINAL_SUBTITLE_SEARCH_STATUSES = [
+  'WAITING',
+  'SEARCHING',
+  'VALIDATING',
+  'EMBEDDING',
+] as const;

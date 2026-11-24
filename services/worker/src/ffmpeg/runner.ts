@@ -1,5 +1,5 @@
 import { spawn, ChildProcess } from 'node:child_process';
-import { mkdir, rm, rename, stat } from 'node:fs/promises';
+import { mkdir, rm, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
@@ -30,6 +30,48 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+// Spec 123, REQ-4 REQ-5
+export function buildMergeArgs(
+  partPath: string,
+  workingPath: string,
+  globalTagsPath: string | null,
+  videoTags: { tid: number; path: string } | null,
+): string[] {
+  const args = ['-o', partPath, '--no-global-tags'];
+  if (globalTagsPath !== null) args.push('--global-tags', globalTagsPath);
+  if (videoTags !== null) args.push('--tags', `${videoTags.tid}:${videoTags.path}`);
+  args.push(workingPath);
+  return args;
+}
+
+export function parseFirstVideoTrackId(json: string): number | null {
+  const parsed = JSON.parse(json) as { tracks?: { id: number; type: string }[] };
+  const track = parsed.tracks?.find((t) => t.type === 'video');
+  return track && Number.isInteger(track.id) ? track.id : null;
+}
+
+function firstVideoTrackId(path: string): Promise<number | null> {
+  return new Promise((resolve, reject) => {
+    const probe = spawn('mkvmerge', ['-J', path]);
+    let out = '';
+    probe.stdout.on('data', (data: Buffer) => {
+      out += data.toString();
+    });
+    probe.on('error', reject);
+    probe.on('close', (code) => {
+      if (code !== 0 && code !== 1) {
+        reject(new Error(`mkvmerge -J exited ${code}`));
+        return;
+      }
+      try {
+        resolve(parseFirstVideoTrackId(out));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
 export function runFfmpeg(
   args: string[],
   workingPath: string,
@@ -38,6 +80,7 @@ export function runFfmpeg(
   durationSeconds: number,
   onProgress: (progress: number, speed: number | null) => Promise<void>,
   signal: AbortSignal,
+  tags?: () => Promise<{ global: string | null; video: string | null } | null>,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const finalCmd = `ffmpeg ${args.map((arg) => (arg.includes(' ') ? `"${arg}"` : arg)).join(' ')}`;
@@ -57,7 +100,12 @@ export function runFfmpeg(
 
     let activeChild: ChildProcess | null = null;
 
+    const tagsPath = `${partPath}.tags.xml`;
+    const videoTagsPath = `${partPath}.video-tags.xml`;
+
     const cleanupTemps = async () => {
+      await rm(tagsPath, { force: true }).catch(() => {});
+      await rm(videoTagsPath, { force: true }).catch(() => {});
       await rm(workingPath, { force: true }).catch(() => {});
       await rm(partPath, { force: true }).catch(() => {});
     };
@@ -224,7 +272,41 @@ export function runFfmpeg(
         return;
       }
 
-      const merge = spawn('mkvmerge', ['-o', partPath, workingPath]);
+      let hasGlobalTags = false;
+      let videoTid: number | null = null;
+      if (tags) {
+        try {
+          const produced = await tags();
+          if (produced?.global != null) {
+            try {
+              await writeFile(tagsPath, produced.global);
+              hasGlobalTags = true;
+            } catch (err) {
+              console.warn('[ffmpeg] global tags omitted:', err instanceof Error ? err.message : err);
+            }
+          }
+          if (produced?.video != null) {
+            try {
+              const tid = await firstVideoTrackId(workingPath);
+              if (tid === null) throw new Error('no video track id');
+              await writeFile(videoTagsPath, produced.video);
+              videoTid = tid;
+            } catch (err) {
+              console.warn('[ffmpeg] video tags omitted:', err instanceof Error ? err.message : err);
+            }
+          }
+        } catch (err) {
+          console.warn('[ffmpeg] tags omitted:', err instanceof Error ? err.message : err);
+        }
+      }
+
+      if (cancelled) {
+        settleReject(new EncodeCancelledError());
+        return;
+      }
+
+      const mergeArgs = buildMergeArgs(partPath, workingPath, hasGlobalTags ? tagsPath : null, videoTid === null ? null : { tid: videoTid, path: videoTagsPath });
+      const merge = spawn('mkvmerge', mergeArgs);
       activeChild = merge;
 
       let mergeStderr = '';
@@ -260,6 +342,8 @@ export function runFfmpeg(
 
       try {
         await rm(workingPath, { force: true });
+        await rm(tagsPath, { force: true });
+        await rm(videoTagsPath, { force: true });
         await rename(partPath, output);
         console.log(`[ffmpeg] completed -> ${output}`);
         settleResolve();
