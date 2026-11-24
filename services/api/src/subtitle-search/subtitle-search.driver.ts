@@ -45,6 +45,7 @@ import {
 import { LanguageRow } from './sidecar-languages';
 import { SubtitleSearchQueueService } from './subtitle-search-queue.service';
 import { SubtitleSearchStaging } from './staging';
+import { NON_TERMINAL_SUBTITLE_SEARCH_STATUSES as NON_TERMINAL } from './non-terminal';
 
 type Search = Prisma.SubtitleSearchGetPayload<{ include: { attempts: true } }>;
 
@@ -82,12 +83,6 @@ const PROVIDER_WIDE_KEYS: string[] = [
 const SYNC_BACKSTOP_MS = 6 * 60 * MINUTE_MS;
 const EMBED_POLL_MS = 2 * MINUTE_MS;
 
-const NON_TERMINAL = [
-  'WAITING',
-  'SEARCHING',
-  'VALIDATING',
-  'EMBEDDING',
-] as const;
 const MAX_RELEASE_NAME_LENGTH = 500;
 
 const strings = (value: unknown): string[] =>

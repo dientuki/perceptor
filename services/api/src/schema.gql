@@ -1465,6 +1465,14 @@ type Mutation {
   """Admin only. Replaces the default and the whole entry set at once."""
   setSubtitleProviderLanguages(defaultProvider: SubtitleProviderKind!, languages: [SubtitleProviderLanguageInput!]!): SubtitleProviderSettings!
 
+  """Owner of the film. Returns the new embed, SYNCING or QUEUED."""
+  uploadMovieSubtitles(movieId: Int!, subtitles: [SubtitleUploadInput!]!): SubtitleEmbed!
+
+  """
+  Owner of the episode's series. Returns the new embed, SYNCING or QUEUED.
+  """
+  uploadEpisodeSubtitles(episodeId: Int!, subtitles: [SubtitleUploadInput!]!): SubtitleEmbed!
+
   """
   Service-only (worker). Safe to receive more than once; false when filePath is no longer the title's file and the report was discarded (108 REQ-5).
   """
@@ -1583,4 +1591,36 @@ input SubtitleProviderInput {
 input SubtitleProviderLanguageInput {
   languageTag: String!
   provider: SubtitleProviderKind!
+}
+
+input SubtitleUploadInput {
+  """
+  The picked file's base name, ending in .srt (case-insensitive); the row's identity within the request, never used as a path.
+  """
+  fileName: String!
+
+  """
+  The file's bytes, base64-encoded, as uploaded (any charset; api normalizes to UTF-8, REQ-8). At most 2 MiB decoded.
+  """
+  contentBase64: String!
+
+  """
+  A Language.tag from the languages catalog (e.g. "es-419", "en"), so a regional variant can be chosen.
+  """
+  languageTag: String!
+  isForced: Boolean!
+  isDefault: Boolean!
+
+  """
+  Drop the file's existing non-forced text subtitle tracks of this language in the same remux (REQ-9).
+  """
+  replace: Boolean!
+
+  """
+  Manual offset in ms (101's convention). Ignored when autoOffset is true.
+  """
+  offsetMs: Int!
+
+  """True: api measures the offset (113) and ignores offsetMs."""
+  autoOffset: Boolean!
 }

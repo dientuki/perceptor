@@ -1,8 +1,8 @@
 ---
 title: Perceptor Constitution
-version: 1.8.0
+version: 1.9.0
 ratified_at: 2026-08-09
-last_amended: 2026-11-20
+last_amended: 2026-11-24
 ---
 
 # Perceptor Constitution
@@ -228,17 +228,20 @@ Two more, both narrow and both for one title at a time:
    Only the exact `.srt` paths the embed request named are deleted. Each must be a regular file in
    the same directory as the replaced `.mkv`. A failed embed deletes nothing.
 
-The first exception applies in two cases:
+The first exception applies in three cases:
 
 - at an administrator's explicit request (`101-jellyfin-subtitle-embed`);
 - when `103-subtitle-search` embeds the subtitles it fetched and validated, for a title one of its
   owners opted into, or for a title one of its owners asked to search by hand
   (`106-manual-subtitle-search`), whatever that owner's preference. The press is the consent, for
-  that one film or episode.
+  that one film or episode;
+- when one of a title's owners uploads subtitle files for that one film or episode
+  (`124-subtitle-upload`). The upload is the consent. Administrator rights are not required.
 
 The second exception applies only to the administrator's request. An embed started by a `103`
-search, however it was requested, reads its subtitles from the downloads root, so it has no sidecar
-to delete and removes nothing under the destinations root.
+search, however it was requested, reads its subtitles from the downloads root, and so does a `124`
+upload, which `api` stages there. Neither has a sidecar to delete, and neither removes anything
+under the destinations root.
 
 A third, also narrow, and the only write that changes a library file without replacing it:
 
@@ -275,11 +278,16 @@ these cases:
 Any other path under the destinations root is a violation, and `services/api/src` contains no
 removal under it at all (the destinations root is mounted read-only in `api`).
 
-The cases of the first exception are checked by their callers: `embedStaged` (the embed of staged
-tracks) is called only from `services/api/src/subtitle-search/`, and a search is created only by
-`SubtitleSearchRequestService`, whose callers are a delivery (`process-jobs/`) and `106`'s two
-mutations. `grep -rn "embedStaged\|requestFor" services/api/src --include=*.ts` shows no other
-caller outside tests.
+The cases of the first exception are checked by their callers:
+
+- `embedStaged` (the embed of staged tracks) is called only from `services/api/src/subtitle-search/`
+  and from the service behind `124`'s two mutations (`uploadMovieSubtitles`/`uploadEpisodeSubtitles`);
+- a search is created only by `SubtitleSearchRequestService`, whose callers are a delivery
+  (`process-jobs/`) and `106`'s two mutations;
+- both of `124`'s mutations refuse a caller who does not own the title.
+
+`grep -rn "embedStaged\|requestFor" services/api/src --include=*.ts` shows no other caller outside
+tests.
 
 The third exception has two checks:
 
@@ -304,3 +312,4 @@ The third exception has two checks:
 | 1.6.0 | 2026-10-24 | Article XII's first `101` exception (replacing a library `.mkv` with its verified remux) now also applies when `103-subtitle-search` embeds the subtitles it validated for a title an owner opted into, not only at an administrator's request. The second exception (deleting embedded sidecars) stays administrator-only, since `103` stages its subtitles in the downloads root. The scratch-file exception and the Check line now name every scratch file the worker creates beside a destination: `passthrough.ts`'s `.part.<ext>` and the embed's `.perceptor-probe`, both already in the code and flagged by the audit of that date as uncovered by the Check's wording. |
 | 1.7.0 | 2026-10-26 | Article XII's first exception (replacing a library `.mkv` with its verified remux) now also applies when a `103` search that an owner requested by hand through `106-manual-subtitle-search` embeds what it validated, even with that owner's `subtitleSearch` preference off: the press is consent for that one film or episode. The second exception (deleting embedded sidecars) stays administrator-only, since such a search stages in the downloads root like any `103` search. The article gains a Check that the staged-track embed and search creation have no callers beyond a delivery and `106`'s mutations. |
 | 1.8.0 | 2026-11-20 | Article XII gains a third exception, ratified alongside `123-grouped-provenance-tags`: an administrator-started library tag migration may edit only the Matroska `Tags` element of a library `.mkv` in place (`mkvpropedit`), with no copy, no `.part`, no `rename` and nothing deleted. Unlike the first exception, this write is not atomic. The article states that risk and what bounds it: the worker checks the file before writing, re-probes it after, and never retries a mismatch with a further write. The Check gains two lines: `mkvpropedit` is spawned only from the migration job, and `startLibraryTagMigration` is admin-guarded. Articles I–XI and the article's core (nothing in the library is ever deleted) are unchanged. |
+| 1.9.0 | 2026-11-24 | Article XII's first exception (replacing a library `.mkv` with its verified remux) gains a third case, ratified alongside `124-subtitle-upload`: one of a title's owners uploads subtitle files for that one film or episode. The upload is the consent, and administrator rights are not required. The second exception (deleting embedded sidecars) stays administrator-only, because `api` stages an upload in the downloads root. The caller Check now admits the service behind `124`'s two mutations as a caller of `embedStaged`, and requires both mutations to refuse a non-owner. The third exception and the article's core are unchanged. |

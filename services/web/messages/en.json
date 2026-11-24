@@ -195,7 +195,12 @@
       "sync_incomplete": "A subtitle only covers part of the file. The file was not touched.",
       "sync_low_score": "A subtitle does not match this file. Try the manual offset. The file was not touched.",
       "sidecar_delete_failed": "Subtitles embedded, but the external .srt could not be deleted. Delete it by hand or from Jellyfin.",
-      "jellyfin_refresh_failed": "Subtitles embedded, but the media server could not be notified. They will appear on its next scan."
+      "jellyfin_refresh_failed": "Subtitles embedded, but the media server could not be notified. They will appear on its next scan.",
+      "upload_too_many": "You can upload up to 8 subtitles at once.",
+      "upload_not_srt": "Only .srt files can be uploaded.",
+      "upload_too_large": "Each subtitle can be up to 2 MB.",
+      "replace_forced": "A forced subtitle cannot replace the others.",
+      "upload_staging_failed": "The uploaded subtitle could not be saved. Try again."
     },
     "subtitleSearch": {
       "replace_language_not_wanted": "That language is not among the ones searched for this title.",
@@ -612,6 +617,27 @@
       "submitting": "Embedding…",
       "failed": "The last embed failed: {reason}",
       "warning": "{reason}"
+    },
+    "uploadSubtitles": {
+      "button": "Upload subtitles",
+      "busyEmbed": "An embed is in progress",
+      "busySearch": "A subtitle search is in progress",
+      "title": "Upload subtitles",
+      "intro": "Choose one or more .srt files from your computer. They are embedded into the library file.",
+      "addFiles": "Choose .srt files",
+      "duplicateReplaced": "{name} was already in the list; it was replaced.",
+      "language": "Language",
+      "noLanguage": "Choose a language",
+      "forced": "Forced",
+      "default": "Default",
+      "replace": "Replace existing",
+      "replaceHint": "Replacing works per language: non-forced subtitles of the other variants are removed too (for example Latino and Spain).",
+      "offset": "Offset (ms)",
+      "auto": "Automatic",
+      "remove": "Remove",
+      "confirm": "Upload",
+      "cancel": "Cancel",
+      "submitting": "Uploading…"
     },
     "subtitleSearch": {
       "title": "Subtitle search",

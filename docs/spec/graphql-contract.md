@@ -3287,6 +3287,31 @@ Search outcome keys (never thrown): `error.subtitleSearch.no_provider` and
 `error.subtitleSearch.archive_unusable`. Subdivx is reached through the SubX API
 (`https://subx-api.duckdns.org/`); `web` and `worker` never call it.
 
+## 124 — Subtitle upload
+
+An owner of a film or episode uploads `.srt` files to embed in the library `.mkv`. Not admin-only.
+
+```graphql
+input SubtitleUploadInput { fileName contentBase64 languageTag isForced isDefault replace offsetMs autoOffset }
+uploadMovieSubtitles(movieId: Int!, subtitles: [SubtitleUploadInput!]!): SubtitleEmbed!
+uploadEpisodeSubtitles(episodeId: Int!, subtitles: [SubtitleUploadInput!]!): SubtitleEmbed!
+```
+
+- `contentBase64` carries the file's **raw bytes**, never text decoded by `web`: `api` normalizes the
+  charset to UTF-8 (`121`'s `toUtf8`). `languageTag` is a `Language.tag`, not an ISO 3 code. Limits:
+  2 MiB per file, 8 files per request; `/graphql` accepts a 32 MB body, every other route keeps 2 MB.
+- The upload is a staged embed (`embedStaged`): `SYNCING` with any `autoOffset`, else `QUEUED`. Files
+  are staged under `.perceptor/subtitle-upload/<embedId>/` in the downloads root and removed when the
+  embed is `COMPLETED` or `FAILED`.
+- Refusals, in order: not found/owned, `empty_selection`, `upload_too_many`, `upload_not_srt`,
+  `duplicate_subtitle`, `multiple_defaults`, `unknown_language`, `offset_out_of_range`,
+  `replace_forced`, `subtitleSearch.replace_language_not_present`, `upload_too_large`/`upload_not_srt`
+  (body), `charset_undetected`, `no_file`, `media_server_unavailable` (ServiceUnavailable), `not_mkv`,
+  `outside_library`, `busy`, `subtitleSearch.in_progress`, `upload_staging_failed` (InternalServerError).
+  New keys: `error.subtitleEmbed.{upload_too_many,upload_not_srt,upload_too_large,replace_forced,upload_staging_failed}`.
+- The worker surface is unchanged: no new field on `SubtitleEmbedDetails`, `SubtitleEmbedTrack` or
+  `SubtitleEmbedSyncDetails`.
+
 ## Known debt
 
 - **No codegen.** The whole "gap" section above exists because of this. Fixing it means adding

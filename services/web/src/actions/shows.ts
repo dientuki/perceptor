@@ -19,6 +19,7 @@ import type {
   SubtitleEmbedResult,
   SubtitleSearch,
   SubtitleSearchResult,
+  SubtitleUploadInput,
   TitleRefreshResult,
   TitleRemovalResult,
 } from "@/types/media";
@@ -481,6 +482,47 @@ export async function embedEpisodeSubtitlesAction(
   }
 
   if (!data?.embedEpisodeSubtitles) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  return { success: true };
+}
+
+const UPLOAD_EPISODE_SUBTITLES_MUTATION = `
+  mutation UploadEpisodeSubtitles($episodeId: Int!, $subtitles: [SubtitleUploadInput!]!) {
+    uploadEpisodeSubtitles(episodeId: $episodeId, subtitles: $subtitles) {
+      id
+      status
+    }
+  }
+`;
+
+// Spec 124, REQ-2
+export async function uploadEpisodeSubtitlesAction(
+  episodeId: string,
+  subtitles: SubtitleUploadInput[],
+): Promise<SubtitleEmbedResult> {
+  type Payload = { uploadEpisodeSubtitles: { id: number } | null };
+  let result: Awaited<ReturnType<typeof fetchGraphQL<Payload>>>;
+  try {
+    result = await fetchGraphQL<Payload>(UPLOAD_EPISODE_SUBTITLES_MUTATION, {
+      episodeId: Number(episodeId),
+      subtitles,
+    });
+  } catch (_err) {
+    const t = await getTranslations("errors");
+    return { error: t("network.connectionFailed") };
+  }
+
+  const { data, errors } = result;
+
+  if (errors && errors.length > 0) {
+    await redirectIfUnauthenticated(errors);
+    return await toActionError(errors[0]);
+  }
+
+  if (!data?.uploadEpisodeSubtitles) {
     const t = await getTranslations("errors");
     return { error: t("network.connectionFailed") };
   }

@@ -819,6 +819,10 @@ one is its own task, not a side effect of touching it for something else):
 Re-run `grep -cE "^(export default )?function [A-Z]" <file>` before trusting this list — it
 decays as files change.
 
+## Uploading subtitles (`124-subtitle-upload`)
+
+`UploadSubtitlesButton.tsx` (icon-only, any owner, beside "Buscar subtítulos" in `Movie.tsx` and in each `COMPLETED` episode's "Pistas" cell) opens `UploadSubtitlesModal.tsx`: `.srt` only, 2 MiB and 8 files pre-checked, language preset by `lib/subtitle-file-name.ts`'s `presetFromFileName` (an ambiguous match such as a bare `spa` leaves the language empty), per-row forced/default/replace/offset/"Automático". Files are read with `arrayBuffer()` and sent base64 as raw bytes, never `file.text()`, because `api` owns charset normalization. `next.config.ts` raises the server-action body limit to 24 MB. `SubtitleEmbedOutcome.tsx` (failure/warning of the latest embed) is rendered for every owner; `EmbedSubtitlesButton` no longer shows those lines.
+
 ## Embedding Jellyfin subtitles (`101-jellyfin-subtitle-embed`)
 
 `src/components/media/EmbedSubtitlesButton.tsx` and `EmbedSubtitlesModal.tsx`, rendered in

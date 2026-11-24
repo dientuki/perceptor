@@ -16,6 +16,7 @@ import {
   setMovieContentKindAction,
   setMovieGrainModeAction,
   setMovieShortAction,
+  uploadMovieSubtitlesAction,
 } from "@/actions/movies";
 import Switch from "@/components/form/switch/Switch";
 import ImportFileModal from "@/components/import/importFileModal";
@@ -29,7 +30,9 @@ import RankingDebugPanel from "@/components/media/RankingDebugPanel";
 import RefreshTitleButton from "@/components/media/RefreshTitleButton";
 import RemoveTitleButton from "@/components/media/RemoveTitleButton";
 import SearchSubtitlesButton from "@/components/media/SearchSubtitlesButton";
+import SubtitleEmbedOutcome from "@/components/media/SubtitleEmbedOutcome";
 import TitleLanguagesPanel from "@/components/media/TitleLanguagesPanel";
+import UploadSubtitlesButton from "@/components/media/UploadSubtitlesButton";
 import MovieReleaseDates from "@/components/movies/MovieReleaseDates";
 import StatusBadge from "@/components/status/StatusBadge";
 import Button from "@/components/ui/button/Button";
@@ -243,16 +246,36 @@ export default function Movie({
           latestSubtitleSearch={movie.latestSubtitleSearch}
           footer={
             <>
-              {subtitleSearchAvailable && movie.status === "COMPLETED" && (
-                <SearchSubtitlesButton
-                  search={movie.latestSubtitleSearch}
-                  onSearch={searchMovieSubtitlesAction.bind(null, movie.id)}
-                  replaceableLanguages={replaceableSubtitleLanguages(
-                    movie.fileSubtitleLanguages,
-                    effective.subtitleLanguages,
-                  )}
-                  fullWidth
-                />
+              {movie.status === "COMPLETED" && (
+                <>
+                  {/* Spec 124, REQ-1 */}
+                  <div className="flex w-full gap-2">
+                    {subtitleSearchAvailable && (
+                      <div className="min-w-0 flex-1">
+                        <SearchSubtitlesButton
+                          search={movie.latestSubtitleSearch}
+                          onSearch={searchMovieSubtitlesAction.bind(
+                            null,
+                            movie.id,
+                          )}
+                          replaceableLanguages={replaceableSubtitleLanguages(
+                            movie.fileSubtitleLanguages,
+                            effective.subtitleLanguages,
+                          )}
+                          fullWidth
+                        />
+                      </div>
+                    )}
+                    <UploadSubtitlesButton
+                      embed={movie.subtitleEmbed}
+                      search={movie.latestSubtitleSearch}
+                      fileSubtitleLanguages={movie.fileSubtitleLanguages}
+                      onUpload={uploadMovieSubtitlesAction.bind(null, movie.id)}
+                    />
+                  </div>
+                  {/* Spec 124, REQ-15 */}
+                  <SubtitleEmbedOutcome embed={movie.subtitleEmbed} />
+                </>
               )}
               <EmbedSubtitlesButton
                 subtitles={movie.externalSubtitles ?? []}

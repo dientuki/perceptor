@@ -194,6 +194,16 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.LIBRARY_PROBE_NOT_FOUND]: 'The title was not found.',
   [ERROR_KEYS.LIBRARY_PROBE_MEDIA_SERVER_UNAVAILABLE]:
     'The media server is unavailable.',
+  [ERROR_KEYS.SUBTITLE_EMBED_UPLOAD_TOO_MANY]:
+    'You can upload up to 8 subtitles at a time.',
+  [ERROR_KEYS.SUBTITLE_EMBED_UPLOAD_NOT_SRT]:
+    'Only .srt files can be uploaded.',
+  [ERROR_KEYS.SUBTITLE_EMBED_UPLOAD_TOO_LARGE]:
+    'Each subtitle can be up to 2 MB.',
+  [ERROR_KEYS.SUBTITLE_EMBED_REPLACE_FORCED]:
+    'A forced subtitle cannot replace the others.',
+  [ERROR_KEYS.SUBTITLE_EMBED_UPLOAD_STAGING_FAILED]:
+    'The uploaded subtitle could not be saved. Try again.',
   [ERROR_KEYS.SUBTITLE_EMBED_BUSY]:
     'This title has a download, encode or subtitle embed in progress.',
   [ERROR_KEYS.LIBRARY_TAGS_MIGRATION_RUNNING]:

@@ -140,6 +140,18 @@ export interface SubtitleEmbedInput {
   autoOffset: boolean;
 }
 
+// Spec 124, REQ-6
+export interface SubtitleUploadInput {
+  fileName: string;
+  contentBase64: string;
+  languageTag: string;
+  isForced: boolean;
+  isDefault: boolean;
+  replace: boolean;
+  offsetMs: number;
+  autoOffset: boolean;
+}
+
 /** Outcome of embedMovieSubtitles/embedEpisodeSubtitles; `errorKey` lets the caller react to stale_listing. */
 export type SubtitleEmbedResult =
   | { success: true }

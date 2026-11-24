@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   allowedDevOrigins: [domain],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "24mb",
+    },
+  },
   output: "standalone",
   images: {
     remotePatterns: [

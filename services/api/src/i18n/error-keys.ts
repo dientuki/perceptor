@@ -181,6 +181,14 @@ export const ERROR_KEYS = {
   SUBTITLE_EMBED_SYNC_LOW_SCORE: 'error.subtitleEmbed.sync_low_score',
   SUBTITLE_EMBED_SYNC_NOT_FOUND: 'error.subtitleEmbed.sync_not_found',
 
+  // Spec 124, REQ-4 REQ-9 REQ-12
+  SUBTITLE_EMBED_UPLOAD_TOO_MANY: 'error.subtitleEmbed.upload_too_many',
+  SUBTITLE_EMBED_UPLOAD_NOT_SRT: 'error.subtitleEmbed.upload_not_srt',
+  SUBTITLE_EMBED_UPLOAD_TOO_LARGE: 'error.subtitleEmbed.upload_too_large',
+  SUBTITLE_EMBED_REPLACE_FORCED: 'error.subtitleEmbed.replace_forced',
+  SUBTITLE_EMBED_UPLOAD_STAGING_FAILED:
+    'error.subtitleEmbed.upload_staging_failed',
+
   // Spec 103
   SUBTITLE_SEARCH_UNSUPPORTED_MEDIA_SERVER: 'error.subtitleSearch.unsupported_media_server',
   SUBTITLE_SEARCH_SYNC_NOT_FOUND: 'error.subtitleSearch.sync_not_found',

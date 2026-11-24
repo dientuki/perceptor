@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { getLanguages } from "@/actions/languages";
+import { OFFSET_LIMIT, parseOffset } from "@/components/media/subtitle-offset";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
 import type { Language } from "@/types/languages";
@@ -29,18 +30,11 @@ interface RowState {
   autoOffset: boolean;
 }
 
-const OFFSET_LIMIT = 600000;
 const ERROR_CLASS =
   "text-base text-error-500 bg-error-50 dark:bg-error-500/10 p-3 rounded-lg";
 const INPUT_CLASS =
   "h-9 rounded-lg border border-gray-300 bg-transparent px-3 text-base text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
 const STALE_LISTING_KEY = "error.subtitleEmbed.stale_listing";
-
-function parseOffset(raw: string): number | null {
-  if (!/^-?\d+$/.test(raw.trim())) return null;
-  const value = Number(raw);
-  return Math.abs(value) <= OFFSET_LIMIT ? value : null;
-}
 
 function initialRows(subtitles: ExternalSubtitle[]): Record<string, RowState> {
   const rows: Record<string, RowState> = {};

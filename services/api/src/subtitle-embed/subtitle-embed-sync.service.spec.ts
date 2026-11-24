@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ERROR_KEYS } from '@/i18n/error-keys';
@@ -40,6 +40,7 @@ describe('SubtitleEmbedSyncService', () => {
   };
   let syncQueue: { addEmbedSync: jest.Mock };
   let embedQueue: { addEmbed: jest.Mock };
+  let uploadStaging: { removeEmbed: jest.Mock };
   let service: SubtitleEmbedSyncService;
 
   const good: SyncReport = {
@@ -75,6 +76,8 @@ describe('SubtitleEmbedSyncService', () => {
     const cue = '1\n00:01:20,000 --> 00:01:30,000\nhi\n';
     await writeFile(join(dir, 'a.srt'), cue);
     await writeFile(join(dir, 'b.srt'), cue);
+    await mkdir(join(dir, 'stage'), { recursive: true });
+    await writeFile(join(dir, 'stage', '0.srt'), cue);
     await writeFile(
       join(dir, 'utf16.srt'),
       Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(cue, 'utf16le')]),
@@ -120,10 +123,12 @@ describe('SubtitleEmbedSyncService', () => {
     );
     syncQueue = { addEmbedSync: jest.fn().mockResolvedValue(undefined) };
     embedQueue = { addEmbed: jest.fn().mockResolvedValue(undefined) };
+    uploadStaging = { removeEmbed: jest.fn().mockResolvedValue(undefined) };
     service = new SubtitleEmbedSyncService(
       prisma as never,
       syncQueue as never,
       embedQueue as never,
+      uploadStaging as never,
     );
   });
 
@@ -340,6 +345,71 @@ describe('SubtitleEmbedSyncService', () => {
         [{ subtitleEmbedId: 5, fileName: 'a.srt' }, 0],
         [{ subtitleEmbedId: 5, fileName: 'b.srt' }, 2],
       ]);
+    });
+  });
+
+  describe('an uploaded track (Spec 124, REQ-12 REQ-13)', () => {
+    const uploaded = () =>
+      track('Green Book.es-419.srt', {
+        stagedPath: join(dir, 'stage', '0.srt'),
+      });
+
+    // This test exists because otherwise the worker is asked to measure a file name joined onto the library folder, which never exists for an upload, and every automatic upload fails sync_failed.
+    it('serves the staged path as the candidate path', async () => {
+      row!.tracks = [uploaded()];
+
+      const details = await service.details(5, 'Green Book.es-419.srt');
+
+      expect(details.candidatePath).toBe(join(dir, 'stage', '0.srt'));
+    });
+
+    // This test exists because otherwise the last cue of an upload is read from a path that does not exist, the coverage check sees null and the measurement is judged without it.
+    it('reads the last cue from the staged path', async () => {
+      row!.tracks = [uploaded()];
+
+      await service.completed(5, 'Green Book.es-419.srt', good);
+
+      expect(row!.status).toBe('QUEUED');
+      expect(
+        (row!.tracks[0].measurement as { lastCueEndMs: number | null })
+          .lastCueEndMs,
+      ).toBe(90_000);
+    });
+
+    // This test exists because otherwise a rejected upload leaves its subtitle copy under the downloads root forever.
+    it('removes the staging directory when a rejection fails the embed, and not on an acceptance', async () => {
+      row!.tracks = [uploaded()];
+      await service.completed(5, 'Green Book.es-419.srt', good);
+      expect(uploadStaging.removeEmbed).not.toHaveBeenCalled();
+
+      row!.status = 'SYNCING';
+      row!.tracks = [uploaded()];
+      await service.completed(5, 'Green Book.es-419.srt', {
+        ...good,
+        framerateRatio: 1.2,
+      });
+
+      expect(row!.status).toBe('FAILED');
+      expect(uploadStaging.removeEmbed).toHaveBeenCalledTimes(1);
+      expect(uploadStaging.removeEmbed).toHaveBeenCalledWith(5);
+    });
+
+    it('removes the staging directory on a worker failure report and on a remux enqueue failure', async () => {
+      row!.tracks = [uploaded()];
+      await service.failed(
+        5,
+        'Green Book.es-419.srt',
+        ERROR_KEYS.SUBTITLE_EMBED_SYNC_FAILED,
+      );
+      expect(uploadStaging.removeEmbed).toHaveBeenCalledWith(5);
+
+      uploadStaging.removeEmbed.mockClear();
+      row!.status = 'SYNCING';
+      row!.tracks = [uploaded()];
+      embedQueue.addEmbed.mockRejectedValue(new Error('redis down'));
+      await service.completed(5, 'Green Book.es-419.srt', good);
+      expect(row!.status).toBe('FAILED');
+      expect(uploadStaging.removeEmbed).toHaveBeenCalledWith(5);
     });
   });
 });

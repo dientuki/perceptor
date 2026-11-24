@@ -195,7 +195,12 @@
       "sync_incomplete": "Un subtítulo solo cubre parte del archivo. El archivo no se tocó.",
       "sync_low_score": "Un subtítulo no coincide con este archivo. Probá con el desfase manual. El archivo no se tocó.",
       "sidecar_delete_failed": "Subtítulos incrustados, pero no se pudo borrar el .srt externo. Borralo a mano o desde Jellyfin.",
-      "jellyfin_refresh_failed": "Subtítulos incrustados, pero no se pudo avisar al servidor de medios. Aparecerán en su próximo escaneo."
+      "jellyfin_refresh_failed": "Subtítulos incrustados, pero no se pudo avisar al servidor de medios. Aparecerán en su próximo escaneo.",
+      "upload_too_many": "Podés subir hasta 8 subtítulos a la vez.",
+      "upload_not_srt": "Solo se pueden subir archivos .srt.",
+      "upload_too_large": "Cada subtítulo puede pesar hasta 2 MB.",
+      "replace_forced": "Un subtítulo forzado no puede reemplazar a los demás.",
+      "upload_staging_failed": "No se pudo guardar el subtítulo subido. Probá de nuevo."
     },
     "subtitleSearch": {
       "replace_language_not_wanted": "Ese idioma no está entre los que se buscan en este título.",
@@ -612,6 +617,27 @@
       "submitting": "Incrustando…",
       "failed": "La última incrustación falló: {reason}",
       "warning": "{reason}"
+    },
+    "uploadSubtitles": {
+      "button": "Subir subtítulos",
+      "busyEmbed": "Hay una incrustación en curso",
+      "busySearch": "Hay una búsqueda de subtítulos en curso",
+      "title": "Subir subtítulos",
+      "intro": "Elegí uno o más archivos .srt de tu computadora. Se incrustan en el archivo de la biblioteca.",
+      "addFiles": "Elegir archivos .srt",
+      "duplicateReplaced": "{name} ya estaba en la lista; se reemplazó.",
+      "language": "Idioma",
+      "noLanguage": "Elegí un idioma",
+      "forced": "Forzado",
+      "default": "Predeterminado",
+      "replace": "Reemplazar los existentes",
+      "replaceHint": "Reemplazar funciona por idioma: también se quitan los subtítulos no forzados de las otras variantes (por ejemplo, Latino y España).",
+      "offset": "Desfase (ms)",
+      "auto": "Automático",
+      "remove": "Quitar",
+      "confirm": "Subir",
+      "cancel": "Cancelar",
+      "submitting": "Subiendo…"
     },
     "subtitleSearch": {
       "title": "Búsqueda de subtítulos",

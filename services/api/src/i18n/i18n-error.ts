@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  InternalServerErrorException,
   NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -75,6 +76,11 @@ export const i18nError = {
 
   forbidden(key: ErrorKey, params?: I18nParams): ForbiddenException {
     return new ForbiddenException(buildResponse(key, params));
+  },
+
+  // Spec 124, REQ-12
+  internalServerError(key: ErrorKey, params?: I18nParams): InternalServerErrorException {
+    return new InternalServerErrorException(buildResponse(key, params));
   },
 
   serviceUnavailable(key: ErrorKey, params?: I18nParams): ServiceUnavailableException {
