@@ -3,11 +3,12 @@ title: Bound subtitle cue text before the worker runs regexes on it
 spec_version: 0.1.0
 author: security-audit run-2 (draft)
 created_at: 2026-11-22
-last_updated: 2026-11-22
+last_updated: 2026-11-23
 status: Draft
 services: [worker]
 source_finding: worker/encode/subtitle-content-unbounded-quadratic-regex-on-track-text
-audit_verdict: needs_validation
+audit_verdict: confirmed
+severity: low
 priority: 24
 ---
 
@@ -16,6 +17,8 @@ priority: 24
 > Draft written from a static security audit (`security-audit` skill, run-2, profile `standard`).
 > Nothing was executed; the finding is `needs_validation`. Line numbers refer to commit `7365e13`
 > (source unchanged since `98f8779`).
+>
+> **Run-3 update (2026-11-23):** now **confirmed**, overall severity low (likelihood low, impact medium). A fresh verifier reproduced it in a sandboxed local harness (real service code, in-memory fakes); evidence in `~/security-audit-skill/perceptor/run-3/agents/v-worker-encode-subtitle-content-unbounded-quadratic-regex-o/artifacts/evidence/`. The final record is `worker/encode/subtitle-content-unbounded-quadratic-regex-on-track-text` in run-3's `findings.json`.
 
 ## Context & Goal
 

@@ -3,11 +3,11 @@ title: Pin ffmpeg/ffprobe input protocols for torrent-supplied media
 spec_version: 0.1.0
 author: security-audit run-2 (draft)
 created_at: 2026-11-22
-last_updated: 2026-11-22
+last_updated: 2026-11-23
 status: Draft
 services: [worker]
 source_finding: worker/ffmpeg/no-protocol-whitelist-on-untrusted-media-input
-audit_verdict: needs_validation
+audit_verdict: rejected
 priority: 25
 ---
 
@@ -16,6 +16,8 @@ priority: 25
 > Draft written from a static security audit (`security-audit` skill, run-2, profile `standard`).
 > Nothing was executed; the finding is `needs_validation`. Line numbers refer to commit `7365e13`
 > (source unchanged since `98f8779`).
+>
+> **Run-3 update (2026-11-23): rejected.** A local reproduction with ffmpeg n9.0.2 made zero outbound requests for HLS, concat, DASH and SDP payloads named `.mkv`/`.mp4`/`.ts`: libavformat's default nested-protocol whitelist and its probing rules already block the path this draft assumed. Keep it only as optional hardening, not as a security fix.
 
 ## Context & Goal
 

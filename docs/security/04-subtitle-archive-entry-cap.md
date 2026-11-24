@@ -3,11 +3,12 @@ title: Bound Subdivx archive extraction before enumeration
 spec_version: 0.1.0
 author: security-audit run-1 (draft)
 created_at: 2026-11-20
-last_updated: 2026-11-20
+last_updated: 2026-11-23
 status: Draft
 services: [api]
 source_finding: api/subtitle-search/archive-zip-entry-count-checked-after-enumeration
-audit_verdict: needs_validation
+audit_verdict: confirmed
+severity: low
 priority: 4
 ---
 
@@ -15,6 +16,8 @@ priority: 4
 
 > Draft written from a static security audit (`security-audit` skill, run-1, profile `quick`).
 > Nothing was executed; the finding is `needs_validation`. Line numbers refer to commit `98f8779`.
+>
+> **Run-3 update (2026-11-23):** now **confirmed**, overall severity low (likelihood low, impact medium). A fresh verifier reproduced it in a sandboxed local harness (real service code, in-memory fakes); evidence in `~/security-audit-skill/perceptor/run-3/agents/v-api-subtitle-search-archive-zip-entry-count-checked-after/artifacts/evidence/`. The final record is `api/subtitle-search/archive-zip-entry-count-checked-after-enumeration` in run-3's `findings.json`.
 
 ## Context & Goal
 

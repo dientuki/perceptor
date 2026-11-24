@@ -3,11 +3,12 @@ title: Removing a user ends their sessions
 spec_version: 0.1.0
 author: security-audit run-1 (draft)
 created_at: 2026-11-20
-last_updated: 2026-11-20
+last_updated: 2026-11-23
 status: Draft
 services: [api]
 source_finding: api/users/remove-user-keeps-sessions-live
-audit_verdict: needs_validation
+audit_verdict: confirmed
+severity: low
 priority: 6
 ---
 
@@ -16,6 +17,8 @@ priority: 6
 > Draft written from a static security audit (`security-audit` skill, run-1, profile `quick`).
 > Nothing was executed; the finding is `needs_validation`. Line numbers refer to commit `98f8779`.
 > Shares a fix with specs 07 and 09 (`JwtStrategy.validate` re-checking the user); implement together.
+>
+> **Run-3 update (2026-11-23):** now **confirmed**, overall severity low (likelihood low, impact low). A fresh verifier reproduced it in a sandboxed local harness (real service code, in-memory fakes); evidence in `~/security-audit-skill/perceptor/run-3/agents/v-api-users-remove-user-keeps-sessions-live/artifacts/evidence/`. The final record is `api/users/remove-user-keeps-sessions-live` in run-3's `findings.json`.
 
 ## Context & Goal
 
