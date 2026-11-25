@@ -1202,7 +1202,12 @@
       "openSubtitlesHelp": "Es una cuenta de opensubtitles.com (una cuenta de opensubtitles.org no sirve). Hacen falta los dos campos. El límite diario de descargas de esa cuenta es el que limita la búsqueda de subtítulos.",
       "openSubtitlesSignUp": "Crear una cuenta en opensubtitles.com",
       "subdivxHelp": "A Subdivx se llega a través de SubX API con una API key personal. Solo tiene subtítulos en español.",
-      "subdivxQuickstart": "Cómo conseguir una key",
+      "subdivxQuickstart": "Guía de autenticación de SubX",
+      "subdivxStepsTitle": "Cómo conseguir la key",
+      "subdivxStep1": "Iniciá sesión (o creá una cuenta) en",
+      "subdivxStep2": "Andá a Perfil → Claves de API y tocá \"Crear Nueva Clave de API\".",
+      "subdivxStep3": "Ponele un nombre (por ejemplo \"Perceptor\"), dejá el vencimiento vacío salvo que quieras que caduque, y tocá \"Generar Clave\".",
+      "subdivxStep4": "Copiá la key en el momento — SubX la muestra una sola vez — y pegala acá. Si la perdés, generá una nueva y revocá la anterior.",
       "cancel": "Cancelar",
       "save": "Guardar",
       "saving": "Guardando..."
