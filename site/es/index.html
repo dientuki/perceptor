@@ -413,7 +413,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></div>
         <h3>Servicios externos que elegís vos, con tus propias keys</h3>
-        <p>Perceptor le pide a TMDB títulos, posters y fechas de emisión con una key que creás vos mismo y, solo si configurás la búsqueda de subtítulos, a OpenSubtitles, con tu propia cuenta. Esa es toda la lista de salidas. Tus indexers, tu downloader y tu media server son todas cosas que ya corrés vos.</p>
+        <p>Perceptor le pide a TMDB títulos, posters y fechas de emisión con una key que creás vos mismo y, solo si configurás la búsqueda de subtítulos, a OpenSubtitles o a Subdivx, con tu propia cuenta o key. Esa es toda la lista de salidas. Tus indexers, tu downloader y tu media server son todas cosas que ya corrés vos.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"/><path d="M9 7V4h6v3M9 13h6"/></svg></div>
@@ -501,7 +501,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3a4 4 0 0 0-4 4v4a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
         <h3>Tus idiomas, no los del release</h3>
-        <p>Configurálos una vez para toda la instalación, ajustalos para tu cuenta, agregá uno más para un solo título. Audio y subtítulos se eligen por separado — pedir el audio original con tus subtítulos es algo normal. La página de cada título te dice cuáles se van a usar, y qué idiomas trae realmente el archivo. ¿Al release le falta un idioma de subtítulos? Perceptor lo puede buscar en OpenSubtitles, comprobar que esté sincronizado e incrustarlo en el archivo.</p>
+        <p>Configurálos una vez para toda la instalación, ajustalos para tu cuenta, agregá uno más para un solo título. Audio y subtítulos se eligen por separado — pedir el audio original con tus subtítulos es algo normal. La página de cada título te dice cuáles se van a usar, y qué idiomas trae realmente el archivo. ¿Al release le falta un idioma de subtítulos? Perceptor lo puede buscar en OpenSubtitles o en Subdivx — o tomar el .srt que subas —, comprobar que esté sincronizado e incrustarlo en el archivo.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
@@ -536,7 +536,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h4M13 11h4M7 15h10"/></svg></div>
         <h3>Los subtítulos que faltan, los busca él</h3>
-        <p>Activalo y un archivo que llega sin un idioma que querés lo consigue en OpenSubtitles, con tu propia cuenta. Antes de incrustarlo se verifica que esté sincronizado con la película, y uno que está pero no sirve se puede cambiar por otro mejor — solo si lo pedís.</p>
+        <p>Activalo y un archivo que llega sin un idioma que querés lo consigue en OpenSubtitles o en Subdivx, con tus propias cuentas. Antes de incrustarlo se verifica que esté sincronizado con la película, y uno que está pero no sirve se puede cambiar por otro mejor — solo si lo pedís.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5h9v7H8l-4 3z"/><path d="M11 15h5l4 3v-9h-4"/></svg></div>
@@ -547,6 +547,21 @@
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg></div>
         <h3>DVD y Blu-ray, también</h3>
         <p>De una carpeta de Blu-ray encuentra la playlist principal y la arma. Un rip de DVD se desentrelaza, conserva sus colores y su formato panorámico, y queda en una fracción del tamaño.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg></div>
+        <h3>Cada archivo dice cómo se hizo</h3>
+        <p>Abrí cualquier archivo en MediaInfo y te dice de qué release salió, qué versión de Perceptor lo codificó y con qué parámetros — y, de cada subtítulo, quién lo trajo y cómo se sincronizó.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></div>
+        <h3>Tus propios subtítulos</h3>
+        <p>¿Ya tenés el .srt que va? Subilo a una película o a un episodio, elegí el idioma y dejá que Perceptor mida el desfase — o escribilo vos. Entra al archivo con el mismo remux verificado que todo lo demás.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12h2M7 8v8M11 5v14M15 8v8M19 11v2"/></svg></div>
+        <h3>Audio sin etiqueta, reconocido</h3>
+        <p>Una pista que no dice en qué idioma está no se descarta. Perceptor escucha algunos fragmentos, sin conexión, y la etiqueta — así una pista en el idioma original sin tag igual llega a tu archivo.</p>
       </div>
     </div>
     <figure class="figure">
@@ -612,7 +627,7 @@
       </details>
       <details>
         <summary>¿Qué información manda sobre mí?</summary>
-        <p>Los títulos que buscás van a TMDB, porque ahí está el catálogo — con una API key que creaste vos, no una compartida por todos. Las búsquedas de releases van a los indexers que configuraste. Si está configurada la búsqueda de subtítulos, a OpenSubtitles se le piden los idiomas que faltan, con la cuenta que cargó tu admin y sin decir qué usuario lo pidió. Esa es la lista completa: no hay servidor de Perceptor, ni cuenta, ni telemetría, ni script de analítica en ninguna pantalla. Tu biblioteca, tu historial y tus archivos se quedan en tu hardware.</p>
+        <p>Los títulos que buscás van a TMDB, porque ahí está el catálogo — con una API key que creaste vos, no una compartida por todos. Las búsquedas de releases van a los indexers que configuraste. Si está configurada la búsqueda de subtítulos, a OpenSubtitles o a Subdivx se le piden los idiomas que faltan, con la cuenta o la key que cargó tu admin y sin decir qué usuario lo pidió. Esa es la lista completa: no hay servidor de Perceptor, ni cuenta, ni telemetría, ni script de analítica en ninguna pantalla. Tu biblioteca, tu historial y tus archivos se quedan en tu hardware.</p>
       </details>
       <details>
         <summary>¿Lo puede usar más de una persona?</summary>

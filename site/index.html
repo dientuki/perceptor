@@ -423,7 +423,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></div>
         <h3>Outside services you choose, with your own keys</h3>
-        <p>Perceptor asks TMDB for titles, posters and air dates with a key you create yourself, and — only if you set up subtitle search — OpenSubtitles, with your own account. That's the whole outbound list. Your indexers, your downloader and your media server are all things you already run.</p>
+        <p>Perceptor asks TMDB for titles, posters and air dates with a key you create yourself, and — only if you set up subtitle search — OpenSubtitles or Subdivx, with your own account or key. That's the whole outbound list. Your indexers, your downloader and your media server are all things you already run.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"/><path d="M9 7V4h6v3M9 13h6"/></svg></div>
@@ -511,7 +511,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3a4 4 0 0 0-4 4v4a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
         <h3>Your languages, not the release's</h3>
-        <p>Set them once for the whole install, tweak them for your account, add one more for a single title. Audio and subtitles are chosen separately — original audio with your subtitles is a normal thing to ask for. Every title's page tells you which ones will be used, and which languages the file actually carries. Release missing a subtitle language? Perceptor can find it on OpenSubtitles, check it's in sync and fold it into the file.</p>
+        <p>Set them once for the whole install, tweak them for your account, add one more for a single title. Audio and subtitles are chosen separately — original audio with your subtitles is a normal thing to ask for. Every title's page tells you which ones will be used, and which languages the file actually carries. Release missing a subtitle language? Perceptor can find it on OpenSubtitles or Subdivx — or take the .srt you upload — check it's in sync and fold it into the file.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
@@ -546,7 +546,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h4M13 11h4M7 15h10"/></svg></div>
         <h3>Missing subtitles, found for you</h3>
-        <p>Opt in and a file that arrives without a language you want gets one from OpenSubtitles, with your own account. Each candidate's timing is checked against the film before it goes in, and one that's there but wrong can be swapped for a better one — only when you ask.</p>
+        <p>Opt in and a file that arrives without a language you want gets one from OpenSubtitles or Subdivx, with your own accounts. Each candidate's timing is checked against the film before it goes in, and one that's there but wrong can be swapped for a better one — only when you ask.</p>
       </div>
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5h9v7H8l-4 3z"/><path d="M11 15h5l4 3v-9h-4"/></svg></div>
@@ -557,6 +557,21 @@
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg></div>
         <h3>DVDs and Blu-rays welcome</h3>
         <p>A Blu-ray folder has its main playlist found and assembled. A DVD rip is deinterlaced, keeps its colours and its widescreen shape, and comes out a fraction of the size.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg></div>
+        <h3>Every file says how it was made</h3>
+        <p>Open any file in MediaInfo and it tells you which release it came from, which Perceptor version encoded it and with what settings — and, for each subtitle, who supplied it and how it was synced.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></div>
+        <h3>Bring your own subtitles</h3>
+        <p>Already have the right .srt? Upload it to a film or an episode, pick its language, and let Perceptor measure the offset — or type it yourself. It goes into the file through the same checked remux as everything else.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12h2M7 8v8M11 5v14M15 8v8M19 11v2"/></svg></div>
+        <h3>Unlabelled audio, identified</h3>
+        <p>A track that doesn't say what language it's in isn't thrown away. Perceptor listens to a few stretches, offline, and labels it — so an original-language track with no tag still makes it into your file.</p>
       </div>
     </div>
     <figure class="figure">
@@ -622,7 +637,7 @@
       </details>
       <details>
         <summary>What does it send out about me?</summary>
-        <p>Titles you search for go to TMDB, because that's where the catalogue is — with an API key you created, not one shared by everyone. Release searches go to the indexers you configured. If subtitle search is set up, OpenSubtitles is asked for the missing languages, with the account your admin entered and nothing about which user asked. That's the complete list: there's no Perceptor server, no account, no telemetry and no analytics script on any screen. Your library, your history and your files stay on your hardware.</p>
+        <p>Titles you search for go to TMDB, because that's where the catalogue is — with an API key you created, not one shared by everyone. Release searches go to the indexers you configured. If subtitle search is set up, OpenSubtitles or Subdivx is asked for the missing languages, with the account or key your admin entered and nothing about which user asked. That's the complete list: there's no Perceptor server, no account, no telemetry and no analytics script on any screen. Your library, your history and your files stay on your hardware.</p>
       </details>
       <details>
         <summary>Can several people use it?</summary>

@@ -49,7 +49,10 @@ who isn't on your own machine.
   swarm like any other torrent client's. If an administrator sets up subtitle search, `api` asks
   OpenSubtitles.com for the languages a file is missing, signed in with the OpenSubtitles account
   entered in Settings; it sends the title's TMDB id (plus season and episode), the languages and
-  the file's OpenSubtitles hash, nothing about which user asked. Perceptor adds nothing else to that list.
+  the file's OpenSubtitles hash, nothing about which user asked. If Subdivx is configured too, Spanish
+  searches go to the SubX API (a third-party Subdivx gateway) with the administrator's own API key,
+  sending the title's IMDb id or, failing that, its name — again nothing about which user asked.
+  Perceptor adds nothing else to that list.
 
 ## Status
 
@@ -57,10 +60,10 @@ who isn't on your own machine.
 register, find a release, download, scan, transcode, file, notify and browse. Bug reports are
 welcome. It has no production deployment and no users besides its author.
 
-The published images are release candidates (`v0.1.0-rc1` through `v0.7.0-rc1`); there is no stable
+The published images are release candidates (`v0.1.0-rc1` through `v0.8.0-rc1`); there is no stable
 release yet, so `latest` resolves to the newest release candidate rather than to a final version.
 
-One hundred and nineteen feature specs (`001` through `119`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
+One hundred and twenty-four feature specs (`001` through `124`) live in `docs/spec/features/`. The root `CLAUDE.md` has a
 stage-by-stage table, and [Known limitations](#known-limitations) lists the rough edges.
 
 ## Stack
@@ -75,7 +78,7 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   Traefik v3.7 (optional), GitHub Actions release workflow publishing to GHCR
 - **Integrations:** qBittorrent (download client), Prowlarr (indexer aggregation), FlareSolverr
   (Cloudflare challenge proxy for Prowlarr), TMDB API v3 (catalog), OpenSubtitles.com
-  (optional subtitle search), Jellyfin or Plex (media server, runs outside the stack)
+  and Subdivx through the SubX API (optional subtitle search), Jellyfin or Plex (media server, runs outside the stack)
 
 ## What it does today
 
@@ -185,6 +188,10 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   and anything undecided keeps both as plain `Español`. The same opt-in covers subtitles, where the
   dialogue is already text: a Spanish subtitle track whose tags don't say which variant it is gets
   scored on its own words, with no transcription, and is labelled `Latino` or `Español (España)`.
+- 🎙️ **Untagged audio is identified, not ignored.** When no tagged audio track is in the title's
+  original language, each track with no language tag is identified by ear — whisper.cpp again,
+  offline — and labelled with what it heard, so a correctly dubbed but untagged original isn't
+  dropped. A track it can't decide fails the encode with a clear reason instead of guessing.
 - 🧠 **Decisions made from the container, not the filename.** Remux vs. web-grade quality comes from
   `ffprobe` metadata, so a badly named release still gets the right treatment.
 - 📦 **Season packs fan out correctly**: every file is enumerated, matched to its episode by
@@ -205,8 +212,12 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
 - 🔕 **Compression is optional.** Turn it off from Settings and the pipeline still renames, moves
   and files the release — it just never invokes FFmpeg.
 - 🏷️ **Every transcoded file records where it came from.** A `title` tag for players, and a
-  `PERCEPTOR_SOURCE` tag naming the exact release path — so "which rip is this?" is answerable
-  months after the download was cleaned up.
+  `PERCEPTOR` group of Matroska tags, readable in MediaInfo: the exact release path, the Perceptor
+  version and the encode date, and on the video track the settings used (codec, CRF, preset, content
+  kind, source and output resolution, grain, deinterlace, trims) — so "which rip is this, and how
+  was it made?" is answerable months after the download was cleaned up. An embedded subtitle track
+  records its provider, file name, offset and sync score the same way. Files written by earlier
+  versions can be converted in place from Settings → Environment.
 - 📮 **A finished encode is never lost.** If the api is restarting when the worker reports back, the
   worker keeps retrying until it's acknowledged; both outcome mutations are safe to receive twice.
 - 🩹 **A crashed encode picks itself back up.** If the worker container dies mid-encode, the job is
@@ -258,10 +269,12 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   if any subtitle fails the check, nothing is written. The
   file is remuxed next to the original, verified and swapped in one atomic rename, and only then
   are the `.srt` files deleted. Jellyfin rescans the item, so it lists each subtitle once.
-- 🔍 **Missing subtitle languages can be found for you.** Once an administrator enters an
-  OpenSubtitles.com account in Settings → General, each user can opt in from `/preferences`: when a
-  file is delivered without a subtitle language they want, Perceptor searches OpenSubtitles
-  directly — whatever the media server, or with none. Any owner can also press **Buscar
+- 🔍 **Missing subtitle languages can be found for you.** Once an administrator adds a subtitle
+  provider in Settings → Subtítulos — OpenSubtitles.com with a username and password, Subdivx with
+  an API key, or both, with one as the default and a language such as `es-419` assigned to the
+  other — each user can opt in from `/preferences`: when a file is delivered without a subtitle
+  language they want, Perceptor searches that language's providers in order, each with its own
+  budget of attempts, directly — whatever the media server, or with none. Any owner can also press **Buscar
   subtítulos** on a film or an episode that already holds a file. At most three candidates are
   downloaded per language, multi-CD uploads are discarded before spending a download, and each
   candidate's timing is checked against the file with `ffsubsync` — framerate, offset, how much of
@@ -271,6 +284,11 @@ stage-by-stage table, and [Known limitations](#known-limitations) lists the roug
   replacement file lost reads as missing. If you
   asked for Latin American Spanish, OpenSubtitles is asked for that variant first, and a candidate
   that turns out to be the other one is rejected and the next one tried.
+- 📤 **Bring your own `.srt`.** Any owner can upload subtitle files to a film or an episode that
+  already holds a file. The charset is normalized to UTF-8, and each file gets its language, the
+  forced and default flags, whether it replaces that language's existing tracks, and an offset —
+  typed, or measured with `ffsubsync` when **Automático** is ticked. They are embedded through the
+  same verified remux as everything else.
 - 🔁 **Replace a subtitle that's there but wrong.** The manual search dialog, **Buscar y reemplazar
   subtítulos**, lists every language you want that the file already holds, each unticked. Tick
   one and it is searched as if it were missing; only if a candidate passes are the old tracks of
@@ -353,6 +371,26 @@ Two things it does for you on every start, not just the first:
   `PERCEPTOR_AUTO_MIGRATE=false` in `.env` to opt out and run them yourself.
 - **The database is dumped first.** A one-shot `backup` service writes to `./backups` and keeps the
   five most recent; `api` will not start if the dump fails.
+
+### Subtitle providers (optional)
+
+Subtitle search needs at least one provider, added by an administrator in **Settings →
+Subtítulos**. Neither is required for anything else.
+
+- **OpenSubtitles.** Create an account at [opensubtitles.com](https://www.opensubtitles.com/) — an
+  opensubtitles.org account does not work — and enter its username and password. A free account
+  allows about 20 downloads a day.
+- **Subdivx** (Spanish only), reached through the third-party [SubX API](https://subx-api.duckdns.org/docs/getting-started/authentication/),
+  which takes a personal API key:
+  1. Sign in (or create an account) at [subdivx.com](https://www.subdivx.com/).
+  2. Go to **Profile → API Keys** and press **Create New API Key**.
+  3. Give it a name (for example `Perceptor`), leave the expiration empty unless you want it to
+     lapse, and press **Generate Key**.
+  4. Copy the key right away — SubX shows it only once — and paste it into the Subdivx provider in
+     Settings → Subtítulos. If you lose it, generate a new one and revoke the old one.
+
+With both configured, pick a default and assign a language to the other one — `es-419` to Subdivx,
+say — so that language is searched there first and falls back to the default.
 
 ### HTTPS
 
@@ -487,7 +525,7 @@ A one-shot `backup` service dumps the database before `api` starts, and, with HT
 9. **File and notify.** The output lands in the library, the worker reports `encodeCompleted`, and
    `api` notifies your media server with the host-side path.
 10. **Fill subtitle gaps (optional).** With subtitle search set up, `api` works out which wanted
-    subtitle languages the file lacks, fetches candidates from OpenSubtitles, the worker checks
+    subtitle languages the file lacks, fetches candidates from the configured providers, the worker checks
     each one's timing (and, for Spanish, its variant), and the first that passes is embedded into
     the library file — replacing that language's existing tracks only when you asked for it.
 
@@ -704,7 +742,8 @@ Rough edges, stated plainly:
   subtitle search works with any of them.
 - **Subtitle search runs on a small quota.** A free OpenSubtitles account allows about 20 downloads
   a day, and a search can spend up to three per missing language. That is why there is no
-  scheduled sweep and no button for a whole season or series. A source checkout also needs the
+  scheduled sweep and no button for a whole season or series. Subdivx only has Spanish subtitles
+  and goes through a third-party gateway, the SubX API, which needs its own key. A source checkout also needs the
   maintainer's OpenSubtitles application key in `.env`; without it the feature is simply off.
 - **Libraries don't overlap.** Each user sees only their own titles; a title someone else registered
   answers "not available for this user" rather than rendering. There is no shared or household
