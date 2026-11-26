@@ -537,7 +537,11 @@ Docker sees a one-off `docker compose run worker` or a second stack pointed at t
 `REDIS_HOST`. The acquisition window (60s) deliberately outlasts the TTL (30s) so a worker killed
 hard can retake its own unexpired lease when Docker restarts it seconds later; a renewal that fails
 mid-encode is logged and never fatal, since a Redis blip is not worth abandoning a multi-hour encode
-and an `api` unreachable through the same outage would not be reconciling anything either. The
+and an `api` unreachable through the same outage would not be reconciling anything either. A renewal
+the holder check rejects is not the end of it: `maintainWorkerLease` then retries `SET NX`, so a
+lease that expired under a live worker (a host stall longer than the TTL) is reclaimed with one log
+line instead of staying empty forever; a lease another instance took is left alone and logged once
+per transition (`leaseTickMessage`), never on every tick. The
 returned count is logged, never branched on — which jobs get skipped, failed or requeued is
 entirely `api`'s decision, made against rows this service cannot see (no Prisma, no database).
 

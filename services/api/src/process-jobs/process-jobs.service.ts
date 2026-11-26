@@ -328,7 +328,7 @@ export class ProcessJobsService {
   async encodeStarted(processJobId: number) {
     // Spec 095, REQ-13; Spec 097, REQ-7
     const { count } = await this.prisma.processJob.updateMany({
-      where: { id: processJobId, status: { notIn: ['DISCARDED', 'STOPPED'] } },
+      where: { id: processJobId, status: { notIn: ['DISCARDED', 'STOPPED', 'COMPLETED'] } },
       data: { status: 'ENCODING' },
     });
 
@@ -343,7 +343,11 @@ export class ProcessJobsService {
 
     if (count === 0) {
       throw i18nError.conflict(
-        processJob.status === 'STOPPED' ? ERROR_KEYS.ENCODE_STOPPED : ERROR_KEYS.ENCODE_DISCARDED,
+        processJob.status === 'STOPPED'
+          ? ERROR_KEYS.ENCODE_STOPPED
+          : processJob.status === 'COMPLETED'
+            ? ERROR_KEYS.ENCODE_ALREADY_COMPLETED
+            : ERROR_KEYS.ENCODE_DISCARDED,
       );
     }
 
@@ -481,7 +485,7 @@ export class ProcessJobsService {
     }
 
     // Spec 095, REQ-14; Spec 097, REQ-8
-    if (existing.status === 'DISCARDED' || existing.status === 'STOPPED') {
+    if (existing.status === 'DISCARDED' || existing.status === 'STOPPED' || existing.status === 'COMPLETED') {
       return true;
     }
 

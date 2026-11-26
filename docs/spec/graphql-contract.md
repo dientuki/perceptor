@@ -2476,6 +2476,13 @@ source never brought it.
 `api` → `worker` only: the worker abandons the job silently, reports nothing and does not retry. It
 never reaches `web`.
 
+**`encodeStarted` also refuses a `COMPLETED` job with `error.encode.already_completed`, and
+`encodeFailed` ignores one.** BullMQ redelivers a job whose lock expired (a host stall longer than
+the lock) even after the encode delivered; the rerun's input is already deleted, and its probe
+failure used to overwrite `COMPLETED` with `ERROR`. Same handling as `error.encode.discarded`: the
+worker abandons silently, reports nothing, never retries. A worker that predates the key reports the
+refusal as an ordinary `encodeFailed`, which `api` now ignores for a `COMPLETED` row.
+
 Additive: an un-updated `web` or `worker` keeps working against the new `api`, except that a `web`
 that does not know `DISCARDED` paints it with the default gray tone.
 

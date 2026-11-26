@@ -14,7 +14,7 @@ import { fetchTrackTitles } from '../api/track-titles';
 import type { EncodeJob } from '../queue/types';
 import { KeyedError } from '../i18n/keyed-error';
 import { renderMessage } from '../i18n/messages.en';
-import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED, ERROR_ENCODE_DISCARDED, ERROR_ENCODE_STOPPED } from '../i18n/error-keys';
+import { ERROR_ENCODE_UNEXPECTED, ERROR_ENCODE_MOVE_FAILED, ERROR_ENCODE_DISCARDED, ERROR_ENCODE_STOPPED, ERROR_ENCODE_ALREADY_COMPLETED } from '../i18n/error-keys';
 import { EncodeCancelledError, registerEncode, releaseEncode } from '../encode/cancellation';
 import { normalizeContentKind } from '../encode/content-kind';
 import { normalizeLibraryLayout } from '../paths/library-layout';
@@ -278,7 +278,9 @@ export async function handleEncode(job: Job<EncodeJob>): Promise<void> {
           ? 'discarded'
           : error instanceof KeyedError && error.key === ERROR_ENCODE_STOPPED
             ? 'stopped'
-            : null;
+            : error instanceof KeyedError && error.key === ERROR_ENCODE_ALREADY_COMPLETED
+              ? 'already completed'
+              : null;
       if (error instanceof EncodeCancelledError || refusal) {
         console.log(`[encode] ${processJobId}: ${refusal ?? 'cancelled'}, reporting nothing`);
         // Spec 054, REQ-8

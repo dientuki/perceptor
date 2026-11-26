@@ -134,6 +134,7 @@ export const MESSAGES_EN: Record<string, string> = {
   [ERROR_KEYS.PROCESS_JOB_NOT_RUNNING]: 'This file is not being encoded',
   [ERROR_KEYS.ENCODE_DISCARDED]: 'Encode was discarded by the user',
   [ERROR_KEYS.ENCODE_STOPPED]: 'Encode was stopped by the user',
+  [ERROR_KEYS.ENCODE_ALREADY_COMPLETED]: 'Encode already completed',
   [ERROR_KEYS.DOWNLOAD_NOT_A_TORRENT]:
     'This download has no associated torrent',
   [ERROR_KEYS.TORRENT_CLIENT_REJECTED]:

@@ -105,6 +105,7 @@ export const ERROR_KEYS = {
   PROCESS_JOB_NOT_RUNNING: 'error.processJob.not_running',
   ENCODE_DISCARDED: 'error.encode.discarded',
   ENCODE_STOPPED: 'error.encode.stopped',
+  ENCODE_ALREADY_COMPLETED: 'error.encode.already_completed',
   DOWNLOAD_NOT_A_TORRENT: 'error.download.not_a_torrent',
   TORRENT_CLIENT_REJECTED: 'error.download.torrent_client_rejected',
   TORRENT_CLIENT_UNAUTHORIZED: 'error.download.torrent_client_unauthorized',

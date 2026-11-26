@@ -55,6 +55,7 @@ import {
   ERROR_ENCODE_DISCARDED,
   ERROR_ENCODE_DISC_REMUX_FAILED,
   ERROR_ENCODE_STOPPED,
+  ERROR_ENCODE_ALREADY_COMPLETED,
   ERROR_ENCODE_FFMPEG_FAILED,
   ERROR_ENCODE_PROBE_FAILED,
   ERROR_ENCODE_UNEXPECTED,
@@ -953,6 +954,30 @@ describe('handleEncode — encodeStarted refused as stopped (Spec 097, REQ-6)', 
     expect(passthroughMock).not.toHaveBeenCalled();
     expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeFailed'))).toBe(false);
     expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeCompleted'))).toBe(false);
+    expect(cleanupSourceMock).not.toHaveBeenCalled();
+  });
+});
+
+// Defends against a queue redelivery of a job that already delivered (lock lost during a host
+// stall): its input is gone, so running it reports a probe failure that buries the delivery.
+describe('handleEncode — encodeStarted refused as already completed', () => {
+  it('reports nothing, never runs the encode driver and is non-retryable', async () => {
+    fetchGraphQLMock.mockImplementation((query: string) => {
+      if (query.includes('processJob(id:')) {
+        return Promise.resolve({ processJob: PROCESS_JOB_DETAILS });
+      }
+      if (query.includes('encodeStarted')) {
+        return Promise.reject(new KeyedError(ERROR_ENCODE_ALREADY_COMPLETED, 'Encode already completed'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const rejection = await handleEncode(makeJob()).catch((err) => err);
+
+    expect(rejection).toBeInstanceOf(UnrecoverableError);
+    expect(encodeMock).not.toHaveBeenCalled();
+    expect(passthroughMock).not.toHaveBeenCalled();
+    expect(fetchGraphQLMock.mock.calls.some(([query]) => (query as string).includes('encodeFailed'))).toBe(false);
     expect(cleanupSourceMock).not.toHaveBeenCalled();
   });
 });
