@@ -1487,7 +1487,7 @@ describe('ProcessJobsService', () => {
       });
 
       expect(prisma.processJob.updateMany).toHaveBeenCalledWith({
-        where: { id: 1, status: { notIn: ['DISCARDED', 'STOPPED'] } },
+        where: { id: 1, status: { notIn: ['DISCARDED', 'STOPPED', 'COMPLETED'] } },
         data: { status: 'ENCODING' },
       });
       expect(prisma.processJob.update).not.toHaveBeenCalled();
@@ -1564,6 +1564,36 @@ describe('ProcessJobsService', () => {
 
       expect(result.removeTorrent).toBe(true);
       expect(result.deleteDownloadPath).toBe(true);
+    });
+  });
+
+  // A BullMQ job whose lock expired (host stall) is redelivered after its encode already
+  // delivered: the rerun finds its input deleted and its failure turned the COMPLETED row into
+  // ERROR, leaving a delivered title with a failed download whose Play re-downloads it.
+  describe('reports for a COMPLETED job redelivered by the queue', () => {
+    it('encodeStarted refuses a COMPLETED job with error.encode.already_completed and leaves the row', async () => {
+      prisma.processJob.updateMany.mockResolvedValue({ count: 0 });
+      prisma.processJob.findUnique.mockResolvedValue({ status: 'COMPLETED', movieId: 9, episodeId: null });
+
+      await expect(service.encodeStarted(1)).rejects.toMatchObject({
+        response: { i18n: { key: 'error.encode.already_completed' } },
+      });
+
+      expect(prisma.processJob.update).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
+    });
+
+    it('encodeFailed on a COMPLETED job writes nothing and recomputes nothing', async () => {
+      prisma.processJob.findUnique.mockResolvedValue({
+        status: 'COMPLETED',
+        sourceFile: { mediaSource: { status: 'SCANNED' } },
+      });
+
+      await service.encodeFailed(1, 'error.encode.probe_failed', undefined, 'No such file or directory');
+
+      expect(prisma.processJob.update).not.toHaveBeenCalled();
+      expect(prisma.processJob.updateMany).not.toHaveBeenCalled();
+      expect(titleStatus.recomputeMovie).not.toHaveBeenCalled();
     });
   });
 

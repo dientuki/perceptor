@@ -6,6 +6,8 @@ import {
   RENEW_SCRIPT,
   WORKER_LEASE_KEY,
   acquireWorkerLease,
+  leaseTickMessage,
+  maintainWorkerLease,
   releaseWorkerLease,
   renewWorkerLease,
   tryAcquireWorkerLease,
@@ -167,5 +169,51 @@ describe('worker singleton lease', () => {
     expect(await releaseWorkerLease(redis, 'holder')).toBe(true);
     expect(await redis.get(WORKER_LEASE_KEY)).toBeNull();
     expect(await tryAcquireWorkerLease(redis, 'next')).toBe(true);
+  });
+});
+
+// Defends against a lease that expired under a live worker (a host stall longer than the TTL):
+// renewal alone only ever compared holders, so the worker logged "rejected" every 10s forever while
+// the key stayed empty, leaving any second worker free to take it and reconcile the live encode.
+describe('keeping the worker lease after it lapsed', () => {
+  it('renews while the lease is still held', async () => {
+    const clock = { now: 0 };
+    const redis = new FakeRedis(clock);
+    await tryAcquireWorkerLease(redis, 'holder');
+
+    clock.now += 10_000;
+    expect(await maintainWorkerLease(redis, 'holder')).toEqual({ outcome: 'renewed' });
+    expect(redis.ttlOf(WORKER_LEASE_KEY)).toBe(LEASE_TTL_MS);
+  });
+
+  it('reclaims a lease that expired with nobody else holding it', async () => {
+    const clock = { now: 0 };
+    const redis = new FakeRedis(clock);
+    await tryAcquireWorkerLease(redis, 'holder');
+
+    clock.now += LEASE_TTL_MS + 60_000;
+    expect(await maintainWorkerLease(redis, 'holder')).toEqual({ outcome: 'reclaimed' });
+    expect(await redis.get(WORKER_LEASE_KEY)).toBe('holder');
+    expect(await tryAcquireWorkerLease(redis, 'second')).toBe(false);
+  });
+
+  it('leaves a lease another instance took and reports who holds it', async () => {
+    const clock = { now: 0 };
+    const redis = new FakeRedis(clock);
+    await tryAcquireWorkerLease(redis, 'holder');
+    clock.now += LEASE_TTL_MS;
+    await tryAcquireWorkerLease(redis, 'other');
+
+    expect(await maintainWorkerLease(redis, 'holder')).toEqual({ outcome: 'held-elsewhere', holder: 'other' });
+    expect(await redis.get(WORKER_LEASE_KEY)).toBe('other');
+  });
+
+  it('logs a foreign holder once, not on every tick', () => {
+    const tick = { outcome: 'held-elsewhere' as const, holder: 'other' };
+
+    expect(leaseTickMessage('renewed', tick)).toContain('other');
+    expect(leaseTickMessage('held-elsewhere', tick)).toBeNull();
+    expect(leaseTickMessage(null, { outcome: 'renewed' })).toBeNull();
+    expect(leaseTickMessage('renewed', { outcome: 'reclaimed' })).toContain('reclaimed');
   });
 });

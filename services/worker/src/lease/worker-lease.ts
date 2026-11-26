@@ -69,6 +69,34 @@ export async function renewWorkerLease(redis: LeaseRedis, leaseId: string): Prom
   return Number(reply) === 1;
 }
 
+export type LeaseTick =
+  | { outcome: 'renewed' }
+  | { outcome: 'reclaimed' }
+  | { outcome: 'held-elsewhere'; holder: string | null };
+
+export async function maintainWorkerLease(redis: LeaseRedis, leaseId: string): Promise<LeaseTick> {
+  if (await renewWorkerLease(redis, leaseId)) {
+    return { outcome: 'renewed' };
+  }
+  if (await tryAcquireWorkerLease(redis, leaseId)) {
+    return { outcome: 'reclaimed' };
+  }
+  return { outcome: 'held-elsewhere', holder: await redis.get(WORKER_LEASE_KEY) };
+}
+
+export function leaseTickMessage(previous: LeaseTick['outcome'] | null, tick: LeaseTick): string | null {
+  if (tick.outcome === 'reclaimed') {
+    return '[worker] worker lease had expired with no other holder, reclaimed it';
+  }
+  if (tick.outcome === 'held-elsewhere' && previous !== 'held-elsewhere') {
+    return (
+      `[worker] worker lease is held by ${tick.holder ?? 'another instance'}: a second worker is ` +
+      'running against this Redis and only one of them should'
+    );
+  }
+  return null;
+}
+
 export async function releaseWorkerLease(redis: LeaseRedis, leaseId: string): Promise<boolean> {
   const reply = await redis.eval(RELEASE_SCRIPT, 1, WORKER_LEASE_KEY, leaseId);
   return Number(reply) === 1;

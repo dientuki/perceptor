@@ -44,6 +44,8 @@ export const ERROR_ENCODE_DISCARDED = 'error.encode.discarded';
 // Spec 097, REQ-6
 export const ERROR_ENCODE_STOPPED = 'error.encode.stopped';
 
+export const ERROR_ENCODE_ALREADY_COMPLETED = 'error.encode.already_completed';
+
 // Spec 100, REQ-13
 export const ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS = 'error.source.disc_playlist_ambiguous';
 

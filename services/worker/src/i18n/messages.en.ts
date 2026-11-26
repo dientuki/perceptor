@@ -10,6 +10,7 @@ import {
   ERROR_SOURCE_DISC_PLAYLIST_AMBIGUOUS,
   ERROR_ENCODE_DISCARDED,
   ERROR_ENCODE_STOPPED,
+  ERROR_ENCODE_ALREADY_COMPLETED,
   ERROR_ENCODE_EPISODE_NUMBERS_MISSING,
   ERROR_ENCODE_FFMPEG_FAILED,
   ERROR_ENCODE_MKVMERGE_FAILED,
@@ -53,6 +54,7 @@ export const messagesEn: Record<string, string> = {
   [ERROR_ENCODE_UNKNOWN_DRIVER]: 'Unknown ENCODE_DRIVER: {driver}',
   [ERROR_ENCODE_DISCARDED]: 'Encode was discarded by the user',
   [ERROR_ENCODE_STOPPED]: 'Encode was stopped by the user',
+  [ERROR_ENCODE_ALREADY_COMPLETED]: 'Encode already completed',
   [ERROR_ENCODE_UNEXPECTED]: 'Unexpected encode failure: {detail}',
   [ERROR_PROCESS_JOB_NOT_FOUND]: 'Process job {id} does not exist',
   [ERROR_SOURCE_NO_DOWNLOAD_PATH]:

@@ -42,9 +42,11 @@ import { VERDICT_CALL_TIMEOUT_MS, installVerdictStore } from './encode/verdict-s
 import {
   LEASE_RENEW_INTERVAL_MS,
   acquireWorkerLease,
+  leaseTickMessage,
+  maintainWorkerLease,
   newLeaseId,
   releaseWorkerLease,
-  renewWorkerLease,
+  type LeaseTick,
 } from './lease/worker-lease';
 import { reportEncodeWorkerStarted } from './api/encode-worker-started';
 import { deliverReport } from './api/deliver-report';
@@ -87,12 +89,13 @@ async function main() {
   // not be reconciling anything either.
 
   // Spec 054, NFR-4
+  let lastLeaseOutcome: LeaseTick['outcome'] | null = null;
   const leaseRenewal = setInterval(() => {
-    void renewWorkerLease(leaseClient, leaseId)
-      .then((renewed) => {
-        if (!renewed) {
-          console.error('[worker] worker lease renewal rejected, this instance no longer holds it');
-        }
+    void maintainWorkerLease(leaseClient, leaseId)
+      .then((tick) => {
+        const message = leaseTickMessage(lastLeaseOutcome, tick);
+        if (message) console.error(message);
+        lastLeaseOutcome = tick.outcome;
       })
       .catch((err) => {
         console.error('[worker] worker lease renewal failed:', err);
